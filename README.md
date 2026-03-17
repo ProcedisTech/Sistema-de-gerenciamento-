@@ -2,16 +2,6 @@
 
 O Procedi é uma aplicação web moderna desenvolvida em React para otimizar e digitalizar a jornada de atendimento de pacientes em clínicas de estética avançada e harmonização facial. O sistema guia o profissional através de um fluxo estruturado de 5 etapas, garantindo segurança clínica, conformidade legal (LGPD) e precisão técnica.
 
-📸 Demonstração Visual
-
-(Coloque as suas imagens na pasta do projeto e substitua os links abaixo para que elas apareçam aqui)
-
-<div align="center">
-<!-- Exemplo de como colocar duas imagens lado a lado -->
-<img src="https://www.google.com/search?q=https://via.placeholder.com/400x250/00a88e/ffffff%3Ftext%3DTela%2Bde%2BLogin" alt="Tela de Login" width="400" style="border-radius: 10px; margin: 10px;"/>
-<img src="https://www.google.com/search?q=https://via.placeholder.com/400x250/00a88e/ffffff%3Ftext%3DMapeamento%2BFacial" alt="Mapeamento Facial" width="400" style="border-radius: 10px; margin: 10px;"/>
-</div>
-
 ✨ Funcionalidades Principais
 
 🔒 Autenticação Segura: Ecrã de login para controlo de acesso profissional.
@@ -38,7 +28,7 @@ A etapa 3 conta com um motor de desenho avançado criado do zero para precisão 
 
 ✏️ Desenho Livre: Marcações com paleta de 17 cores premium.
 
-🎯 Pontuação Inteligente: * Inserção de pontos de injeção enumerados sequencialmente.
+🎯 Pontuação Inteligente: Inserção de pontos de injeção enumerados sequencialmente.
 
 Controlo deslizante (slider) para ajustar o tamanho exato da agulha/ponto.
 
@@ -70,25 +60,19 @@ Passos para instalação
 
 Clone o repositório:
 
-git clone [https://github.com/SEU_USUARIO/procedi.git](https://github.com/SEU_USUARIO/procedi.git)
-
+<h3><code>git clone https://github.com/SEU_USUARIO/procedi.git</code></h3>
 
 Entre na pasta do projeto:
 
-cd procedi
-
+<h3><code>cd procedi</code></h3>
 
 Instale as dependências:
 
-npm install
-
+<h3><code>npm install</code></h3>
 
 Inicie o servidor:
 
-npm run dev
-
-
-Abra o navegador no link indicado no terminal (geralmente http://localhost:5173/).
+<h3><code>npm run dev</code></h3>
 
 🔐 Acesso ao Sistema
 
