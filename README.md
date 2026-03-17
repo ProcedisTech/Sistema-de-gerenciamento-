@@ -2,6 +2,16 @@
 
 O Procedi é uma aplicação web moderna desenvolvida em React para otimizar e digitalizar a jornada de atendimento de pacientes em clínicas de estética avançada e harmonização facial. O sistema guia o profissional através de um fluxo estruturado de 5 etapas, garantindo segurança clínica, conformidade legal (LGPD) e precisão técnica.
 
+📸 Demonstração Visual
+
+(Coloque as suas imagens na pasta do projeto e substitua os links abaixo para que elas apareçam aqui)
+
+<div align="center">
+<!-- Exemplo de como colocar duas imagens lado a lado -->
+<img src="https://via.placeholder.com/400x250/00a88e/ffffff?text=Tela+de+Login" alt="Tela de Login" width="400" style="border-radius: 10px; margin: 10px;"/>
+<img src="https://via.placeholder.com/400x250/00a88e/ffffff?text=Mapeamento+Facial" alt="Mapeamento Facial" width="400" style="border-radius: 10px; margin: 10px;"/>
+</div>
+
 ✨ Funcionalidades Principais
 
 🔒 Autenticação Segura: Ecrã de login para controlo de acesso profissional.
