@@ -2,6 +2,16 @@
 
 O Procedi é uma aplicação web moderna desenvolvida em React para otimizar e digitalizar a jornada de atendimento de pacientes em clínicas de estética avançada e harmonização facial. O sistema guia o profissional através de um fluxo estruturado de 5 etapas, garantindo segurança clínica, conformidade legal (LGPD) e precisão técnica.
 
+📸 Demonstração Visual
+
+(Coloque as suas imagens na pasta do projeto e substitua os links abaixo para que elas apareçam aqui)
+
+<div align="center">
+<!-- Exemplo de como colocar duas imagens lado a lado -->
+<img src="https://www.google.com/search?q=https://via.placeholder.com/400x250/00a88e/ffffff%3Ftext%3DTela%2Bde%2BLogin" alt="Tela de Login" width="400" style="border-radius: 10px; margin: 10px;"/>
+<img src="https://www.google.com/search?q=https://via.placeholder.com/400x250/00a88e/ffffff%3Ftext%3DMapeamento%2BFacial" alt="Mapeamento Facial" width="400" style="border-radius: 10px; margin: 10px;"/>
+</div>
+
 ✨ Funcionalidades Principais
 
 🔒 Autenticação Segura: Ecrã de login para controlo de acesso profissional.
@@ -10,43 +20,45 @@ O Procedi é uma aplicação web moderna desenvolvida em React para otimizar e d
 
 👤 Gestão de Pacientes (Check-in):
 
-Formulário completo com validações e formatação automática (Máscaras de CPF, RG e Telefone).
+Formulário com validações e formatação automática (Máscaras de CPF, RG e Telefone).
 
-Cálculo automático de idade baseado na data de nascimento.
+Cálculo automático de idade e alertas visuais de risco (ex: Alergias).
 
-Alertas visuais para histórico médico crítico (ex: Alergias).
+📋 Anamnese Digital: Registo rápido de queixas, expectativas e contraindicações.
 
-📋 Anamnese Digital: Registo de queixas, expectativas e contraindicações (gestação, anticoagulantes, etc.).
+⚖️ Conformidade LGPD: Termos de consentimento digitais integrados.
 
-🎨 Mapeamento Facial Avançado (Canvas API):
+✅ Finalização: Orientações de pós-procedimento e registo de satisfação.
 
-Upload de fotografias do paciente.
+🎨 Motor de Mapeamento Facial (Canvas API)
 
-Ferramenta de Desenho: Marcações livres com várias cores.
+A etapa 3 conta com um motor de desenho avançado criado do zero para precisão estética:
 
-Ferramenta de Ponto: Inserção de pontos de injeção enumerados automaticamente, com tamanho configurável e numeração inteligente (dentro ou fora do ponto).
+🖼️ Upload Dinâmico: Carregamento de fotografias do paciente diretamente para o Canvas.
 
-Ferramenta de Borracha: Apagar zonas específicas com tamanho ajustável.
+✏️ Desenho Livre: Marcações com paleta de 17 cores premium.
 
-Pré-visualização (Cursor): O cursor do rato adapta-se em tempo real à cor e tamanho da ferramenta selecionada (ponto ou borracha).
+🎯 Pontuação Inteligente: * Inserção de pontos de injeção enumerados sequencialmente.
 
-Histórico de ações (Desfazer) e Limpar tudo.
+Controlo deslizante (slider) para ajustar o tamanho exato da agulha/ponto.
 
-⚖️ Conformidade LGPD: Termos de consentimento digitais integrados antes do procedimento.
+Lógica visual: Números posicionam-se dentro ou fora do ponto dependendo do tamanho escolhido.
 
-✅ Finalização e Orientações: Lista de verificações pós-procedimento e confirmação de satisfação.
+🧽 Borracha Ajustável: Controlo deslizante para aumentar ou diminuir a área de apagar.
+
+🖱️ Cursor Dinâmico Inteligente: O cursor do rato transforma-se num círculo exato que reflete o tamanho e a cor selecionada (na borracha ou no ponto) para uma precisão milimétrica.
 
 🛠️ Tecnologias Utilizadas
 
-React - Biblioteca JavaScript para construção da interface de utilizador.
+React - Interface de utilizador e gestão de estados complexos.
 
-Vite - Ferramenta de build super rápida para projetos web modernos.
+Vite - Ferramenta de build e servidor de desenvolvimento super rápido.
 
-Tailwind CSS - Framework CSS utility-first para um design responsivo e premium.
+Tailwind CSS - Design System utility-first com estética moderna e sombras suaves.
 
-Lucide React - Biblioteca de ícones elegantes e consistentes.
+Lucide React - Ícones vetorizados elegantes.
 
-HTML5 Canvas API - Utilizada para o motor de desenho e mapeamento facial interativo.
+HTML5 Canvas API - Manipulação e edição de imagem em tempo real.
 
 🚀 Como Executar o Projeto Localmente
 
@@ -71,7 +83,7 @@ Instale as dependências:
 npm install
 
 
-Inicie o servidor de desenvolvimento:
+Inicie o servidor:
 
 npm run dev
 
@@ -80,22 +92,12 @@ Abra o navegador no link indicado no terminal (geralmente http://localhost:5173/
 
 🔐 Acesso ao Sistema
 
-Para testar a interface em ambiente de desenvolvimento, utilize as seguintes credenciais padrão:
+Para testar a interface, utilize as credenciais padrão:
 
 Usuário: Rafael
 
 Senha: PROcedi
 
-📁 Estrutura da Jornada (Passo a Passo)
-
-Check-in: Dados pessoais, documentos e contactos.
-
-Anamnese: Queixas e histórico médico.
-
-Avaliação: Upload de foto e desenho de mapeamento na face do paciente.
-
-Execução: Assinatura digital do Termo de Consentimento (LGPD).
-
-Finalização: Confirmação de orientações pós-procedimento.
-
-Desenvolvido com 🩵 para a área de Estética e Harmonização Facial.
+<div align="center">
+<i>Desenvolvido com 🩵 para elevar o padrão da Estética e Harmonização Facial.</i>
+</div>
