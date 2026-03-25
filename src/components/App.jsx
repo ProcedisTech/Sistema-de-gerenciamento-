@@ -8,13 +8,33 @@ import {
   Undo, Trash2, Upload, Image as ImageIcon, Lightbulb
 } from 'lucide-react';
 
+const api = (path) =>
+  `${import.meta.env.VITE_API_BASE_URL ?? ''}${path}`;
+
 export default function App() {
   // ================= ESTADOS DE AUTENTICAÇÃO =================
+  const [authReady, setAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(api('/api/auth/me'), { credentials: 'include' })
+      .then((res) => {
+        if (!cancelled && res.ok) setIsLoggedIn(true);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setAuthReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ================= ESTADO GLOBAL DA JORNADA =================
   const [currentStep, setCurrentStep] = useState(1);
@@ -98,17 +118,45 @@ export default function App() {
   };
 
   // ================= FUNÇÕES GERAIS =================
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (username === 'Rafael' && password === 'PROcedi') {
+    setLoginError('');
+    setLoginSubmitting(true);
+    try {
+      const res = await fetch(api('/api/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          username: username.trim(),
+          password,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoginError(data.error || 'Usuário ou senha incorretos.');
+        return;
+      }
       setIsLoggedIn(true);
-      setLoginError('');
-    } else {
-      setLoginError('Usuário ou senha incorretos.');
+      setPassword('');
+    } catch {
+      setLoginError(
+        'Não foi possível conectar ao servidor. Inicie a API (npm run server) ou use npm run dev:full.'
+      );
+    } finally {
+      setLoginSubmitting(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch(api('/api/auth/logout'), {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      /* sessão localmente encerrada */
+    }
     setIsLoggedIn(false);
     setUsername('');
     setPassword('');
@@ -331,6 +379,20 @@ export default function App() {
   };
 
   // ================= RENDERIZADORES DE UI =================
+  if (!authReady) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center p-4 font-sans gap-4"
+        style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}
+      >
+        <div className="bg-[#00a88e] w-14 h-14 rounded-[1.25rem] flex items-center justify-center shadow-md border-[3px] border-[#00a88e]/30 animate-pulse">
+          <Shield className="text-white w-7 h-7" strokeWidth={1.5} />
+        </div>
+        <p className="text-[15px] text-[#475569] font-medium">Verificando sessão…</p>
+      </div>
+    );
+  }
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 font-sans" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
@@ -369,8 +431,13 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <button type="submit" className="w-full bg-[#00a88e] hover:bg-[#00967f] text-white py-3 px-4 rounded-xl text-[15px] font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mt-4">
-              <Shield className="w-5 h-5" strokeWidth={2.5} /> Entrar no Sistema
+            <button
+              type="submit"
+              disabled={loginSubmitting}
+              className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl text-[15px] font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mt-4"
+            >
+              <Shield className="w-5 h-5" strokeWidth={2.5} />{' '}
+              {loginSubmitting ? 'Entrando…' : 'Entrar no Sistema'}
             </button>
           </form>
         </div>
