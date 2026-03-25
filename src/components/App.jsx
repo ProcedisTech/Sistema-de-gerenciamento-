@@ -5,6 +5,7 @@ import {
   CheckCircle, Square, CheckSquare, CheckCircle2, Award,
   Lock, User as UserIcon, EyeOff, Search, AlertTriangle, 
   ClipboardList, Palette, PenTool, Circle, Eraser, 
+  Camera,
   Undo, Trash2, Upload, Image as ImageIcon, Lightbulb
 } from 'lucide-react';
 
@@ -21,7 +22,33 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  const [cookieConsentAccepted, setCookieConsentAccepted] = useState(() => {
+    try {
+      return document.cookie.includes('cookie_consent=true');
+    } catch {
+      return false;
+    }
+  });
+
+  const acceptCookies = () => {
+    try {
+      // Consentimento (para compliance/UX). A sessão do login é via cookie httpOnly do backend.
+      document.cookie =
+        'cookie_consent=true; Path=/; Max-Age=' + 60 * 60 * 24 * 365 + '; SameSite=Lax';
+    } catch {
+      // ignore
+    }
+    setCookieConsentAccepted(true);
+  };
+
   useEffect(() => {
+    if (!cookieConsentAccepted) {
+      // Mostra a tela de login sem tentar autenticar automaticamente.
+      setIsLoggedIn(false);
+      setAuthReady(true);
+      return;
+    }
+
     let cancelled = false;
     fetch(api('/api/auth/me'), { credentials: 'include' })
       .then((res) => {
@@ -34,11 +61,25 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [cookieConsentAccepted]);
 
   // ================= ESTADO GLOBAL DA JORNADA =================
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [journeyId, setJourneyId] = useState(null);
+
+  // ================= FOTO DURANTE PROCEDIMENTO =================
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
+  const [anamnesePhotoUrl, setAnamnesePhotoUrl] = useState(null); // foto confirmada (miniatura)
+  const [anamnesePhotoBlob, setAnamnesePhotoBlob] = useState(null); // blob confirmada (futuro: enviar ao backend)
+  const [anamnesePhotoMeta, setAnamnesePhotoMeta] = useState(null); // { journeyId, capturedAt }
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null); // preview dentro do modal (pode ser repetida)
+  const [photoPreviewBlob, setPhotoPreviewBlob] = useState(null);
+  const [videoReady, setVideoReady] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   // ================= ESTADOS DA ETAPA 1 (Check-in) =================
   const [activeTab, setActiveTab] = useState('existente');
@@ -53,6 +94,31 @@ export default function App() {
   const [profissao, setProfissao] = useState('');
   const [alergias, setAlergias] = useState('');
   const [step1Errors, setStep1Errors] = useState({});
+
+  // ================= PACIENTES (MODO TESTE SEM BANCO) =================
+  // Persistência apenas em memória: ao recarregar a página, volta ao estado inicial.
+  const [patients, setPatients] = useState(() => {
+    const seedDataNascimento = '1985-04-20'
+    const seedIdade = 40
+    return [
+      {
+        id: 'patient_seed_1',
+        nome: 'Ana Carolina Silva',
+        dataNascimento: seedDataNascimento,
+        idade: seedIdade,
+        sexo: 'f',
+        estadoCivil: 'solteiro',
+        profissao: 'Administradora',
+        alergias: 'Penicilina',
+        cpf: '123.456.789-00',
+        rg: '',
+        telefone: '(11) 98765-4321',
+        email: 'ana@example.com',
+      },
+    ]
+  })
+
+  const [selectedPatientCpf, setSelectedPatientCpf] = useState(null)
 
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
@@ -71,7 +137,7 @@ export default function App() {
   const [imageSrc, setImageSrc] = useState(null);
   const [activeTool, setActiveTool] = useState('draw');
   const [activeColor, setActiveColor] = useState('#ef4444');
-  const [strokeWidth, setStrokeWidth] = useState(3);
+  const [strokeWidth] = useState(3);
   const [pointSize, setPointSize] = useState(12); // Novo estado para tamanho do ponto
   const [showPointNumbers, setShowPointNumbers] = useState(true); // Novo estado para mostrar numeração
   const [eraserSize, setEraserSize] = useState(20); // Novo estado para tamanho da borracha
@@ -117,29 +183,114 @@ export default function App() {
       .replace(/(-\d{4})\d+?$/, '$1');
   };
 
+  const generateJourneyId = () => {
+    try {
+      if (globalThis?.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    } catch {
+      // ignore and fallback
+    }
+    return `journey_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  };
+
+  const calculateAgeFromISODate = (iso) => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length !== 3) return '';
+    const [year, month, day] = parts;
+    const dataNasc = new Date(Number(year), Number(month) - 1, Number(day));
+    if (Number.isNaN(dataNasc.getTime())) return '';
+    const hoje = new Date();
+    let idadeCalculada = hoje.getFullYear() - dataNasc.getFullYear();
+    const m = hoje.getMonth() - dataNasc.getMonth();
+    if (m < 0 || (m === 0 && hoje.getDate() < dataNasc.getDate())) {
+      idadeCalculada--;
+    }
+    return idadeCalculada;
+  };
+
+  const getPatientInitials = (name) => {
+    const parts = (name || '')
+      .split(' ')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const initials = parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join('');
+    return initials || 'P';
+  };
+
+  const selectPatient = (patient) => {
+    if (!patient) return;
+    setNome(patient.nome || '');
+    setDataNascimento(patient.dataNascimento || '');
+    setIdade(patient.idade !== undefined && patient.idade !== null ? String(patient.idade) : '');
+    setSexo(patient.sexo || '');
+    setEstadoCivil(patient.estadoCivil || '');
+    setProfissao(patient.profissao || '');
+    setAlergias(patient.alergias || '');
+    setCpf(patient.cpf || '');
+    setRg(patient.rg || '');
+    setTelefone(patient.telefone || '');
+    setEmail(patient.email || '');
+    setStep1Errors({});
+    setSelectedPatientCpf(patient.cpf || null);
+    setActiveTab('existente');
+  };
+
   // ================= FUNÇÕES GERAIS =================
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
     setLoginSubmitting(true);
     try {
+      const testUser = 'Rafael';
+      const testPassword = 'PROcedi';
+      const usernameTrim = username.trim();
+
       const res = await fetch(api('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          username: username.trim(),
+          username: usernameTrim,
           password,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // Fallback de teste para quando o backend não estiver acessível
+        // (ex.: hospedagem sem proxy em `/api` no Netlify).
+        if (
+          usernameTrim === testUser &&
+          password === testPassword &&
+          (res.status === 404 || res.status === 0 || res.status >= 500)
+        ) {
+          setIsLoggedIn(true);
+          setPassword('');
+          setLoginError('');
+          return;
+        }
+
+        if (res.status === 404) {
+          setLoginError(
+            'Não encontrei o endpoint de login (`/api/auth/login`). Verifique se a API está encaminhada no Netlify.'
+          );
+          return;
+        }
+
         setLoginError(data.error || 'Usuário ou senha incorretos.');
         return;
       }
       setIsLoggedIn(true);
       setPassword('');
     } catch {
+      // Fallback de teste para quando a API não responder (DNS, rota, etc.).
+      const testUser = 'Rafael';
+      const testPassword = 'PROcedi';
+      if (username.trim() === testUser && password === testPassword) {
+        setIsLoggedIn(true);
+        setPassword('');
+        setLoginError('');
+        return;
+      }
       setLoginError(
         'Não foi possível conectar ao servidor. Inicie a API (npm run server) ou use npm run dev:full.'
       );
@@ -200,6 +351,41 @@ export default function App() {
         setStep1Errors(errors);
         return;
       }
+      // Salva/atualiza o paciente em memória para testes (sem banco de dados).
+      const newCpf = cpf.trim();
+      const patientAge =
+        idade !== '' && idade !== null
+          ? idade
+          : calculateAgeFromISODate(dataNascimento);
+
+      const newPatient = {
+        id: `patient_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        nome: nome.trim(),
+        dataNascimento,
+        idade: patientAge !== '' ? patientAge : '',
+        sexo,
+        estadoCivil,
+        profissao: profissao.trim(),
+        alergias: alergias.trim(),
+        cpf: newCpf,
+        rg: rg || '',
+        telefone: telefone || '',
+        email: email || '',
+      };
+
+      setPatients((prev) => {
+        if (!newCpf) return [...prev, newPatient];
+        const idx = prev.findIndex((p) => p.cpf === newCpf);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], ...newPatient, id: copy[idx].id };
+          return copy;
+        }
+        return [...prev, newPatient];
+      });
+
+      setSelectedPatientCpf(newCpf || null);
+      setActiveTab('existente');
       setStep1Errors({});
     }
 
@@ -220,9 +406,41 @@ export default function App() {
   const handleFinishJourney = () => {
     setIsFinishing(true);
     setTimeout(() => {
-      alert("Jornada finalizada e paciente salvo com sucesso!");
-      resetJourney();
-      setIsFinishing(false);
+      // TODO (quando houver backend/DB para fotos):
+      // enviar `anamnesePhotoBlob` (se existir) para uma rota associada ao `journeyId`.
+      // O fluxo não deve quebrar se a rota ainda não existir.
+      const sendPhoto = async () => {
+        if (!anamnesePhotoBlob || !journeyId) return;
+
+        try {
+          const form = new FormData();
+          form.append('journeyId', journeyId);
+          form.append(
+            'photo',
+            anamnesePhotoBlob,
+            `anamnese_${journeyId}.jpg`
+          );
+          if (anamnesePhotoMeta) form.append('meta', JSON.stringify(anamnesePhotoMeta));
+
+          // Exemplo de endpoint futuro (não existe hoje):
+          const res = await fetch(api(`/api/journeys/${journeyId}/photos`), {
+            method: 'POST',
+            body: form,
+            credentials: 'include',
+          });
+
+          // Se endpoint não existir (404/5xx), ignoramos.
+          if (!res.ok) return;
+        } catch {
+          // ignore
+        }
+      };
+
+      Promise.resolve(sendPhoto()).finally(() => {
+        alert("Jornada finalizada e paciente salvo com sucesso!");
+        resetJourney();
+        setIsFinishing(false);
+      });
     }, 1000);
   };
 
@@ -230,6 +448,26 @@ export default function App() {
     setCurrentStep(1);
     setActiveTab('existente');
     setSearchQuery('');
+    if (anamnesePhotoUrl) {
+      try {
+        URL.revokeObjectURL(anamnesePhotoUrl);
+      } catch {
+        // ignore
+      }
+    }
+    setJourneyId(null);
+    setAnamnesePhotoUrl(null);
+    setAnamnesePhotoBlob(null);
+    setAnamnesePhotoMeta(null);
+    if (photoPreviewUrl) {
+      try {
+        URL.revokeObjectURL(photoPreviewUrl);
+      } catch {
+        // ignore
+      }
+    }
+    setPhotoPreviewUrl(null);
+    setPhotoPreviewBlob(null);
     setDataNascimento(''); setIdade('');
     setNome(''); setSexo(''); setEstadoCivil(''); setProfissao(''); setAlergias(''); setStep1Errors({});
     setCpf(''); setRg(''); setTelefone(''); setEmail('');
@@ -241,6 +479,147 @@ export default function App() {
     setTermoLido(false); setTermoAssinado(false);
     setOrientacoes(false); setSatisfacao(false);
   };
+
+  useEffect(() => {
+    if (currentStep === 2 && !journeyId) {
+      setJourneyId(generateJourneyId());
+    }
+  }, [currentStep, journeyId]);
+
+  const stopCamera = () => {
+    try {
+      const stream = streamRef.current;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    } catch {
+      // ignore
+    } finally {
+      streamRef.current = null;
+      setVideoReady(false);
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    }
+  };
+
+  const startCamera = async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setCameraError('Seu navegador não suporta câmera.');
+      return;
+    }
+    setCameraError('');
+    setIsCameraStarting(true);
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setVideoReady(true);
+    } catch (err) {
+      setCameraError(
+        err?.name === 'NotAllowedError'
+          ? 'Permissão da câmera negada. Ajuste as permissões do navegador.'
+          : 'Não foi possível acessar a câmera.'
+      );
+    } finally {
+      setIsCameraStarting(false);
+    }
+  };
+
+  const revokePreviewUrl = (url) => {
+    if (!url) return;
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  };
+
+  const openPhotoModal = () => {
+    if (!journeyId) setJourneyId(generateJourneyId());
+    setCameraError('');
+    setPhotoPreviewUrl(null);
+    setPhotoPreviewBlob(null);
+    setPhotoModalOpen(true);
+  };
+
+  const closePhotoModal = () => {
+    stopCamera();
+    setPhotoModalOpen(false);
+    setCameraError('');
+    revokePreviewUrl(photoPreviewUrl);
+    setPhotoPreviewUrl(null);
+    setPhotoPreviewBlob(null);
+  };
+
+  const retakePhoto = () => {
+    revokePreviewUrl(photoPreviewUrl);
+    setPhotoPreviewUrl(null);
+    setPhotoPreviewBlob(null);
+  };
+
+  const capturePhoto = async () => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    if (!videoReady) return;
+
+    const canvas = document.createElement('canvas');
+    const width = videoEl.videoWidth || 640;
+    const height = videoEl.videoHeight || 480;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(videoEl, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
+    );
+    if (!blob) return;
+
+    revokePreviewUrl(photoPreviewUrl);
+    const url = URL.createObjectURL(blob);
+    setPhotoPreviewUrl(url);
+    setPhotoPreviewBlob(blob);
+  };
+
+  const confirmPhoto = () => {
+    if (!photoPreviewUrl) return;
+    const meta = {
+      journeyId: journeyId || generateJourneyId(),
+      capturedAt: new Date().toISOString(),
+      stepCaptured: currentStep,
+    };
+    // Não revoga o preview: ele vira a foto confirmada (miniatura).
+    setAnamnesePhotoUrl(photoPreviewUrl);
+    setAnamnesePhotoBlob(photoPreviewBlob);
+    setAnamnesePhotoMeta(meta);
+
+    // Mantém a foto confirmada e encerra a câmera.
+    setPhotoPreviewUrl(null);
+    setPhotoPreviewBlob(null);
+    stopCamera();
+    setPhotoModalOpen(false);
+    setCameraError('');
+  };
+
+  useEffect(() => {
+    if (!photoModalOpen) return;
+    // Inicia câmera quando modal abre.
+    startCamera().catch(() => {});
+    return () => {
+      stopCamera();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoModalOpen]);
 
   // ================= LÓGICA DO CANVAS (ETAPA 3) =================
   const colors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'];
@@ -396,6 +775,28 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 font-sans" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
+        {!cookieConsentAccepted && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
+            <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <Shield className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+                  <h3 className="text-[16px] font-bold text-[#0f172a]">Cookies</h3>
+                </div>
+                <p className="text-[13px] text-[#475569] font-medium mb-4">
+                  Usamos cookies para manter sua sessão e melhorar a experiência. Aceitando, você concorda com o uso de cookies.
+                </p>
+                <button
+                  type="button"
+                  onClick={acceptCookies}
+                  className="w-full bg-[#00a88e] hover:bg-[#00967f] text-white py-3 px-4 rounded-xl font-bold transition-all shadow-md border-[3px] border-transparent"
+                >
+                  Aceitar cookies
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col items-center mb-8">
           <div className="bg-[#00a88e] w-16 h-16 rounded-[1.25rem] flex items-center justify-center mb-6 shadow-md border-[3px] border-[#00a88e]/30">
             <Shield className="text-white w-8 h-8" strokeWidth={1.5} />
@@ -479,8 +880,39 @@ export default function App() {
     );
   };
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredPatients = normalizedQuery
+    ? patients.filter((p) =>
+        [p.nome, p.cpf, p.telefone]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(normalizedQuery))
+      )
+    : patients;
+
   return (
     <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
+      {!cookieConsentAccepted && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
+          <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <Shield className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+                <h3 className="text-[16px] font-bold text-[#0f172a]">Cookies</h3>
+              </div>
+              <p className="text-[13px] text-[#475569] font-medium mb-4">
+                Usamos cookies para manter sua sessão e melhorar a experiência. Aceitando, você concorda com o uso de cookies.
+              </p>
+              <button
+                type="button"
+                onClick={acceptCookies}
+                className="w-full bg-[#00a88e] hover:bg-[#00967f] text-white py-3 px-4 rounded-xl font-bold transition-all shadow-md border-[3px] border-transparent"
+              >
+                Aceitar cookies
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <aside className="w-[280px] bg-white border-r-[3px] border-[#00a88e]/15 flex flex-col h-full flex-shrink-0 shadow-[4px_0_24px_rgb(0,168,142,0.02)] z-10">
         <div className="p-6 flex items-center gap-3 mb-2">
           <div className="bg-[#00a88e] p-2 rounded-xl border-[3px] border-[#00a88e]/25 shadow-sm">
@@ -547,18 +979,44 @@ export default function App() {
                       <Search className="absolute left-4 top-3.5 h-5 w-5 text-[#00a88e]/60" strokeWidth={2.5} />
                       <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Buscar por nome, CPF ou telefone..." className="w-full pl-12 pr-4 py-3.5 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-2xl text-[14px] focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] transition-all font-medium" />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-5 rounded-2xl border-[3px] border-[#00a88e]/40 bg-[#f0fdfa] cursor-pointer flex gap-4 shadow-sm hover:shadow-md transition-all hover:border-[#00a88e]">
-                        <div className="w-12 h-12 rounded-full bg-[#00a88e] text-white flex items-center justify-center font-bold text-[16px] flex-shrink-0 shadow-sm">AC</div>
-                        <div className="flex-1">
-                          <h4 className="text-[16px] font-bold text-[#0f766e] mb-1.5">Ana Carolina Silva</h4>
-                          <div className="text-[13px] text-[#475569] space-y-0.5 mb-2 font-medium"><p>123.456.789-00</p><p>(11) 98765-4321</p></div>
-                          <div className="flex items-center gap-1.5 text-[#ef4444] text-[12px] font-bold bg-red-50 w-fit px-2.5 py-1.5 rounded-lg border-[3px] border-red-100">
-                            <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} /> Alergias: Penicilina
-                          </div>
-                        </div>
+                    {filteredPatients.length === 0 ? (
+                      <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
+                        Nenhum paciente encontrado.
                       </div>
-                    </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredPatients.map((p) => {
+                          const isSelected = selectedPatientCpf && p.cpf === selectedPatientCpf;
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => selectPatient(p)}
+                              className={`p-5 rounded-2xl border-[3px] cursor-pointer flex gap-4 shadow-sm transition-all hover:shadow-md ${
+                                isSelected
+                                  ? 'border-[#00a88e] bg-[#e6f7f5]'
+                                  : 'border-[#00a88e]/40 bg-[#f0fdfa] hover:border-[#00a88e]'
+                              }`}
+                            >
+                              <div className="w-12 h-12 rounded-full bg-[#00a88e] text-white flex items-center justify-center font-bold text-[16px] flex-shrink-0 shadow-sm">
+                                {getPatientInitials(p.nome)}
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="text-[16px] font-bold text-[#0f766e] mb-1.5">
+                                  {p.nome}
+                                </h4>
+                                <div className="text-[13px] text-[#475569] space-y-0.5 mb-2 font-medium">
+                                  <p>{p.cpf}</p>
+                                  <p>{p.telefone}</p>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[#ef4444] text-[12px] font-bold bg-red-50 w-fit px-2.5 py-1.5 rounded-lg border-[3px] border-red-100">
+                                  <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} /> Alergias: {p.alergias || '—'}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <form className="space-y-6">
@@ -965,6 +1423,139 @@ export default function App() {
         </div>
       </main>
       
+      {/* Botão de captura com câmera (Anamnese -> Execução) */}
+      {currentStep >= 2 && currentStep <= 4 && (
+        <>
+          <div className="fixed right-6 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-end gap-3">
+            {anamnesePhotoUrl && (
+              <div className="w-14 h-14 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/25 bg-white shadow-sm">
+                <img
+                  src={anamnesePhotoUrl}
+                  alt="Foto do procedimento"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={openPhotoModal}
+              className="w-16 h-16 rounded-full bg-[#ef4444] hover:bg-[#dc2626] transition-all shadow-lg flex items-center justify-center border-[3px] border-red-200"
+              aria-label="Tirar foto durante o procedimento"
+            >
+              <Camera className="w-7 h-7 text-white" strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {/* Modal da câmera */}
+          {photoModalOpen && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-black/60"
+                onClick={closePhotoModal}
+              />
+
+              <div className="relative w-full max-w-[900px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
+                <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-[#e6f7f5] p-2 rounded-xl border-[3px] border-[#00a88e]/25">
+                      <Camera className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h4 className="text-[16px] font-bold text-[#0f172a]">
+                        Foto ao vivo
+                      </h4>
+                      <p className="text-[12px] font-medium text-[#64748b]">
+                        Capture durante o procedimento e confirme.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closePhotoModal}
+                    className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
+                    aria-label="Fechar"
+                  >
+                    <Square className="w-5 h-5" strokeWidth={2.5} />
+                  </button>
+                </div>
+
+                <div className="p-4">
+                  <div className="relative rounded-[20px] overflow-hidden border-[3px] border-[#00a88e]/15 bg-[#f8fbfb]">
+                    <video
+                      ref={videoRef}
+                      playsInline
+                      className="w-full max-h-[70vh] object-contain bg-black"
+                    />
+
+                    {photoPreviewUrl && (
+                      <img
+                        src={photoPreviewUrl}
+                        alt="Prévia da foto"
+                        className="absolute inset-0 w-full h-full object-contain bg-black"
+                      />
+                    )}
+
+                    {!videoReady && !photoPreviewUrl && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <div className="text-white text-[14px] font-bold">
+                          {isCameraStarting ? 'Abrindo câmera...' : 'Carregando...'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {cameraError && (
+                    <div className="mt-3 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
+                      {cameraError}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+                    {!photoPreviewUrl ? (
+                      <button
+                        type="button"
+                        onClick={capturePhoto}
+                        disabled={!videoReady || isCameraStarting}
+                        className="px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md"
+                      >
+                        Capturar
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={retakePhoto}
+                          className="px-5 py-3 rounded-xl font-bold text-[#0f172a] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#00a88e]/20"
+                        >
+                          Repetir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={confirmPhoto}
+                          disabled={!photoPreviewBlob}
+                          className="px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md"
+                        >
+                          Confirmar
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={closePhotoModal}
+                      className="px-5 py-3 rounded-xl font-bold text-[#64748b] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#94a3b8]/30"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
