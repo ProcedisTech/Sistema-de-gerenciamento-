@@ -81,6 +81,13 @@ export default function App() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
+  // Fotos capturadas (na câmera ao vivo) para serem usadas na etapa 3.
+  // Por enquanto, fica apenas em memória (sem banco).
+  const EVALUATION_PHOTO_MAX = 5;
+  const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]); // [{ url, blob, meta }]
+  const [evaluationSelectedPhotoIndex, setEvaluationSelectedPhotoIndex] = useState(null);
+  const [evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl] = useState(null); // foto final com desenho
+
   // ================= ESTADOS DA ETAPA 1 (Check-in) =================
   const [activeTab, setActiveTab] = useState('existente');
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,6 +239,29 @@ export default function App() {
     setEmail(patient.email || '');
     setStep1Errors({});
     setSelectedPatientCpf(patient.cpf || null);
+
+    // Carrega fotos salvas na ficha do paciente (sem banco, vem da lista em memória).
+    const photos = patient.evaluationCapturedPhotos || [];
+    setEvaluationCapturedPhotos(photos);
+    const selectedIdx =
+      patient.evaluationSelectedPhotoIndex !== undefined &&
+      patient.evaluationSelectedPhotoIndex !== null
+        ? patient.evaluationSelectedPhotoIndex
+        : photos.length > 0
+          ? photos.length - 1
+          : null;
+    setEvaluationSelectedPhotoIndex(selectedIdx);
+    setEvaluationAnnotatedPhotoUrl(patient.evaluationAnnotatedPhotoUrl || null);
+
+    // Ajusta a foto base do canvas para a foto selecionada (se houver).
+    if (selectedIdx !== null && photos[selectedIdx]?.url) {
+      setImageSrc(photos[selectedIdx].url);
+      setPaths([]);
+    } else {
+      setImageSrc(null);
+      setPaths([]);
+    }
+
     setActiveTab('existente');
   };
 
@@ -468,6 +498,16 @@ export default function App() {
     }
     setPhotoPreviewUrl(null);
     setPhotoPreviewBlob(null);
+    setEvaluationCapturedPhotos([]);
+    setEvaluationSelectedPhotoIndex(null);
+    if (evaluationAnnotatedPhotoUrl) {
+      try {
+        URL.revokeObjectURL(evaluationAnnotatedPhotoUrl);
+      } catch {
+        // ignore
+      }
+    }
+    setEvaluationAnnotatedPhotoUrl(null);
     setDataNascimento(''); setIdade('');
     setNome(''); setSexo(''); setEstadoCivil(''); setProfissao(''); setAlergias(''); setStep1Errors({});
     setCpf(''); setRg(''); setTelefone(''); setEmail('');
@@ -543,6 +583,10 @@ export default function App() {
   };
 
   const openPhotoModal = () => {
+    if (evaluationCapturedPhotos.length >= EVALUATION_PHOTO_MAX) {
+      setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
+      return;
+    }
     if (!journeyId) setJourneyId(generateJourneyId());
     setCameraError('');
     setPhotoPreviewUrl(null);
@@ -593,15 +637,54 @@ export default function App() {
 
   const confirmPhoto = () => {
     if (!photoPreviewUrl) return;
+
+    if (evaluationCapturedPhotos.length >= EVALUATION_PHOTO_MAX) {
+      setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
+      return;
+    }
     const meta = {
       journeyId: journeyId || generateJourneyId(),
       capturedAt: new Date().toISOString(),
       stepCaptured: currentStep,
     };
-    // Não revoga o preview: ele vira a foto confirmada (miniatura).
+
+    const newEntry = { url: photoPreviewUrl, blob: photoPreviewBlob, meta };
+    const newPhotos = [...evaluationCapturedPhotos, newEntry];
+    const newSelectedIdx = newPhotos.length - 1;
+
+    // Não revoga o preview: ele vira foto confirmada (miniatura lateral).
     setAnamnesePhotoUrl(photoPreviewUrl);
     setAnamnesePhotoBlob(photoPreviewBlob);
     setAnamnesePhotoMeta(meta);
+
+    // Atualiza a lista de fotos capturadas (até 5).
+    setEvaluationCapturedPhotos(newPhotos);
+    setEvaluationSelectedPhotoIndex(newSelectedIdx);
+
+    // Se estiver na etapa 3, já deixa a foto capturada pronta para o desenho.
+    if (currentStep === 3) {
+      setImageSrc(photoPreviewUrl);
+      setPaths([]);
+    }
+
+    // Salva na "ficha" do paciente em memória (sem banco por enquanto).
+    const targetCpf = (selectedPatientCpf || cpf || '').trim();
+    if (targetCpf) {
+      setPatients((prev) =>
+        prev.map((p) => {
+          if ((p.cpf || '').trim() !== targetCpf) return p;
+          return {
+            ...p,
+            evaluationCapturedPhotos: newPhotos.map((ph) => ({
+              url: ph.url,
+              // blob fica apenas em memória, mas não é serializável em DB futuro
+              meta: ph.meta,
+            })),
+            evaluationSelectedPhotoIndex: newSelectedIdx,
+          };
+        })
+      );
+    }
 
     // Mantém a foto confirmada e encerra a câmera.
     setPhotoPreviewUrl(null);
@@ -631,6 +714,8 @@ export default function App() {
       reader.onload = (event) => {
         setImageSrc(event.target.result);
         setPaths([]);
+        setEvaluationSelectedPhotoIndex(null);
+        setEvaluationAnnotatedPhotoUrl(null);
       };
       reader.readAsDataURL(file);
     }
@@ -694,6 +779,70 @@ export default function App() {
       }
     });
     ctx.globalCompositeOperation = 'source-over';
+  };
+
+  const saveAnnotatedEvaluationPhoto = async () => {
+    if (!imageSrc) return;
+    const overlayCanvas = canvasRef.current;
+    if (!overlayCanvas) return;
+    if (!paths || paths.length === 0) {
+      alert('Desenhe algo no canvas antes de salvar.');
+      return;
+    }
+
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = overlayCanvas.width;
+    outCanvas.height = overlayCanvas.height;
+    const ctx = outCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const baseImg = new Image();
+    baseImg.src = imageSrc;
+    await new Promise((resolve, reject) => {
+      baseImg.onload = () => resolve();
+      baseImg.onerror = () => reject(new Error('Falha ao carregar imagem base.'));
+    });
+
+    // Composição com "object-fit: contain" para alinhar com a <img> atual.
+    const baseW = baseImg.naturalWidth || baseImg.width;
+    const baseH = baseImg.naturalHeight || baseImg.height;
+    const scale = Math.min(outCanvas.width / baseW, outCanvas.height / baseH);
+    const drawW = baseW * scale;
+    const drawH = baseH * scale;
+    const dx = (outCanvas.width - drawW) / 2;
+    const dy = (outCanvas.height - drawH) / 2;
+
+    ctx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+    ctx.drawImage(baseImg, dx, dy, drawW, drawH);
+    ctx.drawImage(overlayCanvas, 0, 0);
+
+    const blob = await new Promise((resolve) =>
+      outCanvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
+    );
+    if (!blob) return;
+
+    const url = URL.createObjectURL(blob);
+    if (evaluationAnnotatedPhotoUrl) {
+      try {
+        URL.revokeObjectURL(evaluationAnnotatedPhotoUrl);
+      } catch {
+        // ignore
+      }
+    }
+    setEvaluationAnnotatedPhotoUrl(url);
+
+    const targetCpf = (selectedPatientCpf || cpf || '').trim();
+    if (targetCpf) {
+      setPatients((prev) =>
+        prev.map((p) =>
+          (p.cpf || '').trim() !== targetCpf
+            ? p
+            : { ...p, evaluationAnnotatedPhotoUrl: url }
+        )
+      );
+    }
+
+    alert('Foto desenhada salva na ficha do paciente (mock).');
   };
 
   useEffect(() => {
@@ -890,7 +1039,7 @@ export default function App() {
     : patients;
 
   return (
-    <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
+    <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
       {!cookieConsentAccepted && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
           <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
@@ -913,7 +1062,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <aside className="w-[280px] bg-white border-r-[3px] border-[#00a88e]/15 flex flex-col h-full flex-shrink-0 shadow-[4px_0_24px_rgb(0,168,142,0.02)] z-10">
+      <aside className="w-full md:w-[280px] bg-white border-r-0 md:border-r-[3px] border-b-[3px] md:border-b-0 border-[#00a88e]/15 flex flex-col md:h-full flex-shrink-0 shadow-[4px_0_24px_rgb(0,168,142,0.02)] z-10">
         <div className="p-6 flex items-center gap-3 mb-2">
           <div className="bg-[#00a88e] p-2 rounded-xl border-[3px] border-[#00a88e]/25 shadow-sm">
             <Shield className="text-white w-6 h-6" strokeWidth={2} />
@@ -949,13 +1098,13 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col h-full overflow-y-auto">
-        <header className="bg-white px-10 py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
+        <header className="bg-white px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
           <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
           <p className="text-[#64748b] text-[14px] mb-8 font-medium">Processo completo em 5 etapas</p>
           {renderStepper()}
         </header>
 
-        <div className="p-8 max-w-[1100px] mx-auto w-full">
+        <div className="p-4 sm:p-6 md:p-8 max-w-[1100px] mx-auto w-full">
           <div className="bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 p-8 pb-6">
             
             {/* ETAPA 1: CHECK-IN */}
@@ -1200,6 +1349,47 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-[13px] font-bold text-[#00a88e]">Fotos tiradas na câmera</h4>
+                    <span className="text-[12px] font-bold text-[#00a88e] bg-[#e6f7f5] px-2 py-0.5 rounded-md">
+                      {evaluationCapturedPhotos.length}/{EVALUATION_PHOTO_MAX}
+                    </span>
+                  </div>
+
+                  {evaluationCapturedPhotos.length === 0 ? (
+                    <div className="bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-4 text-[#64748b] text-[13px] font-medium">
+                      Toque no botão redondo à direita para tirar uma foto ao vivo.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {evaluationCapturedPhotos.map((ph, idx) => {
+                        const isSelected = evaluationSelectedPhotoIndex === idx;
+                        return (
+                          <button
+                            key={ph.url}
+                            type="button"
+                            onClick={() => {
+                              setEvaluationSelectedPhotoIndex(idx);
+                              setImageSrc(ph.url);
+                              setPaths([]);
+                              setEvaluationAnnotatedPhotoUrl(null);
+                            }}
+                            className={`w-20 h-20 rounded-2xl overflow-hidden border-[3px] transition-all ${
+                              isSelected
+                                ? 'border-[#00a88e] ring-[4px] ring-[#00a88e]/20'
+                                : 'border-[#00a88e]/15 hover:border-[#00a88e]/40'
+                            }`}
+                            aria-label="Usar foto capturada"
+                          >
+                            <img src={ph.url} alt="Foto capturada" className="w-full h-full object-cover" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 <div className={`border-[3px] border-[#00a88e]/25 bg-white shadow-sm rounded-2xl p-6 mb-8 transition-opacity ${!imageSrc ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                   <div className="flex flex-col md:flex-row gap-6 mb-4">
                     <div className="flex-1">
@@ -1277,6 +1467,22 @@ export default function App() {
                     </div>
                   )}
 
+                  {imageSrc && (
+                    <div className="mb-4 flex justify-end">
+                      <label
+                        className="cursor-pointer text-[13px] font-bold text-[#00a88e] hover:text-[#00967f] bg-[#e6f7f5] border-[3px] border-[#00a88e]/15 hover:bg-[#f0fdfa] px-4 py-2 rounded-xl transition-all"
+                      >
+                        Trocar por upload
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                        />
+                      </label>
+                    </div>
+                  )}
+
                   <div className="flex gap-4 mt-2">
                     <button onClick={() => setPaths(prev => prev.slice(0, -1))} className="flex-1 py-2.5 bg-[#fffbeb] border-[3px] border-[#f59e0b]/40 hover:bg-[#fef3c7] text-[#b45309] rounded-xl font-bold text-[13px] transition-all outline-none shadow-sm">Desfazer</button>
                     <button onClick={() => setPaths([])} className="flex-1 py-2.5 bg-[#fef2f2] border-[3px] border-red-300 hover:bg-red-50 text-red-600 rounded-xl font-bold text-[13px] transition-all outline-none shadow-sm">Limpar Tudo</button>
@@ -1325,6 +1531,34 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {imageSrc && (
+                  <div className="mt-4 flex items-center justify-between gap-4 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={saveAnnotatedEvaluationPhoto}
+                      disabled={!imageSrc || !paths || paths.length === 0}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-sm border-[3px] ${
+                        paths && paths.length > 0
+                          ? 'bg-[#00a88e] hover:bg-[#00967f] text-white border-transparent'
+                          : 'bg-[#f8fbfb] text-[#94a3b8] border-[#e2e8f0] cursor-not-allowed shadow-none'
+                      }`}
+                    >
+                      <CheckCircle className="w-4 h-4" strokeWidth={3} />
+                      Salvar foto desenhada
+                    </button>
+
+                    {evaluationAnnotatedPhotoUrl && (
+                      <div className="w-20 h-20 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/20 bg-white shadow-sm">
+                        <img
+                          src={evaluationAnnotatedPhotoUrl}
+                          alt="Foto desenhada salva"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
