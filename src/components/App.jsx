@@ -5,7 +5,7 @@ import {
   CheckCircle, Square, CheckSquare, CheckCircle2, Award,
   Lock, User as UserIcon, EyeOff, Search, AlertTriangle, 
   ClipboardList, Palette, PenTool, Circle, Eraser, 
-  Camera,
+  Camera, Menu, X,
   Undo, Trash2, Upload, Image as ImageIcon, Lightbulb
 } from 'lucide-react';
 
@@ -67,6 +67,7 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
   const [activeView, setActiveView] = useState('jornada'); // 'jornada' | 'agenda'
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
 
   // ================= FOTO DURANTE PROCEDIMENTO =================
@@ -1273,7 +1274,7 @@ export default function App() {
   return (
     <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
       {!cookieConsentAccepted && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
+        <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
           <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
             <div className="p-6">
               <div className="flex items-center gap-3 mb-3">
@@ -1294,7 +1295,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <aside className="w-full md:w-[280px] bg-white border-r-0 md:border-r-[3px] border-b-[3px] md:border-b-0 border-[#00a88e]/15 flex flex-col md:h-full flex-shrink-0 shadow-[4px_0_24px_rgb(0,168,142,0.02)] z-10">
+      <aside className="hidden md:flex w-[280px] bg-white border-r-[3px] border-[#00a88e]/15 flex-col md:h-full flex-shrink-0 shadow-[4px_0_24px_rgb(0,168,142,0.02)] z-10">
         <div className="p-6 flex items-center gap-3 mb-2">
           <div className="bg-[#00a88e] p-2 rounded-xl border-[3px] border-[#00a88e]/25 shadow-sm">
             <Shield className="text-white w-6 h-6" strokeWidth={2} />
@@ -1350,7 +1351,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-full overflow-y-auto">
+      <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[96px] md:pb-0">
         <header className="bg-white px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
           {activeView === 'jornada' ? (
             <>
@@ -2361,6 +2362,157 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Barra de navegação mobile */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[130] bg-white border-t-[3px] border-[#00a88e]/15">
+        <div className="px-3 py-2.5 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveView('jornada')
+              setCurrentStep(1)
+              setActiveTab('existente')
+            }}
+            className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-xl py-2 border-[3px] transition-all ${
+              activeView === 'jornada'
+                ? 'border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e]'
+                : 'border-transparent bg-white text-[#64748b]'
+            }`}
+          >
+            <GitCommit className="w-5 h-5" strokeWidth={2.5} />
+            <span className="text-[11px] font-bold">Jornada</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('agenda')}
+            className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-xl py-2 border-[3px] transition-all ${
+              activeView === 'agenda'
+                ? 'border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e]'
+                : 'border-transparent bg-white text-[#64748b]'
+            }`}
+          >
+            <Calendar className="w-5 h-5" strokeWidth={2.5} />
+            <span className="text-[11px] font-bold">Agenda</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobileNavOpen(true)
+            }}
+            className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-xl py-2 border-[3px] transition-all ${
+              'border-transparent bg-white text-[#64748b]'
+            }`}
+          >
+            <Menu className="w-5 h-5" strokeWidth={2.5} />
+            <span className="text-[11px] font-bold">Menu</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Drawer lateral mobile (inclui deslogar) */}
+      {mobileNavOpen && (
+        <div className="md:hidden fixed inset-0 z-[140]">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[320px] bg-white border-r-[3px] border-[#00a88e]/15 shadow-[4px_0_24px_rgb(0,168,142,0.08)] p-4 overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-[#00a88e] p-2 rounded-xl border-[3px] border-[#00a88e]/25 shadow-sm">
+                  <Shield className="text-white w-6 h-6" strokeWidth={2} />
+                </div>
+                <div>
+                  <h1 className="text-[16px] font-bold text-[#0f172a] leading-tight">
+                    Procedi
+                  </h1>
+                  <p className="text-[10px] text-[#64748b] font-medium">Harmonização Premium</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="w-10 h-10 rounded-xl border-[3px] border-[#00a88e]/20 text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa] transition-all flex items-center justify-center"
+                aria-label="Fechar menu"
+              >
+                <X className="w-5 h-5" strokeWidth={2.5} />
+              </button>
+            </div>
+
+            <div className="mx-0 mb-5 bg-[#e6f7f5] rounded-[14px] p-3 flex items-center gap-3 border-[3px] border-[#00a88e]/25 shadow-sm">
+              <div className="w-10 h-10 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-sm">
+                RS
+              </div>
+              <div className="flex-1">
+                <h2 className="text-[13px] font-bold text-[#0f766e] leading-tight">
+                  Rafael Silva
+                </h2>
+                <p className="text-[11px] text-[#00a88e] font-medium">Administrador</p>
+              </div>
+            </div>
+
+            <nav className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveView('jornada')
+                  setCurrentStep(1)
+                  setActiveTab('existente')
+                  setMobileNavOpen(false)
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-[14px] shadow-sm border-[3px] ${
+                  activeView === 'jornada'
+                    ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                    : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+                }`}
+              >
+                <GitCommit className="w-5 h-5" strokeWidth={2.5} /> Jornada do Paciente
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveView('agenda')
+                  setMobileNavOpen(false)
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+                  activeView === 'agenda'
+                    ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                    : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+                }`}
+              >
+                <Calendar className="w-5 h-5" /> Agenda
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // Ainda não existe tela dedicada; mantemos o botão como atalho visual.
+                  setMobileNavOpen(false)
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-[#64748b] hover:bg-[#f0fdfa] border-[3px] border-transparent hover:border-[#00a88e]/20 rounded-xl font-semibold text-[14px] transition-all"
+              >
+                <Users className="w-5 h-5" strokeWidth={2.5} /> Pacientes
+              </button>
+            </nav>
+
+            <div className="mt-5 pt-4 border-t-[3px] border-[#00a88e]/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false)
+                  handleLogout()
+                }}
+                className="flex items-center gap-3 px-4 py-3 text-[#ef4444] hover:bg-red-50 border-[3px] border-transparent hover:border-red-100 w-full rounded-xl font-bold text-[14px] transition-all"
+              >
+                <LogOut className="w-5 h-5" strokeWidth={2.5} /> Sair do Sistema
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Botão de captura com câmera (Anamnese -> Execução) */}
       {activeView === 'jornada' && currentStep >= 2 && currentStep <= 4 && (
