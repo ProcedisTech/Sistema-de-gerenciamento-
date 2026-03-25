@@ -66,6 +66,7 @@ export default function App() {
   // ================= ESTADO GLOBAL DA JORNADA =================
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [activeView, setActiveView] = useState('jornada'); // 'jornada' | 'agenda'
   const [journeyId, setJourneyId] = useState(null);
 
   // ================= FOTO DURANTE PROCEDIMENTO =================
@@ -126,6 +127,27 @@ export default function App() {
   })
 
   const [selectedPatientCpf, setSelectedPatientCpf] = useState(null)
+
+  // ================= AGENDA (MODO TESTE SEM BANCO) =================
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const [appointments, setAppointments] = useState([]) // [{id,date,time,procedure,patient:{nome,cpf,telefone}}]
+  const [selectedDay, setSelectedDay] = useState(todayIso)
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear())
+  const [calendarMonthIndex, setCalendarMonthIndex] = useState(new Date().getMonth()) // 0-11
+
+  const [agendaModalOpen, setAgendaModalOpen] = useState(false)
+  const [agendaModePatient, setAgendaModePatient] = useState('novo') // 'novo' | 'existente'
+  const [agendaDate, setAgendaDate] = useState(todayIso)
+  const [agendaTime, setAgendaTime] = useState('09:00')
+  const [agendaProcedure, setAgendaProcedure] = useState('')
+
+  const [agendaPatientSearch, setAgendaPatientSearch] = useState('')
+  const [agendaSelectedPatientCpf, setAgendaSelectedPatientCpf] = useState('')
+  const [agendaModalError, setAgendaModalError] = useState('')
+
+  const [agendaNewPatientNome, setAgendaNewPatientNome] = useState('')
+  const [agendaNewPatientCpf, setAgendaNewPatientCpf] = useState('')
+  const [agendaNewPatientTelefone, setAgendaNewPatientTelefone] = useState('')
 
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
@@ -1038,6 +1060,216 @@ export default function App() {
       )
     : patients;
 
+  // ================= AGENDA (helpers) =================
+  const pad2 = (n) => String(n).padStart(2, '0')
+  const buildDateStr = (year, monthIndex, day) =>
+    `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`
+
+  const monthStartWeekday = new Date(calendarYear, calendarMonthIndex, 1).getDay() // 0..6 (Dom..Sáb)
+  const monthDaysCount = new Date(calendarYear, calendarMonthIndex + 1, 0).getDate()
+  const calendarCells = Array.from({ length: 42 }).map((_, idx) => {
+    const dayNum = idx - monthStartWeekday + 1
+    if (dayNum < 1 || dayNum > monthDaysCount) return { dayNum: null, dateStr: null }
+    return { dayNum, dateStr: buildDateStr(calendarYear, calendarMonthIndex, dayNum) }
+  })
+
+  const appointmentsForSelectedDay = appointments.filter((a) => a.date === selectedDay)
+
+  const normalizeCpf = (v) => String(v || '').replace(/\D/g, '')
+  const normalizeTelefone = (v) => String(v || '').replace(/\D/g, '')
+
+  const monthAppointments = appointments.filter((a) => {
+    const ym = a?.date ? a.date.slice(0, 7) : ''
+    const currentYm = `${calendarYear}-${pad2(calendarMonthIndex + 1)}`
+    return ym === currentYm
+  })
+
+  const monthPatientCpfs = new Set(
+    monthAppointments
+      .map((a) => normalizeCpf(a?.patient?.cpf))
+      .filter(Boolean)
+  )
+  const monthConfirmedPatientCpfs = new Set(
+    monthAppointments
+      .filter((a) => (a?.status || 'pendente') === 'confirmado')
+      .map((a) => normalizeCpf(a?.patient?.cpf))
+      .filter(Boolean)
+  )
+  const monthPendingPatientCpfs = new Set(
+    monthAppointments
+      .filter((a) => (a?.status || 'pendente') === 'pendente')
+      .map((a) => normalizeCpf(a?.patient?.cpf))
+      .filter(Boolean)
+  )
+
+  const todayAppointments = appointments.filter((a) => a.date === todayIso)
+  const todayPatientCpfs = new Set(
+    todayAppointments
+      .map((a) => normalizeCpf(a?.patient?.cpf))
+      .filter(Boolean)
+  )
+
+  const monthLabel = (() => {
+    const labels = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ]
+    return `${labels[calendarMonthIndex]} ${calendarYear}`
+  })()
+
+  const openAgendaModal = () => {
+    setAgendaModalError('')
+    setAgendaModalOpen(true)
+    setAgendaModePatient('novo')
+    setAgendaDate(selectedDay)
+    setAgendaTime('09:00')
+    setAgendaProcedure('')
+    setAgendaPatientSearch('')
+    setAgendaSelectedPatientCpf('')
+    setAgendaNewPatientNome('')
+    setAgendaNewPatientCpf('')
+    setAgendaNewPatientTelefone('')
+  }
+
+  const closeAgendaModal = () => {
+    setAgendaModalOpen(false)
+    setAgendaModalError('')
+  }
+
+  const confirmAgendaAppointment = () => {
+    setAgendaModalError('')
+
+    if (!agendaDate || !agendaTime || !agendaProcedure.trim()) {
+      setAgendaModalError('Preencha data, horário e procedimento.')
+      return
+    }
+
+    const createPatientIfNeeded = () => {
+      if (agendaModePatient === 'existente') {
+        const existing = patients.find(
+          (p) => (p.cpf || '').trim() === (agendaSelectedPatientCpf || '').trim()
+        )
+        if (!existing) return null
+        return existing
+      }
+
+      const nome = agendaNewPatientNome.trim()
+      const cpfInput = agendaNewPatientCpf.trim()
+      const telInput = agendaNewPatientTelefone.trim()
+      if (!nome || !cpfInput || !telInput) return null
+
+      // Evita duplicar: tenta achar por CPF (principal) e telefone (fallback).
+      const normalized = {
+        cpf: normalizeCpf(cpfInput),
+        telefone: normalizeTelefone(telInput),
+      }
+
+      const found =
+        patients.find((p) => normalizeCpf(p.cpf) === normalized.cpf) ||
+        patients.find((p) => normalizeTelefone(p.telefone) === normalized.telefone)
+
+      if (found) {
+        return {
+          ...found,
+          nome,
+          cpf: cpfInput,
+          telefone: telInput,
+        }
+      }
+
+      return {
+        id: `patient_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        nome,
+        dataNascimento: '',
+        idade: '',
+        sexo: '',
+        estadoCivil: '',
+        profissao: '',
+        alergias: '',
+        cpf: cpfInput,
+        rg: '',
+        telefone: telInput,
+        email: '',
+      }
+    }
+
+    const patient = createPatientIfNeeded()
+    if (!patient) {
+      setAgendaModalError('Selecione/Preencha o paciente para agendar.')
+      return
+    }
+
+    // Se paciente foi atualizado/created, persiste no array (mock).
+    if (agendaModePatient === 'novo') {
+      setPatients((prev) => {
+        const cpfKey = (patient.cpf || '').trim()
+        if (!cpfKey) return prev
+        const idx = prev.findIndex((p) => (p.cpf || '').trim() === cpfKey)
+        if (idx >= 0) {
+          const copy = [...prev]
+          copy[idx] = { ...copy[idx], ...patient }
+          return copy
+        }
+        return [...prev, patient]
+      })
+    }
+
+    const newAppointment = {
+      id: `appt_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      date: agendaDate,
+      time: agendaTime,
+      procedure: agendaProcedure.trim(),
+      status: 'pendente',
+      patient: {
+        nome: patient.nome || '',
+        cpf: patient.cpf || '',
+        telefone: patient.telefone || '',
+      },
+    }
+
+    setAppointments((prev) => [...prev, newAppointment])
+    setSelectedDay(agendaDate)
+    setCalendarYear(Number(agendaDate.slice(0, 4)))
+    setCalendarMonthIndex(Number(agendaDate.slice(5, 7)) - 1)
+    closeAgendaModal()
+  }
+
+  const toggleAppointmentStatus = (appointmentId, nextStatus) => {
+    setAppointments((prev) =>
+      prev.map((a) =>
+        a.id === appointmentId ? { ...a, status: nextStatus } : a
+      )
+    )
+  }
+
+  const goPrevCalendarMonth = () => {
+    if (calendarMonthIndex === 0) {
+      setCalendarMonthIndex(11)
+      setCalendarYear((y) => y - 1)
+    } else {
+      setCalendarMonthIndex((m) => m - 1)
+    }
+  }
+
+  const goNextCalendarMonth = () => {
+    if (calendarMonthIndex === 11) {
+      setCalendarMonthIndex(0)
+      setCalendarYear((y) => y + 1)
+    } else {
+      setCalendarMonthIndex((m) => m + 1)
+    }
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
       {!cookieConsentAccepted && (
@@ -1080,10 +1312,31 @@ export default function App() {
           </div>
         </div>
         <nav className="flex-1 px-4 space-y-2">
-          <button className="w-full flex items-center gap-3 px-4 py-3 bg-[#e6f7f5] text-[#00a88e] border-[3px] border-[#00a88e]/25 rounded-xl font-bold text-[14px] shadow-sm">
+          <button
+            onClick={() => {
+              setActiveView('jornada')
+              if (activeView !== 'jornada') {
+                // Ao voltar da Agenda, garantimos que o paciente recem-criado apareca na lista.
+                setCurrentStep(1)
+                setActiveTab('existente')
+              }
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-[14px] shadow-sm border-[3px] ${
+              activeView === 'jornada'
+                ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+            }`}
+          >
             <GitCommit className="w-5 h-5" strokeWidth={2.5} /> Jornada do Paciente
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-[#64748b] hover:bg-[#f0fdfa] hover:text-[#00a88e] border-[3px] border-transparent hover:border-[#00a88e]/20 rounded-xl font-semibold text-[14px] transition-all">
+          <button
+            onClick={() => setActiveView('agenda')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+              activeView === 'agenda'
+                ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+            }`}
+          >
             <Calendar className="w-5 h-5" /> Agenda
           </button>
           <button className="w-full flex items-center gap-3 px-4 py-3 text-[#64748b] hover:bg-[#f0fdfa] hover:text-[#00a88e] border-[3px] border-transparent hover:border-[#00a88e]/20 rounded-xl font-semibold text-[14px] transition-all">
@@ -1099,15 +1352,32 @@ export default function App() {
 
       <main className="flex-1 flex flex-col h-full overflow-y-auto">
         <header className="bg-white px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
-          <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
-          <p className="text-[#64748b] text-[14px] mb-8 font-medium">Processo completo em 5 etapas</p>
-          {renderStepper()}
+          {activeView === 'jornada' ? (
+            <>
+              <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">
+                Jornada de Harmonização Otimizada
+              </h2>
+              <p className="text-[#64748b] text-[14px] mb-8 font-medium">
+                Processo completo em 5 etapas
+              </p>
+              {renderStepper()}
+            </>
+          ) : (
+            <>
+              <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">Agenda</h2>
+              <p className="text-[#64748b] text-[14px] mb-6 font-medium">
+                Gerenciamento completo de agendamentos
+              </p>
+            </>
+          )}
         </header>
 
         <div className="p-4 sm:p-6 md:p-8 max-w-[1100px] mx-auto w-full">
           <div className="bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 p-8 pb-6">
             
-            {/* ETAPA 1: CHECK-IN */}
+            {activeView === 'jornada' && (
+              <>
+                {/* ETAPA 1: CHECK-IN */}
             {currentStep === 1 && (
               <div className="animate-in fade-in duration-300">
                 <div className="flex items-center gap-4 mb-8">
@@ -1651,14 +1921,449 @@ export default function App() {
                   {isFinishing ? 'Salvando...' : 'Finalizar Jornada'} <CheckCircle className="w-4 h-4" strokeWidth={3} />
                 </button>
               )}
-            </div>
 
+                {/* Mantém o restante do fluxo da Jornada dentro do wrapper */}
+            </div>
+              </>
+            )}
+
+            {activeView === 'agenda' && (
+              <div>
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                  <div>
+                    <h3 className="text-[18px] font-bold text-[#0f172a]">
+                      Agenda
+                    </h3>
+                    <p className="text-[#64748b] text-[13px] font-medium">
+                      Clique em um dia para ver os agendamentos
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={openAgendaModal}
+                    className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent flex items-center justify-center gap-2"
+                  >
+                    <Calendar className="w-5 h-5" /> + Novo Agendamento
+                  </button>
+                </div>
+
+                {/* Prévia de contagens do mês */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                  <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-2xl p-4 shadow-sm">
+                    <div className="text-[12px] font-bold text-[#64748b] mb-1">
+                      Total do Mês
+                    </div>
+                    <div className="text-[20px] font-extrabold text-[#0f172a]">
+                      {monthPatientCpfs.size}
+                    </div>
+                  </div>
+                  <div className="bg-white border-[3px] border-[#22c55e]/15 rounded-2xl p-4 shadow-sm">
+                    <div className="text-[12px] font-bold text-[#64748b] mb-1">
+                      Confirmados
+                    </div>
+                    <div className="text-[20px] font-extrabold text-[#16a34a]">
+                      {monthConfirmedPatientCpfs.size}
+                    </div>
+                  </div>
+                  <div className="bg-white border-[3px] border-[#f59e0b]/20 rounded-2xl p-4 shadow-sm">
+                    <div className="text-[12px] font-bold text-[#64748b] mb-1">
+                      Pendentes
+                    </div>
+                    <div className="text-[20px] font-extrabold text-[#b45309]">
+                      {monthPendingPatientCpfs.size}
+                    </div>
+                  </div>
+                  <div className="bg-white border-[3px] border-[#00a88e]/10 rounded-2xl p-4 shadow-sm">
+                    <div className="text-[12px] font-bold text-[#64748b] mb-1">
+                      Hoje
+                    </div>
+                    <div className="text-[20px] font-extrabold text-[#0f766e]">
+                      {todayPatientCpfs.size}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+                  <div className="flex-1 bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                      <button
+                        type="button"
+                        onClick={goPrevCalendarMonth}
+                        className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white border-[3px] border-[#00a88e]/20 text-[#0f766e] font-bold hover:bg-[#e6f7f5]"
+                      >
+                        Anterior
+                      </button>
+                      <div className="text-[16px] font-bold text-[#0f172a]">
+                        {monthLabel}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={goNextCalendarMonth}
+                        className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white border-[3px] border-[#00a88e]/20 text-[#0f766e] font-bold hover:bg-[#e6f7f5]"
+                      >
+                        Próximo
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-[12px] font-bold text-[#64748b] mb-2 sm:mb-3">
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => (
+                        <div key={d}>{d}</div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                      {calendarCells.map((cell, idx) => {
+                        const { dayNum, dateStr } = cell
+                        const count =
+                          dayNum && dateStr
+                            ? appointments.filter((a) => a.date === dateStr).length
+                            : 0
+                        const isSelected = dateStr && dateStr === selectedDay
+
+                        return (
+                          <button
+                            key={`${idx}`}
+                            type="button"
+                            disabled={!dayNum}
+                            onClick={() => dayNum && dateStr && setSelectedDay(dateStr)}
+                            className={`h-[44px] sm:h-[54px] rounded-xl border-[3px] text-left px-1.5 sm:px-2 py-1.5 sm:py-2 transition-all ${
+                              dayNum
+                                ? isSelected
+                                  ? 'border-[#00a88e] bg-[#e6f7f5]'
+                                  : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
+                                : 'border-transparent bg-transparent'
+                            }`}
+                          >
+                            <div className="text-[11px] sm:text-[12px] font-bold text-[#0f172a]">
+                              {dayNum || ''}
+                            </div>
+                            {count > 0 && (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="w-5 h-3 sm:w-6 sm:h-4 rounded-md bg-[#00a88e] text-white text-[10px] sm:text-[11px] font-bold flex items-center justify-center">
+                                  {count}
+                                </span>
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="w-full lg:w-[340px]">
+                    <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-2xl p-3 sm:p-4 mt-2 lg:mt-0">
+                      <div className="flex items-center justify-between mb-2 sm:mb-3">
+                        <h4 className="text-[16px] font-bold text-[#0f172a]">
+                          {selectedDay}
+                        </h4>
+                        <span className="text-[12px] font-bold text-[#0f766e] bg-[#e6f7f5] border-[3px] border-[#00a88e]/20 px-2 py-0.5 rounded-lg">
+                          {appointmentsForSelectedDay.length}
+                        </span>
+                      </div>
+
+                      {appointmentsForSelectedDay.length === 0 ? (
+                        <div className="text-[#64748b] text-[13px] font-medium">
+                          Sem agendamentos para este dia.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {appointmentsForSelectedDay.map((a) => (
+                            (() => {
+                              const status = (a?.status || 'pendente')
+                              const statusLabel =
+                                status === 'confirmado' ? 'confirmado' : 'pendente'
+                              const statusPill =
+                                status === 'confirmado'
+                                  ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
+                                  : 'bg-[#fef9c3] text-[#b45309] border-[#f59e0b]/20'
+
+                              const toggleNext =
+                                status === 'pendente' ? 'confirmado' : 'pendente'
+
+                              return (
+                            <div
+                              key={a.id}
+                              className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb]"
+                            >
+                              <div className="flex items-center justify-between gap-3 mb-1">
+                                <div className="text-[14px] font-bold text-[#0f766e]">
+                                  {a.patient?.nome || 'Paciente'}
+                                </div>
+                                <div className="text-[12px] font-bold text-[#64748b]">
+                                  {a.time}
+                                </div>
+                              </div>
+                              <div className="text-[13px] font-medium text-[#334155]">
+                                {a.procedure}
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3 mt-3">
+                                <span
+                                  className={`text-[12px] font-bold px-2 py-1 rounded-lg border-[3px] ${statusPill}`}
+                                >
+                                  {statusLabel}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    toggleAppointmentStatus(
+                                      a.id,
+                                      toggleNext
+                                    )
+                                  }
+                                  className="text-[12px] font-bold px-3 py-2 rounded-xl border-[3px] border-transparent bg-white text-[#00a88e] hover:bg-[#e6f7f5] transition-all"
+                                >
+                                  {toggleNext === 'confirmado'
+                                    ? 'Confirmar'
+                                    : 'Marcar pendente'}
+                                </button>
+                              </div>
+                            </div>
+                              )
+                            })()
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {agendaModalOpen && (
+                  <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                    <div
+                      className="absolute inset-0 bg-black/60"
+                      onClick={closeAgendaModal}
+                    />
+
+                    <div className="relative w-full max-w-[860px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-y-auto max-h-[92vh]">
+                      <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+                          <div>
+                            <h4 className="text-[16px] font-bold text-[#0f172a]">
+                              Novo Agendamento
+                            </h4>
+                            <p className="text-[12px] font-medium text-[#64748b]">
+                              Selecione ou crie um paciente e confirme
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={closeAgendaModal}
+                          className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
+                          aria-label="Fechar"
+                        >
+                          <Square className="w-5 h-5" strokeWidth={2.5} />
+                        </button>
+                      </div>
+
+                      <div className="p-4">
+                        {agendaModalError && (
+                          <div className="mb-4 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
+                            {agendaModalError}
+                          </div>
+                        )}
+
+                        <div className="mb-4">
+                          <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-3 border-[3px] border-[#00a88e]/15">
+                            <button
+                              type="button"
+                              onClick={() => setAgendaModePatient('novo')}
+                              className={`flex-1 py-3 text-[14px] font-bold rounded-xl transition-all ${
+                                agendaModePatient === 'novo'
+                                  ? 'bg-[#00a88e] text-white shadow-md'
+                                  : 'text-[#64748b] hover:text-[#00a88e] hover:bg-white'
+                              }`}
+                            >
+                              Novo paciente
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAgendaModePatient('existente')}
+                              className={`flex-1 py-3 text-[14px] font-bold rounded-xl transition-all ${
+                                agendaModePatient === 'existente'
+                                  ? 'bg-[#00a88e] text-white shadow-md'
+                                  : 'text-[#64748b] hover:text-[#00a88e] hover:bg-white'
+                              }`}
+                            >
+                              Paciente da clínica
+                            </button>
+                          </div>
+
+                          {agendaModePatient === 'novo' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div className="space-y-1.5 md:col-span-1">
+                                <label className="text-[13px] font-bold text-[#00a88e]">
+                                  Nome
+                                </label>
+                                <input
+                                  value={agendaNewPatientNome}
+                                  onChange={(e) =>
+                                    setAgendaNewPatientNome(e.target.value)
+                                  }
+                                  className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                                  placeholder="Nome do paciente"
+                                />
+                              </div>
+                              <div className="space-y-1.5 md:col-span-1">
+                                <label className="text-[13px] font-bold text-[#00a88e]">
+                                  CPF
+                                </label>
+                                <input
+                                  value={agendaNewPatientCpf}
+                                  onChange={(e) =>
+                                    setAgendaNewPatientCpf(
+                                      maskCPF(e.target.value)
+                                    )
+                                  }
+                                  className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                                  placeholder="000.000.000-00"
+                                />
+                              </div>
+                              <div className="space-y-1.5 md:col-span-1">
+                                <label className="text-[13px] font-bold text-[#00a88e]">
+                                  Telefone
+                                </label>
+                                <input
+                                  value={agendaNewPatientTelefone}
+                                  onChange={(e) =>
+                                    setAgendaNewPatientTelefone(
+                                      maskTelefone(e.target.value)
+                                    )
+                                  }
+                                  className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                                  placeholder="(00) 00000-0000"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <input
+                                value={agendaPatientSearch}
+                                onChange={(e) =>
+                                  setAgendaPatientSearch(e.target.value)
+                                }
+                                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                                placeholder="Buscar por nome, CPF ou telefone..."
+                              />
+
+                              <div className="max-h-[220px] overflow-y-auto pr-1">
+                                {patients
+                                  .filter((p) => {
+                                    const q = agendaPatientSearch
+                                      .trim()
+                                      .toLowerCase()
+                                    if (!q) return true
+                                    return [p.nome, p.cpf, p.telefone]
+                                      .filter(Boolean)
+                                      .some((v) =>
+                                        String(v)
+                                          .toLowerCase()
+                                          .includes(q)
+                                      )
+                                  })
+                                  .map((p) => {
+                                    const selected =
+                                      (agendaSelectedPatientCpf || '') ===
+                                      (p.cpf || '').trim()
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={p.id}
+                                        onClick={() =>
+                                          setAgendaSelectedPatientCpf(
+                                            (p.cpf || '').trim()
+                                          )
+                                        }
+                                        className={`w-full text-left p-4 rounded-xl border-[3px] mb-2 ${
+                                          selected
+                                            ? 'border-[#00a88e] bg-[#e6f7f5]'
+                                            : 'border-[#00a88e]/15 bg-white hover:bg-[#f0fdfa]'
+                                        }`}
+                                      >
+                                        <div className="text-[14px] font-bold text-[#0f766e]">
+                                          {p.nome}
+                                        </div>
+                                        <div className="text-[12px] font-medium text-[#64748b]">
+                                          {p.cpf} • {p.telefone}
+                                        </div>
+                                      </button>
+                                    )
+                                  })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[13px] font-bold text-[#00a88e]">
+                              Data
+                            </label>
+                            <input
+                              type="date"
+                              value={agendaDate}
+                              onChange={(e) => setAgendaDate(e.target.value)}
+                              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[13px] font-bold text-[#00a88e]">
+                              Horário
+                            </label>
+                            <input
+                              type="time"
+                              value={agendaTime}
+                              onChange={(e) => setAgendaTime(e.target.value)}
+                              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                            />
+                          </div>
+                          <div className="space-y-1.5 md:col-span-1">
+                            <label className="text-[13px] font-bold text-[#00a88e]">
+                              Procedimento
+                            </label>
+                            <input
+                              value={agendaProcedure}
+                              onChange={(e) =>
+                                setAgendaProcedure(e.target.value)
+                              }
+                              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                              placeholder="Ex: Botox"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-4 border-t-[3px] border-[#00a88e]/15 flex items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={closeAgendaModal}
+                          className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/20 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa]"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={confirmAgendaAppointment}
+                          className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md"
+                        >
+                          Confirmar agendamento
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </main>
       
       {/* Botão de captura com câmera (Anamnese -> Execução) */}
-      {currentStep >= 2 && currentStep <= 4 && (
+      {activeView === 'jornada' && currentStep >= 2 && currentStep <= 4 && (
         <>
           <div className="fixed right-6 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-end gap-3">
             {anamnesePhotoUrl && (
