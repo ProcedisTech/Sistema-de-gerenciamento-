@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:full": "concurrently -k \"npm run dev\" \"npm run server\"",
+    "ports:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/clean-ports.ps1",
+    "dev:full:clean": "npm run ports:clean && npm run dev:full",
     "server": "npm run dev --prefix server",
     "build": "vite build",
     "lint": "eslint .",
@@ -29,6 +31,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "postcss": "^8.5.8",
+    "prettier": "^3.8.1",
+    "prettier-eslint": "^16.4.2",
     "tailwindcss": "^3.4.19",
     "vite": "^8.0.0"
   }

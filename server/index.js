@@ -9,9 +9,6 @@ import { createAuthRouter } from './routes/auth.js'
 import { requireAuth } from './middleware/requireAuth.js'
 
 const PORT = Number(process.env.PORT) || 3001
-// Se não estiver definido, o CORS vai refletir a origem recebida (bom para testes em nuvem).
-// Em produção, defina para ficar restrito.
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN
 const JWT_SECRET =
   process.env.JWT_SECRET ||
   'procedi-dev-jwt-secret-please-change-me-0123456789abcdef'
@@ -22,6 +19,16 @@ const ADMIN_PASSWORD_FALLBACK = process.env.ADMIN_PASSWORD || 'PROcedi'
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH
 const COOKIE_NAME = process.env.COOKIE_NAME || 'procedi_token'
 const isProd = process.env.NODE_ENV === 'production'
+// Em desenvolvimento aceitamos localhost automatico; em producao use FRONTEND_ORIGIN.
+const FRONTEND_ORIGIN = isProd ? process.env.FRONTEND_ORIGIN : undefined
+
+const localDevOriginRegex = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/
+
+function resolveCorsOrigin(origin) {
+  if (FRONTEND_ORIGIN) return FRONTEND_ORIGIN
+  if (!origin) return true
+  return localDevOriginRegex.test(origin)
+}
 
 const cookieSameSite = process.env.COOKIE_SAMESITE || 'lax'
 const cookieBase = {
@@ -47,7 +54,14 @@ async function start() {
 
   app.use(
     cors({
-      origin: FRONTEND_ORIGIN || true,
+      origin: (origin, callback) => {
+        const allowed = resolveCorsOrigin(origin)
+        if (allowed === true || allowed === origin) {
+          callback(null, allowed)
+          return
+        }
+        callback(new Error(`Origem nao permitida pelo CORS: ${origin || 'desconhecida'}`))
+      },
       credentials: true,
       methods: ['GET', 'POST', 'OPTIONS'],
       allowedHeaders: ['Content-Type'],
@@ -98,7 +112,9 @@ async function start() {
 
   app.listen(PORT, () => {
     console.log(`Procedi API em http://localhost:${PORT}`)
-    console.log(`CORS: ${FRONTEND_ORIGIN || '(refletindo origem)'} `)
+    console.log(
+      `CORS: ${FRONTEND_ORIGIN || 'automatico (localhost/127.0.0.1 em qualquer porta)'} `
+    )
     console.log(`Cookie SameSite: ${cookieSameSite} (secure=${cookieBase.secure})`)
   })
 }
