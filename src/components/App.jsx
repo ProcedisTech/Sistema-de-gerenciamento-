@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   Shield, Calendar, Users, LogOut, ChevronLeft, ChevronRight, 
   UserCheck, FileText, Eye, Syringe, FileCheck, GitCommit,
   CheckCircle, Square, CheckSquare, CheckCircle2, Award,
   Lock, User as UserIcon, EyeOff, Search, AlertTriangle, 
-  ClipboardList, Palette, PenTool, Circle, Eraser, 
-  Camera, Menu, X,
-  Undo, Trash2, Upload, Image as ImageIcon, Lightbulb
+  ClipboardList, Upload, Image as ImageIcon, Lightbulb,
+  Clock, Download, Bell, Phone, Mail, Activity, Plus,
+  Play, StickyNote, ExternalLink, ArrowLeft, Menu, X, Camera
 } from 'lucide-react';
 
 const api = (path) =>
@@ -50,23 +50,32 @@ export default function App() {
     }
 
     let cancelled = false;
+    // Timeout para evitar que a página fique em branco indefinidamente
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setAuthReady(true);
+    }, 2000);
+
     fetch(api('/api/auth/me'), { credentials: 'include' })
       .then((res) => {
         if (!cancelled && res.ok) setIsLoggedIn(true);
       })
       .catch(() => {})
       .finally(() => {
-        if (!cancelled) setAuthReady(true);
+        if (!cancelled) {
+          clearTimeout(timeoutId);
+          setAuthReady(true);
+        }
       });
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [cookieConsentAccepted]);
 
   // ================= ESTADO GLOBAL DA JORNADA =================
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
-  const [activeView, setActiveView] = useState('jornada'); // 'jornada' | 'agenda'
+  const [activeView, setActiveView] = useState('jornada'); // 'jornada' | 'agenda' | 'pacientes'
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
 
@@ -107,27 +116,141 @@ export default function App() {
   // ================= PACIENTES (MODO TESTE SEM BANCO) =================
   // Persistência apenas em memória: ao recarregar a página, volta ao estado inicial.
   const [patients, setPatients] = useState(() => {
-    const seedDataNascimento = '1985-04-20'
-    const seedIdade = 40
     return [
       {
         id: 'patient_seed_1',
         nome: 'Ana Carolina Silva',
-        dataNascimento: seedDataNascimento,
-        idade: seedIdade,
+        dataNascimento: '1991-03-27',
+        idade: 35,
         sexo: 'f',
         estadoCivil: 'solteiro',
-        profissao: 'Administradora',
-        alergias: 'Penicilina',
+        profissao: 'Advogada',
+        alergias: 'Penicilina, Látex',
         cpf: '123.456.789-00',
-        rg: '',
+        rg: '12.345.678-9',
         telefone: '(11) 98765-4321',
-        email: 'ana@example.com',
+        email: 'ana.silva@email.com',
+        endereco: 'Rua das Flores, 123 - Jardins, São Paulo - SP',
+        instagram: '@anacarolina',
+        status: 'ativo',
+        ultimaVisita: '15/02/2026',
+        proximoRetorno: '15/03/2026',
+        saldoDevedor: 1200,
+        lgpdAssinado: true,
+        lgpdRenovacao: '15/05/2027',
+        medicamentos: ['Anticoncepcional Oral', 'Vitamina D'],
+        condicoesSaude: 'Enxaqueca ocasional',
+        queixasEsteticas: ['Linhas de expressão', 'Volume labial'],
+        cirurgiasAnteriores: 'Rinoplastia (2018)',
+        observacoesImportantes: 'Paciente sensível a agulhas - usar anestésico tópico sempre',
+        procedures: [
+          { data: '15/02/2026', hora: '14:30', nome: 'Botox + Preenchimento Labial', profissional: 'Dr. Roberto Silva', valor: 2450 },
+          { data: '10/11/2025', hora: '10:00', nome: 'Avaliação para Harmonização Facial', profissional: 'Dr. Roberto Silva', valor: 0 },
+          { data: '05/08/2025', hora: '09:30', nome: 'Bioestimulador', profissional: 'Dra. Mariana Costa', valor: 1800 },
+        ],
+        notas: [
+          { texto: 'Paciente sensível a agulhas - usar anestésico tópico sempre', autor: 'Dr. Roberto Silva', data: '05/08/2025' },
+          { texto: 'Preferência por atendimentos no período da tarde', autor: 'Recepção', data: '10/11/2025' },
+        ],
+        documentos: [
+          { nome: 'Termo de Consentimento LGPD', data: '05/08/2025', hora: '10:45', tipo: 'Assinatura digital', status: 'vigente' },
+          { nome: 'Contrato de Tratamento', data: '05/08/2025', hora: '10:50', tipo: 'Assinatura digital', status: 'vigente' },
+          { nome: 'Termo de Responsabilidade - Botox', data: '15/02/2026', hora: '14:15', tipo: 'Assinatura digital', status: 'vigente' },
+        ],
+        galeria: [
+          { sessao: 'Sessão 3 - Fev/2026', procedimento: 'Botox + Preenchimento', data: '15/02/2026', fotos: [{ label: 'Antes', url: null }, { label: 'Planejamento', url: null }, { label: 'Depois', url: null }] },
+          { sessao: 'Sessão 2 - Nov/2025', procedimento: 'Avaliação Inicial', data: '10/11/2025', fotos: [{ label: 'Antes', url: null }] },
+          { sessao: 'Sessão 1 - Ago/2025', procedimento: 'Bioestimulador', data: '05/08/2025', fotos: [{ label: 'Antes', url: null }] },
+        ],
+      },
+      {
+        id: 'patient_seed_2',
+        nome: 'Mariana Costa',
+        dataNascimento: '1998-07-14',
+        idade: 28,
+        sexo: 'f',
+        estadoCivil: 'solteiro',
+        profissao: 'Designer',
+        alergias: 'Nenhuma',
+        cpf: '234.567.890-11',
+        rg: '23.456.789-0',
+        telefone: '(11) 91234-5678',
+        email: 'mariana.costa@email.com',
+        endereco: 'Av. Paulista, 456 - Bela Vista, São Paulo - SP',
+        instagram: '@marianacosta',
+        status: 'ativo',
+        ultimaVisita: '22/02/2026',
+        proximoRetorno: '22/03/2026',
+        saldoDevedor: 0,
+        lgpdAssinado: true,
+        lgpdRenovacao: '22/02/2027',
+        medicamentos: [],
+        condicoesSaude: '',
+        queixasEsteticas: ['Sobrancelha assimétrica', 'Pele opaca'],
+        cirurgiasAnteriores: '',
+        observacoesImportantes: '',
+        procedures: [
+          { data: '22/02/2026', hora: '10:00', nome: 'Skinbooster', profissional: 'Dra. Mariana Costa', valor: 1200 },
+          { data: '10/12/2025', hora: '11:00', nome: 'Design de Sobrancelha', profissional: 'Dra. Mariana Costa', valor: 800 },
+        ],
+        notas: [],
+        documentos: [
+          { nome: 'Termo de Consentimento LGPD', data: '10/12/2025', hora: '11:05', tipo: 'Assinatura digital', status: 'vigente' },
+        ],
+        galeria: [
+          { sessao: 'Sessão 2 - Fev/2026', procedimento: 'Skinbooster', data: '22/02/2026', fotos: [{ label: 'Antes', url: null }, { label: 'Depois', url: null }] },
+        ],
+      },
+      {
+        id: 'patient_seed_3',
+        nome: 'Patricia Oliveira',
+        dataNascimento: '1984-09-02',
+        idade: 42,
+        sexo: 'f',
+        estadoCivil: 'casado',
+        profissao: 'Empresária',
+        alergias: 'Nenhuma',
+        cpf: '345.678.901-22',
+        rg: '34.567.890-1',
+        telefone: '(11) 99876-5432',
+        email: 'patricia.oli@email.com',
+        endereco: 'Rua Augusta, 789 - Consolação, São Paulo - SP',
+        instagram: '@patriciaoli',
+        status: 'ativo',
+        ultimaVisita: '01/03/2026',
+        proximoRetorno: '01/04/2026',
+        saldoDevedor: 0,
+        lgpdAssinado: true,
+        lgpdRenovacao: '01/03/2027',
+        medicamentos: ['Vitamina C'],
+        condicoesSaude: 'Hipertensão controlada',
+        queixasEsteticas: ['Flacidez facial', 'Manchas'],
+        cirurgiasAnteriores: 'Blefaroplastia (2020)',
+        observacoesImportantes: '',
+        procedures: [
+          { data: '01/03/2026', hora: '09:00', nome: 'Botox Preventivo', profissional: 'Dr. Roberto Silva', valor: 1500 },
+          { data: '10/12/2025', hora: '14:00', nome: 'Skinbooster', profissional: 'Dra. Mariana Costa', valor: 1200 },
+          { data: '15/09/2025', hora: '10:00', nome: 'Harmonização Facial', profissional: 'Dr. Roberto Silva', valor: 3200 },
+        ],
+        notas: [],
+        documentos: [
+          { nome: 'Termo de Consentimento LGPD', data: '15/09/2025', hora: '09:50', tipo: 'Assinatura digital', status: 'vigente' },
+          { nome: 'Contrato de Tratamento', data: '15/09/2025', hora: '09:55', tipo: 'Assinatura digital', status: 'vigente' },
+        ],
+        galeria: [
+          { sessao: 'Sessão 3 - Mar/2026', procedimento: 'Botox Preventivo', data: '01/03/2026', fotos: [{ label: 'Antes', url: null }, { label: 'Depois', url: null }] },
+          { sessao: 'Sessão 2 - Dez/2025', procedimento: 'Skinbooster', data: '10/12/2025', fotos: [{ label: 'Antes', url: null }] },
+        ],
       },
     ]
   })
 
   const [selectedPatientCpf, setSelectedPatientCpf] = useState(null)
+
+  // ================= GESTÃO DE PACIENTES (VIEW SEPARADA) =================
+  const [patientView, setPatientView] = useState('list') // 'list' | 'profile'
+  const [patientDetailTab, setPatientDetailTab] = useState('timeline') // 'timeline' | 'anamnese' | 'galeria' | 'documentos' | 'financeiro'
+  const [patientSearchQuery, setPatientSearchQuery] = useState('') // busca por nome, cpf, telefone
 
   // ================= AGENDA (MODO TESTE SEM BANCO) =================
   const todayIso = new Date().toISOString().slice(0, 10)
@@ -744,10 +867,11 @@ export default function App() {
     }
   };
 
-  const redrawCanvas = () => {
+  const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     let currentPointNumber = 1;
@@ -802,7 +926,7 @@ export default function App() {
       }
     });
     ctx.globalCompositeOperation = 'source-over';
-  };
+  }, [paths, showPointNumbers]);
 
   const saveAnnotatedEvaluationPhoto = async () => {
     if (!imageSrc) return;
@@ -880,7 +1004,7 @@ export default function App() {
       window.addEventListener('resize', updateCanvasSize);
       return () => window.removeEventListener('resize', updateCanvasSize);
     }
-  }, [imageSrc, paths, currentStep, showPointNumbers]); // showPointNumbers na dependência para atualizar numeração em tempo real
+  }, [currentStep, imageSrc, redrawCanvas]);
 
   const getCoordinates = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -930,93 +1054,6 @@ export default function App() {
   };
 
   // ================= RENDERIZADORES DE UI =================
-  if (!authReady) {
-    return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center p-4 font-sans gap-4"
-        style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}
-      >
-        <div className="bg-[#00a88e] w-14 h-14 rounded-[1.25rem] flex items-center justify-center shadow-md border-[3px] border-[#00a88e]/30 animate-pulse">
-          <Shield className="text-white w-7 h-7" strokeWidth={1.5} />
-        </div>
-        <p className="text-[15px] text-[#475569] font-medium">Verificando sessão…</p>
-      </div>
-    );
-  }
-
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 font-sans" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
-        {!cookieConsentAccepted && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
-            <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <Shield className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
-                  <h3 className="text-[16px] font-bold text-[#0f172a]">Cookies</h3>
-                </div>
-                <p className="text-[13px] text-[#475569] font-medium mb-4">
-                  Usamos cookies para manter sua sessão e melhorar a experiência. Aceitando, você concorda com o uso de cookies.
-                </p>
-                <button
-                  type="button"
-                  onClick={acceptCookies}
-                  className="w-full bg-[#00a88e] hover:bg-[#00967f] text-white py-3 px-4 rounded-xl font-bold transition-all shadow-md border-[3px] border-transparent"
-                >
-                  Aceitar cookies
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-[#00a88e] w-16 h-16 rounded-[1.25rem] flex items-center justify-center mb-6 shadow-md border-[3px] border-[#00a88e]/30">
-            <Shield className="text-white w-8 h-8" strokeWidth={1.5} />
-          </div>
-          <h1 className="text-[32px] font-semibold text-[#0f172a] mb-2 tracking-tight">Procedi</h1>
-          <p className="text-[15px] text-[#475569] mb-1.5">Sistema de Harmonização Facial Premium</p>
-        </div>
-        <div className="bg-white w-full max-w-[440px] rounded-2xl shadow-[0_8px_30px_rgb(0,168,142,0.08)] border-[3px] border-[#00a88e]/25 p-8">
-          <form onSubmit={handleLogin} className="space-y-5">
-            {loginError && (
-              <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[14px] font-medium text-center border-[3px] border-red-300">
-                {loginError}
-              </div>
-            )}
-            <div className="space-y-2">
-              <label className="text-[13px] font-bold text-[#0f766e] ml-1">Usuário</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <UserIcon className="h-[18px] w-[18px] text-[#00a88e]/60" strokeWidth={2} />
-                </div>
-                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] transition-all" placeholder="Digite o seu usuário" required />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[13px] font-bold text-[#0f766e] ml-1">Senha</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Lock className="h-[18px] w-[18px] text-[#00a88e]/60" strokeWidth={2} />
-                </div>
-                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-10 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] transition-all" placeholder="Digite a sua senha" required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#00a88e]/60 hover:text-[#00a88e]">
-                  {showPassword ? <EyeOff className="h-[18px] w-[18px]" strokeWidth={2} /> : <Eye className="h-[18px] w-[18px]" strokeWidth={2} />}
-                </button>
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loginSubmitting}
-              className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl text-[15px] font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mt-4"
-            >
-              <Shield className="w-5 h-5" strokeWidth={2.5} />{' '}
-              {loginSubmitting ? 'Entrando…' : 'Entrar no Sistema'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
 
   const renderStepper = () => {
     const steps = [
@@ -1052,65 +1089,78 @@ export default function App() {
     );
   };
 
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-  const filteredPatients = normalizedQuery
-    ? patients.filter((p) =>
-        [p.nome, p.cpf, p.telefone]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(normalizedQuery))
-      )
-    : patients;
+  const normalizedQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+  const filteredPatients = useMemo(() => {
+    if (!normalizedQuery) return patients;
+    return patients.filter((p) =>
+      [p.nome, p.cpf, p.telefone]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(normalizedQuery))
+    );
+  }, [normalizedQuery, patients]);
 
   // ================= AGENDA (helpers) =================
-  const pad2 = (n) => String(n).padStart(2, '0')
-  const buildDateStr = (year, monthIndex, day) =>
+  const pad2 = useCallback((n) => String(n).padStart(2, '0'), [])
+  const buildDateStr = useCallback((year, monthIndex, day) =>
     `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`
+  , [pad2])
 
-  const monthStartWeekday = new Date(calendarYear, calendarMonthIndex, 1).getDay() // 0..6 (Dom..Sáb)
-  const monthDaysCount = new Date(calendarYear, calendarMonthIndex + 1, 0).getDate()
-  const calendarCells = Array.from({ length: 42 }).map((_, idx) => {
-    const dayNum = idx - monthStartWeekday + 1
-    if (dayNum < 1 || dayNum > monthDaysCount) return { dayNum: null, dateStr: null }
-    return { dayNum, dateStr: buildDateStr(calendarYear, calendarMonthIndex, dayNum) }
-  })
+  const monthStartWeekday = useMemo(() => new Date(calendarYear, calendarMonthIndex, 1).getDay(), [calendarYear, calendarMonthIndex]) // 0..6 (Dom..Sab)
+  const monthDaysCount = useMemo(() => new Date(calendarYear, calendarMonthIndex + 1, 0).getDate(), [calendarYear, calendarMonthIndex])
+  const calendarCells = useMemo(() => (
+    Array.from({ length: 42 }).map((_, idx) => {
+      const dayNum = idx - monthStartWeekday + 1
+      if (dayNum < 1 || dayNum > monthDaysCount) return { dayNum: null, dateStr: null }
+      return { dayNum, dateStr: buildDateStr(calendarYear, calendarMonthIndex, dayNum) }
+    })
+  ), [monthStartWeekday, monthDaysCount, calendarYear, calendarMonthIndex, buildDateStr])
 
-  const appointmentsForSelectedDay = appointments.filter((a) => a.date === selectedDay)
+  const appointmentsForSelectedDay = useMemo(
+    () => appointments.filter((a) => a.date === selectedDay),
+    [appointments, selectedDay]
+  )
 
   const normalizeCpf = (v) => String(v || '').replace(/\D/g, '')
   const normalizeTelefone = (v) => String(v || '').replace(/\D/g, '')
 
-  const monthAppointments = appointments.filter((a) => {
-    const ym = a?.date ? a.date.slice(0, 7) : ''
-    const currentYm = `${calendarYear}-${pad2(calendarMonthIndex + 1)}`
-    return ym === currentYm
-  })
+  const currentYm = useMemo(
+    () => `${calendarYear}-${pad2(calendarMonthIndex + 1)}`,
+    [calendarYear, calendarMonthIndex, pad2]
+  )
+  const monthAppointments = useMemo(
+    () => appointments.filter((a) => (a?.date ? a.date.slice(0, 7) : '') === currentYm),
+    [appointments, currentYm]
+  )
 
-  const monthPatientCpfs = new Set(
+  const monthPatientCpfs = useMemo(() => new Set(
     monthAppointments
       .map((a) => normalizeCpf(a?.patient?.cpf))
       .filter(Boolean)
-  )
-  const monthConfirmedPatientCpfs = new Set(
+  ), [monthAppointments])
+  const monthConfirmedPatientCpfs = useMemo(() => new Set(
     monthAppointments
       .filter((a) => (a?.status || 'pendente') === 'confirmado')
       .map((a) => normalizeCpf(a?.patient?.cpf))
       .filter(Boolean)
-  )
-  const monthPendingPatientCpfs = new Set(
+  ), [monthAppointments])
+  const monthPendingPatientCpfs = useMemo(() => new Set(
     monthAppointments
       .filter((a) => (a?.status || 'pendente') === 'pendente')
       .map((a) => normalizeCpf(a?.patient?.cpf))
       .filter(Boolean)
-  )
+  ), [monthAppointments])
 
-  const todayAppointments = appointments.filter((a) => a.date === todayIso)
-  const todayPatientCpfs = new Set(
+  const todayAppointments = useMemo(
+    () => appointments.filter((a) => a.date === todayIso),
+    [appointments, todayIso]
+  )
+  const todayPatientCpfs = useMemo(() => new Set(
     todayAppointments
       .map((a) => normalizeCpf(a?.patient?.cpf))
       .filter(Boolean)
-  )
+  ), [todayAppointments])
 
-  const monthLabel = (() => {
+  const monthLabel = useMemo(() => {
     const labels = [
       'Janeiro',
       'Fevereiro',
@@ -1126,7 +1176,7 @@ export default function App() {
       'Dezembro',
     ]
     return `${labels[calendarMonthIndex]} ${calendarYear}`
-  })()
+  }, [calendarMonthIndex, calendarYear])
 
   const openAgendaModal = () => {
     setAgendaModalError('')
@@ -1271,6 +1321,94 @@ export default function App() {
     }
   }
 
+  if (!authReady) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center p-4 font-sans gap-4"
+        style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}
+      >
+        <div className="bg-[#00a88e] w-14 h-14 rounded-[1.25rem] flex items-center justify-center shadow-md border-[3px] border-[#00a88e]/30 animate-pulse">
+          <Shield className="text-white w-7 h-7" strokeWidth={1.5} />
+        </div>
+        <p className="text-[15px] text-[#475569] font-medium">Verificando sessão...</p>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 font-sans" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
+        {!cookieConsentAccepted && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] w-[92vw] max-w-[520px]">
+            <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden">
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <Shield className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+                  <h3 className="text-[16px] font-bold text-[#0f172a]">Cookies</h3>
+                </div>
+                <p className="text-[13px] text-[#475569] font-medium mb-4">
+                  Usamos cookies para manter sua sessao e melhorar a experiencia. Aceitando, voce concorda com o uso de cookies.
+                </p>
+                <button
+                  type="button"
+                  onClick={acceptCookies}
+                  className="w-full bg-[#00a88e] hover:bg-[#00967f] text-white py-3 px-4 rounded-xl font-bold transition-all shadow-md border-[3px] border-transparent"
+                >
+                  Aceitar cookies
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="flex flex-col items-center mb-8">
+          <div className="bg-[#00a88e] w-16 h-16 rounded-[1.25rem] flex items-center justify-center mb-6 shadow-md border-[3px] border-[#00a88e]/30">
+            <Shield className="text-white w-8 h-8" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-[32px] font-semibold text-[#0f172a] mb-2 tracking-tight">Procedi</h1>
+          <p className="text-[15px] text-[#475569] mb-1.5">Sistema de Harmonizacao Facial Premium</p>
+        </div>
+        <div className="bg-white w-full max-w-[440px] rounded-2xl shadow-[0_8px_30px_rgb(0,168,142,0.08)] border-[3px] border-[#00a88e]/25 p-8">
+          <form onSubmit={handleLogin} className="space-y-5">
+            {loginError && (
+              <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[14px] font-medium text-center border-[3px] border-red-300">
+                {loginError}
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="text-[13px] font-bold text-[#0f766e] ml-1">Usuario</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <UserIcon className="h-[18px] w-[18px] text-[#00a88e]/60" strokeWidth={2} />
+                </div>
+                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] transition-all" placeholder="Digite o seu usuario" required />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[13px] font-bold text-[#0f766e] ml-1">Senha</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Lock className="h-[18px] w-[18px] text-[#00a88e]/60" strokeWidth={2} />
+                </div>
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-10 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] transition-all" placeholder="Digite a sua senha" required />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#00a88e]/60 hover:text-[#00a88e]">
+                  {showPassword ? <EyeOff className="h-[18px] w-[18px]" strokeWidth={2} /> : <Eye className="h-[18px] w-[18px]" strokeWidth={2} />}
+                </button>
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={loginSubmitting}
+              className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl text-[15px] font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mt-4"
+            >
+              <Shield className="w-5 h-5" strokeWidth={2.5} />{' '}
+              {loginSubmitting ? 'Entrando...' : 'Entrar no Sistema'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
       {!cookieConsentAccepted && (
@@ -1340,7 +1478,15 @@ export default function App() {
           >
             <Calendar className="w-5 h-5" /> Agenda
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-[#64748b] hover:bg-[#f0fdfa] hover:text-[#00a88e] border-[3px] border-transparent hover:border-[#00a88e]/20 rounded-xl font-semibold text-[14px] transition-all">
+          <button 
+            type="button"
+            onClick={() => setActiveView('pacientes')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+              activeView === 'pacientes'
+                ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+            }`}
+          >
             <Users className="w-5 h-5" /> Pacientes
           </button>
         </nav>
@@ -2131,13 +2277,19 @@ export default function App() {
                 </div>
 
                 {agendaModalOpen && (
-                  <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                  <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    onMouseDown={closeAgendaModal}
+                  >
                     <div
                       className="absolute inset-0 bg-black/60"
                       onClick={closeAgendaModal}
                     />
 
-                    <div className="relative w-full max-w-[860px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-y-auto max-h-[92vh]">
+                    <div
+                      className="relative w-full max-w-[860px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-y-auto max-h-[92vh]"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
                       <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
                         <div className="flex items-center gap-3">
                           <Calendar className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
@@ -2157,7 +2309,7 @@ export default function App() {
                           className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
                           aria-label="Fechar"
                         >
-                          <Square className="w-5 h-5" strokeWidth={2.5} />
+                          <X className="w-5 h-5" strokeWidth={2.5} />
                         </button>
                       </div>
 
@@ -2359,6 +2511,544 @@ export default function App() {
                 )}
               </div>
             )}
+
+            {activeView === 'pacientes' && (() => {
+              const filteredPatients = patients.filter((p) => {
+                if (!patientSearchQuery.trim()) return true;
+                const q = patientSearchQuery.toLowerCase();
+                return (
+                  (p.nome || '').toLowerCase().includes(q) ||
+                  (p.cpf || '').toLowerCase().includes(q) ||
+                  (p.telefone || '').toLowerCase().includes(q)
+                );
+              });
+              const selectedPatient = patients.find((p) => p.cpf === selectedPatientCpf) || null;
+
+              // ===== VIEW: LISTA SPLIT-PANE =====
+              if (patientView === 'list') {
+                return (
+                  <div className="flex flex-col gap-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-[20px] font-bold text-[#0f172a]">Gestão de Pacientes</h3>
+                        <p className="text-[#64748b] text-[13px] font-medium">Histórico completo e dados protegidos</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="px-4 py-2 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] flex items-center gap-1.5 border-[3px] border-transparent transition-all shadow-sm"
+                      >
+                        <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Paciente
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col lg:flex-row gap-4 min-h-[600px]">
+                      {/* Coluna esquerda - Lista de pacientes */}
+                      <div className="w-full lg:w-[360px] flex-shrink-0">
+                        <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 flex flex-col h-full">
+                          <div className="relative mb-4">
+                            <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-[#00a88e]/60" strokeWidth={2.5} />
+                            <input
+                              type="text"
+                              placeholder="Buscar paciente..."
+                              value={patientSearchQuery}
+                              onChange={(e) => setPatientSearchQuery(e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium text-[#0f172a] bg-white focus:outline-none focus:border-[#00a88e]/50 focus:ring-2 focus:ring-[#00a88e]/10 placeholder:text-[#94a3b8]"
+                            />
+                          </div>
+                          <div className="flex-1 overflow-y-auto space-y-2">
+                            {filteredPatients.length === 0 ? (
+                              <div className="text-center py-8 text-[#94a3b8] text-[14px]">
+                                <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                                Nenhum paciente encontrado
+                              </div>
+                            ) : (
+                              filteredPatients.map((patient) => {
+                                const isSelected = selectedPatientCpf === patient.cpf;
+                                return (
+                                  <button
+                                    key={patient.id}
+                                    type="button"
+                                    onClick={() => setSelectedPatientCpf(patient.cpf)}
+                                    className={`w-full text-left p-3 rounded-xl border-[3px] transition-all ${
+                                      isSelected
+                                        ? 'border-[#00a88e] bg-[#f0fdfa]'
+                                        : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/30 hover:bg-[#f8fbfb]'
+                                    }`}
+                                  >
+                                    <div className="flex items-start gap-2.5">
+                                      <div className="w-10 h-10 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0 mt-0.5">
+                                        {getPatientInitials(patient.nome)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-[14px] font-bold text-[#0f766e]">{patient.nome}</div>
+                                        <div className="text-[12px] text-[#64748b]">{patient.idade} anos</div>
+                                        <div className="text-[12px] text-[#64748b]">{patient.telefone}</div>
+                                        <div className="text-[12px] text-[#64748b]">Último procedimento</div>
+                                        <div className="text-[12px] font-bold text-[#00a88e] mt-1">{patient.ultimaVisita || '—'}</div>
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Coluna direita - Detalhes do paciente */}
+                      <div className="flex-1">
+                        {selectedPatient ? (
+                          <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-6 flex flex-col h-full">
+                            <div className="flex items-start justify-between pb-4 border-b-[3px] border-[#00a88e]/10">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="text-[18px] font-bold text-[#0f172a]">{selectedPatient.nome}</h3>
+                                <div className="text-[13px] text-[#64748b] font-medium space-y-1 mt-1">
+                                  <p>{selectedPatient.email}</p>
+                                  <p>{selectedPatient.telefone}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 ml-4">
+                                <div className="w-12 h-12 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-[16px] flex-shrink-0">
+                                  {getPatientInitials(selectedPatient.nome)}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mt-4 mb-4 pb-4 border-b-[3px] border-[#00a88e]/10">
+                              {[
+                                { key: 'timeline', label: 'Linha do Tempo de Procedimentos', icon: Clock },
+                                { key: 'galeria', label: 'Galeria de Evolução', icon: ImageIcon },
+                              ].map(({ key, label, icon }) => {
+                                const TabIcon = icon;
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => {
+                                      setPatientDetailTab(key);
+                                      setPatientView('list');
+                                    }}
+                                    className={`flex items-center gap-1.5 px-3 py-2 font-bold text-[12px] whitespace-nowrap transition-all rounded-lg ${
+                                      patientDetailTab === key
+                                        ? 'text-[#00a88e] bg-[#f0fdfa] border-[2px] border-[#00a88e]'
+                                        : 'text-[#64748b] bg-white border-[2px] border-[#e2e8f0] hover:text-[#00a88e]'
+                                    }`}
+                                  >
+                                    <TabIcon className="w-4 h-4" /> {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto">
+                              {patientDetailTab === 'timeline' && (
+                                <div className="space-y-3">
+                                  <h4 className="text-[14px] font-bold text-[#0f172a]">Histórico de Procedimentos</h4>
+                                  {selectedPatient.procedures && selectedPatient.procedures.length > 0 ? (
+                                    selectedPatient.procedures.map((proc, idx) => (
+                                      <div key={idx} className="p-4 rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] hover:border-[#00a88e]/30 transition-all cursor-pointer">
+                                        <div className="flex items-start justify-between">
+                                          <div className="flex-1">
+                                            <div className="text-[14px] font-bold text-[#0f766e]">{proc.nome}</div>
+                                            <div className="text-[12px] text-[#64748b] mt-1">{proc.data} • {proc.hora}</div>
+                                            <div className="text-[12px] text-[#64748b]">Por: {proc.profissional}</div>
+                                          </div>
+                                          <ChevronRight className="w-4 h-4 text-[#94a3b8] flex-shrink-0 mt-1" />
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-[13px] text-[#94a3b8] text-center py-6">Nenhum procedimento registrado</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {patientDetailTab === 'galeria' && (
+                                <div className="space-y-4">
+                                  <h4 className="text-[14px] font-bold text-[#0f172a]">Galeria de Evolução</h4>
+                                  {selectedPatient.galeria && selectedPatient.galeria.length > 0 ? (
+                                    selectedPatient.galeria.map((sessao, idx) => (
+                                      <div key={idx} className="space-y-2">
+                                        <div className="text-[12px] font-bold text-[#0f766e]">{sessao.sessao}</div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                          {sessao.fotos.map((foto, fi) => (
+                                            <div key={fi} className="aspect-square rounded-lg bg-[#e2e8f0] flex items-center justify-center border-[2px] border-[#e2e8f0]">
+                                              <ImageIcon className="w-6 h-6 text-[#94a3b8]" />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-[13px] text-[#94a3b8] text-center py-6">Nenhuma foto registrada</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t-[3px] border-[#00a88e]/10">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPatientDetailTab('timeline');
+                                  setPatientView('profile');
+                                }}
+                                className="w-full px-4 py-3 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[14px] transition-all border-[3px] border-transparent shadow-md flex items-center justify-center gap-2"
+                              >
+                                <ExternalLink className="w-4 h-4" strokeWidth={2.5} /> Ver Visão Geral Completa do Paciente
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-6 h-full flex flex-col items-center justify-center text-[#94a3b8]">
+                            <ImageIcon className="w-16 h-16 opacity-20 mb-3" />
+                            <p className="text-[14px] font-medium">Selecione um paciente para ver os detalhes</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ===== VIEW: PERFIL COMPLETO =====
+              if (patientView === 'profile' && selectedPatient) {
+                return (
+                  <div className="flex flex-col gap-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPatientView('list');
+                        setPatientDetailTab('timeline');
+                      }}
+                      className="inline-flex items-center gap-2 text-[#00a88e] hover:text-[#00967f] font-bold text-[14px] transition-all w-fit"
+                    >
+                      <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
+                    </button>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Coluna principal - Detalhes e Tabs */}
+                      <div className="lg:col-span-2">
+                        {/* Card de header */}
+                        <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-6 mb-6">
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                            <div className="w-20 h-20 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">
+                              {getPatientInitials(selectedPatient.nome)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="text-[20px] font-bold text-[#0f172a]">{selectedPatient.nome}</h3>
+                                <span className="px-3 py-1 bg-[#dcfce7] text-[#16a34a] rounded-full text-[11px] font-bold border-[2px] border-[#16a34a]/20">ATIVO</span>
+                              </div>
+                              <div className="flex flex-wrap gap-4 text-[13px] text-[#64748b] font-medium">
+                                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {selectedPatient.idade} anos</span>
+                                <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> {selectedPatient.cpf}</span>
+                                <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {selectedPatient.telefone}</span>
+                                <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {selectedPatient.email}</span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2 flex-shrink-0">
+                              <button
+                                type="button"
+                                className="px-4 py-2.5 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] transition-all border-[3px] border-transparent shadow-md"
+                              >
+                                <Play className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Iniciar Atendimento
+                              </button>
+                              <button
+                                type="button"
+                                className="px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all"
+                              >
+                                <UserIcon className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Editar Cadastro
+                              </button>
+                              <button
+                                type="button"
+                                className="px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all"
+                                disabled
+                              >
+                                <Download className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Gerar PDF
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Info Cards */}
+                          <div className="grid grid-cols-3 gap-3 mt-6 pt-6 border-t-[3px] border-[#00a88e]/10">
+                            <div className="bg-[#f0fdfa] rounded-xl p-3 border-[2px] border-[#00a88e]/20">
+                              <div className="text-[12px] text-[#64748b] font-medium">Última Visita</div>
+                              <div className="text-[14px] font-bold text-[#00a88e] mt-1">{selectedPatient.ultimaVisita || '—'}</div>
+                            </div>
+                            <div className="bg-[#f0fdfa] rounded-xl p-3 border-[2px] border-[#00a88e]/20">
+                              <div className="text-[12px] text-[#64748b] font-medium">Próximo Retorno</div>
+                              <div className="text-[14px] font-bold text-[#00a88e] mt-1">{selectedPatient.proximoRetorno || '—'}</div>
+                            </div>
+                            <div className={`rounded-xl p-3 border-[2px] ${selectedPatient.saldoDevedor > 0 ? 'bg-red-50 border-red-200' : 'bg-[#f0fdfa] border-[#00a88e]/20'}`}>
+                              <div className={`text-[12px] font-medium ${selectedPatient.saldoDevedor > 0 ? 'text-red-700' : 'text-[#64748b]'}`}>Saldo Devedor</div>
+                              <div className={`text-[14px] font-bold mt-1 ${selectedPatient.saldoDevedor > 0 ? 'text-red-600' : 'text-[#00a88e]'}`}>
+                                {selectedPatient.saldoDevedor > 0 ? `R$ ${selectedPatient.saldoDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 overflow-hidden">
+                          <div className="flex border-b-[3px] border-[#00a88e]/10 overflow-x-auto">
+                            {[
+                              { key: 'timeline', label: 'Linha do Tempo', icon: Clock },
+                              { key: 'anamnese', label: 'Anamnese', icon: Activity },
+                              { key: 'galeria', label: 'Galeria', icon: ImageIcon },
+                              { key: 'documentos', label: 'Documentos', icon: FileText },
+                            ].map(({ key, label, icon }) => {
+                              const TabIcon = icon;
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => setPatientDetailTab(key)}
+                                  className={`flex items-center gap-2 px-5 py-4 font-bold text-[13px] whitespace-nowrap transition-all border-b-[3px] -mb-[3px] ${
+                                    patientDetailTab === key
+                                      ? 'text-[#00a88e] border-[#00a88e] bg-[#f0fdfa]'
+                                      : 'text-[#64748b] border-transparent hover:text-[#00a88e] hover:bg-[#f8fbfb]'
+                                  }`}
+                                >
+                                  <TabIcon className="w-4 h-4" /> {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="p-6">
+                            {/* TIMELINE */}
+                            {patientDetailTab === 'timeline' && (
+                              <div className="space-y-4">
+                                <h4 className="text-[16px] font-bold text-[#0f172a] mb-4">Histórico Completo</h4>
+                                <div className="space-y-3">
+                                  {selectedPatient.procedures && selectedPatient.procedures.length > 0 ? (
+                                    selectedPatient.procedures.map((proc, idx) => (
+                                      <div key={idx} className="flex gap-4 p-4 rounded-xl border-[2px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all bg-white">
+                                        <div className="w-12 h-12 rounded-full bg-[#e6f7f5] flex items-center justify-center flex-shrink-0 border-[2px] border-[#00a88e]/20">
+                                          <CheckCircle2 className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[14px] font-bold text-[#0f766e]">{proc.nome}</div>
+                                          <div className="text-[12px] text-[#64748b] mt-1">{proc.data} • {proc.hora} • {proc.profissional}</div>
+                                          {proc.valor > 0 && <div className="text-[13px] text-[#64748b] mt-1">R$ {proc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 text-[#94a3b8] flex-shrink-0 mt-1" />
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum procedimento registrado</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ANAMNESE */}
+                            {patientDetailTab === 'anamnese' && (
+                              <div className="space-y-4">
+                                <h4 className="text-[16px] font-bold text-[#0f172a] mb-4">Histórico Médico e Saúde</h4>
+                                
+                                {selectedPatient.alergias && selectedPatient.alergias !== 'Nenhuma' && (
+                                  <div className="bg-red-50 border-[3px] border-red-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <AlertTriangle className="w-5 h-5 text-red-600" strokeWidth={2.5} />
+                                      <h5 className="font-bold text-red-700">Alergias Conhecidas</h5>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedPatient.alergias.split(',').map((alergia, idx) => (
+                                        <span key={idx} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[12px] font-bold">
+                                          {alergia.trim()}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {selectedPatient.medicamentos && selectedPatient.medicamentos.length > 0 && (
+                                  <div className="bg-blue-50 border-[3px] border-blue-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Activity className="w-5 h-5 text-blue-600" strokeWidth={2.5} />
+                                      <h5 className="font-bold text-blue-700">Medicamentos em Uso</h5>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {selectedPatient.medicamentos.map((med, idx) => (
+                                        <div key={idx} className="text-[13px] text-blue-800">• {med}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {selectedPatient.condicoesSaude && (
+                                  <div className="bg-[#f0fdfa] border-[3px] border-[#00a88e]/20 rounded-xl p-4">
+                                    <h5 className="font-bold text-[#0f766e] mb-2">Condições de Saúde</h5>
+                                    <p className="text-[13px] text-[#0f766e]">{selectedPatient.condicoesSaude}</p>
+                                  </div>
+                                )}
+
+                                {selectedPatient.queixasEsteticas && selectedPatient.queixasEsteticas.length > 0 && (
+                                  <div className="bg-[#f0fdfa] border-[3px] border-[#00a88e]/20 rounded-xl p-4">
+                                    <h5 className="font-bold text-[#0f766e] mb-2">Queixas Estéticas</h5>
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedPatient.queixasEsteticas.map((queixa, idx) => (
+                                        <span key={idx} className="px-3 py-1.5 bg-[#e6f7f5] text-[#0f766e] rounded-lg text-[12px] font-bold">
+                                          {queixa}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {selectedPatient.cirurgiasAnteriores && (
+                                  <div className="bg-[#f0fdfa] border-[3px] border-[#00a88e]/20 rounded-xl p-4">
+                                    <h5 className="font-bold text-[#0f766e] mb-2">Cirurgias Anteriores</h5>
+                                    <p className="text-[13px] text-[#0f766e]">{selectedPatient.cirurgiasAnteriores}</p>
+                                  </div>
+                                )}
+
+                                {selectedPatient.observacoesImportantes && (
+                                  <div className="bg-yellow-50 border-[3px] border-yellow-200 rounded-xl p-4">
+                                    <div className="flex items-start gap-2">
+                                      <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                                      <div>
+                                        <h5 className="font-bold text-yellow-700 mb-1">Observações Importantes</h5>
+                                        <p className="text-[13px] text-yellow-800">{selectedPatient.observacoesImportantes}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* GALERIA */}
+                            {patientDetailTab === 'galeria' && (
+                              <div className="space-y-6">
+                                <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de Evolução</h4>
+                                {selectedPatient.galeria && selectedPatient.galeria.length > 0 ? (
+                                  selectedPatient.galeria.map((sessao, idx) => (
+                                    <div key={idx} className="space-y-3">
+                                      <div className="text-[14px] font-bold text-[#0f766e]">{sessao.sessao}</div>
+                                      <div className="text-[12px] text-[#64748b] mb-2">{sessao.procedimento} • {sessao.data}</div>
+                                      <div className="grid grid-cols-3 gap-3">
+                                        {sessao.fotos.map((foto, fi) => (
+                                          <div key={fi} className="flex flex-col gap-1">
+                                            <div className="aspect-square rounded-xl bg-[#e6f7f5] border-[2px] border-[#00a88e]/15 flex items-center justify-center overflow-hidden">
+                                              {foto.url ? (
+                                                <img src={foto.url} alt={foto.label} className="w-full h-full object-cover" />
+                                              ) : (
+                                                <ImageIcon className="w-8 h-8 text-[#00a88e]/30" />
+                                              )}
+                                            </div>
+                                            <p className="text-[11px] text-center text-[#64748b] font-medium">{foto.label}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* DOCUMENTOS */}
+                            {patientDetailTab === 'documentos' && (
+                              <div className="space-y-4">
+                                <h4 className="text-[16px] font-bold text-[#0f172a] mb-4">Documentos e Consentimentos LGPD</h4>
+                                {selectedPatient.documentos && selectedPatient.documentos.length > 0 ? (
+                                  selectedPatient.documentos.map((doc, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-4 rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] hover:border-[#00a88e]/30 transition-all">
+                                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg bg-[#e6f7f5] flex items-center justify-center flex-shrink-0">
+                                          <FileText className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[13px] font-bold text-[#0f766e]">{doc.nome}</div>
+                                          <div className="text-[12px] text-[#64748b]">{doc.data} • {doc.hora} • {doc.tipo}</div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+                                        <span className="px-2 py-1 bg-[#dcfce7] text-[#16a34a] rounded-lg text-[11px] font-bold">{doc.status}</span>
+                                        <button type="button" className="w-8 h-8 rounded-lg border-[2px] border-[#e2e8f0] flex items-center justify-center text-[#64748b] hover:text-[#00a88e] hover:border-[#00a88e]/30 transition-all flex-shrink-0">
+                                          <Download className="w-4 h-4" strokeWidth={2.5} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum documento registrado</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Coluna lateral - Alertas e Notas */}
+                      <div className="lg:col-span-1 flex flex-col gap-4">
+                        {/* ALERTAS */}
+                        <div className="bg-amber-50 rounded-2xl border-[3px] border-amber-200 p-4 shadow-sm">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Bell className="w-5 h-5 text-amber-500" strokeWidth={2.5} />
+                            <h5 className="text-[14px] font-bold text-[#0f172a]">Alertas</h5>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="bg-white border-[2px] border-amber-200 rounded-lg p-3">
+                              <p className="text-[12px] font-bold text-amber-700 flex items-center gap-1.5">
+                                <Bell className="w-3.5 h-3.5" /> Aniversário em 67 dias
+                              </p>
+                            </div>
+                            {selectedPatient.saldoDevedor > 0 && (
+                              <div className="bg-red-100 border-[2px] border-red-300 rounded-lg p-3">
+                                <p className="text-[12px] font-bold text-red-700 flex items-center gap-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5" /> Parcela vence em 7 dias
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* NOTAS RÁPIDAS */}
+                        <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/15 p-4 shadow-sm">
+                          <div className="flex items-center gap-2 mb-3">
+                            <StickyNote className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
+                            <h5 className="text-[14px] font-bold text-[#0f172a]">Notas Rápidas</h5>
+                          </div>
+                          <div className="space-y-2">
+                            {selectedPatient.notas && selectedPatient.notas.length > 0 ? (
+                              selectedPatient.notas.map((nota, i) => (
+                                <div key={i} className={`p-3 rounded-lg border-[2px] ${i % 2 === 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+                                  <p className={`text-[12px] font-medium ${i % 2 === 0 ? 'text-yellow-800' : 'text-green-800'}`}>{nota.texto}</p>
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span className={`text-[11px] font-medium ${i % 2 === 0 ? 'text-yellow-600' : 'text-green-600'}`}>{nota.autor}</span>
+                                    <span className={`text-[11px] ${i % 2 === 0 ? 'text-yellow-500' : 'text-green-500'}`}>{nota.data}</span>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-[12px] text-[#94a3b8]">Nenhuma nota registrada</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* LGPD */}
+                        <div className="bg-[#00a88e] rounded-2xl p-4 shadow-sm text-white">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Shield className="w-5 h-5" strokeWidth={2.5} />
+                            <h5 className="text-[14px] font-bold">LGPD</h5>
+                          </div>
+                          <p className="text-[12px] font-medium">Todos os termos vigentes e atualizados</p>
+                          {selectedPatient.lgpdRenovacao && (
+                            <p className="text-[12px] mt-1">Renovação: {selectedPatient.lgpdRenovacao}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return null;
+            })()}
           </div>
         </div>
       </main>
@@ -2489,10 +3179,14 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  // Ainda não existe tela dedicada; mantemos o botão como atalho visual.
-                  setMobileNavOpen(false)
+                  setActiveView('pacientes');
+                  setMobileNavOpen(false);
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-[#64748b] hover:bg-[#f0fdfa] border-[3px] border-transparent hover:border-[#00a88e]/20 rounded-xl font-semibold text-[14px] transition-all"
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+                  activeView === 'pacientes'
+                    ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                    : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+                }`}
               >
                 <Users className="w-5 h-5" strokeWidth={2.5} /> Pacientes
               </button>
@@ -2647,12 +3341,6 @@ export default function App() {
         </>
       )}
 
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #00a88e; border-radius: 10px; opacity: 0.5; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00967f; }
-      `}} />
     </div>
   );
 }
