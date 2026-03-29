@@ -7,6 +7,8 @@ import rateLimit from 'express-rate-limit'
 import bcrypt from 'bcryptjs'
 import { createAuthRouter } from './routes/auth.js'
 import { requireAuth } from './middleware/requireAuth.js'
+import { testDatabaseConnection } from './db/client.js'
+import { findUserByUsername } from './db/usersRepo.js'
 
 const PORT = Number(process.env.PORT) || 3001
 const JWT_SECRET =
@@ -44,6 +46,15 @@ async function start() {
     ADMIN_PASSWORD_HASH || (await bcrypt.hash(ADMIN_PASSWORD_FALLBACK, 12))
 
   const app = express()
+  let dbReady = false
+
+  try {
+    await testDatabaseConnection()
+    dbReady = true
+  } catch (error) {
+    console.warn('Banco indisponivel na inicializacao. Seguindo com fallback de credenciais.', error?.message)
+  }
+
   app.set('trust proxy', 1)
 
   app.use(
@@ -90,11 +101,20 @@ async function start() {
       adminPasswordHash,
       cookieName: COOKIE_NAME,
       cookieBase,
+      findUserByUsername: dbReady ? findUserByUsername : undefined,
     })
   )
 
-  app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, service: 'procedi-api' })
+  app.get('/api/health', async (_req, res) => {
+    let database = 'down'
+    try {
+      await testDatabaseConnection()
+      database = 'up'
+    } catch {
+      database = 'down'
+    }
+
+    res.json({ ok: true, service: 'procedi-api', database })
   })
 
   app.get('/api/protected/ping', requireAuth, (req, res) => {
