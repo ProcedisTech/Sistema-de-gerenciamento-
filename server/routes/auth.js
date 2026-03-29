@@ -4,7 +4,14 @@ import bcrypt from 'bcryptjs'
 
 export function createAuthRouter(opts) {
   const router = Router()
-  const { jwtSecret, adminUsername, adminPasswordHash, cookieName, cookieBase } = opts
+  const {
+    jwtSecret,
+    adminUsername,
+    adminPasswordHash,
+    cookieName,
+    cookieBase,
+    findUserByUsername,
+  } = opts
 
   router.post('/login', async (req, res) => {
     const { username, password } = req.body ?? {}
@@ -20,10 +27,20 @@ export function createAuthRouter(opts) {
       return res.status(400).json({ error: 'Credenciais inválidas.' })
     }
 
-    const userOk = username.trim() === adminUsername
+    const usernameTrim = username.trim()
+    let dbUser = null
+    if (typeof findUserByUsername === 'function') {
+      try {
+        dbUser = await findUserByUsername(usernameTrim)
+      } catch {
+        dbUser = null
+      }
+    }
+
+    const userOk = dbUser ? Boolean(dbUser.isActive) : usernameTrim === adminUsername
     let passOk = false
     try {
-      passOk = await bcrypt.compare(password, adminPasswordHash)
+      passOk = await bcrypt.compare(password, dbUser?.passwordHash || adminPasswordHash)
     } catch {
       passOk = false
     }
@@ -32,11 +49,13 @@ export function createAuthRouter(opts) {
       return res.status(401).json({ error: 'Usuário ou senha incorretos.' })
     }
 
-    const token = jwt.sign(
-      { sub: adminUsername, role: 'admin' },
-      jwtSecret,
-      { expiresIn: '8h', issuer: 'procedi-api' }
-    )
+    const usernameForToken = dbUser?.username || adminUsername
+    const roleForToken = dbUser?.role || 'admin'
+
+    const token = jwt.sign({ sub: usernameForToken, role: roleForToken }, jwtSecret, {
+      expiresIn: '8h',
+      issuer: 'procedi-api',
+    })
 
     res.cookie(cookieName, token, {
       ...cookieBase,
@@ -45,7 +64,7 @@ export function createAuthRouter(opts) {
 
     return res.json({
       ok: true,
-      user: { username: adminUsername, role: 'admin' },
+      user: { username: usernameForToken, role: roleForToken },
     })
   })
 

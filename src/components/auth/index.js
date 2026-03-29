@@ -1,3 +1,3 @@
 export { LoginForm } from './LoginForm';
-export { CookieConsent } from './CookieConsent';
-
+export { CookieConsent } from './SessionConsentBanner';
+export { AuthLoadingScreen } from './AuthLoadingScreen';

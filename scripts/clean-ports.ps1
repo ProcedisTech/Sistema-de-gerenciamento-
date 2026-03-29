@@ -12,9 +12,9 @@ foreach ($port in $Ports) {
   }
 
   $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
-  foreach ($pid in $pids) {
-    if ($pid -and $pid -ne 0) {
-      $allPids += $pid
+  foreach ($processId in $pids) {
+    if ($processId -and $processId -ne 0) {
+      $allPids += $processId
     }
   }
 }
@@ -26,14 +26,14 @@ if (-not $allPids) {
   exit 0
 }
 
-foreach ($pid in $allPids) {
+foreach ($processId in $allPids) {
   try {
-    $proc = Get-Process -Id $pid -ErrorAction Stop
-    Stop-Process -Id $pid -Force -ErrorAction Stop
-    Write-Host "[clean-ports] Finalizado PID $pid ($($proc.ProcessName))."
+    $proc = Get-Process -Id $processId -ErrorAction Stop
+    Stop-Process -Id $processId -Force -ErrorAction Stop
+    Write-Host "[clean-ports] Finalizado PID $processId ($($proc.ProcessName))."
   }
   catch {
-    Write-Host "[clean-ports] Nao foi possivel finalizar PID ${pid}: $($_.Exception.Message)"
+    Write-Host "[clean-ports] Nao foi possivel finalizar PID ${processId}: $($_.Exception.Message)"
   }
 }
 

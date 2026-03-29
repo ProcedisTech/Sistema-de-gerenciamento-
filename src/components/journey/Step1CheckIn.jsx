@@ -3,8 +3,10 @@ import { UserCheck, AlertTriangle, Square, CheckSquare, Shield, Search } from 'l
 import { maskCPF, maskRG, maskTelefone, calculateAgeFromISODate, getPatientInitials } from '../utils/formatters';
 
 export function Step1CheckIn({
-  activeTab, setActiveTab,
+  activeTab,
+  setActiveTab,
   searchQuery, setSearchQuery,
+  selectedPatientCpf,
   patients,
   nome, setNome,
   dataNascimento, setDataNascimento,
@@ -50,6 +52,31 @@ export function Step1CheckIn({
         </div>
       </div>
 
+      <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-8 border-[3px] border-[#00a88e]/15">
+        <button
+          type="button"
+          onClick={() => setActiveTab('existente')}
+          className={`flex-1 py-3 text-[14px] font-bold rounded-xl transition-all ${
+            activeTab === 'existente'
+              ? 'bg-[#00a88e] text-white shadow-md'
+              : 'text-[#64748b] hover:text-[#00a88e] hover:bg-white'
+          }`}
+        >
+          Paciente Existente
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('novo')}
+          className={`flex-1 py-3 text-[14px] font-bold rounded-xl transition-all ${
+            activeTab === 'novo'
+              ? 'bg-[#00a88e] text-white shadow-md'
+              : 'text-[#64748b] hover:text-[#00a88e] hover:bg-white'
+          }`}
+        >
+          Novo Paciente
+        </button>
+      </div>
+
       {activeTab === 'existente' ? (
         <div className="space-y-4">
           <div className="relative">
@@ -65,11 +92,17 @@ export function Step1CheckIn({
 
           {filteredPatients.length > 0 ? (
             <div className="max-h-[400px] overflow-y-auto space-y-2">
-              {filteredPatients.map((p) => (
+              {filteredPatients.map((p) => {
+                const isSelected = (selectedPatientCpf || '') === (p.cpf || '');
+                return (
                 <div
                   key={p.id}
                   onClick={() => selectPatient(p)}
-                  className="p-4 bg-white border-[3px] border-[#00a88e]/15 rounded-xl cursor-pointer hover:border-[#00a88e]/50 hover:bg-[#f8fbfb] transition-all flex items-center gap-4"
+                  className={`p-4 border-[3px] rounded-xl cursor-pointer transition-all flex items-center gap-4 ${
+                    isSelected
+                      ? 'bg-[#e6f7f5] border-[#00a88e]'
+                      : 'bg-white border-[#00a88e]/15 hover:border-[#00a88e]/50 hover:bg-[#f8fbfb]'
+                  }`}
                 >
                   <div className="w-12 h-12 rounded-full bg-[#00a88e] text-white flex items-center justify-center font-bold text-[16px] flex-shrink-0 shadow-sm">
                     {getPatientInitials(p.nome)}
@@ -87,7 +120,7 @@ export function Step1CheckIn({
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             <div className="text-center py-8 text-[#64748b] font-medium">

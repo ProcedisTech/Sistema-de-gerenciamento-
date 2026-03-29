@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { Eye, Upload, Image as ImageIcon, CheckCircle, Square, CheckSquare } from 'lucide-react';
+import React, { useCallback, useEffect } from 'react';
+import { Eye, Upload, Image as ImageIcon, CheckCircle, Square, CheckSquare, Trash2 } from 'lucide-react';
 
 const colors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'];
 
@@ -17,8 +17,30 @@ export function Step3Evaluation({
   canvasRef, containerRef,
   evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl,
   selectedPatientCpf, cpf,
-  patients, setPatients,
+  setPatients,
+  evaluationCapturedPhotos,
+  evaluationSelectedPhotoIndex,
+  setEvaluationSelectedPhotoIndex,
+  onSelectCapturedPhoto,
+  onDeleteCapturedPhoto,
+  evaluationPhotoMax,
 }) {
+  const getPointerCoordinates = (event) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+
+    const touch = event?.touches?.[0] || event?.changedTouches?.[0];
+    const clientX = touch?.clientX ?? event?.clientX;
+    const clientY = touch?.clientY ?? event?.clientY;
+
+    if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -31,7 +53,7 @@ export function Step3Evaluation({
     }
   };
 
-  const redrawCanvas = () => {
+  const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -85,7 +107,7 @@ export function Step3Evaluation({
       }
     });
     ctx.globalCompositeOperation = 'source-over';
-  };
+  }, [canvasRef, paths, showPointNumbers]);
 
   const saveAnnotatedEvaluationPhoto = async () => {
     if (!imageSrc) return;
@@ -161,12 +183,12 @@ export function Step3Evaluation({
       window.addEventListener('resize', updateCanvasSize);
       return () => window.removeEventListener('resize', updateCanvasSize);
     }
-  }, [imageSrc, paths, showPointNumbers]);
+  }, [imageSrc, canvasRef, containerRef, redrawCanvas]);
 
   const startDrawing = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left || e.touches[0].clientX - rect.left;
-    const y = e.clientY - rect.top || e.touches[0].clientY - rect.top;
+    const pointer = getPointerCoordinates(e);
+    if (!pointer || !canvasRef.current) return;
+    const { x, y } = pointer;
 
     setIsDrawing(true);
 
@@ -178,13 +200,15 @@ export function Step3Evaluation({
   };
 
   const handleMouseMove = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left || e.touches[0].clientX - rect.left;
-    const y = e.clientY - rect.top || e.touches[0].clientY - rect.top;
+    const pointer = getPointerCoordinates(e);
+    if (!pointer || !canvasRef.current) return;
+    const { x, y } = pointer;
 
     setCursorPos({ x, y });
 
     if (!isDrawing || !canvasRef.current) return;
+
+    if (activeTool === 'point') return;
 
     setPaths((prev) => {
       const newPaths = [...prev];
@@ -219,6 +243,60 @@ export function Step3Evaluation({
           <h3 className="text-[20px] font-bold text-[#0f172a]">Avaliação e Mapeamento</h3>
           <p className="text-[#64748b] text-[14px] font-medium">Desenhe e marque pontos na foto do paciente</p>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-[13px] font-bold text-[#00a88e]">Fotos tiradas na câmera</h4>
+          <span className="text-[12px] font-bold text-[#00a88e] bg-[#e6f7f5] px-2 py-0.5 rounded-md">
+            {(evaluationCapturedPhotos || []).length}/{evaluationPhotoMax || 5}
+          </span>
+        </div>
+
+        {(evaluationCapturedPhotos || []).length === 0 ? (
+          <div className="bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-4 text-[#64748b] text-[13px] font-medium flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Use o botão de câmera vermelho para capturar até 5 fotos e escolher qual desenhar.
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {evaluationCapturedPhotos.map((ph, idx) => {
+              const isSelected = evaluationSelectedPhotoIndex === idx;
+              return (
+                <div key={`${ph.url}_${idx}`} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEvaluationSelectedPhotoIndex(idx);
+                      onSelectCapturedPhoto?.(idx);
+                    }}
+                    className={`w-20 h-20 rounded-2xl overflow-hidden border-[3px] transition-all ${
+                      isSelected
+                        ? 'border-[#00a88e] ring-[4px] ring-[#00a88e]/20'
+                        : 'border-[#00a88e]/15 hover:border-[#00a88e]/40'
+                    }`}
+                    aria-label="Selecionar foto capturada"
+                  >
+                    <img src={ph.url} alt="Foto capturada" className="w-full h-full object-cover" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteCapturedPhoto?.(idx);
+                    }}
+                    className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[3px] border-white flex items-center justify-center shadow-md"
+                    aria-label="Apagar foto capturada"
+                    title="Apagar foto"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Toolbar */}

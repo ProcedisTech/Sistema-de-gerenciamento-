@@ -1,97 +1,89 @@
-💉 Procedi - Sistema de Harmonização Facial Premium
+# Procedi - Sistema de gerenciamento
 
-O Procedi é uma aplicação web moderna desenvolvida em React para otimizar e digitalizar a jornada de atendimento de pacientes em clínicas de estética avançada e harmonização facial. O sistema guia o profissional através de um fluxo estruturado de 5 etapas, garantindo segurança clínica, conformidade legal (LGPD) e precisão técnica.
+Documentacao principal para desenvolvimento, operacao e manutencao profunda.
 
-📸 Demonstração Visual
+## Estado atual do projeto
+- Frontend React + Vite em `src/`.
+- Backend Express em `server/`.
+- Autenticacao JWT por cookie httpOnly em `server/routes/auth.js`.
+- Banco PostgreSQL introduzido com base em migrations SQL em `server/db/migrations/`.
+- Dados de pacientes/agenda no frontend ainda estao em memoria (fase de migracao incremental).
 
-(Coloque as suas imagens na pasta do projeto e substitua os links abaixo para que elas apareçam aqui)
+## Mapa rapido
+- Arquitetura: `docs/ARCHITECTURE.md`
+- Banco PostgreSQL: `docs/DATABASE_POSTGRESQL.md`
+- Manutencao profunda: `docs/MAINTENANCE.md`
+- Runbooks SRE: `docs/RUNBOOKS.md`
 
-<div align="center">
-<!-- Exemplo de como colocar duas imagens lado a lado -->
-<img src="https://via.placeholder.com/400x250/00a88e/ffffff?text=Tela+de+Login" alt="Tela de Login" width="400" style="border-radius: 10px; margin: 10px;"/>
-<img src="https://via.placeholder.com/400x250/00a88e/ffffff?text=Mapeamento+Facial" alt="Mapeamento Facial" width="400" style="border-radius: 10px; margin: 10px;"/>
-</div>
+## Requisitos
+- Node.js 20+
+- npm 10+
+- PostgreSQL 15+ (local ou gerenciado)
 
-✨ Funcionalidades Principais
+## Setup rapido (dev)
+### 1) Frontend
+```bash
+npm install
+npm run dev
+```
 
-🔒 Autenticação Segura: Ecrã de login para controlo de acesso profissional.
+### 2) Backend
+```bash
+cd server
+npm install
+cp .env.example .env
+npm run migrate
+npm run seed-admin
+npm run dev
+```
 
-🛣️ Jornada Otimizada de 5 Etapas: Um stepper interativo que impede o avanço sem o preenchimento de dados obrigatórios.
+## Scripts importantes
+### Raiz
+```bash
+npm run dev
+npm run dev:full
+npm run server
+npm run build
+npm run lint
+```
 
-👤 Gestão de Pacientes (Check-in):
+### Backend (`server/`)
+```bash
+npm run dev
+npm run start
+npm run migrate
+npm run seed-admin
+npm run hash-password -- "SUA_SENHA"
+```
 
-Formulário com validações e formatação automática (Máscaras de CPF, RG e Telefone).
+## Variaveis de ambiente principais
+Backend (`server/.env`):
+- `PORT`
+- `FRONTEND_ORIGIN`
+- `DATABASE_URL`
+- `DB_SSL_MODE`
+- `JWT_SECRET`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD_HASH` (recomendado)
+- `COOKIE_NAME`
+- `LOGIN_RATE_LIMIT_MAX`
 
-Cálculo automático de idade e alertas visuais de risco (ex: Alergias).
+Frontend (`.env.local` opcional):
+- `VITE_API_BASE_URL`
 
-📋 Anamnese Digital: Registo rápido de queixas, expectativas e contraindicações.
+## Fases da implementacao do banco
+1. **Concluida**: conexao PostgreSQL, migration runner, schema inicial e seed de usuario admin.
+2. **Em andamento**: migracao de auth para tabela `users` com fallback para credencial por env.
+3. **Proxima**: endpoints de pacientes, agenda e jornadas com persistencia real.
+4. **Final**: frontend consumindo API para remover estado apenas em memoria.
 
-⚖️ Conformidade LGPD: Termos de consentimento digitais integrados.
+## Seguranca minima recomendada
+- Nunca commitar `.env` real.
+- Trocar `JWT_SECRET` em todos os ambientes.
+- Nao usar senha em texto puro em producao; usar `ADMIN_PASSWORD_HASH`.
+- Habilitar TLS e `DB_SSL_MODE=require` para banco gerenciado.
+- Monitorar tentativas de login e erros 5xx.
 
-✅ Finalização: Orientações de pós-procedimento e registo de satisfação.
+## Observacao sobre compatibilidade
+A API atual foi atualizada para suportar autenticacao via PostgreSQL, mas ainda preserva fallback de credencial para ambientes sem banco operacional imediato. Isso permite rollout gradual.
 
-🎨 Motor de Mapeamento Facial (Canvas API)
-
-A etapa 3 conta com um motor de desenho avançado criado do zero para precisão estética:
-
-🖼️ Upload Dinâmico: Carregamento de fotografias do paciente diretamente para o Canvas.
-
-✏️ Desenho Livre: Marcações com paleta de 17 cores premium.
-
-🎯 Pontuação Inteligente: Inserção de pontos de injeção enumerados sequencialmente.
-
-Controlo deslizante (slider) para ajustar o tamanho exato da agulha/ponto.
-
-Lógica visual: Números posicionam-se dentro ou fora do ponto dependendo do tamanho escolhido.
-
-🧽 Borracha Ajustável: Controlo deslizante para aumentar ou diminuir a área de apagar.
-
-🖱️ Cursor Dinâmico Inteligente: O cursor do rato transforma-se num círculo exato que reflete o tamanho e a cor selecionada (na borracha ou no ponto) para uma precisão milimétrica.
-
-🛠️ Tecnologias Utilizadas
-
-React - Interface de utilizador e gestão de estados complexos.
-
-Vite - Ferramenta de build e servidor de desenvolvimento super rápido.
-
-Tailwind CSS - Design System utility-first com estética moderna e sombras suaves.
-
-Lucide React - Ícones vetorizados elegantes.
-
-HTML5 Canvas API - Manipulação e edição de imagem em tempo real.
-
-🚀 Como Executar o Projeto Localmente
-
-Pré-requisitos
-
-Certifique-se de que tem o Node.js instalado na sua máquina.
-
-Passos para instalação
-
-Clone o repositório:
-
-<h3><code>git clone https://github.com/SEU_USUARIO/procedi.git</code></h3>
-
-Entre na pasta do projeto:
-
-<h3><code>cd procedi</code></h3>
-
-Instale as dependências:
-
-<h3><code>npm install</code></h3>
-
-Inicie o servidor:
-
-<h3><code>npm run dev</code></h3>
-
-🔐 Acesso ao Sistema
-
-Para testar a interface, utilize as credenciais padrão:
-
-Usuário: Rafael
-
-Senha: PROcedi
-
-<div align="center">
-<i>Desenvolvido com 🩵 para elevar o padrão da Estética e Harmonização Facial.</i>
-</div>

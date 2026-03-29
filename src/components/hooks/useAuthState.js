@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../utils/formatters';
 
 export const useAuthState = () => {
+  const isDev = import.meta.env.DEV;
   const [authReady, setAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
@@ -36,6 +37,13 @@ export const useAuthState = () => {
       return;
     }
 
+    // Em dev local, evita ruído de 502 quando a API não está rodando.
+    if (isDev && import.meta.env.VITE_FORCE_AUTH_ME_CHECK !== 'true') {
+      setIsLoggedIn(false);
+      setAuthReady(true);
+      return;
+    }
+
     let cancelled = false;
     const timeoutId = setTimeout(() => {
       if (!cancelled) setAuthReady(true);
@@ -57,7 +65,7 @@ export const useAuthState = () => {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [cookieConsentAccepted]);
+  }, [cookieConsentAccepted, isDev]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -67,6 +75,14 @@ export const useAuthState = () => {
       const testUser = 'Rafael';
       const testPassword = 'PROcedi';
       const usernameTrim = username.trim();
+
+      // Atalho local para desenvolvimento sem backend disponível.
+      if (isDev && usernameTrim === testUser && password === testPassword) {
+        setIsLoggedIn(true);
+        setPassword('');
+        setLoginError('');
+        return;
+      }
 
       const res = await fetch(api('/api/auth/login'), {
         method: 'POST',
