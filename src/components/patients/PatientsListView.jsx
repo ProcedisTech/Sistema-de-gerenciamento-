@@ -11,6 +11,7 @@ export function PatientsListView({
   setPatientDetailTab,
   setPatientView,
   getPatientInitials,
+  onCreatePatient,
 }) {
   const filteredPatients = patients.filter((p) => {
     if (!patientSearchQuery.trim()) return true;
@@ -26,14 +27,15 @@ export function PatientsListView({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-[20px] font-bold text-[#0f172a]">Gestao de Pacientes</h3>
           <p className="text-[#64748b] text-[13px] font-medium">Historico completo e dados protegidos</p>
         </div>
         <button
           type="button"
-          className="px-4 py-2 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] flex items-center gap-1.5 border-[3px] border-transparent transition-all shadow-sm"
+          onClick={onCreatePatient}
+          className="w-full sm:w-auto px-4 py-2 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] flex items-center justify-center gap-1.5 border-[3px] border-transparent transition-all shadow-sm"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Paciente
         </button>
@@ -94,8 +96,8 @@ export function PatientsListView({
 
         <div className="flex-1">
           {selectedPatient ? (
-            <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-6 flex flex-col h-full">
-              <div className="flex items-start justify-between pb-4 border-b-[3px] border-[#00a88e]/10">
+            <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 sm:p-6 flex flex-col h-full">
+              <div className="flex items-start justify-between pb-4 border-b-[3px] border-[#00a88e]/10 gap-3">
                 <div className="flex-1 min-w-0">
                   <h3 className="text-[18px] font-bold text-[#0f172a]">{selectedPatient.nome}</h3>
                   <div className="text-[13px] text-[#64748b] font-medium space-y-1 mt-1">
@@ -103,7 +105,7 @@ export function PatientsListView({
                     <p>{selectedPatient.telefone}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2 ml-2 sm:ml-4">
                   <div className="w-12 h-12 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-[16px] flex-shrink-0">
                     {getPatientInitials(selectedPatient.nome)}
                   </div>

@@ -303,22 +303,22 @@ export function PatientProfileView({
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {selectedPatient.email}</span>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 flex-shrink-0">
+              <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => onStartAttendance?.(selectedPatient)}
-                  className="px-4 py-2.5 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] transition-all border-[3px] border-transparent shadow-md"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] transition-all border-[3px] border-transparent shadow-md"
                 >
                   <Play className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Iniciar Atendimento
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditing((prev) => (prev ? null : createEditDraft()))}
-                  className="px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all"
                 >
                   <UserIcon className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Editar Cadastro
                 </button>
-                <button type="button" className="px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all" disabled>
+                <button type="button" className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all" disabled>
                   <Download className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Gerar PDF
                 </button>
               </div>
@@ -342,7 +342,7 @@ export function PatientProfileView({
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3 mt-6 pt-6 border-t-[3px] border-[#00a88e]/10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-6 border-t-[3px] border-[#00a88e]/10">
               <div className="bg-[#f0fdfa] rounded-xl p-3 border-[2px] border-[#00a88e]/20">
                 <div className="text-[12px] text-[#64748b] font-medium">Ultima Visita</div>
                 <div className="text-[14px] font-bold text-[#00a88e] mt-1">{selectedPatient.ultimaVisita || '-'}</div>

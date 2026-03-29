@@ -199,18 +199,18 @@ export function AgendaModal({
           </div>
         </div>
 
-        <div className="p-4 border-t-[3px] border-[#00a88e]/15 flex items-center justify-between gap-3">
+        <div className="p-4 border-t-[3px] border-[#00a88e]/15 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/20 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa]"
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/20 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa]"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md"
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md"
           >
             Confirmar agendamento
           </button>
