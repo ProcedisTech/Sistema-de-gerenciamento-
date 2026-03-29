@@ -21,7 +21,7 @@ export function ProcedureCameraWidget({
 
   return (
     <>
-      <div className="fixed right-6 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-end gap-3">
+      <div className="fixed right-4 bottom-[122px] md:right-6 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[55] flex flex-col items-end gap-3">
         {photoThumbUrl && (
           <div className="w-14 h-14 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/25 bg-white shadow-sm">
             <img
@@ -109,7 +109,7 @@ export function ProcedureCameraWidget({
                     type="button"
                     onClick={capturePhoto}
                     disabled={!videoReady || isCameraStarting}
-                    className="px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md"
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md"
                   >
                     Capturar
                   </button>
@@ -118,7 +118,7 @@ export function ProcedureCameraWidget({
                     <button
                       type="button"
                       onClick={retakePhoto}
-                      className="px-5 py-3 rounded-xl font-bold text-[#0f172a] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#00a88e]/20"
+                      className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[#0f172a] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#00a88e]/20"
                     >
                       Repetir
                     </button>
@@ -126,7 +126,7 @@ export function ProcedureCameraWidget({
                       type="button"
                       onClick={confirmPhoto}
                       disabled={!photoPreviewBlob}
-                      className="px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md"
+                      className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md"
                     >
                       Confirmar
                     </button>
@@ -136,7 +136,7 @@ export function ProcedureCameraWidget({
                 <button
                   type="button"
                   onClick={closePhotoModal}
-                  className="px-5 py-3 rounded-xl font-bold text-[#64748b] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#94a3b8]/30"
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[#64748b] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#94a3b8]/30"
                 >
                   Cancelar
                 </button>

@@ -14,7 +14,7 @@ import {
 import { LoginForm, CookieConsent } from './auth';
 
 // Componentes de Layout
-import { Sidebar, Stepper } from './layout';
+import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 // Componentes de Agenda e Pacientes
 import { AgendaView } from './agenda';
@@ -137,6 +137,12 @@ export default function App() {
   
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [activeView, setActiveView] = React.useState('jornada');
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
+  const goToView = (view) => {
+    setActiveView(view);
+    setMobileNavOpen(false);
+  };
 
   const updatePatientByCpf = (cpfKey, updater) => {
     const key = String(cpfKey || '').trim();
@@ -156,6 +162,31 @@ export default function App() {
     setCurrentStep(2);
     setActiveView('jornada');
     setPatientView('list');
+  };
+
+  const handleCreatePatientFromPatients = () => {
+    // Open check-in in "novo" mode with a clean draft.
+    setCurrentStep(1);
+    goToView('jornada');
+    setPatientView('list');
+    setSelectedPatientCpf(null);
+
+    journeyState.setActiveTab('novo');
+    journeyState.setSearchQuery('');
+    journeyState.setStep1Errors({});
+
+    journeyState.setNome('');
+    journeyState.setDataNascimento('');
+    journeyState.setIdade('');
+    journeyState.setSexo('');
+    journeyState.setEstadoCivil('');
+    journeyState.setProfissao('');
+    journeyState.setAlergias('');
+    journeyState.setCpf('');
+    journeyState.setRg('');
+    journeyState.setTelefone('');
+    journeyState.setEmail('');
+    journeyState.setLgpdInicial(false);
   };
 
   const handleUpdatePatientProfile = (cpfKey, patch) => {
@@ -496,43 +527,43 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen font-sans overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
+    <div className="flex min-h-screen md:h-screen flex-col md:flex-row font-sans overflow-x-hidden md:overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
       <CookieConsent cookieConsentAccepted={cookieConsentAccepted} acceptCookies={acceptCookies} />
 
       {/* Sidebar */}
       <Sidebar activeView={activeView} setActiveView={setActiveView} handleLogout={handleLogout} />
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[96px] md:pb-0">
+      <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[112px] md:pb-0">
         {/* Header */}
         <header className="bg-white px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
           {activeView === 'jornada' ? (
             <>
-              <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
-              <p className="text-[#64748b] text-[14px] mb-8 font-medium">Processo completo em 5 etapas</p>
+              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
+              <p className="text-[#64748b] text-[13px] sm:text-[14px] mb-5 sm:mb-8 font-medium">Processo completo em 5 etapas</p>
               <Stepper currentStep={currentStep} />
             </>
           ) : null}
 
           {activeView === 'agenda' ? (
             <>
-              <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">Agenda</h2>
-              <p className="text-[#64748b] text-[14px] font-medium">Gerencie agendamentos por dia e por paciente</p>
+              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Agenda</h2>
+              <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Gerencie agendamentos por dia e por paciente</p>
             </>
           ) : null}
 
           {activeView === 'pacientes' ? (
             <>
-              <h2 className="text-[24px] font-bold text-[#0f172a] mb-1">Pacientes</h2>
-              <p className="text-[#64748b] text-[14px] font-medium">Acesse prontuario, historico e galeria de evolucao</p>
+              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Pacientes</h2>
+              <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Acesse prontuario, historico e galeria de evolucao</p>
             </>
           ) : null}
         </header>
 
         {/* Content Area */}
-        <div className="p-4 sm:p-6 md:p-8 max-w-[1100px] mx-auto w-full">
-          <div className="bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 p-8 pb-6">
-            
+        <div className="p-3 sm:p-6 md:p-8 max-w-[1100px] mx-auto w-full">
+          <div className="bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 p-4 sm:p-8 pb-5 sm:pb-6">
+
             {activeView === 'jornada' && (
               <>
                 {/* ============ ETAPA 1: CHECK-IN ============ */}
@@ -653,11 +684,11 @@ export default function App() {
                 )}
 
                 {/* ============ BOTÕES DE NAVEGAÇÃO ============ */}
-                <div className="flex justify-between items-center mt-10 pt-6 border-t-[3px] border-[#00a88e]/15">
+                <div className="flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3 mt-8 sm:mt-10 pt-5 sm:pt-6 border-t-[3px] border-[#00a88e]/15">
                   <button
                     onClick={prevStep}
                     disabled={currentStep === 1 || isFinishing}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-sm border-[3px] ${
+                    className={`w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-sm border-[3px] ${
                       currentStep === 1 || isFinishing
                         ? 'text-[#94a3b8] bg-[#f8fbfb] border-[#e2e8f0] cursor-not-allowed'
                         : 'text-[#00a88e] bg-white border-[#00a88e]/25 hover:bg-[#e6f7f5] hover:border-[#00a88e]'
@@ -670,7 +701,7 @@ export default function App() {
                     <button
                       onClick={handleNextStep}
                       disabled={isFinishing}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-md border-[3px] border-transparent text-white bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-md border-[3px] border-transparent text-white bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       Próxima Etapa <ChevronRight className="w-4 h-4" strokeWidth={3} />
                     </button>
@@ -678,7 +709,7 @@ export default function App() {
                     <button
                       onClick={handleNextStep}
                       disabled={isFinishing}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-md border-[3px] border-transparent text-white bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-md border-[3px] border-transparent text-white bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       Finalizar Procedimento ✓
                     </button>
@@ -701,6 +732,7 @@ export default function App() {
                 patientSearchQuery={patientSearchQuery}
                 setPatientSearchQuery={setPatientSearchQuery}
                 getPatientInitials={getPatientInitials}
+                onCreatePatient={handleCreatePatientFromPatients}
                 onStartAttendance={handleStartAttendance}
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
@@ -724,6 +756,16 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #00a88e; border-radius: 10px; opacity: 0.5; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00967f; }
       `}} />
+
+      <MobileNavigation
+        activeView={activeView}
+        mobileNavOpen={mobileNavOpen}
+        setMobileNavOpen={setMobileNavOpen}
+        onGoJornada={() => goToView('jornada')}
+        onGoAgenda={() => goToView('agenda')}
+        onGoPacientes={() => goToView('pacientes')}
+        onLogout={handleLogout}
+      />
 
       <ProcedureCameraWidget
         visible={activeView === 'jornada' && (currentStep === 2 || currentStep === 3)}
