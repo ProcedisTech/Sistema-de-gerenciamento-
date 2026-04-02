@@ -1,6 +1,7 @@
 import React from 'react';
 import { PatientProfileView } from './PatientProfileView';
 import { PatientsListView } from './PatientsListView';
+import { PatientCreateView } from './PatientCreateView';
 
 export function PatientsView(props) {
   const {
@@ -15,9 +16,17 @@ export function PatientsView(props) {
     onUpdatePatient,
     onAddGalleryFiles,
     onDeleteGalleryPhoto,
+    onPatientCreated,
+    mergePatientById,
+    refreshPatients,
+    roleUserId,
   } = props;
 
   const selectedPatient = patients.find((p) => p.cpf === selectedPatientCpf) || null;
+
+  if (patientView === 'create') {
+    return <PatientCreateView setPatientView={setPatientView} onPatientCreated={onPatientCreated} />;
+  }
 
   if (patientView === 'list') {
     return <PatientsListView {...props} />;
@@ -35,10 +44,13 @@ export function PatientsView(props) {
         onUpdatePatient={onUpdatePatient}
         onAddGalleryFiles={onAddGalleryFiles}
         onDeleteGalleryPhoto={onDeleteGalleryPhoto}
+        mergePatientById={mergePatientById}
+        refreshPatients={refreshPatients}
+        roleUserId={roleUserId}
       />
     );
   }
 
-  return null;
+  return <PatientsListView {...props} />;
 }
 

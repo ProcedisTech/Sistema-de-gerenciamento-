@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, X } from 'lucide-react';
+import { Calendar, X, Loader2 } from 'lucide-react';
 
 export function AgendaModal({
   isOpen,
@@ -24,11 +24,24 @@ export function AgendaModal({
   setAgendaDate,
   agendaTime,
   setAgendaTime,
+  agendaHoraFim,
+  setAgendaHoraFim,
   agendaProcedure,
   setAgendaProcedure,
+  agendaCatalogoId,
+  setAgendaCatalogoId,
+  catalogosList = [],
+  equipeList = [],
+  agendaRoleUserId,
+  setAgendaRoleUserId,
+  profissionalRoleUserId,
   onConfirm,
+  agendaSaving,
+  onAgendaTimeChange,
 }) {
   if (!isOpen) return null;
+
+  const catalogOptions = Array.isArray(catalogosList) ? catalogosList : [];
 
   return (
     <div
@@ -45,9 +58,10 @@ export function AgendaModal({
           <div className="flex items-center gap-3">
             <Calendar className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
             <div>
-              <h4 className="text-[16px] font-bold text-[#0f172a]">Novo Agendamento</h4>
-              <p className="text-[12px] font-medium text-[#64748b]">
-                Selecione ou crie um paciente e confirme
+              <h4 className="text-[16px] font-bold text-[#0f172a]">Novo horário na agenda</h4>
+              <p className="text-[12px] font-medium text-[#64748b] leading-snug">
+                Abre um intervalo (início e fim) para o profissional atender. Pacientes e procedimentos de cada atendimento são
+                marcados depois, no botão &quot;Marcar atendimento&quot; do dia.
               </p>
             </div>
           </div>
@@ -69,7 +83,50 @@ export function AgendaModal({
             </div>
           )}
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-bold text-[#00a88e]">Profissional (role no servidor)</label>
+              <select
+                value={agendaRoleUserId}
+                onChange={(e) => setAgendaRoleUserId(e.target.value)}
+                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+              >
+                <option value="">Selecione...</option>
+                {equipeList.map((p) => (
+                  <option key={p.id} value={profissionalRoleUserId(p)}>
+                    {p.nomeCompleto || p.nome || p.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-bold text-[#00a88e]">Procedimento de referência (opcional)</label>
+              <select
+                value={agendaCatalogoId}
+                onChange={(e) => setAgendaCatalogoId(e.target.value)}
+                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+              >
+                <option value="">Nenhum</option>
+                {catalogOptions.map((c) => (
+                  <option key={c.id} value={c.catalogoProcedimentoId || c.id}>
+                    {c.nomeProcedimento || c.id}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-[#64748b] font-medium leading-relaxed">
+                Isso <span className="font-bold text-[#475569]">não é categoria</span>: vem do{' '}
+                <span className="font-bold text-[#475569]">catálogo de procedimentos</span> da clínica. Só ajuda a preencher a
+                observação deste horário na lista. Cada paciente continua com o procedimento escolhido em &quot;Marcar
+                atendimento&quot;.
+              </p>
+            </div>
+          </div>
+
           <div className="mb-4">
+            <p className="text-[11px] text-[#64748b] font-medium mb-2 leading-relaxed">
+              Opcional: incluir paciente só atualiza a lista para você usar em &quot;Marcar atendimento&quot;. Criar o horário não
+              reserva vaga para ninguém.
+            </p>
             <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-3 border-[3px] border-[#00a88e]/15">
               <button
                 type="button"
@@ -148,7 +205,7 @@ export function AgendaModal({
                       return (
                         <button
                           type="button"
-                          key={p.id}
+                          key={p.id || p.cpf}
                           onClick={() => setAgendaSelectedPatientCpf((p.cpf || '').trim())}
                           className={`w-full text-left p-4 rounded-xl border-[3px] mb-2 ${
                             selected
@@ -159,6 +216,7 @@ export function AgendaModal({
                           <div className="text-[14px] font-bold text-[#0f766e]">{p.nome}</div>
                           <div className="text-[12px] font-medium text-[#64748b]">
                             {p.cpf} • {p.telefone}
+                            {!p.id && <span className="text-amber-600"> · sem ID servidor</span>}
                           </div>
                         </button>
                       );
@@ -168,7 +226,7 @@ export function AgendaModal({
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Data</label>
               <input
@@ -179,21 +237,30 @@ export function AgendaModal({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e]">Horario</label>
+              <label className="text-[13px] font-bold text-[#00a88e]">Início</label>
               <input
                 type="time"
                 value={agendaTime}
-                onChange={(e) => setAgendaTime(e.target.value)}
+                onChange={(e) => (onAgendaTimeChange ? onAgendaTimeChange(e.target.value) : setAgendaTime(e.target.value))}
                 className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               />
             </div>
-            <div className="space-y-1.5 md:col-span-1">
-              <label className="text-[13px] font-bold text-[#00a88e]">Procedimento</label>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-bold text-[#00a88e]">Fim</label>
+              <input
+                type="time"
+                value={agendaHoraFim}
+                onChange={(e) => setAgendaHoraFim(e.target.value)}
+                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-bold text-[#00a88e]">Observação do horário</label>
               <input
                 value={agendaProcedure}
                 onChange={(e) => setAgendaProcedure(e.target.value)}
                 className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
-                placeholder="Ex: Botox"
+                placeholder="Ex.: manhã consultas, revisão…"
               />
             </div>
           </div>
@@ -203,20 +270,22 @@ export function AgendaModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/20 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa]"
+            disabled={agendaSaving}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/20 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa] disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md"
+            disabled={agendaSaving}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            Confirmar agendamento
+            {agendaSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Criar horário
           </button>
         </div>
       </div>
     </div>
   );
 }
-

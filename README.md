@@ -8,8 +8,10 @@ Documentacao principal para desenvolvimento, operacao e manutencao profunda.
 - Autenticacao JWT por cookie httpOnly em `server/routes/auth.js`.
 - Banco PostgreSQL introduzido com base em migrations SQL em `server/db/migrations/`.
 - Dados de pacientes/agenda no frontend ainda estao em memoria (fase de migracao incremental).
+- **Integracao Spring Boot (API alvo):** ver `docs/CONTEXTO_SPRING_E_PLANO.md` — contrato com o repo `plataforma-procedimentos`, plano por fases e changelog para agentes.
 
 ## Mapa rapido
+- Contexto Spring + plano de evolucao: `docs/CONTEXTO_SPRING_E_PLANO.md`
 - Arquitetura: `docs/ARCHITECTURE.md`
 - Banco PostgreSQL: `docs/DATABASE_POSTGRESQL.md`
 - Manutencao profunda: `docs/MAINTENANCE.md`

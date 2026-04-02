@@ -160,7 +160,7 @@ export function useJourneyController({
       const patientAge = idade !== '' && idade !== null ? idade : calculateAgeFromISODate(dataNascimento);
 
       const newPatient = {
-        id: `patient_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        id: crypto.randomUUID(),
         nome: nome.trim(),
         dataNascimento,
         idade: patientAge !== '' ? patientAge : '',

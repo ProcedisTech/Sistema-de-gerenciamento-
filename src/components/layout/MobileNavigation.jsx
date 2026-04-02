@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, GitCommit, LogOut, Menu, Shield, Users, X } from 'lucide-react';
+import { Calendar, ClipboardList, GitCommit, LogOut, Menu, Shield, Users, X } from 'lucide-react';
 
 export function MobileNavigation({
   activeView,
@@ -8,6 +8,7 @@ export function MobileNavigation({
   onGoJornada,
   onGoAgenda,
   onGoPacientes,
+  onGoAnamnese,
   onLogout,
 }) {
   return (
@@ -118,6 +119,18 @@ export function MobileNavigation({
                 }`}
               >
                 <Users className="w-5 h-5" strokeWidth={2.5} /> Pacientes
+              </button>
+
+              <button
+                type="button"
+                onClick={onGoAnamnese}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+                  activeView === 'anamnese'
+                    ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                    : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+                }`}
+              >
+                <ClipboardList className="w-5 h-5" /> Anamnese
               </button>
             </nav>
 
