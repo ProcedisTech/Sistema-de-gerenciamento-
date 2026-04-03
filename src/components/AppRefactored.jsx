@@ -618,44 +618,71 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[112px] md:pb-0">
-        {/* Header */}
-        <header className="bg-white px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
-          <div className="mb-4 flex justify-end">
-            <DevContextBar />
-          </div>
-          {activeView === 'jornada' ? (
-            <>
-              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
-              <p className="text-[#64748b] text-[13px] sm:text-[14px] mb-5 sm:mb-8 font-medium">Processo completo em 5 etapas</p>
-              <Stepper currentStep={currentStep} />
-            </>
-          ) : null}
-
-          {activeView === 'agenda' ? (
-            <>
-              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Agenda</h2>
-              <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Gerencie agendamentos por dia e por paciente</p>
-            </>
-          ) : null}
-
-          {activeView === 'pacientes' ? (
-            <>
-              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Pacientes</h2>
-              <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Acesse prontuario, historico e galeria de evolucao</p>
-            </>
-          ) : null}
-
+        {/* Header — anamnese: barra compacta, título e dev context na mesma linha no desktop */}
+        <header
+          className={`bg-white px-4 sm:px-6 md:px-10 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0 ${
+            activeView === 'anamnese' ? 'py-3 sm:py-3.5 md:py-4' : 'py-6 sm:py-8'
+          }`}
+        >
           {activeView === 'anamnese' ? (
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-6">
+              <div className="min-w-0">
+                <h2 className="text-[18px] sm:text-[21px] md:text-[22px] font-bold text-[#0f172a] leading-tight mb-0.5">
+                  Anamnese
+                </h2>
+                <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
+                  Configure categorias, perguntas e fichas reutilizáveis
+                </p>
+              </div>
+              <div className="flex justify-end shrink-0 md:max-w-[min(100%,520px)]">
+                <DevContextBar />
+              </div>
+            </div>
+          ) : (
             <>
-              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Anamnese</h2>
-              <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Configure categorias, perguntas e fichas reutilizáveis</p>
+              <div className="mb-4 flex justify-end">
+                <DevContextBar />
+              </div>
+              {activeView === 'jornada' ? (
+                <>
+                  <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
+                  <p className="text-[#64748b] text-[13px] sm:text-[14px] mb-5 sm:mb-8 font-medium">Processo completo em 5 etapas</p>
+                  <Stepper currentStep={currentStep} />
+                </>
+              ) : null}
+
+              {activeView === 'agenda' ? (
+                <>
+                  <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Agenda</h2>
+                  <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Gerencie agendamentos por dia e por paciente</p>
+                </>
+              ) : null}
+
+              {activeView === 'pacientes' ? (
+                <>
+                  <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Pacientes</h2>
+                  <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Acesse prontuario, historico e galeria de evolucao</p>
+                </>
+              ) : null}
             </>
-          ) : null}
+          )}
         </header>
 
-        {/* Content Area */}
-        <div className="p-3 sm:p-6 md:p-8 max-w-[1100px] mx-auto w-full">
-          <div className="bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 p-4 sm:p-8 pb-5 sm:pb-6">
+        {/* Content Area — anamnese usa largura e altura maiores no desktop */}
+        <div
+          className={`w-full mx-auto ${
+            activeView === 'anamnese'
+              ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] flex-1 flex flex-col min-h-0'
+              : 'p-3 sm:p-6 md:p-8 max-w-[1100px]'
+          }`}
+        >
+          <div
+            className={`bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 ${
+              activeView === 'anamnese'
+                ? 'flex-1 flex flex-col min-h-0 px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
+                : 'p-4 sm:p-8 pb-5 sm:pb-6'
+            }`}
+          >
 
             {activeView === 'jornada' && (
               <>
