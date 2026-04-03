@@ -250,12 +250,12 @@ export function QuestionManager() {
           <p className="text-[12px] mt-1">Crie perguntas para montar fichas de anamnese</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
           {perguntasFiltradas.map((p) => (
-            <div key={p.id} className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <p className="text-[14px] font-bold text-[#0f172a]">{p.descricao}</p>
+            <div key={p.id} className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all h-full flex flex-col shadow-sm">
+              <div className="flex items-start justify-between gap-3 flex-1 min-h-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-bold text-[#0f172a] line-clamp-4">{p.descricao}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/15">
                       {p.categoriaNome || 'Sem categoria'}
