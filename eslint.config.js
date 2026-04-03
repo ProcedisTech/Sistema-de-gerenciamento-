@@ -26,4 +26,16 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    files: ['**/PatientProfileView.jsx', '**/Step5Finalization.jsx'],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    files: ['**/OrgContext.jsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

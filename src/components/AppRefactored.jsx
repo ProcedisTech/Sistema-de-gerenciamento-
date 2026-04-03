@@ -15,10 +15,22 @@ import { LoginForm, CookieConsent } from './auth';
 
 // Componentes de Layout
 import { Sidebar, Stepper, MobileNavigation } from './layout';
+import { DevContextBar } from './layout/DevContextBar';
 
-// Componentes de Agenda e Pacientes
+import { useOrg } from '../contexts/OrgContext';
+import {
+  anamneseApi,
+  pacientesApi,
+  agendasApi,
+  procedimentosApi,
+} from '../services/api';
+import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
+import { addMinutesToTime } from '../utils/agendaMapping';
+
+// Componentes de Agenda, Pacientes e Anamnese
 import { AgendaView } from './agenda';
 import { PatientsView } from './patients';
+import { AnamneseAdminView } from './anamnese';
 import { ProcedureCameraWidget } from './canvas';
 
 // Componentes da Jornada (5 Etapas)
@@ -28,12 +40,14 @@ import { Step1CheckIn, Step2Anamnese, Step3Evaluation, Step4LGPD, Step5Finalizat
 import { getPatientInitials, maskCPF, maskTelefone } from './utils';
 
 export default function App() {
+  const { roleUserId } = useOrg();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState();
   const patientState = usePatientState();
   const journeyState = useJourneyState();
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const anamneseRef = useRef(null);
 
   // ============ Estados destructurados para facilitar leitura ============
   const { authReady, isLoggedIn, handleLogout, cookieConsentAccepted, acceptCookies } = authState;
@@ -49,6 +63,8 @@ export default function App() {
     setPatientDetailTab,
     patientSearchQuery,
     setPatientSearchQuery,
+    refreshPatients,
+    mergePatientById,
   } = patientState;
 
   const agendaState = useAgendaController({
@@ -165,28 +181,7 @@ export default function App() {
   };
 
   const handleCreatePatientFromPatients = () => {
-    // Open check-in in "novo" mode with a clean draft.
-    setCurrentStep(1);
-    goToView('jornada');
-    setPatientView('list');
-    setSelectedPatientCpf(null);
-
-    journeyState.setActiveTab('novo');
-    journeyState.setSearchQuery('');
-    journeyState.setStep1Errors({});
-
-    journeyState.setNome('');
-    journeyState.setDataNascimento('');
-    journeyState.setIdade('');
-    journeyState.setSexo('');
-    journeyState.setEstadoCivil('');
-    journeyState.setProfissao('');
-    journeyState.setAlergias('');
-    journeyState.setCpf('');
-    journeyState.setRg('');
-    journeyState.setTelefone('');
-    journeyState.setEmail('');
-    journeyState.setLgpdInicial(false);
+    setPatientView('create');
   };
 
   const handleUpdatePatientProfile = (cpfKey, patch) => {
@@ -264,8 +259,13 @@ export default function App() {
     const selectedTrim = String(selectedPatientCpf || '').trim();
     const matchKey = cpfTrim || selectedTrim;
 
+    const existingPatient = patients.find((p) => {
+      const pCpf = String(p?.cpf || '').trim();
+      return matchKey && pCpf === matchKey;
+    });
+
     const patientPayload = {
-      id: matchKey ? `patient_${matchKey.replace(/\D/g, '')}` : `patient_${Date.now()}`,
+      id: existingPatient?.id || crypto.randomUUID(),
       nome: journeyState.nome || '',
       dataNascimento: journeyState.dataNascimento || '',
       idade: journeyState.idade || '',
@@ -350,10 +350,11 @@ export default function App() {
     }
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (currentStep === 1) {
       if (journeyState.activeTab === 'novo') {
-        const { nome, dataNascimento, sexo, estadoCivil, profissao, cpf, telefone, email, alergias, lgpdInicial } = journeyState;
+        const { nome, dataNascimento, sexo, estadoCivil, profissao, cpf, telefone, email, alergias, lgpdInicial } =
+          journeyState;
         const errors = {};
         if (!nome.trim()) errors.nome = true;
         if (!dataNascimento) errors.dataNascimento = true;
@@ -371,15 +372,33 @@ export default function App() {
           return;
         }
 
-        // Novo paciente: salva imediatamente no estado local para testes.
-        upsertPatientLocal({ ensureSelected: true });
+        try {
+          const dto = await pacientesApi.create(journeyToPacienteCreateDTO(journeyState));
+          const mapped = mapBackendPatient(dto);
+          setPatients((prev) => {
+            const cpfKey = String(mapped.cpf || '').trim();
+            const idx = prev.findIndex((p) => String(p?.cpf || '').trim() === cpfKey);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], ...mapped };
+              return copy;
+            }
+            return [...prev, mapped];
+          });
+          patientState.setSelectedPatientCpf(mapped.cpf || null);
+          journeyState.setCpf(mapped.cpf || '');
+          upsertPatientLocal({ ensureSelected: true });
+        } catch (err) {
+          alert(err.message || 'Erro ao cadastrar paciente no servidor.');
+          return;
+        }
       } else {
-        // Para paciente existente, basta ter um registro selecionado/cpf carregado.
         const hasSelectedPatient = Boolean((selectedPatientCpf || '').trim() || (journeyState.cpf || '').trim());
         if (!hasSelectedPatient) {
           alert('Selecione um paciente para continuar para anamnese.');
           return;
         }
+        upsertPatientLocal({ ensureSelected: true });
       }
 
       journeyState.setStep1Errors({});
@@ -392,8 +411,26 @@ export default function App() {
         return;
       }
 
-      // Finalizacao da anamnese: persiste no estado local (mock) para paciente atual.
       upsertPatientLocal({ ensureSelected: true });
+
+      const anamneseData = anamneseRef.current?.getAnamneseData?.();
+      if (anamneseData && anamneseData.respostas.length > 0) {
+        const paciente = patients.find((p) => {
+          const pCpf = String(p?.cpf || '').trim();
+          const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+          return sCpf && pCpf === sCpf;
+        });
+        const rid = roleUserId || 'a0a00000-0000-0000-0000-000000000001';
+        if (paciente?.id) {
+          anamneseApi
+            .createPaciente(paciente.id, rid, {
+              anamneseId: anamneseData.anamneseId,
+              observacoes: `Queixa: ${queixa}. Expectativas: ${expectativas}`,
+              respostas: anamneseData.respostas,
+            })
+            .catch((err) => console.warn('Erro ao salvar anamnese:', err.message));
+        }
+      }
     }
 
     if (currentStep === 4) {
@@ -407,9 +444,13 @@ export default function App() {
     }
 
     if (currentStep === 5) {
-      const { orientacoes, satisfacao } = journeyState;
+      const { orientacoes, satisfacao, catalogoProcedimentoSaudeId } = journeyState;
       if (!orientacoes || !satisfacao) {
         alert('Confirme as orientações e satisfação');
+        return;
+      }
+      if (!catalogoProcedimentoSaudeId) {
+        alert('Selecione o procedimento do catálogo (servidor) para finalizar.');
         return;
       }
 
@@ -419,7 +460,7 @@ export default function App() {
     if (currentStep < 5) {
       setCurrentStep(currentStep + 1);
     } else {
-      finishJourney();
+      await finishJourney();
     }
   };
 
@@ -432,11 +473,51 @@ export default function App() {
   const finishJourney = async () => {
     setIsFinishing(true);
     try {
-      console.log('Jornada finalizada!', { currentStep, journeyId });
-      alert('Procedimento finalizado com sucesso!');
+      const rid = roleUserId || 'a0a00000-0000-0000-0000-000000000001';
+      const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+      const paciente = patients.find((p) => String(p?.cpf || '').trim() === sCpf);
+      const catId = journeyState.catalogoProcedimentoSaudeId;
+
+      if (!paciente?.id) {
+        alert('Paciente sem ID do servidor. Recarregue a lista de pacientes ou cadastre novamente.');
+        return;
+      }
+      if (!catId) {
+        alert('Selecione o procedimento na etapa 5.');
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const hi = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const hf = addMinutesToTime(hi, 45);
+
+      const agenda = await agendasApi.create({
+        dataAgendamento: today,
+        horaInicio: `${hi}:00`,
+        horaFim: `${hf}:00`,
+        roleUserId: rid,
+        tipo: 'atendimento',
+        observacao: 'Jornada — horário automático',
+      });
+
+      const proc = await procedimentosApi.iniciar({
+        pacienteId: paciente.id,
+        catalogoProcedimentoSaudeId: catId,
+        roleUserId: rid,
+        agendaId: agenda.id,
+      });
+
+      if (proc?.id) {
+        await procedimentosApi.finalizar(proc.id);
+      }
+
+      refreshPatients();
+      alert('Procedimento finalizado e registrado no servidor.');
       resetJourney();
     } catch (error) {
       console.error('Erro ao finalizar jornada:', error);
+      alert(error.message || 'Erro ao registrar procedimento. Verifique conflito de horário na agenda ou dados no Swagger.');
     } finally {
       setIsFinishing(false);
     }
@@ -463,7 +544,9 @@ export default function App() {
     journeyState.setTermoAssinado(false);
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
+    journeyState.setCatalogoProcedimentoSaudeId('');
     patientState.setSelectedPatientCpf(null);
+    patientState.setPatientView('list');
   };
 
   const selectPatient = (patient) => {
@@ -537,6 +620,9 @@ export default function App() {
       <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[112px] md:pb-0">
         {/* Header */}
         <header className="bg-white px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0">
+          <div className="mb-4 flex justify-end">
+            <DevContextBar />
+          </div>
           {activeView === 'jornada' ? (
             <>
               <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Jornada de Harmonização Otimizada</h2>
@@ -556,6 +642,13 @@ export default function App() {
             <>
               <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Pacientes</h2>
               <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Acesse prontuario, historico e galeria de evolucao</p>
+            </>
+          ) : null}
+
+          {activeView === 'anamnese' ? (
+            <>
+              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Anamnese</h2>
+              <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Configure categorias, perguntas e fichas reutilizáveis</p>
             </>
           ) : null}
         </header>
@@ -608,6 +701,7 @@ export default function App() {
                 {/* ============ ETAPA 2: ANAMNESE ============ */}
                 {currentStep === 2 && (
                   <Step2Anamnese
+                    ref={anamneseRef}
                     queixa={journeyState.queixa}
                     setQueixa={journeyState.setQueixa}
                     expectativas={journeyState.expectativas}
@@ -680,6 +774,8 @@ export default function App() {
                     setOrientacoes={journeyState.setOrientacoes}
                     satisfacao={journeyState.satisfacao}
                     setSatisfacao={journeyState.setSatisfacao}
+                    catalogoProcedimentoSaudeId={journeyState.catalogoProcedimentoSaudeId}
+                    setCatalogoProcedimentoSaudeId={journeyState.setCatalogoProcedimentoSaudeId}
                   />
                 )}
 
@@ -737,10 +833,16 @@ export default function App() {
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
                 onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
+                onPatientCreated={patientState.refreshPatients}
+                mergePatientById={mergePatientById}
+                refreshPatients={refreshPatients}
+                roleUserId={roleUserId}
               />
             )}
 
-            {!['jornada', 'agenda', 'pacientes'].includes(activeView) && (
+            {activeView === 'anamnese' && <AnamneseAdminView />}
+
+            {!['jornada', 'agenda', 'pacientes', 'anamnese'].includes(activeView) && (
               <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
@@ -764,6 +866,7 @@ export default function App() {
         onGoJornada={() => goToView('jornada')}
         onGoAgenda={() => goToView('agenda')}
         onGoPacientes={() => goToView('pacientes')}
+        onGoAnamnese={() => goToView('anamnese')}
         onLogout={handleLogout}
       />
 

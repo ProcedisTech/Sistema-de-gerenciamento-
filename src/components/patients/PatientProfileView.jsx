@@ -7,10 +7,13 @@ import {
   Camera,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ClipboardList,
   Download,
   FileText,
   Image as ImageIcon,
+  Loader2,
   Mail,
   Phone,
   Play,
@@ -20,6 +23,142 @@ import {
   User as UserIcon,
   X,
 } from 'lucide-react';
+import { anamneseApi, pacientesApi, notasApi, procedimentosApi } from '../../services/api';
+import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+
+function renderRespostaValue(resp) {
+  if (resp.opcaoSelecionada) return resp.opcaoSelecionada;
+  if (resp.respostaTexto) return resp.respostaTexto;
+  if (resp.respostaNumero !== null && resp.respostaNumero !== undefined) return String(resp.respostaNumero);
+  if (resp.respostaBoolean === true) return 'Sim';
+  if (resp.respostaBoolean === false) return 'Não';
+  return '-';
+}
+
+function AnamneseTab({ pacienteId }) {
+  const [anamneses, setAnamneses] = useState([]);
+  const [detalhes, setDetalhes] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
+
+  useEffect(() => {
+    if (!pacienteId) return;
+    setLoading(true);
+    anamneseApi.listPaciente(pacienteId)
+      .then(async (data) => {
+        const list = Array.isArray(data) ? data : [];
+        setAnamneses(list);
+
+        const detMap = {};
+        const results = await Promise.all(
+          list.map((an) =>
+            anamneseApi.getPaciente(pacienteId, an.id)
+              .then((det) => ({ id: an.id, det }))
+              .catch(() => ({ id: an.id, det: null }))
+          )
+        );
+        results.forEach(({ id, det }) => { if (det) detMap[id] = det; });
+        setDetalhes(detMap);
+
+        if (list.length > 0) setExpandedId(list[0].id);
+      })
+      .catch((err) => console.warn('Erro ao buscar anamneses:', err.message))
+      .finally(() => setLoading(false));
+  }, [pacienteId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-[#00a88e]" />
+        <span className="ml-2 text-[#64748b] text-[13px]">Carregando anamneses...</span>
+      </div>
+    );
+  }
+
+  if (anamneses.length === 0) {
+    return (
+      <div className="text-center py-12 text-[#94a3b8]">
+        <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-30" />
+        <p className="text-[14px] font-medium">Nenhuma anamnese preenchida</p>
+        <p className="text-[12px] mt-1">Preencha uma ficha na jornada do paciente</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">Anamneses Preenchidas ({anamneses.length})</h4>
+      {anamneses.map((an) => {
+        const isOpen = expandedId === an.id;
+        const detalhe = detalhes[an.id] || an;
+        const respostas = Array.isArray(detalhe.respostas) ? detalhe.respostas : [];
+
+        return (
+          <div key={an.id} className="border-[3px] border-[#00a88e]/15 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setExpandedId(isOpen ? null : an.id)}
+              className="w-full flex items-center justify-between p-4 bg-[#f8fbfb] hover:bg-[#f0fdfa] transition-all text-left"
+            >
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <ClipboardList className="w-4 h-4 text-[#00a88e]" strokeWidth={2} />
+                  <span className="text-[14px] font-bold text-[#0f172a]">{an.anamneseNome || 'Anamnese'}</span>
+                  <span className="text-[12px] text-[#64748b]">({respostas.length} respostas)</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748b]">
+                  {an.profissionalNome && <span>Por: {an.profissionalNome}</span>}
+                  {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR')} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                  <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border-[2px] ${
+                    an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO'
+                      ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
+                      : 'bg-[#fef9c3] text-[#b45309] border-[#f59e0b]/20'
+                  }`}>
+                    {an.status || 'rascunho'}
+                  </span>
+                </div>
+              </div>
+              <ChevronDown className={`w-5 h-5 text-[#94a3b8] transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+              <div className="p-4 border-t-[3px] border-[#00a88e]/10 space-y-3">
+                {detalhe.observacoes && (
+                  <div className="p-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/20">
+                    <span className="text-[12px] font-bold text-[#b45309]">Observações</span>
+                    <p className="text-[13px] text-[#0f172a] mt-1">{detalhe.observacoes}</p>
+                  </div>
+                )}
+
+                {respostas.length > 0 ? (
+                  <div className="space-y-2">
+                    {respostas.map((resp) => (
+                      <div key={resp.id} className="p-4 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <span className="text-[12px] text-[#64748b] font-medium">{resp.perguntaDescricao || 'Pergunta'}</span>
+                            {resp.tipoResposta && (
+                              <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#e6f7f5] text-[#0f766e]">
+                                {resp.tipoResposta}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-[14px] font-bold text-[#0f172a] mt-1.5">{renderRespostaValue(resp)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function PatientProfileView({
   selectedPatient,
@@ -31,8 +170,15 @@ export function PatientProfileView({
   onUpdatePatient,
   onAddGalleryFiles,
   onDeleteGalleryPhoto,
+  mergePatientById,
+  refreshPatients,
+  roleUserId,
 }) {
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
+  const [apiNotes, setApiNotes] = useState([]);
+  const [apiProcedures, setApiProcedures] = useState([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState('');
   const [editing, setEditing] = useState(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
   const [quickNoteText, setQuickNoteText] = useState('');
@@ -105,12 +251,79 @@ export function PatientProfileView({
     return terms;
   }, [patient]);
 
+  useEffect(() => {
+    const id = selectedPatient?.id;
+    if (!id) return undefined;
+    let cancelled = false;
+    setDetailLoading(true);
+    (async () => {
+      try {
+        const [dto, notasList, procList] = await Promise.all([
+          pacientesApi.get(id).catch(() => null),
+          notasApi.list(id).catch(() => []),
+          procedimentosApi.byPaciente(id).catch(() => []),
+        ]);
+        if (cancelled) return;
+        if (dto) {
+          mergePatientById?.(id, (prev) => ({
+            ...mapBackendPatient(dto),
+            evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
+            evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
+            evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
+            galeria: prev.galeria,
+            documentos: prev.documentos,
+            notas: prev.notas,
+            procedures: prev.procedures,
+          }));
+        }
+        setApiNotes(Array.isArray(notasList) ? notasList : []);
+        setApiProcedures(Array.isArray(procList) ? procList : []);
+      } catch {
+        if (!cancelled) {
+          setApiNotes([]);
+          setApiProcedures([]);
+        }
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recarregar só ao trocar paciente
+  }, [selectedPatient?.id]);
+
+  const displayNotes = useMemo(() => {
+    const fromApi = (apiNotes || []).map((n) => ({
+      id: n.id,
+      texto: n.conteudo,
+      autor: n.autorNome || 'Equipe',
+      data: n.criadoEm ? new Date(n.criadoEm).toLocaleString('pt-BR') : '',
+      _fromApi: true,
+    }));
+    const local = (selectedPatient?.notas || []).map((n, i) => ({
+      ...n,
+      id: `loc_${i}`,
+      _fromApi: false,
+    }));
+    return [...fromApi, ...local];
+  }, [apiNotes, selectedPatient?.notas]);
+
   const timelineEvents = useMemo(() => {
     const events = [];
 
+    (apiProcedures || []).forEach((proc, pIdx) => {
+      events.push({
+        id: proc.id || `api_proc_${pIdx}`,
+        type: 'procedimento',
+        title: proc.procedimentoNome || 'Procedimento',
+        meta: `${proc.statusNome || ''} ${proc.criadoEm ? new Date(proc.criadoEm).toLocaleString('pt-BR') : ''} ${proc.profissionalNome ? `· ${proc.profissionalNome}` : ''}`,
+      });
+    });
+
     (patient.procedures || []).forEach((proc, idx) => {
       events.push({
-        id: `proc_${idx}`,
+        id: `proc_local_${idx}`,
         type: 'procedimento',
         title: proc.nome || 'Procedimento',
         meta: `${proc.data || '-'} ${proc.hora ? `- ${proc.hora}` : ''} ${proc.profissional ? `- ${proc.profissional}` : ''}`,
@@ -136,24 +349,50 @@ export function PatientProfileView({
     });
 
     return events;
-  }, [patient, capturedPhotos]);
+  }, [patient, capturedPhotos, apiProcedures]);
 
-  const saveEditProfile = () => {
-    const meds = (editing?.medicamentos || '')
-      .split(',')
-      .map((m) => m.trim())
-      .filter(Boolean);
-
-    onUpdatePatient?.(selectedPatient.cpf, {
-      nome: editing?.nome || '',
-      email: editing?.email || '',
-      telefone: editing?.telefone || '',
-      profissao: editing?.profissao || '',
-      alergias: editing?.alergias || '',
-      condicoesSaude: editing?.condicoesSaude || '',
-      medicamentos: meds,
-    });
-    setEditing(null);
+  const saveEditProfile = async () => {
+    if (!selectedPatient?.id) {
+      const meds = (editing?.medicamentos || '')
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean);
+      onUpdatePatient?.(selectedPatient.cpf, {
+        nome: editing?.nome || '',
+        email: editing?.email || '',
+        telefone: editing?.telefone || '',
+        profissao: editing?.profissao || '',
+        alergias: editing?.alergias || '',
+        condicoesSaude: editing?.condicoesSaude || '',
+        medicamentos: meds,
+      });
+      setEditing(null);
+      return;
+    }
+    setProfileSaveError('');
+    try {
+      const dto = await pacientesApi.get(selectedPatient.id);
+      const payload = mergePacienteDtoWithEditing(dto, editing);
+      await pacientesApi.update(selectedPatient.id, payload);
+      const fresh = await pacientesApi.get(selectedPatient.id);
+      mergePatientById?.(selectedPatient.id, (prev) => ({
+        ...mapBackendPatient(fresh),
+        evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
+        evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
+        galeria: prev.galeria,
+        documentos: prev.documentos,
+        medicamentos: (editing?.medicamentos || '')
+          .split(',')
+          .map((m) => m.trim())
+          .filter(Boolean),
+        condicoesSaude: editing?.condicoesSaude ?? prev.condicoesSaude,
+        alergias: editing?.alergias ?? prev.alergias,
+      }));
+      refreshPatients?.();
+      setEditing(null);
+    } catch (e) {
+      setProfileSaveError(e.message || 'Erro ao salvar cadastro.');
+    }
   };
 
   const handleUploadGalleryFiles = (event) => {
@@ -163,9 +402,25 @@ export function PatientProfileView({
     event.target.value = '';
   };
 
-  const handleAddQuickNote = () => {
+  const handleAddQuickNote = async () => {
     const text = quickNoteText.trim();
     if (!text) return;
+
+    if (selectedPatient?.id) {
+      try {
+        await notasApi.create(selectedPatient.id, {
+          roleUserId: roleUserId || 'a0a00000-0000-0000-0000-000000000001',
+          conteudo: text,
+          autorNome: 'Nota rápida',
+        });
+        const list = await notasApi.list(selectedPatient.id);
+        setApiNotes(Array.isArray(list) ? list : []);
+        setQuickNoteText('');
+      } catch (e) {
+        alert(e.message || 'Erro ao salvar nota.');
+      }
+      return;
+    }
 
     const existingNotes = Array.isArray(selectedPatient?.notas) ? selectedPatient.notas : [];
     const now = new Date();
@@ -174,7 +429,6 @@ export function PatientProfileView({
       autor: 'Atendimento',
       data: now.toLocaleDateString('pt-BR'),
     };
-
     onUpdatePatient?.(selectedPatient.cpf, {
       notas: [newNote, ...existingNotes],
     });
@@ -271,6 +525,16 @@ export function PatientProfileView({
 
   return (
     <div className="flex flex-col gap-6">
+      {detailLoading && (
+        <div className="flex items-center gap-2 text-[#64748b] text-[13px] font-medium">
+          <Loader2 className="w-4 h-4 animate-spin text-[#00a88e]" /> Sincronizando com o servidor...
+        </div>
+      )}
+      {profileSaveError ? (
+        <div className="p-3 rounded-xl border-[3px] border-red-200 bg-red-50 text-red-700 text-[13px] font-bold">
+          {profileSaveError}
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() => {
@@ -410,44 +674,7 @@ export function PatientProfileView({
               )}
 
               {patientDetailTab === 'anamnese' && (
-                <div className="space-y-4">
-                  <h4 className="text-[16px] font-bold text-[#0f172a] mb-4">Historico Medico e Saude</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]"><span className="text-[12px] text-[#64748b]">Queixa</span><p className="text-[13px] font-bold text-[#0f766e]">{selectedPatient.anamnese?.queixa || '-'}</p></div>
-                    <div className="p-3 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]"><span className="text-[12px] text-[#64748b]">Expectativas</span><p className="text-[13px] font-bold text-[#0f766e]">{selectedPatient.anamnese?.expectativas || '-'}</p></div>
-                    <div className="p-3 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]"><span className="text-[12px] text-[#64748b]">Condicoes de saude</span><p className="text-[13px] font-bold text-[#0f766e]">{selectedPatient.condicoesSaude || '-'}</p></div>
-                    <div className="p-3 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]"><span className="text-[12px] text-[#64748b]">Medicamentos</span><p className="text-[13px] font-bold text-[#0f766e]">{Array.isArray(selectedPatient.medicamentos) && selectedPatient.medicamentos.length ? selectedPatient.medicamentos.join(', ') : '-'}</p></div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {[
-                      { label: 'Gestante', value: selectedPatient.anamnese?.gestante },
-                      { label: 'Amamentando', value: selectedPatient.anamnese?.amamentando },
-                      { label: 'Anticoagulantes', value: selectedPatient.anamnese?.anticoagulantes },
-                      { label: 'Queloides', value: selectedPatient.anamnese?.queloides },
-                    ].map((item) => (
-                      <div key={item.label} className={`p-2 rounded-lg border-[2px] text-[12px] font-bold ${item.value ? 'bg-[#e6f7f5] border-[#00a88e]/25 text-[#0f766e]' : 'bg-white border-[#e2e8f0] text-[#64748b]'}`}>
-                        {item.label}: {item.value ? 'Sim' : 'Nao'}
-                      </div>
-                    ))}
-                  </div>
-
-                  {selectedPatient.alergias && selectedPatient.alergias !== 'Nenhuma' && (
-                    <div className="bg-red-50 border-[3px] border-red-200 rounded-xl p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="w-5 h-5 text-red-600" strokeWidth={2.5} />
-                        <h5 className="font-bold text-red-700">Alergias Conhecidas</h5>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedPatient.alergias.split(',').map((alergia, idx) => (
-                          <span key={idx} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[12px] font-bold">
-                            {alergia.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <AnamneseTab pacienteId={selectedPatient.id} />
               )}
 
               {patientDetailTab === 'galeria' && (
@@ -572,11 +799,11 @@ export function PatientProfileView({
               </button>
             </div>
             <div className="space-y-2">
-              {selectedPatient.notas?.length ? selectedPatient.notas.map((nota, i) => (
-                <div key={i} className={`p-3 rounded-lg border-[2px] ${i % 2 === 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+              {displayNotes.length ? displayNotes.map((nota, i) => (
+                <div key={nota.id || i} className={`p-3 rounded-lg border-[2px] ${i % 2 === 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
                   <p className={`text-[12px] font-medium ${i % 2 === 0 ? 'text-yellow-800' : 'text-green-800'}`}>{nota.texto}</p>
                   <div className="flex items-center justify-between mt-1">
-                    <span className={`text-[11px] font-medium ${i % 2 === 0 ? 'text-yellow-600' : 'text-green-600'}`}>{nota.autor}</span>
+                    <span className={`text-[11px] font-medium ${i % 2 === 0 ? 'text-yellow-600' : 'text-green-600'}`}>{nota.autor}{nota._fromApi ? ' · servidor' : ''}</span>
                     <span className={`text-[11px] ${i % 2 === 0 ? 'text-yellow-500' : 'text-green-500'}`}>{nota.data}</span>
                   </div>
                 </div>

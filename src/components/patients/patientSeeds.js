@@ -1,6 +1,6 @@
 export const PATIENT_SEEDS = [
   {
-    id: 'patient_seed_1',
+    id: 'f0000000-0000-4000-a000-000000000001',
     nome: 'Ana Carolina Silva',
     dataNascimento: '1991-03-27',
     idade: 35,
@@ -46,7 +46,7 @@ export const PATIENT_SEEDS = [
     ],
   },
   {
-    id: 'patient_seed_2',
+    id: 'f0000000-0000-4000-a000-000000000002',
     nome: 'Mariana Costa',
     dataNascimento: '1998-07-14',
     idade: 28,
@@ -84,7 +84,7 @@ export const PATIENT_SEEDS = [
     ],
   },
   {
-    id: 'patient_seed_3',
+    id: 'f0000000-0000-4000-a000-000000000003',
     nome: 'Patricia Oliveira',
     dataNascimento: '1984-09-02',
     idade: 42,
