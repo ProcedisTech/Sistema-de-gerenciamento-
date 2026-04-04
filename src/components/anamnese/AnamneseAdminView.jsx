@@ -93,7 +93,7 @@ export function AnamneseAdminView() {
 
       {/* Área principal: ocupa o restante da largura no desktop (scroll único no main) */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col">
           {activeTab === 'categorias' && <CategoryManager />}
           {activeTab === 'perguntas' && <QuestionManager />}
           {activeTab === 'fichas' && <FichaBuilder />}
