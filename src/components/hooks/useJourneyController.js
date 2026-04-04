@@ -62,10 +62,6 @@ export function useJourneyController({
     setPhotoPreviewBlob,
     setQueixa,
     setExpectativas,
-    setGestante,
-    setAmamentando,
-    setAnticoagulantes,
-    setQueloides,
     setPointSize,
     setShowPointNumbers,
     setEraserSize,
@@ -258,10 +254,6 @@ export function useJourneyController({
     setEmail('');
     setQueixa('');
     setExpectativas('');
-    setGestante(false);
-    setAmamentando(false);
-    setAnticoagulantes(false);
-    setQueloides(false);
     setImageSrc(null);
     setPaths([]);
     setPointSize(12);

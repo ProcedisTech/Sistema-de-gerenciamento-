@@ -124,6 +124,14 @@ export const anamneseApi = {
   listCategorias: () => request('/api/v1/anamnese/categorias', { needsOrg: false }),
   createCategoria: (data) =>
     request('/api/v1/anamnese/categorias', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
+  updateCategoria: (id, { nome }) =>
+    request(`/api/v1/anamnese/categorias/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ nome }),
+      needsOrg: false,
+    }),
+  deleteCategoria: (id) =>
+    request(`/api/v1/anamnese/categorias/${id}`, { method: 'DELETE', needsOrg: false }),
 
   listHabitos: (catId) =>
     request(`/api/v1/anamnese/habitos?categoriaId=${catId}`, { needsOrg: false }),
@@ -138,6 +146,21 @@ export const anamneseApi = {
     return results.flat();
   },
   createHabito: (data) => request('/api/v1/anamnese/habitos', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
+  /** Body: categoriaId, tipoRespostaId, descricao; opcional alternativas (sync quando enviado). */
+  updateHabito: (id, body) =>
+    request(`/api/v1/anamnese/habitos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+      needsOrg: false,
+    }),
+  deleteHabito: (id) =>
+    request(`/api/v1/anamnese/habitos/${id}`, { method: 'DELETE', needsOrg: false }),
+  reordenarAlternativas: (habitoId, ordens) =>
+    request(`/api/v1/anamnese/habitos/${habitoId}/alternativas/reordenar`, {
+      method: 'PATCH',
+      body: JSON.stringify(ordens),
+      needsOrg: false,
+    }),
 
   addAlternativas: (habitoId, data) =>
     request(`/api/v1/anamnese/habitos/${habitoId}/alternativas`, {

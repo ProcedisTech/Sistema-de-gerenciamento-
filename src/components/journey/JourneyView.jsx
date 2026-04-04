@@ -59,14 +59,6 @@ export function JourneyView({
   setQueixa,
   expectativas,
   setExpectativas,
-  gestante,
-  setGestante,
-  amamentando,
-  setAmamentando,
-  anticoagulantes,
-  setAnticoagulantes,
-  queloides,
-  setQueloides,
   evaluationCapturedPhotos,
   evaluationSelectedPhotoIndex,
   setEvaluationSelectedPhotoIndex,
@@ -323,19 +315,6 @@ export function JourneyView({
             <div className="space-y-2">
               <label className="text-[13px] font-bold text-[#00a88e] ml-1">Expectativas do Paciente <span className="text-red-500">*</span></label>
               <textarea value={expectativas} onChange={(e) => setExpectativas(e.target.value)} rows={3} className="w-full p-4 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]" placeholder="O que o paciente espera do procedimento..." />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-              {[
-                { state: gestante, setter: setGestante, label: 'Gestante' },
-                { state: amamentando, setter: setAmamentando, label: 'Amamentando' },
-                { state: anticoagulantes, setter: setAnticoagulantes, label: 'Uso de Anticoagulantes' },
-                { state: queloides, setter: setQueloides, label: 'Tendencia a Queloides' },
-              ].map((item, idx) => (
-                <div key={idx} onClick={() => item.setter(!item.state)} className={`flex items-center gap-3 p-4 border-[3px] rounded-xl cursor-pointer hover:bg-[#e6f7f5] transition-all shadow-sm ${item.state ? 'border-[#00a88e] bg-[#f0fdfa]' : 'border-[#00a88e]/20 bg-[#f8fbfb]'}`}>
-                  {item.state ? <CheckSquare className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} /> : <Square className="w-5 h-5 text-[#00a88e]/40" strokeWidth={2.5} />}
-                  <span className={`text-[14px] font-bold ${item.state ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{item.label}</span>
-                </div>
-              ))}
             </div>
           </form>
         </div>
