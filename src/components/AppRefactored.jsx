@@ -281,10 +281,6 @@ export default function App() {
       anamnese: {
         queixa: journeyState.queixa || '',
         expectativas: journeyState.expectativas || '',
-        gestante: Boolean(journeyState.gestante),
-        amamentando: Boolean(journeyState.amamentando),
-        anticoagulantes: Boolean(journeyState.anticoagulantes),
-        queloides: Boolean(journeyState.queloides),
         updatedAt: new Date().toISOString(),
       },
       lgpdInicial: Boolean(journeyState.lgpdInicial),
@@ -733,14 +729,6 @@ export default function App() {
                     setQueixa={journeyState.setQueixa}
                     expectativas={journeyState.expectativas}
                     setExpectativas={journeyState.setExpectativas}
-                    gestante={journeyState.gestante}
-                    setGestante={journeyState.setGestante}
-                    amamentando={journeyState.amamentando}
-                    setAmamentando={journeyState.setAmamentando}
-                    anticoagulantes={journeyState.anticoagulantes}
-                    setAnticoagulantes={journeyState.setAnticoagulantes}
-                    queloides={journeyState.queloides}
-                    setQueloides={journeyState.setQueloides}
                   />
                 )}
 

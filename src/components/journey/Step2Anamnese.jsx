@@ -61,7 +61,7 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
       <div className="space-y-2">
         <label className="text-[13px] font-bold text-[#0f766e] ml-1">{pergunta.descricao}</label>
         <div className="space-y-2">
-          {(pergunta.alternativas || []).map((alt) => {
+          {[...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map((alt) => {
             const ativa = String(selecionada) === String(alt.id);
             return (
               <div
@@ -89,7 +89,7 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
       <div className="space-y-2">
         <label className="text-[13px] font-bold text-[#0f766e] ml-1">{pergunta.descricao}</label>
         <div className="space-y-2">
-          {(pergunta.alternativas || []).map((alt) => {
+          {[...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map((alt) => {
             const ativa = selecionadas.includes(alt.id);
             const toggle = () => {
               const next = ativa ? selecionadas.filter((id) => id !== alt.id) : [...selecionadas, alt.id];
@@ -126,10 +126,6 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
 export const Step2Anamnese = forwardRef(function Step2Anamnese({
   queixa, setQueixa,
   expectativas, setExpectativas,
-  gestante, setGestante,
-  amamentando, setAmamentando,
-  anticoagulantes, setAnticoagulantes,
-  queloides, setQueloides,
 }, ref) {
   const [fichas, setFichas] = useState([]);
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState('');
@@ -179,13 +175,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const handleRespostaChange = useCallback((resposta) => {
     setRespostas((prev) => ({ ...prev, [resposta.perguntaId]: resposta }));
   }, []);
-
-  const legacyItems = [
-    { state: gestante, setter: setGestante, label: 'Gestante' },
-    { state: amamentando, setter: setAmamentando, label: 'Amamentando' },
-    { state: anticoagulantes, setter: setAnticoagulantes, label: 'Uso de Anticoagulantes' },
-    { state: queloides, setter: setQueloides, label: 'Histórico de Queloides' },
-  ];
 
   const itensOrdenados = fichaSelecionada?.itens
     ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)
@@ -279,27 +268,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             className="w-full p-4 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
             placeholder="O que o paciente espera do procedimento..."
           />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t-[3px] border-[#00a88e]/15">
-          {legacyItems.map((item, idx) => (
-            <div
-              key={idx}
-              onClick={() => item.setter(!item.state)}
-              className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-                item.state ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
-              }`}
-            >
-              {item.state ? (
-                <CheckSquare className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
-              ) : (
-                <Square className="w-6 h-6 text-[#00a88e]/40" strokeWidth={2.5} />
-              )}
-              <span className={`text-[14px] font-bold ${item.state ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
-                {item.label}
-              </span>
-            </div>
-          ))}
         </div>
       </form>
     </div>

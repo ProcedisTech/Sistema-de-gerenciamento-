@@ -25,10 +25,6 @@ export const useJourneyState = () => {
   // ============ ETAPA 2: ANAMNESE ============
   const [queixa, setQueixa] = useState('');
   const [expectativas, setExpectativas] = useState('');
-  const [gestante, setGestante] = useState(false);
-  const [amamentando, setAmamentando] = useState(false);
-  const [anticoagulantes, setAnticoagulantes] = useState(false);
-  const [queloides, setQueloides] = useState(false);
 
   // ============ ETAPA 3: AVALIAÇÃO ============
   const [imageSrc, setImageSrc] = useState(null);
@@ -108,14 +104,6 @@ export const useJourneyState = () => {
     setQueixa,
     expectativas,
     setExpectativas,
-    gestante,
-    setGestante,
-    amamentando,
-    setAmamentando,
-    anticoagulantes,
-    setAnticoagulantes,
-    queloides,
-    setQueloides,
     // Etapa 3
     imageSrc,
     setImageSrc,

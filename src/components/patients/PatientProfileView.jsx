@@ -91,7 +91,9 @@ function AnamneseTab({ pacienteId }) {
       {anamneses.map((an) => {
         const isOpen = expandedId === an.id;
         const detalhe = detalhes[an.id] || an;
-        const respostas = Array.isArray(detalhe.respostas) ? detalhe.respostas : [];
+        const respostas = Array.isArray(detalhe.respostas)
+          ? [...detalhe.respostas].sort((a, b) => (a.fichaItemOrdem ?? 999) - (b.fichaItemOrdem ?? 999))
+          : [];
 
         return (
           <div key={an.id} className="border-[3px] border-[#00a88e]/15 rounded-xl overflow-hidden">
