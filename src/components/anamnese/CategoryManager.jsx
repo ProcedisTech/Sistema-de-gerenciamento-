@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Tag, Loader2, Pencil, Trash2, Check, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Plus, Tag, Loader2, Pencil, Trash2, Check, X, Search } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 
 export function CategoryManager() {
   const [categorias, setCategorias] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState('');
   const [novoNome, setNovoNome] = useState('');
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
@@ -40,6 +41,12 @@ export function CategoryManager() {
   useEffect(() => {
     if (editingId && editInputRef.current) editInputRef.current.focus();
   }, [editingId]);
+
+  const categoriasFiltradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return categorias;
+    return categorias.filter((c) => c.nome.toLowerCase().includes(q));
+  }, [categorias, busca]);
 
   const handleCriar = async (e) => {
     e.preventDefault();
@@ -126,56 +133,91 @@ export function CategoryManager() {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-[minmax(260px,34%)_minmax(0,1fr)] lg:gap-6 xl:gap-8 2xl:gap-10 lg:min-h-[min(62vh,520px)] lg:items-stretch">
-      {/* Create form */}
-      <div className="min-w-0 w-full flex flex-col justify-start lg:h-full lg:min-h-0 lg:rounded-2xl lg:border-[3px] lg:border-[#00a88e]/10 lg:bg-white lg:p-5 xl:p-6">
-        <div className="space-y-4 flex flex-col flex-1 min-h-0">
-          <form onSubmit={handleCriar} className="flex flex-col sm:flex-row sm:items-end gap-3">
-            <div className="flex-1 space-y-1.5 min-w-0">
-              <label className="text-[13px] font-bold text-[#00a88e] ml-1">Nova Categoria</label>
+    <div className="flex flex-col flex-1 min-h-0 gap-4 xl:gap-5">
+      {/* Barra superior: buscar + criar */}
+      <div className="shrink-0 rounded-2xl border-[3px] border-[#00a88e]/10 bg-white p-3 sm:p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <label htmlFor="category-search" className="text-[13px] font-bold text-[#00a88e] ml-1">
+              Buscar categoria
+            </label>
+            <div className="relative">
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00a88e]/60 pointer-events-none"
+                strokeWidth={2.5}
+              />
               <input
+                id="category-search"
+                type="search"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Digite para filtrar a lista..."
+                className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <form onSubmit={handleCriar} className="flex flex-col sm:flex-row sm:items-end gap-2 lg:gap-3 flex-1 min-w-0 lg:max-w-xl xl:max-w-2xl">
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <label htmlFor="category-new-name" className="text-[13px] font-bold text-[#00a88e] ml-1">
+                Nova categoria
+              </label>
+              <input
+                id="category-new-name"
                 type="text"
                 value={novoNome}
                 onChange={(e) => setNovoNome(e.target.value)}
-                placeholder="Ex: Cardiológico, Estético, Medicamentos..."
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] lg:bg-white"
+                placeholder="Ex.: Cardiológico, Estético..."
+                className="w-full px-4 py-2.5 sm:py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
               />
             </div>
             <button
               type="submit"
               disabled={criando || !novoNome.trim()}
-              className="w-full sm:w-auto shrink-0 px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full sm:w-auto shrink-0 px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" strokeWidth={2.5} />}
               Criar
             </button>
           </form>
-
-          {erro && (
-            <div className="bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
-              {erro}
-            </div>
-          )}
         </div>
+
+        {erro && (
+          <div className="mt-3 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
+            {erro}
+          </div>
+        )}
       </div>
 
-      {/* Categories list */}
-      <div className="flex flex-col min-h-[12rem] min-w-0 w-full rounded-2xl border-[3px] border-[#00a88e]/10 bg-[#f8fbfb]/80 p-4 sm:p-5 xl:p-6 lg:h-full lg:min-h-0">
+      {/* Lista — ocupa o restante da altura */}
+      <div className="flex flex-col flex-1 min-h-0 min-w-0 w-full rounded-2xl border-[3px] border-[#00a88e]/10 bg-[#f8fbfb]/80 p-4 sm:p-5 xl:p-6">
         {loading ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 py-8 text-center min-h-[11rem] lg:min-h-0">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 py-8 text-center min-h-[12rem]">
             <Loader2 className="w-6 h-6 animate-spin text-[#00a88e]" />
             <span className="text-[#64748b] text-[13px] font-medium">Carregando categorias...</span>
           </div>
         ) : categorias.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center text-[#94a3b8] min-h-[11rem] lg:min-h-0">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center text-[#94a3b8] min-h-[12rem]">
             <Tag className="w-10 h-10 opacity-30 shrink-0" />
             <p className="text-[14px] font-medium max-w-[280px]">Nenhuma categoria cadastrada</p>
-            <p className="text-[12px] mt-0.5 lg:hidden max-w-[260px]">Crie a primeira categoria acima</p>
-            <p className="text-[12px] mt-0.5 hidden lg:block max-w-[280px]">Crie a primeira categoria no formulário ao lado</p>
+            <p className="text-[12px] mt-0.5 max-w-[320px]">Use o campo &ldquo;Nova categoria&rdquo; acima para criar a primeira</p>
+          </div>
+        ) : categoriasFiltradas.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8 text-center text-[#94a3b8] min-h-[12rem]">
+            <Search className="w-10 h-10 opacity-30 shrink-0" strokeWidth={2} />
+            <p className="text-[14px] font-medium max-w-[280px]">Nenhuma categoria coincide com a busca</p>
+            <button
+              type="button"
+              onClick={() => setBusca('')}
+              className="text-[13px] font-bold text-[#00a88e] hover:underline mt-1"
+            >
+              Limpar filtro
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-3 w-full content-start flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-            {categorias.map((cat) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full content-start flex-1 min-h-0 overflow-y-auto custom-scrollbar min-w-0">
+            {categoriasFiltradas.map((cat) => {
               const isEditing = editingId === cat.id;
               const isDeleting = deletingId === cat.id;
               const cardErro = erroInline?.id === cat.id ? erroInline.msg : null;
@@ -183,11 +225,11 @@ export function CategoryManager() {
               return (
                 <div
                   key={cat.id}
-                  className="flex flex-col gap-2 p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all shadow-sm"
+                  className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all shadow-sm min-w-0"
                 >
                   {isEditing ? (
                     /* ── Edit mode ── */
-                    <div className="flex items-center gap-2 w-full">
+                    <div className="flex flex-wrap items-center gap-2 w-full min-w-0">
                       <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0" strokeWidth={2} />
                       <input
                         ref={editInputRef}
@@ -218,34 +260,40 @@ export function CategoryManager() {
                     </div>
                   ) : isDeleting ? (
                     /* ── Delete confirmation ── */
-                    <div className="flex items-center gap-2 w-full flex-wrap">
-                      <span className="text-[13px] font-bold text-[#0f172a] flex-1 min-w-0 truncate">
+                    <div className="flex flex-col gap-2.5 w-full min-w-0 sm:flex-row sm:items-center sm:flex-wrap sm:gap-2">
+                      <span className="text-[13px] font-bold text-[#0f172a] w-full min-w-0 break-words [overflow-wrap:anywhere] leading-snug sm:flex-1">
                         Remover &ldquo;{cat.nome}&rdquo;?
                       </span>
-                      <button
-                        onClick={() => handleExcluir(cat.id)}
-                        disabled={excluindo}
-                        className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-[12px] font-bold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 flex-shrink-0"
-                      >
-                        {excluindo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" strokeWidth={2.5} />}
-                        Confirmar
-                      </button>
-                      <button
-                        onClick={handleCancelarExclusao}
-                        className="px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#64748b] text-[12px] font-bold hover:bg-[#e2e8f0] transition-colors flex-shrink-0"
-                      >
-                        Cancelar
-                      </button>
+                      <div className="flex flex-row flex-wrap gap-2 justify-end w-full sm:w-auto sm:justify-start sm:flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleExcluir(cat.id)}
+                          disabled={excluindo}
+                          className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-[12px] font-bold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 flex-shrink-0"
+                        >
+                          {excluindo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" strokeWidth={2.5} />}
+                          Confirmar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelarExclusao}
+                          className="px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#64748b] text-[12px] font-bold hover:bg-[#e2e8f0] transition-colors flex-shrink-0"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     /* ── Normal view ── */
-                    <div className="flex items-center justify-between w-full gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0" strokeWidth={2} />
-                        <span className="text-[14px] font-bold text-[#0f172a] truncate">{cat.nome}</span>
+                    <div className="flex flex-col gap-3 w-full min-w-0 md:flex-row md:items-center md:justify-between md:gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1 md:items-center md:min-w-0 md:gap-3">
+                        <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />
+                        <span className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words [overflow-wrap:anywhere] leading-snug md:truncate md:[overflow-wrap:normal]">
+                          {cat.nome}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border-[2px] ${
+                      <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full md:w-auto md:ml-2 pt-0.5 md:pt-0 border-t border-[#00a88e]/10 md:border-0">
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border-[2px] whitespace-nowrap ${
                           cat.ativo !== false
                             ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
                             : 'bg-red-50 text-red-600 border-red-200'

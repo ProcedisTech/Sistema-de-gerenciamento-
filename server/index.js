@@ -74,8 +74,8 @@ async function start() {
         callback(new Error(`Origem nao permitida pelo CORS: ${origin || 'desconhecida'}`))
       },
       credentials: true,
-      methods: ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'X-Org-Id'],
     })
   )
 
