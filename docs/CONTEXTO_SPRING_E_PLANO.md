@@ -18,7 +18,7 @@ Documentação de referência no **backend** (caminhos típicos):
 - `docs/CONTEXTO_CONJUNTO_FRONT_BACK.md` — contrato API, lacunas, briefing cruzado
 - `docs/DOCUMENTACAO_TECNICA.md`, `docs/BANCO_DE_DADOS.md`, `docs/PLANO_PROTECAO_DADOS.md`
 
-**Legado neste repo:** pasta `server/` (Express + auth por cookie). A direção do produto é **substituir** esse backend pelo Spring; integrações novas devem preferir **`src/services/api.js`** e `http://localhost:8080` (via proxy).
+**Backend deste produto:** Spring Boot (`plataforma-procedimentos`). O frontend usa **`src/services/api.js`** e o proxy Vite (`/api` → `http://localhost:8080` por padrão). O antigo `server/` Express foi removido deste repositório.
 
 ---
 

@@ -12,14 +12,32 @@ export function getOrgId() {
   return currentOrgId;
 }
 
+// ── JWT Bearer token (stateless auth para /api/v1/**) ──────────
+const SESSION_KEY = 'procedi_jwt';
+let authToken = (() => { try { return sessionStorage.getItem(SESSION_KEY) ?? null; } catch { return null; } })();
+
+export function setAuthToken(t) {
+  authToken = t ?? null;
+  try {
+    if (authToken) sessionStorage.setItem(SESSION_KEY, authToken);
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch { /* ignore */ }
+}
+export function clearAuthToken() { setAuthToken(null); }
+
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   const headers = { 'Content-Type': 'application/json', ...fetchOpts.headers };
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-  const res = await fetch(path, { ...fetchOpts, headers });
+  const res = await fetch(path, { ...fetchOpts, headers, credentials: 'include' });
 
   if (res.status === 204) return null;
   if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
     const body = await res.json().catch(() => ({ message: res.statusText }));
     const err = new Error(body.message || `HTTP ${res.status}`);
     err.status = res.status;
@@ -28,6 +46,12 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   }
   return res.json();
 }
+
+/** Registro público (sem X-Org-Id). Login continua em useAuthState. */
+export const authApi = {
+  register: (data) =>
+    request('/api/auth/register', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
+};
 
 // ── Pacientes ──────────────────────────────────────────────
 
@@ -60,6 +84,9 @@ export const equipeApi = {
 export const usuariosApi = {
   list: () => request('/api/v1/usuarios'),
   get: (id) => request(`/api/v1/usuarios/${id}`),
+  create: (data) => request('/api/v1/usuarios', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => request(`/api/v1/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id) => request(`/api/v1/usuarios/${id}`, { method: 'DELETE' }),
 };
 
 // ── Catálogo de procedimentos ───────────────────────────────

@@ -17,6 +17,16 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: proxyTarget,
           changeOrigin: true,
+          secure: false,
+          cookieDomainRewrite: { '*': '' },
+        cookiePathRewrite: { '*': '/' },
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              if (req.headers.cookie) {
+                proxyReq.setHeader('Cookie', req.headers.cookie);
+              }
+            });
+          },
         },
       },
     },
