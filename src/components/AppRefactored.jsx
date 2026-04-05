@@ -21,11 +21,8 @@ import { useOrg } from '../contexts/OrgContext';
 import {
   anamneseApi,
   pacientesApi,
-  agendasApi,
-  procedimentosApi,
 } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
-import { addMinutesToTime } from '../utils/agendaMapping';
 
 // Componentes de Agenda, Pacientes e Anamnese
 import { AgendaView } from './agenda';
@@ -445,13 +442,9 @@ export default function App() {
     }
 
     if (currentStep === 5) {
-      const { orientacoes, satisfacao, catalogoProcedimentoSaudeId } = journeyState;
+      const { orientacoes, satisfacao } = journeyState;
       if (!orientacoes || !satisfacao) {
         alert('Confirme as orientações e satisfação');
-        return;
-      }
-      if (!catalogoProcedimentoSaudeId) {
-        alert('Selecione o procedimento do catálogo (servidor) para finalizar.');
         return;
       }
 
@@ -474,55 +467,12 @@ export default function App() {
   const finishJourney = async () => {
     setIsFinishing(true);
     try {
-      const rid = roleUserId;
-      const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
-      const paciente = patients.find((p) => String(p?.cpf || '').trim() === sCpf);
-      const catId = journeyState.catalogoProcedimentoSaudeId;
-
-      if (!rid || !/^[0-9a-f-]{36}$/i.test(String(rid))) {
-        alert('Sua sessão não tem um profissional válido (roleUserId). Faça login novamente.');
-        return;
-      }
-      if (!paciente?.id) {
-        alert('Paciente sem ID do servidor. Recarregue a lista de pacientes ou cadastre novamente.');
-        return;
-      }
-      if (!catId) {
-        alert('Selecione o procedimento na etapa 5.');
-        return;
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const now = new Date();
-      const hi = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const hf = addMinutesToTime(hi, 45);
-
-      const agenda = await agendasApi.create({
-        dataAgendamento: today,
-        horaInicio: `${hi}:00`,
-        horaFim: `${hf}:00`,
-        roleUserId: rid,
-        tipo: 'atendimento',
-        observacao: 'Jornada — horário automático',
-      });
-
-      const proc = await procedimentosApi.iniciar({
-        pacienteId: paciente.id,
-        catalogoProcedimentoSaudeId: catId,
-        roleUserId: rid,
-        agendaId: agenda.id,
-      });
-
-      if (proc?.id) {
-        await procedimentosApi.finalizar(proc.id);
-      }
-
       refreshPatients();
-      alert('Procedimento finalizado e registrado no servidor.');
+      alert('Jornada finalizada com sucesso!');
       resetJourney();
     } catch (error) {
       console.error('Erro ao finalizar jornada:', error);
-      alert(error.message || 'Erro ao registrar procedimento. Verifique conflito de horário na agenda ou dados no Swagger.');
+      alert(error.message || 'Erro ao finalizar jornada.');
     } finally {
       setIsFinishing(false);
     }
@@ -549,7 +499,6 @@ export default function App() {
     journeyState.setTermoAssinado(false);
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
-    journeyState.setCatalogoProcedimentoSaudeId('');
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
   };
@@ -822,8 +771,6 @@ export default function App() {
                     setOrientacoes={journeyState.setOrientacoes}
                     satisfacao={journeyState.satisfacao}
                     setSatisfacao={journeyState.setSatisfacao}
-                    catalogoProcedimentoSaudeId={journeyState.catalogoProcedimentoSaudeId}
-                    setCatalogoProcedimentoSaudeId={journeyState.setCatalogoProcedimentoSaudeId}
                   />
                 )}
 
