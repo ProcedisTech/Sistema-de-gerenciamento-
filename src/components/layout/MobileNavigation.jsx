@@ -1,5 +1,18 @@
 import React from 'react';
-import { Calendar, ClipboardList, GitCommit, LogOut, Menu, Package, Shield, Users, X } from 'lucide-react';
+import { Calendar, ClipboardList, GitCommit, LogOut, Menu, Package, Shield, UserCog, Users, X } from 'lucide-react';
+
+function displayInitials(name) {
+  if (!name || typeof name !== 'string') return 'U';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'U';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function displayRole(role) {
+  if (!role || typeof role !== 'string') return 'Usuário';
+  return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+}
 
 export function MobileNavigation({
   activeView,
@@ -10,8 +23,13 @@ export function MobileNavigation({
   onGoPacientes,
   onGoAnamnese,
   onGoEstoque,
+  onGoUsuarios,
   onLogout,
+  authUser,
 }) {
+  const displayName = authUser?.username || 'Usuário';
+  const roleLabel = displayRole(authUser?.role);
+
   return (
     <>
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-[130] bg-white border-t-[3px] border-[#00a88e]/15 pb-[max(env(safe-area-inset-bottom),0.25rem)]">
@@ -78,10 +96,12 @@ export function MobileNavigation({
             </div>
 
             <div className="mx-0 mb-5 bg-[#e6f7f5] rounded-[14px] p-3 flex items-center gap-3 border-[3px] border-[#00a88e]/25 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-sm">RS</div>
-              <div className="flex-1">
-                <h2 className="text-[13px] font-bold text-[#0f766e] leading-tight">Rafael Silva</h2>
-                <p className="text-[11px] text-[#00a88e] font-medium">Administrador</p>
+              <div className="w-10 h-10 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-sm">
+                {displayInitials(displayName)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-[13px] font-bold text-[#0f766e] leading-tight truncate">{displayName}</h2>
+                <p className="text-[11px] text-[#00a88e] font-medium truncate">{roleLabel}</p>
               </div>
             </div>
 
@@ -145,6 +165,18 @@ export function MobileNavigation({
               >
                 <Package className="w-5 h-5" /> Estoque
               </button>
+
+              <button
+                type="button"
+                onClick={onGoUsuarios}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+                  activeView === 'usuarios'
+                    ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+                    : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+                }`}
+              >
+                <UserCog className="w-5 h-5" /> Usuários
+              </button>
             </nav>
 
             <div className="mt-5 pt-4 border-t-[3px] border-[#00a88e]/10">
@@ -162,4 +194,3 @@ export function MobileNavigation({
     </>
   );
 }
-

@@ -1,7 +1,27 @@
-// Camada de acesso ao backend Spring Boot.
-// Header X-Org-Id injetado automaticamente nas chamadas que exigem organização.
+/**
+ * Cliente HTTP do frontend para o Spring Boot (mesma origem em dev via Vite: :5173 → proxy /api → :8080).
+ *
+ * Autenticação
+ * - JWT em cookie HttpOnly nome `jwt`, definido pelo backend em POST /api/auth/login e /api/auth/register.
+ * - Todas as chamadas usam credentials: 'include' para enviar o cookie.
+ * - 401 em rotas protegidas = sessão ausente ou expirada (não indica que o servidor está offline).
+ *
+ * Rotas públicas (exemplos)
+ * - POST /api/auth/login   body: { username, password }
+ * - POST /api/auth/register body: { username, email, password } — senha 8–128 chars
+ *
+ * Autenticado (cookie + eventualmente Bearer se o backend passar a expor no JSON — hoje não usamos Bearer no client)
+ * - GET /api/auth/me — 401 = usuário não logado
+ * - POST /api/auth/logout
+ *
+ * Protegido
+ * - /api/v1/** — enviar X-Org-Id quando needsOrg: true (padrão), alinhado ao UUID da org no banco (VITE_DEFAULT_ORG_ID).
+ *
+ * @see vite.config.js — proxy /api, reescrita de cookie para dev same-origin
+ * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
+ */
 
-const DEFAULT_ORG_ID = 'b0000000-0000-0000-0000-000000000001';
+import { DEFAULT_ORG_ID } from '../config/apiEnv';
 
 let currentOrgId = DEFAULT_ORG_ID;
 
@@ -12,16 +32,32 @@ export function getOrgId() {
   return currentOrgId;
 }
 
-async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
+/** Texto de erro estável para UI e logs (sempre com código HTTP). */
+function buildApiErrorMessage(status, body, statusText) {
+  const detail =
+    (body && typeof body === 'object' && (body.message || body.error || body.detail)) || statusText || '';
+  const trimmed = String(detail).trim();
+  return trimmed ? `[HTTP ${status}] ${trimmed}` : `[HTTP ${status}]`;
+}
+
+async function request(path, { needsOrg = true, credentials: _omitCredentials, ...fetchOpts } = {}) {
   const headers = { 'Content-Type': 'application/json', ...fetchOpts.headers };
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
 
-  const res = await fetch(path, { ...fetchOpts, headers });
+  // Sempre enviar cookie HttpOnly `jwt` (same-origin :5173 + proxy /api). Nunca use 'omit' aqui.
+  const res = await fetch(path, {
+    ...fetchOpts,
+    headers,
+    credentials: 'include',
+  });
 
   if (res.status === 204) return null;
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ message: res.statusText }));
-    const err = new Error(body.message || `HTTP ${res.status}`);
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
     err.status = res.status;
     err.body = body;
     throw err;
@@ -60,6 +96,9 @@ export const equipeApi = {
 export const usuariosApi = {
   list: () => request('/api/v1/usuarios'),
   get: (id) => request(`/api/v1/usuarios/${id}`),
+  create: (data) => request('/api/v1/usuarios', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => request(`/api/v1/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id) => request(`/api/v1/usuarios/${id}`, { method: 'DELETE' }),
 };
 
 // ── Catálogo de procedimentos ───────────────────────────────
@@ -88,6 +127,7 @@ export const agendasApi = {
  */
 export const agendamentosApi = {
   listByAgenda: (agendaId) => request(`/api/v1/agendas/${agendaId}/agendamentos`),
+  /** Mesmo `request()` que pacientes/agendas: credentials:'include', cookie jwt, X-Org-Id. URL relativa → :5173/api/v1/agendamentos com proxy. */
   create: (body) => request('/api/v1/agendamentos', { method: 'POST', body: JSON.stringify(body) }),
   remove: (id) => request(`/api/v1/agendamentos/${id}`, { method: 'DELETE' }),
 };
@@ -175,7 +215,8 @@ export const anamneseApi = {
     );
     return results.flat();
   },
-  createHabito: (data) => request('/api/v1/anamnese/habitos', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
+  createHabito: (data) =>
+    request('/api/v1/anamnese/habitos', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
   /** Body: categoriaId, tipoRespostaId, descricao; opcional alternativas (sync quando enviado). */
   updateHabito: (id, body) =>
     request(`/api/v1/anamnese/habitos/${id}`, {

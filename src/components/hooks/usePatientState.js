@@ -1,26 +1,33 @@
 import { useState, useEffect, useCallback } from 'react';
 import { pacientesApi } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
-import { PATIENT_SEEDS } from '../patients/patientSeeds';
 
-export const usePatientState = () => {
-  // Seeds como valor inicial imediato; substituído pelo backend quando disponível.
-  const [patients, setPatients] = useState(PATIENT_SEEDS);
+/**
+ * Lista de pacientes só é carregada do backend quando `authEnabled` (sessão válida + cookie).
+ * Sem auth: lista vazia — sem seeds locais misturados com gravações reais.
+ *
+ * @param {{ authEnabled?: boolean }} [opts]
+ */
+export const usePatientState = (opts = {}) => {
+  const { authEnabled = false } = opts;
+  const [patients, setPatients] = useState([]);
 
   const refreshPatients = useCallback(() => {
+    if (!authEnabled) return;
     pacientesApi
       .list()
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setPatients(data.map(mapBackendPatient));
-        }
+        setPatients(Array.isArray(data) ? data.map(mapBackendPatient) : []);
       })
       .catch((err) => {
-        console.warn('[usePatientState] Backend indisponível, mantendo seeds locais:', err.message);
+        if (err.status === 401) {
+          console.warn('[usePatientState] Sessão ausente ou expirada; lista de pacientes não carregada.');
+        } else {
+          console.warn('[usePatientState] Falha ao listar pacientes:', err.message);
+        }
       });
-  }, []);
+  }, [authEnabled]);
 
-  /** Atualiza um paciente na lista pelo id (ex.: após GET ou PUT). */
   const mergePatientById = useCallback((id, updater) => {
     if (!id) return;
     setPatients((prev) =>
@@ -32,7 +39,13 @@ export const usePatientState = () => {
     );
   }, []);
 
-  useEffect(() => { refreshPatients(); }, [refreshPatients]);
+  useEffect(() => {
+    if (!authEnabled) {
+      setPatients([]);
+      return;
+    }
+    refreshPatients();
+  }, [authEnabled, refreshPatients]);
 
   const [selectedPatientCpf, setSelectedPatientCpf] = useState(null);
   const [patientView, setPatientView] = useState('list');
@@ -54,4 +67,3 @@ export const usePatientState = () => {
     mergePatientById,
   };
 };
-

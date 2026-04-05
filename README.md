@@ -4,88 +4,52 @@ Documentacao principal para desenvolvimento, operacao e manutencao profunda.
 
 ## Estado atual do projeto
 - Frontend React + Vite em `src/`.
-- Backend Express em `server/`.
-- Autenticacao JWT por cookie httpOnly em `server/routes/auth.js`.
-- Banco PostgreSQL introduzido com base em migrations SQL em `server/db/migrations/`.
-- Dados de pacientes/agenda no frontend ainda estao em memoria (fase de migracao incremental).
-- **Integracao Spring Boot (API alvo):** ver `docs/CONTEXTO_SPRING_E_PLANO.md` — contrato com o repo `plataforma-procedimentos`, plano por fases e changelog para agentes.
+- **API:** Spring Boot (autenticacao JWT por cookie + REST em `/api/v1/...`). O Vite encaminha `/api` para o backend (veja `vite.config.js` e `VITE_API_PROXY_TARGET`).
+- Dados de pacientes/agenda no frontend ainda podem estar em memoria em partes do fluxo (migracao incremental).
+- **Integracao Spring Boot:** ver `docs/CONTEXTO_SPRING_E_PLANO.md`.
 
 ## Mapa rapido
 - Contexto Spring + plano de evolucao: `docs/CONTEXTO_SPRING_E_PLANO.md`
 - Arquitetura: `docs/ARCHITECTURE.md`
-- Banco PostgreSQL: `docs/DATABASE_POSTGRESQL.md`
 - Manutencao profunda: `docs/MAINTENANCE.md`
 - Runbooks SRE: `docs/RUNBOOKS.md`
 
 ## Requisitos
 - Node.js 20+
 - npm 10+
-- PostgreSQL 15+ (local ou gerenciado)
+- Spring Boot rodando (ex.: `http://localhost:8080`) para as chamadas `/api/*`
 
 ## Setup rapido (dev)
-### 1) Frontend
+### Frontend
 ```bash
 npm install
 npm run dev
 ```
 
-### 2) Backend
-```bash
-cd server
-npm install
-cp .env.example .env
-npm run migrate
-npm run seed-admin
-npm run dev
-```
+Certifique-se de que o Spring Boot esta ativo na porta configurada em `VITE_API_PROXY_TARGET` (padrao: 8080).
+
+### Dev: mesma origem e cookie JWT (`jwt`)
+- Abra o app **sempre** em **uma** URL fixa: ou `http://localhost:5173` **ou** `http://127.0.0.1:5173`. Cookies **nao** sao compartilhados entre os dois; misturar login em um e API no outro quebra a sessao.
+- Com autenticacao por cookie, deixe **`VITE_API_BASE_URL` vazio** para todas as chamadas irem a `/api/...` no mesmo host do Vite (proxy para o Spring). Apontar o front direto para `:8080` armazena o cookie em outro host e os `POST /api/v1/*` no `:5173` ficam sem `jwt`.
+- Apos login, em DevTools → Application → Cookies, o nome do cookie deve ser **`jwt`** no **mesmo** host da barra de enderecos.
+- Para diagnosticar **401** em `POST /api/v1/agendamentos`: Network → a requisicao deve mostrar **Request Headers** com `Cookie: ...jwt=...` e `X-Org-Id` alinhado ao banco / `VITE_DEFAULT_ORG_ID`. Compare com um `GET` que funcione (ex. pacientes).
 
 ## Scripts importantes
-### Raiz
 ```bash
 npm run dev
-npm run dev:full
-npm run server
 npm run build
 npm run lint
 ```
 
-### Backend (`server/`)
-```bash
-npm run dev
-npm run start
-npm run migrate
-npm run seed-admin
-npm run hash-password -- "SUA_SENHA"
-```
-
-## Variaveis de ambiente principais
-Backend (`server/.env`):
-- `PORT`
-- `FRONTEND_ORIGIN`
-- `DATABASE_URL`
-- `DB_SSL_MODE`
-- `JWT_SECRET`
-- `ADMIN_USERNAME`
-- `ADMIN_PASSWORD_HASH` (recomendado)
-- `COOKIE_NAME`
-- `LOGIN_RATE_LIMIT_MAX`
-
-Frontend (`.env.local` opcional):
-- `VITE_API_BASE_URL`
-
-## Fases da implementacao do banco
-1. **Concluida**: conexao PostgreSQL, migration runner, schema inicial e seed de usuario admin.
-2. **Em andamento**: migracao de auth para tabela `users` com fallback para credencial por env.
-3. **Proxima**: endpoints de pacientes, agenda e jornadas com persistencia real.
-4. **Final**: frontend consumindo API para remover estado apenas em memoria.
+## Variaveis de ambiente (frontend, opcional)
+- `VITE_API_BASE_URL` — em dev com JWT em cookie, **deixe vazio** (use o proxy). Ver `.env.example`.
+- `VITE_API_PROXY_TARGET` — alvo do proxy em dev (ex.: `http://localhost:8080`)
+- `VITE_PORT` — porta do Vite
+- `VITE_DEFAULT_ORG_ID` — UUID enviado em `X-Org-Id` nas rotas `/api/v1/*` que exigem org
 
 ## Seguranca minima recomendada
-- Nunca commitar `.env` real.
-- Trocar `JWT_SECRET` em todos os ambientes.
-- Nao usar senha em texto puro em producao; usar `ADMIN_PASSWORD_HASH`.
-- Habilitar TLS e `DB_SSL_MODE=require` para banco gerenciado.
-- Monitorar tentativas de login e erros 5xx.
+- Nunca commitar `.env` real com segredos.
+- Em producao, usar HTTPS e cookies com flags adequadas conforme o backend.
 
 ## Observacao sobre compatibilidade
-A API atual foi atualizada para suportar autenticacao via PostgreSQL, mas ainda preserva fallback de credencial para ambientes sem banco operacional imediato. Isso permite rollout gradual.
-
+O login e o CRUD de usuarios consomem o Spring Boot (`/api/auth/*`, `/api/v1/usuarios`). O header `X-Org-Id` e enviado automaticamente nas rotas que exigem organizacao (`src/services/api.js`).

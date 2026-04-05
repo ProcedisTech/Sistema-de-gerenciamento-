@@ -3,18 +3,18 @@
 ## Visao geral
 O sistema tem duas camadas principais:
 - **Frontend SPA** em React (`src/`).
-- **Backend API** em Express (`server/`).
+- **Backend API** Spring Boot (repositório `plataforma-procedimentos`), consumida via `/api` (proxy do Vite em dev).
 
-Fluxo principal:
-1. Usuario autentica via `POST /api/auth/login`.
-2. Backend emite JWT assinado e grava cookie httpOnly.
-3. Frontend usa `credentials: include` para chamadas autenticadas.
-4. API valida cookie JWT no middleware `requireAuth`.
+Fluxo principal de autenticação:
+1. Usuario autentica via `POST /api/auth/login` (Spring).
+2. Backend emite JWT e define cookie httpOnly.
+3. `src/services/api.js` envia `credentials: 'include'` nas requisições.
+4. Rotas protegidas exigem cookie JWT válido (configuração no Spring).
 
 ## Frontend
 ### Entradas
 - `src/main.jsx`: bootstrap React.
-- `src/components/AppRoot.jsx`: lazy load + error boundary.
+- `src/components/AppRoot.jsx`: `OrgProvider` + error boundary.
 - `src/components/App.jsx`: facade estavel para `AppRefactored`.
 
 ### Composicao atual
@@ -26,35 +26,17 @@ Fluxo principal:
   - `patients/`
   - `auth/`
   - `layout/`
+  - `users/` (CRUD de usuarios)
 
 ### Observacao de estado
-- Pacientes/agendamentos ainda estao em estado local em memoria.
+- Pacientes/agendamentos ainda podem estar em estado local em memoria em partes do fluxo.
 - Estruturas seed em `patients/patientSeeds.js` e `usePatientState.js`.
 
-## Backend
-### Arquivos chave
-- `server/index.js`: bootstrap, CORS, helmet, auth router, health.
-- `server/routes/auth.js`: login/logout/me.
-- `server/middleware/requireAuth.js`: guard JWT.
-- `server/db/client.js`: pool PostgreSQL.
-- `server/db/usersRepo.js`: acesso a usuarios para autenticacao.
+### Contexto de organizacao
+- `src/contexts/OrgContext.jsx`: `orgId`, `roleUserId` (sincronizado com a sessao apos login/`/me`).
 
-### Segurança
-- `helmet` ativo (CSP desligado intencionalmente no momento).
-- Rate limit em `/api/auth/login`.
-- JWT issuer fixo: `procedi-api`.
-- Cookie httpOnly com `sameSite` configuravel.
-
-## Banco de dados
-- PostgreSQL com migration SQL em `server/db/migrations/001_init.sql`.
-- Runner de migrations: `server/scripts/migrate.mjs`.
-- Seed admin: `server/scripts/seed-admin.mjs`.
+## Backend (Spring Boot)
+Documentacao e codigo ficam no repositorio do backend. Contratos REST usados pelo frontend estao centralizados em `src/services/api.js`.
 
 ## Decisao de rollout
-Banco adotado com **migracao incremental por modulos**:
-1. Infra do banco + auth.
-2. Pacientes.
-3. Agenda.
-4. Jornadas/fotos.
-5. Corte final de estado local.
-
+Migracao incremental por modulos (pacientes, agenda, jornadas) conforme plano em `docs/CONTEXTO_SPRING_E_PLANO.md`.

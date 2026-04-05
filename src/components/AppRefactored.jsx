@@ -11,27 +11,24 @@ import {
 } from './hooks';
 
 // Componentes de Autenticação
-import { LoginForm, CookieConsent } from './auth';
+import { LoginForm, RegisterForm, CookieConsent } from './auth';
 
 // Componentes de Layout
 import { Sidebar, Stepper, MobileNavigation } from './layout';
 import { DevContextBar } from './layout/DevContextBar';
 
 import { useOrg } from '../contexts/OrgContext';
-import {
-  anamneseApi,
-  pacientesApi,
-  agendasApi,
-  procedimentosApi,
-} from '../services/api';
+import { anamneseApi, pacientesApi, procedimentosApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
-import { addMinutesToTime } from '../utils/agendaMapping';
+import { formatJourneyFinishError } from '../utils/agendaErrors';
+import { createJourneyAgendaSlotWithBackoff } from '../utils/journeyAgendaSlot';
 
 // Componentes de Agenda, Pacientes, Anamnese e Estoque
 import { AgendaView } from './agenda';
 import { PatientsView } from './patients';
 import { AnamneseAdminView } from './anamnese';
 import { EstoqueView } from './estoque';
+import { UsersCrudView } from './users';
 import { ProcedureCameraWidget } from './canvas';
 
 // Componentes da Jornada (5 Etapas)
@@ -41,17 +38,20 @@ import { Step1CheckIn, Step2Anamnese, Step3Evaluation, Step4LGPD, Step5Finalizat
 import { getPatientInitials, maskCPF, maskTelefone } from './utils';
 
 export default function App() {
-  const { roleUserId } = useOrg();
+  const { roleUserId, setRoleUserId } = useOrg();
   // ============ ESTADO GLOBAL ============
-  const authState = useAuthState();
-  const patientState = usePatientState();
+  const authState = useAuthState({ setRoleUserId });
+  const authSessionReady = authState.authReady && authState.cookieConsentAccepted && authState.isLoggedIn;
+  const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const anamneseRef = useRef(null);
+  /** Evita dois POSTs de agenda por duplo clique em “Finalizar”. */
+  const finishJourneyLockRef = useRef(false);
 
   // ============ Estados destructurados para facilitar leitura ============
-  const { authReady, isLoggedIn, handleLogout, cookieConsentAccepted, acceptCookies } = authState;
+  const { authReady, isLoggedIn, authUser, handleLogout, cookieConsentAccepted, acceptCookies } = authState;
   const { currentStep, setCurrentStep, isFinishing, setIsFinishing, journeyId } = journeyState;
   const {
     patients,
@@ -73,6 +73,7 @@ export default function App() {
     setPatients,
     maskCPF,
     maskTelefone,
+    authEnabled: authSessionReady,
   });
 
   const cameraState = useProcedureCamera({
@@ -155,6 +156,7 @@ export default function App() {
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [activeView, setActiveView] = React.useState('jornada');
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const [showRegisterForm, setShowRegisterForm] = React.useState(false);
 
   const goToView = (view) => {
     setActiveView(view);
@@ -348,6 +350,7 @@ export default function App() {
   };
 
   const handleNextStep = async () => {
+    if (currentStep === 5 && isFinishing) return;
     if (currentStep === 1) {
       if (journeyState.activeTab === 'novo') {
         const { nome, dataNascimento, sexo, estadoCivil, profissao, cpf, telefone, email, alergias, lgpdInicial } =
@@ -417,8 +420,11 @@ export default function App() {
           const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
           return sCpf && pCpf === sCpf;
         });
-        const rid = roleUserId || 'a0a00000-0000-0000-0000-000000000001';
-        if (paciente?.id) {
+        const rid = roleUserId;
+        if (!rid) {
+          console.warn('roleUserId ausente: faça login novamente para vincular o profissional.');
+        }
+        if (paciente?.id && rid) {
           anamneseApi
             .createPaciente(paciente.id, rid, {
               anamneseId: anamneseData.anamneseId,
@@ -468,13 +474,19 @@ export default function App() {
   };
 
   const finishJourney = async () => {
+    if (finishJourneyLockRef.current) return;
+    finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
-      const rid = roleUserId || 'a0a00000-0000-0000-0000-000000000001';
+      const rid = roleUserId;
       const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
       const paciente = patients.find((p) => String(p?.cpf || '').trim() === sCpf);
       const catId = journeyState.catalogoProcedimentoSaudeId;
 
+      if (!rid || !/^[0-9a-f-]{36}$/i.test(String(rid))) {
+        alert('Sua sessão não tem um profissional válido (roleUserId). Faça login novamente.');
+        return;
+      }
       if (!paciente?.id) {
         alert('Paciente sem ID do servidor. Recarregue a lista de pacientes ou cadastre novamente.');
         return;
@@ -487,15 +499,11 @@ export default function App() {
       const today = new Date().toISOString().slice(0, 10);
       const now = new Date();
       const hi = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const hf = addMinutesToTime(hi, 45);
 
-      const agenda = await agendasApi.create({
+      const { agenda, shiftedByMinutes } = await createJourneyAgendaSlotWithBackoff({
         dataAgendamento: today,
-        horaInicio: `${hi}:00`,
-        horaFim: `${hf}:00`,
         roleUserId: rid,
-        tipo: 'atendimento',
-        observacao: 'Jornada — horário automático',
+        startHhMm: hi,
       });
 
       const proc = await procedimentosApi.iniciar({
@@ -510,12 +518,17 @@ export default function App() {
       }
 
       refreshPatients();
-      alert('Procedimento finalizado e registrado no servidor.');
+      const shiftMsg =
+        shiftedByMinutes > 0
+          ? ` O horário na agenda foi deslocado automaticamente em ${shiftedByMinutes} min (evitar conflito com outro slot).`
+          : '';
+      alert(`Procedimento finalizado e registrado no servidor.${shiftMsg}`);
       resetJourney();
     } catch (error) {
       console.error('Erro ao finalizar jornada:', error);
-      alert(error.message || 'Erro ao registrar procedimento. Verifique conflito de horário na agenda ou dados no Swagger.');
+      alert(formatJourneyFinishError(error));
     } finally {
+      finishJourneyLockRef.current = false;
       setIsFinishing(false);
     }
   };
@@ -600,7 +613,17 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <>
-        <LoginForm {...authState} />
+        {showRegisterForm ? (
+          <RegisterForm
+            onBack={() => setShowRegisterForm(false)}
+            registerAndEnter={async (payload) => {
+              await authState.registerAndEnter(payload);
+              setShowRegisterForm(false);
+            }}
+          />
+        ) : (
+          <LoginForm {...authState} onShowRegister={() => setShowRegisterForm(true)} />
+        )}
         <CookieConsent cookieConsentAccepted={cookieConsentAccepted} acceptCookies={acceptCookies} />
       </>
     );
@@ -611,7 +634,12 @@ export default function App() {
       <CookieConsent cookieConsentAccepted={cookieConsentAccepted} acceptCookies={acceptCookies} />
 
       {/* Sidebar */}
-      <Sidebar activeView={activeView} setActiveView={setActiveView} handleLogout={handleLogout} />
+      <Sidebar
+        activeView={activeView}
+        setActiveView={setActiveView}
+        handleLogout={handleLogout}
+        authUser={authUser}
+      />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[112px] md:pb-0">
@@ -661,6 +689,15 @@ export default function App() {
                 <>
                   <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Pacientes</h2>
                   <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">Acesse prontuario, historico e galeria de evolucao</p>
+                </>
+              ) : null}
+
+              {activeView === 'usuarios' ? (
+                <>
+                  <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Usuários</h2>
+                  <p className="text-[#64748b] text-[13px] sm:text-[14px] font-medium">
+                    Crie logins vinculados a um profissional (RoleUser) da organização
+                  </p>
                 </>
               ) : null}
             </>
@@ -862,7 +899,9 @@ export default function App() {
 
             {activeView === 'estoque' && <EstoqueView />}
 
-            {!['jornada', 'agenda', 'pacientes', 'anamnese', 'estoque'].includes(activeView) && (
+            {activeView === 'usuarios' && <UsersCrudView />}
+
+            {!['jornada', 'agenda', 'pacientes', 'anamnese', 'estoque', 'usuarios'].includes(activeView) && (
               <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
@@ -888,7 +927,9 @@ export default function App() {
         onGoPacientes={() => goToView('pacientes')}
         onGoAnamnese={() => goToView('anamnese')}
         onGoEstoque={() => goToView('estoque')}
+        onGoUsuarios={() => goToView('usuarios')}
         onLogout={handleLogout}
+        authUser={authUser}
       />
 
       <ProcedureCameraWidget

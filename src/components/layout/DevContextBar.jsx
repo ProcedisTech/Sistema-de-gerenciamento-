@@ -27,17 +27,19 @@ export function DevContextBar() {
         onChange={(e) => setOrgId(e.target.value)}
         className="rounded-lg border-[2px] border-[#e2e8f0] px-2 py-1 text-[11px] bg-white max-w-[200px]"
       >
-        <option value={defaultOrgId}>Org Cardio (seed)</option>
-        <option value={altOrgId}>Org Estética (seed)</option>
+        <option value={defaultOrgId}>Org padrão (VITE_DEFAULT_ORG_ID)</option>
+        {altOrgId ? (
+          <option value={altOrgId}>Org alternativa (VITE_ALT_ORG_ID)</option>
+        ) : null}
       </select>
       <select
         value={roleUserId}
         onChange={(e) => setRoleUserId(e.target.value)}
         className="rounded-lg border-[2px] border-[#e2e8f0] px-2 py-1 text-[11px] bg-white max-w-[220px]"
       >
-        <option value="">roleUserId...</option>
+        <option value="">Profissional (roleUserId)…</option>
         {equipe.map((p) => (
-          <option key={p.id} value={roleKey(p)}>
+          <option key={roleKey(p) || p.id} value={roleKey(p)}>
             {p.nomeCompleto || p.id}
           </option>
         ))}

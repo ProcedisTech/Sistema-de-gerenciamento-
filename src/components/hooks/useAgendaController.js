@@ -11,7 +11,7 @@ function profissionalRoleUserId(p) {
   return p.roleUserId || p.role_user_id || p.id || '';
 }
 
-export function useAgendaController({ patients, setPatients, maskCPF, maskTelefone }) {
+export function useAgendaController({ patients, setPatients, maskCPF, maskTelefone, authEnabled = false }) {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const [appointments, setAppointments] = useState([]);
@@ -73,6 +73,12 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
   }, [calendarYear, calendarMonthIndex, monthDaysCount, buildDateStr]);
 
   const fetchMonthAgendas = useCallback(async () => {
+    if (!authEnabled) {
+      setAppointments([]);
+      setAgendasError('');
+      setAgendasLoading(false);
+      return;
+    }
     setAgendasLoading(true);
     setAgendasError('');
     try {
@@ -92,17 +98,27 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       );
       setAppointments(withCompromissos);
     } catch (e) {
-      console.warn('[agenda]', e.message);
+      if (e.status === 401) {
+        console.warn('[agenda] Sessão ausente ou expirada; agenda não carregada.');
+      } else {
+        console.warn('[agenda] Falha ao carregar agenda:', e.message);
+      }
       setAgendasError(e.message || 'Falha ao carregar agenda');
       setAppointments([]);
     } finally {
       setAgendasLoading(false);
     }
-  }, [monthRange.start, monthRange.end]);
+  }, [monthRange.start, monthRange.end, authEnabled]);
 
   useEffect(() => {
+    if (!authEnabled) {
+      setAppointments([]);
+      setAgendasError('');
+      setAgendasLoading(false);
+      return;
+    }
     fetchMonthAgendas();
-  }, [fetchMonthAgendas]);
+  }, [authEnabled, fetchMonthAgendas]);
 
   const loadModalCatalogs = useCallback(() => {
     catalogosApi
@@ -296,7 +312,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       setCalendarMonthIndex(Number(agendaDate.slice(5, 7)) - 1);
       closeAgendaModal();
     } catch (e) {
-      setAgendaModalError(e.status === 409 ? formatAgendamentoApiError(e) : e.message || 'Erro ao criar horário.');
+      setAgendaModalError(formatAgendamentoApiError(e));
     } finally {
       setAgendaSaving(false);
     }
@@ -320,6 +336,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
     setCompromissoModalError('');
   };
 
+  /** Modal MarcarCompromissoModal → agendamentosApi.create → api.js request (credentials + X-Org-Id). URL: /api/v1/agendamentos na mesma origem do Vite (ex. http://localhost:5173/api/...). */
   const confirmMarcarCompromisso = async () => {
     if (!slotParaCompromisso?.id) return;
     setCompromissoModalError('');
@@ -343,6 +360,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       await fetchMonthAgendas();
       closeCompromissoModal();
     } catch (e) {
+      console.warn('[agendamentos] POST /api/v1/agendamentos falhou:', e.status, e.message);
       setCompromissoModalError(formatAgendamentoApiError(e));
     } finally {
       setCompromissoSaving(false);

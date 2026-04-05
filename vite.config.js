@@ -14,9 +14,20 @@ export default defineConfig(({ mode }) => {
       port: frontendPort,
       strictPort: true,
       proxy: {
+        // Spring em :8080; no browser a origem é :5173, então o cookie HttpOnly `jwt` segue same-origin via /api/*.
         '/api': {
           target: proxyTarget,
           changeOrigin: true,
+          secure: false,
+          cookieDomainRewrite: { '*': '' },
+          cookiePathRewrite: { '*': '/' },
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              if (req.headers.cookie) {
+                proxyReq.setHeader('Cookie', req.headers.cookie);
+              }
+            });
+          },
         },
       },
     },

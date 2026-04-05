@@ -1,5 +1,7 @@
 # Implementacao PostgreSQL
 
+> **Nota (2025):** o backend Express em `server/` deste repositório foi removido. O banco de dados de producao é gerido pelo **Spring Boot** (`plataforma-procedimentos`). Este ficheiro permanece como referência histórica do schema que existia no scaffold local.
+
 ## Objetivo
 Este documento define o modelo de dados e o processo operacional para persistencia do sistema em PostgreSQL.
 
