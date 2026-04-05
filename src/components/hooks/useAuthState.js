@@ -1,6 +1,12 @@
+/**
+ * Auth contra Spring Boot (cookie HttpOnly `jwt`).
+ *
+ * - GET /api/auth/me com 401 = não logado (estado local limpo; não é falha de rede).
+ * - Login/register: POST com credentials:'include'; sessão vem no Set-Cookie.
+ * - Resposta típica: { ok: true, user: { id, username, role, roleUserId } }.
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../utils/formatters';
-import { setAuthToken, clearAuthToken } from '../../services/api';
 
 function normalizeAuthUser(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -17,7 +23,7 @@ function isUuid(v) {
 }
 
 /**
- * @param {{ setRoleUserId?: (id: string) => void }} [options]
+ * @param {{ setRoleUserId?: (id: string) => void }} [options] — use string vazio no logout para limpar
  */
 export const useAuthState = (options = {}) => {
   const { setRoleUserId } = options;
@@ -75,14 +81,17 @@ export const useAuthState = (options = {}) => {
     fetch(api('/api/auth/me'), { credentials: 'include' })
       .then(async (res) => {
         if (cancelled) return;
+        if (res.status === 401) {
+          setIsLoggedIn(false);
+          setAuthUser(null);
+          return;
+        }
         if (!res.ok) {
           setIsLoggedIn(false);
           setAuthUser(null);
           return;
         }
         const data = await res.json().catch(() => ({}));
-        const token = data?.token ?? data?.accessToken ?? data?.jwt ?? null;
-        if (token) setAuthToken(token);
         const user = data?.user;
         if (user) {
           applySessionUser(user);
@@ -137,8 +146,6 @@ export const useAuthState = (options = {}) => {
         setLoginError(data.error || data.message || 'Usuário ou senha incorretos.');
         return;
       }
-      const token = data.token ?? data.accessToken ?? data.jwt ?? null;
-      if (token) setAuthToken(token);
       if (data.user) {
         applySessionUser(data.user);
       }
@@ -172,8 +179,6 @@ export const useAuthState = (options = {}) => {
         err.body = data;
         throw err;
       }
-      const token = data.token ?? data.accessToken ?? data.jwt ?? null;
-      if (token) setAuthToken(token);
       if (data.user) {
         applySessionUser(data.user);
       }
@@ -191,13 +196,13 @@ export const useAuthState = (options = {}) => {
     } catch {
       /* sessão localmente encerrada */
     }
-    clearAuthToken();
+    if (typeof setRoleUserId === 'function') setRoleUserId('');
     setIsLoggedIn(false);
     setAuthUser(null);
     setUsername('');
     setPassword('');
     setLoginError('');
-  }, []);
+  }, [setRoleUserId]);
 
   useEffect(() => {
     const handler = () => handleLogout();

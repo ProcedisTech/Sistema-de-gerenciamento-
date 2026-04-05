@@ -56,7 +56,15 @@ export function RegisterForm({ onBack, registerAndEnter }) {
 
           <div className="p-10">
             <h1 className="text-[28px] font-bold text-[#0f172a] mb-2">Criar Usuário</h1>
-            <p className="text-[#64748b] text-[14px] mb-8 font-medium">Preencha os dados para criar uma nova conta</p>
+            <p className="text-[#64748b] text-[14px] mb-3 font-medium">Preencha os dados para criar uma nova conta</p>
+            <p className="text-[#94a3b8] text-[12px] mb-8 font-medium leading-relaxed border-l-[3px] border-[#00a88e]/30 pl-3">
+              Este passo <span className="font-bold text-[#64748b]">não cadastra a clínica</span>: só o usuário. A organização
+              precisa existir no PostgreSQL (seed, admin ou API no backend). Depois do login, as chamadas usam{' '}
+              <span className="font-bold text-[#64748b]">X-Org-Id</span> — alinhe{' '}
+              <span className="font-mono text-[11px] text-[#0f766e]">VITE_DEFAULT_ORG_ID</span> no{' '}
+              <span className="font-mono text-[11px] text-[#0f766e]">.env</span> ao UUID da sua clínica ou use a barra
+              &quot;Contexto API&quot; (se o backend permitir trocar de org).
+            </p>
 
             {error && (
               <div className="mb-6 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-4 text-[13px] font-bold">

@@ -1,3 +1,7 @@
+/**
+ * Dados fictícios apenas para testes manuais / Storybook — não importar no bundle principal da app.
+ * A lista de pacientes em produção vem exclusivamente de GET /api/v1/pacientes.
+ */
 export const PATIENT_SEEDS = [
   {
     id: 'f0000000-0000-4000-a000-000000000001',
@@ -125,4 +129,3 @@ export const PATIENT_SEEDS = [
     ],
   },
 ];
-

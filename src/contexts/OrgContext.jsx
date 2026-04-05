@@ -1,12 +1,10 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
+import { DEFAULT_ORG_ID, ALT_ORG_ID } from '../config/apiEnv';
 
 const LS_ORG = 'procedi_org_id';
-const LS_ROLE = 'procedi_role_user_id';
-
-const DEFAULT_ORG = 'b0000000-0000-0000-0000-000000000001';
-/** Fallback até auth real; alinhar com seed do backend. */
-const DEFAULT_ROLE_USER = 'a0a00000-0000-0000-0000-000000000001';
+/** v2: evita reaproveitar roleUserId de demo antigo no localStorage. */
+const LS_ROLE = 'procedi_role_user_id_v2';
 
 const OrgContext = createContext(null);
 
@@ -20,8 +18,8 @@ function readLs(key, fallback) {
 }
 
 export function OrgProvider({ children }) {
-  const [orgId, setOrgIdState] = useState(() => readLs(LS_ORG, DEFAULT_ORG));
-  const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, DEFAULT_ROLE_USER));
+  const [orgId, setOrgIdState] = useState(() => readLs(LS_ORG, DEFAULT_ORG_ID));
+  const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, ''));
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -39,10 +37,11 @@ export function OrgProvider({ children }) {
   }, []);
 
   const setRoleUserId = useCallback((id) => {
-    if (!id) return;
-    setRoleUserIdState(id);
+    const next = id == null ? '' : String(id).trim();
+    setRoleUserIdState(next);
     try {
-      localStorage.setItem(LS_ROLE, id);
+      if (next) localStorage.setItem(LS_ROLE, next);
+      else localStorage.removeItem(LS_ROLE);
     } catch {
       /* ignore */
     }
@@ -54,8 +53,8 @@ export function OrgProvider({ children }) {
       setOrgId,
       roleUserId,
       setRoleUserId,
-      defaultOrgId: DEFAULT_ORG,
-      altOrgId: 'b0000000-0000-0000-0000-000000000002',
+      defaultOrgId: DEFAULT_ORG_ID,
+      altOrgId: ALT_ORG_ID,
     }),
     [orgId, setOrgId, roleUserId, setRoleUserId]
   );
@@ -69,10 +68,10 @@ export function useOrg() {
     return {
       orgId: apiGetOrgId(),
       setOrgId: apiSetOrgId,
-      roleUserId: DEFAULT_ROLE_USER,
+      roleUserId: '',
       setRoleUserId: () => {},
-      defaultOrgId: DEFAULT_ORG,
-      altOrgId: 'b0000000-0000-0000-0000-000000000002',
+      defaultOrgId: DEFAULT_ORG_ID,
+      altOrgId: ALT_ORG_ID,
     };
   }
   return ctx;

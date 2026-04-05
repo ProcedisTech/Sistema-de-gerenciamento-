@@ -409,9 +409,13 @@ export function PatientProfileView({
     if (!text) return;
 
     if (selectedPatient?.id) {
+      if (!roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
+        alert('Selecione o profissional (roleUserId) na barra de contexto ou faça login com usuário vinculado à equipe.');
+        return;
+      }
       try {
         await notasApi.create(selectedPatient.id, {
-          roleUserId: roleUserId || 'a0a00000-0000-0000-0000-000000000001',
+          roleUserId,
           conteudo: text,
           autorNome: 'Nota rápida',
         });

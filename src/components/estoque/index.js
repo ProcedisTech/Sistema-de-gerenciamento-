@@ -1,0 +1,1 @@
+export { EstoqueView } from './EstoqueView';
