@@ -46,8 +46,6 @@ export const useJourneyState = () => {
   // ============ ETAPA 5: FINALIZAÇÃO ============
   const [orientacoes, setOrientacoes] = useState(false);
   const [satisfacao, setSatisfacao] = useState(false);
-  /** UUID do item de catálogo para ProcedimentoIniciarDTO (catalogoProcedimentoSaudeId). */
-  const [catalogoProcedimentoSaudeId, setCatalogoProcedimentoSaudeId] = useState('');
 
   // ============ FOTOS ============
   const EVALUATION_PHOTO_MAX = 5;
@@ -136,8 +134,6 @@ export const useJourneyState = () => {
     setOrientacoes,
     satisfacao,
     setSatisfacao,
-    catalogoProcedimentoSaudeId,
-    setCatalogoProcedimentoSaudeId,
     // Fotos
     EVALUATION_PHOTO_MAX,
     evaluationCapturedPhotos,

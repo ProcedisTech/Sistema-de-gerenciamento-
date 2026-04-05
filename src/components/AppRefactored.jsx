@@ -18,10 +18,18 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 import { DevContextBar } from './layout/DevContextBar';
 
 import { useOrg } from '../contexts/OrgContext';
+<<<<<<< HEAD
 import { anamneseApi, pacientesApi, procedimentosApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
 import { formatJourneyFinishError } from '../utils/agendaErrors';
 import { createJourneyAgendaSlotWithBackoff } from '../utils/journeyAgendaSlot';
+=======
+import {
+  anamneseApi,
+  pacientesApi,
+} from '../services/api';
+import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
+>>>>>>> 3b448021b7f21edeca7da2ea13ccb8bee80a3590
 
 // Componentes de Agenda, Pacientes, Anamnese e Estoque
 import { AgendaView } from './agenda';
@@ -447,13 +455,9 @@ export default function App() {
     }
 
     if (currentStep === 5) {
-      const { orientacoes, satisfacao, catalogoProcedimentoSaudeId } = journeyState;
+      const { orientacoes, satisfacao } = journeyState;
       if (!orientacoes || !satisfacao) {
         alert('Confirme as orientações e satisfação');
-        return;
-      }
-      if (!catalogoProcedimentoSaudeId) {
-        alert('Selecione o procedimento do catálogo (servidor) para finalizar.');
         return;
       }
 
@@ -478,6 +482,7 @@ export default function App() {
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
+<<<<<<< HEAD
       const rid = roleUserId;
       const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
       const paciente = patients.find((p) => String(p?.cpf || '').trim() === sCpf);
@@ -527,6 +532,14 @@ export default function App() {
     } catch (error) {
       console.error('Erro ao finalizar jornada:', error);
       alert(formatJourneyFinishError(error));
+=======
+      refreshPatients();
+      alert('Jornada finalizada com sucesso!');
+      resetJourney();
+    } catch (error) {
+      console.error('Erro ao finalizar jornada:', error);
+      alert(error.message || 'Erro ao finalizar jornada.');
+>>>>>>> 3b448021b7f21edeca7da2ea13ccb8bee80a3590
     } finally {
       finishJourneyLockRef.current = false;
       setIsFinishing(false);
@@ -554,7 +567,6 @@ export default function App() {
     journeyState.setTermoAssinado(false);
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
-    journeyState.setCatalogoProcedimentoSaudeId('');
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
   };
@@ -829,8 +841,6 @@ export default function App() {
                     setOrientacoes={journeyState.setOrientacoes}
                     satisfacao={journeyState.satisfacao}
                     setSatisfacao={journeyState.setSatisfacao}
-                    catalogoProcedimentoSaudeId={journeyState.catalogoProcedimentoSaudeId}
-                    setCatalogoProcedimentoSaudeId={journeyState.setCatalogoProcedimentoSaudeId}
                   />
                 )}
 
