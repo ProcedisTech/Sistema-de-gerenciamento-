@@ -27,10 +27,11 @@ import {
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
 import { addMinutesToTime } from '../utils/agendaMapping';
 
-// Componentes de Agenda, Pacientes e Anamnese
+// Componentes de Agenda, Pacientes, Anamnese e Estoque
 import { AgendaView } from './agenda';
 import { PatientsView } from './patients';
 import { AnamneseAdminView } from './anamnese';
+import { EstoqueView } from './estoque';
 import { ProcedureCameraWidget } from './canvas';
 
 // Componentes da Jornada (5 Etapas)
@@ -617,17 +618,19 @@ export default function App() {
         {/* Header — anamnese: barra compacta, título e dev context na mesma linha no desktop */}
         <header
           className={`bg-white px-4 sm:px-6 md:px-10 border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0 ${
-            activeView === 'anamnese' ? 'py-3 sm:py-3.5 md:py-4' : 'py-6 sm:py-8'
+            activeView === 'anamnese' || activeView === 'estoque' ? 'py-3 sm:py-3.5 md:py-4' : 'py-6 sm:py-8'
           }`}
         >
-          {activeView === 'anamnese' ? (
+          {activeView === 'anamnese' || activeView === 'estoque' ? (
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-6">
               <div className="min-w-0">
                 <h2 className="text-[18px] sm:text-[21px] md:text-[22px] font-bold text-[#0f172a] leading-tight mb-0.5">
-                  Anamnese
+                  {activeView === 'anamnese' ? 'Anamnese' : 'Estoque'}
                 </h2>
                 <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
-                  Configure categorias, perguntas e fichas reutilizáveis
+                  {activeView === 'anamnese'
+                    ? 'Configure categorias, perguntas e fichas reutilizáveis'
+                    : 'Insumos, lotes e controle de movimentações'}
                 </p>
               </div>
               <div className="flex justify-end shrink-0 md:max-w-[min(100%,520px)]">
@@ -667,14 +670,14 @@ export default function App() {
         {/* Content Area — anamnese usa largura e altura maiores no desktop */}
         <div
           className={`w-full mx-auto ${
-            activeView === 'anamnese'
+            activeView === 'anamnese' || activeView === 'estoque'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] flex-1 flex flex-col min-h-0'
               : 'p-3 sm:p-6 md:p-8 max-w-[1100px]'
           }`}
         >
           <div
             className={`bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 ${
-              activeView === 'anamnese'
+              activeView === 'anamnese' || activeView === 'estoque'
                 ? 'flex-1 flex flex-col min-h-0 px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                 : 'p-4 sm:p-8 pb-5 sm:pb-6'
             }`}
@@ -857,7 +860,9 @@ export default function App() {
 
             {activeView === 'anamnese' && <AnamneseAdminView />}
 
-            {!['jornada', 'agenda', 'pacientes', 'anamnese'].includes(activeView) && (
+            {activeView === 'estoque' && <EstoqueView />}
+
+            {!['jornada', 'agenda', 'pacientes', 'anamnese', 'estoque'].includes(activeView) && (
               <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
@@ -882,6 +887,7 @@ export default function App() {
         onGoAgenda={() => goToView('agenda')}
         onGoPacientes={() => goToView('pacientes')}
         onGoAnamnese={() => goToView('anamnese')}
+        onGoEstoque={() => goToView('estoque')}
         onLogout={handleLogout}
       />
 

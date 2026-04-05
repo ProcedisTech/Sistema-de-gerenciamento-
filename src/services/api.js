@@ -105,6 +105,36 @@ export const procedimentosApi = {
   finalizar: (id) => request(`/api/v1/procedimentos/${id}/finalizar`, { method: 'PATCH' }),
 };
 
+// ── Estoque / Insumos ───────────────────────────────────────
+
+export const estoqueApi = {
+  listItens: () => request('/api/v1/estoque/itens'),
+  getItem: (id) => request(`/api/v1/estoque/itens/${id}`),
+  createItem: (data) =>
+    request('/api/v1/estoque/itens', { method: 'POST', body: JSON.stringify(data) }),
+  updateItem: (id, data) =>
+    request(`/api/v1/estoque/itens/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleItem: (id) =>
+    request(`/api/v1/estoque/itens/${id}/toggle`, { method: 'PATCH' }),
+
+  listLotes: (itemId) => request(`/api/v1/estoque/itens/${itemId}/lotes`),
+  createLote: (itemId, data) =>
+    request(`/api/v1/estoque/itens/${itemId}/lotes`, { method: 'POST', body: JSON.stringify(data) }),
+  updateLote: (loteId, data) =>
+    request(`/api/v1/estoque/lotes/${loteId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  listMovimentacoes: (params = {}) => {
+    const entries = Object.entries(params).filter(([, v]) => v != null && v !== '');
+    const qs = new URLSearchParams(Object.fromEntries(entries)).toString();
+    return request(`/api/v1/estoque/movimentacoes${qs ? `?${qs}` : ''}`);
+  },
+  createMovimentacao: (data) =>
+    request('/api/v1/estoque/movimentacoes', { method: 'POST', body: JSON.stringify(data) }),
+
+  listCatalogoProcedimentoItens: (catalogoId) =>
+    request(`/api/v1/estoque/catalogo-procedimento/${catalogoId}/itens`),
+};
+
 // ── Dimensões (sem X-Org-Id) ───────────────────────────────
 
 export const dimensoesApi = {

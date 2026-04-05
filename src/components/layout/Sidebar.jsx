@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, GitCommit, Calendar, Users, ClipboardList, LogOut } from 'lucide-react';
+import { Shield, GitCommit, Calendar, Users, ClipboardList, Package, LogOut } from 'lucide-react';
 
 export function Sidebar({ activeView, setActiveView, handleLogout }) {
   return (
@@ -64,6 +64,17 @@ export function Sidebar({ activeView, setActiveView, handleLogout }) {
           }`}
         >
           <ClipboardList className="w-5 h-5" /> Anamnese
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveView('estoque')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[14px] transition-all border-[3px] ${
+            activeView === 'estoque'
+              ? 'bg-[#e6f7f5] text-[#00a88e] border-[#00a88e]/25'
+              : 'bg-white text-[#64748b] border-transparent hover:bg-[#f0fdfa] hover:text-[#00a88e] hover:border-[#00a88e]/20'
+          }`}
+        >
+          <Package className="w-5 h-5" /> Estoque
         </button>
       </nav>
 
