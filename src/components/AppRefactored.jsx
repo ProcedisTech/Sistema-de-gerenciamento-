@@ -18,18 +18,8 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 import { DevContextBar } from './layout/DevContextBar';
 
 import { useOrg } from '../contexts/OrgContext';
-<<<<<<< HEAD
-import { anamneseApi, pacientesApi, procedimentosApi } from '../services/api';
+import { anamneseApi, pacientesApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
-import { formatJourneyFinishError } from '../utils/agendaErrors';
-import { createJourneyAgendaSlotWithBackoff } from '../utils/journeyAgendaSlot';
-=======
-import {
-  anamneseApi,
-  pacientesApi,
-} from '../services/api';
-import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
->>>>>>> 3b448021b7f21edeca7da2ea13ccb8bee80a3590
 
 // Componentes de Agenda, Pacientes, Anamnese e Estoque
 import { AgendaView } from './agenda';
@@ -482,64 +472,12 @@ export default function App() {
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
-<<<<<<< HEAD
-      const rid = roleUserId;
-      const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
-      const paciente = patients.find((p) => String(p?.cpf || '').trim() === sCpf);
-      const catId = journeyState.catalogoProcedimentoSaudeId;
-
-      if (!rid || !/^[0-9a-f-]{36}$/i.test(String(rid))) {
-        alert('Sua sessão não tem um profissional válido (roleUserId). Faça login novamente.');
-        return;
-      }
-      if (!paciente?.id) {
-        alert('Paciente sem ID do servidor. Recarregue a lista de pacientes ou cadastre novamente.');
-        return;
-      }
-      if (!catId) {
-        alert('Selecione o procedimento na etapa 5.');
-        return;
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const now = new Date();
-      const hi = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const { agenda, shiftedByMinutes } = await createJourneyAgendaSlotWithBackoff({
-        dataAgendamento: today,
-        roleUserId: rid,
-        startHhMm: hi,
-      });
-
-      const proc = await procedimentosApi.iniciar({
-        pacienteId: paciente.id,
-        catalogoProcedimentoSaudeId: catId,
-        roleUserId: rid,
-        agendaId: agenda.id,
-      });
-
-      if (proc?.id) {
-        await procedimentosApi.finalizar(proc.id);
-      }
-
-      refreshPatients();
-      const shiftMsg =
-        shiftedByMinutes > 0
-          ? ` O horário na agenda foi deslocado automaticamente em ${shiftedByMinutes} min (evitar conflito com outro slot).`
-          : '';
-      alert(`Procedimento finalizado e registrado no servidor.${shiftMsg}`);
-      resetJourney();
-    } catch (error) {
-      console.error('Erro ao finalizar jornada:', error);
-      alert(formatJourneyFinishError(error));
-=======
       refreshPatients();
       alert('Jornada finalizada com sucesso!');
       resetJourney();
     } catch (error) {
       console.error('Erro ao finalizar jornada:', error);
       alert(error.message || 'Erro ao finalizar jornada.');
->>>>>>> 3b448021b7f21edeca7da2ea13ccb8bee80a3590
     } finally {
       finishJourneyLockRef.current = false;
       setIsFinishing(false);
