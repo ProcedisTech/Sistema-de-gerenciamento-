@@ -1,10 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../utils/formatters';
+import { setAuthToken, clearAuthToken } from '../../services/api';
 
-export const useAuthState = () => {
-  const isDev = import.meta.env.DEV;
+function normalizeAuthUser(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    id: raw.id,
+    username: raw.username,
+    role: raw.role,
+    roleUserId: raw.roleUserId,
+  };
+}
+
+function isUuid(v) {
+  return Boolean(v && /^[0-9a-f-]{36}$/i.test(String(v)));
+}
+
+/**
+ * @param {{ setRoleUserId?: (id: string) => void }} [options]
+ */
+export const useAuthState = (options = {}) => {
+  const { setRoleUserId } = options;
   const [authReady, setAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [username, setUsername] = useState('');
@@ -19,6 +38,17 @@ export const useAuthState = () => {
     }
   });
 
+  const applySessionUser = useCallback(
+    (user) => {
+      const normalized = normalizeAuthUser(user);
+      setAuthUser(normalized);
+      if (normalized?.roleUserId && isUuid(normalized.roleUserId) && typeof setRoleUserId === 'function') {
+        setRoleUserId(String(normalized.roleUserId));
+      }
+    },
+    [setRoleUserId]
+  );
+
   const acceptCookies = () => {
     try {
       document.cookie =
@@ -29,17 +59,10 @@ export const useAuthState = () => {
     setCookieConsentAccepted(true);
   };
 
-  // Verificar autenticação ao montar
   useEffect(() => {
     if (!cookieConsentAccepted) {
       setIsLoggedIn(false);
-      setAuthReady(true);
-      return;
-    }
-
-    // Em dev local, evita ruído de 502 quando a API não está rodando.
-    if (isDev && import.meta.env.VITE_FORCE_AUTH_ME_CHECK !== 'true') {
-      setIsLoggedIn(false);
+      setAuthUser(null);
       setAuthReady(true);
       return;
     }
@@ -50,10 +73,31 @@ export const useAuthState = () => {
     }, 2000);
 
     fetch(api('/api/auth/me'), { credentials: 'include' })
-      .then((res) => {
-        if (!cancelled && res.ok) setIsLoggedIn(true);
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setIsLoggedIn(false);
+          setAuthUser(null);
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        const token = data?.token ?? data?.accessToken ?? data?.jwt ?? null;
+        if (token) setAuthToken(token);
+        const user = data?.user;
+        if (user) {
+          applySessionUser(user);
+          setIsLoggedIn(true);
+        } else {
+          setIsLoggedIn(false);
+          setAuthUser(null);
+        }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) {
+          setIsLoggedIn(false);
+          setAuthUser(null);
+        }
+      })
       .finally(() => {
         if (!cancelled) {
           clearTimeout(timeoutId);
@@ -65,25 +109,14 @@ export const useAuthState = () => {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [cookieConsentAccepted, isDev]);
+  }, [cookieConsentAccepted, applySessionUser]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
     setLoginSubmitting(true);
     try {
-      const testUser = 'Rafael';
-      const testPassword = 'PROcedi';
       const usernameTrim = username.trim();
-
-      // Atalho local para desenvolvimento sem backend disponível.
-      if (isDev && usernameTrim === testUser && password === testPassword) {
-        setIsLoggedIn(true);
-        setPassword('');
-        setLoginError('');
-        return;
-      }
-
       const res = await fetch(api('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,48 +128,61 @@ export const useAuthState = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Fallback de teste
-        if (
-          usernameTrim === testUser &&
-          password === testPassword &&
-          (res.status === 404 || res.status === 0 || res.status >= 500)
-        ) {
-          setIsLoggedIn(true);
-          setPassword('');
-          setLoginError('');
-          return;
-        }
-
         if (res.status === 404) {
           setLoginError(
-            'Não encontrei o endpoint de login (`/api/auth/login`). Verifique se a API está encaminhada no Netlify.'
+            'Não encontrei o endpoint de login (`/api/auth/login`). Verifique se o Spring Boot está rodando e o proxy do Vite aponta para a porta correta.'
           );
           return;
         }
-
-        setLoginError(data.error || 'Usuário ou senha incorretos.');
+        setLoginError(data.error || data.message || 'Usuário ou senha incorretos.');
         return;
+      }
+      const token = data.token ?? data.accessToken ?? data.jwt ?? null;
+      if (token) setAuthToken(token);
+      if (data.user) {
+        applySessionUser(data.user);
       }
       setIsLoggedIn(true);
       setPassword('');
     } catch {
-      const testUser = 'Rafael';
-      const testPassword = 'PROcedi';
-      if (username.trim() === testUser && password === testPassword) {
-        setIsLoggedIn(true);
-        setPassword('');
-        setLoginError('');
-        return;
-      }
       setLoginError(
-        'Não foi possível conectar ao servidor. Inicie a API (npm run server) ou use npm run dev:full.'
+        'Não foi possível conectar ao servidor. Inicie o Spring Boot (ex.: porta 8080) e rode `npm run dev` com o proxy configurado.'
       );
     } finally {
       setLoginSubmitting(false);
     }
   };
 
-  const handleLogout = async () => {
+  const registerAndEnter = useCallback(
+    async ({ username, email, password }) => {
+      const res = await fetch(api('/api/auth/register'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          username: username.trim(),
+          email: email.trim(),
+          password,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data.message || 'Não foi possível criar o usuário.');
+        err.status = res.status;
+        err.body = data;
+        throw err;
+      }
+      const token = data.token ?? data.accessToken ?? data.jwt ?? null;
+      if (token) setAuthToken(token);
+      if (data.user) {
+        applySessionUser(data.user);
+      }
+      setIsLoggedIn(true);
+    },
+    [applySessionUser]
+  );
+
+  const handleLogout = useCallback(async () => {
     try {
       await fetch(api('/api/auth/logout'), {
         method: 'POST',
@@ -145,15 +191,24 @@ export const useAuthState = () => {
     } catch {
       /* sessão localmente encerrada */
     }
+    clearAuthToken();
     setIsLoggedIn(false);
+    setAuthUser(null);
     setUsername('');
     setPassword('');
     setLoginError('');
-  };
+  }, []);
+
+  useEffect(() => {
+    const handler = () => handleLogout();
+    window.addEventListener('auth:expired', handler);
+    return () => window.removeEventListener('auth:expired', handler);
+  }, [handleLogout]);
 
   return {
     authReady,
     isLoggedIn,
+    authUser,
     loginSubmitting,
     loginError,
     username,
@@ -165,9 +220,9 @@ export const useAuthState = () => {
     cookieConsentAccepted,
     acceptCookies,
     handleLogin,
+    registerAndEnter,
     handleLogout,
     setIsLoggedIn,
     setLoginError,
   };
 };
-
