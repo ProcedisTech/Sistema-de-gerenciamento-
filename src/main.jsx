@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import AppRoot from './components/AppRoot.jsx'
+import { ToastProvider } from './contexts/ToastContext.jsx'
 import './styles/index.css'
 
 const rootEl = document.getElementById('root')
@@ -37,7 +38,9 @@ try {
 
   ReactDOM.createRoot(rootEl).render(
     <React.StrictMode>
-      <AppRoot />
+      <ToastProvider>
+        <AppRoot />
+      </ToastProvider>
     </React.StrictMode>,
   )
 } catch (error) {

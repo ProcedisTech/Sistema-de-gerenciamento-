@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { Eye, Upload, Image as ImageIcon, CheckCircle, Square, CheckSquare, Trash2 } from 'lucide-react';
+import { useToast } from '../../contexts/useToast.js';
 
 const colors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'];
 
@@ -25,6 +26,8 @@ export function Step3Evaluation({
   onDeleteCapturedPhoto,
   evaluationPhotoMax,
 }) {
+  const toast = useToast();
+
   const getPointerCoordinates = (event) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return null;
@@ -114,7 +117,7 @@ export function Step3Evaluation({
     const overlayCanvas = canvasRef.current;
     if (!overlayCanvas) return;
     if (!paths || paths.length === 0) {
-      alert('Desenhe algo no canvas antes de salvar.');
+      toast.warning('Desenhe algo no canvas antes de salvar.');
       return;
     }
 
@@ -167,7 +170,7 @@ export function Step3Evaluation({
       );
     }
 
-    alert('Foto desenhada salva na ficha do paciente (mock).');
+    toast.success('Foto anotada salva na ficha do paciente.');
   };
 
   useEffect(() => {

@@ -2,11 +2,14 @@
  * Auth contra Spring Boot (cookie HttpOnly `jwt`).
  *
  * - GET /api/auth/me com 401 = não logado (estado local limpo; não é falha de rede).
- * - Login/register: POST com credentials:'include'; sessão vem no Set-Cookie.
- * - Resposta típica: { ok: true, user: { id, username, role, roleUserId } }.
+ * - Login: POST com credentials:'include'; sessão vem no Set-Cookie.
+ * - Resposta típica: { ok: true, user: { id, username, role, roleUserId, organizacaoSaudeId? } }
+ *   e/ou organizacaoSaudeId no raiz — usamos para setOrgId (header X-Org-Id).
  */
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../utils/formatters';
+import { extractOrganizacaoIdFromAuthResponse } from '../../utils/authPayload';
+import { useToast } from '../../contexts/useToast.js';
 
 function normalizeAuthUser(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -23,10 +26,19 @@ function isUuid(v) {
 }
 
 /**
- * @param {{ setRoleUserId?: (id: string) => void }} [options] — use string vazio no logout para limpar
+ * @param {{ setRoleUserId?: (id: string) => void, setOrgId?: (id: string) => void }} [options]
  */
 export const useAuthState = (options = {}) => {
-  const { setRoleUserId } = options;
+  const { setRoleUserId, setOrgId } = options;
+  const { success: toastSuccess, info: toastInfo } = useToast();
+
+  const syncOrganizacaoFromAuthPayload = useCallback(
+    (payload) => {
+      const oid = extractOrganizacaoIdFromAuthResponse(payload);
+      if (oid && typeof setOrgId === 'function') setOrgId(oid);
+    },
+    [setOrgId]
+  );
   const [authReady, setAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authUser, setAuthUser] = useState(null);
@@ -92,6 +104,7 @@ export const useAuthState = (options = {}) => {
           return;
         }
         const data = await res.json().catch(() => ({}));
+        syncOrganizacaoFromAuthPayload(data);
         const user = data?.user;
         if (user) {
           applySessionUser(user);
@@ -118,7 +131,7 @@ export const useAuthState = (options = {}) => {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [cookieConsentAccepted, applySessionUser]);
+  }, [cookieConsentAccepted, applySessionUser, syncOrganizacaoFromAuthPayload]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -146,11 +159,13 @@ export const useAuthState = (options = {}) => {
         setLoginError(data.error || data.message || 'Usuário ou senha incorretos.');
         return;
       }
+      syncOrganizacaoFromAuthPayload(data);
       if (data.user) {
         applySessionUser(data.user);
       }
       setIsLoggedIn(true);
       setPassword('');
+      toastSuccess('Login realizado com sucesso.');
     } catch {
       setLoginError(
         'Não foi possível conectar ao servidor. Inicie o Spring Boot (ex.: porta 8080) e rode `npm run dev` com o proxy configurado.'
@@ -159,33 +174,6 @@ export const useAuthState = (options = {}) => {
       setLoginSubmitting(false);
     }
   };
-
-  const registerAndEnter = useCallback(
-    async ({ username, email, password }) => {
-      const res = await fetch(api('/api/auth/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          username: username.trim(),
-          email: email.trim(),
-          password,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const err = new Error(data.message || 'Não foi possível criar o usuário.');
-        err.status = res.status;
-        err.body = data;
-        throw err;
-      }
-      if (data.user) {
-        applySessionUser(data.user);
-      }
-      setIsLoggedIn(true);
-    },
-    [applySessionUser]
-  );
 
   const handleLogout = useCallback(async () => {
     try {
@@ -202,7 +190,8 @@ export const useAuthState = (options = {}) => {
     setUsername('');
     setPassword('');
     setLoginError('');
-  }, [setRoleUserId]);
+    toastInfo('Sessão encerrada.');
+  }, [setRoleUserId, toastInfo]);
 
   useEffect(() => {
     const handler = () => handleLogout();
@@ -225,7 +214,6 @@ export const useAuthState = (options = {}) => {
     cookieConsentAccepted,
     acceptCookies,
     handleLogin,
-    registerAndEnter,
     handleLogout,
     setIsLoggedIn,
     setLoginError,
