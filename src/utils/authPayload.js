@@ -1,4 +1,24 @@
 /**
+ * JWT no JSON (LoginResponseDTO / MeResponseDTO) — Jackson serializa como accessToken (camelCase).
+ * Raiz ou dentro de `user`; pode ser null no /me se não houver roleUserId no JWT.
+ */
+const ACCESS_TOKEN_JSON_KEYS = ['accessToken'];
+
+function pickAccessTokenFromObject(o) {
+  if (!o || typeof o !== 'object') return null;
+  for (const k of ACCESS_TOKEN_JSON_KEYS) {
+    const t = o[k];
+    if (typeof t === 'string' && t.trim()) return t.trim();
+  }
+  return null;
+}
+
+export function extractAccessTokenFromAuthResponse(data) {
+  if (!data || typeof data !== 'object') return null;
+  return pickAccessTokenFromObject(data) || pickAccessTokenFromObject(data.user);
+}
+
+/**
  * Extrai UUID da organização devolvido pelo Spring após login, register ou GET /api/auth/me.
  * O backend pode enviar no objeto raiz ou dentro de `user` (alinhar um dos nomes abaixo).
  */

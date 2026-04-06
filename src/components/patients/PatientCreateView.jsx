@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, UserPlus } from 'lucide-react';
-import { maskCPF, maskRG, maskTelefone, calculateAgeFromISODate } from '../utils/formatters';
+import { ArrowLeft, Save, Loader2, UserPlus, AlertTriangle } from 'lucide-react';
+import {
+  maskCPF,
+  maskRG,
+  maskTelefone,
+  calculateAgeFromISODate,
+  clampBirthDateDigits,
+  formatBirthDigitsBR,
+  birthDigitsToISO,
+  isPlausibleBirthISODate,
+  MIN_BIRTH_YEAR,
+} from '../utils/formatters';
 import { pacientesApi, dimensoesApi } from '../../services/api';
 
 export function PatientCreateView({ setPatientView, onPatientCreated }) {
@@ -36,27 +46,21 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
 
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
 
-  const maskDate = (v) => {
-    return v
-      .replace(/\D/g, '')
-      .replace(/(\d{2})(\d)/, '$1/$2')
-      .replace(/(\d{2})(\d)/, '$1/$2')
-      .replace(/(\d{4})\d+$/, '$1');
-  };
-
   const handleDataNascimentoChange = (raw) => {
-    const masked = maskDate(raw);
-    setDataNascimentoDisplay(masked);
+    const digits = clampBirthDateDigits(raw);
+    const display = formatBirthDigitsBR(digits);
+    setDataNascimentoDisplay(display);
 
-    const digits = masked.replace(/\D/g, '');
     if (digits.length === 8) {
-      const dd = digits.slice(0, 2);
-      const mm = digits.slice(2, 4);
-      const yyyy = digits.slice(4, 8);
-      const iso = `${yyyy}-${mm}-${dd}`;
-      setDataNascimento(iso);
-      const age = calculateAgeFromISODate(iso);
-      setIdade(age !== '' ? age : '');
+      const iso = birthDigitsToISO(digits);
+      if (iso && isPlausibleBirthISODate(iso)) {
+        setDataNascimento(iso);
+        const age = calculateAgeFromISODate(iso);
+        setIdade(age !== '' ? age : '');
+      } else {
+        setDataNascimento('');
+        setIdade('');
+      }
     } else {
       setDataNascimento('');
       setIdade('');
@@ -67,6 +71,9 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
     const e = {};
     if (!nome.trim()) e.nome = true;
     if (!dataNascimento) e.dataNascimento = true;
+    if (!sexo.trim()) e.sexo = true;
+    if (!estadoCivilId.trim()) e.estadoCivil = true;
+    if (!profissao.trim()) e.profissao = true;
     if (!cpf.trim()) e.cpf = true;
     if (!telefone.trim()) e.telefone = true;
     if (!email.trim()) e.email = true;
@@ -78,7 +85,14 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      setErro('Preencha os campos obrigatórios.');
+      const dnDigits = dataNascimentoDisplay.replace(/\D/g, '');
+      if (validationErrors.dataNascimento && dnDigits.length === 8 && !dataNascimento) {
+        setErro(
+          `Data de nascimento inválida ou fora do permitido: ano entre ${MIN_BIRTH_YEAR} e ${new Date().getFullYear()}, data real e não futura.`
+        );
+      } else {
+        setErro('Preencha os campos obrigatórios.');
+      }
       return;
     }
 
@@ -121,9 +135,21 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   const clearError = (field) => setErrors((prev) => ({ ...prev, [field]: false }));
 
   const inputClass = (field) =>
-    `w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
+    `w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
       errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
     }`;
+
+  const selectPersonalClass = (field) =>
+    `w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${
+      errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
+    }`;
+
+  const hasPersonalSectionError =
+    Boolean(errors.nome) ||
+    Boolean(errors.dataNascimento) ||
+    Boolean(errors.sexo) ||
+    Boolean(errors.estadoCivil) ||
+    Boolean(errors.profissao);
 
   if (sucesso) {
     return (
@@ -138,7 +164,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="animate-in fade-in duration-300 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -155,17 +181,27 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
         </div>
         <div>
           <h3 className="text-[20px] font-bold text-[#0f172a]">Novo Paciente</h3>
-          <p className="text-[#64748b] text-[14px] font-medium">Preencha os dados para cadastrar</p>
+          <p className="text-[#64748b] text-[14px] font-medium">Identificação e dados pessoais</p>
         </div>
       </div>
 
-      {erro && (
-        <div className="bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
-      )}
-
       <form onSubmit={handleSalvar} className="space-y-6">
-        {/* Dados Pessoais */}
-        <div className="border-[3px] border-[#00a88e]/25 rounded-2xl p-6 bg-white">
+        {(Object.keys(errors).length > 0 || erro) && (
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[14px] font-bold border-[3px] border-red-200 flex items-start gap-2">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+            <span>
+              {erro ||
+                (Object.keys(errors).length > 0 ? 'Por favor, preencha todos os campos obrigatórios (*).' : '')}
+            </span>
+          </div>
+        )}
+
+        {/* Dados Pessoais — alinhado ao Step1CheckIn (jornada) */}
+        <div
+          className={`border-[3px] rounded-2xl p-6 transition-colors ${
+            hasPersonalSectionError ? 'border-red-300 bg-red-50/10' : 'border-[#00a88e]/25 bg-white'
+          }`}
+        >
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-full bg-[#00a88e] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">1</div>
             <h4 className="text-[18px] font-bold text-[#0f766e]">Dados Pessoais</h4>
@@ -173,40 +209,103 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
             <div className="md:col-span-2 space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Nome Completo <span className="text-red-500">*</span></label>
-              <input type="text" value={nome} onChange={(e) => { setNome(e.target.value); clearError('nome'); }} placeholder="Nome completo do paciente" className={inputClass('nome')} />
+              <input
+                type="text"
+                value={nome}
+                onChange={(e) => {
+                  setNome(e.target.value);
+                  clearError('nome');
+                }}
+                placeholder="Nome completo do paciente"
+                className={inputClass('nome')}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Data de Nascimento <span className="text-red-500">*</span></label>
-              <input type="text" value={dataNascimentoDisplay} onChange={(e) => { handleDataNascimentoChange(e.target.value); clearError('dataNascimento'); }} placeholder="DD/MM/AAAA" maxLength={10} className={inputClass('dataNascimento')} />
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="bday"
+                value={dataNascimentoDisplay}
+                onChange={(e) => {
+                  handleDataNascimentoChange(e.target.value);
+                  clearError('dataNascimento');
+                }}
+                placeholder="DD/MM/AAAA"
+                maxLength={10}
+                className={inputClass('dataNascimento')}
+              />
+              {dataNascimentoDisplay.replace(/\D/g, '').length === 8 && !dataNascimento ? (
+                <p className="text-[12px] font-bold text-red-600">
+                  Ajuste a data: ano de {MIN_BIRTH_YEAR} até {new Date().getFullYear()}, calendário válido e não futura.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Idade</label>
-              <input type="text" value={idade !== '' ? `${idade} anos` : ''} placeholder="Calculada automaticamente" disabled className="w-full px-4 py-3 bg-[#e2e8f0]/40 border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed" />
+              <input
+                type="text"
+                value={idade !== '' ? `${idade} anos` : ''}
+                placeholder="Calculada automaticamente"
+                disabled
+                className="w-full px-4 py-3 bg-[#e2e8f0]/40 border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed"
+              />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e]">Sexo</label>
-              <select value={sexo} onChange={(e) => setSexo(e.target.value)} className={inputClass() + ' appearance-none'}>
+              <label className="text-[13px] font-bold text-[#00a88e]">Sexo <span className="text-red-500">*</span></label>
+              <select
+                value={sexo}
+                onChange={(e) => {
+                  setSexo(e.target.value);
+                  clearError('sexo');
+                }}
+                className={selectPersonalClass('sexo')}
+              >
                 <option value="">Selecione...</option>
                 <option value="F">Feminino</option>
                 <option value="M">Masculino</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e]">Estado Civil</label>
-              <select value={estadoCivilId} onChange={(e) => setEstadoCivilId(e.target.value)} className={inputClass() + ' appearance-none'}>
+              <label className="text-[13px] font-bold text-[#00a88e]">Estado Civil <span className="text-red-500">*</span></label>
+              <select
+                value={estadoCivilId}
+                onChange={(e) => {
+                  setEstadoCivilId(e.target.value);
+                  clearError('estadoCivil');
+                }}
+                className={selectPersonalClass('estadoCivil')}
+              >
                 <option value="">Selecione...</option>
                 {estadosCivis.map((ec) => (
-                  <option key={ec.estado_civil_id || ec.id} value={ec.estado_civil_id || ec.id}>{ec.nome}</option>
+                  <option key={ec.estado_civil_id || ec.id} value={ec.estado_civil_id || ec.id}>
+                    {ec.nome}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e]">Gênero</label>
-              <input type="text" value={genero} onChange={(e) => setGenero(e.target.value)} placeholder="Como se identifica" className={inputClass()} />
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="text-[13px] font-bold text-[#00a88e]">Profissão <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={profissao}
+                onChange={(e) => {
+                  setProfissao(e.target.value);
+                  clearError('profissao');
+                }}
+                placeholder="Ex: Advogada, Empresário, Estudante..."
+                className={inputClass('profissao')}
+              />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e]">Profissão</label>
-              <input type="text" value={profissao} onChange={(e) => setProfissao(e.target.value)} placeholder="Ex: Advogada, Empresário..." className={inputClass()} />
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="text-[13px] font-bold text-[#00a88e]">Gênero</label>
+              <input
+                type="text"
+                value={genero}
+                onChange={(e) => setGenero(e.target.value)}
+                placeholder="Como se identifica"
+                className={inputClass()}
+              />
             </div>
           </div>
         </div>
@@ -230,7 +329,11 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
         </div>
 
         {/* Contato */}
-        <div className="border-[3px] border-[#a855f7]/25 rounded-2xl p-6 bg-white">
+        <div
+          className={`border-[3px] rounded-2xl p-6 transition-colors ${
+            errors.telefone || errors.email ? 'border-red-300 bg-red-50/10' : 'border-[#a855f7]/25 bg-white'
+          }`}
+        >
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-full bg-[#a855f7] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">3</div>
             <h4 className="text-[18px] font-bold text-[#7e22ce]">Contato</h4>

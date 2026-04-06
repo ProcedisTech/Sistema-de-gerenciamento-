@@ -1,8 +1,28 @@
 import { calculateAgeFromISODate } from '../components/utils/formatters';
+import { resolveApiUrl } from '../config/apiEnv.js';
+
+/**
+ * Backend pode enviar path relativo à API (ex. /api/v1/pacientes/{id}/foto-perfil?v=…).
+ * Com front em outro host (Netlify), precisamos prefixar VITE_API_BASE_URL para o <img> carregar.
+ */
+function normalizeFotoPerfilUrl(raw) {
+  if (typeof raw !== 'string') return '';
+  const t = raw.trim();
+  if (!t) return '';
+  if (t.startsWith('http://') || t.startsWith('https://') || t.startsWith('data:')) return t;
+  if (t.startsWith('/')) return resolveApiUrl(t);
+  return t;
+}
 
 /** Shape usada nas telas (lista, jornada, perfil). */
 export function mapBackendPatient(dto) {
   if (!dto) return null;
+  /** Contrato atual: fotoPerfilUrl (path /api/v1/.../foto-perfil?v=… ou URL absoluta). Aliases só para legado. */
+  const rawFoto =
+    (typeof dto.fotoPerfilUrl === 'string' && dto.fotoPerfilUrl.trim()) ||
+    (typeof dto.urlFotoPerfil === 'string' && dto.urlFotoPerfil.trim()) ||
+    (typeof dto.fotoUrl === 'string' && dto.fotoUrl.trim()) ||
+    '';
   return {
     id: dto.id,
     nome: dto.nomeCompleto || '',
@@ -25,6 +45,8 @@ export function mapBackendPatient(dto) {
     indicacao: dto.indicacao || '',
     genero: dto.genero || '',
     status: dto.ativo !== false ? 'ativo' : 'inativo',
+    /** Canônico no Spring: só fotoPerfilUrl; aliases no front são opcionais. */
+    fotoPerfilUrl: rawFoto ? normalizeFotoPerfilUrl(rawFoto) : '',
     ultimaVisita: '',
     proximoRetorno: '',
     saldoDevedor: 0,

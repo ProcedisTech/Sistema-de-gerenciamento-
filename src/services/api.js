@@ -2,25 +2,26 @@
  * Cliente HTTP do frontend para o Spring Boot (mesma origem em dev via Vite: :5173 → proxy /api → :8080).
  *
  * Autenticação
- * - JWT em cookie HttpOnly nome `jwt`, definido pelo backend em POST /api/auth/login.
- * - Todas as chamadas usam credentials: 'include' para enviar o cookie.
- * - 401 em rotas protegidas = sessão ausente ou expirada (não indica que o servidor está offline).
+ * - Cookie HttpOnly `jwt` (POST /api/auth/login) + credentials: 'include' em todas as chamadas.
+ * - Se o JSON de login ou GET /api/auth/me trouxer `accessToken` (LoginResponseDTO / MeResponseDTO), enviamos também
+ *   Authorization: Bearer … (sessionStorage + memória) — necessário quando o filtro JWT do Spring prioriza Bearer.
  *
  * Rotas públicas (exemplos)
  * - POST /api/auth/login   body: { username, password }
  *
- * Autenticado (cookie + eventualmente Bearer se o backend passar a expor no JSON — hoje não usamos Bearer no client)
+ * Autenticado
  * - GET /api/auth/me — 401 = usuário não logado
  * - POST /api/auth/logout
  *
  * Protegido
- * - /api/v1/** — enviar X-Org-Id quando needsOrg: true (padrão), alinhado ao UUID da org no banco (VITE_DEFAULT_ORG_ID).
+ * - /api/v1/** — X-Org-Id quando needsOrg: true + Bearer quando houver accessToken guardado.
+ * - Binários (foto de perfil, galeria/arquivo): requestBlob com os mesmos headers.
  *
  * @see vite.config.js — proxy /api, reescrita de cookie para dev same-origin
  * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
  */
 
-import { DEFAULT_ORG_ID } from '../config/apiEnv';
+import { DEFAULT_ORG_ID, resolveApiUrl } from '../config/apiEnv';
 
 let currentOrgId = DEFAULT_ORG_ID;
 
@@ -29,6 +30,82 @@ export function setOrgId(id) {
 }
 export function getOrgId() {
   return currentOrgId;
+}
+
+const ACCESS_TOKEN_LS = 'procedi_access_token';
+
+function readStoredAccessToken() {
+  try {
+    const v = sessionStorage.getItem(ACCESS_TOKEN_LS);
+    return v && String(v).trim() ? String(v).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+let accessTokenMemory = readStoredAccessToken();
+
+/** Grava token devolvido no login/register/me; limpar no logout. Persiste na sessão da aba (F5 mantém). */
+export function setAccessToken(token) {
+  const t =
+    token != null && typeof token === 'string' && token.trim() ? String(token).trim() : null;
+  accessTokenMemory = t;
+  try {
+    if (t) sessionStorage.setItem(ACCESS_TOKEN_LS, t);
+    else sessionStorage.removeItem(ACCESS_TOKEN_LS);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getAccessToken() {
+  return accessTokenMemory;
+}
+
+function bearerAuthorizationHeader() {
+  const t = accessTokenMemory;
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+function withAuthHeaders(base) {
+  const h = base && typeof base === 'object' ? { ...base } : {};
+  Object.assign(h, bearerAuthorizationHeader());
+  return h;
+}
+
+/**
+ * Headers para `fetch` fora deste módulo (ex.: logout, journey photos).
+ * @param {{ needsOrg?: boolean }} opts
+ */
+export function authHeadersForFetch({ needsOrg = true } = {}) {
+  const h = bearerAuthorizationHeader();
+  if (needsOrg && currentOrgId) h['X-Org-Id'] = currentOrgId;
+  return h;
+}
+
+async function requestDelete(path, { needsOrg = true } = {}) {
+  const headers = withAuthHeaders({});
+  if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
+  const url = path.startsWith('http') ? path : resolveApiUrl(path);
+  const res = await fetch(url, { method: 'DELETE', credentials: 'include', headers });
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  const text = await res.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 /** Texto de erro estável para UI e logs (sempre com código HTTP). */
@@ -40,11 +117,13 @@ function buildApiErrorMessage(status, body, statusText) {
 }
 
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
-  const headers = { 'Content-Type': 'application/json', ...fetchOpts.headers };
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json', ...fetchOpts.headers });
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
 
+  const url = path.startsWith('http') ? path : resolveApiUrl(path);
+
   // Sempre enviar cookie HttpOnly `jwt` (same-origin :5173 + proxy /api). Nunca use 'omit' aqui.
-  const res = await fetch(path, {
+  const res = await fetch(url, {
     ...fetchOpts,
     headers,
     credentials: 'include',
@@ -64,6 +143,84 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   return res.json();
 }
 
+/** POST multipart (FormData): não define Content-Type para o browser enviar boundary. */
+async function requestForm(path, { needsOrg = true, method = 'POST', body, ...rest } = {}) {
+  const headers = withAuthHeaders({ ...rest.headers });
+  if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
+
+  const url = path.startsWith('http') ? path : resolveApiUrl(path);
+
+  const res = await fetch(url, {
+    ...rest,
+    method,
+    body,
+    headers,
+    credentials: 'include',
+  });
+
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+    const resBody = await res.json().catch(() => ({}));
+    const err = new Error(buildApiErrorMessage(res.status, resBody, res.statusText));
+    err.status = res.status;
+    err.body = resBody;
+    throw err;
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    return res.json();
+  }
+  return null;
+}
+
+/** Deduplica GETs binários simultâneos (Strict Mode / várias miniaturas) — mesma URL + org → uma requisição. */
+const blobInflight = new Map();
+
+/** GET binário (ex.: foto de perfil) com cookie + Bearer + X-Org-Id — não usar <img src="/api/..."> em rotas que exigem org. */
+async function requestBlob(path, { needsOrg = true } = {}) {
+  const headers = withAuthHeaders({});
+  if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
+  const url = path.startsWith('http') ? path : resolveApiUrl(path);
+  const tokenMark = accessTokenMemory ? 'b' : 'c';
+  const dedupeKey = `${needsOrg ? String(currentOrgId || '') : '_'}|${tokenMark}|${url}`;
+  const existing = blobInflight.get(dedupeKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const res = await fetch(url, { method: 'GET', credentials: 'include', headers });
+      if (!res.ok) {
+        // Não disparar auth:expired aqui (ver comentário anterior no histórico).
+        const body = await res.json().catch(() => ({}));
+        if (import.meta.env.DEV && res.status === 401) {
+          console.warn(
+            '[api] requestBlob 401 — envie Cookie jwt e/ou Authorization Bearer (accessToken do login) + X-Org-Id. ' +
+              'Org:',
+            currentOrgId || '(vazio)',
+            ' Bearer:',
+            accessTokenMemory ? '(presente)' : '(ausente)',
+            '\n URL:',
+            url,
+          );
+        }
+        const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
+        err.status = res.status;
+        err.body = body;
+        throw err;
+      }
+      return res.blob();
+    } finally {
+      blobInflight.delete(dedupeKey);
+    }
+  })();
+
+  blobInflight.set(dedupeKey, promise);
+  return promise;
+}
+
 // ── Pacientes ──────────────────────────────────────────────
 
 export const pacientesApi = {
@@ -73,6 +230,98 @@ export const pacientesApi = {
   create: (data) => request('/api/v1/pacientes', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/api/v1/pacientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/pacientes/${id}`, { method: 'DELETE' }),
+  /** Multipart `file` — backend normaliza para JPEG 480px; tipos jpeg/png/webp, limite ~5 MiB. */
+  uploadFotoPerfil: (pacienteId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return requestForm(`/api/v1/pacientes/${pacienteId}/foto-perfil`, { method: 'POST', body: fd });
+  },
+  removeFotoPerfil: (pacienteId) =>
+    requestDelete(`/api/v1/pacientes/${pacienteId}/foto-perfil`),
+  /**
+   * GET foto de perfil com os mesmos headers que o restante da API (jwt + X-Org-Id).
+   * @param {string} pacienteId UUID
+   * @param {string} [fotoPerfilUrlHint] path (/api/v1/.../foto-perfil?v=…) ou URL absoluta do DTO
+   */
+  getFotoPerfilBlob: (pacienteId, fotoPerfilUrlHint) => {
+    const hint = typeof fotoPerfilUrlHint === 'string' ? fotoPerfilUrlHint.trim() : '';
+    let path;
+    if (hint.startsWith('http://') || hint.startsWith('https://')) {
+      path = hint;
+    } else if (hint.startsWith('/')) {
+      path = hint;
+    } else {
+      path = `/api/v1/pacientes/${pacienteId}/foto-perfil`;
+    }
+    return requestBlob(path, { needsOrg: true });
+  },
+};
+
+/**
+ * Galeria de evolução — PacienteController (jwt cookie + X-Org-Id, mesmo padrão que /pacientes/**).
+ *
+ * GET    /api/v1/pacientes/{id}/galeria  → { fotos: [...] }; query opcional: dataDesde, dataAte,
+ *        catalogoProcedimentoSaudeId, procedimentoFeitoId (datas YYYY-MM-DD).
+ * POST   /api/v1/pacientes/{id}/galeria  → multipart file + opcionais (dataReferencia, legenda, …)
+ * DELETE /api/v1/pacientes/{id}/galeria/{fotoId} → 204
+ * Arquivo: GET …/galeria/{fotoId}/arquivo?v=… — usar fetch+blob (X-Org-Id), não <img src> direto se a rota exigir org.
+ *
+ * Normalização: src/utils/pacienteGaleria.js
+ */
+function buildGaleriaListPath(pacienteId, filters = {}) {
+  const params = new URLSearchParams();
+  const f = filters && typeof filters === 'object' ? filters : {};
+  if (f.dataDesde) params.set('dataDesde', String(f.dataDesde).trim());
+  if (f.dataAte) params.set('dataAte', String(f.dataAte).trim());
+  if (f.catalogoProcedimentoSaudeId) params.set('catalogoProcedimentoSaudeId', String(f.catalogoProcedimentoSaudeId).trim());
+  if (f.procedimentoFeitoId) params.set('procedimentoFeitoId', String(f.procedimentoFeitoId).trim());
+  const q = params.toString();
+  return `/api/v1/pacientes/${pacienteId}/galeria${q ? `?${q}` : ''}`;
+}
+
+export const pacientesGaleriaApi = {
+  list: (pacienteId, filters) => request(buildGaleriaListPath(pacienteId, filters)),
+  /**
+   * Binário da foto (cookie + X-Org-Id). `pathOrUrl`: path /api/v1/.../arquivo?… ou URL absoluta.
+   */
+  fetchArquivoBlob: (pathOrUrl) => {
+    const raw = typeof pathOrUrl === 'string' ? pathOrUrl.trim() : '';
+    if (!raw) return Promise.reject(new Error('URL da imagem vazia.'));
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return requestBlob(raw, { needsOrg: true });
+    }
+    const path = raw.startsWith('/') ? raw : `/${raw}`;
+    return requestBlob(path, { needsOrg: true });
+  },
+  upload: (pacienteId, file, options = {}) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const {
+      roleUserId,
+      dataReferencia,
+      catalogoProcedimentoSaudeId,
+      procedimentoFeitoId,
+      legenda,
+    } = options;
+    if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
+      fd.append('roleUserId', String(roleUserId));
+    }
+    if (dataReferencia != null && String(dataReferencia).trim()) {
+      fd.append('dataReferencia', String(dataReferencia).trim());
+    }
+    if (catalogoProcedimentoSaudeId != null && String(catalogoProcedimentoSaudeId).trim()) {
+      fd.append('catalogoProcedimentoSaudeId', String(catalogoProcedimentoSaudeId).trim());
+    }
+    if (procedimentoFeitoId != null && String(procedimentoFeitoId).trim()) {
+      fd.append('procedimentoFeitoId', String(procedimentoFeitoId).trim());
+    }
+    if (legenda != null && String(legenda).trim()) {
+      fd.append('legenda', String(legenda).trim());
+    }
+    return requestForm(`/api/v1/pacientes/${pacienteId}/galeria`, { method: 'POST', body: fd });
+  },
+  remove: (pacienteId, fotoId) =>
+    requestDelete(`/api/v1/pacientes/${pacienteId}/galeria/${encodeURIComponent(fotoId)}`),
 };
 
 // ── Notas do paciente ──────────────────────────────────────

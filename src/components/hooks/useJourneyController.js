@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useToast } from '../../contexts/useToast.js';
+import { authHeadersForFetch } from '../../services/api.js';
 
 export function useJourneyController({
   state,
@@ -285,6 +286,7 @@ export function useJourneyController({
             method: 'POST',
             body: form,
             credentials: 'include',
+            headers: { ...authHeadersForFetch() },
           });
         } catch {
           // ignore

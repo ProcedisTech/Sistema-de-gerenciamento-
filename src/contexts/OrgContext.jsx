@@ -17,8 +17,15 @@ function readLs(key, fallback) {
   }
 }
 
+function readInitialOrgIdSynced() {
+  const initial = readLs(LS_ORG, DEFAULT_ORG_ID);
+  /** Antes do primeiro useEffect: garante que api.js já usa a org do localStorage (evita 401 em /v1 com org errada). */
+  apiSetOrgId(initial);
+  return initial;
+}
+
 export function OrgProvider({ children }) {
-  const [orgId, setOrgIdState] = useState(() => readLs(LS_ORG, DEFAULT_ORG_ID));
+  const [orgId, setOrgIdState] = useState(readInitialOrgIdSynced);
   const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, ''));
 
   useEffect(() => {
