@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useToast } from '../../contexts/useToast.js';
 import { agendasApi, equipeApi, pacientesApi, catalogosApi, agendamentosApi } from '../../services/api';
 import { mapAgendaDtoToAppointment, addMinutesToTime } from '../../utils/agendaMapping';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
@@ -12,6 +13,7 @@ function profissionalRoleUserId(p) {
 }
 
 export function useAgendaController({ patients, setPatients, maskCPF, maskTelefone, authEnabled = false }) {
+  const toast = useToast();
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const [appointments, setAppointments] = useState([]);
@@ -311,6 +313,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       setCalendarYear(Number(agendaDate.slice(0, 4)));
       setCalendarMonthIndex(Number(agendaDate.slice(5, 7)) - 1);
       closeAgendaModal();
+      toast.success('Horário criado na agenda.');
     } catch (e) {
       setAgendaModalError(formatAgendamentoApiError(e));
     } finally {
@@ -359,6 +362,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       });
       await fetchMonthAgendas();
       closeCompromissoModal();
+      toast.success('Compromisso marcado com sucesso.');
     } catch (e) {
       console.warn('[agendamentos] POST /api/v1/agendamentos falhou:', e.status, e.message);
       setCompromissoModalError(formatAgendamentoApiError(e));
@@ -372,8 +376,9 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
     try {
       await agendamentosApi.remove(compromissoRowId);
       await fetchMonthAgendas();
+      toast.info('Compromisso removido.');
     } catch (e) {
-      alert(formatAgendamentoApiError(e));
+      toast.error(formatAgendamentoApiError(e));
     }
   };
 
@@ -382,8 +387,9 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
     try {
       await agendasApi.cancelar(appointmentId);
       await fetchMonthAgendas();
+      toast.info('Horário cancelado.');
     } catch (e) {
-      alert(e.message || 'Não foi possível cancelar o horário.');
+      toast.error(e.message || 'Não foi possível cancelar o horário.');
     }
   };
 

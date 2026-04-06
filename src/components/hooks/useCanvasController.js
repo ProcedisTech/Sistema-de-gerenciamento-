@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useToast } from '../../contexts/useToast.js';
 
 export function useCanvasController({
   currentStep,
@@ -7,6 +8,7 @@ export function useCanvasController({
   setPatients,
   setEvaluationSelectedPhotoIndex,
 }) {
+  const toast = useToast();
   const [imageSrc, setImageSrc] = useState(null);
   const [activeTool, setActiveTool] = useState('draw');
   const [activeColor, setActiveColor] = useState('#ef4444');
@@ -125,7 +127,7 @@ export function useCanvasController({
     if (!overlayCanvas) return;
 
     if (!paths || paths.length === 0) {
-      alert('Desenhe algo no canvas antes de salvar.');
+      toast.warning('Desenhe algo no canvas antes de salvar.');
       return;
     }
 
@@ -177,7 +179,7 @@ export function useCanvasController({
       );
     }
 
-    alert('Foto desenhada salva na ficha do paciente (mock).');
+    toast.success('Foto anotada salva na ficha do paciente.');
   };
 
   useEffect(() => {

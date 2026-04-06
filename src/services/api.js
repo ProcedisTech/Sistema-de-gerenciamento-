@@ -2,13 +2,12 @@
  * Cliente HTTP do frontend para o Spring Boot (mesma origem em dev via Vite: :5173 → proxy /api → :8080).
  *
  * Autenticação
- * - JWT em cookie HttpOnly nome `jwt`, definido pelo backend em POST /api/auth/login e /api/auth/register.
+ * - JWT em cookie HttpOnly nome `jwt`, definido pelo backend em POST /api/auth/login.
  * - Todas as chamadas usam credentials: 'include' para enviar o cookie.
  * - 401 em rotas protegidas = sessão ausente ou expirada (não indica que o servidor está offline).
  *
  * Rotas públicas (exemplos)
  * - POST /api/auth/login   body: { username, password }
- * - POST /api/auth/register body: { username, email, password } — senha 8–128 chars
  *
  * Autenticado (cookie + eventualmente Bearer se o backend passar a expor no JSON — hoje não usamos Bearer no client)
  * - GET /api/auth/me — 401 = usuário não logado
@@ -40,7 +39,7 @@ function buildApiErrorMessage(status, body, statusText) {
   return trimmed ? `[HTTP ${status}] ${trimmed}` : `[HTTP ${status}]`;
 }
 
-async function request(path, { needsOrg = true, credentials: _omitCredentials, ...fetchOpts } = {}) {
+async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   const headers = { 'Content-Type': 'application/json', ...fetchOpts.headers };
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
 

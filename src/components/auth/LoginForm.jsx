@@ -1,7 +1,7 @@
 import React from 'react';
-import { Shield, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { Shield, Eye, EyeOff } from 'lucide-react';
 
-export function LoginForm({ username, setUsername, password, setPassword, showPassword, setShowPassword, handleLogin, loginSubmitting, loginError, onShowRegister }) {
+export function LoginForm({ username, setUsername, password, setPassword, showPassword, setShowPassword, handleLogin, loginSubmitting, loginError }) {
   return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb]">
       <div className="w-full max-w-[420px] mx-4">
@@ -74,18 +74,6 @@ export function LoginForm({ username, setUsername, password, setPassword, showPa
                 {loginSubmitting ? 'Entrando…' : 'Entrar no Sistema'}
               </button>
             </form>
-
-            <div className="mt-4 pt-4 border-t-[2px] border-[#00a88e]/10">
-              <button
-                type="button"
-                onClick={onShowRegister}
-                disabled={loginSubmitting}
-                className="w-full bg-transparent hover:bg-[#f0fdfa] disabled:opacity-60 disabled:cursor-not-allowed text-[#00a88e] py-3 px-4 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/30 hover:border-[#00a88e]/60 flex items-center justify-center gap-2"
-              >
-                <UserPlus className="w-5 h-5" strokeWidth={2.5} />
-                Criar Usuário
-              </button>
-            </div>
           </div>
         </div>
       </div>

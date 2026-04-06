@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
+import { useToast } from '../../contexts/useToast.js';
 
 export function useJourneyController({
   state,
   setters,
   helpers,
 }) {
+  const toast = useToast();
   const {
     currentStep,
     activeTab,
@@ -188,7 +190,7 @@ export function useJourneyController({
 
     if (currentStep === 2) {
       if (!queixa.trim() || !expectativas.trim()) {
-        alert('Por favor, preencha a Queixa Principal e as Expectativas antes de avancar.');
+        toast.warning('Para prosseguir, preencha a queixa principal e as expectativas.');
         return;
       }
     }
@@ -290,7 +292,7 @@ export function useJourneyController({
       };
 
       Promise.resolve(sendPhoto()).finally(() => {
-        alert('Jornada finalizada e paciente salvo com sucesso!');
+        toast.success('Jornada finalizada e paciente salvo com sucesso.');
         resetJourney();
         setIsFinishing(false);
       });

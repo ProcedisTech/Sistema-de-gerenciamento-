@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { anamneseApi, pacientesApi, notasApi, procedimentosApi } from '../../services/api';
+import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
 
 function renderRespostaValue(resp) {
@@ -176,6 +177,7 @@ export function PatientProfileView({
   refreshPatients,
   roleUserId,
 }) {
+  const toast = useToast();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
@@ -410,7 +412,9 @@ export function PatientProfileView({
 
     if (selectedPatient?.id) {
       if (!roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
-        alert('Selecione o profissional (roleUserId) na barra de contexto ou faça login com usuário vinculado à equipe.');
+        toast.warning(
+          'Selecione o profissional na barra de contexto ou faça login com usuário vinculado à equipe para salvar a nota.'
+        );
         return;
       }
       try {
@@ -423,7 +427,7 @@ export function PatientProfileView({
         setApiNotes(Array.isArray(list) ? list : []);
         setQuickNoteText('');
       } catch (e) {
-        alert(e.message || 'Erro ao salvar nota.');
+        toast.error(e.message || 'Erro ao salvar nota.');
       }
       return;
     }

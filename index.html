@@ -8,6 +8,25 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Pilha de toasts fora de #root: evita overflow/transform cortarem ou empilharem errado -->
+    <div
+      id="procedi-toast-root"
+      aria-label="Notificações"
+      style="
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        z-index: 2147483647;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 1rem;
+        padding-top: max(1rem, env(safe-area-inset-top, 0px));
+      "
+    ></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
