@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Eye, EyeOff } from 'lucide-react';
+import { Shield, Eye, EyeOff, Wifi } from 'lucide-react';
 
 export function LoginForm({ username, setUsername, password, setPassword, showPassword, setShowPassword, handleLogin, loginSubmitting, loginError }) {
   return (
@@ -14,7 +14,15 @@ export function LoginForm({ username, setUsername, password, setPassword, showPa
 
           <div className="p-10">
             <h1 className="text-[28px] font-bold text-[#0f172a] mb-2">Procedi</h1>
-            <p className="text-[#64748b] text-[14px] mb-8 font-medium">Sistema de Gerenciamento Premium</p>
+            <p className="text-[#64748b] text-[14px] mb-3 font-medium">Sistema de Gerenciamento Premium</p>
+            <p className="mb-8 flex items-center gap-2 text-[12px] font-semibold text-[#0f766e]">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00a88e] opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#00a88e]" />
+              </span>
+              <Wifi className="h-3.5 w-3.5 opacity-90" strokeWidth={2.5} aria-hidden />
+              Servidor da API conectado — você pode entrar.
+            </p>
 
             {loginError && (
               <div className="mb-6 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-4 text-[13px] font-bold">

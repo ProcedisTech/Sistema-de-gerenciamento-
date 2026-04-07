@@ -1,15 +1,21 @@
 /**
  * Auth contra Spring Boot (cookie HttpOnly `jwt`).
  *
- * - GET /api/auth/me com 401 = não logado (estado local limpo; não é falha de rede).
- * - Login: POST com credentials:'include'; sessão vem no Set-Cookie.
- * - Resposta típica: { ok: true, user: { id, username, role, roleUserId, organizacaoSaudeId? } }
- *   e/ou organizacaoSaudeId no raiz — usamos para setOrgId (header X-Org-Id).
+ * - GET /api/auth/me com 401 = não logado (esperado; o DevTools pode listar em vermelho — não é bug).
+ * - Snapshot deduplicado (authMeProbe): BackendGate + este hook + StrictMode compartilham uma requisição.
+ * - Login: POST com credentials:'include'; sessão vem no Set-Cookie e pode vir accessToken no JSON.
+ * - accessToken → sessionStorage + Authorization: Bearer nas chamadas api.js (complementa o cookie).
+ * - Resposta típica: { ok: true, user: { … }, accessToken?, organizacaoSaudeId? } — org para X-Org-Id.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../utils/formatters';
-import { extractOrganizacaoIdFromAuthResponse } from '../../utils/authPayload';
+import {
+  extractAccessTokenFromAuthResponse,
+  extractOrganizacaoIdFromAuthResponse,
+} from '../../utils/authPayload';
+import { authHeadersForFetch, setAccessToken } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
+import { fetchAuthMeSnapshot, invalidateAuthMeCache } from '../../utils/authMeProbe.js';
 
 function normalizeAuthUser(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -90,20 +96,22 @@ export const useAuthState = (options = {}) => {
       if (!cancelled) setAuthReady(true);
     }, 2000);
 
-    fetch(api('/api/auth/me'), { credentials: 'include' })
-      .then(async (res) => {
+    fetchAuthMeSnapshot()
+      .then((snap) => {
         if (cancelled) return;
-        if (res.status === 401) {
+        if (snap.status === 401) {
           setIsLoggedIn(false);
           setAuthUser(null);
           return;
         }
-        if (!res.ok) {
+        if (!snap.ok) {
           setIsLoggedIn(false);
           setAuthUser(null);
           return;
         }
-        const data = await res.json().catch(() => ({}));
+        const data = snap.payload || {};
+        const tok = extractAccessTokenFromAuthResponse(data);
+        if (tok) setAccessToken(tok);
         syncOrganizacaoFromAuthPayload(data);
         const user = data?.user;
         if (user) {
@@ -163,6 +171,9 @@ export const useAuthState = (options = {}) => {
       if (data.user) {
         applySessionUser(data.user);
       }
+      const tok = extractAccessTokenFromAuthResponse(data);
+      if (tok) setAccessToken(tok);
+      invalidateAuthMeCache();
       setIsLoggedIn(true);
       setPassword('');
       toastSuccess('Login realizado com sucesso.');
@@ -180,10 +191,13 @@ export const useAuthState = (options = {}) => {
       await fetch(api('/api/auth/logout'), {
         method: 'POST',
         credentials: 'include',
+        headers: { ...authHeadersForFetch({ needsOrg: false }) },
       });
     } catch {
       /* sessão localmente encerrada */
     }
+    setAccessToken(null);
+    invalidateAuthMeCache();
     if (typeof setRoleUserId === 'function') setRoleUserId('');
     setIsLoggedIn(false);
     setAuthUser(null);

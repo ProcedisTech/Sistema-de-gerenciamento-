@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
   ArrowLeft,
   Bell,
   Camera,
+  Cake,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -20,12 +21,49 @@ import {
   Save,
   Shield,
   StickyNote,
+  Trash2,
+  Upload,
   User as UserIcon,
   X,
 } from 'lucide-react';
-import { anamneseApi, pacientesApi, notasApi, procedimentosApi } from '../../services/api';
+import {
+  anamneseApi,
+  pacientesApi,
+  pacientesGaleriaApi,
+  notasApi,
+  procedimentosApi,
+} from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import {
+  birthdayModalStorageKey,
+  getBirthdayAlertInfo,
+  parsePatientBirthDate,
+} from '../../utils/birthday.js';
+import {
+  compressImageFileToJpegDataUrl,
+  getPatientProfilePhotoDisplayUrl,
+  profilePhotoStorageKey,
+  setStoredProfilePhotoDataUrl,
+} from '../../utils/patientProfilePhoto.js';
+import { PatientAvatar } from './PatientAvatar.jsx';
+import {
+  formatPacienteGaleriaError,
+  normalizePacienteGaleriaItem,
+  normalizePacienteGaleriaResponse,
+} from '../../utils/pacienteGaleria.js';
+import {
+  GaleriaArquivoImage,
+  GaleriaArquivoLightbox,
+  GaleriaLocalImage,
+} from './GaleriaArquivoImage.jsx';
+
+function birthdayAlertSidebarCopy(alert) {
+  if (!alert) return null;
+  if (alert.isToday) return 'Aniversário hoje — celebre com o paciente!';
+  if (alert.daysUntil === 1) return 'Aniversário amanhã';
+  return `Aniversário em ${alert.daysUntil} dias`;
+}
 
 function renderRespostaValue(resp) {
   if (resp.opcaoSelecionada) return resp.opcaoSelecionada;
@@ -179,21 +217,152 @@ export function PatientProfileView({
 }) {
   const toast = useToast();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
+  const birthParts = useMemo(
+    () => parsePatientBirthDate(patient.dataNascimento),
+    [patient.dataNascimento],
+  );
+  const birthAlert = birthParts ? getBirthdayAlertInfo(birthParts) : null;
+  const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
   const [editing, setEditing] = useState(null);
-  const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
+  /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
+  const [galleryPreview, setGalleryPreview] = useState(null);
   const [quickNoteText, setQuickNoteText] = useState('');
   const [galleryCameraOpen, setGalleryCameraOpen] = useState(false);
   const [galleryCameraError, setGalleryCameraError] = useState('');
   const [galleryCameraStarting, setGalleryCameraStarting] = useState(false);
   const [galleryVideoReady, setGalleryVideoReady] = useState(false);
+  /** 'loading' | 'api' = lista no servidor; 'local' = fallback (fotos da jornada / legado). */
+  const [galeriaBackend, setGaleriaBackend] = useState('loading');
+  const [apiGaleriaItems, setApiGaleriaItems] = useState([]);
+  const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const galleryVideoRef = useRef(null);
   const galleryStreamRef = useRef(null);
+  const profilePhotoInputRef = useRef(null);
 
   const isEditing = Boolean(editing);
+
+  const profilePhotoDisplayUrl = getPatientProfilePhotoDisplayUrl(patient);
+
+  const applyProfilePhoto = useCallback(
+    (dataUrl) => {
+      const key = profilePhotoStorageKey(selectedPatient);
+      if (dataUrl && key) setStoredProfilePhotoDataUrl(key, dataUrl);
+      if (!dataUrl && key) setStoredProfilePhotoDataUrl(key, null);
+      if (selectedPatient?.id) {
+        mergePatientById?.(selectedPatient.id, (prev) => ({ ...prev, fotoPerfilUrl: dataUrl || '' }));
+      }
+      if (selectedPatient?.cpf) {
+        onUpdatePatient?.(selectedPatient.cpf, { fotoPerfilUrl: dataUrl || '' });
+      }
+    },
+    [selectedPatient, mergePatientById, onUpdatePatient],
+  );
+
+  const mergeServerPatientIntoState = useCallback(
+    (dto) => {
+      if (!selectedPatient?.id || !dto) return;
+      const mapped = mapBackendPatient(dto);
+      mergePatientById?.(selectedPatient.id, (prev) => ({
+        ...mapped,
+        fotoPerfilUrl: mapped.fotoPerfilUrl ?? '',
+        evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
+        evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
+        evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
+        galeria: prev.galeria,
+        documentos: prev.documentos,
+        notas: prev.notas,
+        procedures: prev.procedures,
+        medicamentos: prev.medicamentos,
+        condicoesSaude: prev.condicoesSaude,
+        alergias: prev.alergias,
+      }));
+      if (selectedPatient.cpf) {
+        onUpdatePatient?.(selectedPatient.cpf, { fotoPerfilUrl: mapped.fotoPerfilUrl ?? '' });
+      }
+    },
+    [selectedPatient?.id, selectedPatient?.cpf, mergePatientById, onUpdatePatient],
+  );
+
+  const isServerProfilePhotoType = (file) => {
+    const t = (file?.type || '').toLowerCase();
+    return (
+      t === 'image/jpeg' ||
+      t === 'image/jpg' ||
+      t === 'image/png' ||
+      t === 'image/webp'
+    );
+  };
+
+  const handleProfilePhotoFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (selectedPatient?.id) {
+      if (file.type && !isServerProfilePhotoType(file)) {
+        toast.error('Use JPEG, PNG ou WebP (como no cadastro do servidor).');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Arquivo acima de 5 MB. Escolha uma imagem menor.');
+        return;
+      }
+      setProfilePhotoBusy(true);
+      try {
+        const updated = await pacientesApi.uploadFotoPerfil(selectedPatient.id, file);
+        const key = profilePhotoStorageKey(selectedPatient);
+        if (key) setStoredProfilePhotoDataUrl(key, null);
+        const sameId =
+          updated &&
+          typeof updated === 'object' &&
+          String(updated.id) === String(selectedPatient.id);
+        const dto = sameId ? updated : await pacientesApi.get(selectedPatient.id);
+        mergeServerPatientIntoState(dto);
+        refreshPatients?.();
+        toast.success('Foto de perfil salva no servidor.');
+      } catch (err) {
+        toast.error(err?.message || 'Não foi possível enviar a foto.');
+      } finally {
+        setProfilePhotoBusy(false);
+      }
+      return;
+    }
+
+    try {
+      const dataUrl = await compressImageFileToJpegDataUrl(file, 480, 0.86);
+      applyProfilePhoto(dataUrl);
+      toast.success('Foto de perfil atualizada (somente neste aparelho).');
+    } catch (err) {
+      toast.error(err?.message || 'Não foi possível usar esta imagem.');
+    }
+  };
+
+  const handleRemoveProfilePhoto = async () => {
+    if (selectedPatient?.id) {
+      setProfilePhotoBusy(true);
+      try {
+        await pacientesApi.removeFotoPerfil(selectedPatient.id);
+        const dto = await pacientesApi.get(selectedPatient.id);
+        const key = profilePhotoStorageKey(selectedPatient);
+        if (key) setStoredProfilePhotoDataUrl(key, null);
+        mergeServerPatientIntoState(dto);
+        refreshPatients?.();
+        toast.info('Foto de perfil removida.');
+      } catch (err) {
+        toast.error(err?.message || 'Não foi possível remover a foto.');
+      } finally {
+        setProfilePhotoBusy(false);
+      }
+      return;
+    }
+    applyProfilePhoto('');
+    toast.info('Foto de perfil removida.');
+  };
+
 
   const createEditDraft = () => ({
     nome: patient.nome || '',
@@ -241,7 +410,21 @@ export function PatientProfileView({
     return flattened;
   }, [patient]);
 
-  const galleryItems = capturedPhotos.length > 0 ? capturedPhotos : fallbackGalleryPhotos;
+  const galleryItemsForGrid = useMemo(() => {
+    if (galeriaBackend === 'api') {
+      return apiGaleriaItems.map((it) => ({
+        id: `api_${it.serverId}`,
+        url: it.url,
+        fileName: it.fileName,
+        legenda: it.legenda,
+        dataReferencia: it.dataReferencia,
+        serverId: it.serverId,
+        source: 'api',
+        index: -1,
+      }));
+    }
+    return capturedPhotos.length > 0 ? capturedPhotos : fallbackGalleryPhotos;
+  }, [galeriaBackend, apiGaleriaItems, capturedPhotos, fallbackGalleryPhotos]);
 
   const consentTerms = useMemo(() => {
     const terms = [];
@@ -254,6 +437,36 @@ export function PatientProfileView({
     if (patient.satisfacao) terms.push('Satisfacao com resultado confirmada');
     return terms;
   }, [patient]);
+
+  const dismissBirthdayModal = useCallback(() => {
+    const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
+    const todayKey = new Date().toISOString().slice(0, 10);
+    try {
+      sessionStorage.setItem(birthdayModalStorageKey(cpf, todayKey), '1');
+    } catch (_) {
+      /* ignore */
+    }
+    setBirthdayModalOpen(false);
+  }, [patient.cpf, selectedPatient?.id]);
+
+  useEffect(() => {
+    if (!birthAlert?.isToday) {
+      setBirthdayModalOpen(false);
+      return;
+    }
+    const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const key = birthdayModalStorageKey(cpf, todayKey);
+    try {
+      if (sessionStorage.getItem(key) === '1') {
+        setBirthdayModalOpen(false);
+        return;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    setBirthdayModalOpen(true);
+  }, [birthAlert?.isToday, patient.cpf, selectedPatient?.id]);
 
   useEffect(() => {
     const id = selectedPatient?.id;
@@ -269,16 +482,20 @@ export function PatientProfileView({
         ]);
         if (cancelled) return;
         if (dto) {
-          mergePatientById?.(id, (prev) => ({
-            ...mapBackendPatient(dto),
-            evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
-            evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
-            evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
-            galeria: prev.galeria,
-            documentos: prev.documentos,
-            notas: prev.notas,
-            procedures: prev.procedures,
-          }));
+          mergePatientById?.(id, (prev) => {
+            const mapped = mapBackendPatient(dto);
+            return {
+              ...mapped,
+              fotoPerfilUrl: mapped.fotoPerfilUrl ?? prev.fotoPerfilUrl,
+              evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
+              evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
+              evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
+              galeria: prev.galeria,
+              documentos: prev.documentos,
+              notas: prev.notas,
+              procedures: prev.procedures,
+            };
+          });
         }
         setApiNotes(Array.isArray(notasList) ? notasList : []);
         setApiProcedures(Array.isArray(procList) ? procList : []);
@@ -295,6 +512,38 @@ export function PatientProfileView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recarregar só ao trocar paciente
+  }, [selectedPatient?.id]);
+
+  useEffect(() => {
+    const id = selectedPatient?.id;
+    if (!id) {
+      setGaleriaBackend('local');
+      setApiGaleriaItems([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setGaleriaBackend('loading');
+    setApiGaleriaItems([]);
+    (async () => {
+      try {
+        const data = await pacientesGaleriaApi.list(id);
+        if (cancelled) return;
+        setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
+        setGaleriaBackend('api');
+      } catch (e) {
+        if (cancelled) return;
+        setApiGaleriaItems([]);
+        setGaleriaBackend('local');
+        // 401/403 = sessão/org; 404 = rota inexistente — fallback local sem alarme no console.
+        const st = e?.status;
+        if (st != null && st !== 401 && st !== 403 && st !== 404) {
+          console.warn('[PatientProfileView] Galeria API:', e.message);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedPatient?.id]);
 
   const displayNotes = useMemo(() => {
@@ -343,17 +592,32 @@ export function PatientProfileView({
       });
     });
 
-    capturedPhotos.forEach((photo, idx) => {
-      events.push({
-        id: `photo_${idx}`,
-        type: 'foto',
-        title: 'Foto adicionada na galeria',
-        meta: photo.capturedAt ? new Date(photo.capturedAt).toLocaleString('pt-BR') : photo.fileName,
+    if (galeriaBackend === 'api') {
+      apiGaleriaItems.forEach((it) => {
+        const title = it.legenda || it.fileName || 'Foto na galeria de evolução';
+        const dataRef = it.dataReferencia ? String(it.dataReferencia) : '';
+        const quando = it.createdAt ? new Date(it.createdAt).toLocaleString('pt-BR') : '';
+        const meta = [dataRef, quando].filter(Boolean).join(' · ') || it.fileName;
+        events.push({
+          id: `galeria_api_${it.serverId}`,
+          type: 'foto',
+          title,
+          meta,
+        });
       });
-    });
+    } else {
+      capturedPhotos.forEach((photo, idx) => {
+        events.push({
+          id: `photo_${idx}`,
+          type: 'foto',
+          title: 'Foto adicionada na galeria',
+          meta: photo.capturedAt ? new Date(photo.capturedAt).toLocaleString('pt-BR') : photo.fileName,
+        });
+      });
+    }
 
     return events;
-  }, [patient, capturedPhotos, apiProcedures]);
+  }, [patient, capturedPhotos, apiProcedures, galeriaBackend, apiGaleriaItems]);
 
   const saveEditProfile = async () => {
     if (!selectedPatient?.id) {
@@ -379,19 +643,24 @@ export function PatientProfileView({
       const payload = mergePacienteDtoWithEditing(dto, editing);
       await pacientesApi.update(selectedPatient.id, payload);
       const fresh = await pacientesApi.get(selectedPatient.id);
-      mergePatientById?.(selectedPatient.id, (prev) => ({
-        ...mapBackendPatient(fresh),
-        evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
-        evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
-        galeria: prev.galeria,
-        documentos: prev.documentos,
-        medicamentos: (editing?.medicamentos || '')
-          .split(',')
-          .map((m) => m.trim())
-          .filter(Boolean),
-        condicoesSaude: editing?.condicoesSaude ?? prev.condicoesSaude,
-        alergias: editing?.alergias ?? prev.alergias,
-      }));
+      mergePatientById?.(selectedPatient.id, (prev) => {
+        const mapped = mapBackendPatient(fresh);
+        return {
+          ...mapped,
+          fotoPerfilUrl: mapped.fotoPerfilUrl ?? prev.fotoPerfilUrl,
+          evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
+          evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
+          evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
+          galeria: prev.galeria,
+          documentos: prev.documentos,
+          medicamentos: (editing?.medicamentos || '')
+            .split(',')
+            .map((m) => m.trim())
+            .filter(Boolean),
+          condicoesSaude: editing?.condicoesSaude ?? prev.condicoesSaude,
+          alergias: editing?.alergias ?? prev.alergias,
+        };
+      });
       refreshPatients?.();
       setEditing(null);
     } catch (e) {
@@ -399,11 +668,57 @@ export function PatientProfileView({
     }
   };
 
-  const handleUploadGalleryFiles = (event) => {
+  const handleRemoveGalleryItem = async (item) => {
+    if (item.source === 'api' && item.serverId && selectedPatient?.id) {
+      try {
+        await pacientesGaleriaApi.remove(selectedPatient.id, item.serverId);
+        setApiGaleriaItems((prev) => prev.filter((x) => x.serverId !== item.serverId));
+        toast.success('Foto removida da galeria.');
+      } catch (e) {
+        toast.error(formatPacienteGaleriaError(e));
+      }
+      return;
+    }
+    if (typeof item.index === 'number' && item.index >= 0) {
+      onDeleteGalleryPhoto?.(selectedPatient.cpf, item.index);
+    }
+  };
+
+  const handleUploadGalleryFiles = async (event) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    onAddGalleryFiles?.(selectedPatient.cpf, files);
+    const fileArr = Array.from(files).filter((f) => f.type.startsWith('image/'));
     event.target.value = '';
+    if (fileArr.length === 0) return;
+
+    if (selectedPatient?.id && galeriaBackend === 'api') {
+      try {
+        const slice = fileArr.slice(0, 15);
+        let mergedSingle = false;
+        for (const file of slice) {
+          const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, { roleUserId });
+          if (slice.length === 1) {
+            const one = normalizePacienteGaleriaItem(created);
+            if (one) {
+              setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
+              mergedSingle = true;
+            }
+          }
+        }
+        if (!mergedSingle) {
+          const data = await pacientesGaleriaApi.list(selectedPatient.id);
+          setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
+        }
+        toast.success(
+          fileArr.length === 1 ? 'Foto enviada para a galeria.' : 'Fotos enviadas para a galeria.',
+        );
+      } catch (e) {
+        toast.error(formatPacienteGaleriaError(e));
+      }
+      return;
+    }
+
+    onAddGalleryFiles?.(selectedPatient.cpf, fileArr);
   };
 
   const handleAddQuickNote = async () => {
@@ -518,6 +833,25 @@ export function PatientProfileView({
     if (!blob) return;
 
     const file = new File([blob], `galeria_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    if (selectedPatient?.id && galeriaBackend === 'api') {
+      try {
+        const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, { roleUserId });
+        const one = normalizePacienteGaleriaItem(created);
+        if (one) {
+          setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
+        } else {
+          const data = await pacientesGaleriaApi.list(selectedPatient.id);
+          setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
+        }
+        toast.success('Foto adicionada à galeria.');
+      } catch (e) {
+        toast.error(formatPacienteGaleriaError(e));
+      }
+      closeGalleryCamera();
+      return;
+    }
+
     onAddGalleryFiles?.(selectedPatient.cpf, [file]);
     closeGalleryCamera();
   };
@@ -560,8 +894,57 @@ export function PatientProfileView({
         <div className="lg:col-span-2">
           <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-6 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-              <div className="w-20 h-20 rounded-full bg-[#00a88e] flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">
-                {getPatientInitials(selectedPatient.nome)}
+              <div className="flex flex-col items-center sm:items-start gap-2 flex-shrink-0">
+                <input
+                  ref={profilePhotoInputRef}
+                  type="file"
+                  accept={
+                    selectedPatient?.id
+                      ? 'image/jpeg,image/jpg,image/png,image/webp'
+                      : 'image/*'
+                  }
+                  className="hidden"
+                  disabled={profilePhotoBusy}
+                  onChange={handleProfilePhotoFile}
+                />
+                <PatientAvatar
+                  patient={patient}
+                  getPatientInitials={getPatientInitials}
+                  className="relative w-[88px] h-[88px] rounded-full border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] overflow-hidden flex items-center justify-center shadow-sm"
+                  initialsClassName="text-2xl font-bold"
+                  spinnerClassName="w-7 h-7"
+                />
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-1 max-w-[120px] sm:max-w-none">
+                  <button
+                    type="button"
+                    onClick={() => profilePhotoInputRef.current?.click()}
+                    disabled={profilePhotoBusy}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00a88e] hover:text-[#00967f] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {profilePhotoBusy ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.5} aria-hidden />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden />
+                    )}
+                    {profilePhotoBusy ? 'Enviando…' : 'Enviar foto'}
+                  </button>
+                  {profilePhotoDisplayUrl ? (
+                    <button
+                      type="button"
+                      onClick={handleRemoveProfilePhoto}
+                      disabled={profilePhotoBusy}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#94a3b8] hover:text-red-600 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden />
+                      Remover
+                    </button>
+                  ) : null}
+                </div>
+                <p className="text-[10px] text-[#94a3b8] text-center sm:text-left leading-snug max-w-[200px] sm:max-w-[220px]">
+                  {selectedPatient?.id
+                    ? 'Servidor: JPEG/PNG/WebP até 5 MB; imagem autenticada (cookie). CORS deve incluir a origem do front.'
+                    : 'Referência só neste aparelho até o paciente existir na API.'}
+                </p>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2">
@@ -689,41 +1072,98 @@ export function PatientProfileView({
 
               {patientDetailTab === 'galeria' && (
                 <div className="space-y-6">
-                  <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de Evolucao</h4>
-                  <div className="flex items-center gap-2">
-                    <label className="px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent cursor-pointer">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de Evolucao</h4>
+                    {galeriaBackend === 'loading' && selectedPatient?.id ? (
+                      <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
+                        Sincronizando galeria…
+                      </span>
+                    ) : galeriaBackend === 'api' ? (
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-[#0f766e] bg-[#e6f7f5] border border-[#00a88e]/25 px-2 py-1 rounded-lg w-fit">
+                        Galeria no servidor
+                      </span>
+                    ) : selectedPatient?.id ? (
+                      <span className="text-[11px] font-medium text-[#94a3b8] w-fit max-w-md leading-snug">
+                        Galeria do servidor indisponível — exibindo fotos locais da jornada, se houver.
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label
+                      className={`px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent ${
+                        galeriaBackend === 'loading' && selectedPatient?.id ? 'opacity-50 pointer-events-none' : 'cursor-pointer'
+                      }`}
+                    >
                       <ImageIcon className="w-4 h-4 inline mr-1" /> Upload
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={handleUploadGalleryFiles} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
+                        onChange={handleUploadGalleryFiles}
+                      />
                     </label>
                     <button
                       type="button"
                       onClick={openGalleryCamera}
-                      className="px-3 py-2 rounded-xl bg-white text-[#00a88e] font-bold text-[12px] border-[2px] border-[#00a88e]/25"
+                      disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
+                      className="px-3 py-2 rounded-xl bg-white text-[#00a88e] font-bold text-[12px] border-[2px] border-[#00a88e]/25 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Camera className="w-4 h-4 inline mr-1" /> Tirar na hora
                     </button>
                   </div>
 
-                  {galleryItems.length ? (
+                  {galleryItemsForGrid.length ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {galleryItems.map((item) => (
-                        <div key={item.id} className="relative">
-                          <button type="button" onClick={() => setPreviewPhotoUrl(item.url)} className="aspect-square rounded-xl bg-[#e6f7f5] border-[2px] border-[#00a88e]/15 flex items-center justify-center overflow-hidden w-full">
-                            <img src={item.url} alt={item.fileName} className="w-full h-full object-cover" />
-                          </button>
-                          {item.source !== 'legacy' && (
+                      {galleryItemsForGrid.map((item) => {
+                        const canDelete =
+                          item.source === 'api' || (item.source !== 'legacy' && item.index >= 0);
+                        return (
+                          <div key={item.id} className="relative">
                             <button
                               type="button"
-                              onClick={() => onDeleteGalleryPhoto?.(selectedPatient.cpf, item.index)}
-                              className="absolute top-1 right-1 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[2px] border-white text-[11px] font-bold"
+                              onClick={() =>
+                                setGalleryPreview({
+                                  url: item.url,
+                                  authFetch: item.source === 'api',
+                                  caption: item.fileName,
+                                })
+                              }
+                              className="aspect-square rounded-xl bg-[#e6f7f5] border-[2px] border-[#00a88e]/15 flex items-center justify-center overflow-hidden w-full"
                             >
-                              x
+                              {item.source === 'api' ? (
+                                <GaleriaArquivoImage
+                                  url={item.url}
+                                  alt=""
+                                  className="w-full h-full"
+                                  imgClassName="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <GaleriaLocalImage
+                                  url={item.url}
+                                  alt=""
+                                  imgClassName="w-full h-full object-cover"
+                                />
+                              )}
                             </button>
-                          )}
-                        </div>
-                      ))}
+                            {canDelete ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveGalleryItem(item)}
+                                className="absolute top-1 right-1 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[2px] border-white text-[11px] font-bold"
+                              >
+                                x
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>}
+                  ) : (
+                    <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
+                  )}
                 </div>
               )}
 
@@ -771,10 +1211,29 @@ export function PatientProfileView({
               <h5 className="text-[14px] font-bold text-[#0f172a]">Alertas</h5>
             </div>
             <div className="space-y-2">
-              <div className="bg-white border-[2px] border-amber-200 rounded-lg p-3">
-                <p className="text-[12px] font-bold text-amber-700 flex items-center gap-1.5">
-                  <Bell className="w-3.5 h-3.5" /> Aniversario em 67 dias
-                </p>
+              <div
+                className={`rounded-lg p-3 border-[2px] ${
+                  birthAlert?.isToday
+                    ? 'bg-amber-100 border-amber-400 shadow-sm ring-2 ring-amber-300/50'
+                    : 'bg-white border-amber-200'
+                }`}
+              >
+                {birthAlert ? (
+                  <p
+                    className={`text-[12px] flex items-center gap-1.5 ${
+                      birthAlert.isToday
+                        ? 'font-bold text-amber-900'
+                        : 'font-bold text-amber-700'
+                    }`}
+                  >
+                    <Bell className="w-3.5 h-3.5 flex-shrink-0" />
+                    {birthdayAlertSidebarCopy(birthAlert)}
+                  </p>
+                ) : (
+                  <p className="text-[12px] font-medium text-amber-800/90">
+                    Cadastre a data de nascimento para ver quantos dias faltam para o aniversário.
+                  </p>
+                )}
               </div>
               {selectedPatient.saldoDevedor > 0 && (
                 <div className="bg-red-100 border-[2px] border-red-300 rounded-lg p-3">
@@ -834,11 +1293,77 @@ export function PatientProfileView({
         </div>
       </div>
 
-      {previewPhotoUrl && (
-        <div className="fixed inset-0 z-[220] bg-black/70 flex items-center justify-center p-4" onClick={() => setPreviewPhotoUrl(null)}>
-          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setPreviewPhotoUrl(null)} className="absolute -top-10 right-0 text-white font-bold">Fechar</button>
-            <img src={previewPhotoUrl} alt="Preview da foto" className="max-w-[90vw] max-h-[85vh] rounded-xl border-[3px] border-white/30" />
+      {birthdayModalOpen && birthAlert?.isToday && (
+        <div
+          className="fixed inset-0 z-[240] flex items-center justify-center p-4 bg-black/55"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="birthday-modal-title"
+          onClick={dismissBirthdayModal}
+        >
+          <div
+            className="birthday-modal-pop relative w-full max-w-md rounded-2xl border-[3px] border-amber-300 bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={dismissBirthdayModal}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border-[2px] border-[#e2e8f0] text-[#64748b] transition-colors hover:border-[#00a88e]/30 hover:text-[#00a88e]"
+              aria-label="Fechar"
+            >
+              <X className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+            <div className="mb-4 flex justify-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200">
+                <Cake className="h-9 w-9 text-amber-600" strokeWidth={2.25} />
+              </div>
+            </div>
+            <h3 id="birthday-modal-title" className="text-center text-[18px] font-bold text-[#0f172a]">
+              Aniversário hoje
+            </h3>
+            <p className="mt-3 text-center text-[15px] leading-relaxed text-[#334155]">
+              <span className="font-bold text-[#00a88e]">{patient.nome || 'Paciente'}</span>
+              {' '}
+              completa
+              {' '}
+              <span className="font-bold text-amber-700">{birthAlert.turningAge}</span>
+              {' '}
+              {birthAlert.turningAge === 1 ? 'ano' : 'anos'} hoje.
+            </p>
+            <button
+              type="button"
+              onClick={dismissBirthdayModal}
+              className="mt-6 w-full rounded-xl border-[2px] border-transparent bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[#00967f]"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {galleryPreview && (
+        <div
+          className="fixed inset-0 z-[220] bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setGalleryPreview(null)}
+          role="presentation"
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setGalleryPreview(null)}
+              className="absolute -top-10 right-0 text-white font-bold"
+            >
+              Fechar
+            </button>
+            {galleryPreview.authFetch ? (
+              <GaleriaArquivoLightbox url={galleryPreview.url} alt={galleryPreview.caption || 'Preview da foto'} />
+            ) : (
+              <img
+                src={galleryPreview.url}
+                alt={galleryPreview.caption || 'Preview da foto'}
+                className="max-w-[90vw] max-h-[85vh] rounded-xl border-[3px] border-white/30 object-contain"
+              />
+            )}
           </div>
         </div>
       )}
