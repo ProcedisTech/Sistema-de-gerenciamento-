@@ -128,8 +128,8 @@ function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, on
     TIPOS_COM_ALTERNATIVAS.includes(tipoStrOriginal) ||
     alternativas.length > 0;
 
-  // Lock the tipo select when the question is already a choice type or has alternatives — prevents state inconsistency
-  const tipoTravado = TIPOS_COM_ALTERNATIVAS.includes(tipoStrOriginal) || alternativas.length > 0;
+  // Always lock the tipo select in edit mode — changing type after creation causes conflicts with existing answers
+  const tipoTravado = true;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -255,9 +255,9 @@ function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, on
                   className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
                 >
                   <option value="">Selecione...</option>
-                  {tiposResposta.filter((t) => t.ativo !== false).map((t) => (
-                    <option key={t.tipo_resposta_id || t.id} value={t.tipo_resposta_id || t.id}>{tipoLabel(t.tipo)}</option>
-                  ))}
+                {tiposResposta.filter((t) => t.ativo !== false).map((t) => (
+                  <option key={t.tipo_resposta_id || t.id} value={t.tipo_resposta_id || t.id}>{tipoLabel(t.tipo)}</option>
+                ))}
                 </select>
               )}
             </div>
@@ -741,7 +741,7 @@ export function QuestionManager() {
                   </div>
                 )}
 
-                {/* Alternatives with drag-to-reorder */}
+                {/* Alternatives with drag-to-reorder (escolha_unica / multipla_escolha) */}
                 {hasAlts && (
                   <div className="mt-3 pl-3 border-l-[3px] border-[#a855f7]/20 space-y-1">
                     {isSavingReorder && (
@@ -760,6 +760,44 @@ export function QuestionManager() {
                         ))}
                       </SortableContext>
                     </DndContext>
+                  </div>
+                )}
+
+                {/* Preview for non-choice types */}
+                {p.tipoResposta === 'texto' && (
+                  <div className="mt-3 pl-3 border-l-[3px] border-blue-200">
+                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wide mb-1">Pré-visualização</p>
+                    <input
+                      disabled
+                      placeholder="Resposta escrita pelo paciente..."
+                      className="w-full px-3 py-2 bg-slate-50 border-[2px] border-dashed border-slate-300 rounded-lg text-[12px] text-slate-400 cursor-not-allowed"
+                    />
+                  </div>
+                )}
+
+                {p.tipoResposta === 'booleano' && (
+                  <div className="mt-3 pl-3 border-l-[3px] border-emerald-200">
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wide mb-1.5">Pré-visualização</p>
+                    <div className="flex gap-2">
+                      <span className="px-4 py-1.5 rounded-lg border-[2px] border-emerald-300 bg-emerald-50 text-emerald-700 text-[12px] font-bold select-none">
+                        Sim
+                      </span>
+                      <span className="px-4 py-1.5 rounded-lg border-[2px] border-slate-200 bg-slate-50 text-slate-500 text-[12px] font-bold select-none">
+                        Não
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {p.tipoResposta === 'numero' && (
+                  <div className="mt-3 pl-3 border-l-[3px] border-cyan-200">
+                    <p className="text-[10px] font-bold text-cyan-500 uppercase tracking-wide mb-1">Pré-visualização</p>
+                    <input
+                      type="number"
+                      disabled
+                      placeholder="0"
+                      className="w-32 px-3 py-2 bg-slate-50 border-[2px] border-dashed border-slate-300 rounded-lg text-[12px] text-slate-400 cursor-not-allowed"
+                    />
                   </div>
                 )}
               </div>

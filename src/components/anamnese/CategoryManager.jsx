@@ -51,7 +51,10 @@ export function CategoryManager() {
   const handleCriar = async (e) => {
     e.preventDefault();
     const nome = novoNome.trim();
-    if (!nome) return;
+    if (!nome) {
+      setErro('Você precisa digitar um nome da categoria.');
+      return;
+    }
     setErro('');
     setCriando(true);
     try {
@@ -167,14 +170,14 @@ export function CategoryManager() {
                 id="category-new-name"
                 type="text"
                 value={novoNome}
-                onChange={(e) => setNovoNome(e.target.value)}
+                onChange={(e) => { setNovoNome(e.target.value); if (erro) setErro(''); }}
                 placeholder="Ex.: Cardiológico, Estético..."
-                className="w-full px-4 py-2.5 sm:py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+                className={`w-full px-4 py-2.5 sm:py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${erro ? 'border-red-400 focus:border-red-500' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
               />
             </div>
             <button
               type="submit"
-              disabled={criando || !novoNome.trim()}
+              disabled={criando}
               className="w-full sm:w-auto shrink-0 px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" strokeWidth={2.5} />}
@@ -288,18 +291,11 @@ export function CategoryManager() {
                     <div className="flex flex-col gap-3 w-full min-w-0 md:flex-row md:items-center md:justify-between md:gap-2">
                       <div className="flex items-start gap-2.5 min-w-0 flex-1 md:items-center md:min-w-0 md:gap-3">
                         <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />
-                        <span className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words [overflow-wrap:anywhere] leading-snug md:truncate md:[overflow-wrap:normal]">
+                        <span title={cat.nome} className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words [overflow-wrap:anywhere] leading-snug md:truncate md:[overflow-wrap:normal]">
                           {cat.nome}
                         </span>
                       </div>
                       <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full md:w-auto md:ml-2 pt-0.5 md:pt-0 border-t border-[#00a88e]/10 md:border-0">
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border-[2px] whitespace-nowrap ${
-                          cat.ativo !== false
-                            ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
-                            : 'bg-red-50 text-red-600 border-red-200'
-                        }`}>
-                          {cat.ativo !== false ? 'Ativo' : 'Inativo'}
-                        </span>
                         <button
                           onClick={() => handleEditar(cat)}
                           title="Editar"
