@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, FileText, Loader2, ChevronUp, ChevronDown, Trash2, GripVertical, Square, CheckSquare, Save, X, Edit3 } from 'lucide-react';
+import { Plus, FileText, Loader2, ChevronUp, ChevronDown, Trash2, GripVertical, Square, CheckSquare, Save, X } from 'lucide-react';
 import { anamneseApi, dimensoesApi } from '../../services/api';
 
 export function FichaBuilder() {
@@ -302,12 +302,16 @@ export function FichaBuilder() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {fichas.map((ficha) => (
-            <div key={ficha.id} className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all shadow-sm flex flex-col">
+            <div
+              key={ficha.id}
+              onClick={() => abrirEdicao(ficha)}
+              className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/40 hover:bg-[#f0fdfa] transition-all shadow-sm flex flex-col cursor-pointer"
+            >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <FileText className="w-5 h-5 text-[#00a88e]" strokeWidth={2} />
-                    <h5 className="text-[15px] font-bold text-[#0f172a]">{ficha.nome}</h5>
+                    <FileText className="w-5 h-5 text-[#00a88e] flex-shrink-0" strokeWidth={2} />
+                    <h5 className="text-[15px] font-bold text-[#0f172a] truncate">{ficha.nome}</h5>
                   </div>
                   {ficha.especialidadeNome && (
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/15">
@@ -318,11 +322,12 @@ export function FichaBuilder() {
                     {ficha.itens?.length || 0} pergunta{(ficha.itens?.length || 0) !== 1 ? 's' : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => abrirEdicao(ficha)} className="px-3 py-2 rounded-lg bg-white text-[#00a88e] border-[2px] border-[#00a88e]/20 hover:bg-[#f0fdfa] text-[12px] font-bold flex items-center gap-1">
-                    <Edit3 className="w-3.5 h-3.5" /> Editar
-                  </button>
-                  <button type="button" onClick={() => handleExcluir(ficha.id)} className="px-3 py-2 rounded-lg bg-white text-red-500 border-[2px] border-red-200 hover:bg-red-50 text-[12px] font-bold flex items-center gap-1">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleExcluir(ficha.id); }}
+                    className="px-3 py-2 rounded-lg bg-white text-red-500 border-[2px] border-red-200 hover:bg-red-50 text-[12px] font-bold flex items-center gap-1"
+                  >
                     <Trash2 className="w-3.5 h-3.5" /> Excluir
                   </button>
                 </div>
