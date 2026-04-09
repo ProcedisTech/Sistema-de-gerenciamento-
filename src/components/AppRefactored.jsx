@@ -527,13 +527,6 @@ export default function App() {
     journeyState.setActiveTab('existente');
   };
 
-  React.useEffect(() => {
-    const key = String(selectedPatientCpf || '').trim();
-    if (!key) return;
-    syncPendingDocumentsForPatient(key).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPatientCpf]);
-
   // ============ RENDERIZAÇÃO ============
   if (!authReady) {
     return (
