@@ -136,7 +136,7 @@ export function CategoryManager() {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-4 xl:gap-5">
+    <div className="flex flex-col gap-4 xl:gap-5">
       {/* Barra superior: buscar + criar */}
       <div className="shrink-0 rounded-2xl border-[3px] border-[#00a88e]/10 bg-white p-3 sm:p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
@@ -193,8 +193,8 @@ export function CategoryManager() {
         )}
       </div>
 
-      {/* Lista — ocupa o restante da altura */}
-      <div className="flex flex-col flex-1 min-h-0 min-w-0 w-full rounded-2xl border-[3px] border-[#00a88e]/10 bg-[#f8fbfb]/80 p-4 sm:p-5 xl:p-6">
+      {/* Lista */}
+      <div className="flex flex-col min-w-0 w-full rounded-2xl border-[3px] border-[#00a88e]/10 bg-[#f8fbfb]/80 p-4 sm:p-5 xl:p-6">
         {loading ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 py-8 text-center min-h-[12rem]">
             <Loader2 className="w-6 h-6 animate-spin text-[#00a88e]" />
@@ -219,7 +219,7 @@ export function CategoryManager() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full content-start flex-1 min-h-0 overflow-y-auto custom-scrollbar min-w-0">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,220px),1fr))] gap-3 w-full content-start min-w-0">
             {categoriasFiltradas.map((cat) => {
               const isEditing = editingId === cat.id;
               const isDeleting = deletingId === cat.id;
@@ -228,7 +228,7 @@ export function CategoryManager() {
               return (
                 <div
                   key={cat.id}
-                  className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all shadow-sm min-w-0"
+                  className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all shadow-sm min-w-[min(100%,14rem)]"
                 >
                   {isEditing ? (
                     /* ── Edit mode ── */
@@ -263,11 +263,11 @@ export function CategoryManager() {
                     </div>
                   ) : isDeleting ? (
                     /* ── Delete confirmation ── */
-                    <div className="flex flex-col gap-2.5 w-full min-w-0 sm:flex-row sm:items-center sm:flex-wrap sm:gap-2">
-                      <span className="text-[13px] font-bold text-[#0f172a] w-full min-w-0 break-words [overflow-wrap:anywhere] leading-snug sm:flex-1">
+                    <div className="flex flex-col gap-2.5 w-full min-w-0 xl:flex-row xl:items-center xl:flex-wrap xl:gap-2">
+                      <span className="text-[13px] font-bold text-[#0f172a] w-full min-w-0 break-words leading-snug xl:flex-1">
                         Remover &ldquo;{cat.nome}&rdquo;?
                       </span>
-                      <div className="flex flex-row flex-wrap gap-2 justify-end w-full sm:w-auto sm:justify-start sm:flex-shrink-0">
+                      <div className="flex flex-row flex-wrap gap-2 w-full xl:w-auto xl:flex-shrink-0">
                         <button
                           type="button"
                           onClick={() => handleExcluir(cat.id)}
@@ -288,14 +288,14 @@ export function CategoryManager() {
                     </div>
                   ) : (
                     /* ── Normal view ── */
-                    <div className="flex flex-col gap-3 w-full min-w-0 md:flex-row md:items-center md:justify-between md:gap-2">
-                      <div className="flex items-start gap-2.5 min-w-0 flex-1 md:items-center md:min-w-0 md:gap-3">
+                    <div className="flex flex-col gap-2 w-full min-w-0 xl:flex-row xl:items-center xl:justify-between xl:gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1 xl:items-center xl:gap-3">
                         <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />
-                        <span title={cat.nome} className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words [overflow-wrap:anywhere] leading-snug md:truncate md:[overflow-wrap:normal]">
+                        <span title={cat.nome} className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words leading-snug">
                           {cat.nome}
                         </span>
                       </div>
-                      <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full md:w-auto md:ml-2 pt-0.5 md:pt-0 border-t border-[#00a88e]/10 md:border-0">
+                      <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full xl:w-auto xl:ml-2 pt-0.5 xl:pt-0 border-t border-[#00a88e]/10 xl:border-0">
                         <button
                           onClick={() => handleEditar(cat)}
                           title="Editar"

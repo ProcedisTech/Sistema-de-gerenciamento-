@@ -679,9 +679,9 @@ export function QuestionManager() {
             return (
               <div key={p.id} className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all flex flex-col shadow-sm">
                 {/* Header row */}
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-bold text-[#0f172a] line-clamp-4">{p.descricao}</p>
+                    <p className="text-[14px] font-bold text-[#0f172a] break-words [overflow-wrap:anywhere]">{p.descricao}</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/15">
                         {p.categoriaNome || 'Sem categoria'}
@@ -715,22 +715,24 @@ export function QuestionManager() {
 
                 {/* Delete confirmation */}
                 {isDeleting && (
-                  <div className="mt-3 flex items-center gap-2 flex-wrap">
-                    <span className="text-[12px] font-bold text-[#475569] flex-1 min-w-0">Remover esta pergunta?</span>
-                    <button
-                      onClick={() => handleExcluir(p.id)}
-                      disabled={excluindo}
-                      className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-[12px] font-bold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 flex-shrink-0"
-                    >
-                      {excluindo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" strokeWidth={2.5} />}
-                      Confirmar
-                    </button>
-                    <button
-                      onClick={() => { setDeletingId(null); setErroDelete(null); }}
-                      className="px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#64748b] text-[12px] font-bold hover:bg-[#e2e8f0] transition-colors flex-shrink-0"
-                    >
-                      Cancelar
-                    </button>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <span className="text-[12px] font-bold text-[#475569] break-words [overflow-wrap:anywhere]">Remover esta pergunta?</span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleExcluir(p.id)}
+                        disabled={excluindo}
+                        className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-[12px] font-bold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 flex-shrink-0"
+                      >
+                        {excluindo ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" strokeWidth={2.5} />}
+                        Confirmar
+                      </button>
+                      <button
+                        onClick={() => { setDeletingId(null); setErroDelete(null); }}
+                        className="px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#64748b] text-[12px] font-bold hover:bg-[#e2e8f0] transition-colors flex-shrink-0"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 )}
 
