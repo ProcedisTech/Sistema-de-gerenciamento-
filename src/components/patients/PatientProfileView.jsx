@@ -443,7 +443,7 @@ export function PatientProfileView({
     const todayKey = new Date().toISOString().slice(0, 10);
     try {
       sessionStorage.setItem(birthdayModalStorageKey(cpf, todayKey), '1');
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     setBirthdayModalOpen(false);
@@ -462,7 +462,7 @@ export function PatientProfileView({
         setBirthdayModalOpen(false);
         return;
       }
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     setBirthdayModalOpen(true);

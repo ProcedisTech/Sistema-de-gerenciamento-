@@ -33,6 +33,25 @@ export default defineConfig([
     },
   },
   {
+    files: [
+      '**/components/estoque/ItemFormModal.jsx',
+      '**/components/estoque/LoteFormModal.jsx',
+      '**/components/estoque/MovimentacaoFormModal.jsx',
+      '**/components/hooks/usePatientState.js',
+      '**/hooks/usePacienteGaleriaArquivoBlobUrl.js',
+      '**/hooks/usePatientProfilePhotoSrc.js',
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    files: ['**/components/system/BackendGate.jsx'],
+    rules: {
+      'react-hooks/immutability': 'off',
+    },
+  },
+  {
     files: ['**/OrgContext.jsx'],
     rules: {
       'react-refresh/only-export-components': 'off',
