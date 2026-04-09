@@ -49,7 +49,7 @@ export const useJourneyState = () => {
   const [satisfacao, setSatisfacao] = useState(false);
 
   // ============ FOTOS ============
-  const EVALUATION_PHOTO_MAX = 5;
+  const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
   const [evaluationSelectedPhotoIndex, setEvaluationSelectedPhotoIndex] = useState(null);
   const [evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl] = useState(null);

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import {
   anamneseApi,
+  pacientesDocumentosApi,
   pacientesApi,
   pacientesGaleriaApi,
   notasApi,
@@ -211,6 +212,8 @@ export function PatientProfileView({
   onUpdatePatient,
   onAddGalleryFiles,
   onDeleteGalleryPhoto,
+  onUploadDocumentFiles,
+  onSyncPendingDocuments,
   mergePatientById,
   refreshPatients,
   roleUserId,
@@ -225,6 +228,7 @@ export function PatientProfileView({
   const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
+  const [apiDocuments, setApiDocuments] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
   const [editing, setEditing] = useState(null);
@@ -307,8 +311,8 @@ export function PatientProfileView({
         toast.error('Use JPEG, PNG ou WebP (como no cadastro do servidor).');
         return;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Arquivo acima de 5 MB. Escolha uma imagem menor.');
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Arquivo acima de 50 MB. Escolha um arquivo menor.');
         return;
       }
       setProfilePhotoBusy(true);
@@ -438,6 +442,23 @@ export function PatientProfileView({
     return terms;
   }, [patient]);
 
+  const displayDocuments = useMemo(() => {
+    const local = Array.isArray(selectedPatient?.documentos) ? selectedPatient.documentos : [];
+    const fromApi = Array.isArray(apiDocuments)
+      ? apiDocuments.map((d) => ({
+        ...d,
+        syncStatus: 'synced',
+        status: d.status || 'sincronizado',
+      }))
+      : [];
+    const byKey = new Map();
+    [...local, ...fromApi].forEach((doc, idx) => {
+      const key = String(doc.id || `${doc.nome || 'doc'}_${idx}`);
+      if (!byKey.has(key)) byKey.set(key, doc);
+    });
+    return Array.from(byKey.values());
+  }, [selectedPatient?.documentos, apiDocuments]);
+
   const dismissBirthdayModal = useCallback(() => {
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -517,6 +538,26 @@ export function PatientProfileView({
   useEffect(() => {
     const id = selectedPatient?.id;
     if (!id) {
+      setApiDocuments([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const docs = await pacientesDocumentosApi.list(id);
+        if (!cancelled) setApiDocuments(Array.isArray(docs) ? docs : []);
+      } catch {
+        if (!cancelled) setApiDocuments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatient?.id]);
+
+  useEffect(() => {
+    const id = selectedPatient?.id;
+    if (!id) {
       setGaleriaBackend('local');
       setApiGaleriaItems([]);
       return undefined;
@@ -583,12 +624,12 @@ export function PatientProfileView({
       });
     });
 
-    (patient.documentos || []).forEach((doc, idx) => {
+    displayDocuments.forEach((doc, idx) => {
       events.push({
         id: `doc_${idx}`,
         type: 'documento',
         title: doc.nome || 'Documento',
-        meta: `${doc.data || '-'} ${doc.hora ? `- ${doc.hora}` : ''}`,
+        meta: `${doc.data || '-'} ${doc.hora ? `- ${doc.hora}` : ''} ${doc.syncStatus === 'pending' ? '· pendente de sincronizacao' : ''}`,
       });
     });
 
@@ -617,7 +658,50 @@ export function PatientProfileView({
     }
 
     return events;
-  }, [patient, capturedPhotos, apiProcedures, galeriaBackend, apiGaleriaItems]);
+  }, [patient, capturedPhotos, apiProcedures, galeriaBackend, apiGaleriaItems, displayDocuments]);
+
+  const handleUploadDocumentFiles = async (event) => {
+    const files = event.target.files;
+    event.target.value = '';
+    if (!files || !files.length) return;
+    await onUploadDocumentFiles?.(files, selectedPatient?.cpf);
+  };
+
+  const handleSyncPendingDocuments = async () => {
+    await onSyncPendingDocuments?.(selectedPatient?.cpf);
+    if (selectedPatient?.id) {
+      try {
+        const docs = await pacientesDocumentosApi.list(selectedPatient.id);
+        setApiDocuments(Array.isArray(docs) ? docs : []);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleDownloadDocument = async (doc) => {
+    if (doc.syncStatus === 'pending') {
+      toast.warning('Documento ainda pendente de sincronizacao.');
+      return;
+    }
+    if (!selectedPatient?.id || !doc?.id) {
+      toast.warning('Documento indisponivel para download.');
+      return;
+    }
+    try {
+      const blob = await pacientesDocumentosApi.fetchArquivoBlob(selectedPatient.id, doc.id);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = doc.nome || 'documento';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      toast.error(e?.message || 'Nao foi possivel baixar o documento.');
+    }
+  };
 
   const saveEditProfile = async () => {
     if (!selectedPatient?.id) {
@@ -693,7 +777,7 @@ export function PatientProfileView({
 
     if (selectedPatient?.id && galeriaBackend === 'api') {
       try {
-        const slice = fileArr.slice(0, 15);
+        const slice = fileArr.slice(0, 30);
         let mergedSingle = false;
         for (const file of slice) {
           const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, { roleUserId });
@@ -942,7 +1026,7 @@ export function PatientProfileView({
                 </div>
                 <p className="text-[10px] text-[#94a3b8] text-center sm:text-left leading-snug max-w-[200px] sm:max-w-[220px]">
                   {selectedPatient?.id
-                    ? 'Servidor: JPEG/PNG/WebP até 5 MB; imagem autenticada (cookie). CORS deve incluir a origem do front.'
+                    ? 'Servidor: JPEG/PNG/WebP até 50 MB; imagem autenticada (cookie). CORS deve incluir a origem do front.'
                     : 'Referência só neste aparelho até o paciente existir na API.'}
                 </p>
               </div>
@@ -1171,6 +1255,20 @@ export function PatientProfileView({
                 <div className="space-y-4">
                   <h4 className="text-[16px] font-bold text-[#0f172a] mb-4">Documentos e Consentimentos LGPD</h4>
 
+                  <div className="flex flex-wrap gap-2">
+                    <label className="px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent cursor-pointer">
+                      <Upload className="w-4 h-4 inline mr-1" /> Upload documento
+                      <input type="file" multiple className="hidden" onChange={handleUploadDocumentFiles} />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleSyncPendingDocuments}
+                      className="px-3 py-2 rounded-xl bg-white text-[#0f172a] font-bold text-[12px] border-[2px] border-[#00a88e]/25"
+                    >
+                      Sincronizar pendentes
+                    </button>
+                  </div>
+
                   <div className="flex flex-wrap gap-2 mb-2">
                     {consentTerms.length ? consentTerms.map((term) => (
                       <span key={term} className="px-2 py-1 rounded-lg bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/20 text-[12px] font-bold">{term}</span>
@@ -1179,7 +1277,7 @@ export function PatientProfileView({
                     )}
                   </div>
 
-                  {selectedPatient.documentos?.length ? selectedPatient.documentos.map((doc, idx) => (
+                  {displayDocuments.length ? displayDocuments.map((doc, idx) => (
                     <div key={idx} className="flex items-center justify-between p-4 rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] hover:border-[#00a88e]/30 transition-all">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-10 h-10 rounded-lg bg-[#e6f7f5] flex items-center justify-center flex-shrink-0">
@@ -1191,8 +1289,8 @@ export function PatientProfileView({
                         </div>
                       </div>
                       <div className="flex items-center gap-3 ml-4 flex-shrink-0">
-                        <span className="px-2 py-1 bg-[#dcfce7] text-[#16a34a] rounded-lg text-[11px] font-bold">{doc.status}</span>
-                        <button type="button" className="w-8 h-8 rounded-lg border-[2px] border-[#e2e8f0] flex items-center justify-center text-[#64748b] hover:text-[#00a88e] hover:border-[#00a88e]/30 transition-all flex-shrink-0">
+                        <span className={`px-2 py-1 rounded-lg text-[11px] font-bold ${doc.syncStatus === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-[#dcfce7] text-[#16a34a]'}`}>{doc.syncStatus === 'pending' ? 'pendente de sincronizacao' : (doc.status || 'sincronizado')}</span>
+                        <button type="button" onClick={() => handleDownloadDocument(doc)} className="w-8 h-8 rounded-lg border-[2px] border-[#e2e8f0] flex items-center justify-center text-[#64748b] hover:text-[#00a88e] hover:border-[#00a88e]/30 transition-all flex-shrink-0">
                           <Download className="w-4 h-4" strokeWidth={2.5} />
                         </button>
                       </div>

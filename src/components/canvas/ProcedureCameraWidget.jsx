@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, X } from 'lucide-react';
+import { Camera, FileUp, Upload, X } from 'lucide-react';
 
 export function ProcedureCameraWidget({
   visible,
@@ -16,6 +16,8 @@ export function ProcedureCameraWidget({
   capturePhoto,
   retakePhoto,
   confirmPhoto,
+  uploadPhotoFiles,
+  uploadDocumentFiles,
 }) {
   if (!visible) return null;
 
@@ -39,6 +41,31 @@ export function ProcedureCameraWidget({
         >
           <Camera className="w-7 h-7 text-white" strokeWidth={2.5} />
         </button>
+        <label className="w-14 h-14 rounded-2xl bg-white hover:bg-[#f8fbfb] transition-all shadow-md flex items-center justify-center border-[3px] border-[#00a88e]/25 cursor-pointer">
+          <Upload className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
+          <input
+            type="file"
+            className="hidden"
+            accept="image/*"
+            multiple
+            onChange={(event) => {
+              uploadPhotoFiles?.(event.target.files);
+              event.target.value = '';
+            }}
+          />
+        </label>
+        <label className="w-14 h-14 rounded-2xl bg-white hover:bg-[#f8fbfb] transition-all shadow-md flex items-center justify-center border-[3px] border-[#3b82f6]/25 cursor-pointer">
+          <FileUp className="w-5 h-5 text-[#3b82f6]" strokeWidth={2.5} />
+          <input
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(event) => {
+              uploadDocumentFiles?.(event.target.files);
+              event.target.value = '';
+            }}
+          />
+        </label>
       </div>
 
       {photoModalOpen && (

@@ -17,7 +17,7 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesApi } from '../services/api';
+import { anamneseApi, pacientesApi, pacientesDocumentosApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
 
 import { PatientsView } from './patients';
@@ -42,6 +42,15 @@ const STEP1_FIELD_LABELS = {
   alergias: 'alergias',
   lgpdInicial: 'aceite de LGPD',
 };
+
+const BLOCKED_FILE_EXTENSIONS = new Set(['exe', 'bat', 'cmd', 'ps1', 'msi', 'js']);
+
+function hasBlockedFileExtension(fileName) {
+  const name = String(fileName || '').trim().toLowerCase();
+  const idx = name.lastIndexOf('.');
+  if (idx < 0 || idx === name.length - 1) return false;
+  return BLOCKED_FILE_EXTENSIONS.has(name.slice(idx + 1));
+}
 
 function messageForMissingStep1Fields(errors) {
   const keys = Object.keys(errors);
@@ -197,7 +206,7 @@ export default function App() {
   };
 
   const handleAddGalleryFiles = async (cpfKey, fileList) => {
-    const files = Array.from(fileList || []).slice(0, 5);
+    const files = Array.from(fileList || []).slice(0, 30);
     if (files.length === 0) return;
 
     const toDataUrl = (file) =>
@@ -231,14 +240,106 @@ export default function App() {
       const current = Array.isArray(prev?.evaluationCapturedPhotos)
         ? prev.evaluationCapturedPhotos
         : [];
-      const merged = [...current, ...uploaded].slice(0, 5);
+      const merged = [...current, ...uploaded].slice(0, 30);
       return {
         ...prev,
         evaluationCapturedPhotos: merged,
         evaluationSelectedPhotoIndex:
-          merged.length > 0 ? Math.min(merged.length - 1, 4) : null,
+          merged.length > 0 ? Math.min(merged.length - 1, 29) : null,
       };
     });
+  };
+
+  const syncPendingDocumentsForPatient = async (cpfKey) => {
+    const key = String(cpfKey || '').trim();
+    if (!key) return;
+    const selected = patients.find((p) => String(p?.cpf || '').trim() === key);
+    if (!selected?.id) return;
+    const docs = Array.isArray(selected.documentos) ? selected.documentos : [];
+    const pending = docs.filter((d) => d?.syncStatus === 'pending' && d?._file instanceof File);
+    if (!pending.length) return;
+
+    const updatedById = new Map();
+    for (const item of pending) {
+      try {
+        const created = await pacientesDocumentosApi.upload(selected.id, item._file, { roleUserId });
+        updatedById.set(item.id, {
+          ...item,
+          ...created,
+          syncStatus: 'synced',
+          status: 'sincronizado',
+          _file: null,
+        });
+      } catch {
+        updatedById.set(item.id, item);
+      }
+    }
+
+    updatePatientByCpf(key, (prev) => ({
+      ...prev,
+      documentos: (Array.isArray(prev.documentos) ? prev.documentos : []).map((d) => updatedById.get(d.id) || d),
+    }));
+  };
+
+  const handleUploadDocumentFiles = async (fileList, cpfKey) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    const blocked = files.find((f) => hasBlockedFileExtension(f.name));
+    if (blocked) {
+      toast.error(`Arquivo bloqueado por segurança: ${blocked.name}`);
+      return;
+    }
+
+    const overLimit = files.find((f) => Number(f?.size || 0) > 50 * 1024 * 1024);
+    if (overLimit) {
+      toast.error(`Arquivo acima de 50 MB: ${overLimit.name}`);
+      return;
+    }
+
+    const key = String(cpfKey || selectedPatientCpf || journeyState.cpf || '').trim();
+    if (!key) return;
+    const selected = patients.find((p) => String(p?.cpf || '').trim() === key);
+
+    const now = new Date();
+    const localDocs = files.map((file) => ({
+      id: `pending_${crypto.randomUUID()}`,
+      nome: file.name,
+      data: now.toLocaleDateString('pt-BR'),
+      hora: now.toTimeString().slice(0, 5),
+      tipo: file.type || 'application/octet-stream',
+      status: 'pendente de sincronizacao',
+      syncStatus: 'pending',
+      _file: file,
+    }));
+
+    updatePatientByCpf(key, (prev) => ({
+      ...prev,
+      documentos: [...localDocs, ...(Array.isArray(prev.documentos) ? prev.documentos : [])],
+    }));
+
+    if (!selected?.id) return;
+
+    for (const item of localDocs) {
+      try {
+        const created = await pacientesDocumentosApi.upload(selected.id, item._file, { roleUserId });
+        updatePatientByCpf(key, (prev) => ({
+          ...prev,
+          documentos: (Array.isArray(prev.documentos) ? prev.documentos : []).map((doc) => {
+            if (doc.id !== item.id) return doc;
+            return {
+              ...doc,
+              ...created,
+              syncStatus: 'synced',
+              status: 'sincronizado',
+              _file: null,
+            };
+          }),
+        }));
+      } catch {
+        // mantém pendente para retentativa automática/manual
+      }
+    }
   };
 
   const handleDeleteGalleryPhoto = (cpfKey, index) => {
@@ -558,6 +659,13 @@ export default function App() {
     journeyState.setActiveTab('existente');
   };
 
+  React.useEffect(() => {
+    const key = String(selectedPatientCpf || '').trim();
+    if (!key) return;
+    syncPendingDocumentsForPatient(key).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPatientCpf]);
+
   // ============ RENDERIZAÇÃO ============
   if (!authReady) {
     return (
@@ -810,6 +918,8 @@ export default function App() {
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
                 onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
+                onUploadDocumentFiles={handleUploadDocumentFiles}
+                onSyncPendingDocuments={syncPendingDocumentsForPatient}
                 onPatientCreated={patientState.refreshPatients}
                 mergePatientById={mergePatientById}
                 refreshPatients={refreshPatients}
@@ -845,7 +955,7 @@ export default function App() {
       />
 
       <ProcedureCameraWidget
-        visible={activeView === 'jornada' && (currentStep === 2 || currentStep === 3)}
+        visible={activeView === 'jornada' && currentStep >= 2 && currentStep <= 5}
         photoThumbUrl={cameraState.anamnesePhotoUrl}
         photoModalOpen={cameraState.photoModalOpen}
         openPhotoModal={cameraState.openPhotoModal}
@@ -859,6 +969,8 @@ export default function App() {
         capturePhoto={cameraState.capturePhoto}
         retakePhoto={cameraState.retakePhoto}
         confirmPhoto={handleConfirmProcedurePhoto}
+        uploadPhotoFiles={cameraState.uploadPhotoFiles}
+        uploadDocumentFiles={(files) => handleUploadDocumentFiles(files)}
       />
     </div>
   );

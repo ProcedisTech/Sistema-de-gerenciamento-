@@ -19,7 +19,7 @@ export function useProcedureCamera({
   const [photoPreviewBlob, setPhotoPreviewBlob] = useState(null);
   const [videoReady, setVideoReady] = useState(false);
 
-  const EVALUATION_PHOTO_MAX = 5;
+  const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
   const [evaluationSelectedPhotoIndex, setEvaluationSelectedPhotoIndex] = useState(null);
   const [evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl] = useState(null);
@@ -182,6 +182,64 @@ export function useProcedureCamera({
     setCameraError('');
   };
 
+  const uploadPhotoFiles = (fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f && String(f.type || '').startsWith('image/'));
+    if (!files.length) return;
+
+    const remaining = Math.max(0, EVALUATION_PHOTO_MAX - evaluationCapturedPhotos.length);
+    if (remaining <= 0) {
+      setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
+      return;
+    }
+
+    const slice = files.slice(0, remaining);
+    const nowIso = new Date().toISOString();
+    const nextPhotos = [
+      ...evaluationCapturedPhotos,
+      ...slice.map((file) => ({
+        url: URL.createObjectURL(file),
+        blob: file,
+        meta: {
+          journeyId: journeyId || generateJourneyId(),
+          capturedAt: nowIso,
+          stepCaptured: currentStep,
+          source: 'upload',
+          fileName: file.name,
+        },
+      })),
+    ];
+
+    const newSelectedIdx = nextPhotos.length - 1;
+    setEvaluationCapturedPhotos(nextPhotos);
+    setEvaluationSelectedPhotoIndex(newSelectedIdx);
+    setAnamnesePhotoUrl(nextPhotos[newSelectedIdx]?.url || null);
+    setAnamnesePhotoBlob(nextPhotos[newSelectedIdx]?.blob || null);
+    setAnamnesePhotoMeta(nextPhotos[newSelectedIdx]?.meta || null);
+
+    const targetCpf = (selectedPatientCpf || cpf || '').trim();
+    if (targetCpf) {
+      setPatients((prev) =>
+        prev.map((p) => {
+          if ((p.cpf || '').trim() !== targetCpf) return p;
+          return {
+            ...p,
+            evaluationCapturedPhotos: nextPhotos.map((ph) => ({
+              url: ph.url,
+              meta: ph.meta,
+            })),
+            evaluationSelectedPhotoIndex: newSelectedIdx,
+          };
+        })
+      );
+    }
+
+    if (slice.length < files.length) {
+      setCameraError(`Foram adicionadas ${slice.length} fotos. Limite de ${EVALUATION_PHOTO_MAX} atingido.`);
+    } else {
+      setCameraError('');
+    }
+  };
+
   useEffect(() => {
     if (!photoModalOpen) return;
     startCamera().catch(() => {});
@@ -221,6 +279,7 @@ export function useProcedureCamera({
     retakePhoto,
     capturePhoto,
     confirmPhoto,
+    uploadPhotoFiles,
   };
 }
 
