@@ -323,7 +323,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function QuestionManager() {
+export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
   const [perguntas, setPerguntas] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [tiposResposta, setTiposResposta] = useState([]);
@@ -390,6 +390,12 @@ export function QuestionManager() {
   };
 
   useEffect(() => { fetchDados(); }, []);
+
+  useEffect(() => {
+    if (jumpToCategoryId == null || jumpToCategoryId === '') return;
+    setFiltroCategoria(String(jumpToCategoryId));
+    onJumpConsumed?.();
+  }, [jumpToCategoryId, onJumpConsumed]);
 
   const perguntasFiltradas = useMemo(() => {
     if (!filtroCategoria) return perguntas;
