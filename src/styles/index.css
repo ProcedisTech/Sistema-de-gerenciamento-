@@ -106,7 +106,7 @@
 @keyframes patient-preview-sheet-desktop {
   from {
     opacity: 0;
-    transform: translateX(14px);
+    transform: translateX(10px);
   }
   to {
     opacity: 1;
@@ -123,3 +123,4 @@
     animation-name: patient-preview-sheet-desktop;
   }
 }
+

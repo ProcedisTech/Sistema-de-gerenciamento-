@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Clock, ExternalLink, Image as ImageIcon, Plus, Search, X, ArrowUpDown } from 'lucide-react';
+import {
+  ArrowUpDown,
+  Calendar,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Image as ImageIcon,
+  Plus,
+  Search,
+  Shield,
+  X,
+} from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
 
 function parseUltimaVisitaMs(s) {
@@ -20,19 +31,162 @@ const SORT_OPTIONS = [
   { value: 'visita-asc', label: 'Última visita (antiga)' },
 ];
 
+function PatientPreviewPanel({
+  selectedPatient,
+  detailTitleId,
+  closeDetail,
+  galleryPhotoCount,
+  galleryPreviewSlots,
+  getPatientInitials,
+  setPatientDetailTab,
+  setPatientView,
+  shellClassName,
+}) {
+  return (
+    <div className={shellClassName}>
+      <button
+        type="button"
+        onClick={closeDetail}
+        className="absolute right-3 top-3 z-20 p-2 rounded-xl border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f8fafc] hover:text-[#0f172a] transition-colors shadow-sm"
+        aria-label="Fechar painel"
+      >
+        <X className="w-4 h-4" strokeWidth={2.5} />
+      </button>
+
+      <div className="w-full flex flex-wrap flex-[1_1_100%] items-center gap-4 rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 pr-12 shadow-sm">
+        <PatientAvatar
+          patient={selectedPatient}
+          getPatientInitials={getPatientInitials}
+          className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-full border-2 border-[#00a88e]/25 bg-[#e6f7f5] overflow-hidden flex items-center justify-center text-white font-bold"
+          initialsClassName="text-base sm:text-lg font-bold"
+          spinnerClassName="w-5 h-5"
+        />
+        <div className="min-w-0 flex-1 basis-[12rem]">
+          <h3
+            id={detailTitleId}
+            className="text-lg sm:text-xl font-bold text-[#0f172a] leading-snug break-words"
+          >
+            {selectedPatient.nome}
+          </h3>
+          <p className="mt-1 text-sm text-[#64748b] break-all">{selectedPatient.email || '—'}</p>
+          <p className="text-sm text-[#64748b]">{selectedPatient.telefone || '—'}</p>
+        </div>
+        <div className="flex w-full sm:w-auto sm:flex-col sm:items-end justify-end shrink-0">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/25 bg-[#ecfdf5] px-2.5 py-1.5 text-[11px] sm:text-xs font-bold text-[#047857]">
+            <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={2.25} aria-hidden />
+            LGPD Auditado
+          </span>
+        </div>
+      </div>
+
+      <section className="w-full flex-[1_1_100%] rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2 text-[#0f172a]">
+          <Clock className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
+          <h4 className="text-base font-bold">Linha do Tempo de Procedimentos</h4>
+        </div>
+        {selectedPatient.procedures && selectedPatient.procedures.length > 0 ? (
+          <div className="relative pl-2">
+            <div className="absolute left-[15px] top-3 bottom-3 w-px bg-[#e2e8f0]" aria-hidden />
+            <ul className="space-y-3">
+              {selectedPatient.procedures.map((proc, idx) => (
+                <li key={idx} className="relative flex gap-3 pl-8">
+                  <span
+                    className="absolute left-[11px] top-5 h-3 w-3 rounded-full border-2 border-white bg-[#00a88e] shadow-sm"
+                    aria-hidden
+                  />
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-3.5 sm:p-4 transition-colors hover:border-[#00a88e]/35 hover:bg-[#f0fdfa]/80"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center gap-2 text-[#64748b]">
+                          <Calendar className="w-4 h-4 shrink-0 text-[#94a3b8]" strokeWidth={2} />
+                          <span className="text-sm font-medium">{proc.data}</span>
+                          {proc.hora ? (
+                            <span className="text-sm text-[#94a3b8]">· {proc.hora}</span>
+                          ) : null}
+                        </div>
+                        <p className="text-base font-bold text-[#0f766e] leading-snug">{proc.nome}</p>
+                        <p className="text-sm text-[#64748b]">
+                          Realizado por {proc.profissional || '—'}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 shrink-0 text-[#cbd5e1] mt-1" strokeWidth={2} aria-hidden />
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="py-6 text-center text-sm text-[#94a3b8]">Nenhum procedimento registrado</p>
+        )}
+      </section>
+
+      <section className="w-full flex-[1_1_100%] rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[#0f172a]">
+            <ImageIcon className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
+            <h4 className="text-base font-bold">Galeria de Evolução</h4>
+          </div>
+          <span className="text-sm font-semibold text-[#64748b]">
+            {galleryPhotoCount} {galleryPhotoCount === 1 ? 'foto' : 'fotos'}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          {galleryPreviewSlots.map((slot) => (
+            <div
+              key={slot.key}
+              className={`relative aspect-[4/3] overflow-hidden rounded-lg border-2 ${
+                slot.highlight ? 'border-[#cbd5e1] bg-[#94a3b8]/35' : 'border-[#e2e8f0] bg-[#e2e8f0]'
+              } flex flex-col items-center justify-center`}
+            >
+              <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-[#64748b] shadow-sm">
+                {slot.label}
+              </span>
+              {slot.highlight && selectedPatient.galeria?.length ? (
+                <span className="text-xs font-semibold text-white drop-shadow-sm">
+                  {selectedPatient.procedures?.[0]?.data || '—'}
+                </span>
+              ) : (
+                <ImageIcon className="h-8 w-8 text-[#94a3b8]/80" strokeWidth={1.75} aria-hidden />
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="w-full flex-[1_1_100%] pb-1 max-lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <button
+          type="button"
+          onClick={() => {
+            setPatientDetailTab('timeline');
+            setPatientView('profile');
+          }}
+          className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-4 py-3.5 text-sm sm:text-base font-bold text-white shadow-md transition-colors hover:bg-[#00967f] active:scale-[0.99]"
+        >
+          <ExternalLink className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2.25} />
+          Ver Visão Geral Completa do Paciente
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PatientsListView({
   patients,
   patientSearchQuery,
   setPatientSearchQuery,
   selectedPatientCpf,
   setSelectedPatientCpf,
-  patientDetailTab,
   setPatientDetailTab,
   setPatientView,
   getPatientInitials,
   onCreatePatient,
 }) {
   const [sortBy, setSortBy] = useState('nome-asc');
+  const desktopTitleId = 'patient-detail-title';
 
   const filteredPatients = useMemo(() => {
     const list = patients.filter((p) => {
@@ -69,6 +223,35 @@ export function PatientsListView({
 
   const selectedPatient = patients.find((p) => p.cpf === selectedPatientCpf) || null;
 
+  const galleryPhotoCount = useMemo(() => {
+    if (!selectedPatient?.galeria?.length) return 0;
+    return selectedPatient.galeria.reduce((acc, s) => acc + (s.fotos?.length || 0), 0);
+  }, [selectedPatient]);
+
+  const galleryPreviewSlots = useMemo(() => {
+    const slots = [];
+    if (selectedPatient?.galeria?.length) {
+      selectedPatient.galeria.forEach((sessao, si) => {
+        (sessao.fotos || []).forEach((_, fi) => {
+          if (slots.length >= 6) return;
+          slots.push({
+            key: `${si}-${fi}`,
+            label: `Foto ${slots.length + 1}`,
+            highlight: slots.length === 0,
+          });
+        });
+      });
+    }
+    while (slots.length < 6) {
+      slots.push({
+        key: `empty-${slots.length}`,
+        label: `Foto ${slots.length + 1}`,
+        highlight: false,
+      });
+    }
+    return slots.slice(0, 6);
+  }, [selectedPatient]);
+
   const closeDetail = () => {
     setSelectedPatientCpf(null);
     setPatientDetailTab('timeline');
@@ -76,8 +259,6 @@ export function PatientsListView({
 
   useEffect(() => {
     if (!selectedPatient) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const onKey = (e) => {
       if (e.key === 'Escape') {
         setSelectedPatientCpf(null);
@@ -85,14 +266,26 @@ export function PatientsListView({
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener('keydown', onKey);
-    };
+    return () => window.removeEventListener('keydown', onKey);
   }, [selectedPatient, setSelectedPatientCpf, setPatientDetailTab]);
 
+  useEffect(() => {
+    if (!selectedPatient) return undefined;
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const syncBodyScroll = () => {
+      document.body.style.overflow = mq.matches ? 'hidden' : '';
+    };
+    syncBodyScroll();
+    mq.addEventListener('change', syncBodyScroll);
+    return () => {
+      mq.removeEventListener('change', syncBodyScroll);
+      document.body.style.overflow = '';
+    };
+  }, [selectedPatient]);
+
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col lg:flex-row lg:items-start lg:gap-5 xl:gap-6 w-full min-w-0">
+      <div className="min-w-0 flex-1 flex flex-col">
       <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 sm:p-5 md:p-6 flex flex-col">
         <div className="flex flex-col gap-3 mb-4">
           <div className="relative w-full min-w-0">
@@ -135,7 +328,7 @@ export function PatientsListView({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 content-start">
+        <div className="grid w-full min-w-0 grid-cols-1 content-start gap-3 md:gap-4 sm:[grid-template-columns:repeat(auto-fit,minmax(min(100%,16.25rem),1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(min(100%,17.25rem),1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(min(100%,18.25rem),1fr))]">
             {filteredPatients.length === 0 ? (
               <div className="col-span-full text-center py-12 text-[#94a3b8] text-[14px]">
                 <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -149,13 +342,13 @@ export function PatientsListView({
                     key={patient.id}
                     type="button"
                     onClick={() => setSelectedPatientCpf(patient.cpf)}
-                    className={`min-h-0 text-left rounded-xl border-[3px] transition-all active:scale-[0.99] p-2.5 sm:p-3 flex flex-col h-full ${
+                    className={`min-h-0 w-full min-w-0 text-left rounded-xl border-[3px] transition-all active:scale-[0.99] p-3 sm:p-3.5 flex flex-col h-full min-h-[4.5rem] sm:min-h-0 ${
                       selected
                         ? 'border-[#00a88e] bg-[#f0fdfa] shadow-sm ring-2 ring-[#00a88e]/15'
                         : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/35 hover:bg-[#f8fbfb]'
                     }`}
                   >
-                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                    <div className="flex items-start gap-2.5 min-w-0 w-full flex-1">
                       <PatientAvatar
                         patient={patient}
                         getPatientInitials={getPatientInitials}
@@ -193,7 +386,7 @@ export function PatientsListView({
                         </div>
                       </div>
                       <ChevronRight
-                        className={`w-5 h-5 shrink-0 mt-1 hidden sm:block ${selected ? 'text-[#00a88e]' : 'text-[#94a3b8]'}`}
+                        className={`w-5 h-5 shrink-0 mt-0.5 opacity-80 ${selected ? 'text-[#00a88e]' : 'text-[#94a3b8]'}`}
                         strokeWidth={2}
                         aria-hidden
                       />
@@ -204,166 +397,55 @@ export function PatientsListView({
             )}
         </div>
       </div>
+      </div>
 
       {selectedPatient ? (
-        <div
-          className="fixed inset-0 z-[140] flex items-end justify-center sm:items-center sm:justify-end sm:p-3"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="patient-detail-title"
-        >
-          <button
-            type="button"
-            className="patient-preview-backdrop absolute inset-0 bg-black/35 backdrop-blur-[2px]"
-            aria-label="Fechar painel do paciente"
-            onClick={closeDetail}
-          />
-          <div className="patient-preview-sheet relative z-10 flex flex-col w-full sm:w-[min(100vw-1.5rem,21rem)] md:w-[min(100vw-2rem,23.5rem)] lg:w-[min(100vw-2rem,26rem)] max-h-[min(85dvh,620px)] sm:max-h-[min(88vh,560px)] lg:max-h-[min(90vh,640px)] bg-white rounded-t-[20px] sm:rounded-2xl sm:rounded-r-none border border-[#00a88e]/18 shadow-[0_12px_40px_-8px_rgba(15,23,42,0.12)] overflow-hidden max-sm:max-h-[min(calc(100dvh-env(safe-area-inset-bottom)-12px),92dvh)]">
-            <div className="flex items-start gap-2.5 px-3 pt-3 pb-2.5 sm:px-3.5 sm:pt-3.5 md:gap-3 md:px-4 md:pt-4 md:pb-3 border-b border-[#00a88e]/10 shrink-0 bg-white">
-              <button
-                type="button"
-                onClick={closeDetail}
-                className="p-1.5 rounded-lg border border-[#e2e8f0] text-[#64748b] hover:bg-[#f8fbfb] hover:text-[#0f172a] transition-colors shrink-0"
-                aria-label="Fechar"
-              >
-                <X className="w-4 h-4" strokeWidth={2.5} />
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] md:text-[11px] font-bold uppercase tracking-wide text-[#94a3b8] mb-0.5">Resumo</p>
-                <h3 id="patient-detail-title" className="text-[15px] md:text-[16px] lg:text-[17px] font-bold text-[#0f172a] break-words leading-snug">
-                  {selectedPatient.nome}
-                </h3>
-                <div className="text-[11px] md:text-[12px] text-[#64748b] font-medium space-y-0.5 mt-1 break-all leading-snug">
-                  <p>{selectedPatient.email}</p>
-                  <p>{selectedPatient.telefone}</p>
-                </div>
-              </div>
-              <PatientAvatar
-                patient={selectedPatient}
-                getPatientInitials={getPatientInitials}
-                className="w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full border border-[#00a88e]/20 bg-[#e6f7f5] overflow-hidden flex items-center justify-center text-white font-bold shrink-0"
-                initialsClassName="text-[12px] sm:text-[13px] font-bold"
-                spinnerClassName="w-4 h-4 sm:w-[18px] sm:h-[18px]"
-              />
-            </div>
-
-            {/* Mobile: CTA duplicado no topo — a barra inferior do app (z-130) cobria o rodapé do sheet (z-50). */}
-            <div className="px-3 pb-2 sm:hidden shrink-0 border-b border-[#00a88e]/10 bg-white">
-              <button
-                type="button"
-                onClick={() => {
-                  setPatientDetailTab('timeline');
-                  setPatientView('profile');
-                }}
-                className="w-full min-h-[48px] rounded-xl bg-[#00a88e] text-white font-bold text-[13px] flex items-center justify-center gap-2 border-[2px] border-[#00a88e] shadow-sm active:scale-[0.99]"
-              >
-                <ExternalLink className="w-4 h-4 shrink-0" strokeWidth={2.25} />
-                Abrir perfil completo
-              </button>
-            </div>
-
-            <div
-              className="flex gap-2 px-3 py-2 md:px-4 md:py-2.5 border-b border-[#00a88e]/10 shrink-0 bg-[#fafafa] max-sm:flex-nowrap sm:flex-wrap"
-              role="tablist"
-              aria-label="Seções do resumo"
-            >
-              {[
-                { key: 'timeline', short: 'Linha do tempo', icon: Clock },
-                { key: 'galeria', short: 'Galeria', icon: ImageIcon },
-              ].map(({ key, short, icon }) => {
-                const TabIcon = icon;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={patientDetailTab === key}
-                    onClick={() => {
-                      setPatientDetailTab(key);
-                      setPatientView('list');
-                    }}
-                    className={`flex flex-1 min-w-0 sm:flex-initial items-center justify-center gap-1.5 max-sm:min-h-[44px] max-sm:px-2 sm:gap-1 md:gap-1.5 sm:px-2 sm:py-1.5 md:px-2.5 md:py-2 font-bold text-[11px] sm:text-[10px] md:text-[11px] transition-all rounded-xl sm:rounded-md ${
-                      patientDetailTab === key
-                        ? 'text-[#00a88e] bg-white border-[2px] sm:border border-[#00a88e]/35 shadow-sm'
-                        : 'text-[#64748b] bg-white/80 sm:bg-transparent border-[2px] sm:border border-[#e2e8f0] sm:border-transparent hover:text-[#00a88e]'
-                    }`}
-                  >
-                    <TabIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 shrink-0" strokeWidth={2.25} />
-                    <span className="truncate max-sm:text-center">{short}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-4 md:py-4 custom-scrollbar">
-              {patientDetailTab === 'timeline' && (
-                <div className="space-y-2 md:space-y-2.5">
-                  <h4 className="text-[11px] md:text-[12px] font-bold uppercase tracking-wide text-[#94a3b8]">Procedimentos</h4>
-                  {selectedPatient.procedures && selectedPatient.procedures.length > 0 ? (
-                    selectedPatient.procedures.map((proc, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 md:p-3 rounded-lg border border-[#e2e8f0] bg-[#f8fbfb]/80 hover:border-[#00a88e]/25 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[12px] md:text-[13px] font-bold text-[#0f766e] break-words leading-snug">{proc.nome}</div>
-                            <div className="text-[10px] md:text-[11px] text-[#64748b] mt-0.5">
-                              {proc.data} — {proc.hora}
-                            </div>
-                            <div className="text-[10px] md:text-[11px] text-[#94a3b8]">Por: {proc.profissional}</div>
-                          </div>
-                          <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 text-[#cbd5e1] shrink-0 mt-0.5" />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[11px] md:text-[12px] text-[#94a3b8] text-center py-4 leading-relaxed">Nenhum procedimento registrado</p>
-                  )}
-                </div>
-              )}
-
-              {patientDetailTab === 'galeria' && (
-                <div className="space-y-3 md:space-y-3.5">
-                  <h4 className="text-[11px] md:text-[12px] font-bold uppercase tracking-wide text-[#94a3b8]">Galeria</h4>
-                  {selectedPatient.galeria && selectedPatient.galeria.length > 0 ? (
-                    selectedPatient.galeria.map((sessao, idx) => (
-                      <div key={idx} className="space-y-2">
-                        <div className="text-[12px] md:text-[13px] font-bold text-[#0f766e]">{sessao.sessao}</div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {sessao.fotos.map((foto, fi) => (
-                            <div
-                              key={fi}
-                              className="aspect-square rounded-lg bg-[#e2e8f0] flex items-center justify-center border-[2px] border-[#e2e8f0]"
-                            >
-                              <ImageIcon className="w-6 h-6 text-[#94a3b8]" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[11px] md:text-[12px] text-[#94a3b8] text-center py-4 leading-relaxed">Nenhuma foto registrada</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="px-3 pt-2 pb-[max(1rem,env(safe-area-inset-bottom),12px)] md:px-4 md:pt-2.5 border-t border-[#00a88e]/10 shrink-0 bg-[#fafafa] max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom),16px)]">
-              <button
-                type="button"
-                onClick={() => {
-                  setPatientDetailTab('timeline');
-                  setPatientView('profile');
-                }}
-                className="w-full min-h-[48px] sm:min-h-0 px-3 py-3 sm:py-2 md:px-4 md:py-2.5 rounded-xl sm:rounded-lg text-[13px] sm:text-[11px] md:text-[12px] font-bold text-[#00a88e] bg-white border-[2px] sm:border border-[#00a88e]/35 hover:bg-[#f0fdfa] hover:border-[#00a88e]/50 transition-all flex items-center justify-center gap-2 sm:gap-1.5 shadow-sm active:scale-[0.99] sm:active:scale-100"
-              >
-                <ExternalLink className="w-4 h-4 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 shrink-0 opacity-90" strokeWidth={2.25} />
-                Perfil completo
-              </button>
-            </div>
+        <>
+          {/* Mobile / tablet (< lg): modal com backdrop — resumo imediato sem rolar a página */}
+          <div
+            className="lg:hidden fixed inset-0 z-[140] flex items-end justify-center p-0 sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Resumo do paciente"
+          >
+            <button
+              type="button"
+              className="patient-preview-backdrop absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+              aria-label="Fechar resumo do paciente"
+              onClick={closeDetail}
+            />
+            <PatientPreviewPanel
+              selectedPatient={selectedPatient}
+              detailTitleId={undefined}
+              closeDetail={closeDetail}
+              galleryPhotoCount={galleryPhotoCount}
+              galleryPreviewSlots={galleryPreviewSlots}
+              getPatientInitials={getPatientInitials}
+              setPatientDetailTab={setPatientDetailTab}
+              setPatientView={setPatientView}
+              shellClassName="patient-preview-sheet relative z-10 flex w-full max-w-lg flex-row flex-wrap content-start items-start justify-start gap-4 rounded-t-[20px] border border-[#e2e8f0] border-b-0 bg-[#f1f5f9] p-4 pb-6 shadow-[0_-8px_40px_-12px_rgba(15,23,42,0.2)] sm:rounded-2xl sm:border-b sm:shadow-[0_16px_48px_-10px_rgba(15,23,42,0.14)] max-h-[min(calc(100dvh-env(safe-area-inset-bottom)-12px),92dvh)] overflow-y-auto overflow-x-hidden custom-scrollbar sm:max-h-[min(88dvh,720px)]"
+            />
           </div>
-        </div>
+
+          {/* Desktop (lg+): painel lateral que empurra a lista */}
+          <aside
+            className="hidden lg:flex patient-preview-sheet relative z-10 mt-0 flex-row flex-wrap content-start items-start justify-start gap-4 w-full lg:flex-none lg:w-[min(52rem,min(58vw,calc(100%-1rem)))] lg:max-w-full lg:shrink-0 rounded-2xl border border-[#e2e8f0] bg-[#f1f5f9] p-4 sm:p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] overflow-y-auto overflow-x-hidden custom-scrollbar"
+            aria-labelledby={desktopTitleId}
+            aria-label="Resumo do paciente"
+          >
+            <PatientPreviewPanel
+              selectedPatient={selectedPatient}
+              detailTitleId={desktopTitleId}
+              closeDetail={closeDetail}
+              galleryPhotoCount={galleryPhotoCount}
+              galleryPreviewSlots={galleryPreviewSlots}
+              getPatientInitials={getPatientInitials}
+              setPatientDetailTab={setPatientDetailTab}
+              setPatientView={setPatientView}
+              shellClassName="contents"
+            />
+          </aside>
+        </>
       ) : null}
     </div>
   );
