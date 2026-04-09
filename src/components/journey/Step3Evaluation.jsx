@@ -259,7 +259,7 @@ export function Step3Evaluation({
         {(evaluationCapturedPhotos || []).length === 0 ? (
           <div className="bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-4 text-[#64748b] text-[13px] font-medium flex items-center gap-2">
             <ImageIcon className="w-4 h-4" />
-            Use o botão de câmera vermelho para capturar até 5 fotos e escolher qual desenhar.
+            Use o botão de câmera vermelho para capturar até {evaluationPhotoMax || 30} fotos e escolher qual desenhar.
           </div>
         ) : (
           <div className="flex flex-wrap gap-3">
