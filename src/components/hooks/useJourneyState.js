@@ -42,6 +42,7 @@ export const useJourneyState = () => {
   // ============ ETAPA 4: LGPD ============
   const [termoLido, setTermoLido] = useState(false);
   const [termoAssinado, setTermoAssinado] = useState(false);
+  const [termoAssinaturaDataUrl, setTermoAssinaturaDataUrl] = useState('');
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
   const [orientacoes, setOrientacoes] = useState(false);
@@ -129,6 +130,8 @@ export const useJourneyState = () => {
     setTermoLido,
     termoAssinado,
     setTermoAssinado,
+    termoAssinaturaDataUrl,
+    setTermoAssinaturaDataUrl,
     // Etapa 5
     orientacoes,
     setOrientacoes,

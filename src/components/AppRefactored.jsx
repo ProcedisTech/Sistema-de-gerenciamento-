@@ -294,6 +294,7 @@ export default function App() {
       lgpdInicial: Boolean(journeyState.lgpdInicial),
       termoLido: Boolean(journeyState.termoLido),
       termoAssinado: Boolean(journeyState.termoAssinado),
+      termoAssinaturaDataUrl: journeyState.termoAssinaturaDataUrl || '',
       orientacoes: Boolean(journeyState.orientacoes),
       satisfacao: Boolean(journeyState.satisfacao),
     };
@@ -511,6 +512,7 @@ export default function App() {
     journeyState.setPaths([]);
     journeyState.setTermoLido(false);
     journeyState.setTermoAssinado(false);
+    journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
     patientState.setSelectedPatientCpf(null);
@@ -629,7 +631,7 @@ export default function App() {
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] flex-1 flex flex-col min-h-0'
               : activeView === 'pacientes'
                 ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
-                : 'p-3 sm:p-6 md:p-8 max-w-[1100px]'
+                : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
           }`}
         >
           <div
@@ -741,6 +743,8 @@ export default function App() {
                     setTermoLido={journeyState.setTermoLido}
                     termoAssinado={journeyState.termoAssinado}
                     setTermoAssinado={journeyState.setTermoAssinado}
+                    termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
+                    setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
                   />
                 )}
 
