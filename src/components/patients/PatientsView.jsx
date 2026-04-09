@@ -16,8 +16,6 @@ export function PatientsView(props) {
     onUpdatePatient,
     onAddGalleryFiles,
     onDeleteGalleryPhoto,
-    onUploadDocumentFiles,
-    onSyncPendingDocuments,
     onPatientCreated,
     mergePatientById,
     refreshPatients,
@@ -46,8 +44,6 @@ export function PatientsView(props) {
         onUpdatePatient={onUpdatePatient}
         onAddGalleryFiles={onAddGalleryFiles}
         onDeleteGalleryPhoto={onDeleteGalleryPhoto}
-        onUploadDocumentFiles={onUploadDocumentFiles}
-        onSyncPendingDocuments={onSyncPendingDocuments}
         mergePatientById={mergePatientById}
         refreshPatients={refreshPatients}
         roleUserId={roleUserId}

@@ -38,11 +38,6 @@ export const PATIENT_SEEDS = [
       { texto: 'Paciente sensivel a agulhas - usar anestesico topico sempre', autor: 'Dr. Roberto Silva', data: '05/08/2025' },
       { texto: 'Preferencia por atendimentos no periodo da tarde', autor: 'Recepcao', data: '10/11/2025' },
     ],
-    documentos: [
-      { nome: 'Termo de Consentimento LGPD', data: '05/08/2025', hora: '10:45', tipo: 'Assinatura digital', status: 'vigente' },
-      { nome: 'Contrato de Tratamento', data: '05/08/2025', hora: '10:50', tipo: 'Assinatura digital', status: 'vigente' },
-      { nome: 'Termo de Responsabilidade - Botox', data: '15/02/2026', hora: '14:15', tipo: 'Assinatura digital', status: 'vigente' },
-    ],
     galeria: [
       { sessao: 'Sessao 3 - Fev/2026', procedimento: 'Botox + Preenchimento', data: '15/02/2026', fotos: [{ label: 'Antes', url: null }, { label: 'Planejamento', url: null }, { label: 'Depois', url: null }] },
       { sessao: 'Sessao 2 - Nov/2025', procedimento: 'Avaliacao Inicial', data: '10/11/2025', fotos: [{ label: 'Antes', url: null }] },
@@ -80,9 +75,6 @@ export const PATIENT_SEEDS = [
       { data: '10/12/2025', hora: '11:00', nome: 'Design de Sobrancelha', profissional: 'Dra. Mariana Costa', valor: 800 },
     ],
     notas: [],
-    documentos: [
-      { nome: 'Termo de Consentimento LGPD', data: '10/12/2025', hora: '11:05', tipo: 'Assinatura digital', status: 'vigente' },
-    ],
     galeria: [
       { sessao: 'Sessao 2 - Fev/2026', procedimento: 'Skinbooster', data: '22/02/2026', fotos: [{ label: 'Antes', url: null }, { label: 'Depois', url: null }] },
     ],
@@ -119,10 +111,6 @@ export const PATIENT_SEEDS = [
       { data: '15/09/2025', hora: '10:00', nome: 'Harmonizacao Facial', profissional: 'Dr. Roberto Silva', valor: 3200 },
     ],
     notas: [],
-    documentos: [
-      { nome: 'Termo de Consentimento LGPD', data: '15/09/2025', hora: '09:50', tipo: 'Assinatura digital', status: 'vigente' },
-      { nome: 'Contrato de Tratamento', data: '15/09/2025', hora: '09:55', tipo: 'Assinatura digital', status: 'vigente' },
-    ],
     galeria: [
       { sessao: 'Sessao 3 - Mar/2026', procedimento: 'Botox Preventivo', data: '01/03/2026', fotos: [{ label: 'Antes', url: null }, { label: 'Depois', url: null }] },
       { sessao: 'Sessao 2 - Dez/2025', procedimento: 'Skinbooster', data: '10/12/2025', fotos: [{ label: 'Antes', url: null }] },

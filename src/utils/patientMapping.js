@@ -59,7 +59,6 @@ export function mapBackendPatient(dto) {
     observacoesImportantes: '',
     procedures: [],
     notas: [],
-    documentos: [],
     galeria: [],
   };
 }

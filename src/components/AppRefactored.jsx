@@ -17,7 +17,7 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesApi, pacientesDocumentosApi } from '../services/api';
+import { anamneseApi, pacientesApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
 
 import { PatientsView } from './patients';
@@ -42,15 +42,6 @@ const STEP1_FIELD_LABELS = {
   alergias: 'alergias',
   lgpdInicial: 'aceite de LGPD',
 };
-
-const BLOCKED_FILE_EXTENSIONS = new Set(['exe', 'bat', 'cmd', 'ps1', 'msi', 'js']);
-
-function hasBlockedFileExtension(fileName) {
-  const name = String(fileName || '').trim().toLowerCase();
-  const idx = name.lastIndexOf('.');
-  if (idx < 0 || idx === name.length - 1) return false;
-  return BLOCKED_FILE_EXTENSIONS.has(name.slice(idx + 1));
-}
 
 function messageForMissingStep1Fields(errors) {
   const keys = Object.keys(errors);
@@ -250,98 +241,6 @@ export default function App() {
     });
   };
 
-  const syncPendingDocumentsForPatient = async (cpfKey) => {
-    const key = String(cpfKey || '').trim();
-    if (!key) return;
-    const selected = patients.find((p) => String(p?.cpf || '').trim() === key);
-    if (!selected?.id) return;
-    const docs = Array.isArray(selected.documentos) ? selected.documentos : [];
-    const pending = docs.filter((d) => d?.syncStatus === 'pending' && d?._file instanceof File);
-    if (!pending.length) return;
-
-    const updatedById = new Map();
-    for (const item of pending) {
-      try {
-        const created = await pacientesDocumentosApi.upload(selected.id, item._file, { roleUserId });
-        updatedById.set(item.id, {
-          ...item,
-          ...created,
-          syncStatus: 'synced',
-          status: 'sincronizado',
-          _file: null,
-        });
-      } catch {
-        updatedById.set(item.id, item);
-      }
-    }
-
-    updatePatientByCpf(key, (prev) => ({
-      ...prev,
-      documentos: (Array.isArray(prev.documentos) ? prev.documentos : []).map((d) => updatedById.get(d.id) || d),
-    }));
-  };
-
-  const handleUploadDocumentFiles = async (fileList, cpfKey) => {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
-
-    const blocked = files.find((f) => hasBlockedFileExtension(f.name));
-    if (blocked) {
-      toast.error(`Arquivo bloqueado por segurança: ${blocked.name}`);
-      return;
-    }
-
-    const overLimit = files.find((f) => Number(f?.size || 0) > 50 * 1024 * 1024);
-    if (overLimit) {
-      toast.error(`Arquivo acima de 50 MB: ${overLimit.name}`);
-      return;
-    }
-
-    const key = String(cpfKey || selectedPatientCpf || journeyState.cpf || '').trim();
-    if (!key) return;
-    const selected = patients.find((p) => String(p?.cpf || '').trim() === key);
-
-    const now = new Date();
-    const localDocs = files.map((file) => ({
-      id: `pending_${crypto.randomUUID()}`,
-      nome: file.name,
-      data: now.toLocaleDateString('pt-BR'),
-      hora: now.toTimeString().slice(0, 5),
-      tipo: file.type || 'application/octet-stream',
-      status: 'pendente de sincronizacao',
-      syncStatus: 'pending',
-      _file: file,
-    }));
-
-    updatePatientByCpf(key, (prev) => ({
-      ...prev,
-      documentos: [...localDocs, ...(Array.isArray(prev.documentos) ? prev.documentos : [])],
-    }));
-
-    if (!selected?.id) return;
-
-    for (const item of localDocs) {
-      try {
-        const created = await pacientesDocumentosApi.upload(selected.id, item._file, { roleUserId });
-        updatePatientByCpf(key, (prev) => ({
-          ...prev,
-          documentos: (Array.isArray(prev.documentos) ? prev.documentos : []).map((doc) => {
-            if (doc.id !== item.id) return doc;
-            return {
-              ...doc,
-              ...created,
-              syncStatus: 'synced',
-              status: 'sincronizado',
-              _file: null,
-            };
-          }),
-        }));
-      } catch {
-        // mantém pendente para retentativa automática/manual
-      }
-    }
-  };
-
   const handleDeleteGalleryPhoto = (cpfKey, index) => {
     updatePatientByCpf(cpfKey, (prev) => {
       const photos = Array.isArray(prev?.evaluationCapturedPhotos)
@@ -410,42 +309,11 @@ export default function App() {
       if (idx >= 0) {
         const copy = [...list];
         const existing = copy[idx];
-        const existingDocs = Array.isArray(existing.documentos) ? existing.documentos : [];
-        const docs = [...existingDocs];
-
-        const ensureDoc = (nome, status = 'vigente') => {
-          if (docs.some((d) => d?.nome === nome)) return;
-          const now = new Date();
-          docs.unshift({
-            nome,
-            data: now.toLocaleDateString('pt-BR'),
-            hora: now.toTimeString().slice(0, 5),
-            tipo: 'Assinatura digital',
-            status,
-          });
-        };
-
-        if (patientPayload.lgpdInicial) ensureDoc('Termo LGPD Inicial');
-        if (patientPayload.termoAssinado) ensureDoc('Termo de Consentimento LGPD - Jornada');
-        if (patientPayload.orientacoes) ensureDoc('Termo de Orientacoes Pos-Procedimento');
-
-        copy[idx] = { ...existing, ...patientPayload, documentos: docs };
+        copy[idx] = { ...existing, ...patientPayload };
         return copy;
       }
 
-      const docs = [];
-      if (patientPayload.lgpdInicial) {
-        const now = new Date();
-        docs.push({
-          nome: 'Termo LGPD Inicial',
-          data: now.toLocaleDateString('pt-BR'),
-          hora: now.toTimeString().slice(0, 5),
-          tipo: 'Assinatura digital',
-          status: 'vigente',
-        });
-      }
-
-      return [...list, { ...patientPayload, documentos: docs }];
+      return [...list, patientPayload];
     });
 
     if (ensureSelected) {
@@ -918,8 +786,6 @@ export default function App() {
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
                 onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
-                onUploadDocumentFiles={handleUploadDocumentFiles}
-                onSyncPendingDocuments={syncPendingDocumentsForPatient}
                 onPatientCreated={patientState.refreshPatients}
                 mergePatientById={mergePatientById}
                 refreshPatients={refreshPatients}
