@@ -1,11 +1,15 @@
 import React from 'react';
-import { Shield, Square, CheckSquare, PenLine, Eraser, RotateCw, X } from 'lucide-react';
+import { Shield, Square, CheckSquare, PenLine, Eraser, RotateCw, X, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
 
 export function Step4LGPD({
   termoLido, setTermoLido,
   termoAssinado, setTermoAssinado,
   termoAssinaturaDataUrl,
   setTermoAssinaturaDataUrl,
+  lgpdCapturedPhotos = [],
+  lgpdPhotoMax = 30,
+  onLgpdUploadFiles,
+  onLgpdRemovePhoto,
 }) {
   const [signatureModalOpen, setSignatureModalOpen] = React.useState(false);
   const [mobilePortrait, setMobilePortrait] = React.useState(false);
@@ -15,6 +19,7 @@ export function Step4LGPD({
   const canvasRef = React.useRef(null);
   const isDrawingRef = React.useRef(false);
   const hasStrokeRef = React.useRef(Boolean(termoAssinaturaDataUrl));
+  const lgpdUploadInputRef = React.useRef(null);
 
   React.useEffect(() => {
     const evaluateOrientation = () => {
@@ -197,15 +202,46 @@ export function Step4LGPD({
     setSignatureModalOpen(true);
   };
 
+  const handleLgpdImageUpload = (event) => {
+    const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
+    event.target.value = '';
+    if (!files.length) return;
+    onLgpdUploadFiles?.(files);
+  };
+
   return (
     <div className="animate-in fade-in duration-300">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="bg-[#dcfce7] p-3 rounded-2xl text-[#22c55e] border-[3px] border-[#22c55e]/25">
-          <Shield className="w-7 h-7" strokeWidth={2.5} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <div className="bg-[#dcfce7] p-3 rounded-2xl text-[#22c55e] border-[3px] border-[#22c55e]/25">
+            <Shield className="w-7 h-7" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h3 className="text-[20px] font-bold text-[#0f172a]">Termo de Consentimento LGPD</h3>
+            <p className="text-[#64748b] text-[14px] font-medium">Autorização antes do procedimento</p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-[20px] font-bold text-[#0f172a]">Termo de Consentimento LGPD</h3>
-          <p className="text-[#64748b] text-[14px] font-medium">Autorização antes do procedimento</p>
+
+        <div className="flex flex-col items-start sm:items-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => lgpdUploadInputRef.current?.click()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-[3px] border-transparent bg-[#16a34a] text-white text-[13px] font-bold shadow-sm hover:bg-[#15803d] transition-all"
+          >
+            <Upload className="w-4 h-4" strokeWidth={2.5} />
+            Upload de imagens
+          </button>
+          <input
+            ref={lgpdUploadInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleLgpdImageUpload}
+          />
+          <span className="text-[12px] font-bold text-[#15803d]">
+            {(lgpdCapturedPhotos || []).length}/{lgpdPhotoMax} imagens na jornada
+          </span>
         </div>
       </div>
 
@@ -267,6 +303,32 @@ export function Step4LGPD({
             <div className="h-[120px] rounded-lg border-[2px] border-[#00a88e]/20 bg-[#f8fbfb] overflow-hidden">
               <img src={termoAssinaturaDataUrl} alt="Assinatura digital" className="w-full h-full object-contain" />
             </div>
+          </div>
+        )}
+
+        {(lgpdCapturedPhotos || []).length === 0 ? (
+          <div className="bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-4 text-[#64748b] text-[13px] font-medium flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Use o botao verde para anexar as imagens de consentimento/LGPD.
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {(lgpdCapturedPhotos || []).map((ph, idx) => (
+              <div key={`${ph.url}_${idx}`} className="relative">
+                <div className="w-20 h-20 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/15 bg-white">
+                  <img src={ph.url} alt="Imagem LGPD" className="w-full h-full object-cover" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onLgpdRemovePhoto?.(idx)}
+                  className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[3px] border-white flex items-center justify-center shadow-md"
+                  aria-label="Remover imagem LGPD"
+                  title="Remover imagem"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>
