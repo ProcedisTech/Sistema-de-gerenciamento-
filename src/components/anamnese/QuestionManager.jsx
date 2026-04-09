@@ -87,10 +87,8 @@ function SortableAltCard({ alt }) {
 // ── Resolve tipoRespostaId from various API shapes ────────────────────────────
 
 function resolveTipoRespostaId(pergunta, tiposResposta) {
-  // Try direct UUID fields first (camelCase then snake_case)
   const byId = pergunta.tipoRespostaId || pergunta.tipo_resposta_id;
   if (byId) return String(byId);
-  // Fallback: match by tipo string (e.g. "multipla_escolha")
   const tipoStr = pergunta.tipoResposta || pergunta.tipo_resposta || '';
   if (tipoStr) {
     const match = tiposResposta.find((tr) => tr.tipo === tipoStr);
@@ -101,7 +99,7 @@ function resolveTipoRespostaId(pergunta, tiposResposta) {
 
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 
-function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, onSaved }) {
+export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, onSaved }) {
   const [categoriaId, setCategoriaId] = useState(String(pergunta.categoriaId || ''));
   const [tipoRespostaId, setTipoRespostaId] = useState(() => resolveTipoRespostaId(pergunta, tiposResposta));
   const [descricao, setDescricao] = useState(pergunta.descricao || '');
@@ -114,7 +112,6 @@ function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, on
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
 
-  // tipo string from the original pergunta object (any API shape)
   const tipoStrOriginal = pergunta.tipoResposta || pergunta.tipo_resposta || '';
 
   const tipoSelecionado = useMemo(() => {
@@ -122,7 +119,6 @@ function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, on
     return t?.tipo || '';
   }, [tiposResposta, tipoRespostaId]);
 
-  // Show alternatives whenever: current select is a choice type, OR the original tipo was a choice type, OR there are already saved alternatives
   const mostrarAlternativas =
     TIPOS_COM_ALTERNATIVAS.includes(tipoSelecionado) ||
     TIPOS_COM_ALTERNATIVAS.includes(tipoStrOriginal) ||
@@ -144,7 +140,6 @@ function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, on
   const handleAdicionarAlt = () => {
     const texto = novaAlt.trim();
     if (!texto) return;
-    // For new (unsaved) alternatives, use a temp id
     setAlternativas((prev) => [
       ...prev,
       { id: `new-${Date.now()}`, alternativa: texto, ordem: prev.length + 1 },
@@ -202,7 +197,7 @@ function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onClose, on
     } catch (err) {
       if (err.status === 404) {
         onClose();
-        onSaved(null); // trigger refetch
+        onSaved(null);
       } else {
         setErro(err.message || 'Erro ao salvar pergunta.');
       }
@@ -332,6 +327,7 @@ export function QuestionManager() {
   const [perguntas, setPerguntas] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [tiposResposta, setTiposResposta] = useState([]);
+  const [fichas, setFichas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroCategoria, setFiltroCategoria] = useState('');
 
@@ -351,8 +347,7 @@ export function QuestionManager() {
   // delete
   const [deletingId, setDeletingId] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
-  const [erroDelete, setErroDelete] = useState(null); // { id, msg }
-  /** Conflito 409 ao excluir (pergunta em uso) — mensagem do servidor em modal */
+  const [erroDelete, setErroDelete] = useState(null);
   const [deleteConflictModal, setDeleteConflictModal] = useState(null);
 
   // reorder state per card: { [habitoId]: isSaving }
@@ -367,16 +362,30 @@ export function QuestionManager() {
 
   const precisaAlternativas = TIPOS_COM_ALTERNATIVAS.includes(tipoSelecionado);
 
+  // Derive which pergunta ids are in use across all fichas
+  const perguntasEmUso = useMemo(() => {
+    const ids = new Set();
+    fichas.forEach((f) => {
+      (f.itens || []).forEach((item) => {
+        const id = item.pergunta?.id || item.perguntaId;
+        if (id) ids.add(String(id));
+      });
+    });
+    return ids;
+  }, [fichas]);
+
   const fetchDados = async () => {
     setLoading(true);
-    const [cats, tipos, pergs] = await Promise.all([
+    const [cats, tipos, pergs, fs] = await Promise.all([
       anamneseApi.listCategorias().catch((e) => { console.warn('Categorias:', e.message); return []; }),
       dimensoesApi.tiposResposta().catch((e) => { console.warn('Tipos resposta:', e.message); return []; }),
       anamneseApi.listAllHabitos().catch((e) => { console.warn('Hábitos:', e.message); return []; }),
+      anamneseApi.listFichas().catch((e) => { console.warn('Fichas:', e.message); return []; }),
     ]);
     setCategorias(Array.isArray(cats) ? cats : []);
     setTiposResposta(Array.isArray(tipos) ? tipos : []);
     setPerguntas(Array.isArray(pergs) ? pergs : []);
+    setFichas(Array.isArray(fs) ? fs : []);
     setLoading(false);
   };
 
@@ -483,7 +492,6 @@ export function QuestionManager() {
     const newIdx = alts.findIndex((a) => a.id === over.id);
     const reordered = arrayMove(alts, oldIdx, newIdx).map((a, i) => ({ ...a, ordem: i + 1 }));
 
-    // Optimistic update
     setPerguntas((prev) =>
       prev.map((p) => (p.id === habitoId ? { ...p, alternativas: reordered } : p))
     );
@@ -518,16 +526,8 @@ export function QuestionManager() {
     return map[tipo] || tipo;
   };
 
-  const tipoBadgeColor = (tipo) => {
-    const map = {
-      texto: 'bg-blue-50 text-blue-700 border-blue-200',
-      escolha_unica: 'bg-purple-50 text-purple-700 border-purple-200',
-      multipla_escolha: 'bg-amber-50 text-amber-700 border-amber-200',
-      booleano: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      numero: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-    };
-    return map[tipo] || 'bg-gray-50 text-gray-700 border-gray-200';
-  };
+  // All type badges use the same blue style
+  const tipoBadgeColor = () => 'bg-blue-50 text-blue-700 border-blue-200';
 
   return (
     <div className="space-y-6">
@@ -650,6 +650,44 @@ export function QuestionManager() {
             />
           </div>
 
+          {/* Preview in create form for non-choice types */}
+          {tipoSelecionado === 'texto' && (
+            <div className="pl-3 border-l-[3px] border-blue-200">
+              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wide mb-1">Pré-visualização</p>
+              <input
+                disabled
+                placeholder="Resposta do paciente"
+                className="w-full px-3 py-2 bg-slate-50 border-[2px] border-dashed border-slate-300 rounded-lg text-[12px] text-slate-400 cursor-not-allowed"
+              />
+            </div>
+          )}
+
+          {tipoSelecionado === 'booleano' && (
+            <div className="pl-3 border-l-[3px] border-emerald-200">
+              <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wide mb-1.5">Pré-visualização</p>
+              <div className="flex gap-2">
+                <span className="px-4 py-1.5 rounded-lg border-[2px] border-emerald-300 bg-emerald-50 text-emerald-700 text-[12px] font-bold select-none">
+                  Sim
+                </span>
+                <span className="px-4 py-1.5 rounded-lg border-[2px] border-slate-200 bg-slate-50 text-slate-500 text-[12px] font-bold select-none">
+                  Não
+                </span>
+              </div>
+            </div>
+          )}
+
+          {tipoSelecionado === 'numero' && (
+            <div className="pl-3 border-l-[3px] border-cyan-200">
+              <p className="text-[10px] font-bold text-cyan-500 uppercase tracking-wide mb-1">Pré-visualização</p>
+              <input
+                type="number"
+                disabled
+                placeholder="Resposta do paciente"
+                className="w-32 px-3 py-2 bg-slate-50 border-[2px] border-dashed border-slate-300 rounded-lg text-[12px] text-slate-400 cursor-not-allowed"
+              />
+            </div>
+          )}
+
           {precisaAlternativas && (
             <div className="space-y-3 p-4 bg-white border-[3px] border-[#a855f7]/20 rounded-xl">
               <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas *</label>
@@ -716,9 +754,14 @@ export function QuestionManager() {
             const isDeleting = deletingId === p.id;
             const cardErro = erroDelete?.id === p.id ? erroDelete.msg : null;
             const isSavingReorder = !!reorderSaving[p.id];
+            const emUso = perguntasEmUso.has(String(p.id));
 
             return (
-              <div key={p.id} className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all flex flex-col shadow-sm">
+              <div
+                key={p.id}
+                onClick={() => { if (!isDeleting) setEditingPergunta(p); }}
+                className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all flex flex-col shadow-sm cursor-pointer"
+              >
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -733,30 +776,42 @@ export function QuestionManager() {
                     </div>
                   </div>
 
-                  {/* Action buttons */}
-                  {!isDeleting && (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => setEditingPergunta(p)}
-                        title="Editar"
-                        className="p-1.5 rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#00a88e] transition-colors"
-                      >
-                        <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
-                      </button>
-                      <button
-                        onClick={() => { setErroDelete(null); setDeletingId(p.id); }}
-                        title="Excluir"
-                        className="p-1.5 rounded-lg text-[#64748b] hover:bg-red-50 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
-                      </button>
+                  {/* Badge above action buttons (or badge only while confirming delete) */}
+                  {(emUso || !isDeleting) && (
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {emUso && (
+                        <span
+                          className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap"
+                          title="Usada em uma ou mais fichas"
+                        >
+                          Em uso
+                        </span>
+                      )}
+                      {!isDeleting && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setEditingPergunta(p)}
+                            title="Editar"
+                            className="p-1.5 rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#00a88e] transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                          </button>
+                          <button
+                            onClick={() => { setErroDelete(null); setDeletingId(p.id); }}
+                            title="Excluir"
+                            className="p-1.5 rounded-lg text-[#64748b] hover:bg-red-50 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
 
                 {/* Delete confirmation */}
                 {isDeleting && (
-                  <div className="mt-3 flex flex-col gap-2">
+                  <div className="mt-3 flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
                     <span className="text-[12px] font-bold text-[#475569] break-words [overflow-wrap:anywhere]">Remover esta pergunta?</span>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -779,14 +834,14 @@ export function QuestionManager() {
 
                 {/* Inline error */}
                 {cardErro && (
-                  <div className="mt-2 text-[12px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <div className="mt-2 text-[12px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     {cardErro}
                   </div>
                 )}
 
                 {/* Alternatives with drag-to-reorder (escolha_unica / multipla_escolha) */}
                 {hasAlts && (
-                  <div className="mt-3 pl-3 border-l-[3px] border-[#a855f7]/20 space-y-1">
+                  <div className="mt-3 pl-3 border-l-[3px] border-[#a855f7]/20 space-y-1" onClick={(e) => e.stopPropagation()}>
                     {isSavingReorder && (
                       <div className="flex items-center gap-1.5 text-[11px] text-[#a855f7] font-medium pb-1">
                         <Loader2 className="w-3 h-3 animate-spin" /> Salvando ordem...
@@ -812,7 +867,7 @@ export function QuestionManager() {
                     <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wide mb-1">Pré-visualização</p>
                     <input
                       disabled
-                      placeholder="Resposta escrita pelo paciente..."
+                      placeholder="Resposta do paciente"
                       className="w-full px-3 py-2 bg-slate-50 border-[2px] border-dashed border-slate-300 rounded-lg text-[12px] text-slate-400 cursor-not-allowed"
                     />
                   </div>
@@ -838,7 +893,7 @@ export function QuestionManager() {
                     <input
                       type="number"
                       disabled
-                      placeholder="0"
+                      placeholder="Resposta do paciente"
                       className="w-32 px-3 py-2 bg-slate-50 border-[2px] border-dashed border-slate-300 rounded-lg text-[12px] text-slate-400 cursor-not-allowed"
                     />
                   </div>
