@@ -83,6 +83,25 @@ export function authHeadersForFetch({ needsOrg = true } = {}) {
   return h;
 }
 
+/**
+ * Dispara `auth:expired` (logout) apenas se GET /api/auth/me também retornar 401 — ou seja,
+ * a sessão realmente expirou. Se /me responder 200, o 401 é de negócio/org e não desloga.
+ * Usa dynamic import para evitar dependência circular estática com authMeProbe.js.
+ */
+async function dispatchAuthExpiredIfSessionReallyGone() {
+  try {
+    const { invalidateAuthMeCache, fetchAuthMeSnapshot } = await import('../utils/authMeProbe.js');
+    invalidateAuthMeCache();
+    const snap = await fetchAuthMeSnapshot();
+    if (snap.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+  } catch {
+    // Falha ao verificar /me: disparar logout por segurança
+    window.dispatchEvent(new CustomEvent('auth:expired'));
+  }
+}
+
 async function requestDelete(path, { needsOrg = true } = {}) {
   const headers = withAuthHeaders({});
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
@@ -91,7 +110,7 @@ async function requestDelete(path, { needsOrg = true } = {}) {
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
+      await dispatchAuthExpiredIfSessionReallyGone();
     }
     const body = await res.json().catch(() => ({}));
     const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
@@ -116,6 +135,23 @@ function buildApiErrorMessage(status, body, statusText) {
   return trimmed ? `[HTTP ${status}] ${trimmed}` : `[HTTP ${status}]`;
 }
 
+/**
+ * Mensagem legível a partir do JSON de erro (Spring / ProblemDetail), sem prefixo `[HTTP n]`.
+ * Ordem: `message`, `detail`, `error` apenas se for string.
+ * @param {{ body?: Record<string, unknown> } | null | undefined} err
+ * @returns {string}
+ */
+export function getApiErrorDetail(err) {
+  const body = err && typeof err === 'object' && err.body && typeof err.body === 'object' ? err.body : null;
+  if (!body) return '';
+  const msg = body.message != null ? String(body.message).trim() : '';
+  if (msg) return msg;
+  const det = body.detail != null ? String(body.detail).trim() : '';
+  if (det) return det;
+  if (typeof body.error === 'string' && body.error.trim()) return body.error.trim();
+  return '';
+}
+
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   const headers = withAuthHeaders({ 'Content-Type': 'application/json', ...fetchOpts.headers });
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
@@ -132,7 +168,7 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
+      await dispatchAuthExpiredIfSessionReallyGone();
     }
     const body = await res.json().catch(() => ({}));
     const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
@@ -161,7 +197,7 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
+      await dispatchAuthExpiredIfSessionReallyGone();
     }
     const resBody = await res.json().catch(() => ({}));
     const err = new Error(buildApiErrorMessage(res.status, resBody, res.statusText));
@@ -437,55 +473,53 @@ export const dimensoesApi = {
 };
 
 // ── Anamnese ───────────────────────────────────────────────
+// Categorias/hábitos: mesmo padrão que fichas (X-Org-Id + cookie/Bearer). Omitir needsOrg enviava só GET “ok” e
+// POST/PUT/DELETE sem X-Org-Id → 401 em muitos setups Spring multi-tenant.
 
 export const anamneseApi = {
-  listCategorias: () => request('/api/v1/anamnese/categorias', { needsOrg: false }),
+  listCategorias: () => request('/api/v1/anamnese/categorias'),
   createCategoria: (data) =>
-    request('/api/v1/anamnese/categorias', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
+    request('/api/v1/anamnese/categorias', { method: 'POST', body: JSON.stringify(data) }),
   updateCategoria: (id, { nome }) =>
     request(`/api/v1/anamnese/categorias/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ nome }),
-      needsOrg: false,
     }),
   deleteCategoria: (id) =>
-    request(`/api/v1/anamnese/categorias/${id}`, { method: 'DELETE', needsOrg: false }),
+    request(`/api/v1/anamnese/categorias/${id}`, { method: 'DELETE' }),
 
   listHabitos: (catId) =>
-    request(`/api/v1/anamnese/habitos?categoriaId=${catId}`, { needsOrg: false }),
+    request(`/api/v1/anamnese/habitos?categoriaId=${catId}`),
   listAllHabitos: async () => {
-    const cats = await request('/api/v1/anamnese/categorias', { needsOrg: false });
+    const cats = await request('/api/v1/anamnese/categorias');
     if (!Array.isArray(cats) || cats.length === 0) return [];
     const results = await Promise.all(
       cats.map((c) =>
-        request(`/api/v1/anamnese/habitos?categoriaId=${c.id}`, { needsOrg: false }).catch(() => [])
+        request(`/api/v1/anamnese/habitos?categoriaId=${c.id}`).catch(() => [])
       )
     );
     return results.flat();
   },
   createHabito: (data) =>
-    request('/api/v1/anamnese/habitos', { method: 'POST', body: JSON.stringify(data), needsOrg: false }),
+    request('/api/v1/anamnese/habitos', { method: 'POST', body: JSON.stringify(data) }),
   /** Body: categoriaId, tipoRespostaId, descricao; opcional alternativas (sync quando enviado). */
   updateHabito: (id, body) =>
     request(`/api/v1/anamnese/habitos/${id}`, {
       method: 'PUT',
       body: JSON.stringify(body),
-      needsOrg: false,
     }),
   deleteHabito: (id) =>
-    request(`/api/v1/anamnese/habitos/${id}`, { method: 'DELETE', needsOrg: false }),
+    request(`/api/v1/anamnese/habitos/${id}`, { method: 'DELETE' }),
   reordenarAlternativas: (habitoId, ordens) =>
     request(`/api/v1/anamnese/habitos/${habitoId}/alternativas/reordenar`, {
       method: 'PATCH',
       body: JSON.stringify(ordens),
-      needsOrg: false,
     }),
 
   addAlternativas: (habitoId, data) =>
     request(`/api/v1/anamnese/habitos/${habitoId}/alternativas`, {
       method: 'POST',
       body: JSON.stringify(data),
-      needsOrg: false,
     }),
 
   listFichas: () => request('/api/v1/anamnese/fichas'),

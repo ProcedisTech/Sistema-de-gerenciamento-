@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, Tag, Loader2, Pencil, Trash2, Check, X, Search } from 'lucide-react';
-import { anamneseApi } from '../../services/api';
+import { anamneseApi, getApiErrorDetail } from '../../services/api';
 
 export function CategoryManager() {
   const [categorias, setCategorias] = useState([]);
@@ -62,7 +62,11 @@ export function CategoryManager() {
       setNovoNome('');
       await fetchCategorias();
     } catch (err) {
-      setErro(err.message || 'Erro ao criar categoria.');
+      if (err.status === 409) {
+        setErro(getApiErrorDetail(err) || 'Já existe uma categoria com esse nome.');
+      } else {
+        setErro(getApiErrorDetail(err) || err.message || 'Erro ao criar categoria.');
+      }
     } finally {
       setCriando(false);
     }
@@ -93,7 +97,10 @@ export function CategoryManager() {
       setEditingNome('');
     } catch (err) {
       if (err.status === 409) {
-        setErroInline({ id, msg: err.message || 'Já existe uma categoria com esse nome.' });
+        setErroInline({
+          id,
+          msg: getApiErrorDetail(err) || err.message || 'Já existe uma categoria com esse nome.',
+        });
       } else if (err.status === 404) {
         setEditingId(null);
         setEditingNome('');

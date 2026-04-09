@@ -17,7 +17,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { anamneseApi, dimensoesApi } from '../../services/api';
+import { anamneseApi, dimensoesApi, getApiErrorDetail } from '../../services/api';
 
 const TIPOS_COM_ALTERNATIVAS = ['escolha_unica', 'multipla_escolha'];
 
@@ -352,6 +352,8 @@ export function QuestionManager() {
   const [deletingId, setDeletingId] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
   const [erroDelete, setErroDelete] = useState(null); // { id, msg }
+  /** Conflito 409 ao excluir (pergunta em uso) — mensagem do servidor em modal */
+  const [deleteConflictModal, setDeleteConflictModal] = useState(null);
 
   // reorder state per card: { [habitoId]: isSaving }
   const [reorderSaving, setReorderSaving] = useState({});
@@ -456,9 +458,17 @@ export function QuestionManager() {
       setDeletingId(null);
     } catch (err) {
       if (err.status === 409) {
-        setErroDelete({ id, msg: 'Esta pergunta está em uso em fichas ativas — remova-a das fichas primeiro.' });
+        setErroDelete(null);
+        setDeletingId(null);
+        setDeleteConflictModal(
+          getApiErrorDetail(err) ||
+            'Essa pergunta está em uso em uma ou mais fichas. Remova-a das fichas antes de excluir.'
+        );
       } else {
-        setErroDelete({ id, msg: err.message || 'Erro ao excluir.' });
+        setErroDelete({
+          id,
+          msg: getApiErrorDetail(err) || err.message || 'Erro ao excluir.',
+        });
       }
     } finally {
       setExcluindo(false);
@@ -531,6 +541,37 @@ export function QuestionManager() {
           onClose={() => setEditingPergunta(null)}
           onSaved={handleEditSaved}
         />
+      )}
+
+      {deleteConflictModal != null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-conflict-title"
+            className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 shadow-2xl w-full max-w-md flex flex-col"
+          >
+            <div className="px-6 py-4 border-b border-[#e2e8f0]">
+              <h3 id="delete-conflict-title" className="text-[16px] font-bold text-[#0f172a]">
+                Não foi possível excluir
+              </h3>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-[14px] font-medium text-[#475569] leading-relaxed whitespace-pre-wrap break-words">
+                {deleteConflictModal}
+              </p>
+            </div>
+            <div className="px-6 pb-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteConflictModal(null)}
+                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toolbar */}
