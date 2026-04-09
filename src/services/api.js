@@ -324,28 +324,6 @@ export const pacientesGaleriaApi = {
     requestDelete(`/api/v1/pacientes/${pacienteId}/galeria/${encodeURIComponent(fotoId)}`),
 };
 
-export const pacientesDocumentosApi = {
-  list: (pacienteId) =>
-    request(`/api/v1/pacientes/${pacienteId}/documentos`).then((data) => {
-      if (Array.isArray(data)) return data;
-      if (Array.isArray(data?.documentos)) return data.documentos;
-      if (Array.isArray(data?.itens)) return data.itens;
-      return [];
-    }),
-  upload: (pacienteId, file, options = {}) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    const { roleUserId } = options || {};
-    if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
-      fd.append('roleUserId', String(roleUserId));
-    }
-    return requestForm(`/api/v1/pacientes/${pacienteId}/documentos`, { method: 'POST', body: fd });
-  },
-  fetchArquivoBlob: (pacienteId, documentoId) =>
-    requestBlob(`/api/v1/pacientes/${pacienteId}/documentos/${documentoId}/arquivo`, { needsOrg: true }),
-  remove: (pacienteId, documentoId) =>
-    requestDelete(`/api/v1/pacientes/${pacienteId}/documentos/${encodeURIComponent(documentoId)}`),
-};
 
 // ── Notas do paciente ──────────────────────────────────────
 
