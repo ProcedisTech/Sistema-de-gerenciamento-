@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ClipboardList, Tag, HelpCircle, FileText } from 'lucide-react';
 import { CategoryManager } from './CategoryManager';
 import { QuestionManager } from './QuestionManager';
@@ -46,6 +46,16 @@ function TabButton({ tabKey, label, icon, active, onSelect, variant }) {
 
 export function AnamneseAdminView() {
   const [activeTab, setActiveTab] = useState('categorias');
+  const [jumpToCategoryId, setJumpToCategoryId] = useState(null);
+
+  const handleVerPerguntasDaCategoria = useCallback((categoriaId) => {
+    setJumpToCategoryId(categoriaId);
+    setActiveTab('perguntas');
+  }, []);
+
+  const handleJumpConsumed = useCallback(() => {
+    setJumpToCategoryId(null);
+  }, []);
 
   return (
     <div className="flex flex-col lg:flex-row lg:gap-8 xl:gap-10">
@@ -93,8 +103,12 @@ export function AnamneseAdminView() {
 
       {/* Área principal: ocupa o restante da largura no desktop */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {activeTab === 'categorias' && <CategoryManager />}
-        {activeTab === 'perguntas' && <QuestionManager />}
+        {activeTab === 'categorias' && (
+          <CategoryManager onVerPerguntas={handleVerPerguntasDaCategoria} />
+        )}
+        {activeTab === 'perguntas' && (
+          <QuestionManager jumpToCategoryId={jumpToCategoryId} onJumpConsumed={handleJumpConsumed} />
+        )}
         {activeTab === 'fichas' && <FichaBuilder />}
       </div>
     </div>

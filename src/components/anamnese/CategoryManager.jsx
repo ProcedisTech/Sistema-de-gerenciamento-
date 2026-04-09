@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Tag, Loader2, Pencil, Trash2, Check, X, Search } from 'lucide-react';
+import { Plus, Tag, Loader2, Pencil, Trash2, Check, X, Search, ChevronRight } from 'lucide-react';
 import { anamneseApi, getApiErrorDetail } from '../../services/api';
 
-export function CategoryManager() {
+export function CategoryManager({ onVerPerguntas }) {
   const [categorias, setCategorias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
@@ -296,22 +296,43 @@ export function CategoryManager() {
                   ) : (
                     /* ── Normal view ── */
                     <div className="flex flex-col gap-2 w-full min-w-0 xl:flex-row xl:items-center xl:justify-between xl:gap-2">
-                      <div className="flex items-start gap-2.5 min-w-0 flex-1 xl:items-center xl:gap-3">
-                        <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />
-                        <span title={cat.nome} className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words leading-snug">
-                          {cat.nome}
-                        </span>
-                      </div>
+                      {typeof onVerPerguntas === 'function' ? (
+                        <button
+                          type="button"
+                          onClick={() => onVerPerguntas(cat.id)}
+                          className="flex items-start gap-2.5 min-w-0 flex-1 xl:items-center xl:gap-3 text-left rounded-xl -m-1 p-1 hover:bg-[#f0fdfa]/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40 transition-colors"
+                        >
+                          <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />
+                          <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                            <span title={cat.nome} className="text-[15px] md:text-[14px] font-bold text-[#0f172a] break-words leading-snug">
+                              {cat.nome}
+                            </span>
+                            <span className="text-[11px] font-bold text-[#00a88e]/80 flex items-center gap-0.5">
+                              Ver perguntas
+                              <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} aria-hidden />
+                            </span>
+                          </span>
+                        </button>
+                      ) : (
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1 xl:items-center xl:gap-3">
+                          <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />
+                          <span title={cat.nome} className="text-[15px] md:text-[14px] font-bold text-[#0f172a] min-w-0 flex-1 break-words leading-snug">
+                            {cat.nome}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full xl:w-auto xl:ml-2 pt-0.5 xl:pt-0 border-t border-[#00a88e]/10 xl:border-0">
                         <button
-                          onClick={() => handleEditar(cat)}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleEditar(cat); }}
                           title="Editar"
                           className="p-1.5 rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#00a88e] transition-colors"
                         >
                           <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
                         </button>
                         <button
-                          onClick={() => handleConfirmarExclusao(cat.id)}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleConfirmarExclusao(cat.id); }}
                           title="Excluir"
                           className="p-1.5 rounded-lg text-[#64748b] hover:bg-red-50 hover:text-red-500 transition-colors"
                         >
