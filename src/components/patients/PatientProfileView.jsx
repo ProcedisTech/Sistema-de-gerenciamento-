@@ -178,11 +178,6 @@ function AnamneseTab({ pacienteId }) {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1">
                             <span className="text-[12px] text-[#64748b] font-medium">{resp.perguntaDescricao || 'Pergunta'}</span>
-                            {resp.tipoResposta && (
-                              <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#e6f7f5] text-[#0f766e]">
-                                {resp.tipoResposta}
-                              </span>
-                            )}
                           </div>
                         </div>
                         <p className="text-[14px] font-bold text-[#0f172a] mt-1.5">{renderRespostaValue(resp)}</p>
