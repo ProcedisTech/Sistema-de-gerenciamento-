@@ -48,7 +48,7 @@ export function AnamneseAdminView() {
   const [activeTab, setActiveTab] = useState('categorias');
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 lg:flex-row lg:gap-8 xl:gap-10">
+    <div className="flex flex-col lg:flex-row lg:gap-8 xl:gap-10">
       {/* Coluna esquerda: contexto + abas (mobile: topo; desktop: sidebar) */}
       <div className="flex-shrink-0 lg:w-56 xl:w-64 lg:border-r-[3px] lg:border-[#00a88e]/10 lg:pr-8">
         <div className="flex items-center gap-3 sm:gap-4 mb-4 lg:mb-5">
@@ -91,13 +91,11 @@ export function AnamneseAdminView() {
         </nav>
       </div>
 
-      {/* Área principal: ocupa o restante da largura no desktop (scroll único no main) */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-0 flex flex-col">
-          {activeTab === 'categorias' && <CategoryManager />}
-          {activeTab === 'perguntas' && <QuestionManager />}
-          {activeTab === 'fichas' && <FichaBuilder />}
-        </div>
+      {/* Área principal: ocupa o restante da largura no desktop */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {activeTab === 'categorias' && <CategoryManager />}
+        {activeTab === 'perguntas' && <QuestionManager />}
+        {activeTab === 'fichas' && <FichaBuilder />}
       </div>
     </div>
   );

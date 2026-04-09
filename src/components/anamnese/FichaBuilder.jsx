@@ -215,7 +215,7 @@ export function FichaBuilder() {
                     </div>
                     <span className="w-6 h-6 rounded-full bg-[#00a88e] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">{item.ordem}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-bold text-[#0f172a] truncate">{item.descricao}</p>
+                      <p className="text-[13px] font-bold text-[#0f172a] break-words [overflow-wrap:anywhere] leading-snug">{item.descricao}</p>
                       <span className="text-[11px] text-[#64748b]">{item.categoriaNome}</span>
                     </div>
                     <button type="button" onClick={() => toggleObrigatorio(idx)} title={item.obrigatorio ? 'Obrigatória' : 'Opcional'}>
@@ -307,11 +307,11 @@ export function FichaBuilder() {
               onClick={() => abrirEdicao(ficha)}
               className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/40 hover:bg-[#f0fdfa] transition-all shadow-sm flex flex-col cursor-pointer"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between xl:gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <FileText className="w-5 h-5 text-[#00a88e] flex-shrink-0" strokeWidth={2} />
-                    <h5 className="text-[15px] font-bold text-[#0f172a] truncate">{ficha.nome}</h5>
+                  <div className="flex items-start gap-2 mb-1">
+                    <FileText className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5" strokeWidth={2} />
+                    <h5 className="text-[15px] font-bold text-[#0f172a] break-words [overflow-wrap:anywhere] leading-snug">{ficha.nome}</h5>
                   </div>
                   {ficha.especialidadeNome && (
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/15">
@@ -322,7 +322,7 @@ export function FichaBuilder() {
                     {ficha.itens?.length || 0} pergunta{(ficha.itens?.length || 0) !== 1 ? 's' : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center xl:flex-shrink-0">
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleExcluir(ficha.id); }}
