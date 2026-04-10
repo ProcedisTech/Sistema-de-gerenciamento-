@@ -1,6 +1,6 @@
 /**
- * Foto de perfil: `fotoPerfilUrl` do Spring aponta para GET /api/v1/pacientes/{id}/foto-perfil,
- * que exige X-Org-Id. Não use <img src={fotoPerfilUrl}> direto — ver usePatientProfilePhotoSrc.
+ * Foto de perfil: `fotoPerfilUrl` pode ser path na API (GET com X-Org-Id) ou URL presigned (R2) —
+ * usePatientProfilePhotoSrc trata os dois casos.
  * Fallback: data URL em localStorage quando não há URL do servidor.
  */
 

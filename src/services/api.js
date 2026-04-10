@@ -21,7 +21,7 @@
  * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
  */
 
-import { DEFAULT_ORG_ID, resolveApiUrl } from '../config/apiEnv';
+import { DEFAULT_ORG_ID, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 
 let currentOrgId = DEFAULT_ORG_ID;
 
@@ -215,19 +215,30 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
 /** Deduplica GETs binários simultâneos (Strict Mode / várias miniaturas) — mesma URL + org → uma requisição. */
 const blobInflight = new Map();
 
-/** GET binário (ex.: foto de perfil) com cookie + Bearer + X-Org-Id — não usar <img src="/api/..."> em rotas que exigem org. */
+/**
+ * GET binário: rotas /api com cookie + Bearer + X-Org-Id.
+ * URL absoluta em outro host (presigned R2 etc.) — sem auth (assinatura na query string).
+ */
 async function requestBlob(path, { needsOrg = true } = {}) {
-  const headers = withAuthHeaders({});
-  if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
+  const attachAuth = shouldAttachApiAuthToFetchUrl(url);
+  let headers = {};
+  let credentials = 'omit';
+  if (attachAuth) {
+    headers = withAuthHeaders({});
+    if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
+    credentials = 'include';
+  }
   const tokenMark = accessTokenMemory ? 'b' : 'c';
-  const dedupeKey = `${needsOrg ? String(currentOrgId || '') : '_'}|${tokenMark}|${url}`;
+  const dedupeKey = attachAuth
+    ? `${needsOrg ? String(currentOrgId || '') : '_'}|${tokenMark}|${url}`
+    : `ext|${url}`;
   const existing = blobInflight.get(dedupeKey);
   if (existing) return existing;
 
   const promise = (async () => {
     try {
-      const res = await fetch(url, { method: 'GET', credentials: 'include', headers });
+      const res = await fetch(url, { method: 'GET', credentials, headers });
       if (!res.ok) {
         // Não disparar auth:expired aqui (ver comentário anterior no histórico).
         const body = await res.json().catch(() => ({}));

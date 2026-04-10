@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { shouldAttachApiAuthToFetchUrl } from '../config/apiEnv.js';
 import { pacientesApi } from '../services/api.js';
 import { getStoredProfilePhotoDataUrl, profilePhotoStorageKey } from '../utils/patientProfilePhoto.js';
 
 /**
  * Resolve a URL exibível da foto de perfil.
- * O GET /api/v1/pacientes/{id}/foto-perfil exige header X-Org-Id; <img src="..."> não envia —
- * o navegador falha (403/401) e mostra o texto do atributo alt. Aqui usamos fetch + blob.
+ * - Path ou URL na própria API: fetch + blob (jwt/org no GET).
+ * - URL presigned em outro host (R2): <img src> direto — sem headers que invalidem a assinatura.
  */
 export function usePatientProfilePhotoSrc(patient) {
   const rawFoto = typeof patient?.fotoPerfilUrl === 'string' ? patient.fotoPerfilUrl.trim() : '';
@@ -14,7 +15,10 @@ export function usePatientProfilePhotoSrc(patient) {
   const storageKey = profilePhotoStorageKey(patient);
   const storedFallback = !rawFoto && storageKey ? getStoredProfilePhotoDataUrl(storageKey) : null;
 
-  const needsApiFetch = Boolean(id && rawFoto && !isDataUrl);
+  const isHttp = rawFoto.startsWith('http://') || rawFoto.startsWith('https://');
+  const useDirectPresignedUrl = Boolean(isHttp && !shouldAttachApiAuthToFetchUrl(rawFoto));
+
+  const needsApiFetch = Boolean(id && rawFoto && !isDataUrl && !useDirectPresignedUrl);
 
   const [blobSrc, setBlobSrc] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -61,7 +65,13 @@ export function usePatientProfilePhotoSrc(patient) {
     };
   }, [needsApiFetch, id, rawFoto]);
 
-  const src = isDataUrl ? rawFoto : needsApiFetch ? blobSrc : storedFallback;
+  const src = isDataUrl
+    ? rawFoto
+    : useDirectPresignedUrl
+      ? rawFoto
+      : needsApiFetch
+        ? blobSrc
+        : storedFallback;
   const loadingVisible = Boolean(needsApiFetch && loading && !blobSrc);
 
   return { src, loading: loadingVisible };
