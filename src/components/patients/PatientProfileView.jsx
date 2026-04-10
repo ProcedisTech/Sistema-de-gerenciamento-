@@ -19,7 +19,6 @@ import {
   Phone,
   Play,
   Save,
-  Shield,
   StickyNote,
   Trash2,
   Upload,
@@ -1215,17 +1214,6 @@ export function PatientProfileView({
                 </div>
               )) : <p className="text-[12px] text-[#94a3b8]">Nenhuma nota registrada</p>}
             </div>
-          </div>
-
-          <div className="bg-[#00a88e] rounded-2xl p-4 shadow-sm text-white">
-            <div className="flex items-center gap-2 mb-2">
-              <Shield className="w-5 h-5" strokeWidth={2.5} />
-              <h5 className="text-[14px] font-bold">LGPD</h5>
-            </div>
-            <p className="text-[12px] font-medium">Todos os termos vigentes e atualizados</p>
-            {selectedPatient.lgpdRenovacao && (
-              <p className="text-[12px] mt-1">Renovacao: {selectedPatient.lgpdRenovacao}</p>
-            )}
           </div>
         </div>
       </div>
