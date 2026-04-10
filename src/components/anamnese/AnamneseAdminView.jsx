@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { ClipboardList, Tag, HelpCircle, FileText } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { ClipboardList, Tag, HelpCircle, FileText, X } from 'lucide-react';
 import { CategoryManager } from './CategoryManager';
 import { QuestionManager } from './QuestionManager';
 import { FichaBuilder } from './FichaBuilder';
@@ -46,16 +46,35 @@ function TabButton({ tabKey, label, icon, active, onSelect, variant }) {
 
 export function AnamneseAdminView() {
   const [activeTab, setActiveTab] = useState('categorias');
-  const [jumpToCategoryId, setJumpToCategoryId] = useState(null);
+  const [painelCategoria, setPainelCategoria] = useState(null);
 
-  const handleVerPerguntasDaCategoria = useCallback((categoriaId) => {
-    setJumpToCategoryId(categoriaId);
-    setActiveTab('perguntas');
+  const handleVerPerguntasDaCategoria = useCallback(({ id, nome }) => {
+    setPainelCategoria({ id, nome });
   }, []);
 
-  const handleJumpConsumed = useCallback(() => {
-    setJumpToCategoryId(null);
+  const fecharPainelCategoria = useCallback(() => {
+    setPainelCategoria(null);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'categorias') {
+      setPainelCategoria(null);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (painelCategoria == null || activeTab !== 'categorias') return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') fecharPainelCategoria();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [painelCategoria, fecharPainelCategoria, activeTab]);
 
   return (
     <div className="flex flex-col lg:flex-row lg:gap-8 xl:gap-10">
@@ -104,11 +123,48 @@ export function AnamneseAdminView() {
       {/* Área principal: ocupa o restante da largura no desktop */}
       <div className="flex-1 min-w-0 flex flex-col">
         {activeTab === 'categorias' && (
-          <CategoryManager onVerPerguntas={handleVerPerguntasDaCategoria} />
+          <>
+            <CategoryManager onVerPerguntas={handleVerPerguntasDaCategoria} />
+            {painelCategoria != null && (
+              <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
+                <button
+                  type="button"
+                  aria-label="Fechar painel"
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                  onClick={fecharPainelCategoria}
+                />
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="painel-perguntas-categoria-titulo"
+                  className="relative z-10 w-full max-w-6xl max-h-[90vh] flex flex-col bg-white rounded-2xl border-[3px] border-[#00a88e]/20 shadow-2xl overflow-hidden"
+                >
+                  <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[#e2e8f0] flex-shrink-0">
+                    <h3 id="painel-perguntas-categoria-titulo" className="text-[16px] sm:text-[17px] font-bold text-[#0f172a] leading-snug min-w-0 pr-2">
+                      Perguntas — {painelCategoria.nome}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={fecharPainelCategoria}
+                      className="p-2 rounded-xl text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a] flex-shrink-0"
+                      aria-label="Fechar"
+                    >
+                      <X className="w-5 h-5" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 custom-scrollbar">
+                    <QuestionManager
+                      embeddedInPanel
+                      lockedCategoryId={painelCategoria.id}
+                      panelTitle={painelCategoria.nome}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
-        {activeTab === 'perguntas' && (
-          <QuestionManager jumpToCategoryId={jumpToCategoryId} onJumpConsumed={handleJumpConsumed} />
-        )}
+        {activeTab === 'perguntas' && <QuestionManager />}
         {activeTab === 'fichas' && <FichaBuilder />}
       </div>
     </div>

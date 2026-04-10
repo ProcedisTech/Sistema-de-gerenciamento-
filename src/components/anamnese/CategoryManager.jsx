@@ -299,7 +299,7 @@ export function CategoryManager({ onVerPerguntas }) {
                       {typeof onVerPerguntas === 'function' ? (
                         <button
                           type="button"
-                          onClick={() => onVerPerguntas(cat.id)}
+                          onClick={() => onVerPerguntas({ id: cat.id, nome: cat.nome })}
                           className="flex items-start gap-2.5 min-w-0 flex-1 xl:items-center xl:gap-3 text-left rounded-xl -m-1 p-1 hover:bg-[#f0fdfa]/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40 transition-colors"
                         >
                           <Tag className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 md:mt-0" strokeWidth={2} />

@@ -207,7 +207,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2e8f0]">
           <h3 className="text-[16px] font-bold text-[#0f172a]">Editar Pergunta</h3>
@@ -323,13 +323,22 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
+export function QuestionManager({
+  embeddedInPanel = false,
+  lockedCategoryId = null,
+  panelTitle = '',
+}) {
+  const lockedIdStr =
+    embeddedInPanel && lockedCategoryId != null && lockedCategoryId !== ''
+      ? String(lockedCategoryId)
+      : '';
+
   const [perguntas, setPerguntas] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [tiposResposta, setTiposResposta] = useState([]);
   const [fichas, setFichas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState(() => lockedIdStr || '');
 
   // create form
   const [formAberto, setFormAberto] = useState(false);
@@ -392,10 +401,8 @@ export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
   useEffect(() => { fetchDados(); }, []);
 
   useEffect(() => {
-    if (jumpToCategoryId == null || jumpToCategoryId === '') return;
-    setFiltroCategoria(String(jumpToCategoryId));
-    onJumpConsumed?.();
-  }, [jumpToCategoryId, onJumpConsumed]);
+    if (lockedIdStr) setFiltroCategoria(lockedIdStr);
+  }, [lockedIdStr]);
 
   const perguntasFiltradas = useMemo(() => {
     if (!filtroCategoria) return perguntas;
@@ -550,7 +557,7 @@ export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
       )}
 
       {deleteConflictModal != null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div
             role="dialog"
             aria-modal="true"
@@ -582,23 +589,42 @@ export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <label className="text-[13px] font-bold text-[#64748b]">Filtrar por categoria:</label>
-          <select
-            value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
-            className="px-3 py-2 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[13px] font-medium focus:outline-none focus:border-[#00a88e] appearance-none"
-          >
-            <option value="">Todas</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
+        <div className="flex items-center gap-3 min-w-0">
+          {lockedIdStr ? (
+            <>
+              <span className="text-[13px] font-bold text-[#64748b] flex-shrink-0">Categoria:</span>
+              <span className="text-[13px] font-bold text-[#0f172a] truncate" title={panelTitle || categorias.find((c) => String(c.id) === lockedIdStr)?.nome}>
+                {panelTitle || categorias.find((c) => String(c.id) === lockedIdStr)?.nome || '…'}
+              </span>
+            </>
+          ) : (
+            <>
+              <label className="text-[13px] font-bold text-[#64748b]">Filtrar por categoria:</label>
+              <select
+                value={filtroCategoria}
+                onChange={(e) => setFiltroCategoria(e.target.value)}
+                className="px-3 py-2 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[13px] font-medium focus:outline-none focus:border-[#00a88e] appearance-none"
+              >
+                <option value="">Todas</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         <button
           type="button"
-          onClick={() => { setFormAberto(!formAberto); if (!formAberto) resetForm(); }}
+          onClick={() => {
+            if (formAberto) {
+              setFormAberto(false);
+            } else {
+              resetForm();
+              if (lockedIdStr) setCategoriaId(lockedIdStr);
+              setFormAberto(true);
+            }
+          }}
           className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent flex items-center gap-2"
         >
           {formAberto ? <ChevronUp className="w-4 h-4" /> : <Plus className="w-4 h-4" strokeWidth={2.5} />}
@@ -618,16 +644,22 @@ export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e] ml-1">Categoria *</label>
-              <select
-                value={categoriaId}
-                onChange={(e) => setCategoriaId(e.target.value)}
-                className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
-              >
-                <option value="">Selecione...</option>
-                {categorias.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome}</option>
-                ))}
-              </select>
+              {lockedIdStr ? (
+                <div className="w-full px-4 py-3 bg-[#f1f5f9] border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] font-medium text-[#475569]">
+                  {panelTitle || categorias.find((c) => String(c.id) === lockedIdStr)?.nome || '—'}
+                </div>
+              ) : (
+                <select
+                  value={categoriaId}
+                  onChange={(e) => setCategoriaId(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                >
+                  <option value="">Selecione...</option>
+                  {categorias.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -749,8 +781,12 @@ export function QuestionManager({ jumpToCategoryId = null, onJumpConsumed }) {
       ) : perguntasFiltradas.length === 0 ? (
         <div className="text-center py-12 text-[#94a3b8]">
           <HelpCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-[14px] font-medium">Nenhuma pergunta cadastrada</p>
-          <p className="text-[12px] mt-1">Crie perguntas para montar fichas de anamnese</p>
+          <p className="text-[14px] font-medium">
+            {lockedIdStr ? 'Nenhuma pergunta nesta categoria' : 'Nenhuma pergunta cadastrada'}
+          </p>
+          <p className="text-[12px] mt-1">
+            {lockedIdStr ? 'Use "Nova Pergunta" acima para adicionar à categoria' : 'Crie perguntas para montar fichas de anamnese'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
