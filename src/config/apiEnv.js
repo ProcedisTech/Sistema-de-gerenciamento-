@@ -39,6 +39,27 @@ export function resolveApiUrl(path) {
   return `${base}${p}`;
 }
 
+/**
+ * Se `fetch(url)` deve levar cookie jwt, Bearer e X-Org-Id (rotas da API ou proxy em dev).
+ * URLs em outro host (ex.: GET presigned do R2) retornam false — headers extras quebram assinatura S3-style.
+ */
+export function shouldAttachApiAuthToFetchUrl(resolvedUrl) {
+  if (typeof resolvedUrl !== 'string' || !resolvedUrl.trim()) return true;
+  try {
+    const pageBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
+    const u = new URL(resolvedUrl, pageBase);
+    const base = getApiBaseUrl();
+    const apiOrigin = base
+      ? new URL(base).origin
+      : typeof window !== 'undefined'
+        ? window.location.origin
+        : '';
+    return Boolean(apiOrigin) && u.origin === apiOrigin;
+  } catch {
+    return true;
+  }
+}
+
 let warnedDev8080Base = false;
 
 /** Em dev: avisa se a base aponta direto para :8080 — cookie jwt costuma ficar na origem errada (use proxy :5173). */
