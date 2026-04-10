@@ -714,6 +714,10 @@ export default function App() {
                     setTermoAssinado={journeyState.setTermoAssinado}
                     termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
                     setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
+                    lgpdCapturedPhotos={cameraState.evaluationCapturedPhotos}
+                    lgpdPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                    onLgpdUploadFiles={cameraState.uploadPhotoFiles}
+                    onLgpdRemovePhoto={handleDeleteCapturedPhoto}
                   />
                 )}
 
