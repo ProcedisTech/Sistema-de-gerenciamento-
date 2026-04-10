@@ -66,6 +66,9 @@ function birthdayAlertSidebarCopy(alert) {
 
 function renderRespostaValue(resp) {
   if (resp.opcaoSelecionada) return resp.opcaoSelecionada;
+  if (Array.isArray(resp.opcoesSelecionadasLabels) && resp.opcoesSelecionadasLabels.length > 0) {
+    return resp.opcoesSelecionadasLabels.join(', ');
+  }
   if (resp.respostaTexto) return resp.respostaTexto;
   if (resp.respostaNumero !== null && resp.respostaNumero !== undefined) return String(resp.respostaNumero);
   if (resp.respostaBoolean === true) return 'Sim';
@@ -73,11 +76,204 @@ function renderRespostaValue(resp) {
   return '-';
 }
 
+/** Formato gravado em AppRefactored: `Queixa: …. Expectativas: …` */
+function parseQueixaExpectativas(observacoes) {
+  if (!observacoes || typeof observacoes !== 'string') return null;
+  const marker = '. Expectativas:';
+  const idx = observacoes.indexOf(marker);
+  if (idx === -1) return null;
+  const queixa = observacoes.slice(0, idx).replace(/^Queixa:\s*/i, '').trim();
+  const expectativas = observacoes.slice(idx + marker.length).trim();
+  return { queixa: queixa || '—', expectativas: expectativas || '—' };
+}
+
+function buildPerguntaMapFromFicha(ficha) {
+  const map = {};
+  const itens = ficha?.itens || [];
+  itens.forEach((item) => {
+    const p = item.pergunta || item;
+    const pid = p.id ?? item.perguntaId;
+    if (pid == null) return;
+    const alts = Array.isArray(p.alternativas) ? [...p.alternativas] : [];
+    alts.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+    map[String(pid)] = {
+      tipoResposta: p.tipoResposta || p.tipo_resposta || '',
+      alternativas: alts,
+    };
+  });
+  return map;
+}
+
+function getPerguntaIdFromResp(resp) {
+  return resp.perguntaId ?? resp.pergunta?.id ?? null;
+}
+
+function getEmbeddedAlternativas(resp) {
+  if (Array.isArray(resp.alternativas) && resp.alternativas.length > 0) {
+    return [...resp.alternativas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+  }
+  const p = resp.pergunta;
+  if (p && Array.isArray(p.alternativas) && p.alternativas.length > 0) {
+    return [...p.alternativas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+  }
+  return [];
+}
+
+function resolveTipoResposta(resp, perguntaMap) {
+  const pid = getPerguntaIdFromResp(resp);
+  if (pid != null && perguntaMap?.[String(pid)]?.tipoResposta) {
+    return perguntaMap[String(pid)].tipoResposta;
+  }
+  return (
+    resp.tipoResposta ||
+    resp.tipo_resposta ||
+    resp.pergunta?.tipoResposta ||
+    resp.pergunta?.tipo_resposta ||
+    ''
+  );
+}
+
+function alternativasForResp(resp, perguntaMap) {
+  const embedded = getEmbeddedAlternativas(resp);
+  if (embedded.length > 0) return embedded;
+  const pid = getPerguntaIdFromResp(resp);
+  if (pid != null && perguntaMap?.[String(pid)]?.alternativas?.length) {
+    return perguntaMap[String(pid)].alternativas;
+  }
+  return [];
+}
+
+function AnamneseObservacoesBlock({ texto }) {
+  const parsed = parseQueixaExpectativas(texto);
+  if (parsed) {
+    return (
+      <div className="p-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/20">
+        <span className="text-[12px] font-bold text-[#b45309]">Observações</span>
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="p-4 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]">
+            <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wide">Queixa principal</span>
+            <p className="text-[13px] text-[#0f172a] mt-1.5 whitespace-pre-wrap">{parsed.queixa}</p>
+          </div>
+          <div className="p-4 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]">
+            <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wide">Expectativas do paciente</span>
+            <p className="text-[13px] text-[#0f172a] mt-1.5 whitespace-pre-wrap">{parsed.expectativas}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="p-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/20">
+      <span className="text-[12px] font-bold text-[#b45309]">Observações</span>
+      <p className="text-[13px] text-[#0f172a] mt-1 whitespace-pre-wrap">{texto}</p>
+    </div>
+  );
+}
+
+const BOOLEAN_ALTS = [
+  { id: '__sim', alternativa: 'Sim' },
+  { id: '__nao', alternativa: 'Não' },
+];
+
+function AnamneseRespostaRow({ resp, rowKey, expanded, onToggle, perguntaMap }) {
+  const tipo = resolveTipoResposta(resp, perguntaMap);
+  let alternativas = alternativasForResp(resp, perguntaMap);
+  const isBoolean =
+    tipo === 'booleano' ||
+    resp.respostaBoolean === true ||
+    resp.respostaBoolean === false;
+  if (isBoolean) {
+    alternativas = BOOLEAN_ALTS;
+  }
+  const expandable =
+    isBoolean ||
+    ((tipo === 'escolha_unica' || tipo === 'multipla_escolha') && alternativas.length > 0);
+
+  const isAltSelected = (alt) => {
+    if (isBoolean) {
+      if (alt.alternativa === 'Sim') return resp.respostaBoolean === true;
+      if (alt.alternativa === 'Não') return resp.respostaBoolean === false;
+      return false;
+    }
+    if (tipo === 'multipla_escolha') {
+      const ids = resp.opcoesSelecionadas || resp.opcoes_selecionadas || [];
+      return ids.map(String).includes(String(alt.id));
+    }
+    if (resp.perguntaOpcaoId != null && resp.perguntaOpcaoId !== '') {
+      return String(resp.perguntaOpcaoId) === String(alt.id);
+    }
+    if (resp.opcaoSelecionada && alt.alternativa) {
+      return String(resp.opcaoSelecionada).trim() === String(alt.alternativa).trim();
+    }
+    return false;
+  };
+
+  const header = (
+    <>
+      <div className="flex-1 min-w-0">
+        <span className="text-[12px] text-[#0f766e] font-semibold">{resp.perguntaDescricao || 'Pergunta'}</span>
+        <p className="text-[14px] font-bold text-[#0f172a] mt-1.5">{renderRespostaValue(resp)}</p>
+      </div>
+      {expandable ? (
+        <ChevronDown
+          className={`w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      ) : null}
+    </>
+  );
+
+  const shellClass =
+    'rounded-xl border-[2px] border-[#00a88e]/25 bg-[#f0fdfa] overflow-hidden';
+
+  if (!expandable) {
+    return <div className={`${shellClass} p-4`}>{header}</div>;
+  }
+
+  return (
+    <div className={shellClass}>
+      <button
+        type="button"
+        className="w-full text-left p-4 flex items-start gap-3 hover:bg-[#e6f7f5]/50 transition-colors"
+        onClick={() => onToggle(rowKey)}
+        aria-expanded={expanded}
+      >
+        {header}
+      </button>
+      {expanded ? (
+        <div className="px-4 pb-4 pt-0 space-y-2 border-t border-[#00a88e]/15">
+          {alternativas.map((alt) => {
+            const selected = isAltSelected(alt);
+            return (
+              <div
+                key={alt.id ?? alt.alternativa}
+                className={`flex items-center gap-3 p-3 rounded-xl border-[2px] transition-all ${
+                  selected
+                    ? 'border-[#00a88e] bg-[#e6f7f5] shadow-sm'
+                    : 'border-[#00a88e]/15 bg-white/90 text-[#64748b]'
+                }`}
+              >
+                <span
+                  className={`text-[14px] flex-1 ${selected ? 'font-bold text-[#0f766e]' : 'font-medium text-[#475569]'}`}
+                >
+                  {alt.alternativa}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AnamneseTab({ pacienteId }) {
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
+  const [expandedRespKeys, setExpandedRespKeys] = useState(() => new Set());
+  const [perguntaMapByAnId, setPerguntaMapByAnId] = useState({});
 
   useEffect(() => {
     if (!pacienteId) return;
@@ -103,6 +299,52 @@ function AnamneseTab({ pacienteId }) {
       .catch((err) => console.warn('Erro ao buscar anamneses:', err.message))
       .finally(() => setLoading(false));
   }, [pacienteId]);
+
+  useEffect(() => {
+    setExpandedRespKeys(new Set());
+  }, [expandedId]);
+
+  useEffect(() => {
+    if (!expandedId) return;
+
+    const targetId = expandedId;
+    const detalhe = detalhes[targetId];
+    const an = anamneses.find((a) => a.id === targetId);
+    const fichaTemplateId =
+      detalhe?.anamneseId ??
+      detalhe?.fichaId ??
+      detalhe?.anamneseFichaId ??
+      an?.anamneseId ??
+      an?.fichaId ??
+      an?.anamneseFichaId;
+
+    if (!fichaTemplateId) return;
+
+    let cancelled = false;
+    anamneseApi
+      .getFicha(fichaTemplateId)
+      .then((ficha) => {
+        if (cancelled || !ficha) return;
+        setPerguntaMapByAnId((prev) => {
+          if (prev[targetId]) return prev;
+          return { ...prev, [targetId]: buildPerguntaMapFromFicha(ficha) };
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedId, detalhes, anamneses]);
+
+  const toggleRespKey = useCallback((rowKey) => {
+    setExpandedRespKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }, []);
 
   if (loading) {
     return (
@@ -163,25 +405,25 @@ function AnamneseTab({ pacienteId }) {
 
             {isOpen && (
               <div className="p-4 border-t-[3px] border-[#00a88e]/10 space-y-3">
-                {detalhe.observacoes && (
-                  <div className="p-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/20">
-                    <span className="text-[12px] font-bold text-[#b45309]">Observações</span>
-                    <p className="text-[13px] text-[#0f172a] mt-1">{detalhe.observacoes}</p>
-                  </div>
-                )}
+                {detalhe.observacoes ? (
+                  <AnamneseObservacoesBlock texto={detalhe.observacoes} />
+                ) : null}
 
                 {respostas.length > 0 ? (
                   <div className="space-y-2">
-                    {respostas.map((resp) => (
-                      <div key={resp.id} className="p-4 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1">
-                            <span className="text-[12px] text-[#64748b] font-medium">{resp.perguntaDescricao || 'Pergunta'}</span>
-                          </div>
-                        </div>
-                        <p className="text-[14px] font-bold text-[#0f172a] mt-1.5">{renderRespostaValue(resp)}</p>
-                      </div>
-                    ))}
+                    {respostas.map((resp, rIdx) => {
+                      const rowKey = `${an.id}:${resp.id ?? rIdx}`;
+                      return (
+                        <AnamneseRespostaRow
+                          key={resp.id ?? `r-${rIdx}`}
+                          resp={resp}
+                          rowKey={rowKey}
+                          expanded={expandedRespKeys.has(rowKey)}
+                          onToggle={toggleRespKey}
+                          perguntaMap={perguntaMapByAnId[an.id]}
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
