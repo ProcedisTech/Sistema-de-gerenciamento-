@@ -8,7 +8,6 @@ import {
   Image as ImageIcon,
   Plus,
   Search,
-  Shield,
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
@@ -47,7 +46,7 @@ function PatientPreviewPanel({
       <button
         type="button"
         onClick={closeDetail}
-        className="absolute right-3 top-3 z-20 p-2 rounded-xl border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f8fafc] hover:text-[#0f172a] transition-colors shadow-sm"
+        className="absolute right-3 top-3 z-20 p-2 rounded-xl border-[2px] border-[#00a88e]/35 bg-[#e6f7f5] text-[#0f766e] hover:bg-[#d1fae5] hover:border-[#00a88e]/50 hover:text-[#0d5c52] transition-colors shadow-sm"
         aria-label="Fechar painel"
       >
         <X className="w-4 h-4" strokeWidth={2.5} />
@@ -70,12 +69,6 @@ function PatientPreviewPanel({
           </h3>
           <p className="mt-1 text-sm text-[#64748b] break-all">{selectedPatient.email || '—'}</p>
           <p className="text-sm text-[#64748b]">{selectedPatient.telefone || '—'}</p>
-        </div>
-        <div className="flex w-full sm:w-auto sm:flex-col sm:items-end justify-end shrink-0">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/25 bg-[#ecfdf5] px-2.5 py-1.5 text-[11px] sm:text-xs font-bold text-[#047857]">
-            <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={2.25} aria-hidden />
-            LGPD Auditado
-          </span>
         </div>
       </div>
 
@@ -125,7 +118,7 @@ function PatientPreviewPanel({
       </section>
 
       <section className="w-full flex-[1_1_100%] rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-[#0f172a]">
             <ImageIcon className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
             <h4 className="text-base font-bold">Galeria de Evolução</h4>
@@ -134,23 +127,23 @@ function PatientPreviewPanel({
             {galleryPhotoCount} {galleryPhotoCount === 1 ? 'foto' : 'fotos'}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid min-h-0 grid-cols-6 gap-1 sm:gap-1.5">
           {galleryPreviewSlots.map((slot) => (
             <div
               key={slot.key}
-              className={`relative aspect-[4/3] overflow-hidden rounded-lg border-2 ${
+              className={`relative h-12 min-h-0 overflow-hidden rounded-md border-2 sm:h-14 ${
                 slot.highlight ? 'border-[#cbd5e1] bg-[#94a3b8]/35' : 'border-[#e2e8f0] bg-[#e2e8f0]'
               } flex flex-col items-center justify-center`}
             >
-              <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-[#64748b] shadow-sm">
+              <span className="absolute left-1 top-1 rounded bg-white/90 px-1 py-0.5 text-[8px] font-bold text-[#64748b] shadow-sm sm:text-[9px]">
                 {slot.label}
               </span>
               {slot.highlight && selectedPatient.galeria?.length ? (
-                <span className="text-xs font-semibold text-white drop-shadow-sm">
+                <span className="text-[10px] font-semibold text-white drop-shadow-sm sm:text-xs">
                   {selectedPatient.procedures?.[0]?.data || '—'}
                 </span>
               ) : (
-                <ImageIcon className="h-8 w-8 text-[#94a3b8]/80" strokeWidth={1.75} aria-hidden />
+                <ImageIcon className="h-4 w-4 text-[#94a3b8]/80 sm:h-5 sm:w-5" strokeWidth={1.75} aria-hidden />
               )}
             </div>
           ))}
@@ -186,6 +179,8 @@ export function PatientsListView({
   onCreatePatient,
 }) {
   const [sortBy, setSortBy] = useState('nome-asc');
+  /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
+  const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   const desktopTitleId = 'patient-detail-title';
 
   const filteredPatients = useMemo(() => {
@@ -221,17 +216,18 @@ export function PatientsListView({
     return sorted;
   }, [patients, patientSearchQuery, sortBy]);
 
-  const selectedPatient = patients.find((p) => p.cpf === selectedPatientCpf) || null;
+  const previewPatient =
+    (previewPatientCpf && patients.find((p) => p.cpf === previewPatientCpf)) || null;
 
   const galleryPhotoCount = useMemo(() => {
-    if (!selectedPatient?.galeria?.length) return 0;
-    return selectedPatient.galeria.reduce((acc, s) => acc + (s.fotos?.length || 0), 0);
-  }, [selectedPatient]);
+    if (!previewPatient?.galeria?.length) return 0;
+    return previewPatient.galeria.reduce((acc, s) => acc + (s.fotos?.length || 0), 0);
+  }, [previewPatient]);
 
   const galleryPreviewSlots = useMemo(() => {
     const slots = [];
-    if (selectedPatient?.galeria?.length) {
-      selectedPatient.galeria.forEach((sessao, si) => {
+    if (previewPatient?.galeria?.length) {
+      previewPatient.galeria.forEach((sessao, si) => {
         (sessao.fotos || []).forEach((_, fi) => {
           if (slots.length >= 6) return;
           slots.push({
@@ -250,27 +246,29 @@ export function PatientsListView({
       });
     }
     return slots.slice(0, 6);
-  }, [selectedPatient]);
+  }, [previewPatient]);
 
   const closeDetail = () => {
+    setPreviewPatientCpf(null);
     setSelectedPatientCpf(null);
     setPatientDetailTab('timeline');
   };
 
   useEffect(() => {
-    if (!selectedPatient) return undefined;
+    if (!previewPatient) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') {
+        setPreviewPatientCpf(null);
         setSelectedPatientCpf(null);
         setPatientDetailTab('timeline');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedPatient, setSelectedPatientCpf, setPatientDetailTab]);
+  }, [previewPatient, setSelectedPatientCpf, setPatientDetailTab]);
 
   useEffect(() => {
-    if (!selectedPatient) return undefined;
+    if (!previewPatient) return undefined;
     const mq = window.matchMedia('(max-width: 1023px)');
     const syncBodyScroll = () => {
       document.body.style.overflow = mq.matches ? 'hidden' : '';
@@ -281,11 +279,11 @@ export function PatientsListView({
       mq.removeEventListener('change', syncBodyScroll);
       document.body.style.overflow = '';
     };
-  }, [selectedPatient]);
+  }, [previewPatient]);
 
   return (
     <div className="flex flex-col lg:flex-row lg:items-start lg:gap-5 xl:gap-6 w-full min-w-0">
-      <div className="min-w-0 flex-1 flex flex-col">
+      <div className="min-w-0 flex-1 flex flex-col lg:min-w-[min(100%,19rem)]">
       <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 sm:p-5 md:p-6 flex flex-col">
         <div className="flex flex-col gap-3 mb-4">
           <div className="relative w-full min-w-0">
@@ -341,7 +339,10 @@ export function PatientsListView({
                   <button
                     key={patient.id}
                     type="button"
-                    onClick={() => setSelectedPatientCpf(patient.cpf)}
+                    onClick={() => {
+                      setSelectedPatientCpf(patient.cpf);
+                      setPreviewPatientCpf(patient.cpf);
+                    }}
                     className={`min-h-0 w-full min-w-0 text-left rounded-xl border-[3px] transition-all active:scale-[0.99] p-3 sm:p-3.5 flex flex-col h-full min-h-[4.5rem] sm:min-h-0 ${
                       selected
                         ? 'border-[#00a88e] bg-[#f0fdfa] shadow-sm ring-2 ring-[#00a88e]/15'
@@ -399,7 +400,7 @@ export function PatientsListView({
       </div>
       </div>
 
-      {selectedPatient ? (
+      {previewPatient ? (
         <>
           {/* Mobile / tablet (< lg): modal com backdrop — resumo imediato sem rolar a página */}
           <div
@@ -415,7 +416,7 @@ export function PatientsListView({
               onClick={closeDetail}
             />
             <PatientPreviewPanel
-              selectedPatient={selectedPatient}
+              selectedPatient={previewPatient}
               detailTitleId={undefined}
               closeDetail={closeDetail}
               galleryPhotoCount={galleryPhotoCount}
@@ -429,12 +430,12 @@ export function PatientsListView({
 
           {/* Desktop (lg+): painel lateral que empurra a lista */}
           <aside
-            className="hidden lg:flex patient-preview-sheet relative z-10 mt-0 flex-row flex-wrap content-start items-start justify-start gap-4 w-full lg:flex-none lg:w-[min(52rem,min(58vw,calc(100%-1rem)))] lg:max-w-full lg:shrink-0 rounded-2xl border border-[#e2e8f0] bg-[#f1f5f9] p-4 sm:p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] overflow-y-auto overflow-x-hidden custom-scrollbar"
+            className="hidden lg:flex patient-preview-sheet relative z-10 mt-0 flex-row flex-wrap content-start items-start justify-start gap-4 w-full lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:shrink rounded-2xl border border-[#e2e8f0] bg-[#f1f5f9] p-4 sm:p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] overflow-y-auto overflow-x-hidden custom-scrollbar"
             aria-labelledby={desktopTitleId}
             aria-label="Resumo do paciente"
           >
             <PatientPreviewPanel
-              selectedPatient={selectedPatient}
+              selectedPatient={previewPatient}
               detailTitleId={desktopTitleId}
               closeDetail={closeDetail}
               galleryPhotoCount={galleryPhotoCount}

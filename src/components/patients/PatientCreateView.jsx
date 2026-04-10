@@ -5,11 +5,10 @@ import {
   maskRG,
   maskTelefone,
   calculateAgeFromISODate,
-  clampBirthDateDigits,
+  sanitizeBirthDateDigits,
   formatBirthDigitsBR,
-  birthDigitsToISO,
-  isPlausibleBirthISODate,
-  MIN_BIRTH_YEAR,
+  validateBirthDateDigits8,
+  birthDateValidationUserMessage,
 } from '../utils/formatters';
 import { pacientesApi, dimensoesApi } from '../../services/api';
 
@@ -47,15 +46,15 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
 
   const handleDataNascimentoChange = (raw) => {
-    const digits = clampBirthDateDigits(raw);
+    const digits = sanitizeBirthDateDigits(raw);
     const display = formatBirthDigitsBR(digits);
     setDataNascimentoDisplay(display);
 
     if (digits.length === 8) {
-      const iso = birthDigitsToISO(digits);
-      if (iso && isPlausibleBirthISODate(iso)) {
-        setDataNascimento(iso);
-        const age = calculateAgeFromISODate(iso);
+      const r = validateBirthDateDigits8(digits);
+      if (r.ok) {
+        setDataNascimento(r.iso);
+        const age = calculateAgeFromISODate(r.iso);
         setIdade(age !== '' ? age : '');
       } else {
         setDataNascimento('');
@@ -86,10 +85,16 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       const dnDigits = dataNascimentoDisplay.replace(/\D/g, '');
-      if (validationErrors.dataNascimento && dnDigits.length === 8 && !dataNascimento) {
-        setErro(
-          `Data de nascimento inválida ou fora do permitido: ano entre ${MIN_BIRTH_YEAR} e ${new Date().getFullYear()}, data real e não futura.`
-        );
+      const cy = new Date().getFullYear();
+      if (validationErrors.dataNascimento) {
+        if (dnDigits.length > 0 && dnDigits.length < 8) {
+          setErro(birthDateValidationUserMessage('incomplete', cy));
+        } else if (dnDigits.length === 8 && !dataNascimento) {
+          const r = validateBirthDateDigits8(dnDigits);
+          setErro(!r.ok ? birthDateValidationUserMessage(r.reason, cy) : 'Preencha os campos obrigatórios.');
+        } else {
+          setErro('Preencha os campos obrigatórios.');
+        }
       } else {
         setErro('Preencha os campos obrigatórios.');
       }
@@ -150,6 +155,13 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
     Boolean(errors.sexo) ||
     Boolean(errors.estadoCivil) ||
     Boolean(errors.profissao);
+
+  const birthDigitsForUi = dataNascimentoDisplay.replace(/\D/g, '');
+  let dataNascimentoFieldMessage = null;
+  if (birthDigitsForUi.length === 8 && !dataNascimento) {
+    const br = validateBirthDateDigits8(birthDigitsForUi);
+    if (!br.ok) dataNascimentoFieldMessage = birthDateValidationUserMessage(br.reason);
+  }
 
   if (sucesso) {
     return (
@@ -235,9 +247,9 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
                 maxLength={10}
                 className={inputClass('dataNascimento')}
               />
-              {dataNascimentoDisplay.replace(/\D/g, '').length === 8 && !dataNascimento ? (
-                <p className="text-[12px] font-bold text-red-600">
-                  Ajuste a data: ano de {MIN_BIRTH_YEAR} até {new Date().getFullYear()}, calendário válido e não futura.
+              {dataNascimentoFieldMessage ? (
+                <p className="text-[12px] font-bold text-red-600" role="alert">
+                  {dataNascimentoFieldMessage}
                 </p>
               ) : null}
             </div>
