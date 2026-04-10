@@ -46,7 +46,7 @@ function PatientPreviewPanel({
       <button
         type="button"
         onClick={closeDetail}
-        className="absolute right-3 top-3 z-20 p-2 rounded-xl border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f8fafc] hover:text-[#0f172a] transition-colors shadow-sm"
+        className="absolute right-3 top-3 z-20 p-2 rounded-xl border-[2px] border-[#00a88e]/35 bg-[#e6f7f5] text-[#0f766e] hover:bg-[#d1fae5] hover:border-[#00a88e]/50 hover:text-[#0d5c52] transition-colors shadow-sm"
         aria-label="Fechar painel"
       >
         <X className="w-4 h-4" strokeWidth={2.5} />
@@ -118,7 +118,7 @@ function PatientPreviewPanel({
       </section>
 
       <section className="w-full flex-[1_1_100%] rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-[#0f172a]">
             <ImageIcon className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
             <h4 className="text-base font-bold">Galeria de Evolução</h4>
@@ -127,23 +127,23 @@ function PatientPreviewPanel({
             {galleryPhotoCount} {galleryPhotoCount === 1 ? 'foto' : 'fotos'}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid min-h-0 grid-cols-6 gap-1 sm:gap-1.5">
           {galleryPreviewSlots.map((slot) => (
             <div
               key={slot.key}
-              className={`relative aspect-[4/3] overflow-hidden rounded-lg border-2 ${
+              className={`relative h-12 min-h-0 overflow-hidden rounded-md border-2 sm:h-14 ${
                 slot.highlight ? 'border-[#cbd5e1] bg-[#94a3b8]/35' : 'border-[#e2e8f0] bg-[#e2e8f0]'
               } flex flex-col items-center justify-center`}
             >
-              <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-[#64748b] shadow-sm">
+              <span className="absolute left-1 top-1 rounded bg-white/90 px-1 py-0.5 text-[8px] font-bold text-[#64748b] shadow-sm sm:text-[9px]">
                 {slot.label}
               </span>
               {slot.highlight && selectedPatient.galeria?.length ? (
-                <span className="text-xs font-semibold text-white drop-shadow-sm">
+                <span className="text-[10px] font-semibold text-white drop-shadow-sm sm:text-xs">
                   {selectedPatient.procedures?.[0]?.data || '—'}
                 </span>
               ) : (
-                <ImageIcon className="h-8 w-8 text-[#94a3b8]/80" strokeWidth={1.75} aria-hidden />
+                <ImageIcon className="h-4 w-4 text-[#94a3b8]/80 sm:h-5 sm:w-5" strokeWidth={1.75} aria-hidden />
               )}
             </div>
           ))}
@@ -283,7 +283,7 @@ export function PatientsListView({
 
   return (
     <div className="flex flex-col lg:flex-row lg:items-start lg:gap-5 xl:gap-6 w-full min-w-0">
-      <div className="min-w-0 flex-1 flex flex-col">
+      <div className="min-w-0 flex-1 flex flex-col lg:min-w-[min(100%,19rem)]">
       <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 sm:p-5 md:p-6 flex flex-col">
         <div className="flex flex-col gap-3 mb-4">
           <div className="relative w-full min-w-0">
@@ -430,7 +430,7 @@ export function PatientsListView({
 
           {/* Desktop (lg+): painel lateral que empurra a lista */}
           <aside
-            className="hidden lg:flex patient-preview-sheet relative z-10 mt-0 flex-row flex-wrap content-start items-start justify-start gap-4 w-full lg:flex-none lg:w-[min(52rem,min(58vw,calc(100%-1rem)))] lg:max-w-full lg:shrink-0 rounded-2xl border border-[#e2e8f0] bg-[#f1f5f9] p-4 sm:p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] overflow-y-auto overflow-x-hidden custom-scrollbar"
+            className="hidden lg:flex patient-preview-sheet relative z-10 mt-0 flex-row flex-wrap content-start items-start justify-start gap-4 w-full lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:shrink rounded-2xl border border-[#e2e8f0] bg-[#f1f5f9] p-4 sm:p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] overflow-y-auto overflow-x-hidden custom-scrollbar"
             aria-labelledby={desktopTitleId}
             aria-label="Resumo do paciente"
           >
