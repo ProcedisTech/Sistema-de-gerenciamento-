@@ -390,7 +390,7 @@ function AnamneseTab({ pacienteId }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748b]">
                   {an.profissionalNome && <span>Por: {an.profissionalNome}</span>}
-                  {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR')} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                  {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span>}
                   <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border-[2px] ${
                     an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO'
                       ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
@@ -774,7 +774,7 @@ export function PatientProfileView({
       id: n.id,
       texto: n.conteudo,
       autor: n.autorNome || 'Equipe',
-      data: n.criadoEm ? new Date(n.criadoEm).toLocaleString('pt-BR') : '',
+      data: n.criadoEm ? new Date(n.criadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '',
       _fromApi: true,
     }));
     const local = (selectedPatient?.notas || []).map((n, i) => ({
@@ -793,7 +793,7 @@ export function PatientProfileView({
         id: proc.id || `api_proc_${pIdx}`,
         type: 'procedimento',
         title: proc.procedimentoNome || 'Procedimento',
-        meta: `${proc.statusNome || ''} ${proc.criadoEm ? new Date(proc.criadoEm).toLocaleString('pt-BR') : ''} ${proc.profissionalNome ? `· ${proc.profissionalNome}` : ''}`,
+        meta: `${proc.statusNome || ''} ${proc.criadoEm ? new Date(proc.criadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''} ${proc.profissionalNome ? `· ${proc.profissionalNome}` : ''}`,
       });
     });
 
@@ -810,7 +810,7 @@ export function PatientProfileView({
       apiGaleriaItems.forEach((it) => {
         const title = it.legenda || it.fileName || 'Foto na galeria de evolução';
         const dataRef = it.dataReferencia ? String(it.dataReferencia) : '';
-        const quando = it.createdAt ? new Date(it.createdAt).toLocaleString('pt-BR') : '';
+        const quando = it.createdAt ? new Date(it.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
         const meta = [dataRef, quando].filter(Boolean).join(' · ') || it.fileName;
         events.push({
           id: `galeria_api_${it.serverId}`,
@@ -825,7 +825,7 @@ export function PatientProfileView({
           id: `photo_${idx}`,
           type: 'foto',
           title: 'Foto adicionada na galeria',
-          meta: photo.capturedAt ? new Date(photo.capturedAt).toLocaleString('pt-BR') : photo.fileName,
+          meta: photo.capturedAt ? new Date(photo.capturedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : photo.fileName,
         });
       });
     }
@@ -965,12 +965,23 @@ export function PatientProfileView({
     const newNote = {
       texto: text,
       autor: 'Atendimento',
-      data: now.toLocaleDateString('pt-BR'),
+      data: now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
     };
     onUpdatePatient?.(selectedPatient.cpf, {
       notas: [newNote, ...existingNotes],
     });
     setQuickNoteText('');
+  };
+
+  const handleDeleteNote = async (id) => {
+    if (!selectedPatient?.id) return;
+    try {
+      await notasApi.remove(id);
+      const list = await notasApi.list(selectedPatient.id);
+      setApiNotes(Array.isArray(list) ? list : []);
+    } catch (e) {
+      toast.error(e.message || 'Erro ao excluir nota.');
+    }
   };
 
   const stopGalleryCamera = () => {
@@ -1450,9 +1461,21 @@ export function PatientProfileView({
               {displayNotes.length ? displayNotes.map((nota, i) => (
                 <div key={nota.id || i} className={`p-3 rounded-lg border-[2px] ${i % 2 === 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
                   <p className={`text-[12px] font-medium ${i % 2 === 0 ? 'text-yellow-800' : 'text-green-800'}`}>{nota.texto}</p>
-                  <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center justify-between mt-1 gap-2">
                     <span className={`text-[11px] font-medium ${i % 2 === 0 ? 'text-yellow-600' : 'text-green-600'}`}>{nota.autor}{nota._fromApi ? ' · servidor' : ''}</span>
-                    <span className={`text-[11px] ${i % 2 === 0 ? 'text-yellow-500' : 'text-green-500'}`}>{nota.data}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[11px] ${i % 2 === 0 ? 'text-yellow-500' : 'text-green-500'}`}>{nota.data}</span>
+                      {nota._fromApi && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(nota.id)}
+                          className="text-red-400 hover:text-red-600 transition-colors"
+                          aria-label="Excluir nota"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )) : <p className="text-[12px] text-[#94a3b8]">Nenhuma nota registrada</p>}
