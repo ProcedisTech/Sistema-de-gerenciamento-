@@ -13,10 +13,13 @@ export const useJourneyState = () => {
   const [idade, setIdade] = useState('');
   const [nome, setNome] = useState('');
   const [sexo, setSexo] = useState('');
-  const [estadoCivil, setEstadoCivil] = useState('');
+  const [estadoCivilId, setEstadoCivilId] = useState('');
   const [profissao, setProfissao] = useState('');
   const [alergias, setAlergias] = useState('');
   const [step1Errors, setStep1Errors] = useState({});
+  const [step2Errors, setStep2Errors] = useState({});
+  const [step4Errors, setStep4Errors] = useState({});
+  const [step5Errors, setStep5Errors] = useState({});
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -38,6 +41,9 @@ export const useJourneyState = () => {
   const [isHoveringCanvas, setIsHoveringCanvas] = useState(false);
   const [paths, setPaths] = useState([]);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // ============ EXECUÇÃO / PROCEDIMENTO ============
+  const [observacoesExecucao, setObservacoesExecucao] = useState('');
 
   // ============ ETAPA 4: LGPD ============
   const [termoLido, setTermoLido] = useState(false);
@@ -82,14 +88,20 @@ export const useJourneyState = () => {
     setNome,
     sexo,
     setSexo,
-    estadoCivil,
-    setEstadoCivil,
+    estadoCivilId,
+    setEstadoCivilId,
     profissao,
     setProfissao,
     alergias,
     setAlergias,
     step1Errors,
     setStep1Errors,
+    step2Errors,
+    setStep2Errors,
+    step4Errors,
+    setStep4Errors,
+    step5Errors,
+    setStep5Errors,
     cpf,
     setCpf,
     rg,
@@ -125,6 +137,9 @@ export const useJourneyState = () => {
     setPaths,
     isDrawing,
     setIsDrawing,
+    // Execução / procedimento
+    observacoesExecucao,
+    setObservacoesExecucao,
     // Etapa 4
     termoLido,
     setTermoLido,

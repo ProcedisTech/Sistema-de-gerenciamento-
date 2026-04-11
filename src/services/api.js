@@ -512,13 +512,17 @@ export const anamneseApi = {
     );
     return results.flat();
   },
+  /** Inclui `prioridade` ('NORMAL' | 'ALERTA'); padrão NORMAL se omitido. */
   createHabito: (data) =>
-    request('/api/v1/anamnese/habitos', { method: 'POST', body: JSON.stringify(data) }),
-  /** Body: categoriaId, tipoRespostaId, descricao; opcional alternativas (sync quando enviado). */
+    request('/api/v1/anamnese/habitos', {
+      method: 'POST',
+      body: JSON.stringify({ prioridade: 'NORMAL', ...data }),
+    }),
+  /** Body: categoriaId, tipoRespostaId, descricao, prioridade; opcional alternativas (sync quando enviado). */
   updateHabito: (id, body) =>
     request(`/api/v1/anamnese/habitos/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(body),
+      body: JSON.stringify({ prioridade: 'NORMAL', ...body }),
     }),
   deleteHabito: (id) =>
     request(`/api/v1/anamnese/habitos/${id}`, { method: 'DELETE' }),
@@ -546,6 +550,11 @@ export const anamneseApi = {
     request(`/api/v1/anamnese/paciente/${pid}?roleUserId=${roleId}`, {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+  atualizarObservacoesAnamnese: (pacienteId, preenchimentoId, observacoes) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/observacoes`, {
+      method: 'PATCH',
+      body: JSON.stringify({ observacoes }),
     }),
   finalizarPaciente: (pid, aid) =>
     request(`/api/v1/anamnese/paciente/${pid}/${aid}/finalizar`, { method: 'PATCH' }),

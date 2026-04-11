@@ -38,20 +38,37 @@ function getToastMountNode() {
 function ToastItem({ id, message, variant, onDismiss }) {
   const cfg = VARIANT_STYLES[variant] || VARIANT_STYLES.info;
   const Icon = cfg.Icon;
+  const isError = variant === 'error';
 
   return (
     <div
       role="status"
       aria-live="polite"
-      style={{ width: 'min(calc(100vw - 2rem), 22rem)' }}
-      className="pointer-events-auto flex items-stretch overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] toast-pop-in"
+      style={{
+        width: isError ? 'min(calc(100vw - 2rem), 28rem)' : 'min(calc(100vw - 2rem), 22rem)',
+      }}
+      className={`pointer-events-auto flex max-w-md items-stretch overflow-hidden rounded-xl bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] toast-pop-in ${
+        isError ? 'border-[3px] border-rose-400' : 'border border-slate-200/90'
+      }`}
     >
       <div className={`w-1 shrink-0 ${cfg.bar}`} aria-hidden />
-      <div className="flex min-w-0 flex-1 items-start gap-3 py-3 pl-3 pr-2">
-        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${cfg.iconWrap}`}>
-          <Icon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+      <div
+        className={`flex min-w-0 flex-1 items-start gap-3 pr-2 ${isError ? 'py-4 pl-4 gap-4' : 'py-3 pl-3 gap-3'}`}
+      >
+        <div
+          className={`mt-0.5 flex shrink-0 items-center justify-center rounded-lg ${cfg.iconWrap} ${
+            isError ? 'h-10 w-10' : 'h-8 w-8'
+          }`}
+        >
+          <Icon className={isError ? 'h-5 w-5' : 'h-4 w-4'} strokeWidth={2.25} aria-hidden />
         </div>
-        <p className="min-w-0 flex-1 pt-1 text-[13px] font-medium leading-snug text-slate-700">{message}</p>
+        <p
+          className={`min-w-0 flex-1 font-medium leading-snug text-slate-700 ${
+            isError ? 'pt-1.5 text-base' : 'pt-1 text-[13px]'
+          }`}
+        >
+          {message}
+        </p>
         <button
           type="button"
           onClick={() => onDismiss(id)}

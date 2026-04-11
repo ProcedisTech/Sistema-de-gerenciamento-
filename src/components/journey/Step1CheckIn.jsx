@@ -1,6 +1,17 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserCheck, AlertTriangle, Square, CheckSquare, Shield, Search } from 'lucide-react';
-import { maskCPF, maskRG, maskTelefone, calculateAgeFromISODate, getPatientInitials } from '../utils/formatters';
+import {
+  maskCPF,
+  maskRG,
+  maskTelefone,
+  calculateAgeFromISODate,
+  getPatientInitials,
+  sanitizeBirthDateDigits,
+  formatBirthDigitsBR,
+  validateBirthDateDigits8,
+  birthDateValidationUserMessage,
+} from '../utils/formatters';
+import { dimensoesApi } from '../../services/api';
 
 export function Step1CheckIn({
   activeTab,
@@ -12,7 +23,7 @@ export function Step1CheckIn({
   dataNascimento, setDataNascimento,
   idade, setIdade,
   sexo, setSexo,
-  estadoCivil, setEstadoCivil,
+  estadoCivilId, setEstadoCivilId,
   profissao, setProfissao,
   alergias, setAlergias,
   cpf, setCpf,
@@ -23,14 +34,53 @@ export function Step1CheckIn({
   step1Errors, setStep1Errors,
   selectPatient,
 }) {
-  const handleDataNascimentoChange = (e) => {
-    const novaData = e.target.value;
-    setDataNascimento(novaData);
-    if (novaData) {
-      const idadeCalculada = calculateAgeFromISODate(novaData);
-      setIdade(idadeCalculada);
+  const [estadosCivis, setEstadosCivis] = useState([]);
+  const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
+
+  useEffect(() => {
+    dimensoesApi
+      .estadosCivis()
+      .then((data) => {
+        if (Array.isArray(data)) setEstadosCivis(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!dataNascimento) return;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dataNascimento).trim());
+    if (!m) return;
+    const digits = `${m[3]}${m[2]}${m[1]}`;
+    setDataNascimentoDisplay(formatBirthDigitsBR(digits));
+  }, [dataNascimento]);
+
+  const handleDataNascimentoChange = (raw) => {
+    const digits = sanitizeBirthDateDigits(raw);
+    const display = formatBirthDigitsBR(digits);
+    setDataNascimentoDisplay(display);
+
+    if (digits.length === 8) {
+      const r = validateBirthDateDigits8(digits);
+      if (r.ok) {
+        setDataNascimento(r.iso);
+        const age = calculateAgeFromISODate(r.iso);
+        setIdade(age !== '' ? age : '');
+      } else {
+        setDataNascimento('');
+        setIdade('');
+      }
+    } else {
+      setDataNascimento('');
+      setIdade('');
     }
   };
+
+  const birthDigitsForUi = dataNascimentoDisplay.replace(/\D/g, '');
+  let dataNascimentoFieldMessage = null;
+  if (birthDigitsForUi.length === 8 && !dataNascimento) {
+    const br = validateBirthDateDigits8(birthDigitsForUi);
+    if (!br.ok) dataNascimentoFieldMessage = birthDateValidationUserMessage(br.reason);
+  }
 
   const filteredPatients = patients.filter((p) => {
     const q = searchQuery.trim().toLowerCase();
@@ -160,14 +210,23 @@ export function Step1CheckIn({
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Data de Nascimento <span className="text-red-500">*</span></label>
                 <input
-                  type="date"
-                  value={dataNascimento}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="bday"
+                  value={dataNascimentoDisplay}
                   onChange={(e) => {
-                    handleDataNascimentoChange(e);
+                    handleDataNascimentoChange(e.target.value);
                     setStep1Errors({...step1Errors, dataNascimento: false});
                   }}
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
                   className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.dataNascimento ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 />
+                {dataNascimentoFieldMessage ? (
+                  <p className="text-[12px] font-bold text-red-600" role="alert">
+                    {dataNascimentoFieldMessage}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Idade</label>
@@ -190,23 +249,26 @@ export function Step1CheckIn({
                   className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.sexo ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 >
                   <option value="">Selecione...</option>
-                  <option value="f">Feminino</option>
-                  <option value="m">Masculino</option>
+                  <option value="F">Feminino</option>
+                  <option value="M">Masculino</option>
                 </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Estado Civil <span className="text-red-500">*</span></label>
                 <select
-                  value={estadoCivil}
+                  value={estadoCivilId}
                   onChange={(e) => {
-                    setEstadoCivil(e.target.value);
+                    setEstadoCivilId(e.target.value);
                     setStep1Errors({...step1Errors, estadoCivil: false});
                   }}
                   className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.estadoCivil ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 >
                   <option value="">Selecione...</option>
-                  <option value="solteiro">Solteiro(a)</option>
-                  <option value="casado">Casado(a)</option>
+                  {estadosCivis.map((ec) => (
+                    <option key={ec.estado_civil_id || ec.id} value={ec.estado_civil_id || ec.id}>
+                      {ec.nome}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="md:col-span-2 space-y-1.5">
@@ -349,4 +411,3 @@ export function Step1CheckIn({
     </div>
   );
 }
-

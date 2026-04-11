@@ -11,7 +11,7 @@ export function Stepper({ currentStep }) {
   ];
 
   return (
-    <div className="flex items-center justify-between max-w-[1000px] overflow-x-auto pb-3 sm:pb-4 custom-scrollbar">
+    <div className="flex shrink-0 items-center justify-between max-w-[1000px] overflow-x-auto pb-3 sm:pb-4 custom-scrollbar">
       {steps.map((step, index) => {
         const isCompleted = currentStep > step.id;
         const isActive = currentStep === step.id;

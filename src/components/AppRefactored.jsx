@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Hooks de estado
@@ -61,9 +61,13 @@ export default function App() {
   const authSessionReady = authState.authReady && authState.cookieConsentAccepted && authState.isLoggedIn;
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
+  /** Remonta Step1CheckIn ao resetar jornada (estado local da data mascarada). */
+  const [step1CheckInKey, setStep1CheckInKey] = useState(0);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const anamneseRef = useRef(null);
+  /** Id do preenchimento retornado por `createPaciente` (PATCH de observações ao finalizar). */
+  const anamnesePreenchimentoIdRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
 
@@ -278,7 +282,8 @@ export default function App() {
       dataNascimento: journeyState.dataNascimento || '',
       idade: journeyState.idade || '',
       sexo: journeyState.sexo || '',
-      estadoCivil: journeyState.estadoCivil || '',
+      estadoCivil: existingPatient?.estadoCivil || '',
+      estadoCivilId: journeyState.estadoCivilId || existingPatient?.estadoCivilId || '',
       profissao: journeyState.profissao || '',
       alergias: journeyState.alergias || '',
       cpf: cpfTrim,
@@ -328,13 +333,13 @@ export default function App() {
     if (currentStep === 5 && isFinishing) return;
     if (currentStep === 1) {
       if (journeyState.activeTab === 'novo') {
-        const { nome, dataNascimento, sexo, estadoCivil, profissao, cpf, telefone, email, alergias, lgpdInicial } =
+        const { nome, dataNascimento, sexo, estadoCivilId, profissao, cpf, telefone, email, alergias, lgpdInicial } =
           journeyState;
         const errors = {};
         if (!nome.trim()) errors.nome = true;
         if (!dataNascimento) errors.dataNascimento = true;
         if (!sexo) errors.sexo = true;
-        if (!estadoCivil) errors.estadoCivil = true;
+        if (!String(estadoCivilId || '').trim()) errors.estadoCivil = true;
         if (!profissao.trim()) errors.profissao = true;
         if (!cpf.trim()) errors.cpf = true;
         if (!telefone.trim()) errors.telefone = true;
@@ -344,7 +349,7 @@ export default function App() {
 
         if (Object.keys(errors).length > 0) {
           journeyState.setStep1Errors(errors);
-          toast.warning(messageForMissingStep1Fields(errors));
+          toast.error(messageForMissingStep1Fields(errors));
           return;
         }
 
@@ -371,7 +376,7 @@ export default function App() {
       } else {
         const hasSelectedPatient = Boolean((selectedPatientCpf || '').trim() || (journeyState.cpf || '').trim());
         if (!hasSelectedPatient) {
-          toast.warning('Para prosseguir, selecione um paciente para continuar à anamnese.');
+          toast.error('Para prosseguir, selecione um paciente para continuar à anamnese.');
           return;
         }
         upsertPatientLocal({ ensureSelected: true });
@@ -381,12 +386,17 @@ export default function App() {
     }
 
     if (currentStep === 2) {
-      const { queixa, expectativas } = journeyState;
+      const { queixa, expectativas, observacoesExecucao } = journeyState;
       if (!queixa.trim() || !expectativas.trim()) {
-        toast.warning('Para prosseguir, preencha a queixa principal e as expectativas.');
+        const e2 = {};
+        if (!queixa.trim()) e2.queixa = true;
+        if (!expectativas.trim()) e2.expectativas = true;
+        journeyState.setStep2Errors(e2);
+        toast.error('Para prosseguir, preencha a queixa principal e as expectativas.');
         return;
       }
 
+      journeyState.setStep2Errors({});
       upsertPatientLocal({ ensureSelected: true });
 
       const anamneseData = anamneseRef.current?.getAnamneseData?.();
@@ -401,13 +411,24 @@ export default function App() {
           console.warn('roleUserId ausente: faça login novamente para vincular o profissional.');
         }
         if (paciente?.id && rid) {
-          anamneseApi
-            .createPaciente(paciente.id, rid, {
+          const observacoesBase = `Queixa: ${queixa}. Expectativas: ${expectativas}`;
+          const execTrim = String(observacoesExecucao || '').trim();
+          const observacoes = execTrim
+            ? `${observacoesBase}\n\nObservações de execução: ${execTrim}`
+            : observacoesBase;
+          try {
+            const created = await anamneseApi.createPaciente(paciente.id, rid, {
               anamneseId: anamneseData.anamneseId,
-              observacoes: `Queixa: ${queixa}. Expectativas: ${expectativas}`,
+              observacoes,
               respostas: anamneseData.respostas,
-            })
-            .catch((err) => console.warn('Erro ao salvar anamnese:', err.message));
+            });
+            const pid = created?.id ?? created?.preenchimentoId;
+            if (pid != null && pid !== '') {
+              anamnesePreenchimentoIdRef.current = String(pid);
+            }
+          } catch (err) {
+            console.warn('Erro ao salvar anamnese:', err.message);
+          }
         }
       }
     }
@@ -415,20 +436,30 @@ export default function App() {
     if (currentStep === 4) {
       const { termoLido, termoAssinado } = journeyState;
       if (!termoLido || !termoAssinado) {
-        toast.warning('Para prosseguir, confirme a leitura e a assinatura do termo LGPD.');
+        journeyState.setStep4Errors({
+          termoLido: !termoLido,
+          termoAssinado: !termoAssinado,
+        });
+        toast.error('Para prosseguir, confirme a leitura e a assinatura do termo LGPD.');
         return;
       }
 
+      journeyState.setStep4Errors({});
       upsertPatientLocal({ ensureSelected: true });
     }
 
     if (currentStep === 5) {
       const { orientacoes, satisfacao } = journeyState;
       if (!orientacoes || !satisfacao) {
-        toast.warning('Para prosseguir, confirme as orientações e o nível de satisfação.');
+        journeyState.setStep5Errors({
+          orientacoes: !orientacoes,
+          satisfacao: !satisfacao,
+        });
+        toast.error('Para prosseguir, confirme as orientações e o nível de satisfação.');
         return;
       }
 
+      journeyState.setStep5Errors({});
       upsertPatientLocal({ ensureSelected: true });
     }
 
@@ -441,6 +472,9 @@ export default function App() {
 
   const prevStep = () => {
     if (currentStep > 1) {
+      if (currentStep === 2) journeyState.setStep2Errors({});
+      if (currentStep === 4) journeyState.setStep4Errors({});
+      if (currentStep === 5) journeyState.setStep5Errors({});
       setCurrentStep(currentStep - 1);
     }
   };
@@ -450,6 +484,18 @@ export default function App() {
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
+      const execTrim = String(journeyState.observacoesExecucao || '').trim();
+      const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+      const paciente = sCpf
+        ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
+        : null;
+      if (execTrim && paciente?.id && anamnesePreenchimentoIdRef.current) {
+        await anamneseApi.atualizarObservacoesAnamnese(
+          paciente.id,
+          anamnesePreenchimentoIdRef.current,
+          execTrim
+        );
+      }
       refreshPatients();
       toast.success('Jornada finalizada com sucesso.');
       resetJourney();
@@ -462,13 +508,17 @@ export default function App() {
     }
   };
 
+  const handleUploadDocumentFiles = () => {
+    // Stub: evita ReferenceError no botão de documentos do widget; implementar envio quando houver API.
+  };
+
   const resetJourney = () => {
     setCurrentStep(1);
     journeyState.setNome('');
     journeyState.setDataNascimento('');
     journeyState.setIdade('');
     journeyState.setSexo('');
-    journeyState.setEstadoCivil('');
+    journeyState.setEstadoCivilId('');
     journeyState.setProfissao('');
     journeyState.setAlergias('');
     journeyState.setCpf('');
@@ -484,6 +534,12 @@ export default function App() {
     journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
+    journeyState.setObservacoesExecucao('');
+    journeyState.setStep2Errors({});
+    journeyState.setStep4Errors({});
+    journeyState.setStep5Errors({});
+    anamnesePreenchimentoIdRef.current = null;
+    setStep1CheckInKey((k) => k + 1);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
   };
@@ -498,7 +554,7 @@ export default function App() {
       journeyState.setDataNascimento('');
       journeyState.setIdade('');
       journeyState.setSexo('');
-      journeyState.setEstadoCivil('');
+      journeyState.setEstadoCivilId('');
       journeyState.setProfissao('');
       journeyState.setAlergias('');
       journeyState.setCpf('');
@@ -514,8 +570,13 @@ export default function App() {
     journeyState.setNome(patient.nome || '');
     journeyState.setDataNascimento(patient.dataNascimento || '');
     journeyState.setIdade(patient.idade !== undefined && patient.idade !== null ? String(patient.idade) : '');
-    journeyState.setSexo(patient.sexo || '');
-    journeyState.setEstadoCivil(patient.estadoCivil || '');
+    const sx = String(patient.sexo || '').trim().toUpperCase();
+    journeyState.setSexo(sx === 'F' || sx === 'M' ? sx : '');
+    journeyState.setEstadoCivilId(
+      patient.estadoCivilId != null && String(patient.estadoCivilId).trim() !== ''
+        ? String(patient.estadoCivilId)
+        : ''
+    );
     journeyState.setProfissao(patient.profissao || '');
     journeyState.setAlergias(patient.alergias || '');
     journeyState.setCpf(patient.cpf || '');
@@ -526,6 +587,14 @@ export default function App() {
     patientState.setSelectedPatientCpf(patient.cpf || null);
     journeyState.setActiveTab('existente');
   };
+
+  const pacienteAtual = React.useMemo(() => {
+    const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+    if (!sCpf) return null;
+    return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
+  }, [patients, selectedPatientCpf, journeyState.cpf]);
+
+  const isJornadaView = activeView === 'jornada';
 
   // ============ RENDERIZAÇÃO ============
   if (!authReady) {
@@ -561,13 +630,20 @@ export default function App() {
       />
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto pb-[112px] md:pb-0">
-        {/* Header — anamnese/pacientes: compacto; jornada: título + stepper */}
+      <main
+        className={`flex flex-1 flex-col h-full pb-[112px] md:pb-0 ${
+          isJornadaView ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'
+        }`}
+      >
         <header
-          className={`bg-white border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] z-0 ${
-            activeView === 'anamnese' || activeView === 'pacientes'
-              ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
-              : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
+          className={`border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] ${
+            isJornadaView
+              ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
+              : `z-0 bg-white ${
+                  activeView === 'anamnese' || activeView === 'pacientes'
+                    ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
+                    : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
+                }`
           }`}
         >
           {activeView === 'anamnese' ? (
@@ -593,7 +669,169 @@ export default function App() {
           ) : null}
         </header>
 
-        {/* Content Area — anamnese usa largura e altura maiores no desktop */}
+        {isJornadaView ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-6 md:p-8">
+                <div className="rounded-[20px] border-[3px] border-[#00a88e]/25 bg-white p-4 pb-5 shadow-lg shadow-[#00a88e]/5 sm:p-8 sm:pb-6">
+                  {currentStep === 1 && (
+                    <Step1CheckIn
+                      key={step1CheckInKey}
+                      activeTab={journeyState.activeTab}
+                      setActiveTab={journeyState.setActiveTab}
+                      searchQuery={journeyState.searchQuery}
+                      setSearchQuery={journeyState.setSearchQuery}
+                      selectedPatientCpf={selectedPatientCpf}
+                      patients={patients}
+                      nome={journeyState.nome}
+                      setNome={journeyState.setNome}
+                      dataNascimento={journeyState.dataNascimento}
+                      setDataNascimento={journeyState.setDataNascimento}
+                      idade={journeyState.idade}
+                      setIdade={journeyState.setIdade}
+                      sexo={journeyState.sexo}
+                      setSexo={journeyState.setSexo}
+                      estadoCivilId={journeyState.estadoCivilId}
+                      setEstadoCivilId={journeyState.setEstadoCivilId}
+                      profissao={journeyState.profissao}
+                      setProfissao={journeyState.setProfissao}
+                      alergias={journeyState.alergias}
+                      setAlergias={journeyState.setAlergias}
+                      cpf={journeyState.cpf}
+                      setCpf={journeyState.setCpf}
+                      rg={journeyState.rg}
+                      setRg={journeyState.setRg}
+                      telefone={journeyState.telefone}
+                      setTelefone={journeyState.setTelefone}
+                      email={journeyState.email}
+                      setEmail={journeyState.setEmail}
+                      lgpdInicial={journeyState.lgpdInicial}
+                      setLgpdInicial={journeyState.setLgpdInicial}
+                      step1Errors={journeyState.step1Errors}
+                      setStep1Errors={journeyState.setStep1Errors}
+                      selectPatient={selectPatient}
+                    />
+                  )}
+
+                  {currentStep === 2 && (
+                    <Step2Anamnese
+                      ref={anamneseRef}
+                      queixa={journeyState.queixa}
+                      setQueixa={journeyState.setQueixa}
+                      expectativas={journeyState.expectativas}
+                      setExpectativas={journeyState.setExpectativas}
+                      pacienteId={pacienteAtual?.id || null}
+                      step2Errors={journeyState.step2Errors}
+                      setStep2Errors={journeyState.setStep2Errors}
+                    />
+                  )}
+
+                  {currentStep === 3 && (
+                    <Step3Evaluation
+                      imageSrc={journeyState.imageSrc}
+                      setImageSrc={journeyState.setImageSrc}
+                      activeTool={journeyState.activeTool}
+                      setActiveTool={journeyState.setActiveTool}
+                      activeColor={journeyState.activeColor}
+                      setActiveColor={journeyState.setActiveColor}
+                      pointSize={journeyState.pointSize}
+                      setPointSize={journeyState.setPointSize}
+                      showPointNumbers={journeyState.showPointNumbers}
+                      setShowPointNumbers={journeyState.setShowPointNumbers}
+                      eraserSize={journeyState.eraserSize}
+                      setEraserSize={journeyState.setEraserSize}
+                      cursorPos={journeyState.cursorPos}
+                      setCursorPos={journeyState.setCursorPos}
+                      isHoveringCanvas={journeyState.isHoveringCanvas}
+                      setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
+                      paths={journeyState.paths}
+                      setPaths={journeyState.setPaths}
+                      isDrawing={journeyState.isDrawing}
+                      setIsDrawing={journeyState.setIsDrawing}
+                      canvasRef={canvasRef}
+                      containerRef={containerRef}
+                      evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
+                      setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
+                      selectedPatientCpf={selectedPatientCpf}
+                      cpf={journeyState.cpf}
+                      patients={patients}
+                      setPatients={setPatients}
+                      evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos}
+                      evaluationSelectedPhotoIndex={cameraState.evaluationSelectedPhotoIndex}
+                      setEvaluationSelectedPhotoIndex={cameraState.setEvaluationSelectedPhotoIndex}
+                      onSelectCapturedPhoto={handleSelectCapturedPhoto}
+                      onDeleteCapturedPhoto={handleDeleteCapturedPhoto}
+                      evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                    />
+                  )}
+
+                  {currentStep === 4 && (
+                    <Step4LGPD
+                      termoLido={journeyState.termoLido}
+                      setTermoLido={journeyState.setTermoLido}
+                      termoAssinado={journeyState.termoAssinado}
+                      setTermoAssinado={journeyState.setTermoAssinado}
+                      termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
+                      setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
+                      lgpdCapturedPhotos={cameraState.evaluationCapturedPhotos}
+                      lgpdPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                      onLgpdUploadFiles={cameraState.uploadPhotoFiles}
+                      onLgpdRemovePhoto={handleDeleteCapturedPhoto}
+                      step4Errors={journeyState.step4Errors}
+                      setStep4Errors={journeyState.setStep4Errors}
+                    />
+                  )}
+
+                  {currentStep === 5 && (
+                    <Step5Finalization
+                      orientacoes={journeyState.orientacoes}
+                      setOrientacoes={journeyState.setOrientacoes}
+                      satisfacao={journeyState.satisfacao}
+                      setSatisfacao={journeyState.setSatisfacao}
+                      step5Errors={journeyState.step5Errors}
+                      setStep5Errors={journeyState.setStep5Errors}
+                    />
+                  )}
+
+                  <div className="mt-8 flex flex-col-reverse gap-3 border-t-[3px] border-[#00a88e]/15 pt-5 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-6">
+                    <button
+                      type="button"
+                      onClick={prevStep}
+                      disabled={currentStep === 1 || isFinishing}
+                      className={`flex w-full items-center justify-center gap-2 rounded-xl border-[3px] px-6 py-3 text-[14px] font-bold shadow-sm outline-none transition-all sm:w-auto ${
+                        currentStep === 1 || isFinishing
+                          ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                          : 'border-[#00a88e]/25 bg-white text-[#00a88e] hover:border-[#00a88e] hover:bg-[#e6f7f5]'
+                      }`}
+                    >
+                      <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Anterior
+                    </button>
+
+                    {currentStep < 5 ? (
+                      <button
+                        type="button"
+                        onClick={handleNextStep}
+                        disabled={isFinishing}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        Próxima Etapa <ChevronRight className="h-4 w-4" strokeWidth={3} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleNextStep}
+                        disabled={isFinishing}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#22c55e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#16a34a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        Finalizar Procedimento ✓
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div
           className={`w-full mx-auto ${
             activeView === 'anamnese'
@@ -612,159 +850,6 @@ export default function App() {
                   : 'p-4 sm:p-8 pb-5 sm:pb-6'
             }`}
           >
-
-            {activeView === 'jornada' && (
-              <>
-                {/* ============ ETAPA 1: CHECK-IN ============ */}
-                {currentStep === 1 && (
-                  <Step1CheckIn
-                    activeTab={journeyState.activeTab}
-                    setActiveTab={journeyState.setActiveTab}
-                    searchQuery={journeyState.searchQuery}
-                    setSearchQuery={journeyState.setSearchQuery}
-                    selectedPatientCpf={selectedPatientCpf}
-                    patients={patients}
-                    nome={journeyState.nome}
-                    setNome={journeyState.setNome}
-                    dataNascimento={journeyState.dataNascimento}
-                    setDataNascimento={journeyState.setDataNascimento}
-                    idade={journeyState.idade}
-                    setIdade={journeyState.setIdade}
-                    sexo={journeyState.sexo}
-                    setSexo={journeyState.setSexo}
-                    estadoCivil={journeyState.estadoCivil}
-                    setEstadoCivil={journeyState.setEstadoCivil}
-                    profissao={journeyState.profissao}
-                    setProfissao={journeyState.setProfissao}
-                    alergias={journeyState.alergias}
-                    setAlergias={journeyState.setAlergias}
-                    cpf={journeyState.cpf}
-                    setCpf={journeyState.setCpf}
-                    rg={journeyState.rg}
-                    setRg={journeyState.setRg}
-                    telefone={journeyState.telefone}
-                    setTelefone={journeyState.setTelefone}
-                    email={journeyState.email}
-                    setEmail={journeyState.setEmail}
-                    lgpdInicial={journeyState.lgpdInicial}
-                    setLgpdInicial={journeyState.setLgpdInicial}
-                    step1Errors={journeyState.step1Errors}
-                    setStep1Errors={journeyState.setStep1Errors}
-                    selectPatient={selectPatient}
-                  />
-                )}
-
-                {/* ============ ETAPA 2: ANAMNESE ============ */}
-                {currentStep === 2 && (
-                  <Step2Anamnese
-                    ref={anamneseRef}
-                    queixa={journeyState.queixa}
-                    setQueixa={journeyState.setQueixa}
-                    expectativas={journeyState.expectativas}
-                    setExpectativas={journeyState.setExpectativas}
-                  />
-                )}
-
-                {/* ============ ETAPA 3: AVALIAÇÃO ============ */}
-                {currentStep === 3 && (
-                  <Step3Evaluation
-                    imageSrc={journeyState.imageSrc}
-                    setImageSrc={journeyState.setImageSrc}
-                    activeTool={journeyState.activeTool}
-                    setActiveTool={journeyState.setActiveTool}
-                    activeColor={journeyState.activeColor}
-                    setActiveColor={journeyState.setActiveColor}
-                    pointSize={journeyState.pointSize}
-                    setPointSize={journeyState.setPointSize}
-                    showPointNumbers={journeyState.showPointNumbers}
-                    setShowPointNumbers={journeyState.setShowPointNumbers}
-                    eraserSize={journeyState.eraserSize}
-                    setEraserSize={journeyState.setEraserSize}
-                    cursorPos={journeyState.cursorPos}
-                    setCursorPos={journeyState.setCursorPos}
-                    isHoveringCanvas={journeyState.isHoveringCanvas}
-                    setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                    paths={journeyState.paths}
-                    setPaths={journeyState.setPaths}
-                    isDrawing={journeyState.isDrawing}
-                    setIsDrawing={journeyState.setIsDrawing}
-                    canvasRef={canvasRef}
-                    containerRef={containerRef}
-                    evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                    setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                    selectedPatientCpf={selectedPatientCpf}
-                    cpf={journeyState.cpf}
-                    patients={patients}
-                    setPatients={setPatients}
-                    evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos}
-                    evaluationSelectedPhotoIndex={cameraState.evaluationSelectedPhotoIndex}
-                    setEvaluationSelectedPhotoIndex={cameraState.setEvaluationSelectedPhotoIndex}
-                    onSelectCapturedPhoto={handleSelectCapturedPhoto}
-                    onDeleteCapturedPhoto={handleDeleteCapturedPhoto}
-                    evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                  />
-                )}
-
-                {/* ============ ETAPA 4: LGPD ============ */}
-                {currentStep === 4 && (
-                  <Step4LGPD
-                    termoLido={journeyState.termoLido}
-                    setTermoLido={journeyState.setTermoLido}
-                    termoAssinado={journeyState.termoAssinado}
-                    setTermoAssinado={journeyState.setTermoAssinado}
-                    termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
-                    setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
-                    lgpdCapturedPhotos={cameraState.evaluationCapturedPhotos}
-                    lgpdPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                    onLgpdUploadFiles={cameraState.uploadPhotoFiles}
-                    onLgpdRemovePhoto={handleDeleteCapturedPhoto}
-                  />
-                )}
-
-                {/* ============ ETAPA 5: FINALIZAÇÃO ============ */}
-                {currentStep === 5 && (
-                  <Step5Finalization
-                    orientacoes={journeyState.orientacoes}
-                    setOrientacoes={journeyState.setOrientacoes}
-                    satisfacao={journeyState.satisfacao}
-                    setSatisfacao={journeyState.setSatisfacao}
-                  />
-                )}
-
-                {/* ============ BOTÕES DE NAVEGAÇÃO ============ */}
-                <div className="flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3 mt-8 sm:mt-10 pt-5 sm:pt-6 border-t-[3px] border-[#00a88e]/15">
-                  <button
-                    onClick={prevStep}
-                    disabled={currentStep === 1 || isFinishing}
-                    className={`w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-sm border-[3px] ${
-                      currentStep === 1 || isFinishing
-                        ? 'text-[#94a3b8] bg-[#f8fbfb] border-[#e2e8f0] cursor-not-allowed'
-                        : 'text-[#00a88e] bg-white border-[#00a88e]/25 hover:bg-[#e6f7f5] hover:border-[#00a88e]'
-                    }`}
-                  >
-                    <ChevronLeft className="w-4 h-4" strokeWidth={3} /> Anterior
-                  </button>
-
-                  {currentStep < 5 ? (
-                    <button
-                      onClick={handleNextStep}
-                      disabled={isFinishing}
-                        className="w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-md border-[3px] border-transparent text-white bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      Próxima Etapa <ChevronRight className="w-4 h-4" strokeWidth={3} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleNextStep}
-                      disabled={isFinishing}
-                        className="w-full sm:w-auto justify-center flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-[14px] transition-all outline-none shadow-md border-[3px] border-transparent text-white bg-[#22c55e] hover:bg-[#16a34a] disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      Finalizar Procedimento ✓
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
 
             {activeView === 'pacientes' && (
               <PatientsView
@@ -799,6 +884,7 @@ export default function App() {
             )}
           </div>
         </div>
+        )}
       </main>
 
       {/* CSS Global */}
@@ -833,7 +919,9 @@ export default function App() {
         retakePhoto={cameraState.retakePhoto}
         confirmPhoto={handleConfirmProcedurePhoto}
         uploadPhotoFiles={cameraState.uploadPhotoFiles}
-        uploadDocumentFiles={(files) => handleUploadDocumentFiles(files)}
+        uploadDocumentFiles={handleUploadDocumentFiles}
+        observacoesExecucao={journeyState.observacoesExecucao}
+        setObservacoesExecucao={journeyState.setObservacoesExecucao}
       />
     </div>
   );
