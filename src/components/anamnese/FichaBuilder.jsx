@@ -72,6 +72,7 @@ export function FichaBuilder() {
         tipoResposta: item.pergunta?.tipoResposta || item.pergunta?.tipo_resposta || '',
         ordem: item.ordem,
         obrigatorio: item.obrigatorio ?? false,
+        prioridade: item.pergunta?.prioridade === 'ALERTA' ? 'ALERTA' : 'NORMAL',
       }))
     );
     setErro('');
@@ -92,6 +93,7 @@ export function FichaBuilder() {
         tipoResposta: pergunta.tipoResposta || '',
         ordem: prev.length + 1,
         obrigatorio: false,
+        prioridade: pergunta.prioridade === 'ALERTA' ? 'ALERTA' : 'NORMAL',
       },
     ]);
   };
@@ -174,7 +176,12 @@ export function FichaBuilder() {
       setFichaItens((prev) =>
         prev.map((item) =>
           String(item.perguntaId) === String(updated.id)
-            ? { ...item, descricao: updated.descricao || item.descricao, categoriaNome: updated.categoriaNome || item.categoriaNome }
+            ? {
+              ...item,
+              descricao: updated.descricao || item.descricao,
+              categoriaNome: updated.categoriaNome || item.categoriaNome,
+              prioridade: updated.prioridade === 'ALERTA' ? 'ALERTA' : 'NORMAL',
+            }
             : item
         )
       );
@@ -237,6 +244,7 @@ export function FichaBuilder() {
       {/* Edit question from inside the ficha builder */}
       {editingPerguntaInBuilder && (
         <EditModal
+          key={editingPerguntaInBuilder.id}
           pergunta={editingPerguntaInBuilder}
           categorias={categorias}
           tiposResposta={tiposResposta}
@@ -297,10 +305,16 @@ export function FichaBuilder() {
                 </div>
               ) : (
                 <div className="space-y-2 lg:max-h-[min(520px,calc(100vh-22rem))] overflow-y-auto pr-1 custom-scrollbar">
-                  {fichaItens.map((item, idx) => (
+                  {fichaItens.map((item, idx) => {
+                    const itemAlerta = item.prioridade === 'ALERTA';
+                    return (
                     <div
                       key={item.perguntaId}
-                      className="flex flex-col gap-2 p-3 rounded-xl border-[3px] border-[#00a88e]/15 bg-white cursor-pointer hover:border-[#00a88e]/30 transition-all sm:flex-row sm:items-center sm:gap-2"
+                      className={`flex flex-col gap-2 p-3 rounded-xl border-[3px] cursor-pointer transition-all sm:flex-row sm:items-center sm:gap-2 ${
+                        itemAlerta
+                          ? 'border-red-300 bg-red-50/80 hover:border-red-400'
+                          : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
+                      }`}
                       onClick={() => {
                         const pergunta = getPerguntaById(item.perguntaId);
                         if (pergunta) setEditingPerguntaInBuilder(pergunta);
@@ -319,7 +333,21 @@ export function FichaBuilder() {
                         <span className="w-6 h-6 rounded-full bg-[#00a88e] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{item.ordem}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-bold text-[#0f172a] break-words leading-snug">{item.descricao}</p>
-                          <span className="text-[11px] text-[#64748b]">{item.categoriaNome}</span>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <span className="text-[11px] text-[#64748b]">{item.categoriaNome}</span>
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] bg-blue-50 text-blue-700 border-blue-200">
+                              {tipoLabel(item.tipoResposta)}
+                            </span>
+                            {itemAlerta ? (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] border-red-600 bg-red-700 text-white">
+                                ⚠️ Alerta
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] border-slate-200 bg-slate-100 text-slate-700">
+                                Normal
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -374,7 +402,8 @@ export function FichaBuilder() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -399,17 +428,38 @@ export function FichaBuilder() {
                 {perguntasDisponiveis.length === 0 ? (
                   <p className="text-center py-6 text-[#94a3b8] text-[13px]">Nenhuma pergunta disponível</p>
                 ) : (
-                  perguntasDisponiveis.map((p) => (
+                  perguntasDisponiveis.map((p) => {
+                    const bankAlerta = p.prioridade === 'ALERTA';
+                    return (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => adicionarPergunta(p)}
-                      className="w-full text-left p-3 rounded-xl border-[2px] border-[#e2e8f0] bg-white hover:border-[#00a88e]/30 hover:bg-[#f0fdfa] transition-all"
+                      className={`w-full text-left p-3 rounded-xl border-[2px] transition-all ${
+                        bankAlerta
+                          ? 'border-red-300 bg-red-50/70 hover:border-red-400 hover:bg-red-50'
+                          : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/30 hover:bg-[#f0fdfa]'
+                      }`}
                     >
                       <p className="text-[13px] font-bold text-[#0f766e]">{p.descricao}</p>
-                      <span className="text-[11px] text-[#64748b]">{p.categoriaNome}</span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <span className="text-[11px] text-[#64748b]">{p.categoriaNome}</span>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] bg-blue-50 text-blue-700 border-blue-200">
+                          {tipoLabel(p.tipoResposta)}
+                        </span>
+                        {bankAlerta ? (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] border-red-600 bg-red-700 text-white">
+                            ⚠️ Alerta
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] border-slate-200 bg-slate-100 text-slate-700">
+                            Normal
+                          </span>
+                        )}
+                      </div>
                     </button>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

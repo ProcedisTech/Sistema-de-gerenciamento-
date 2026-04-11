@@ -527,6 +527,12 @@ export default function App() {
     journeyState.setActiveTab('existente');
   };
 
+  const pacienteAtual = React.useMemo(() => {
+    const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+    if (!sCpf) return null;
+    return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
+  }, [patients, selectedPatientCpf, journeyState.cpf]);
+
   // ============ RENDERIZAÇÃO ============
   if (!authReady) {
     return (
@@ -662,6 +668,7 @@ export default function App() {
                     setQueixa={journeyState.setQueixa}
                     expectativas={journeyState.expectativas}
                     setExpectativas={journeyState.setExpectativas}
+                    pacienteId={pacienteAtual?.id || null}
                   />
                 )}
 

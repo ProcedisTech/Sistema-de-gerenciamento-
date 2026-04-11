@@ -1,19 +1,68 @@
 import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
-import { ClipboardList, Square, CheckSquare, Loader2, FileText } from 'lucide-react';
+import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 
-function DynamicQuestion({ pergunta, resposta, onChange }) {
+/** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
+function parseQueixaExpectativasObs(observacoes) {
+  if (!observacoes || typeof observacoes !== 'string') return null;
+  const marker = '. Expectativas:';
+  const idx = observacoes.indexOf(marker);
+  if (idx === -1) return null;
+  const queixa = observacoes.slice(0, idx).replace(/^Queixa:\s*/i, '').trim();
+  const expectativas = observacoes.slice(idx + marker.length).trim();
+  return { queixa: queixa || '', expectativas: expectativas || '' };
+}
+
+function historicoEntryMatchesFichaId(entry, fichaId) {
+  const fid = String(fichaId);
+  const keys = ['anamneseId', 'fichaId', 'anamneseFichaId'];
+  return keys.some((k) => entry[k] != null && String(entry[k]) === fid);
+}
+
+function historicoTimestamp(entry) {
+  const raw = entry.dataHora ?? entry.dataPreenchimento ?? entry.createdAt ?? entry.dataCriacao ?? null;
+  const t = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Converte resposta da API para o estado usado em `DynamicQuestion` / `getAnamneseData`. */
+function mapApiRespostaToEstado(r) {
+  const perguntaId = r.perguntaId ?? r.pergunta?.id;
+  if (perguntaId == null) return null;
+  const row = { perguntaId };
+  if (r.respostaTexto != null && r.respostaTexto !== '') row.respostaTexto = r.respostaTexto;
+  if (r.respostaNumero !== null && r.respostaNumero !== undefined && r.respostaNumero !== '') {
+    const n = typeof r.respostaNumero === 'number' ? r.respostaNumero : Number(r.respostaNumero);
+    row.respostaNumero = Number.isFinite(n) ? n : null;
+  }
+  if (r.respostaBoolean === true || r.respostaBoolean === false) row.respostaBoolean = r.respostaBoolean;
+  const po = r.perguntaOpcaoId ?? r.opcaoId ?? r.pergunta_opcao_id;
+  if (po != null && po !== '') row.perguntaOpcaoId = po;
+  const multi = r.opcoesSelecionadas ?? r.opcoes_selecionadas;
+  if (Array.isArray(multi) && multi.length > 0) {
+    row.opcoesSelecionadas = multi.map((x) => (typeof x === 'object' && x != null && x.id != null ? x.id : x));
+  }
+  return row;
+}
+
+function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnly = false }) {
   const tipo = pergunta.tipoResposta;
+  const qLabel = alerta ? 'text-[13px] font-bold text-red-950 ml-1' : 'text-[13px] font-bold text-[#0f766e] ml-1';
+  const qTitle = alerta ? 'text-[14px] font-bold text-red-950' : 'text-[14px] font-bold text-[#475569]';
+  const fieldBase = alerta
+    ? 'w-full p-3 bg-white border-[3px] border-red-400 rounded-xl text-[14px] font-medium text-neutral-900 placeholder:text-neutral-500 focus:ring-4 outline-none focus:ring-red-200 focus:border-red-700'
+    : 'w-full p-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]';
 
   if (tipo === 'texto') {
     return (
       <div className="space-y-1.5">
-        <label className="text-[13px] font-bold text-[#0f766e] ml-1">{pergunta.descricao}</label>
+        <label className={qLabel}>{pergunta.descricao}</label>
         <textarea
           value={resposta?.respostaTexto || ''}
           onChange={(e) => onChange({ perguntaId: pergunta.id, respostaTexto: e.target.value })}
           rows={2}
-          className="w-full p-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+          readOnly={readOnly}
+          className={`${fieldBase}${readOnly ? ' cursor-default opacity-90' : ''}`}
           placeholder="Digite a resposta..."
         />
       </div>
@@ -23,12 +72,13 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
   if (tipo === 'numero') {
     return (
       <div className="space-y-1.5">
-        <label className="text-[13px] font-bold text-[#0f766e] ml-1">{pergunta.descricao}</label>
+        <label className={qLabel}>{pergunta.descricao}</label>
         <input
           type="number"
           value={resposta?.respostaNumero ?? ''}
           onChange={(e) => onChange({ perguntaId: pergunta.id, respostaNumero: e.target.value === '' ? null : Number(e.target.value) })}
-          className="w-full p-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+          readOnly={readOnly}
+          className={`${fieldBase}${readOnly ? ' cursor-default opacity-90' : ''}`}
           placeholder="0"
         />
       </div>
@@ -36,21 +86,48 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
   }
 
   if (tipo === 'booleano') {
-    const valor = resposta?.respostaBoolean || false;
+    const valor = resposta?.respostaBoolean ?? null;
     return (
-      <div
-        onClick={() => onChange({ perguntaId: pergunta.id, respostaBoolean: !valor })}
-        className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-          valor ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
-        }`}
-      >
-        {valor
-          ? <CheckSquare className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
-          : <Square className="w-6 h-6 text-[#00a88e]/40" strokeWidth={2.5} />
-        }
-        <span className={`text-[14px] font-bold ${valor ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
-          {pergunta.descricao}
-        </span>
+      <div className="flex flex-col gap-2">
+        <span className={qTitle}>{pergunta.descricao}</span>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: true }); }}
+            className={
+              alerta
+                ? `flex-1 py-2 rounded-xl border-[3px] font-bold text-sm transition-all ${
+                    valor === true
+                      ? 'border-red-800 bg-red-700 text-white shadow-sm'
+                      : 'border-red-300 bg-white text-red-800 hover:border-red-500 hover:bg-red-50'
+                  }`
+                : `flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
+                    valor === true ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-gray-200 text-gray-400 hover:border-[#00a88e]/50'
+                  }`
+            }
+          >
+            Sim
+          </button>
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: false }); }}
+            className={
+              alerta
+                ? `flex-1 py-2 rounded-xl border-[3px] font-bold text-sm transition-all ${
+                    valor === false
+                      ? 'border-red-900 bg-red-900 text-white shadow-sm'
+                      : 'border-red-300 bg-white text-red-800 hover:border-red-600 hover:bg-red-50'
+                  }`
+                : `flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
+                    valor === false ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 text-gray-400 hover:border-red-300'
+                  }`
+            }
+          >
+            Não
+          </button>
+        </div>
       </div>
     );
   }
@@ -59,22 +136,50 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
     const selecionada = resposta?.perguntaOpcaoId || null;
     return (
       <div className="space-y-2">
-        <label className="text-[13px] font-bold text-[#0f766e] ml-1">{pergunta.descricao}</label>
+        <label className={qLabel}>{pergunta.descricao}</label>
         <div className="space-y-2">
           {[...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map((alt) => {
             const ativa = String(selecionada) === String(alt.id);
             return (
               <div
                 key={alt.id}
-                onClick={() => onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id })}
-                className={`flex items-center gap-3 p-3 border-[3px] rounded-xl cursor-pointer transition-all ${
-                  ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
-                }`}
+                role="button"
+                tabIndex={readOnly ? -1 : 0}
+                onClick={() => {
+                  if (readOnly) return;
+                  onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id });
+                }}
+                onKeyDown={(e) => {
+                  if (readOnly) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id });
+                  }
+                }}
+                className={
+                  alerta
+                    ? `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
+                      }${
+                        ativa
+                          ? 'border-red-800 bg-red-200/90 shadow-sm'
+                          : 'border-red-400/80 bg-white hover:bg-red-50'
+                      }`
+                    : `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
+                      }${
+                        ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
+                      }`
+                }
               >
-                <div className={`w-5 h-5 rounded-full border-[3px] flex items-center justify-center flex-shrink-0 ${ativa ? 'border-[#00a88e]' : 'border-[#94a3b8]'}`}>
-                  {ativa && <div className="w-2.5 h-2.5 rounded-full bg-[#00a88e]" />}
+                <div
+                  className={`w-5 h-5 rounded-full border-[3px] flex items-center justify-center flex-shrink-0 ${
+                    alerta ? (ativa ? 'border-red-900' : 'border-red-400') : ativa ? 'border-[#00a88e]' : 'border-[#94a3b8]'
+                  }`}
+                >
+                  {ativa && <div className={`w-2.5 h-2.5 rounded-full ${alerta ? 'bg-red-900' : 'bg-[#00a88e]'}`} />}
                 </div>
-                <span className={`text-[14px] font-medium ${ativa ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{alt.alternativa}</span>
+                <span className={`text-[14px] font-medium ${ativa ? (alerta ? 'text-red-950' : 'text-[#0f766e]') : alerta ? 'text-red-900' : 'text-[#475569]'}`}>{alt.alternativa}</span>
               </div>
             );
           })}
@@ -84,30 +189,53 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
   }
 
   if (tipo === 'multipla_escolha') {
-    const selecionadas = resposta?.opcoesSelecionadas || [];
+    const selecionadas = (resposta?.opcoesSelecionadas || []).map((x) => String(x));
     return (
       <div className="space-y-2">
-        <label className="text-[13px] font-bold text-[#0f766e] ml-1">{pergunta.descricao}</label>
+        <label className={qLabel}>{pergunta.descricao}</label>
         <div className="space-y-2">
           {[...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map((alt) => {
-            const ativa = selecionadas.includes(alt.id);
+            const ativa = selecionadas.includes(String(alt.id));
             const toggle = () => {
-              const next = ativa ? selecionadas.filter((id) => id !== alt.id) : [...selecionadas, alt.id];
+              if (readOnly) return;
+              const idStr = String(alt.id);
+              const next = ativa
+                ? selecionadas.filter((id) => id !== idStr)
+                : [...selecionadas, idStr];
               onChange({ perguntaId: pergunta.id, opcoesSelecionadas: next });
             };
             return (
               <div
                 key={alt.id}
+                role="button"
+                tabIndex={readOnly ? -1 : 0}
                 onClick={toggle}
-                className={`flex items-center gap-3 p-3 border-[3px] rounded-xl cursor-pointer transition-all ${
-                  ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
-                }`}
+                onKeyDown={(e) => {
+                  if (readOnly) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                  }
+                }}
+                className={
+                  alerta
+                    ? `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
+                      }${
+                        ativa ? 'border-red-800 bg-red-200/90 shadow-sm' : 'border-red-400/80 bg-white hover:bg-red-50'
+                      }`
+                    : `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
+                      }${
+                        ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
+                      }`
+                }
               >
                 {ativa
-                  ? <CheckSquare className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
-                  : <Square className="w-5 h-5 text-[#94a3b8]" strokeWidth={2} />
+                  ? <CheckSquare className={`w-5 h-5 ${alerta ? 'text-red-900' : 'text-[#00a88e]'}`} strokeWidth={2.5} />
+                  : <Square className={`w-5 h-5 ${alerta ? 'text-red-400' : 'text-[#94a3b8]'}`} strokeWidth={2} />
                 }
-                <span className={`text-[14px] font-medium ${ativa ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{alt.alternativa}</span>
+                <span className={`text-[14px] font-medium ${ativa ? (alerta ? 'text-red-950' : 'text-[#0f766e]') : alerta ? 'text-red-900' : 'text-[#475569]'}`}>{alt.alternativa}</span>
               </div>
             );
           })}
@@ -117,7 +245,11 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
   }
 
   return (
-    <div className="p-3 bg-[#f8fbfb] border-[3px] border-[#e2e8f0] rounded-xl text-[13px] text-[#64748b]">
+    <div
+      className={`p-3 border-[3px] rounded-xl text-[13px] ${
+        alerta ? 'bg-red-50 border-red-400 text-red-950' : 'bg-[#f8fbfb] border-[#e2e8f0] text-[#64748b]'
+      }`}
+    >
       Tipo de resposta não suportado: {tipo}
     </div>
   );
@@ -126,24 +258,33 @@ function DynamicQuestion({ pergunta, resposta, onChange }) {
 export const Step2Anamnese = forwardRef(function Step2Anamnese({
   queixa, setQueixa,
   expectativas, setExpectativas,
+  pacienteId = null,
 }, ref) {
   const [fichas, setFichas] = useState([]);
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState('');
   const [fichaSelecionada, setFichaSelecionada] = useState(null);
   const [respostas, setRespostas] = useState({});
+  const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(null);
+  const [modoVisualizacao, setModoVisualizacao] = useState(false);
 
   useImperativeHandle(ref, () => ({
     getAnamneseData: () => {
       if (!fichaSelecionadaId || !fichaSelecionada) return null;
       return {
         anamneseId: fichaSelecionadaId,
-        respostas: Object.values(respostas).map((r) => ({
-          perguntaId: r.perguntaId,
-          perguntaOpcaoId: r.perguntaOpcaoId || undefined,
-          respostaTexto: r.respostaTexto || undefined,
-          respostaNumero: r.respostaNumero ?? undefined,
-          respostaBoolean: r.respostaBoolean ?? undefined,
-        })),
+        respostas: Object.values(respostas).map((r) => {
+          const row = {
+            perguntaId: r.perguntaId,
+            perguntaOpcaoId: r.perguntaOpcaoId || undefined,
+            respostaTexto: r.respostaTexto || undefined,
+            respostaNumero: r.respostaNumero ?? undefined,
+            respostaBoolean: r.respostaBoolean ?? undefined,
+          };
+          if (Array.isArray(r.opcoesSelecionadas) && r.opcoesSelecionadas.length > 0) {
+            row.opcoesSelecionadas = r.opcoesSelecionadas;
+          }
+          return row;
+        }),
       };
     },
   }), [fichaSelecionadaId, fichaSelecionada, respostas]);
@@ -159,22 +300,63 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
   const handleSelecionarFicha = useCallback(async (id) => {
     setFichaSelecionadaId(id);
-    if (!id) { setFichaSelecionada(null); return; }
+    setPreenchimentoAnterior(null);
+    setModoVisualizacao(false);
+    if (!id) {
+      setFichaSelecionada(null);
+      return;
+    }
     setLoadingFicha(true);
     try {
       const ficha = await anamneseApi.getFicha(id);
       setFichaSelecionada(ficha);
       setRespostas({});
+
+      if (pacienteId) {
+        try {
+          const historicoRaw = await anamneseApi.listPaciente(pacienteId);
+          const historico = Array.isArray(historicoRaw) ? historicoRaw : [];
+          const candidatos = historico.filter((h) => historicoEntryMatchesFichaId(h, id));
+          const preenchimento = [...candidatos].sort((a, b) => historicoTimestamp(b) - historicoTimestamp(a))[0];
+
+          if (preenchimento) {
+            const detalhes = await anamneseApi.getPaciente(pacienteId, preenchimento.id);
+            const respostasCarregadas = {};
+            (detalhes?.respostas || []).forEach((r) => {
+              const mapped = mapApiRespostaToEstado(r);
+              if (mapped) respostasCarregadas[String(mapped.perguntaId)] = mapped;
+            });
+            setRespostas(respostasCarregadas);
+            const dh =
+              preenchimento.dataHora
+              ?? preenchimento.dataPreenchimento
+              ?? preenchimento.createdAt
+              ?? preenchimento.dataCriacao
+              ?? null;
+            setPreenchimentoAnterior({ id: preenchimento.id, dataHora: dh });
+            setModoVisualizacao(true);
+            const parsed = parseQueixaExpectativasObs(detalhes?.observacoes);
+            if (parsed && (parsed.queixa || parsed.expectativas)) {
+              setQueixa(parsed.queixa);
+              setExpectativas(parsed.expectativas);
+            }
+          }
+        } catch (histErr) {
+          console.warn('[Step2Anamnese] Histórico de anamnese do paciente:', histErr?.message || histErr);
+        }
+      }
     } catch {
       setFichaSelecionada(null);
     } finally {
       setLoadingFicha(false);
     }
-  }, []);
+  }, [pacienteId, setQueixa, setExpectativas]);
 
   const handleRespostaChange = useCallback((resposta) => {
-    setRespostas((prev) => ({ ...prev, [resposta.perguntaId]: resposta }));
-  }, []);
+    if (modoVisualizacao) return;
+    const key = String(resposta.perguntaId);
+    setRespostas((prev) => ({ ...prev, [key]: { ...resposta, perguntaId: resposta.perguntaId } }));
+  }, [modoVisualizacao]);
 
   const itensOrdenados = fichaSelecionada?.itens
     ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)
@@ -220,6 +402,27 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         )}
       </div>
 
+      {preenchimentoAnterior && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-[#e6f7f5] border border-[#00a88e] rounded-xl px-4 py-3 mb-4">
+          <div className="flex items-center gap-2 text-[#0f766e] text-sm font-medium min-w-0">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} aria-hidden />
+            <span>
+              Preenchida em{' '}
+              {preenchimentoAnterior.dataHora
+                ? new Date(preenchimentoAnterior.dataHora).toLocaleString('pt-BR')
+                : 'data não registrada'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModoVisualizacao((v) => !v)}
+            className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
+          >
+            {modoVisualizacao ? 'Modificar' : 'Cancelar'}
+          </button>
+        </div>
+      )}
+
       {/* Perguntas dinâmicas da ficha */}
       {loadingFicha && (
         <div className="flex items-center justify-center py-8">
@@ -231,18 +434,46 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       {fichaSelecionada && itensOrdenados.length > 0 && (
         <div className="space-y-4 mb-6 p-6 bg-white border-[3px] border-[#a855f7]/20 rounded-2xl">
           <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">{fichaSelecionada.nome}</h4>
-          {itensOrdenados.map((item) => (
-            <div key={item.id} className="relative">
-              {item.obrigatorio && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" title="Obrigatória" />
-              )}
-              <DynamicQuestion
-                pergunta={item.pergunta}
-                resposta={respostas[item.pergunta?.id]}
-                onChange={handleRespostaChange}
-              />
-            </div>
-          ))}
+          {itensOrdenados.map((item) => {
+            const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+            return (
+              <div
+                key={item.id}
+                className={
+                  isAlerta
+                    ? 'relative rounded-xl overflow-hidden border-[3px] border-red-800 shadow-lg shadow-red-900/10 ring-1 ring-red-700/30'
+                    : 'relative'
+                }
+              >
+                {isAlerta && (
+                  <div className="flex items-center gap-2 bg-red-800 px-3 py-2.5 text-[12px] font-bold text-white">
+                    <span className="text-base leading-none" aria-hidden>⚠️</span>
+                    <span>Pergunta de alerta</span>
+                  </div>
+                )}
+                <div className={`relative ${isAlerta ? 'bg-gradient-to-b from-red-100 to-red-50 p-4' : ''}`}>
+                  {item.obrigatorio && (
+                    <span
+                      className={`absolute z-[1] text-[10px] font-bold text-white rounded px-1.5 py-0.5 shadow-sm ${
+                        isAlerta ? 'top-2 right-2 bg-red-700' : '-top-2 -right-2 bg-red-500'
+                      }`}
+                    >
+                      obrigatório
+                    </span>
+                  )}
+                  <DynamicQuestion
+                    pergunta={item.pergunta}
+                    resposta={
+                      respostas[item.pergunta?.id] ?? respostas[String(item.pergunta?.id)]
+                    }
+                    onChange={handleRespostaChange}
+                    alerta={isAlerta}
+                    readOnly={modoVisualizacao}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -254,7 +485,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             value={queixa}
             onChange={(e) => setQueixa(e.target.value)}
             rows={3}
-            className="w-full p-4 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+            readOnly={modoVisualizacao}
+            className={`w-full p-4 border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] ${
+              modoVisualizacao ? 'bg-slate-50 cursor-default opacity-95' : 'bg-[#f8fbfb]'
+            }`}
             placeholder="Descreva o motivo da consulta..."
           />
         </div>
@@ -265,7 +499,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             value={expectativas}
             onChange={(e) => setExpectativas(e.target.value)}
             rows={3}
-            className="w-full p-4 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+            readOnly={modoVisualizacao}
+            className={`w-full p-4 border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] ${
+              modoVisualizacao ? 'bg-slate-50 cursor-default opacity-95' : 'bg-[#f8fbfb]'
+            }`}
             placeholder="O que o paciente espera do procedimento..."
           />
         </div>

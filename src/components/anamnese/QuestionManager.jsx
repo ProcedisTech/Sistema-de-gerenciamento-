@@ -109,6 +109,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
       : []
   );
   const [novaAlt, setNovaAlt] = useState('');
+  const [prioridade, setPrioridade] = useState(() => pergunta.prioridade ?? 'NORMAL');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -181,6 +182,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
         categoriaId,
         tipoRespostaId,
         descricao: descricao.trim(),
+        prioridade,
       };
       if (mostrarAlternativas) {
         body.alternativas = alternativas.map((a, i) => {
@@ -256,6 +258,18 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
                 </select>
               )}
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[13px] font-bold text-[#00a88e] ml-1">Prioridade</label>
+            <select
+              value={prioridade}
+              onChange={(e) => setPrioridade(e.target.value)}
+              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+            >
+              <option value="NORMAL">Normal</option>
+              <option value="ALERTA">⚠️ Alerta</option>
+            </select>
           </div>
 
           <div className="space-y-1.5">
@@ -347,6 +361,7 @@ export function QuestionManager({
   const [descricao, setDescricao] = useState('');
   const [alternativas, setAlternativas] = useState([]);
   const [novaAlternativa, setNovaAlternativa] = useState('');
+  const [prioridade, setPrioridade] = useState('NORMAL');
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -428,6 +443,7 @@ export function QuestionManager({
     setDescricao('');
     setAlternativas([]);
     setNovaAlternativa('');
+    setPrioridade('NORMAL');
     setErro('');
   };
 
@@ -444,7 +460,12 @@ export function QuestionManager({
     setErro('');
     setCriando(true);
     try {
-      const habito = await anamneseApi.createHabito({ categoriaId, tipoRespostaId, descricao: descricao.trim() });
+      const habito = await anamneseApi.createHabito({
+        categoriaId,
+        tipoRespostaId,
+        descricao: descricao.trim(),
+        prioridade,
+      });
       if (precisaAlternativas && alternativas.length > 0) {
         await anamneseApi.addAlternativas(habito.id, alternativas);
       }
@@ -547,6 +568,7 @@ export function QuestionManager({
       {/* Edit modal */}
       {editingPergunta && (
         <EditModal
+          key={editingPergunta.id}
           pergunta={editingPergunta}
           categorias={categorias}
           tiposResposta={tiposResposta}
@@ -678,6 +700,18 @@ export function QuestionManager({
           </div>
 
           <div className="space-y-1.5">
+            <label className="text-[13px] font-bold text-[#00a88e] ml-1">Prioridade</label>
+            <select
+              value={prioridade}
+              onChange={(e) => setPrioridade(e.target.value)}
+              className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+            >
+              <option value="NORMAL">Normal</option>
+              <option value="ALERTA">⚠️ Alerta</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
             <label className="text-[13px] font-bold text-[#00a88e] ml-1">Pergunta / Descrição *</label>
             <textarea
               value={descricao}
@@ -797,12 +831,17 @@ export function QuestionManager({
             const cardErro = erroDelete?.id === p.id ? erroDelete.msg : null;
             const isSavingReorder = !!reorderSaving[p.id];
             const emUso = perguntasEmUso.has(String(p.id));
+            const prioridadePergunta = p.prioridade === 'ALERTA' ? 'ALERTA' : 'NORMAL';
 
             return (
               <div
                 key={p.id}
                 onClick={() => { if (!isDeleting) setEditingPergunta(p); }}
-                className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all flex flex-col shadow-sm cursor-pointer"
+                className={`p-4 rounded-xl border-[3px] transition-all flex flex-col shadow-sm cursor-pointer ${
+                  prioridadePergunta === 'ALERTA'
+                    ? 'border-red-300 bg-red-50/80 hover:border-red-400'
+                    : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
+                }`}
               >
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-2">
@@ -815,6 +854,15 @@ export function QuestionManager({
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] ${tipoBadgeColor(p.tipoResposta)}`}>
                         {tipoLabel(p.tipoResposta)}
                       </span>
+                      {prioridadePergunta === 'ALERTA' ? (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] border-red-600 bg-red-700 text-white">
+                          ⚠️ Alerta
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] border-slate-200 bg-slate-100 text-slate-700">
+                          Normal
+                        </span>
+                      )}
                     </div>
                   </div>
 
