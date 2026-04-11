@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Square, CheckSquare, PenLine, Eraser, RotateCw, X, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Shield, Square, CheckSquare, PenLine, Eraser, RotateCw, X, Upload, Image as ImageIcon, Trash2, Stethoscope } from 'lucide-react';
 
 export function Step4LGPD({
   termoLido, setTermoLido,
@@ -12,6 +12,8 @@ export function Step4LGPD({
   onLgpdRemovePhoto,
   step4Errors = {},
   setStep4Errors = () => {},
+  nomeProcedimento = '',
+  setNomeProcedimento = () => {},
 }) {
   const [signatureModalOpen, setSignatureModalOpen] = React.useState(false);
   const [mobilePortrait, setMobilePortrait] = React.useState(false);
@@ -246,6 +248,25 @@ export function Step4LGPD({
             {(lgpdCapturedPhotos || []).length}/{lgpdPhotoMax} imagens na jornada
           </span>
         </div>
+      </div>
+
+      <div className="bg-white border-[3px] border-[#00a88e]/25 rounded-2xl p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-[#e6f7f5] flex items-center justify-center">
+            <Stethoscope className="w-5 h-5 text-[#00a88e]" />
+          </div>
+          <div>
+            <h4 className="text-[15px] font-bold text-[#0f172a]">Procedimento Realizado</h4>
+            <p className="text-[12px] text-[#64748b]">Registre o procedimento executado</p>
+          </div>
+        </div>
+        <input
+          type="text"
+          placeholder="Nome do procedimento *"
+          value={nomeProcedimento}
+          onChange={(e) => setNomeProcedimento(e.target.value)}
+          className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none"
+        />
       </div>
 
       <div className="bg-[#f0fdfa] border-[3px] border-[#00a88e]/25 rounded-2xl p-8 h-[240px] overflow-y-auto mb-6 shadow-inner">

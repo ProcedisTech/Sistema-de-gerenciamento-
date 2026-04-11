@@ -44,6 +44,7 @@ export const useJourneyState = () => {
 
   // ============ EXECUÇÃO / PROCEDIMENTO ============
   const [observacoesExecucao, setObservacoesExecucao] = useState('');
+  const [nomeProcedimento, setNomeProcedimento] = useState('');
 
   // ============ ETAPA 4: LGPD ============
   const [termoLido, setTermoLido] = useState(false);
@@ -140,6 +141,8 @@ export const useJourneyState = () => {
     // Execução / procedimento
     observacoesExecucao,
     setObservacoesExecucao,
+    nomeProcedimento,
+    setNomeProcedimento,
     // Etapa 4
     termoLido,
     setTermoLido,
