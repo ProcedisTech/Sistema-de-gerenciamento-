@@ -698,10 +698,11 @@ export function PatientProfileView({
     setDetailLoading(true);
     (async () => {
       try {
+        console.log('pacienteId linha do tempo:', selectedPatient?.id);
         const [dto, notasList, procList] = await Promise.all([
           pacientesApi.get(id).catch(() => null),
           notasApi.list(id).catch(() => []),
-          procedimentosApi.byPaciente(id).catch(() => []),
+          procedimentosApi.byPaciente(id).catch((e) => { console.error('ERRO procedimentos:', e); return []; }),
         ]);
         if (cancelled) return;
         if (dto) {
