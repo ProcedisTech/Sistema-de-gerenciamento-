@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, FileUp, Upload, X, ClipboardList } from 'lucide-react';
+import { Camera, FileUp, Upload, X, ClipboardList, SwitchCamera } from 'lucide-react';
 
 export function ProcedureCameraWidget({
   visible,
@@ -18,6 +18,8 @@ export function ProcedureCameraWidget({
   confirmPhoto,
   uploadPhotoFiles,
   uploadDocumentFiles,
+  cameraFacing = 'environment',
+  onToggleCameraFacing,
   observacoesExecucao = '',
   setObservacoesExecucao,
 }) {
@@ -29,7 +31,7 @@ export function ProcedureCameraWidget({
 
   return (
     <>
-      <div className="fixed right-4 bottom-[122px] md:right-6 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[55] flex flex-col items-end gap-3">
+      <div className="fixed right-4 bottom-[calc(122px+env(safe-area-inset-bottom,0px))] md:right-6 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[55] flex flex-col items-end gap-3">
         {photoThumbUrl && (
           <div className="w-14 h-14 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/25 bg-white shadow-sm">
             <img
@@ -89,14 +91,17 @@ export function ProcedureCameraWidget({
       </div>
 
       {photoModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onMouseDown={closePhotoModal}>
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 min-h-0"
+          onMouseDown={closePhotoModal}
+        >
           <div className="absolute inset-0 bg-black/60" onClick={closePhotoModal} />
 
           <div
-            className="relative w-full max-w-[900px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden"
+            className="relative w-full max-w-[900px] max-h-[100dvh] min-h-0 flex flex-col bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
+            <div className="flex-shrink-0 p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
               <div className="flex items-center gap-3">
                 <div className="bg-[#e6f7f5] p-2 rounded-xl border-[3px] border-[#00a88e]/25">
                   <Camera className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
@@ -109,22 +114,43 @@ export function ProcedureCameraWidget({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={closePhotoModal}
-                className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
-                aria-label="Fechar"
-              >
-                <X className="w-5 h-5" strokeWidth={2.5} />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {!photoPreviewUrl && onToggleCameraFacing && (
+                  <button
+                    type="button"
+                    onClick={onToggleCameraFacing}
+                    disabled={isCameraStarting}
+                    className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 text-[#00a88e] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                    aria-label={
+                      cameraFacing === 'environment' ? 'Usar camera frontal' : 'Usar camera traseira'
+                    }
+                    title={
+                      cameraFacing === 'environment' ? 'Usar camera frontal' : 'Usar camera traseira'
+                    }
+                  >
+                    <SwitchCamera className="w-5 h-5" strokeWidth={2.5} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closePhotoModal}
+                  className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
+                  aria-label="Fechar"
+                >
+                  <X className="w-5 h-5" strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
 
-            <div className="p-4">
+            <div
+              className="flex-1 min-h-0 overflow-y-auto p-4"
+              style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
+            >
               <div className="relative rounded-[20px] overflow-hidden border-[3px] border-[#00a88e]/15 bg-[#f8fbfb]">
                 <video
                   ref={videoRef}
                   playsInline
-                  className="w-full max-h-[70vh] object-contain bg-black"
+                  className="w-full max-h-[50vh] sm:max-h-[70vh] object-contain bg-black"
                 />
 
                 {photoPreviewUrl && (
