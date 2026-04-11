@@ -922,6 +922,8 @@ export default function App() {
         uploadDocumentFiles={handleUploadDocumentFiles}
         observacoesExecucao={journeyState.observacoesExecucao}
         setObservacoesExecucao={journeyState.setObservacoesExecucao}
+        cameraFacing={cameraState.preferredFacing}
+        onToggleCameraFacing={cameraState.toggleCameraFacing}
       />
     </div>
   );
