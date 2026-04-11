@@ -75,7 +75,7 @@ export function journeyToPacienteCreateDTO(j) {
     email: (j.email || '').trim() || null,
     profissao: (j.profissao || '').trim() || null,
     sexo: sexo === 'F' || sexo === 'M' ? sexo : null,
-    estadoCivilId: undefined,
+    estadoCivilId: j.estadoCivilId || undefined,
   };
 }
 

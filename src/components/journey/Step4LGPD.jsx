@@ -10,6 +10,8 @@ export function Step4LGPD({
   lgpdPhotoMax = 30,
   onLgpdUploadFiles,
   onLgpdRemovePhoto,
+  step4Errors = {},
+  setStep4Errors = () => {},
 }) {
   const [signatureModalOpen, setSignatureModalOpen] = React.useState(false);
   const [mobilePortrait, setMobilePortrait] = React.useState(false);
@@ -189,6 +191,7 @@ export function Step4LGPD({
     const dataUrl = canvas.toDataURL('image/png');
     setTermoAssinaturaDataUrl(dataUrl);
     setTermoAssinado(true);
+    setStep4Errors((prev) => ({ ...prev, termoAssinado: false }));
     setSignatureModalOpen(false);
   };
 
@@ -257,9 +260,16 @@ export function Step4LGPD({
 
       <div className="space-y-3">
         <div
-          onClick={() => setTermoLido(!termoLido)}
+          onClick={() => {
+            setTermoLido(!termoLido);
+            setStep4Errors((prev) => ({ ...prev, termoLido: false }));
+          }}
           className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-            termoLido ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
+            step4Errors.termoLido
+              ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
+              : termoLido
+                ? 'border-[#00a88e] bg-[#e6f7f5]'
+                : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
           }`}
         >
           {termoLido ? (
@@ -274,17 +284,25 @@ export function Step4LGPD({
 
         <div
           ref={openSignatureRef}
-          onClick={handleSignatureAction}
+          onClick={() => {
+            setStep4Errors((prev) => ({ ...prev, termoAssinado: false }));
+            handleSignatureAction();
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
+              setStep4Errors((prev) => ({ ...prev, termoAssinado: false }));
               handleSignatureAction();
             }
           }}
           role="button"
           tabIndex={0}
           className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-            termoAssinado ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
+            step4Errors.termoAssinado
+              ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
+              : termoAssinado
+                ? 'border-[#00a88e] bg-[#e6f7f5]'
+                : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
           }`}
         >
           {termoAssinado ? (

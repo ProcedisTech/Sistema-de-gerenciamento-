@@ -551,6 +551,11 @@ export const anamneseApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  atualizarObservacoesAnamnese: (pacienteId, preenchimentoId, observacoes) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/observacoes`, {
+      method: 'PATCH',
+      body: JSON.stringify({ observacoes }),
+    }),
   finalizarPaciente: (pid, aid) =>
     request(`/api/v1/anamnese/paciente/${pid}/${aid}/finalizar`, { method: 'PATCH' }),
 };

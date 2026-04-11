@@ -6,6 +6,8 @@ export function Step5Finalization({
   setOrientacoes,
   satisfacao,
   setSatisfacao,
+  step5Errors = {},
+  setStep5Errors = () => {},
 }) {
   return (
     <div className="animate-in fade-in duration-300">
@@ -19,7 +21,11 @@ export function Step5Finalization({
         </div>
       </div>
 
-      <div className="space-y-6 bg-white border-[3px] border-[#00a88e]/25 rounded-2xl p-6">
+      <div
+        className={`space-y-6 bg-white border-[3px] rounded-2xl p-6 ${
+          step5Errors.orientacoes || step5Errors.satisfacao ? 'border-red-300' : 'border-[#00a88e]/25'
+        }`}
+      >
         <div>
           <h4 className="text-[18px] font-bold text-[#0f766e] mb-4">Orientações Pós-Procedimento</h4>
           <div className="space-y-3 text-[14px] text-[#475569] font-medium">
@@ -34,9 +40,16 @@ export function Step5Finalization({
 
         <div className="border-t-[3px] border-[#00a88e]/15 pt-6">
           <div
-            onClick={() => setOrientacoes(!orientacoes)}
+            onClick={() => {
+              setOrientacoes(!orientacoes);
+              setStep5Errors((prev) => ({ ...prev, orientacoes: false }));
+            }}
             className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-              orientacoes ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
+              step5Errors.orientacoes
+                ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
+                : orientacoes
+                  ? 'border-[#00a88e] bg-[#e6f7f5]'
+                  : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
             }`}
           >
             {orientacoes ? (
@@ -50,9 +63,16 @@ export function Step5Finalization({
           </div>
 
           <div
-            onClick={() => setSatisfacao(!satisfacao)}
+            onClick={() => {
+              setSatisfacao(!satisfacao);
+              setStep5Errors((prev) => ({ ...prev, satisfacao: false }));
+            }}
             className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm mt-3 ${
-              satisfacao ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
+              step5Errors.satisfacao
+                ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
+                : satisfacao
+                  ? 'border-[#00a88e] bg-[#e6f7f5]'
+                  : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
             }`}
           >
             {satisfacao ? (

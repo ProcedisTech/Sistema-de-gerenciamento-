@@ -14,7 +14,7 @@ export function useJourneyController({
     nome,
     dataNascimento,
     sexo,
-    estadoCivil,
+    estadoCivilId,
     profissao,
     alergias,
     cpf,
@@ -41,7 +41,7 @@ export function useJourneyController({
     setDataNascimento,
     setIdade,
     setSexo,
-    setEstadoCivil,
+    setEstadoCivilId,
     setProfissao,
     setAlergias,
     setCpf,
@@ -83,8 +83,13 @@ export function useJourneyController({
     setNome(patient.nome || '');
     setDataNascimento(patient.dataNascimento || '');
     setIdade(patient.idade !== undefined && patient.idade !== null ? String(patient.idade) : '');
-    setSexo(patient.sexo || '');
-    setEstadoCivil(patient.estadoCivil || '');
+    const sx = String(patient.sexo || '').trim().toUpperCase();
+    setSexo(sx === 'F' || sx === 'M' ? sx : '');
+    setEstadoCivilId(
+      patient.estadoCivilId != null && String(patient.estadoCivilId).trim() !== ''
+        ? String(patient.estadoCivilId)
+        : ''
+    );
     setProfissao(patient.profissao || '');
     setAlergias(patient.alergias || '');
     setCpf(patient.cpf || '');
@@ -142,7 +147,7 @@ export function useJourneyController({
       if (!nome.trim()) errors.nome = true;
       if (!dataNascimento) errors.dataNascimento = true;
       if (!sexo) errors.sexo = true;
-      if (!estadoCivil) errors.estadoCivil = true;
+      if (!String(estadoCivilId || '').trim()) errors.estadoCivil = true;
       if (!profissao.trim()) errors.profissao = true;
       if (!alergias.trim()) errors.alergias = true;
       if (!cpf.trim()) errors.cpf = true;
@@ -164,7 +169,8 @@ export function useJourneyController({
         dataNascimento,
         idade: patientAge !== '' ? patientAge : '',
         sexo,
-        estadoCivil,
+        estadoCivil: '',
+        estadoCivilId,
         profissao: profissao.trim(),
         alergias: alergias.trim(),
         cpf: newCpf,
@@ -247,7 +253,7 @@ export function useJourneyController({
     setIdade('');
     setNome('');
     setSexo('');
-    setEstadoCivil('');
+    setEstadoCivilId('');
     setProfissao('');
     setAlergias('');
     setStep1Errors({});

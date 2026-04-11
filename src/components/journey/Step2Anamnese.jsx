@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 
@@ -13,10 +13,14 @@ function parseQueixaExpectativasObs(observacoes) {
   return { queixa: queixa || '', expectativas: expectativas || '' };
 }
 
+function resolveFichaTemplateIdFromEntry(entry) {
+  const v = entry?.anamneseId ?? entry?.fichaId ?? entry?.anamneseFichaId;
+  return v != null && v !== '' ? String(v) : null;
+}
+
 function historicoEntryMatchesFichaId(entry, fichaId) {
-  const fid = String(fichaId);
-  const keys = ['anamneseId', 'fichaId', 'anamneseFichaId'];
-  return keys.some((k) => entry[k] != null && String(entry[k]) === fid);
+  const eid = resolveFichaTemplateIdFromEntry(entry);
+  return eid != null && eid === String(fichaId);
 }
 
 function historicoTimestamp(entry) {
@@ -259,6 +263,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   queixa, setQueixa,
   expectativas, setExpectativas,
   pacienteId = null,
+  step2Errors = {},
+  setStep2Errors = () => {},
 }, ref) {
   const [fichas, setFichas] = useState([]);
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState('');
@@ -290,6 +296,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   }), [fichaSelecionadaId, fichaSelecionada, respostas]);
   const [loadingFichas, setLoadingFichas] = useState(true);
   const [loadingFicha, setLoadingFicha] = useState(false);
+  const [historicoPaciente, setHistoricoPaciente] = useState([]);
+  const [loadingHistoricoPaciente, setLoadingHistoricoPaciente] = useState(false);
 
   useEffect(() => {
     anamneseApi.listFichas()
@@ -297,6 +305,62 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       .catch(() => setFichas([]))
       .finally(() => setLoadingFichas(false));
   }, []);
+
+  useEffect(() => {
+    if (!pacienteId) {
+      setHistoricoPaciente([]);
+      setLoadingHistoricoPaciente(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingHistoricoPaciente(true);
+    anamneseApi
+      .listPaciente(pacienteId)
+      .then((data) => {
+        if (!cancelled) setHistoricoPaciente(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setHistoricoPaciente([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistoricoPaciente(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pacienteId]);
+
+  const resumoPreenchimentosPorFicha = useMemo(() => {
+    if (!Array.isArray(historicoPaciente) || historicoPaciente.length === 0) return [];
+    const ultimoPorFicha = new Map();
+    for (const h of historicoPaciente) {
+      const fid = resolveFichaTemplateIdFromEntry(h);
+      if (!fid) continue;
+      const prev = ultimoPorFicha.get(fid);
+      if (!prev || historicoTimestamp(h) >= historicoTimestamp(prev)) {
+        ultimoPorFicha.set(fid, h);
+      }
+    }
+    const rows = Array.from(ultimoPorFicha.entries()).map(([fichaId, ultimo]) => {
+      const f = fichas.find((x) => String(x.id) === fichaId);
+      const nome =
+        f?.nome
+        ?? ultimo.anamneseNome
+        ?? ultimo.fichaNome
+        ?? ultimo.nomeFicha
+        ?? ultimo.nome
+        ?? 'Ficha de anamnese';
+      const dataHora =
+        ultimo.dataHora
+        ?? ultimo.dataPreenchimento
+        ?? ultimo.createdAt
+        ?? ultimo.dataCriacao
+        ?? null;
+      return { fichaId, nome, dataHora, ultimo };
+    });
+    rows.sort((a, b) => historicoTimestamp(b.ultimo) - historicoTimestamp(a.ultimo));
+    return rows;
+  }, [historicoPaciente, fichas]);
 
   const handleSelecionarFicha = useCallback(async (id) => {
     setFichaSelecionadaId(id);
@@ -373,6 +437,47 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           <p className="text-[#64748b] text-[14px] font-medium">Histórico médico e contraindicações</p>
         </div>
       </div>
+
+      {pacienteId && loadingHistoricoPaciente && (
+        <div className="mb-6 flex items-center gap-2 text-[#64748b] text-[13px]">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+          Carregando histórico de anamneses do paciente…
+        </div>
+      )}
+
+      {pacienteId && !loadingHistoricoPaciente && resumoPreenchimentosPorFicha.length > 0 && (
+        <div className="mb-6 space-y-3">
+          <p className="text-[13px] font-bold text-[#0f172a]">Preenchimentos anteriores</p>
+          <div className="space-y-2">
+            {resumoPreenchimentosPorFicha.map((row) => (
+              <div
+                key={row.fichaId}
+                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-xl border-[3px] border-[#00a88e]/20 bg-white shadow-sm"
+              >
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <CheckCircle className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5" strokeWidth={2.5} aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-bold text-[#0f172a] break-words">{row.nome}</p>
+                    <p className="text-[12px] text-[#64748b] font-medium mt-0.5">
+                      Último preenchimento:{' '}
+                      {row.dataHora
+                        ? new Date(row.dataHora).toLocaleString('pt-BR')
+                        : 'data não registrada'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSelecionarFicha(row.fichaId)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-[13px] font-bold bg-[#00a88e] text-white border-[3px] border-transparent hover:bg-[#00967f] transition-colors flex-shrink-0"
+                >
+                  Abrir
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Seletor de ficha */}
       <div className="mb-6 p-4 bg-[#f0fdfa] border-[3px] border-[#00a88e]/20 rounded-2xl">
@@ -478,16 +583,27 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {/* Campos fixos originais */}
-      <form className="space-y-6 bg-white border-[3px] border-[#00a88e]/25 rounded-2xl p-6">
+      <form
+        className={`space-y-6 bg-white border-[3px] rounded-2xl p-6 ${
+          step2Errors.queixa || step2Errors.expectativas ? 'border-red-300' : 'border-[#00a88e]/25'
+        }`}
+      >
         <div className="space-y-2">
           <label className="text-[13px] font-bold text-[#00a88e] ml-1">Queixa Principal <span className="text-red-500">*</span></label>
           <textarea
             value={queixa}
-            onChange={(e) => setQueixa(e.target.value)}
+            onChange={(e) => {
+              setQueixa(e.target.value);
+              setStep2Errors((prev) => ({ ...prev, queixa: false }));
+            }}
             rows={3}
             readOnly={modoVisualizacao}
-            className={`w-full p-4 border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] ${
+            className={`w-full p-4 border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${
               modoVisualizacao ? 'bg-slate-50 cursor-default opacity-95' : 'bg-[#f8fbfb]'
+            } ${
+              step2Errors.queixa
+                ? 'border-red-500 bg-red-50 focus:border-red-600 focus:ring-red-200'
+                : 'border-[#00a88e]/25 focus:border-[#00a88e]'
             }`}
             placeholder="Descreva o motivo da consulta..."
           />
@@ -497,11 +613,18 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           <label className="text-[13px] font-bold text-[#00a88e] ml-1">Expectativas do Paciente <span className="text-red-500">*</span></label>
           <textarea
             value={expectativas}
-            onChange={(e) => setExpectativas(e.target.value)}
+            onChange={(e) => {
+              setExpectativas(e.target.value);
+              setStep2Errors((prev) => ({ ...prev, expectativas: false }));
+            }}
             rows={3}
             readOnly={modoVisualizacao}
-            className={`w-full p-4 border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] ${
+            className={`w-full p-4 border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${
               modoVisualizacao ? 'bg-slate-50 cursor-default opacity-95' : 'bg-[#f8fbfb]'
+            } ${
+              step2Errors.expectativas
+                ? 'border-red-500 bg-red-50 focus:border-red-600 focus:ring-red-200'
+                : 'border-[#00a88e]/25 focus:border-[#00a88e]'
             }`}
             placeholder="O que o paciente espera do procedimento..."
           />
