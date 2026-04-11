@@ -18,6 +18,7 @@ import {
   Mail,
   Phone,
   Play,
+  Plus,
   Save,
   StickyNote,
   Trash2,
@@ -475,6 +476,10 @@ export function PatientProfileView({
   const [galeriaBackend, setGaleriaBackend] = useState('loading');
   const [apiGaleriaItems, setApiGaleriaItems] = useState([]);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
+  const [modalProcedimento, setModalProcedimento] = useState(false);
+  const [nomeProcedimento, setNomeProcedimento] = useState('');
+  const [observacaoProcedimento, setObservacaoProcedimento] = useState('');
+  const [salvandoProcedimento, setSalvandoProcedimento] = useState(false);
   const galleryVideoRef = useRef(null);
   const galleryStreamRef = useRef(null);
   const profilePhotoInputRef = useRef(null);
@@ -984,6 +989,34 @@ export function PatientProfileView({
     }
   };
 
+  const handleRegistrarProcedimento = async () => {
+    if (!nomeProcedimento.trim() || !selectedPatient?.id) return;
+    if (!roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
+      toast.warning(
+        'Selecione o profissional na barra de contexto ou faça login com usuário vinculado à equipe para registrar o procedimento.',
+      );
+      return;
+    }
+    setSalvandoProcedimento(true);
+    try {
+      await procedimentosApi.registrarManual(selectedPatient.id, {
+        nome: nomeProcedimento.trim(),
+        roleUserId,
+        observacao: observacaoProcedimento.trim() || null,
+      });
+      const procList = await procedimentosApi.byPaciente(selectedPatient.id);
+      setApiProcedures(Array.isArray(procList) ? procList : []);
+      setModalProcedimento(false);
+      setNomeProcedimento('');
+      setObservacaoProcedimento('');
+      toast.success('Procedimento registrado com sucesso.');
+    } catch (e) {
+      toast.error(e.message || 'Erro ao registrar procedimento.');
+    } finally {
+      setSalvandoProcedimento(false);
+    }
+  };
+
   const stopGalleryCamera = () => {
     try {
       const stream = galleryStreamRef.current;
@@ -1271,7 +1304,17 @@ export function PatientProfileView({
             <div className="p-6">
               {patientDetailTab === 'timeline' && (
                 <div className="space-y-4">
-                  <h4 className="text-[16px] font-bold text-[#0f172a] mb-4">Historico Completo</h4>
+                  <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                    <h4 className="text-[16px] font-bold text-[#0f172a]">Historico Completo</h4>
+                    <button
+                      type="button"
+                      onClick={() => setModalProcedimento(true)}
+                      disabled={!selectedPatient?.id}
+                      className="flex items-center gap-2 px-3 py-2 bg-[#00a88e] text-white rounded-xl text-[13px] font-bold hover:bg-[#0f766e] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-4 h-4" /> Registrar Procedimento
+                    </button>
+                  </div>
                   <div className="space-y-3">
                     {timelineEvents.length ? timelineEvents.map((evt) => (
                       <div key={evt.id} className="flex gap-4 p-4 rounded-xl border-[2px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all bg-white">
@@ -1286,6 +1329,53 @@ export function PatientProfileView({
                       </div>
                     )) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum evento registrado</p>}
                   </div>
+
+                  {modalProcedimento && (
+                    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+                      <div
+                        className="bg-white rounded-2xl border-[3px] border-[#00a88e] max-w-[500px] w-full p-6"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="modal-procedimento-title"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <h3 id="modal-procedimento-title" className="text-[16px] font-bold text-[#0f172a] mb-4">Registrar Procedimento</h3>
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="Nome do procedimento *"
+                            value={nomeProcedimento}
+                            onChange={(e) => setNomeProcedimento(e.target.value)}
+                            className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none"
+                          />
+                          <textarea
+                            placeholder="Observações (opcional)"
+                            value={observacaoProcedimento}
+                            onChange={(e) => setObservacaoProcedimento(e.target.value)}
+                            rows={4}
+                            className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none resize-none"
+                          />
+                        </div>
+                        <div className="flex gap-3 mt-4">
+                          <button
+                            type="button"
+                            onClick={() => setModalProcedimento(false)}
+                            className="flex-1 py-3 rounded-xl border-[2px] border-[#e2e8f0] text-[#64748b] font-bold text-[14px]"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRegistrarProcedimento}
+                            disabled={!nomeProcedimento.trim() || salvandoProcedimento}
+                            className="flex-1 py-3 rounded-xl bg-[#00a88e] text-white font-bold text-[14px] hover:bg-[#0f766e] disabled:opacity-50 transition-all"
+                          >
+                            {salvandoProcedimento ? 'Salvando...' : 'Salvar'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -17,7 +17,7 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesApi } from '../services/api';
+import { anamneseApi, pacientesApi, procedimentosApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
 
 import { PatientsView } from './patients';
@@ -513,6 +513,13 @@ export default function App() {
           execTrim
         );
       }
+      if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
+        await procedimentosApi.registrarManual(paciente.id, {
+          nome: journeyState.nomeProcedimento.trim(),
+          roleUserId,
+          observacao: String(journeyState.observacoesExecucao || '').trim() || null,
+        });
+      }
       refreshPatients();
       toast.success('Jornada finalizada com sucesso.');
       resetJourney();
@@ -552,6 +559,7 @@ export default function App() {
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
     journeyState.setObservacoesExecucao('');
+    journeyState.setNomeProcedimento('');
     journeyState.setStep2Errors({});
     journeyState.setStep4Errors({});
     journeyState.setStep5Errors({});
@@ -796,6 +804,8 @@ export default function App() {
                       onLgpdRemovePhoto={handleDeleteCapturedPhoto}
                       step4Errors={journeyState.step4Errors}
                       setStep4Errors={journeyState.setStep4Errors}
+                      nomeProcedimento={journeyState.nomeProcedimento}
+                      setNomeProcedimento={journeyState.setNomeProcedimento}
                     />
                   )}
 

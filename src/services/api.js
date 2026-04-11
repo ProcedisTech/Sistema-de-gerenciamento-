@@ -434,11 +434,17 @@ export const procedimentosApi = {
   byPaciente: (pid) => request(`/api/v1/procedimentos/paciente/${pid}`),
   create: (data) => request('/api/v1/procedimentos', { method: 'POST', body: JSON.stringify(data) }),
   iniciar: (data) => request('/api/v1/procedimentos/iniciar', { method: 'POST', body: JSON.stringify(data) }),
+  registrarManual: (pacienteId, data) =>
+    request(`/api/v1/procedimentos/paciente/${pacienteId}/manual`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   patchStatus: (id, statusId) =>
     request(`/api/v1/procedimentos/${id}/status?statusId=${encodeURIComponent(statusId)}`, {
       method: 'PATCH',
     }),
   finalizar: (id) => request(`/api/v1/procedimentos/${id}/finalizar`, { method: 'PATCH' }),
+  deletar: (id) => request(`/api/v1/procedimentos/${id}`, { method: 'DELETE' }),
 };
 
 // ── Estoque / Insumos ───────────────────────────────────────

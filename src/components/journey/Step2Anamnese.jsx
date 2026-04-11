@@ -461,7 +461,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                     <p className="text-[12px] text-[#64748b] font-medium mt-0.5">
                       Último preenchimento:{' '}
                       {row.dataHora
-                        ? new Date(row.dataHora).toLocaleString('pt-BR')
+                        ? new Date(row.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
                         : 'data não registrada'}
                     </p>
                   </div>
@@ -514,7 +514,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             <span>
               Preenchida em{' '}
               {preenchimentoAnterior.dataHora
-                ? new Date(preenchimentoAnterior.dataHora).toLocaleString('pt-BR')
+                ? new Date(preenchimentoAnterior.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
                 : 'data não registrada'}
             </span>
           </div>
