@@ -539,6 +539,7 @@ export const anamneseApi = {
     }),
 
   listFichas: () => request('/api/v1/anamnese/fichas'),
+  getFichaBasica: () => request('/api/v1/anamnese/fichas/basica'),
   getFicha: (id) => request(`/api/v1/anamnese/fichas/${id}`),
   createFicha: (data) => request('/api/v1/anamnese/fichas', { method: 'POST', body: JSON.stringify(data) }),
   updateFicha: (id, data) => request(`/api/v1/anamnese/fichas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

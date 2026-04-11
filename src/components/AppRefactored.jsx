@@ -400,7 +400,11 @@ export default function App() {
       upsertPatientLocal({ ensureSelected: true });
 
       const anamneseData = anamneseRef.current?.getAnamneseData?.();
-      if (anamneseData && anamneseData.respostas.length > 0) {
+      const temFicha =
+        Boolean(anamneseData?.anamneseId) && (anamneseData?.respostas?.length ?? 0) > 0;
+      const temObservacoes = Boolean(queixa.trim() || expectativas.trim());
+
+      if (temFicha || temObservacoes) {
         const paciente = patients.find((p) => {
           const pCpf = String(p?.cpf || '').trim();
           const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
@@ -410,7 +414,20 @@ export default function App() {
         if (!rid) {
           console.warn('roleUserId ausente: faça login novamente para vincular o profissional.');
         }
-        if (paciente?.id && rid) {
+
+        let anamneseId = anamneseData?.anamneseId;
+
+        if (!temFicha && temObservacoes) {
+          try {
+            const fichaBasica = await anamneseApi.getFichaBasica();
+            anamneseId = fichaBasica?.id ?? fichaBasica?.anamneseId;
+          } catch (err) {
+            console.warn('Erro ao obter ficha básica:', err.message);
+            anamneseId = undefined;
+          }
+        }
+
+        if (paciente?.id && rid && anamneseId) {
           const observacoesBase = `Queixa: ${queixa}. Expectativas: ${expectativas}`;
           const execTrim = String(observacoesExecucao || '').trim();
           const observacoes = execTrim
@@ -418,9 +435,9 @@ export default function App() {
             : observacoesBase;
           try {
             const created = await anamneseApi.createPaciente(paciente.id, rid, {
-              anamneseId: anamneseData.anamneseId,
+              anamneseId,
               observacoes,
-              respostas: anamneseData.respostas,
+              respostas: anamneseData?.respostas || [],
             });
             const pid = created?.id ?? created?.preenchimentoId;
             if (pid != null && pid !== '') {
