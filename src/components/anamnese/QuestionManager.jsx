@@ -839,7 +839,7 @@ export function QuestionManager({
                 onClick={() => { if (!isDeleting) setEditingPergunta(p); }}
                 className={`p-4 rounded-xl border-[3px] transition-all flex flex-col shadow-sm cursor-pointer ${
                   prioridadePergunta === 'ALERTA'
-                    ? 'border-red-300 bg-red-50/80 hover:border-red-400'
+                    ? 'border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] hover:border-red-400'
                     : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
                 }`}
               >
