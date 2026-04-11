@@ -312,7 +312,7 @@ export function FichaBuilder() {
                       key={item.perguntaId}
                       className={`flex flex-col gap-2 p-3 rounded-xl border-[3px] cursor-pointer transition-all sm:flex-row sm:items-center sm:gap-2 ${
                         itemAlerta
-                          ? 'border-red-300 bg-red-50/80 hover:border-red-400'
+                          ? 'border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] hover:border-red-400'
                           : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
                       }`}
                       onClick={() => {
@@ -437,7 +437,7 @@ export function FichaBuilder() {
                       onClick={() => adicionarPergunta(p)}
                       className={`w-full text-left p-3 rounded-xl border-[2px] transition-all ${
                         bankAlerta
-                          ? 'border-red-300 bg-red-50/70 hover:border-red-400 hover:bg-red-50'
+                          ? 'border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] hover:border-red-400'
                           : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/30 hover:bg-[#f0fdfa]'
                       }`}
                     >

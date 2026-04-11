@@ -212,8 +212,8 @@ function AnamneseRespostaRow({ resp, rowKey, expanded, onToggle, perguntaMap }) 
   const header = (
     <>
       <div className="flex-1 min-w-0">
-        <span className="text-[12px] text-[#0f766e] font-semibold">{resp.perguntaDescricao || 'Pergunta'}</span>
-        <p className="text-[14px] font-bold text-[#0f172a] mt-1.5">{renderRespostaValue(resp)}</p>
+        <span className="text-[14px] text-[#0f766e] font-medium">{resp.perguntaDescricao || 'Pergunta'}</span>
+        <p className="text-[15px] font-semibold text-[#0f172a] mt-2">{renderRespostaValue(resp)}</p>
       </div>
       {expandable ? (
         <ChevronDown
@@ -242,7 +242,7 @@ function AnamneseRespostaRow({ resp, rowKey, expanded, onToggle, perguntaMap }) 
         {header}
       </button>
       {expanded ? (
-        <div className="px-4 pb-4 pt-0 space-y-2 border-t border-[#00a88e]/15">
+        <div className="px-4 pb-4 pt-2 space-y-3 border-t border-[#00a88e]/15">
           {alternativas.map((alt) => {
             const selected = isAltSelected(alt);
             return (
@@ -255,7 +255,7 @@ function AnamneseRespostaRow({ resp, rowKey, expanded, onToggle, perguntaMap }) 
                 }`}
               >
                 <span
-                  className={`text-[14px] flex-1 ${selected ? 'font-bold text-[#0f766e]' : 'font-medium text-[#475569]'}`}
+                  className={`text-[15px] flex-1 ${selected ? 'font-bold text-[#0f766e]' : 'font-medium text-[#475569]'}`}
                 >
                   {alt.alternativa}
                 </span>
@@ -411,7 +411,7 @@ function AnamneseTab({ pacienteId }) {
                 ) : null}
 
                 {respostas.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     {respostas.map((resp, rIdx) => {
                       const rowKey = `${an.id}:${resp.id ?? rIdx}`;
                       return (

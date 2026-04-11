@@ -51,11 +51,9 @@ function mapApiRespostaToEstado(r) {
 
 function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnly = false }) {
   const tipo = pergunta.tipoResposta;
-  const qLabel = alerta ? 'text-[13px] font-bold text-red-950 ml-1' : 'text-[13px] font-bold text-[#0f766e] ml-1';
-  const qTitle = alerta ? 'text-[14px] font-bold text-red-950' : 'text-[14px] font-bold text-[#475569]';
-  const fieldBase = alerta
-    ? 'w-full p-3 bg-white border-[3px] border-red-400 rounded-xl text-[14px] font-medium text-neutral-900 placeholder:text-neutral-500 focus:ring-4 outline-none focus:ring-red-200 focus:border-red-700'
-    : 'w-full p-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]';
+  const qLabel = `text-[13px] font-bold ml-1 ${alerta ? 'text-[#1f2937]' : 'text-[#0f766e]'}`;
+  const qTitle = 'text-[14px] font-bold text-[#1f2937]';
+  const fieldBase = 'w-full p-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]';
 
   if (tipo === 'texto') {
     return (
@@ -94,22 +92,14 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
     return (
       <div className="flex flex-col gap-2">
         <span className={qTitle}>{pergunta.descricao}</span>
-        <div className="flex gap-3">
+        <div className="flex w-full gap-3 md:max-w-[480px]">
           <button
             type="button"
             disabled={readOnly}
             onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: true }); }}
-            className={
-              alerta
-                ? `flex-1 py-2 rounded-xl border-[3px] font-bold text-sm transition-all ${
-                    valor === true
-                      ? 'border-red-800 bg-red-700 text-white shadow-sm'
-                      : 'border-red-300 bg-white text-red-800 hover:border-red-500 hover:bg-red-50'
-                  }`
-                : `flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
-                    valor === true ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-gray-200 text-gray-400 hover:border-[#00a88e]/50'
-                  }`
-            }
+            className={`flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
+              valor === true ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-gray-200 text-gray-400 hover:border-[#00a88e]/50'
+            } md:min-w-[120px] md:max-w-[200px]`}
           >
             Sim
           </button>
@@ -117,17 +107,9 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
             type="button"
             disabled={readOnly}
             onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: false }); }}
-            className={
-              alerta
-                ? `flex-1 py-2 rounded-xl border-[3px] font-bold text-sm transition-all ${
-                    valor === false
-                      ? 'border-red-900 bg-red-900 text-white shadow-sm'
-                      : 'border-red-300 bg-white text-red-800 hover:border-red-600 hover:bg-red-50'
-                  }`
-                : `flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
-                    valor === false ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 text-gray-400 hover:border-red-300'
-                  }`
-            }
+            className={`flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
+              valor === false ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 text-gray-400 hover:border-red-300'
+            } md:min-w-[120px] md:max-w-[200px]`}
           >
             Não
           </button>
@@ -160,30 +142,20 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
                     onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id });
                   }
                 }}
-                className={
-                  alerta
-                    ? `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
-                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
-                      }${
-                        ativa
-                          ? 'border-red-800 bg-red-200/90 shadow-sm'
-                          : 'border-red-400/80 bg-white hover:bg-red-50'
-                      }`
-                    : `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
-                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
-                      }${
-                        ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
-                      }`
-                }
+                className={`flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                  readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
+                }${
+                  ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
+                }`}
               >
                 <div
                   className={`w-5 h-5 rounded-full border-[3px] flex items-center justify-center flex-shrink-0 ${
-                    alerta ? (ativa ? 'border-red-900' : 'border-red-400') : ativa ? 'border-[#00a88e]' : 'border-[#94a3b8]'
+                    ativa ? 'border-[#00a88e]' : 'border-[#94a3b8]'
                   }`}
                 >
-                  {ativa && <div className={`w-2.5 h-2.5 rounded-full ${alerta ? 'bg-red-900' : 'bg-[#00a88e]'}`} />}
+                  {ativa && <div className="w-2.5 h-2.5 rounded-full bg-[#00a88e]" />}
                 </div>
-                <span className={`text-[14px] font-medium ${ativa ? (alerta ? 'text-red-950' : 'text-[#0f766e]') : alerta ? 'text-red-900' : 'text-[#475569]'}`}>{alt.alternativa}</span>
+                <span className={`text-[14px] font-medium ${ativa ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{alt.alternativa}</span>
               </div>
             );
           })}
@@ -221,25 +193,17 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
                     toggle();
                   }
                 }}
-                className={
-                  alerta
-                    ? `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
-                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
-                      }${
-                        ativa ? 'border-red-800 bg-red-200/90 shadow-sm' : 'border-red-400/80 bg-white hover:bg-red-50'
-                      }`
-                    : `flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
-                        readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
-                      }${
-                        ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
-                      }`
-                }
+                className={`flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                  readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
+                }${
+                  ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
+                }`}
               >
                 {ativa
-                  ? <CheckSquare className={`w-5 h-5 ${alerta ? 'text-red-900' : 'text-[#00a88e]'}`} strokeWidth={2.5} />
-                  : <Square className={`w-5 h-5 ${alerta ? 'text-red-400' : 'text-[#94a3b8]'}`} strokeWidth={2} />
+                  ? <CheckSquare className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
+                  : <Square className="w-5 h-5 text-[#94a3b8]" strokeWidth={2} />
                 }
-                <span className={`text-[14px] font-medium ${ativa ? (alerta ? 'text-red-950' : 'text-[#0f766e]') : alerta ? 'text-red-900' : 'text-[#475569]'}`}>{alt.alternativa}</span>
+                <span className={`text-[14px] font-medium ${ativa ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{alt.alternativa}</span>
               </div>
             );
           })}
@@ -251,7 +215,7 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
   return (
     <div
       className={`p-3 border-[3px] rounded-xl text-[13px] ${
-        alerta ? 'bg-red-50 border-red-400 text-red-950' : 'bg-[#f8fbfb] border-[#e2e8f0] text-[#64748b]'
+        alerta ? 'bg-[#fff5f5] border-red-300 text-[#1f2937]' : 'bg-[#f8fbfb] border-[#e2e8f0] text-[#64748b]'
       }`}
     >
       Tipo de resposta não suportado: {tipo}
@@ -537,35 +501,34 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
-        <div className="space-y-4 mb-6 p-6 bg-white border-[3px] border-[#a855f7]/20 rounded-2xl">
+        <div className="space-y-5 mb-6 p-6 bg-white border-[3px] border-[#a855f7]/20 rounded-2xl">
           <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">{fichaSelecionada.nome}</h4>
           {itensOrdenados.map((item) => {
             const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+            const showObrigatorio = Boolean(item.obrigatorio);
             return (
               <div
                 key={item.id}
-                className={
-                  isAlerta
-                    ? 'relative rounded-xl overflow-hidden border-[3px] border-red-800 shadow-lg shadow-red-900/10 ring-1 ring-red-700/30'
-                    : 'relative'
-                }
+                className={isAlerta
+                  ? 'rounded-xl border-[2px] border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] p-4'
+                  : 'rounded-xl border-[2px] border-[#00a88e]/15 bg-white p-4'}
               >
-                {isAlerta && (
-                  <div className="flex items-center gap-2 bg-red-800 px-3 py-2.5 text-[12px] font-bold text-white">
-                    <span className="text-base leading-none" aria-hidden>⚠️</span>
-                    <span>Pergunta de alerta</span>
+                {(isAlerta || showObrigatorio) && (
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    {isAlerta ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-red-700 bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                        <span aria-hidden>⚠</span>
+                        Alerta
+                      </span>
+                    ) : <span aria-hidden className="w-1" />}
+                    {showObrigatorio ? (
+                      <span className="inline-flex shrink-0 rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white whitespace-nowrap shadow-sm">
+                        obrigatório
+                      </span>
+                    ) : <span aria-hidden className="w-1" />}
                   </div>
                 )}
-                <div className={`relative ${isAlerta ? 'bg-gradient-to-b from-red-100 to-red-50 p-4' : ''}`}>
-                  {item.obrigatorio && (
-                    <span
-                      className={`absolute z-[1] text-[10px] font-bold text-white rounded px-1.5 py-0.5 shadow-sm ${
-                        isAlerta ? 'top-2 right-2 bg-red-700' : '-top-2 -right-2 bg-red-500'
-                      }`}
-                    >
-                      obrigatório
-                    </span>
-                  )}
+                <div>
                   <DynamicQuestion
                     pergunta={item.pergunta}
                     resposta={
