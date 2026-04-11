@@ -18,6 +18,7 @@ export function useProcedureCamera({
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
   const [photoPreviewBlob, setPhotoPreviewBlob] = useState(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [preferredFacing, setPreferredFacing] = useState('environment');
 
   const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
@@ -52,11 +53,20 @@ export function useProcedureCamera({
     setCameraError('');
     setIsCameraStarting(true);
     stopCamera();
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+    const primary = preferredFacing;
+    const secondary = primary === 'environment' ? 'user' : 'environment';
+    const requestStream = (facing) =>
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facing } },
         audio: false,
       });
+    try {
+      let stream;
+      try {
+        stream = await requestStream(primary);
+      } catch {
+        stream = await requestStream(secondary);
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -72,6 +82,10 @@ export function useProcedureCamera({
     } finally {
       setIsCameraStarting(false);
     }
+  };
+
+  const toggleCameraFacing = () => {
+    setPreferredFacing((f) => (f === 'environment' ? 'user' : 'environment'));
   };
 
   const revokePreviewUrl = (url) => {
@@ -92,6 +106,7 @@ export function useProcedureCamera({
     setCameraError('');
     setPhotoPreviewUrl(null);
     setPhotoPreviewBlob(null);
+    setPreferredFacing('environment');
     setPhotoModalOpen(true);
   };
 
@@ -246,8 +261,9 @@ export function useProcedureCamera({
     return () => {
       stopCamera();
     };
+    // preferredFacing triggers restart when user toggles; startCamera reads latest preferredFacing from closure on each run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoModalOpen]);
+  }, [photoModalOpen, preferredFacing]);
 
   return {
     EVALUATION_PHOTO_MAX,
@@ -280,6 +296,8 @@ export function useProcedureCamera({
     capturePhoto,
     confirmPhoto,
     uploadPhotoFiles,
+    preferredFacing,
+    toggleCameraFacing,
   };
 }
 
