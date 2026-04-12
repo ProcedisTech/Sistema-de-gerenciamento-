@@ -271,7 +271,12 @@ async function requestBlob(path, { needsOrg = true } = {}) {
 // ── Pacientes ──────────────────────────────────────────────
 
 export const pacientesApi = {
-  list: () => request('/api/v1/pacientes'),
+  /** @param {{ order?: string }} [opts] — ex.: `{ order: 'birthday_asc' }` */
+  list: (opts = {}) => {
+    const order = opts.order != null && String(opts.order).trim() !== '' ? String(opts.order).trim() : '';
+    const q = order ? `?order=${encodeURIComponent(order)}` : '';
+    return request(`/api/v1/pacientes${q}`);
+  },
   get: (id) => request(`/api/v1/pacientes/${id}`),
   search: (q) => request(`/api/v1/pacientes/search?q=${encodeURIComponent(q)}`),
   create: (data) => request('/api/v1/pacientes', { method: 'POST', body: JSON.stringify(data) }),

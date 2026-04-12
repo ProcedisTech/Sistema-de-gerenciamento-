@@ -78,6 +78,19 @@ function renderRespostaValue(resp) {
   return '-';
 }
 
+/** Resposta cuja pergunta foi marcada como alerta na ficha (ALERTA / alert). */
+function isRespostaPrioridadeAlerta(resp) {
+  const p = resp?.pergunta;
+  const pr = p?.prioridade ?? resp?.prioridade ?? resp?.priority ?? p?.priority;
+  if (pr == null || pr === '') return false;
+  const s = String(pr).trim().toLowerCase();
+  return pr === 'ALERTA' || s === 'alerta' || s === 'alert';
+}
+
+function textoPerguntaResposta(resp) {
+  return (resp?.perguntaDescricao || resp?.pergunta?.descricao || 'Pergunta').trim() || 'Pergunta';
+}
+
 /** Formato gravado em AppRefactored: `Queixa: …. Expectativas: …` */
 function parseQueixaExpectativas(observacoes) {
   if (!observacoes || typeof observacoes !== 'string') return null;
@@ -481,6 +494,9 @@ export function PatientProfileView({
   const [nomeProcedimento, setNomeProcedimento] = useState('');
   const [observacaoProcedimento, setObservacaoProcedimento] = useState('');
   const [salvandoProcedimento, setSalvandoProcedimento] = useState(false);
+  const [alertasAnamnese, setAlertasAnamnese] = useState([]);
+  const [alertasAnamneseLoading, setAlertasAnamneseLoading] = useState(false);
+  const [alertasModalOpen, setAlertasModalOpen] = useState(false);
   const galleryVideoRef = useRef(null);
   const galleryStreamRef = useRef(null);
   const profilePhotoInputRef = useRef(null);
@@ -769,6 +785,60 @@ export function PatientProfileView({
         if (st != null && st !== 401 && st !== 403 && st !== 404) {
           console.warn('[PatientProfileView] Galeria API:', e.message);
         }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatient?.id]);
+
+  useEffect(() => {
+    const pacienteId = selectedPatient?.id;
+    setAlertasModalOpen(false);
+    if (!pacienteId) {
+      setAlertasAnamnese([]);
+      setAlertasAnamneseLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setAlertasAnamneseLoading(true);
+    (async () => {
+      try {
+        const list = await anamneseApi.listPaciente(pacienteId);
+        const arr = Array.isArray(list) ? list : [];
+        const pairs = await Promise.all(
+          arr.map((an) =>
+            anamneseApi
+              .getPaciente(pacienteId, an.id)
+              .then((det) => ({ an, det }))
+              .catch(() => ({ an, det: null }))
+          )
+        );
+        if (cancelled) return;
+        const items = [];
+        for (const { an, det } of pairs) {
+          if (!det || !Array.isArray(det.respostas)) continue;
+          const ts = an.dataHora ? new Date(an.dataHora).getTime() : 0;
+          const nome = an.anamneseNome || 'Anamnese';
+          det.respostas.forEach((resp, rIdx) => {
+            if (!isRespostaPrioridadeAlerta(resp)) return;
+            const pid = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
+            items.push({
+              key: `${an.id}-${pid}`,
+              titulo: textoPerguntaResposta(resp),
+              valor: renderRespostaValue(resp),
+              fichaNome: nome,
+              dataHora: an.dataHora,
+              ts,
+            });
+          });
+        }
+        items.sort((a, b) => b.ts - a.ts);
+        setAlertasAnamnese(items);
+      } catch {
+        if (!cancelled) setAlertasAnamnese([]);
+      } finally {
+        if (!cancelled) setAlertasAnamneseLoading(false);
       }
     })();
     return () => {
@@ -1504,10 +1574,52 @@ export function PatientProfileView({
         </div>
 
         <div className="lg:col-span-1 flex flex-col gap-4">
+          <div className="rounded-2xl border-[3px] border-red-300 bg-red-50 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
+              <h5 className="text-[14px] font-bold text-[#0f172a]">Alertas</h5>
+            </div>
+            {alertasAnamneseLoading ? (
+              <div className="flex items-center gap-2 text-[12px] font-medium text-red-900/80">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0 text-red-600" aria-hidden />
+                Carregando alertas da anamnese…
+              </div>
+            ) : alertasAnamnese.length === 0 ? (
+              <p className="text-[12px] font-medium leading-snug text-red-900/85">
+                Nenhuma pergunta em alerta nas anamneses preenchidas.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {alertasAnamnese.slice(0, 3).map((row) => (
+                    <div
+                      key={row.key}
+                      className="rounded-lg border-[2px] border-red-200 bg-white p-3 shadow-sm"
+                    >
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-red-800 line-clamp-3">
+                        {row.titulo}
+                      </p>
+                      <p className="mt-1 break-words text-[12px] font-semibold text-[#0f172a]">{row.valor}</p>
+                    </div>
+                  ))}
+                </div>
+                {alertasAnamnese.length > 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setAlertasModalOpen(true)}
+                    className="mt-3 w-full rounded-xl border-[2px] border-red-400 bg-white py-2.5 text-[12px] font-bold text-red-700 shadow-sm transition-colors hover:bg-red-100/90"
+                  >
+                    Visualizar todos os alertas ({alertasAnamnese.length})
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+
           <div className="bg-amber-50 rounded-2xl border-[3px] border-amber-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <Bell className="w-5 h-5 text-amber-500" strokeWidth={2.5} />
-              <h5 className="text-[14px] font-bold text-[#0f172a]">Alertas</h5>
+              <h5 className="text-[14px] font-bold text-[#0f172a]">Avisos</h5>
             </div>
             <div className="space-y-2">
               <div
@@ -1592,6 +1704,71 @@ export function PatientProfileView({
           </div>
         </div>
       </div>
+
+      {alertasModalOpen ? (
+        <div
+          className="fixed inset-0 z-[230] flex items-center justify-center bg-black/55 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="alertas-modal-title"
+          onClick={() => setAlertasModalOpen(false)}
+        >
+          <div
+            className="relative flex max-h-[min(88dvh,720px)] w-full max-w-lg flex-col rounded-2xl border-[3px] border-red-300 bg-white p-5 shadow-xl sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setAlertasModalOpen(false)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border-[2px] border-[#e2e8f0] text-[#64748b] transition-colors hover:border-red-200 hover:text-red-600"
+              aria-label="Fechar"
+            >
+              <X className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+            <h3 id="alertas-modal-title" className="pr-10 text-[18px] font-bold text-[#0f172a]">
+              Todos os alertas
+            </h3>
+            <p className="mt-1 text-[12px] font-medium text-[#64748b]">
+              Perguntas marcadas como alerta nas fichas, com as respostas registradas.
+            </p>
+            <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 [-webkit-overflow-scrolling:touch]">
+              {alertasAnamnese.map((row) => (
+                <div
+                  key={row.key}
+                  className="rounded-xl border-[2px] border-red-200 bg-red-50/60 p-4 shadow-sm"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-bold leading-snug text-red-950">{row.titulo}</p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
+                        {row.valor}
+                      </p>
+                      {(row.fichaNome || row.dataHora) && (
+                        <p className="mt-2 text-[11px] font-medium text-[#64748b]">
+                          {row.fichaNome || 'Anamnese'}
+                          {row.dataHora
+                            ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
+                                timeZone: 'America/Sao_Paulo',
+                              })}`
+                            : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAlertasModalOpen(false)}
+              className="mt-5 w-full rounded-xl border-[2px] border-transparent bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[#00967f]"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {birthdayModalOpen && birthAlert?.isToday && (
         <div

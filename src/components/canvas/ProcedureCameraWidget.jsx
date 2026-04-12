@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, FileUp, Upload, X, SwitchCamera } from 'lucide-react';
+import { Camera, Upload, X, SwitchCamera } from 'lucide-react';
 
 export function ProcedureCameraWidget({
   visible,
@@ -25,7 +25,7 @@ export function ProcedureCameraWidget({
 
   return (
     <>
-      <div className="fixed right-4 bottom-[calc(122px+env(safe-area-inset-bottom,0px))] md:right-6 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[55] flex flex-col items-end gap-3">
+      <div className="fixed right-4 top-1/2 z-[55] flex -translate-y-1/2 flex-col items-end gap-3 md:right-6">
         {photoThumbUrl && (
           <div className="w-14 h-14 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/25 bg-white shadow-sm">
             <img
@@ -43,32 +43,14 @@ export function ProcedureCameraWidget({
         >
           <Camera className="w-7 h-7 text-white" strokeWidth={2.5} />
         </button>
-        {/* Upload de imagens */}
-        <label
-          title="Enviar fotos"
-          className="group w-14 h-14 rounded-2xl bg-white hover:bg-[#e6f7f5] transition-all shadow-md flex flex-col items-center justify-center border-[3px] border-[#00a88e]/40 cursor-pointer gap-1"
-        >
-          <Upload className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
-          <span className="text-[9px] font-bold text-[#00a88e] leading-none">Fotos</span>
-          <input
-            type="file"
-            className="hidden"
-            accept="image/*"
-            multiple
-            onChange={(event) => {
-              uploadPhotoFiles?.(event.target.files);
-              event.target.value = '';
-            }}
-          />
-        </label>
 
-        {/* Upload de documentos */}
+        {/* Upload de arquivos / documentos */}
         <label
-          title="Enviar documentos"
+          title="Enviar arquivos (upload)"
           className="group w-14 h-14 rounded-2xl bg-white hover:bg-[#eff6ff] transition-all shadow-md flex flex-col items-center justify-center border-[3px] border-[#3b82f6]/40 cursor-pointer gap-1"
         >
-          <FileUp className="w-5 h-5 text-[#3b82f6]" strokeWidth={2.5} />
-          <span className="text-[9px] font-bold text-[#3b82f6] leading-none">Docs</span>
+          <Upload className="w-5 h-5 text-[#3b82f6]" strokeWidth={2.5} />
+          <span className="text-[9px] font-bold text-[#3b82f6] leading-none">Upload</span>
           <input
             type="file"
             className="hidden"

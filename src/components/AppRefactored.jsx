@@ -84,6 +84,8 @@ export default function App() {
     patientSearchQuery,
     setPatientSearchQuery,
     refreshPatients,
+    patientsListOrder,
+    setPatientsListOrder,
     mergePatientById,
   } = patientState;
 
@@ -701,10 +703,11 @@ export default function App() {
         </header>
 
         {isJornadaView ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-6 md:p-8">
-                <div className="rounded-[20px] border-[3px] border-[#00a88e]/25 bg-white p-4 pb-5 shadow-lg shadow-[#00a88e]/5 sm:p-8 sm:pb-6">
+          <>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-[1600px] p-3 pb-20 sm:p-6 md:px-8 md:pt-8 md:pb-8">
+                  <div className="rounded-[20px] border-[3px] border-[#00a88e]/25 bg-white p-4 pb-5 shadow-lg shadow-[#00a88e]/5 sm:p-8 sm:pb-6 md:pb-8">
                   {currentStep === 1 && (
                     <Step1CheckIn
                       key={step1CheckInKey}
@@ -826,45 +829,83 @@ export default function App() {
                       setStep5Errors={journeyState.setStep5Errors}
                     />
                   )}
+                </div>
+              </div>
+            </div>
 
-                  <div className="mt-8 flex flex-col-reverse gap-3 border-t-[3px] border-[#00a88e]/15 pt-5 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-6">
+            <div className="hidden md:block shrink-0 border-t-[3px] border-[#00a88e]/15 bg-[#f8fbfb]/98 backdrop-blur-sm shadow-[0_-6px_28px_-8px_rgba(15,23,42,0.08)] z-20">
+              <div className="mx-auto w-full max-w-[1600px] px-3 py-3 sm:px-6 md:px-8 md:py-4">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={prevStep}
+                    disabled={currentStep === 1 || isFinishing}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl border-[3px] px-6 py-3 text-[14px] font-bold shadow-sm outline-none transition-all sm:w-auto ${
+                      currentStep === 1 || isFinishing
+                        ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                        : 'border-[#00a88e]/25 bg-white text-[#00a88e] hover:border-[#00a88e] hover:bg-[#e6f7f5]'
+                    }`}
+                  >
+                    <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Etapa anterior
+                  </button>
+
+                  {currentStep < 5 ? (
                     <button
                       type="button"
-                      onClick={prevStep}
-                      disabled={currentStep === 1 || isFinishing}
-                      className={`flex w-full items-center justify-center gap-2 rounded-xl border-[3px] px-6 py-3 text-[14px] font-bold shadow-sm outline-none transition-all sm:w-auto ${
-                        currentStep === 1 || isFinishing
-                          ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
-                          : 'border-[#00a88e]/25 bg-white text-[#00a88e] hover:border-[#00a88e] hover:bg-[#e6f7f5]'
-                      }`}
+                      onClick={handleNextStep}
+                      disabled={isFinishing}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                     >
-                      <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Anterior
+                      Próxima etapa <ChevronRight className="h-4 w-4" strokeWidth={3} />
                     </button>
-
-                    {currentStep < 5 ? (
-                      <button
-                        type="button"
-                        onClick={handleNextStep}
-                        disabled={isFinishing}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                      >
-                        Próxima Etapa <ChevronRight className="h-4 w-4" strokeWidth={3} />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleNextStep}
-                        disabled={isFinishing}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#22c55e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#16a34a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                      >
-                        Finalizar Procedimento ✓
-                      </button>
-                    )}
-                  </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleNextStep}
+                      disabled={isFinishing}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#22c55e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#16a34a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    >
+                      Finalizar procedimento ✓
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+
+            <div className="md:hidden pointer-events-none fixed inset-x-0 top-0 bottom-0 z-[125]">
+              <div className="pointer-events-auto absolute left-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={currentStep === 1 || isFinishing}
+                  aria-label="Etapa anterior"
+                  className={`flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-white/40 bg-[#00a88e] text-white shadow-lg outline-none transition-all ${
+                    currentStep === 1 || isFinishing
+                      ? 'cursor-not-allowed opacity-45'
+                      : 'hover:bg-[#00967f] active:scale-[0.98]'
+                  }`}
+                >
+                  <ChevronLeft className="h-6 w-6" strokeWidth={2.75} aria-hidden />
+                </button>
+              </div>
+              <div className="pointer-events-auto absolute right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
+                <button
+                  type="button"
+                  onClick={handleNextStep}
+                  disabled={isFinishing}
+                  aria-label={currentStep < 5 ? 'Próxima etapa' : 'Finalizar procedimento'}
+                  className={`flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-white/40 text-white shadow-lg outline-none transition-all ${
+                    currentStep < 5 ? 'bg-[#00a88e]' : 'bg-[#22c55e] border-[#22c55e]/50'
+                  } ${
+                    isFinishing ? 'cursor-not-allowed opacity-45' : 'hover:opacity-95 active:scale-[0.98]'
+                  }`}
+                >
+                  <ChevronRight className="h-6 w-6" strokeWidth={2.75} aria-hidden />
+                </button>
+              </div>
+            </div>
+          </>
         ) : (
         <div
           className={`w-full mx-auto ${
@@ -905,6 +946,8 @@ export default function App() {
                 onPatientCreated={patientState.refreshPatients}
                 mergePatientById={mergePatientById}
                 refreshPatients={refreshPatients}
+                patientsListOrder={patientsListOrder}
+                setPatientsListOrder={setPatientsListOrder}
                 roleUserId={roleUserId}
               />
             )}

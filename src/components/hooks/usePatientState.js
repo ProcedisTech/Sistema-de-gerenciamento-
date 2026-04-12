@@ -11,11 +11,14 @@ import { mapBackendPatient } from '../../utils/patientMapping';
 export const usePatientState = (opts = {}) => {
   const { authEnabled = false } = opts;
   const [patients, setPatients] = useState([]);
+  /** `null` = ordem default da API; `birthday_asc` = próximo aniversário primeiro. */
+  const [patientsListOrder, setPatientsListOrder] = useState(null);
 
   const refreshPatients = useCallback(() => {
     if (!authEnabled) return;
+    const listOpts = patientsListOrder === 'birthday_asc' ? { order: 'birthday_asc' } : {};
     pacientesApi
-      .list()
+      .list(listOpts)
       .then((data) => {
         setPatients(Array.isArray(data) ? data.map(mapBackendPatient) : []);
       })
@@ -26,7 +29,7 @@ export const usePatientState = (opts = {}) => {
           console.warn('[usePatientState] Falha ao listar pacientes:', err.message);
         }
       });
-  }, [authEnabled]);
+  }, [authEnabled, patientsListOrder]);
 
   const mergePatientById = useCallback((id, updater) => {
     if (!id) return;
@@ -64,6 +67,8 @@ export const usePatientState = (opts = {}) => {
     patientSearchQuery,
     setPatientSearchQuery,
     refreshPatients,
+    patientsListOrder,
+    setPatientsListOrder,
     mergePatientById,
   };
 };

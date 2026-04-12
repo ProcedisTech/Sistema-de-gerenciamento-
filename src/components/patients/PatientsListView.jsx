@@ -28,6 +28,7 @@ const SORT_OPTIONS = [
   { value: 'idade-desc', label: 'Idade (maior)' },
   { value: 'visita-desc', label: 'Última visita (recente)' },
   { value: 'visita-asc', label: 'Última visita (antiga)' },
+  { value: 'birthday-asc', label: 'Aniversário (mais próximo)' },
 ];
 
 function PatientPreviewPanel({
@@ -177,12 +178,20 @@ export function PatientsListView({
   setPatientView,
   getPatientInitials,
   onCreatePatient,
+  patientsListOrder,
+  setPatientsListOrder,
 }) {
-  const [sortBy, setSortBy] = useState('nome-asc');
+  const [sortBy, setSortBy] = useState(() =>
+    patientsListOrder === 'birthday_asc' ? 'birthday-asc' : 'nome-asc'
+  );
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   const [tipoBusca, setTipoBusca] = useState('nome');
   const desktopTitleId = 'patient-detail-title';
+
+  useEffect(() => {
+    if (patientsListOrder === 'birthday_asc') setSortBy('birthday-asc');
+  }, [patientsListOrder]);
 
   const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
 
@@ -221,6 +230,9 @@ export function PatientsListView({
       return (p.nome || '').toLowerCase().includes(q.toLowerCase());
     });
 
+    if (sortBy === 'birthday-asc') {
+      return list;
+    }
     const sorted = [...list];
     sorted.sort((a, b) => {
       switch (sortBy) {
@@ -356,7 +368,11 @@ export function PatientsListView({
               <select
                 id="patient-sort"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSortBy(v);
+                  setPatientsListOrder?.(v === 'birthday-asc' ? 'birthday_asc' : null);
+                }}
                 className="w-full min-w-0 px-3 py-3 border-[3px] border-[#00a88e]/20 rounded-xl text-[13px] font-bold text-[#0f172a] bg-white focus:outline-none focus:border-[#00a88e]/50 appearance-none cursor-pointer"
               >
                 {SORT_OPTIONS.map((o) => (

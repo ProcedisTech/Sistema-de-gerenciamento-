@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle } from 'lucide-react';
+import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
@@ -27,6 +27,23 @@ function historicoTimestamp(entry) {
   const raw = entry.dataHora ?? entry.dataPreenchimento ?? entry.createdAt ?? entry.dataCriacao ?? null;
   const t = raw ? new Date(raw).getTime() : 0;
   return Number.isFinite(t) ? t : 0;
+}
+
+function textoAlertaAnamneseItem(item) {
+  if (!item || typeof item !== 'object') return '';
+  if (typeof item.descricao === 'string' && item.descricao.trim()) return item.descricao.trim();
+  const p = item.pergunta;
+  if (p && typeof p.descricao === 'string' && p.descricao.trim()) return p.descricao.trim();
+  if (typeof item.texto === 'string' && item.texto.trim()) return item.texto.trim();
+  if (typeof item.titulo === 'string' && item.titulo.trim()) return item.titulo.trim();
+  return '';
+}
+
+function listaAnamneseAlertsDaFicha(ficha) {
+  if (!ficha) return [];
+  const raw = ficha.anamnese_alerts ?? ficha.anamneseAlerts;
+  if (!Array.isArray(raw)) return [];
+  return raw;
 }
 
 /** Converte resposta da API para o estado usado em `DynamicQuestion` / `getAnamneseData`. */
@@ -390,6 +407,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)
     : [];
 
+  const anamneseAlertsLista = useMemo(
+    () => listaAnamneseAlertsDaFicha(fichaSelecionada),
+    [fichaSelecionada]
+  );
+
   return (
     <div className="animate-in fade-in duration-300">
       <div className="flex items-center gap-4 mb-8">
@@ -470,6 +492,40 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </select>
         )}
       </div>
+
+      {anamneseAlertsLista.length > 0 && (
+        <div
+          className="mb-6 rounded-2xl border-[3px] border-red-300/90 bg-[#fff7ed] p-4 sm:p-5 shadow-sm ring-1 ring-red-200/40"
+          role="region"
+          aria-label="Alertas da anamnese"
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
+            <h4 className="text-[15px] font-bold text-[#0f172a]">Alertas</h4>
+          </div>
+          <ul className="space-y-2">
+            {anamneseAlertsLista.map((item, idx) => {
+              const label = textoAlertaAnamneseItem(item);
+              const key =
+                item?.id
+                ?? item?.perguntaId
+                ?? item?.pergunta?.id
+                ?? `alert-${idx}`;
+              return (
+                <li
+                  key={key}
+                  className="flex gap-2.5 rounded-xl border-[2px] border-red-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3 shadow-sm"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" strokeWidth={2.5} aria-hidden />
+                  <span className="text-[13px] font-semibold leading-snug text-[#7f1d1d]">
+                    {label || 'Pergunta em alerta'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {preenchimentoAnterior && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-[#e6f7f5] border border-[#00a88e] rounded-xl px-4 py-3 mb-4">
