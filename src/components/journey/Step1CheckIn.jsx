@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { UserCheck, AlertTriangle, Square, CheckSquare, Shield, Search } from 'lucide-react';
+import { UserCheck, AlertTriangle, Search } from 'lucide-react';
 import {
   maskCPF,
   maskRG,
@@ -11,13 +11,15 @@ import {
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
-import { dimensoesApi } from '../../services/api';
+import { PROFISSOES } from '../../data/profissoes';
+import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 
 export function Step1CheckIn({
   activeTab,
   setActiveTab,
   searchQuery, setSearchQuery,
   selectedPatientCpf,
+  setSelectedPatientCpf,
   patients,
   nome, setNome,
   dataNascimento, setDataNascimento,
@@ -25,26 +27,54 @@ export function Step1CheckIn({
   sexo, setSexo,
   estadoCivilId, setEstadoCivilId,
   profissao, setProfissao,
-  alergias, setAlergias,
+  endereco, setEndereco,
   cpf, setCpf,
   rg, setRg,
   telefone, setTelefone,
   email, setEmail,
-  lgpdInicial, setLgpdInicial,
   step1Errors, setStep1Errors,
   selectPatient,
 }) {
-  const [estadosCivis, setEstadosCivis] = useState([]);
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
+  const [tipoBusca, setTipoBusca] = useState('nome');
+  const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
+  const [showProfissoes, setShowProfissoes] = useState(false);
 
-  useEffect(() => {
-    dimensoesApi
-      .estadosCivis()
-      .then((data) => {
-        if (Array.isArray(data)) setEstadosCivis(data);
-      })
-      .catch(() => {});
-  }, []);
+  const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
+
+  const handleProfissaoChange = (value) => {
+    setProfissao(value);
+    setStep1Errors((prev) => ({ ...prev, profissao: false }));
+    if (value.trim().length > 1) {
+      const filtradas = PROFISSOES.filter((p) =>
+        p.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 8);
+      setProfissoesFiltradas(filtradas);
+      setShowProfissoes(filtradas.length > 0);
+    } else {
+      setProfissoesFiltradas([]);
+      setShowProfissoes(false);
+    }
+  };
+
+  const handleBuscaChange = (value) => {
+    if (tipoBusca === 'cpf') {
+      const digits = value.replace(/\D/g, '').slice(0, 11);
+      const masked = digits
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      setSearchQuery(masked);
+    } else if (tipoBusca === 'telefone') {
+      const digits = value.replace(/\D/g, '').slice(0, 11);
+      const masked = digits
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{5})(\d)/, '$1-$2');
+      setSearchQuery(masked);
+    } else {
+      setSearchQuery(value);
+    }
+  };
 
   useEffect(() => {
     if (!dataNascimento) return;
@@ -83,11 +113,15 @@ export function Step1CheckIn({
   }
 
   const filteredPatients = patients.filter((p) => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     if (!q) return true;
-    return [p.nome, p.cpf, p.telefone]
-      .filter(Boolean)
-      .some((v) => String(v).toLowerCase().includes(q));
+    if (tipoBusca === 'cpf') {
+      return normalizeBuscaDigits(p.cpf).includes(normalizeBuscaDigits(q));
+    }
+    if (tipoBusca === 'telefone') {
+      return normalizeBuscaDigits(p.telefone).includes(normalizeBuscaDigits(q));
+    }
+    return (p.nome || '').toLowerCase().includes(q.toLowerCase());
   });
 
   return (
@@ -116,7 +150,23 @@ export function Step1CheckIn({
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('novo')}
+          onClick={() => {
+            setActiveTab('novo');
+            setSelectedPatientCpf(null);
+            setNome('');
+            setDataNascimento('');
+            setIdade('');
+            setSexo('');
+            setEstadoCivilId('');
+            setProfissao('');
+            setEndereco('');
+            setCpf('');
+            setRg('');
+            setTelefone('');
+            setEmail('');
+            setStep1Errors({});
+            setDataNascimentoDisplay('');
+          }}
           className={`flex-1 py-3 text-[14px] font-bold rounded-xl transition-all ${
             activeTab === 'novo'
               ? 'bg-[#00a88e] text-white shadow-md'
@@ -129,15 +179,37 @@ export function Step1CheckIn({
 
       {activeTab === 'existente' ? (
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por nome, CPF ou telefone..."
-              className="w-full pl-12 pr-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
-            />
+          <div className="flex gap-2 items-stretch min-w-0">
+            <select
+              value={tipoBusca}
+              onChange={(e) => {
+                setTipoBusca(e.target.value);
+                setSearchQuery('');
+              }}
+              className="shrink-0 border-[2px] border-[#e2e8f0] rounded-xl px-3 py-2.5 text-[13px] font-medium text-[#475569] focus:border-[#00a88e] outline-none bg-white min-w-0 max-w-[9.5rem] sm:max-w-none"
+              aria-label="Tipo de busca"
+            >
+              <option value="nome">Nome</option>
+              <option value="cpf">CPF</option>
+              <option value="telefone">Telefone</option>
+            </select>
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#00a88e] pointer-events-none" strokeWidth={2.5} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleBuscaChange(e.target.value)}
+                placeholder={
+                  tipoBusca === 'cpf'
+                    ? '000.000.000-00'
+                    : tipoBusca === 'telefone'
+                      ? '(00) 00000-0000'
+                      : 'Buscar por nome...'
+                }
+                autoComplete="off"
+                className="w-full min-w-0 pl-12 pr-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+              />
+            </div>
           </div>
 
           {filteredPatients.length > 0 ? (
@@ -183,7 +255,7 @@ export function Step1CheckIn({
           {Object.keys(step1Errors).length > 0 && (
             <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[14px] font-bold border-[3px] border-red-200 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 flex-shrink-0" strokeWidth={2.5} />
-              Por favor, preencha todos os campos obrigatórios (*) e o termo LGPD para avançar.
+              Por favor, preencha todos os campos obrigatórios (*) para avançar.
             </div>
           )}
 
@@ -200,7 +272,8 @@ export function Step1CheckIn({
                   type="text"
                   value={nome}
                   onChange={(e) => {
-                    setNome(e.target.value);
+                    const value = e.target.value.replace(/[0-9]/g, '');
+                    setNome(value);
                     setStep1Errors({...step1Errors, nome: false});
                   }}
                   placeholder="Nome completo do paciente"
@@ -264,8 +337,8 @@ export function Step1CheckIn({
                   className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.estadoCivil ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 >
                   <option value="">Selecione...</option>
-                  {estadosCivis.map((ec) => (
-                    <option key={ec.estado_civil_id || ec.id} value={ec.estado_civil_id || ec.id}>
+                  {ESTADOS_CIVIS.map((ec) => (
+                    <option key={ec.id} value={ec.id}>
                       {ec.nome}
                     </option>
                   ))}
@@ -273,16 +346,35 @@ export function Step1CheckIn({
               </div>
               <div className="md:col-span-2 space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Profissão <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={profissao}
-                  onChange={(e) => {
-                    setProfissao(e.target.value);
-                    setStep1Errors({...step1Errors, profissao: false});
-                  }}
-                  placeholder="Ex: Advogada, Empresário, Estudante..."
-                  className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.profissao ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={profissao}
+                    onChange={(e) => handleProfissaoChange(e.target.value)}
+                    onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
+                    placeholder="Digite sua profissão..."
+                    autoComplete="off"
+                    className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.profissao ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                  />
+                  {showProfissoes ? (
+                    <div className="absolute z-50 w-full bg-white border-[2px] border-[#00a88e]/30 rounded-xl shadow-lg mt-1 overflow-hidden">
+                      {profissoesFiltradas.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onMouseDown={() => {
+                            setProfissao(p);
+                            setShowProfissoes(false);
+                            setStep1Errors((prev) => ({ ...prev, profissao: false }));
+                          }}
+                          className="w-full text-left px-4 py-2 text-[13px] text-[#334155] hover:bg-[#e6f7f5] hover:text-[#0f766e] transition-colors"
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -356,54 +448,21 @@ export function Step1CheckIn({
             </div>
           </div>
 
-          {/* Histórico Médico */}
-          <div className={`bg-[#fef2f2] border-[3px] rounded-2xl p-6 transition-colors ${step1Errors.alergias ? 'border-red-400 ring-[5px] ring-red-100' : 'border-red-300'}`}>
-            <div className="flex items-center gap-3 mb-6 text-[#dc2626]">
-              <AlertTriangle className="w-6 h-6" strokeWidth={2.5} />
-              <h4 className="text-[18px] font-bold">Histórico Médico Importante</h4>
+          {/* Endereço (opcional) */}
+          <div className="border-[3px] border-[#f59e0b]/25 rounded-2xl p-6 bg-white">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-full bg-[#f59e0b] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">4</div>
+              <h4 className="text-[18px] font-bold text-[#b45309]">Endereço</h4>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#dc2626]">Alergias <span className="text-red-500">*</span></label>
+              <label className="text-[13px] font-bold text-[#f59e0b]">Endereço</label>
               <input
                 type="text"
-                value={alergias}
-                onChange={(e) => {
-                  setAlergias(e.target.value);
-                  setStep1Errors({...step1Errors, alergias: false});
-                }}
-                placeholder="Ex: Penicilina, Látex, ou digite 'Nenhuma'"
-                className={`w-full px-4 py-3 bg-white border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-red-200 transition-all ${step1Errors.alergias ? 'border-red-500 bg-red-50' : 'border-red-300 focus:border-red-500'}`}
+                value={endereco}
+                onChange={(e) => setEndereco(e.target.value)}
+                placeholder="Rua, número, bairro, cidade - UF"
+                className="w-full px-4 py-3 bg-[#fffbeb] border-[3px] border-[#f59e0b]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all"
               />
-              {step1Errors.alergias && <p className="text-[12px] text-red-600 font-bold mt-1">Este campo é obrigatório.</p>}
-            </div>
-          </div>
-
-          {/* LGPD */}
-          <div className={`bg-[#f0fdfa] border-[3px] rounded-2xl p-6 transition-colors ${step1Errors.lgpdInicial ? 'border-red-400 ring-[5px] ring-red-100' : 'border-[#00a88e]/30'}`}>
-            <div className="flex items-center gap-3 mb-5 text-[#00a88e]">
-              <Shield className="w-6 h-6" strokeWidth={2.5} />
-              <h4 className="text-[18px] font-bold text-[#0f766e]">Termo LGPD Inicial</h4>
-            </div>
-            <div
-              onClick={() => {
-                setLgpdInicial(!lgpdInicial);
-                setStep1Errors({...step1Errors, lgpdInicial: false});
-              }}
-              className={`flex items-start gap-4 p-4 bg-white border-[3px] rounded-xl cursor-pointer hover:bg-[#e6f7f5] transition-all shadow-sm ${step1Errors.lgpdInicial ? 'border-red-300 bg-red-50/50' : 'border-[#00a88e]/25'}`}
-            >
-              {lgpdInicial ? (
-                <CheckSquare className="w-6 h-6 text-[#00a88e] mt-0.5" strokeWidth={2.5} />
-              ) : (
-                <Square className={`w-6 h-6 mt-0.5 ${step1Errors.lgpdInicial ? 'text-red-400' : 'text-[#00a88e]/40'}`} strokeWidth={2.5} />
-              )}
-              <div>
-                <p className={`text-[15px] font-bold mb-1 ${lgpdInicial ? 'text-[#00a88e]' : step1Errors.lgpdInicial ? 'text-red-600' : 'text-[#0f766e]'}`}>
-                  O paciente assinou o termo da LGPD
-                </p>
-                <p className="text-[13px] text-[#475569] font-medium leading-relaxed">
-                  Declaro que li e concordo com os termos de uso e autorizo o tratamento dos meus dados pessoais.
-                </p>
-              </div>
             </div>
           </div>
         </form>

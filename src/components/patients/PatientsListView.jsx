@@ -181,18 +181,44 @@ export function PatientsListView({
   const [sortBy, setSortBy] = useState('nome-asc');
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
+  const [tipoBusca, setTipoBusca] = useState('nome');
   const desktopTitleId = 'patient-detail-title';
+
+  const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
+
+  const handleBuscaChange = (value) => {
+    if (tipoBusca === 'cpf') {
+      const digits = value.replace(/\D/g, '').slice(0, 11);
+      const masked = digits
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      setPatientSearchQuery(masked);
+    } else if (tipoBusca === 'telefone') {
+      const digits = value.replace(/\D/g, '').slice(0, 11);
+      const masked = digits
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{5})(\d)/, '$1-$2');
+      setPatientSearchQuery(masked);
+    } else {
+      setPatientSearchQuery(value);
+    }
+  };
 
   const filteredPatients = useMemo(() => {
     const list = patients.filter((p) => {
-      if (!patientSearchQuery.trim()) return true;
-      const q = patientSearchQuery.toLowerCase();
-      return (
-        (p.nome || '').toLowerCase().includes(q) ||
-        (p.cpf || '').toLowerCase().includes(q) ||
-        (p.telefone || '').toLowerCase().includes(q) ||
-        (p.email || '').toLowerCase().includes(q)
-      );
+      const q = patientSearchQuery.trim();
+      if (!q) return true;
+      if (tipoBusca === 'cpf') {
+        return normalizeBuscaDigits(p.cpf).includes(normalizeBuscaDigits(q));
+      }
+      if (tipoBusca === 'telefone') {
+        return normalizeBuscaDigits(p.telefone).includes(normalizeBuscaDigits(q));
+      }
+      if (tipoBusca === 'email') {
+        return (p.email || '').toLowerCase().includes(q.toLowerCase());
+      }
+      return (p.nome || '').toLowerCase().includes(q.toLowerCase());
     });
 
     const sorted = [...list];
@@ -214,7 +240,7 @@ export function PatientsListView({
       }
     });
     return sorted;
-  }, [patients, patientSearchQuery, sortBy]);
+  }, [patients, patientSearchQuery, sortBy, tipoBusca]);
 
   const previewPatient =
     (previewPatientCpf && patients.find((p) => p.cpf === previewPatientCpf)) || null;
@@ -286,16 +312,40 @@ export function PatientsListView({
       <div className="min-w-0 flex-1 flex flex-col lg:min-w-[min(100%,19rem)]">
       <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 sm:p-5 md:p-6 flex flex-col">
         <div className="flex flex-col gap-3 mb-4">
-          <div className="relative w-full min-w-0">
-            <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-[#00a88e]/60 pointer-events-none" strokeWidth={2.5} />
-            <input
-              type="search"
-              placeholder="Buscar por nome, CPF, telefone ou e-mail..."
-              value={patientSearchQuery}
-              onChange={(e) => setPatientSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium text-[#0f172a] bg-white focus:outline-none focus:border-[#00a88e]/50 focus:ring-2 focus:ring-[#00a88e]/10 placeholder:text-[#94a3b8]"
-              autoComplete="off"
-            />
+          <div className="flex gap-2 items-stretch w-full min-w-0">
+            <select
+              value={tipoBusca}
+              onChange={(e) => {
+                setTipoBusca(e.target.value);
+                setPatientSearchQuery('');
+              }}
+              className="shrink-0 border-[2px] border-[#e2e8f0] rounded-xl px-3 py-2.5 text-[13px] font-medium text-[#475569] focus:border-[#00a88e] outline-none bg-white min-w-0 max-w-[9.5rem] sm:max-w-none"
+              aria-label="Tipo de busca"
+            >
+              <option value="nome">Nome</option>
+              <option value="cpf">CPF</option>
+              <option value="telefone">Telefone</option>
+              <option value="email">E-mail</option>
+            </select>
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00a88e]/60 pointer-events-none" strokeWidth={2.5} />
+              <input
+                type="text"
+                value={patientSearchQuery}
+                onChange={(e) => handleBuscaChange(e.target.value)}
+                placeholder={
+                  tipoBusca === 'cpf'
+                    ? '000.000.000-00'
+                    : tipoBusca === 'telefone'
+                      ? '(00) 00000-0000'
+                      : tipoBusca === 'email'
+                        ? 'email@exemplo.com'
+                        : 'Buscar por nome...'
+                }
+                className="w-full min-w-0 pl-10 pr-4 py-3 border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium text-[#0f172a] bg-white focus:outline-none focus:border-[#00a88e]/50 focus:ring-2 focus:ring-[#00a88e]/10 placeholder:text-[#94a3b8]"
+                autoComplete="off"
+              />
+            </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
             <div className="flex items-center gap-2 min-w-0 flex-1 sm:max-w-md lg:max-w-lg">

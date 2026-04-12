@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft, Save, Loader2, UserPlus, AlertTriangle } from 'lucide-react';
 import {
   maskCPF,
@@ -10,10 +10,13 @@ import {
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
-import { pacientesApi, dimensoesApi } from '../../services/api';
+import { pacientesApi } from '../../services/api';
+import { PROFISSOES } from '../../data/profissoes';
+import { ESTADOS_CIVIS } from '../../data/estadosCivis';
+import { useToast } from '../../contexts/useToast.js';
 
 export function PatientCreateView({ setPatientView, onPatientCreated }) {
-  const [estadosCivis, setEstadosCivis] = useState([]);
+  const toast = useToast();
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState(false);
@@ -24,6 +27,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   const [sexo, setSexo] = useState('');
   const [estadoCivilId, setEstadoCivilId] = useState('');
   const [profissao, setProfissao] = useState('');
+  const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
+  const [showProfissoes, setShowProfissoes] = useState(false);
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -36,12 +41,6 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   const [indicacao, setIndicacao] = useState('');
   const [genero, setGenero] = useState('');
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    dimensoesApi.estadosCivis()
-      .then((data) => { if (Array.isArray(data)) setEstadosCivis(data); })
-      .catch(() => {});
-  }, []);
 
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
 
@@ -82,7 +81,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   const handleSalvar = async (e) => {
     e.preventDefault();
     const validationErrors = validate();
-    if (Object.keys(validationErrors).length > 0) {
+    const isValid = Object.keys(validationErrors).length === 0;
+    if (!isValid) {
       setErrors(validationErrors);
       const dnDigits = dataNascimentoDisplay.replace(/\D/g, '');
       const cy = new Date().getFullYear();
@@ -98,6 +98,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
       } else {
         setErro('Preencha os campos obrigatórios.');
       }
+      toast.error('Preencha todos os campos obrigatórios antes de continuar.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -138,6 +140,21 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   };
 
   const clearError = (field) => setErrors((prev) => ({ ...prev, [field]: false }));
+
+  const handleProfissaoChange = (value) => {
+    setProfissao(value);
+    clearError('profissao');
+    if (value.trim().length > 1) {
+      const filtradas = PROFISSOES.filter((p) =>
+        p.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 8);
+      setProfissoesFiltradas(filtradas);
+      setShowProfissoes(filtradas.length > 0);
+    } else {
+      setProfissoesFiltradas([]);
+      setShowProfissoes(false);
+    }
+  };
 
   const inputClass = (field) =>
     `w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
@@ -225,7 +242,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
                 type="text"
                 value={nome}
                 onChange={(e) => {
-                  setNome(e.target.value);
+                  const value = e.target.value.replace(/[0-9]/g, '');
+                  setNome(value);
                   clearError('nome');
                 }}
                 placeholder="Nome completo do paciente"
@@ -289,8 +307,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
                 className={selectPersonalClass('estadoCivil')}
               >
                 <option value="">Selecione...</option>
-                {estadosCivis.map((ec) => (
-                  <option key={ec.estado_civil_id || ec.id} value={ec.estado_civil_id || ec.id}>
+                {ESTADOS_CIVIS.map((ec) => (
+                  <option key={ec.id} value={ec.id}>
                     {ec.nome}
                   </option>
                 ))}
@@ -298,16 +316,35 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
             </div>
             <div className="md:col-span-2 space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Profissão <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                value={profissao}
-                onChange={(e) => {
-                  setProfissao(e.target.value);
-                  clearError('profissao');
-                }}
-                placeholder="Ex: Advogada, Empresário, Estudante..."
-                className={inputClass('profissao')}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={profissao}
+                  onChange={(e) => handleProfissaoChange(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
+                  placeholder="Digite sua profissão..."
+                  autoComplete="off"
+                  className={inputClass('profissao')}
+                />
+                {showProfissoes ? (
+                  <div className="absolute z-50 w-full bg-white border-[2px] border-[#00a88e]/30 rounded-xl shadow-lg mt-1 overflow-hidden">
+                    {profissoesFiltradas.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onMouseDown={() => {
+                          setProfissao(p);
+                          setShowProfissoes(false);
+                          clearError('profissao');
+                        }}
+                        className="w-full text-left px-4 py-2 text-[13px] text-[#334155] hover:bg-[#e6f7f5] hover:text-[#0f766e] transition-colors"
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="md:col-span-2 space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Gênero</label>

@@ -51,10 +51,8 @@ export function JourneyView({
   maskTelefone,
   email,
   setEmail,
-  alergias,
-  setAlergias,
-  lgpdInicial,
-  setLgpdInicial,
+  endereco,
+  setEndereco,
   queixa,
   setQueixa,
   expectativas,
@@ -245,8 +243,14 @@ export function JourneyView({
                     <input type="email" value={email} onChange={(e) => {setEmail(e.target.value); setStep1Errors({...step1Errors, email: false});}} placeholder="email@exemplo.com" className={`w-full px-4 py-3 bg-[#faf5ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${step1Errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`} />
                   </div>
                   <div className="md:col-span-2 space-y-1.5">
-                    <label className="text-[13px] font-bold text-[#a855f7]">Endereco Completo</label>
-                    <input type="text" placeholder="Rua, numero, bairro, cidade - UF, CEP" className="w-full px-4 py-3 bg-[#faf5ff] border-[3px] border-[#a855f7]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 focus:border-[#a855f7] transition-all" />
+                    <label className="text-[13px] font-bold text-[#a855f7]">Endereço</label>
+                    <input
+                      type="text"
+                      value={endereco}
+                      onChange={(e) => setEndereco(e.target.value)}
+                      placeholder="Rua, número, bairro, cidade - UF"
+                      className="w-full px-4 py-3 bg-[#faf5ff] border-[3px] border-[#a855f7]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 focus:border-[#a855f7] transition-all"
+                    />
                   </div>
                 </div>
               </div>
@@ -264,32 +268,6 @@ export function JourneyView({
                   <div className="space-y-1.5">
                     <label className="text-[13px] font-bold text-[#f59e0b]">Instagram</label>
                     <input type="text" placeholder="@usuario" className="w-full px-4 py-3 bg-[#fffbeb] border-[3px] border-[#f59e0b]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all" />
-                  </div>
-                </div>
-              </div>
-
-              <div className={`bg-[#fef2f2] border-[3px] rounded-2xl p-6 transition-colors ${step1Errors.alergias ? 'border-red-400 ring-[5px] ring-red-100' : 'border-red-300'}`}>
-                <div className="flex items-center gap-3 mb-6 text-[#dc2626]">
-                  <AlertTriangle className="w-6 h-6" strokeWidth={2.5} />
-                  <h4 className="text-[18px] font-bold">Historico Medico Importante</h4>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-bold text-[#dc2626]">Alergias <span className="text-red-500">*</span></label>
-                  <input type="text" value={alergias} onChange={(e) => {setAlergias(e.target.value); setStep1Errors({...step1Errors, alergias: false});}} placeholder="Ex: Penicilina, Latex, ou digite 'Nenhuma'" className={`w-full px-4 py-3 bg-white border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-red-200 transition-all ${step1Errors.alergias ? 'border-red-500 bg-red-50' : 'border-red-300 focus:border-red-500'}`} />
-                  {step1Errors.alergias && <p className="text-[12px] text-red-600 font-bold mt-1">Este campo e obrigatorio.</p>}
-                </div>
-              </div>
-
-              <div className={`bg-[#f0fdfa] border-[3px] rounded-2xl p-6 transition-colors ${step1Errors.lgpdInicial ? 'border-red-400 ring-[5px] ring-red-100' : 'border-[#00a88e]/30'}`}>
-                <div className="flex items-center gap-3 mb-5 text-[#00a88e]">
-                  <Shield className="w-6 h-6" strokeWidth={2.5} />
-                  <h4 className="text-[18px] font-bold text-[#0f766e]">Termo LGPD Inicial</h4>
-                </div>
-                <div onClick={() => {setLgpdInicial(!lgpdInicial); setStep1Errors({...step1Errors, lgpdInicial: false});}} className={`flex items-start gap-4 p-4 bg-white border-[3px] rounded-xl cursor-pointer hover:bg-[#e6f7f5] transition-all shadow-sm ${step1Errors.lgpdInicial ? 'border-red-300 bg-red-50/50' : 'border-[#00a88e]/25'}`}>
-                  {lgpdInicial ? <CheckSquare className="w-6 h-6 text-[#00a88e] mt-0.5" strokeWidth={2.5} /> : <Square className={`w-6 h-6 mt-0.5 ${step1Errors.lgpdInicial ? 'text-red-400' : 'text-[#00a88e]/40'}`} strokeWidth={2.5} />}
-                  <div>
-                    <p className={`text-[15px] font-bold mb-1 ${lgpdInicial ? 'text-[#00a88e]' : step1Errors.lgpdInicial ? 'text-red-600' : 'text-[#0f766e]'}`}>O paciente assinou o termo da LGPD</p>
-                    <p className="text-[13px] text-[#475569] font-medium leading-relaxed">Declaro que li e concordo com os termos de uso e autorizo o tratamento dos meus dados pessoais.</p>
                   </div>
                 </div>
               </div>

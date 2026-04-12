@@ -39,8 +39,6 @@ const STEP1_FIELD_LABELS = {
   cpf: 'CPF',
   telefone: 'telefone',
   email: 'e-mail',
-  alergias: 'alergias',
-  lgpdInicial: 'aceite de LGPD',
 };
 
 function messageForMissingStep1Fields(errors) {
@@ -285,7 +283,8 @@ export default function App() {
       estadoCivil: existingPatient?.estadoCivil || '',
       estadoCivilId: journeyState.estadoCivilId || existingPatient?.estadoCivilId || '',
       profissao: journeyState.profissao || '',
-      alergias: journeyState.alergias || '',
+      alergias: existingPatient?.alergias ?? '',
+      endereco: journeyState.endereco || existingPatient?.endereco || '',
       cpf: cpfTrim,
       rg: journeyState.rg || '',
       telefone: journeyState.telefone || '',
@@ -296,7 +295,6 @@ export default function App() {
         expectativas: journeyState.expectativas || '',
         updatedAt: new Date().toISOString(),
       },
-      lgpdInicial: Boolean(journeyState.lgpdInicial),
       termoLido: Boolean(journeyState.termoLido),
       termoAssinado: Boolean(journeyState.termoAssinado),
       termoAssinaturaDataUrl: journeyState.termoAssinaturaDataUrl || '',
@@ -333,8 +331,7 @@ export default function App() {
     if (currentStep === 5 && isFinishing) return;
     if (currentStep === 1) {
       if (journeyState.activeTab === 'novo') {
-        const { nome, dataNascimento, sexo, estadoCivilId, profissao, cpf, telefone, email, alergias, lgpdInicial } =
-          journeyState;
+        const { nome, dataNascimento, sexo, estadoCivilId, profissao, cpf, telefone, email } = journeyState;
         const errors = {};
         if (!nome.trim()) errors.nome = true;
         if (!dataNascimento) errors.dataNascimento = true;
@@ -344,8 +341,6 @@ export default function App() {
         if (!cpf.trim()) errors.cpf = true;
         if (!telefone.trim()) errors.telefone = true;
         if (!email.trim()) errors.email = true;
-        if (!alergias.trim()) errors.alergias = true;
-        if (!lgpdInicial) errors.lgpdInicial = true;
 
         if (Object.keys(errors).length > 0) {
           journeyState.setStep1Errors(errors);
@@ -544,7 +539,7 @@ export default function App() {
     journeyState.setSexo('');
     journeyState.setEstadoCivilId('');
     journeyState.setProfissao('');
-    journeyState.setAlergias('');
+    journeyState.setEndereco('');
     journeyState.setCpf('');
     journeyState.setRg('');
     journeyState.setTelefone('');
@@ -581,7 +576,7 @@ export default function App() {
       journeyState.setSexo('');
       journeyState.setEstadoCivilId('');
       journeyState.setProfissao('');
-      journeyState.setAlergias('');
+      journeyState.setEndereco('');
       journeyState.setCpf('');
       journeyState.setRg('');
       journeyState.setTelefone('');
@@ -603,7 +598,7 @@ export default function App() {
         : ''
     );
     journeyState.setProfissao(patient.profissao || '');
-    journeyState.setAlergias(patient.alergias || '');
+    journeyState.setEndereco(patient.endereco || '');
     journeyState.setCpf(patient.cpf || '');
     journeyState.setRg(patient.rg || '');
     journeyState.setTelefone(patient.telefone || '');
@@ -687,9 +682,20 @@ export default function App() {
             </div>
           ) : activeView === 'jornada' ? (
             <>
-              <h2 className="text-[20px] sm:text-[24px] font-bold text-[#0f172a] mb-1">Fluxo de atendimento</h2>
-              <p className="text-[#64748b] text-[13px] sm:text-[14px] mb-5 sm:mb-8 font-medium">Check-in, anamnese, avaliação, LGPD e finalização</p>
               <Stepper currentStep={currentStep} />
+              {(journeyState.nome || journeyState.telefone) && (
+                <div className="flex items-center gap-4 mt-2 px-1 text-[13px] text-[#475569]">
+                  {journeyState.nome && (
+                    <span className="font-bold text-[#0f766e]">{journeyState.nome}</span>
+                  )}
+                  {journeyState.idade && (
+                    <span>{journeyState.idade} anos</span>
+                  )}
+                  {journeyState.telefone && (
+                    <span>{journeyState.telefone}</span>
+                  )}
+                </div>
+              )}
             </>
           ) : null}
         </header>
@@ -707,6 +713,7 @@ export default function App() {
                       searchQuery={journeyState.searchQuery}
                       setSearchQuery={journeyState.setSearchQuery}
                       selectedPatientCpf={selectedPatientCpf}
+                      setSelectedPatientCpf={setSelectedPatientCpf}
                       patients={patients}
                       nome={journeyState.nome}
                       setNome={journeyState.setNome}
@@ -720,8 +727,8 @@ export default function App() {
                       setEstadoCivilId={journeyState.setEstadoCivilId}
                       profissao={journeyState.profissao}
                       setProfissao={journeyState.setProfissao}
-                      alergias={journeyState.alergias}
-                      setAlergias={journeyState.setAlergias}
+                      endereco={journeyState.endereco}
+                      setEndereco={journeyState.setEndereco}
                       cpf={journeyState.cpf}
                       setCpf={journeyState.setCpf}
                       rg={journeyState.rg}
@@ -730,8 +737,6 @@ export default function App() {
                       setTelefone={journeyState.setTelefone}
                       email={journeyState.email}
                       setEmail={journeyState.setEmail}
-                      lgpdInicial={journeyState.lgpdInicial}
-                      setLgpdInicial={journeyState.setLgpdInicial}
                       step1Errors={journeyState.step1Errors}
                       setStep1Errors={journeyState.setStep1Errors}
                       selectPatient={selectPatient}
@@ -806,6 +811,8 @@ export default function App() {
                       setStep4Errors={journeyState.setStep4Errors}
                       nomeProcedimento={journeyState.nomeProcedimento}
                       setNomeProcedimento={journeyState.setNomeProcedimento}
+                      observacoesExecucao={journeyState.observacoesExecucao}
+                      setObservacoesExecucao={journeyState.setObservacoesExecucao}
                     />
                   )}
 
@@ -947,8 +954,6 @@ export default function App() {
         confirmPhoto={handleConfirmProcedurePhoto}
         uploadPhotoFiles={cameraState.uploadPhotoFiles}
         uploadDocumentFiles={handleUploadDocumentFiles}
-        observacoesExecucao={journeyState.observacoesExecucao}
-        setObservacoesExecucao={journeyState.setObservacoesExecucao}
         cameraFacing={cameraState.preferredFacing}
         onToggleCameraFacing={cameraState.toggleCameraFacing}
       />
