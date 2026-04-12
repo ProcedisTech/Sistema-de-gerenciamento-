@@ -438,8 +438,11 @@ export function Step1CheckIn({
                   type="email"
                   value={email}
                   onChange={(e) => {
-                    setEmail(e.target.value);
+                    setEmail(e.target.value.replace(/\s/g, ''));
                     setStep1Errors({...step1Errors, email: false});
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ') e.preventDefault();
                   }}
                   placeholder="email@exemplo.com"
                   className={`w-full px-4 py-3 bg-[#faf5ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${step1Errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`}

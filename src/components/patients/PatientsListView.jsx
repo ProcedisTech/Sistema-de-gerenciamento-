@@ -410,8 +410,12 @@ export function PatientsListView({
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
-            <div className="flex items-center gap-2 min-w-0 flex-1 sm:max-w-md lg:max-w-lg">
-              <ArrowUpDown className="w-4 h-4 text-[#00a88e] shrink-0 hidden sm:block" strokeWidth={2.5} />
+            <div className="relative min-w-0 flex-1 max-w-[min(100%,18rem)]">
+              <ArrowUpDown
+                className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#00a88e]"
+                strokeWidth={2.5}
+                aria-hidden
+              />
               <label className="sr-only" htmlFor="patient-sort">
                 Ordenar lista
               </label>
@@ -423,7 +427,7 @@ export function PatientsListView({
                   setSortBy(v);
                   setPatientsListOrder?.(v === 'birthday-asc' ? 'birthday_asc' : null);
                 }}
-                className="w-full min-w-0 px-3 py-3 border-[3px] border-[#00a88e]/20 rounded-xl text-[13px] font-bold text-[#0f172a] bg-white focus:outline-none focus:border-[#00a88e]/50 appearance-none cursor-pointer"
+                className="w-full min-w-0 cursor-pointer appearance-none rounded-xl border-[3px] border-[#00a88e]/20 bg-white py-2.5 pl-9 pr-3 text-[13px] font-bold text-[#0f172a] focus:border-[#00a88e]/50 focus:outline-none"
               >
                 {SORT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
