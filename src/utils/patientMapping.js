@@ -76,6 +76,7 @@ export function journeyToPacienteCreateDTO(j) {
     profissao: (j.profissao || '').trim() || null,
     sexo: sexo === 'F' || sexo === 'M' ? sexo : null,
     estadoCivilId: j.estadoCivilId || undefined,
+    endereco: (j.endereco || '').trim() || null,
   };
 }
 
@@ -119,7 +120,7 @@ export function mergePacienteDtoWithEditing(dto, editing) {
     nomePai: dto.nomePai || null,
     profissao: (editing?.profissao ?? dto.profissao ?? '').trim() || null,
     indicacao: dto.indicacao || null,
-    endereco: dto.endereco || null,
+    endereco: (editing?.endereco ?? dto.endereco ?? '').trim() || null,
     sexo: sexo === 'F' || sexo === 'M' ? sexo : dto.sexo || null,
     genero: dto.genero || null,
     estadoCivilId: dto.estadoCivilId || undefined,

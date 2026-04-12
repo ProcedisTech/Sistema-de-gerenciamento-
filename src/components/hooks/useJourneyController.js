@@ -16,12 +16,11 @@ export function useJourneyController({
     sexo,
     estadoCivilId,
     profissao,
-    alergias,
     cpf,
     rg,
     telefone,
     email,
-    lgpdInicial,
+    endereco,
     idade,
     queixa,
     expectativas,
@@ -43,11 +42,11 @@ export function useJourneyController({
     setSexo,
     setEstadoCivilId,
     setProfissao,
-    setAlergias,
     setCpf,
     setRg,
     setTelefone,
     setEmail,
+    setEndereco,
     setStep1Errors,
     setSelectedPatientCpf,
     setPatients,
@@ -91,7 +90,7 @@ export function useJourneyController({
         : ''
     );
     setProfissao(patient.profissao || '');
-    setAlergias(patient.alergias || '');
+    setEndereco(patient.endereco || '');
     setCpf(patient.cpf || '');
     setRg(patient.rg || '');
     setTelefone(patient.telefone || '');
@@ -149,11 +148,9 @@ export function useJourneyController({
       if (!sexo) errors.sexo = true;
       if (!String(estadoCivilId || '').trim()) errors.estadoCivil = true;
       if (!profissao.trim()) errors.profissao = true;
-      if (!alergias.trim()) errors.alergias = true;
       if (!cpf.trim()) errors.cpf = true;
       if (!telefone.trim()) errors.telefone = true;
       if (!email.trim()) errors.email = true;
-      if (!lgpdInicial) errors.lgpdInicial = true;
 
       if (Object.keys(errors).length > 0) {
         setStep1Errors(errors);
@@ -172,7 +169,8 @@ export function useJourneyController({
         estadoCivil: '',
         estadoCivilId,
         profissao: profissao.trim(),
-        alergias: alergias.trim(),
+        alergias: '',
+        endereco: (endereco || '').trim(),
         cpf: newCpf,
         rg: rg || '',
         telefone: telefone || '',
@@ -255,7 +253,7 @@ export function useJourneyController({
     setSexo('');
     setEstadoCivilId('');
     setProfissao('');
-    setAlergias('');
+    setEndereco('');
     setStep1Errors({});
     setCpf('');
     setRg('');

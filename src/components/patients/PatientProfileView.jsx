@@ -16,6 +16,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Mail,
+  MapPin,
   Phone,
   Play,
   Plus,
@@ -609,6 +610,7 @@ export function PatientProfileView({
     email: patient.email || '',
     telefone: patient.telefone || '',
     profissao: patient.profissao || '',
+    endereco: patient.endereco || '',
     alergias: patient.alergias || '',
     condicoesSaude: patient.condicoesSaude || '',
     medicamentos: Array.isArray(patient.medicamentos)
@@ -849,6 +851,7 @@ export function PatientProfileView({
         email: editing?.email || '',
         telefone: editing?.telefone || '',
         profissao: editing?.profissao || '',
+        endereco: editing?.endereco || '',
         alergias: editing?.alergias || '',
         condicoesSaude: editing?.condicoesSaude || '',
         medicamentos: meds,
@@ -1216,6 +1219,12 @@ export function PatientProfileView({
                   <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {selectedPatient.telefone}</span>
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {selectedPatient.email}</span>
                 </div>
+                {selectedPatient.endereco ? (
+                  <div className="flex items-start gap-2 text-[13px] text-[#64748b] mt-2">
+                    <MapPin className="w-4 h-4 text-[#00a88e] shrink-0 mt-0.5" strokeWidth={2.25} aria-hidden />
+                    <span className="min-w-0 break-words">{selectedPatient.endereco}</span>
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
                 <button
@@ -1245,6 +1254,16 @@ export function PatientProfileView({
                   <input value={editing?.email || ''} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="E-mail" />
                   <input value={editing?.telefone || ''} onChange={(e) => setEditing((p) => ({ ...p, telefone: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="Telefone" />
                   <input value={editing?.profissao || ''} onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="Profissao" />
+                  <div className="md:col-span-2">
+                    <label className="text-[12px] font-bold text-[#475569] mb-1 block">Endereço</label>
+                    <input
+                      type="text"
+                      value={editing?.endereco || ''}
+                      onChange={(e) => setEditing((d) => ({ ...d, endereco: e.target.value }))}
+                      placeholder="Rua, número, bairro, cidade - UF"
+                      className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-2 text-[13px] focus:border-[#00a88e] outline-none"
+                    />
+                  </div>
                   <input value={editing?.alergias || ''} onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20 md:col-span-2" placeholder="Alergias" />
                   <input value={editing?.condicoesSaude || ''} onChange={(e) => setEditing((p) => ({ ...p, condicoesSaude: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20 md:col-span-2" placeholder="Condicoes de saude" />
                   <input value={editing?.medicamentos || ''} onChange={(e) => setEditing((p) => ({ ...p, medicamentos: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20 md:col-span-2" placeholder="Medicamentos (separe por virgula)" />

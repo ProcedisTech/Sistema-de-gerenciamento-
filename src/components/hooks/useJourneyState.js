@@ -8,14 +8,12 @@ export const useJourneyState = () => {
   // ============ ETAPA 1: CHECK-IN ============
   const [activeTab, setActiveTab] = useState('existente');
   const [searchQuery, setSearchQuery] = useState('');
-  const [lgpdInicial, setLgpdInicial] = useState(false);
   const [dataNascimento, setDataNascimento] = useState('');
   const [idade, setIdade] = useState('');
   const [nome, setNome] = useState('');
   const [sexo, setSexo] = useState('');
   const [estadoCivilId, setEstadoCivilId] = useState('');
   const [profissao, setProfissao] = useState('');
-  const [alergias, setAlergias] = useState('');
   const [step1Errors, setStep1Errors] = useState({});
   const [step2Errors, setStep2Errors] = useState({});
   const [step4Errors, setStep4Errors] = useState({});
@@ -24,6 +22,7 @@ export const useJourneyState = () => {
   const [rg, setRg] = useState('');
   const [telefone, setTelefone] = useState('');
   const [email, setEmail] = useState('');
+  const [endereco, setEndereco] = useState('');
 
   // ============ ETAPA 2: ANAMNESE ============
   const [queixa, setQueixa] = useState('');
@@ -79,8 +78,6 @@ export const useJourneyState = () => {
     setActiveTab,
     searchQuery,
     setSearchQuery,
-    lgpdInicial,
-    setLgpdInicial,
     dataNascimento,
     setDataNascimento,
     idade,
@@ -93,8 +90,6 @@ export const useJourneyState = () => {
     setEstadoCivilId,
     profissao,
     setProfissao,
-    alergias,
-    setAlergias,
     step1Errors,
     setStep1Errors,
     step2Errors,
@@ -111,6 +106,8 @@ export const useJourneyState = () => {
     setTelefone,
     email,
     setEmail,
+    endereco,
+    setEndereco,
     // Etapa 2
     queixa,
     setQueixa,

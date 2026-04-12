@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Camera, FileUp, Upload, X, ClipboardList, SwitchCamera } from 'lucide-react';
+import React from 'react';
+import { Camera, FileUp, Upload, X, SwitchCamera } from 'lucide-react';
 
 export function ProcedureCameraWidget({
   visible,
@@ -20,14 +20,8 @@ export function ProcedureCameraWidget({
   uploadDocumentFiles,
   cameraFacing = 'environment',
   onToggleCameraFacing,
-  observacoesExecucao = '',
-  setObservacoesExecucao,
 }) {
-  const [obsPanelOpen, setObsPanelOpen] = useState(false);
-
   if (!visible) return null;
-
-  const hasObservacoes = Boolean(String(observacoesExecucao || '').trim());
 
   return (
     <>
@@ -49,8 +43,13 @@ export function ProcedureCameraWidget({
         >
           <Camera className="w-7 h-7 text-white" strokeWidth={2.5} />
         </button>
-        <label className="w-14 h-14 rounded-2xl bg-white hover:bg-[#f8fbfb] transition-all shadow-md flex items-center justify-center border-[3px] border-[#00a88e]/25 cursor-pointer">
+        {/* Upload de imagens */}
+        <label
+          title="Enviar fotos"
+          className="group w-14 h-14 rounded-2xl bg-white hover:bg-[#e6f7f5] transition-all shadow-md flex flex-col items-center justify-center border-[3px] border-[#00a88e]/40 cursor-pointer gap-1"
+        >
           <Upload className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
+          <span className="text-[9px] font-bold text-[#00a88e] leading-none">Fotos</span>
           <input
             type="file"
             className="hidden"
@@ -62,8 +61,14 @@ export function ProcedureCameraWidget({
             }}
           />
         </label>
-        <label className="w-14 h-14 rounded-2xl bg-white hover:bg-[#f8fbfb] transition-all shadow-md flex items-center justify-center border-[3px] border-[#3b82f6]/25 cursor-pointer">
+
+        {/* Upload de documentos */}
+        <label
+          title="Enviar documentos"
+          className="group w-14 h-14 rounded-2xl bg-white hover:bg-[#eff6ff] transition-all shadow-md flex flex-col items-center justify-center border-[3px] border-[#3b82f6]/40 cursor-pointer gap-1"
+        >
           <FileUp className="w-5 h-5 text-[#3b82f6]" strokeWidth={2.5} />
+          <span className="text-[9px] font-bold text-[#3b82f6] leading-none">Docs</span>
           <input
             type="file"
             className="hidden"
@@ -74,20 +79,6 @@ export function ProcedureCameraWidget({
             }}
           />
         </label>
-        <button
-          type="button"
-          onClick={() => setObsPanelOpen(true)}
-          className={`relative w-14 h-14 rounded-2xl bg-white hover:bg-[#f8fbfb] transition-all shadow-md flex items-center justify-center border-[3px] ${
-            hasObservacoes ? 'border-[#00a88e] ring-2 ring-[#00a88e]/25' : 'border-[#a855f7]/25'
-          }`}
-          aria-label="Observações da execução"
-          title="Observações da execução"
-        >
-          <ClipboardList className="w-5 h-5 text-[#a855f7]" strokeWidth={2.5} />
-          {hasObservacoes && (
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#00a88e]" aria-hidden />
-          )}
-        </button>
       </div>
 
       {photoModalOpen && (
@@ -212,69 +203,6 @@ export function ProcedureCameraWidget({
                   className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[#64748b] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#94a3b8]/30"
                 >
                   Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {obsPanelOpen && (
-        <div
-          className="fixed inset-0 z-[61] flex items-center justify-center p-4"
-          onMouseDown={() => setObsPanelOpen(false)}
-        >
-          <div className="absolute inset-0 bg-black/60" aria-hidden />
-
-          <div
-            className="relative w-full max-w-[600px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="bg-[#e6f7f5] p-2 rounded-xl border-[3px] border-[#00a88e]/25 flex-shrink-0">
-                  <ClipboardList className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-[16px] font-bold text-[#0f172a]">Observações da Execução</h4>
-                  <p className="text-[12px] font-medium text-[#64748b]">
-                    Registre o que foi realizado durante o procedimento.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setObsPanelOpen(false)}
-                className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center flex-shrink-0"
-                aria-label="Fechar"
-              >
-                <X className="w-5 h-5" strokeWidth={2.5} />
-              </button>
-            </div>
-
-            <div className="p-4">
-              <textarea
-                value={observacoesExecucao}
-                onChange={(e) => setObservacoesExecucao?.(e.target.value)}
-                rows={10}
-                placeholder="Ex.: Aplicação de toxina botulínica 50 U na região frontal; paciente tolerou bem..."
-                className="w-full min-h-[200px] px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium text-[#0f172a] placeholder:text-[#94a3b8] focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] resize-y"
-              />
-
-              <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setObsPanelOpen(false)}
-                  className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[#64748b] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#94a3b8]/30 order-2 sm:order-1"
-                >
-                  Fechar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setObsPanelOpen(false)}
-                  className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] hover:bg-[#00967f] transition-all border-[3px] border-transparent shadow-md order-1 sm:order-2"
-                >
-                  Salvar e fechar
                 </button>
               </div>
             </div>
