@@ -226,14 +226,18 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
 export const Step2Anamnese = forwardRef(function Step2Anamnese({
   queixa, setQueixa,
   expectativas, setExpectativas,
+  respostasSalvas = {},
+  setRespostasSalvas = () => {},
+  fichaSelecionadaSalvaId = '',
+  setFichaSelecionadaSalvaId = () => {},
   pacienteId = null,
   step2Errors = {},
   setStep2Errors = () => {},
 }, ref) {
   const [fichas, setFichas] = useState([]);
-  const [fichaSelecionadaId, setFichaSelecionadaId] = useState('');
+  const [fichaSelecionadaId, setFichaSelecionadaId] = useState(() => String(fichaSelecionadaSalvaId || ''));
   const [fichaSelecionada, setFichaSelecionada] = useState(null);
-  const [respostas, setRespostas] = useState({});
+  const [respostas, setRespostas] = useState(() => (respostasSalvas && typeof respostasSalvas === 'object' ? respostasSalvas : {}));
   const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(null);
   const [modoVisualizacao, setModoVisualizacao] = useState(false);
 
@@ -271,6 +275,14 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   }, []);
 
   useEffect(() => {
+    setRespostasSalvas(respostas);
+  }, [respostas, setRespostasSalvas]);
+
+  useEffect(() => {
+    setFichaSelecionadaSalvaId(fichaSelecionadaId || '');
+  }, [fichaSelecionadaId, setFichaSelecionadaSalvaId]);
+
+  useEffect(() => {
     if (!pacienteId) {
       setHistoricoPaciente([]);
       setLoadingHistoricoPaciente(false);
@@ -293,6 +305,30 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       cancelled = true;
     };
   }, [pacienteId]);
+
+  useEffect(() => {
+    if (!fichaSelecionadaId) {
+      setFichaSelecionada(null);
+      return;
+    }
+    if (String(fichaSelecionada?.id) === String(fichaSelecionadaId)) return;
+    let cancelled = false;
+    setLoadingFicha(true);
+    anamneseApi
+      .getFicha(fichaSelecionadaId)
+      .then((ficha) => {
+        if (!cancelled) setFichaSelecionada(ficha || null);
+      })
+      .catch(() => {
+        if (!cancelled) setFichaSelecionada(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFicha(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fichaSelecionadaId, fichaSelecionada?.id]);
 
   const resumoPreenchimentosPorFicha = useMemo(() => {
     if (!Array.isArray(historicoPaciente) || historicoPaciente.length === 0) return [];

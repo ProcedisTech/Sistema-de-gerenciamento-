@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { pacientesApi } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
 
+const ACTIVE_PATIENT_STORAGE_KEY = 'activePatientId';
+
 /**
  * Lista de pacientes só é carregada do backend quando `authEnabled` (sessão válida + cookie).
  * Sem auth: lista vazia — sem seeds locais misturados com gravações reais.
@@ -47,7 +49,27 @@ export const usePatientState = (opts = {}) => {
     refreshPatients();
   }, [authEnabled, refreshPatients]);
 
-  const [selectedPatientCpf, setSelectedPatientCpf] = useState(null);
+  const [selectedPatientCpfState, setSelectedPatientCpfState] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(ACTIVE_PATIENT_STORAGE_KEY);
+      return stored && String(stored).trim() ? String(stored).trim() : null;
+    } catch {
+      return null;
+    }
+  });
+  const setSelectedPatientCpf = useCallback((value) => {
+    setSelectedPatientCpfState((prev) => {
+      const nextValue = typeof value === 'function' ? value(prev) : value;
+      const normalized = nextValue != null && String(nextValue).trim() ? String(nextValue).trim() : null;
+      try {
+        if (normalized) sessionStorage.setItem(ACTIVE_PATIENT_STORAGE_KEY, normalized);
+        else sessionStorage.removeItem(ACTIVE_PATIENT_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      return normalized;
+    });
+  }, []);
   const [patientView, setPatientView] = useState('list');
   const [patientDetailTab, setPatientDetailTab] = useState('timeline');
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
@@ -55,7 +77,7 @@ export const usePatientState = (opts = {}) => {
   return {
     patients,
     setPatients,
-    selectedPatientCpf,
+    selectedPatientCpf: selectedPatientCpfState,
     setSelectedPatientCpf,
     patientView,
     setPatientView,

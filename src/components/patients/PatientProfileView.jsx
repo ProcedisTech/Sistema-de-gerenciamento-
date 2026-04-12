@@ -703,7 +703,6 @@ export function PatientProfileView({
     setDetailLoading(true);
     (async () => {
       try {
-        console.log('pacienteId linha do tempo:', selectedPatient?.id);
         const [dto, notasList, procList] = await Promise.all([
           pacientesApi.get(id).catch(() => null),
           notasApi.list(id).catch(() => []),
@@ -1316,7 +1315,12 @@ export function PatientProfileView({
                     </button>
                   </div>
                   <div className="space-y-3">
-                    {timelineEvents.length ? timelineEvents.map((evt) => (
+                    {detailLoading ? (
+                      <div className="flex items-center justify-center py-8 text-[#64748b] text-[13px]">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#00a88e] mr-2" />
+                        Carregando linha do tempo...
+                      </div>
+                    ) : timelineEvents.length ? timelineEvents.map((evt) => (
                       <div key={evt.id} className="flex gap-4 p-4 rounded-xl border-[2px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all bg-white">
                         <div className="w-12 h-12 rounded-full bg-[#e6f7f5] flex items-center justify-center flex-shrink-0 border-[2px] border-[#00a88e]/20">
                           <CheckCircle2 className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
@@ -1327,7 +1331,7 @@ export function PatientProfileView({
                         </div>
                         <ChevronRight className="w-4 h-4 text-[#94a3b8] flex-shrink-0 mt-1" />
                       </div>
-                    )) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum evento registrado</p>}
+                    )) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum procedimento registrado ainda.</p>}
                   </div>
 
                   {modalProcedimento && (

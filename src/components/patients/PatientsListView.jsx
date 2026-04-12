@@ -6,11 +6,13 @@ import {
   Clock,
   ExternalLink,
   Image as ImageIcon,
+  Loader2,
   Plus,
   Search,
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
+import { procedimentosApi } from '../../services/api';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -32,6 +34,8 @@ const SORT_OPTIONS = [
 
 function PatientPreviewPanel({
   selectedPatient,
+  procedures,
+  loadingProcedures,
   detailTitleId,
   closeDetail,
   galleryPhotoCount,
@@ -77,11 +81,16 @@ function PatientPreviewPanel({
           <Clock className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
           <h4 className="text-base font-bold">Linha do Tempo de Procedimentos</h4>
         </div>
-        {selectedPatient.procedures && selectedPatient.procedures.length > 0 ? (
+        {loadingProcedures ? (
+          <div className="flex items-center justify-center py-6 text-sm text-[#64748b]">
+            <Loader2 className="w-4 h-4 animate-spin mr-2 text-[#00a88e]" />
+            Carregando linha do tempo...
+          </div>
+        ) : procedures.length > 0 ? (
           <div className="relative pl-2">
             <div className="absolute left-[15px] top-3 bottom-3 w-px bg-[#e2e8f0]" aria-hidden />
             <ul className="space-y-3">
-              {selectedPatient.procedures.map((proc, idx) => (
+              {procedures.map((proc, idx) => (
                 <li key={idx} className="relative flex gap-3 pl-8">
                   <span
                     className="absolute left-[11px] top-5 h-3 w-3 rounded-full border-2 border-white bg-[#00a88e] shadow-sm"
@@ -113,7 +122,7 @@ function PatientPreviewPanel({
             </ul>
           </div>
         ) : (
-          <p className="py-6 text-center text-sm text-[#94a3b8]">Nenhum procedimento registrado</p>
+          <p className="py-6 text-center text-sm text-[#94a3b8]">Nenhum procedimento registrado ainda.</p>
         )}
       </section>
 
@@ -181,6 +190,7 @@ export function PatientsListView({
   const [sortBy, setSortBy] = useState('nome-asc');
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
+  const [previewProceduresByPatientId, setPreviewProceduresByPatientId] = useState({});
   const desktopTitleId = 'patient-detail-title';
 
   const filteredPatients = useMemo(() => {
@@ -218,6 +228,54 @@ export function PatientsListView({
 
   const previewPatient =
     (previewPatientCpf && patients.find((p) => p.cpf === previewPatientCpf)) || null;
+
+  useEffect(() => {
+    const pid = previewPatient?.id != null ? String(previewPatient.id) : '';
+    if (!pid) return undefined;
+    if (Object.prototype.hasOwnProperty.call(previewProceduresByPatientId, pid)) return undefined;
+    let cancelled = false;
+    procedimentosApi
+      .byPaciente(pid)
+      .then((list) => {
+        if (cancelled) return;
+        setPreviewProceduresByPatientId((prev) => ({ ...prev, [pid]: Array.isArray(list) ? list : [] }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreviewProceduresByPatientId((prev) => ({ ...prev, [pid]: [] }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewPatient?.id, previewProceduresByPatientId]);
+
+  const previewProcedures = useMemo(() => {
+    const pid = previewPatient?.id != null ? String(previewPatient.id) : '';
+    if (!pid) return [];
+    const source = Array.isArray(previewProceduresByPatientId[pid])
+      ? previewProceduresByPatientId[pid]
+      : (Array.isArray(previewPatient?.procedures) ? previewPatient.procedures : []);
+    return source.map((proc) => {
+      if (proc && (proc.data || proc.nome || proc.profissional)) return proc;
+      const createdAt = proc?.criadoEm ? new Date(proc.criadoEm) : null;
+      const data = createdAt && !Number.isNaN(createdAt.getTime())
+        ? createdAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+        : '-';
+      const hora = createdAt && !Number.isNaN(createdAt.getTime())
+        ? createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+        : '';
+      return {
+        data,
+        hora,
+        nome: proc?.procedimentoNome || proc?.nome || 'Procedimento',
+        profissional: proc?.profissionalNome || proc?.profissional || '-',
+      };
+    });
+  }, [previewPatient, previewProceduresByPatientId]);
+
+  const previewPatientId = previewPatient?.id != null ? String(previewPatient.id) : '';
+  const loadingPreviewProcedures =
+    Boolean(previewPatientId) && !Object.prototype.hasOwnProperty.call(previewProceduresByPatientId, previewPatientId);
 
   const galleryPhotoCount = useMemo(() => {
     if (!previewPatient?.galeria?.length) return 0;
@@ -417,6 +475,8 @@ export function PatientsListView({
             />
             <PatientPreviewPanel
               selectedPatient={previewPatient}
+              procedures={previewProcedures}
+              loadingProcedures={loadingPreviewProcedures}
               detailTitleId={undefined}
               closeDetail={closeDetail}
               galleryPhotoCount={galleryPhotoCount}
@@ -436,6 +496,8 @@ export function PatientsListView({
           >
             <PatientPreviewPanel
               selectedPatient={previewPatient}
+              procedures={previewProcedures}
+              loadingProcedures={loadingPreviewProcedures}
               detailTitleId={desktopTitleId}
               closeDetail={closeDetail}
               galleryPhotoCount={galleryPhotoCount}

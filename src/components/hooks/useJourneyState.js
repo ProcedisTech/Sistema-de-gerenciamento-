@@ -1,7 +1,33 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+
+const ACTIVE_STEP_STORAGE_KEY = 'activeStep';
+
+function readStoredStep() {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_STEP_STORAGE_KEY);
+    const n = Number(raw);
+    if (Number.isInteger(n) && n >= 1 && n <= 5) return n;
+  } catch {
+    // ignore
+  }
+  return 1;
+}
 
 export const useJourneyState = () => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStepState, setCurrentStepState] = useState(() => readStoredStep());
+  const setCurrentStep = useCallback((value) => {
+    setCurrentStepState((prev) => {
+      const resolved = typeof value === 'function' ? value(prev) : value;
+      const n = Number(resolved);
+      const safeStep = Number.isInteger(n) && n >= 1 && n <= 5 ? n : 1;
+      try {
+        sessionStorage.setItem(ACTIVE_STEP_STORAGE_KEY, String(safeStep));
+      } catch {
+        // ignore
+      }
+      return safeStep;
+    });
+  }, []);
   const [isFinishing, setIsFinishing] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
 
@@ -28,6 +54,8 @@ export const useJourneyState = () => {
   // ============ ETAPA 2: ANAMNESE ============
   const [queixa, setQueixa] = useState('');
   const [expectativas, setExpectativas] = useState('');
+  const [anamneseFichaSelecionadaId, setAnamneseFichaSelecionadaId] = useState('');
+  const [anamneseRespostas, setAnamneseRespostas] = useState({});
 
   // ============ ETAPA 3: AVALIAÇÃO ============
   const [imageSrc, setImageSrc] = useState(null);
@@ -68,7 +96,7 @@ export const useJourneyState = () => {
 
   return {
     // Gerais
-    currentStep,
+    currentStep: currentStepState,
     setCurrentStep,
     isFinishing,
     setIsFinishing,
@@ -116,6 +144,10 @@ export const useJourneyState = () => {
     setQueixa,
     expectativas,
     setExpectativas,
+    anamneseFichaSelecionadaId,
+    setAnamneseFichaSelecionadaId,
+    anamneseRespostas,
+    setAnamneseRespostas,
     // Etapa 3
     imageSrc,
     setImageSrc,

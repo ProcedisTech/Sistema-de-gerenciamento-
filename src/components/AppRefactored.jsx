@@ -30,6 +30,20 @@ import { Step1CheckIn, Step2Anamnese, Step3Evaluation, Step4LGPD, Step5Finalizat
 // Utilitarios
 import { getPatientInitials } from './utils';
 
+const ACTIVE_VIEW_STORAGE_KEY = 'activeView';
+
+function readStoredActiveView() {
+  try {
+    const stored = sessionStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+    if (stored === 'jornada' || stored === 'pacientes' || stored === 'anamnese') {
+      return stored;
+    }
+  } catch {
+    // ignore
+  }
+  return 'jornada';
+}
+
 const STEP1_FIELD_LABELS = {
   nome: 'nome completo',
   dataNascimento: 'data de nascimento',
@@ -167,7 +181,17 @@ export default function App() {
   };
   
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
-  const [activeView, setActiveView] = React.useState('jornada');
+  const [activeViewState, setActiveViewState] = React.useState(() => readStoredActiveView());
+  const setActiveView = React.useCallback((view) => {
+    const safeView = view === 'pacientes' || view === 'anamnese' ? view : 'jornada';
+    setActiveViewState(safeView);
+    try {
+      sessionStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, safeView);
+    } catch {
+      // ignore
+    }
+  }, []);
+  const activeView = activeViewState;
   const goToView = (view) => {
     setActiveView(view);
   };
@@ -551,6 +575,8 @@ export default function App() {
     journeyState.setEmail('');
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
+    journeyState.setAnamneseFichaSelecionadaId('');
+    journeyState.setAnamneseRespostas({});
     journeyState.setImageSrc(null);
     journeyState.setPaths([]);
     journeyState.setTermoLido(false);
@@ -572,6 +598,9 @@ export default function App() {
   const selectPatient = (patient) => {
     const selectedCpfNorm = String(selectedPatientCpf || '').trim();
     const patientCpfNorm = String(patient?.cpf || '').trim();
+
+    journeyState.setAnamneseFichaSelecionadaId('');
+    journeyState.setAnamneseRespostas({});
 
     // Toggle: clicking the same selected patient deselects it.
     if (!patient || (patientCpfNorm && selectedCpfNorm === patientCpfNorm)) {
@@ -745,6 +774,10 @@ export default function App() {
                       setQueixa={journeyState.setQueixa}
                       expectativas={journeyState.expectativas}
                       setExpectativas={journeyState.setExpectativas}
+                      respostasSalvas={journeyState.anamneseRespostas}
+                      setRespostasSalvas={journeyState.setAnamneseRespostas}
+                      fichaSelecionadaSalvaId={journeyState.anamneseFichaSelecionadaId}
+                      setFichaSelecionadaSalvaId={journeyState.setAnamneseFichaSelecionadaId}
                       pacienteId={pacienteAtual?.id || null}
                       step2Errors={journeyState.step2Errors}
                       setStep2Errors={journeyState.setStep2Errors}
