@@ -165,7 +165,25 @@ export default function App() {
   };
   
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
-  const [activeView, setActiveView] = React.useState('jornada');
+  const [activeView, _setActiveView] = React.useState(() => {
+    try {
+      return sessionStorage.getItem('activeView') || 'jornada';
+    } catch {
+      return 'jornada';
+    }
+  });
+  const setActiveView = React.useCallback((view) => {
+    _setActiveView((prev) => {
+      const next = typeof view === 'function' ? view(prev) : view;
+      try {
+        if (next) sessionStorage.setItem('activeView', String(next));
+        else sessionStorage.removeItem('activeView');
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
   const goToView = (view) => {
     setActiveView(view);
   };
@@ -546,6 +564,13 @@ export default function App() {
     journeyState.setEmail('');
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
+    journeyState.setStep2AnamneseDraft({
+      fichaSelecionadaId: '',
+      respostas: {},
+      preenchimentoAnterior: null,
+      modoVisualizacao: false,
+    });
+    journeyState.setRespostasAnamnese({});
     journeyState.setImageSrc(null);
     journeyState.setPaths([]);
     journeyState.setTermoLido(false);
@@ -753,6 +778,10 @@ export default function App() {
                       pacienteId={pacienteAtual?.id || null}
                       step2Errors={journeyState.step2Errors}
                       setStep2Errors={journeyState.setStep2Errors}
+                      savedAnamneseState={journeyState.step2AnamneseDraft}
+                      onSavedAnamneseStateChange={journeyState.setStep2AnamneseDraft}
+                      respostasAnamnese={journeyState.respostasAnamnese}
+                      salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
                     />
                   )}
 

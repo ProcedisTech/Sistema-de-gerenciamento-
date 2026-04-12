@@ -27,6 +27,21 @@ export const useJourneyState = () => {
   // ============ ETAPA 2: ANAMNESE ============
   const [queixa, setQueixa] = useState('');
   const [expectativas, setExpectativas] = useState('');
+  const [step2AnamneseDraft, setStep2AnamneseDraft] = useState({
+    fichaSelecionadaId: '',
+    respostas: {},
+    preenchimentoAnterior: null,
+    modoVisualizacao: false,
+  });
+  const [respostasAnamnese, setRespostasAnamnese] = useState({});
+
+  const salvarRespostaAnamnese = (perguntaId, valor) => {
+    if (perguntaId == null || perguntaId === '') return;
+    setRespostasAnamnese((prev) => ({
+      ...prev,
+      [String(perguntaId)]: valor,
+    }));
+  };
 
   // ============ ETAPA 3: AVALIAÇÃO ============
   const [imageSrc, setImageSrc] = useState(null);
@@ -113,6 +128,11 @@ export const useJourneyState = () => {
     setQueixa,
     expectativas,
     setExpectativas,
+    step2AnamneseDraft,
+    setStep2AnamneseDraft,
+    respostasAnamnese,
+    setRespostasAnamnese,
+    salvarRespostaAnamnese,
     // Etapa 3
     imageSrc,
     setImageSrc,

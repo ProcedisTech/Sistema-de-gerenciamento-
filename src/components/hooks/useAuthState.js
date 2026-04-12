@@ -197,6 +197,11 @@ export const useAuthState = (options = {}) => {
       /* sessão localmente encerrada */
     }
     setAccessToken(null);
+    try {
+      sessionStorage.clear();
+    } catch {
+      // ignore
+    }
     invalidateAuthMeCache();
     if (typeof setRoleUserId === 'function') setRoleUserId('');
     setIsLoggedIn(false);

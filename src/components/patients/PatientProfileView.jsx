@@ -464,6 +464,7 @@ export function PatientProfileView({
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
   const [editing, setEditing] = useState(null);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
@@ -703,15 +704,16 @@ export function PatientProfileView({
     if (!id) return undefined;
     let cancelled = false;
     setDetailLoading(true);
+    setTimelineLoading(true);
     (async () => {
       try {
-        console.log('pacienteId linha do tempo:', selectedPatient?.id);
-        const [dto, notasList, procList] = await Promise.all([
-          pacientesApi.get(id).catch(() => null),
-          notasApi.list(id).catch(() => []),
-          procedimentosApi.byPaciente(id).catch((e) => { console.error('ERRO procedimentos:', e); return []; }),
+        const [dtoResult, notasResult, procResult] = await Promise.allSettled([
+          pacientesApi.get(id),
+          notasApi.list(id),
+          procedimentosApi.byPaciente(id),
         ]);
         if (cancelled) return;
+        const dto = dtoResult.status === 'fulfilled' ? dtoResult.value : null;
         if (dto) {
           mergePatientById?.(id, (prev) => {
             const mapped = mapBackendPatient(dto);
@@ -727,6 +729,8 @@ export function PatientProfileView({
             };
           });
         }
+        const notasList = notasResult.status === 'fulfilled' ? notasResult.value : [];
+        const procList = procResult.status === 'fulfilled' ? procResult.value : [];
         setApiNotes(Array.isArray(notasList) ? notasList : []);
         setApiProcedures(Array.isArray(procList) ? procList : []);
       } catch {
@@ -735,7 +739,10 @@ export function PatientProfileView({
           setApiProcedures([]);
         }
       } finally {
-        if (!cancelled) setDetailLoading(false);
+        if (!cancelled) {
+          setDetailLoading(false);
+          setTimelineLoading(false);
+        }
       }
     })();
     return () => {
@@ -1335,7 +1342,11 @@ export function PatientProfileView({
                     </button>
                   </div>
                   <div className="space-y-3">
-                    {timelineEvents.length ? timelineEvents.map((evt) => (
+                    {timelineLoading ? (
+                      <div className="flex items-center justify-center py-8 text-[#64748b] text-[13px] font-medium gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#00a88e]" /> Carregando linha do tempo...
+                      </div>
+                    ) : timelineEvents.length ? timelineEvents.map((evt) => (
                       <div key={evt.id} className="flex gap-4 p-4 rounded-xl border-[2px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all bg-white">
                         <div className="w-12 h-12 rounded-full bg-[#e6f7f5] flex items-center justify-center flex-shrink-0 border-[2px] border-[#00a88e]/20">
                           <CheckCircle2 className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
@@ -1346,7 +1357,7 @@ export function PatientProfileView({
                         </div>
                         <ChevronRight className="w-4 h-4 text-[#94a3b8] flex-shrink-0 mt-1" />
                       </div>
-                    )) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum evento registrado</p>}
+                    )) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum procedimento registrado ainda.</p>}
                   </div>
 
                   {modalProcedimento && (
