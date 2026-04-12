@@ -17,11 +17,12 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesApi, procedimentosApi } from '../services/api';
+import { anamneseApi, pacientesApi, procedimentosApi, termosApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
 
 import { PatientsView } from './patients';
 import { AnamneseAdminView } from './anamnese';
+import { TermosManager } from './termos/TermosManager';
 import { ProcedureCameraWidget } from './canvas';
 
 // Componentes da Jornada (5 Etapas)
@@ -51,6 +52,21 @@ function messageForMissingStep1Fields(errors) {
   return `Para prosseguir, preencha ${labels.join(', ')} e ${last}.`;
 }
 
+function normalizeTermosList(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (raw && Array.isArray(raw.content)) return raw.content;
+  return [];
+}
+
+function isTermoAtivoRow(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.ativo === false || row.active === false) return false;
+  if (row.ativo === true || row.active === true) return true;
+  const s = String(row.status || '').toUpperCase();
+  if (s === 'INATIVO' || s === 'INACTIVE') return false;
+  return true;
+}
+
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId } = useOrg();
   const toast = useToast();
@@ -61,6 +77,8 @@ export default function App() {
   const journeyState = useJourneyState();
   /** Remonta Step1CheckIn ao resetar jornada (estado local da data mascarada). */
   const [step1CheckInKey, setStep1CheckInKey] = useState(0);
+  const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
+  const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const anamneseRef = useRef(null);
@@ -189,6 +207,52 @@ export default function App() {
   const goToView = (view) => {
     setActiveView(view);
   };
+
+  React.useEffect(() => {
+    if (activeView !== 'jornada') return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await termosApi.list();
+        if (cancelled) return;
+        const list = normalizeTermosList(raw).filter(isTermoAtivoRow);
+        const first = list[0];
+        setJourneyTermoTitulo(first ? String(first.titulo ?? first.title ?? '').trim() : '');
+        setJourneyTermoConteudo(first ? String(first.conteudo ?? first.content ?? '').trim() : '');
+      } catch {
+        if (!cancelled) {
+          setJourneyTermoTitulo('');
+          setJourneyTermoConteudo('');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView]);
+
+  React.useEffect(() => {
+    if (activeView !== 'jornada' || currentStep !== 4) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await termosApi.list();
+        if (cancelled) return;
+        const list = normalizeTermosList(raw).filter(isTermoAtivoRow);
+        const first = list[0];
+        setJourneyTermoTitulo(first ? String(first.titulo ?? first.title ?? '').trim() : '');
+        setJourneyTermoConteudo(first ? String(first.conteudo ?? first.content ?? '').trim() : '');
+      } catch {
+        if (!cancelled) {
+          setJourneyTermoTitulo('');
+          setJourneyTermoConteudo('');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, currentStep]);
 
   const updatePatientByCpf = (cpfKey, updater) => {
     const key = String(cpfKey || '').trim();
@@ -688,7 +752,7 @@ export default function App() {
             isJornadaView
               ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
               : `z-0 bg-white ${
-                  activeView === 'anamnese' || activeView === 'pacientes'
+                  activeView === 'anamnese' || activeView === 'pacientes' || activeView === 'termos'
                     ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
                     : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
                 }`
@@ -706,6 +770,13 @@ export default function App() {
               <h2 className="text-[19px] sm:text-[22px] md:text-[24px] font-bold text-[#0f172a] leading-tight mb-0.5">Pacientes</h2>
               <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
                 Cadastro, prontuário, histórico e galeria
+              </p>
+            </div>
+          ) : activeView === 'termos' ? (
+            <div className="min-w-0">
+              <h2 className="text-[18px] sm:text-[21px] md:text-[22px] font-bold text-[#0f172a] leading-tight mb-0.5">Termos</h2>
+              <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
+                Texto de consentimento exibido na jornada (LGPD)
               </p>
             </div>
           ) : activeView === 'jornada' ? (
@@ -847,6 +918,8 @@ export default function App() {
                       setNomeProcedimento={journeyState.setNomeProcedimento}
                       observacoesExecucao={journeyState.observacoesExecucao}
                       setObservacoesExecucao={journeyState.setObservacoesExecucao}
+                      termoTitulo={journeyTermoTitulo || undefined}
+                      termoConteudo={journeyTermoConteudo || undefined}
                     />
                   )}
 
@@ -940,7 +1013,7 @@ export default function App() {
         ) : (
         <div
           className={`w-full mx-auto ${
-            activeView === 'anamnese'
+            activeView === 'anamnese' || activeView === 'termos'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
               : activeView === 'pacientes'
                 ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
@@ -949,7 +1022,7 @@ export default function App() {
         >
           <div
             className={`bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 ${
-              activeView === 'anamnese'
+              activeView === 'anamnese' || activeView === 'termos'
                 ? 'px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                 : activeView === 'pacientes'
                   ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
@@ -985,7 +1058,9 @@ export default function App() {
 
             {activeView === 'anamnese' && <AnamneseAdminView />}
 
-            {!['jornada', 'pacientes', 'anamnese'].includes(activeView) && (
+            {activeView === 'termos' && <TermosManager />}
+
+            {!['jornada', 'pacientes', 'anamnese', 'termos'].includes(activeView) && (
               <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>

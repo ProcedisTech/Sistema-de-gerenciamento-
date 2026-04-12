@@ -1,6 +1,8 @@
 import React from 'react';
 import { Shield, Square, CheckSquare, PenLine, Eraser, RotateCw, X, Upload, Image as ImageIcon, Trash2, Stethoscope, ClipboardList } from 'lucide-react';
 
+const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
+
 export function Step4LGPD({
   termoLido, setTermoLido,
   termoAssinado, setTermoAssinado,
@@ -16,6 +18,8 @@ export function Step4LGPD({
   setNomeProcedimento = () => {},
   observacoesExecucao = '',
   setObservacoesExecucao = () => {},
+  termoTitulo,
+  termoConteudo,
 }) {
   const [arquivosSelecionados, setArquivosSelecionados] = React.useState([]);
   const [signatureModalOpen, setSignatureModalOpen] = React.useState(false);
@@ -217,6 +221,12 @@ export function Step4LGPD({
     onLgpdUploadFiles?.(files);
   };
 
+  const tituloDinamico =
+    typeof termoTitulo === 'string' && termoTitulo.trim() ? termoTitulo.trim() : DEFAULT_TERMO_TITULO;
+  const conteudoDinamico =
+    typeof termoConteudo === 'string' && termoConteudo.trim() ? termoConteudo.trim() : '';
+  const usarTextoApi = conteudoDinamico.length > 0;
+
   const handleUploadDocumentFiles = (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
@@ -345,13 +355,21 @@ export function Step4LGPD({
       </div>
 
       <div className="bg-[#f0fdfa] border-[3px] border-[#00a88e]/25 rounded-2xl p-8 h-[240px] overflow-y-auto mb-6 shadow-inner">
-        <h4 className="font-bold text-[#0f766e] mb-3 text-[16px]">TERMO DE CONSENTIMENTO</h4>
-        <p className="text-[14px] text-[#334155] mb-3 font-medium leading-relaxed">
-          Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta, armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos estéticos.
-        </p>
-        <p className="text-[14px] text-[#334155] font-medium leading-relaxed">
-          Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por omitir qualquer condição de saúde que possa interferir no procedimento.
-        </p>
+        <h4 className="font-bold text-[#0f766e] mb-3 text-[16px]">{tituloDinamico}</h4>
+        {usarTextoApi ? (
+          <div className="text-[14px] text-[#334155] font-medium leading-relaxed whitespace-pre-wrap">
+            {conteudoDinamico}
+          </div>
+        ) : (
+          <>
+            <p className="text-[14px] text-[#334155] mb-3 font-medium leading-relaxed">
+              Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta, armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos estéticos.
+            </p>
+            <p className="text-[14px] text-[#334155] font-medium leading-relaxed">
+              Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por omitir qualquer condição de saúde que possa interferir no procedimento.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="space-y-3">
