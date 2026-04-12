@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 export const useJourneyState = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -29,19 +29,20 @@ export const useJourneyState = () => {
   const [expectativas, setExpectativas] = useState('');
   const [step2AnamneseDraft, setStep2AnamneseDraft] = useState({
     fichaSelecionadaId: '',
+    fichaDropdownNovo: '',
     respostas: {},
     preenchimentoAnterior: null,
     modoVisualizacao: false,
   });
   const [respostasAnamnese, setRespostasAnamnese] = useState({});
 
-  const salvarRespostaAnamnese = (perguntaId, valor) => {
+  const salvarRespostaAnamnese = useCallback((perguntaId, valor) => {
     if (perguntaId == null || perguntaId === '') return;
     setRespostasAnamnese((prev) => ({
       ...prev,
       [String(perguntaId)]: valor,
     }));
-  };
+  }, []);
 
   // ============ ETAPA 3: AVALIAÇÃO ============
   const [imageSrc, setImageSrc] = useState(null);

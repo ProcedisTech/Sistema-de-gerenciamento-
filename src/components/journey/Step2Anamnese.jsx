@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo, useRef } from 'react';
+import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
@@ -29,21 +29,16 @@ function historicoTimestamp(entry) {
   return Number.isFinite(t) ? t : 0;
 }
 
-function textoAlertaAnamneseItem(item) {
-  if (!item || typeof item !== 'object') return '';
-  if (typeof item.descricao === 'string' && item.descricao.trim()) return item.descricao.trim();
-  const p = item.pergunta;
-  if (p && typeof p.descricao === 'string' && p.descricao.trim()) return p.descricao.trim();
-  if (typeof item.texto === 'string' && item.texto.trim()) return item.texto.trim();
-  if (typeof item.titulo === 'string' && item.titulo.trim()) return item.titulo.trim();
-  return '';
+function respostasMapHasEntries(m) {
+  return m && typeof m === 'object' && Object.keys(m).length > 0;
 }
 
-function listaAnamneseAlertsDaFicha(ficha) {
-  if (!ficha) return [];
-  const raw = ficha.anamnese_alerts ?? ficha.anamneseAlerts;
-  if (!Array.isArray(raw)) return [];
-  return raw;
+/** Hidratação inicial: evita `{}` truthy em `draft || mapa` esconder `respostasAnamnese`. */
+function mergeInitialRespostas(draftRespostas, respostasAnamneseMap) {
+  if (respostasMapHasEntries(draftRespostas)) return draftRespostas;
+  if (respostasMapHasEntries(respostasAnamneseMap)) return respostasAnamneseMap;
+  if (draftRespostas && typeof draftRespostas === 'object') return draftRespostas;
+  return respostasAnamneseMap || {};
 }
 
 /** Converte resposta da API para o estado usado em `DynamicQuestion` / `getAnamneseData`. */
@@ -250,6 +245,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   onSavedAnamneseStateChange = () => {},
   respostasAnamnese = {},
   salvarRespostaAnamnese = () => {},
+  setRespostasAnamnese = () => {},
 }, ref) {
   const [fichas, setFichas] = useState([]);
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState(
@@ -257,13 +253,16 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   );
   const [fichaSelecionada, setFichaSelecionada] = useState(null);
   const [respostas, setRespostas] = useState(
-    () => savedAnamneseState?.respostas || respostasAnamnese || {}
+    () => mergeInitialRespostas(savedAnamneseState?.respostas, respostasAnamnese)
   );
   const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(
     () => savedAnamneseState?.preenchimentoAnterior || null
   );
   const [modoVisualizacao, setModoVisualizacao] = useState(
     () => Boolean(savedAnamneseState?.modoVisualizacao)
+  );
+  const [fichaDropdownNovo, setFichaDropdownNovo] = useState(
+    () => savedAnamneseState?.fichaDropdownNovo ?? ''
   );
 
   useImperativeHandle(ref, () => ({
@@ -292,35 +291,17 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const [historicoPaciente, setHistoricoPaciente] = useState([]);
   const [loadingHistoricoPaciente, setLoadingHistoricoPaciente] = useState(false);
 
+  const respostasRef = useRef(respostas);
+  respostasRef.current = respostas;
+  const savedDraftRef = useRef(savedAnamneseState);
+  savedDraftRef.current = savedAnamneseState;
+
   useEffect(() => {
     anamneseApi.listFichas()
       .then((data) => setFichas(Array.isArray(data) ? data : []))
       .catch(() => setFichas([]))
       .finally(() => setLoadingFichas(false));
   }, []);
-
-  useEffect(() => {
-    const next = savedAnamneseState || {};
-    setFichaSelecionadaId(next.fichaSelecionadaId || '');
-    setRespostas(next.respostas || respostasAnamnese || {});
-    setPreenchimentoAnterior(next.preenchimentoAnterior || null);
-    setModoVisualizacao(Boolean(next.modoVisualizacao));
-  }, [savedAnamneseState, respostasAnamnese]);
-
-  useEffect(() => {
-    onSavedAnamneseStateChange({
-      fichaSelecionadaId,
-      respostas,
-      preenchimentoAnterior,
-      modoVisualizacao,
-    });
-  }, [
-    fichaSelecionadaId,
-    respostas,
-    preenchimentoAnterior,
-    modoVisualizacao,
-    onSavedAnamneseStateChange,
-  ]);
 
   useEffect(() => {
     if (!pacienteId) {
@@ -378,19 +359,65 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     return rows;
   }, [historicoPaciente, fichas]);
 
-  const handleSelecionarFicha = useCallback(async (id) => {
-    setFichaSelecionadaId(id);
+  /** Select / novo preenchimento: só template; sem histórico; evita reidratar respostas do pai. */
+  const selecionarFichaParaNovo = useCallback(async (id) => {
+    const idStr = id === '' || id == null ? '' : String(id);
+    setRespostasAnamnese({});
+    setFichaDropdownNovo(idStr);
+    onSavedAnamneseStateChange({
+      ...(savedAnamneseState || {}),
+      fichaSelecionadaId: idStr,
+      fichaDropdownNovo: idStr,
+      respostas: {},
+      preenchimentoAnterior: null,
+      modoVisualizacao: false,
+    });
+    setFichaSelecionadaId(idStr);
     setPreenchimentoAnterior(null);
     setModoVisualizacao(false);
-    if (!id) {
+    setRespostas({});
+    respostasRef.current = {};
+    if (!idStr) {
       setFichaSelecionada(null);
       return;
     }
     setLoadingFicha(true);
     try {
+      const ficha = await anamneseApi.getFicha(idStr);
+      setFichaSelecionada(ficha);
+    } catch {
+      setFichaSelecionada(null);
+    } finally {
+      setLoadingFicha(false);
+    }
+  }, [onSavedAnamneseStateChange, savedAnamneseState, setRespostasAnamnese]);
+
+  /** Botão Abrir: último preenchimento da ficha + modo leitura quando existir. */
+  const consultarUltimoPreenchimento = useCallback(async (fichaId) => {
+    const id = String(fichaId);
+    setFichaDropdownNovo('');
+    onSavedAnamneseStateChange({
+      ...(savedAnamneseState || {}),
+      fichaSelecionadaId: id,
+      fichaDropdownNovo: '',
+      respostas: {},
+      preenchimentoAnterior: null,
+      modoVisualizacao: false,
+    });
+    setFichaSelecionadaId(id);
+    setPreenchimentoAnterior(null);
+    setModoVisualizacao(false);
+    setRespostas({});
+    respostasRef.current = {};
+    setLoadingFicha(true);
+    let syncedRespostas = {};
+    let syncedPreenchimento = null;
+    let syncedModo = false;
+    try {
       const ficha = await anamneseApi.getFicha(id);
       setFichaSelecionada(ficha);
       setRespostas({});
+      respostasRef.current = {};
 
       if (pacienteId) {
         try {
@@ -406,14 +433,18 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               const mapped = mapApiRespostaToEstado(r);
               if (mapped) respostasCarregadas[String(mapped.perguntaId)] = mapped;
             });
-            setRespostas(respostasCarregadas);
+            syncedRespostas = respostasCarregadas;
             const dh =
               preenchimento.dataHora
               ?? preenchimento.dataPreenchimento
               ?? preenchimento.createdAt
               ?? preenchimento.dataCriacao
               ?? null;
-            setPreenchimentoAnterior({ id: preenchimento.id, dataHora: dh });
+            syncedPreenchimento = { id: preenchimento.id, dataHora: dh };
+            syncedModo = true;
+            setRespostas(respostasCarregadas);
+            respostasRef.current = respostasCarregadas;
+            setPreenchimentoAnterior(syncedPreenchimento);
             setModoVisualizacao(true);
             const parsed = parseQueixaExpectativasObs(detalhes?.observacoes);
             if (parsed && (parsed.queixa || parsed.expectativas)) {
@@ -425,20 +456,65 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           console.warn('[Step2Anamnese] Histórico de anamnese do paciente:', histErr?.message || histErr);
         }
       }
+
+      onSavedAnamneseStateChange({
+        ...(savedDraftRef.current || {}),
+        fichaSelecionadaId: id,
+        fichaDropdownNovo: '',
+        respostas: syncedRespostas,
+        preenchimentoAnterior: syncedPreenchimento,
+        modoVisualizacao: syncedModo,
+      });
     } catch {
       setFichaSelecionada(null);
     } finally {
       setLoadingFicha(false);
     }
-  }, [pacienteId, setQueixa, setExpectativas]);
+  }, [onSavedAnamneseStateChange, pacienteId, setExpectativas, setQueixa]);
 
   const handleRespostaChange = useCallback((resposta) => {
     if (modoVisualizacao) return;
     const key = String(resposta.perguntaId);
     const normalized = { ...resposta, perguntaId: resposta.perguntaId };
-    setRespostas((prev) => ({ ...prev, [key]: normalized }));
+    const next = { ...respostasRef.current, [key]: normalized };
+    respostasRef.current = next;
+    setRespostas(next);
+    onSavedAnamneseStateChange({
+      ...(savedDraftRef.current || {}),
+      fichaSelecionadaId,
+      fichaDropdownNovo,
+      respostas: next,
+      preenchimentoAnterior,
+      modoVisualizacao,
+    });
     salvarRespostaAnamnese(key, normalized);
-  }, [modoVisualizacao, salvarRespostaAnamnese]);
+  }, [
+    modoVisualizacao,
+    salvarRespostaAnamnese,
+    onSavedAnamneseStateChange,
+    fichaSelecionadaId,
+    fichaDropdownNovo,
+    preenchimentoAnterior,
+  ]);
+
+  const toggleModoVisualizacao = useCallback(() => {
+    const next = !modoVisualizacao;
+    setModoVisualizacao(next);
+    onSavedAnamneseStateChange({
+      ...(savedDraftRef.current || {}),
+      fichaSelecionadaId,
+      fichaDropdownNovo,
+      respostas: respostasRef.current,
+      preenchimentoAnterior,
+      modoVisualizacao: next,
+    });
+  }, [
+    modoVisualizacao,
+    onSavedAnamneseStateChange,
+    fichaSelecionadaId,
+    fichaDropdownNovo,
+    preenchimentoAnterior,
+  ]);
 
   useEffect(() => {
     if (!fichaSelecionadaId || fichaSelecionada) return;
@@ -463,11 +539,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const itensOrdenados = fichaSelecionada?.itens
     ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)
     : [];
-
-  const anamneseAlertsLista = useMemo(
-    () => listaAnamneseAlertsDaFicha(fichaSelecionada),
-    [fichaSelecionada]
-  );
 
   return (
     <div className="animate-in fade-in duration-300">
@@ -495,9 +566,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             {resumoPreenchimentosPorFicha.map((row) => (
               <div
                 key={row.fichaId}
-                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-xl border-[3px] border-[#00a88e]/20 bg-white shadow-sm"
+                className="flex flex-col gap-3 p-4 rounded-xl border-[3px] border-[#00a88e]/20 bg-white shadow-sm"
               >
-                <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="flex items-start gap-3 min-w-0">
                   <CheckCircle className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5" strokeWidth={2.5} aria-hidden />
                   <div className="min-w-0">
                     <p className="text-[14px] font-bold text-[#0f172a] break-words">{row.nome}</p>
@@ -511,8 +582,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleSelecionarFicha(row.fichaId)}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-[13px] font-bold bg-[#00a88e] text-white border-[3px] border-transparent hover:bg-[#00967f] transition-colors flex-shrink-0"
+                  onClick={() => consultarUltimoPreenchimento(row.fichaId)}
+                  className="w-full px-4 py-2.5 rounded-xl text-[13px] font-bold bg-[#00a88e] text-white border-[3px] border-transparent hover:bg-[#00967f] transition-colors"
                 >
                   Abrir
                 </button>
@@ -522,12 +593,15 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      {/* Seletor de ficha */}
+      {/* Nova anamnese: select independente do fluxo Abrir (histórico) */}
       <div className="mb-6 p-4 bg-[#f0fdfa] border-[3px] border-[#00a88e]/20 rounded-2xl">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <FileText className="w-5 h-5 text-[#00a88e]" strokeWidth={2} />
-          <label className="text-[14px] font-bold text-[#0f766e]">Ficha de Anamnese</label>
+          <label className="text-[14px] font-bold text-[#0f766e]">Nova anamnese</label>
         </div>
+        <p className="text-[12px] text-[#64748b] font-medium mb-3 leading-snug">
+          Escolha a ficha para um novo preenchimento. Para ver o último envio já registrado, use <span className="font-bold text-[#0f766e]">Abrir</span> na lista acima.
+        </p>
         {loadingFichas ? (
           <div className="flex items-center gap-2 text-[#64748b] text-[13px]">
             <Loader2 className="w-4 h-4 animate-spin" /> Carregando fichas...
@@ -536,8 +610,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           <p className="text-[13px] text-[#94a3b8]">Nenhuma ficha disponível. Crie fichas na aba Anamnese do menu.</p>
         ) : (
           <select
-            value={fichaSelecionadaId}
-            onChange={(e) => handleSelecionarFicha(e.target.value)}
+            value={fichaDropdownNovo}
+            onChange={(e) => selecionarFichaParaNovo(e.target.value)}
             className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
           >
             <option value="">Selecione uma ficha...</option>
@@ -549,40 +623,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </select>
         )}
       </div>
-
-      {anamneseAlertsLista.length > 0 && (
-        <div
-          className="mb-6 rounded-2xl border-[3px] border-red-300/90 bg-[#fff7ed] p-4 sm:p-5 shadow-sm ring-1 ring-red-200/40"
-          role="region"
-          aria-label="Alertas da anamnese"
-        >
-          <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
-            <h4 className="text-[15px] font-bold text-[#0f172a]">Alertas</h4>
-          </div>
-          <ul className="space-y-2">
-            {anamneseAlertsLista.map((item, idx) => {
-              const label = textoAlertaAnamneseItem(item);
-              const key =
-                item?.id
-                ?? item?.perguntaId
-                ?? item?.pergunta?.id
-                ?? `alert-${idx}`;
-              return (
-                <li
-                  key={key}
-                  className="flex gap-2.5 rounded-xl border-[2px] border-red-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3 shadow-sm"
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" strokeWidth={2.5} aria-hidden />
-                  <span className="text-[13px] font-semibold leading-snug text-[#7f1d1d]">
-                    {label || 'Pergunta em alerta'}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       {preenchimentoAnterior && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-[#e6f7f5] border border-[#00a88e] rounded-xl px-4 py-3 mb-4">
@@ -597,7 +637,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </div>
           <button
             type="button"
-            onClick={() => setModoVisualizacao((v) => !v)}
+            onClick={toggleModoVisualizacao}
             className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
           >
             {modoVisualizacao ? 'Modificar' : 'Cancelar'}
