@@ -568,6 +568,7 @@ export default function App() {
     journeyState.setExpectativas('');
     journeyState.setStep2AnamneseDraft({
       fichaSelecionadaId: '',
+      fichaDropdownNovo: '',
       respostas: {},
       preenchimentoAnterior: null,
       modoVisualizacao: false,
@@ -785,6 +786,7 @@ export default function App() {
                       onSavedAnamneseStateChange={journeyState.setStep2AnamneseDraft}
                       respostasAnamnese={journeyState.respostasAnamnese}
                       salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
+                      setRespostasAnamnese={journeyState.setRespostasAnamnese}
                     />
                   )}
 
