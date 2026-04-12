@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
+import { procedimentosApi } from '../../services/api';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -41,7 +42,27 @@ function PatientPreviewPanel({
   setPatientDetailTab,
   setPatientView,
   shellClassName,
+  previewProcedures = [],
+  loadingPreviewProcedures = false,
 }) {
+  const timelineProcedures =
+    previewProcedures.length > 0
+      ? previewProcedures.map((proc) => ({
+        data: proc.criadoEm
+          ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+          : '-',
+        hora: proc.criadoEm
+          ? new Date(proc.criadoEm).toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'America/Sao_Paulo',
+          })
+          : '',
+        nome: proc.procedimentoNome || proc.nome || 'Procedimento',
+        profissional: proc.profissionalNome || proc.profissional || '—',
+      }))
+      : (selectedPatient.procedures || []);
+
   return (
     <div className={shellClassName}>
       <button
@@ -78,11 +99,13 @@ function PatientPreviewPanel({
           <Clock className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
           <h4 className="text-base font-bold">Linha do Tempo de Procedimentos</h4>
         </div>
-        {selectedPatient.procedures && selectedPatient.procedures.length > 0 ? (
+        {loadingPreviewProcedures ? (
+          <div className="py-6 text-center text-sm text-[#94a3b8]">Carregando procedimentos...</div>
+        ) : timelineProcedures.length > 0 ? (
           <div className="relative pl-2">
             <div className="absolute left-[15px] top-3 bottom-3 w-px bg-[#e2e8f0]" aria-hidden />
             <ul className="space-y-3">
-              {selectedPatient.procedures.map((proc, idx) => (
+              {timelineProcedures.map((proc, idx) => (
                 <li key={idx} className="relative flex gap-3 pl-8">
                   <span
                     className="absolute left-[11px] top-5 h-3 w-3 rounded-full border-2 border-white bg-[#00a88e] shadow-sm"
@@ -188,6 +211,8 @@ export function PatientsListView({
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   const [tipoBusca, setTipoBusca] = useState('nome');
   const desktopTitleId = 'patient-detail-title';
+  const [previewProcedures, setPreviewProcedures] = useState([]);
+  const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
 
   useEffect(() => {
     if (patientsListOrder === 'birthday_asc') setSortBy('birthday-asc');
@@ -257,6 +282,30 @@ export function PatientsListView({
   const previewPatient =
     (previewPatientCpf && patients.find((p) => p.cpf === previewPatientCpf)) || null;
 
+  useEffect(() => {
+    if (!previewPatient?.id) {
+      setPreviewProcedures([]);
+      setLoadingPreviewProcedures(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoadingPreviewProcedures(true);
+    procedimentosApi
+      .byPaciente(previewPatient.id)
+      .then((data) => {
+        if (!cancelled) setPreviewProcedures(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewProcedures([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreviewProcedures(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewPatient?.id]);
+
   const galleryPhotoCount = useMemo(() => {
     if (!previewPatient?.galeria?.length) return 0;
     return previewPatient.galeria.reduce((acc, s) => acc + (s.fotos?.length || 0), 0);
@@ -290,6 +339,7 @@ export function PatientsListView({
     setPreviewPatientCpf(null);
     setSelectedPatientCpf(null);
     setPatientDetailTab('timeline');
+    setPreviewProcedures([]);
   };
 
   useEffect(() => {
@@ -490,6 +540,8 @@ export function PatientsListView({
               getPatientInitials={getPatientInitials}
               setPatientDetailTab={setPatientDetailTab}
               setPatientView={setPatientView}
+              previewProcedures={previewProcedures}
+              loadingPreviewProcedures={loadingPreviewProcedures}
               shellClassName="patient-preview-sheet relative z-10 flex w-full max-w-lg flex-row flex-wrap content-start items-start justify-start gap-4 rounded-t-[20px] border border-[#e2e8f0] border-b-0 bg-[#f1f5f9] p-4 pb-6 shadow-[0_-8px_40px_-12px_rgba(15,23,42,0.2)] sm:rounded-2xl sm:border-b sm:shadow-[0_16px_48px_-10px_rgba(15,23,42,0.14)] max-h-[min(calc(100dvh-env(safe-area-inset-bottom)-12px),92dvh)] overflow-y-auto overflow-x-hidden custom-scrollbar sm:max-h-[min(88dvh,720px)]"
             />
           </div>
@@ -509,6 +561,8 @@ export function PatientsListView({
               getPatientInitials={getPatientInitials}
               setPatientDetailTab={setPatientDetailTab}
               setPatientView={setPatientView}
+              previewProcedures={previewProcedures}
+              loadingPreviewProcedures={loadingPreviewProcedures}
               shellClassName="contents"
             />
           </aside>

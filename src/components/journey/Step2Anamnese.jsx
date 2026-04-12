@@ -246,13 +246,25 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   pacienteId = null,
   step2Errors = {},
   setStep2Errors = () => {},
+  savedAnamneseState = null,
+  onSavedAnamneseStateChange = () => {},
+  respostasAnamnese = {},
+  salvarRespostaAnamnese = () => {},
 }, ref) {
   const [fichas, setFichas] = useState([]);
-  const [fichaSelecionadaId, setFichaSelecionadaId] = useState('');
+  const [fichaSelecionadaId, setFichaSelecionadaId] = useState(
+    () => savedAnamneseState?.fichaSelecionadaId || ''
+  );
   const [fichaSelecionada, setFichaSelecionada] = useState(null);
-  const [respostas, setRespostas] = useState({});
-  const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(null);
-  const [modoVisualizacao, setModoVisualizacao] = useState(false);
+  const [respostas, setRespostas] = useState(
+    () => savedAnamneseState?.respostas || respostasAnamnese || {}
+  );
+  const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(
+    () => savedAnamneseState?.preenchimentoAnterior || null
+  );
+  const [modoVisualizacao, setModoVisualizacao] = useState(
+    () => Boolean(savedAnamneseState?.modoVisualizacao)
+  );
 
   useImperativeHandle(ref, () => ({
     getAnamneseData: () => {
@@ -286,6 +298,29 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       .catch(() => setFichas([]))
       .finally(() => setLoadingFichas(false));
   }, []);
+
+  useEffect(() => {
+    const next = savedAnamneseState || {};
+    setFichaSelecionadaId(next.fichaSelecionadaId || '');
+    setRespostas(next.respostas || respostasAnamnese || {});
+    setPreenchimentoAnterior(next.preenchimentoAnterior || null);
+    setModoVisualizacao(Boolean(next.modoVisualizacao));
+  }, [savedAnamneseState, respostasAnamnese]);
+
+  useEffect(() => {
+    onSavedAnamneseStateChange({
+      fichaSelecionadaId,
+      respostas,
+      preenchimentoAnterior,
+      modoVisualizacao,
+    });
+  }, [
+    fichaSelecionadaId,
+    respostas,
+    preenchimentoAnterior,
+    modoVisualizacao,
+    onSavedAnamneseStateChange,
+  ]);
 
   useEffect(() => {
     if (!pacienteId) {
@@ -400,8 +435,30 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const handleRespostaChange = useCallback((resposta) => {
     if (modoVisualizacao) return;
     const key = String(resposta.perguntaId);
-    setRespostas((prev) => ({ ...prev, [key]: { ...resposta, perguntaId: resposta.perguntaId } }));
-  }, [modoVisualizacao]);
+    const normalized = { ...resposta, perguntaId: resposta.perguntaId };
+    setRespostas((prev) => ({ ...prev, [key]: normalized }));
+    salvarRespostaAnamnese(key, normalized);
+  }, [modoVisualizacao, salvarRespostaAnamnese]);
+
+  useEffect(() => {
+    if (!fichaSelecionadaId || fichaSelecionada) return;
+    let cancelled = false;
+    setLoadingFicha(true);
+    anamneseApi
+      .getFicha(fichaSelecionadaId)
+      .then((ficha) => {
+        if (!cancelled) setFichaSelecionada(ficha || null);
+      })
+      .catch(() => {
+        if (!cancelled) setFichaSelecionada(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFicha(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fichaSelecionadaId, fichaSelecionada]);
 
   const itensOrdenados = fichaSelecionada?.itens
     ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)

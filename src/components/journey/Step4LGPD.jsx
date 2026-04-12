@@ -17,6 +17,7 @@ export function Step4LGPD({
   observacoesExecucao = '',
   setObservacoesExecucao = () => {},
 }) {
+  const [arquivosSelecionados, setArquivosSelecionados] = React.useState([]);
   const [signatureModalOpen, setSignatureModalOpen] = React.useState(false);
   const [mobilePortrait, setMobilePortrait] = React.useState(false);
   const dialogRef = React.useRef(null);
@@ -216,6 +217,17 @@ export function Step4LGPD({
     onLgpdUploadFiles?.(files);
   };
 
+  const handleUploadDocumentFiles = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    setArquivosSelecionados((prev) => [...prev, ...files]);
+    event.target.value = '';
+  };
+
+  const removerArquivo = (index) => {
+    setArquivosSelecionados((prev) => prev.filter((_, i) => i !== index));
+  };
+
   return (
     <div className="animate-in fade-in duration-300">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -269,6 +281,48 @@ export function Step4LGPD({
           rows={4}
           className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none resize-none"
         />
+
+        <div className="mt-4">
+          <div className="w-full">
+            <label
+              htmlFor="upload-docs"
+              className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal-400 bg-teal-50 p-6 transition-colors hover:bg-teal-100"
+            >
+              <Upload className="h-8 w-8 text-teal-500" />
+              <span className="text-sm font-semibold text-teal-700">Clique para enviar arquivos</span>
+              <span className="text-xs text-gray-400">PNG, JPG, PDF — max. 10MB</span>
+              <input
+                id="upload-docs"
+                type="file"
+                multiple
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={handleUploadDocumentFiles}
+              />
+            </label>
+
+            {arquivosSelecionados.length > 0 && (
+              <ul className="mt-3 space-y-1">
+                {arquivosSelecionados.map((file, i) => (
+                  <li
+                    key={`${file.name}_${i}`}
+                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <span className="truncate text-gray-700">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removerArquivo(i)}
+                      className="ml-2 shrink-0 text-red-400 hover:text-red-600"
+                      aria-label={`Remover ${file.name}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white border-[3px] border-[#00a88e]/25 rounded-2xl p-6 mb-6">
