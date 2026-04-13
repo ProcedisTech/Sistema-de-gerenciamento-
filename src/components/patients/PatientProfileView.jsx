@@ -768,6 +768,12 @@ export function PatientProfileView({
   }, [selectedPatient?.id]);
 
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('galeriaBackend:', galeriaBackend);
+    }
+  }, [galeriaBackend]);
+
+  useEffect(() => {
     const id = selectedPatient?.id;
     if (!id) {
       setGaleriaBackend('local');
@@ -779,6 +785,9 @@ export function PatientProfileView({
     setApiGaleriaItems([]);
     (async () => {
       try {
+        if (import.meta.env.DEV) {
+          console.log('listando galeria para pacienteId:', selectedPatient?.id);
+        }
         const data = await pacientesGaleriaApi.list(id);
         if (cancelled) return;
         setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
@@ -1004,6 +1013,9 @@ export function PatientProfileView({
           }
         }
         if (!mergedSingle) {
+          if (import.meta.env.DEV) {
+            console.log('listando galeria para pacienteId:', selectedPatient?.id);
+          }
           const data = await pacientesGaleriaApi.list(selectedPatient.id);
           setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
         }
@@ -1178,6 +1190,9 @@ export function PatientProfileView({
         if (one) {
           setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
         } else {
+          if (import.meta.env.DEV) {
+            console.log('listando galeria para pacienteId:', selectedPatient?.id);
+          }
           const data = await pacientesGaleriaApi.list(selectedPatient.id);
           setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
         }
