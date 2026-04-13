@@ -49,7 +49,10 @@ export function authenticatedImageCrossOrigin(url) {
   return undefined;
 }
 
-/** URL para exibir: prioriza `fotoPerfilUrl` do servidor, depois backup local (data URL). */
+/**
+ * URL para exibir: prioriza `fotoPerfilUrl` do servidor (path da API ou presigned R2), depois backup local (data URL).
+ * Não use `fotoUrl` direto na UI — o mapa do backend unifica em `fotoPerfilUrl`.
+ */
 export function getPatientProfilePhotoDisplayUrl(patient) {
   if (!patient) return null;
   const fromState = patient.fotoPerfilUrl;

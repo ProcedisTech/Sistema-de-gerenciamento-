@@ -5,7 +5,7 @@ import { resolveApiUrl } from '../config/apiEnv.js';
  * Contrato Spring: { fotos: [ { id, url, dataReferencia, registradoEm, legenda, … } ] }
  * (também aceita array direto, itens, content — legado / stubs).
  *
- * url costuma ser path /api/v1/pacientes/{pacienteId}/galeria/{fotoId}/arquivo?v=…
+ * `url` costuma ser path `/api/v1/.../galeria/{fotoId}/arquivo?v=…` ou URL HTTPS presigned (R2).
  */
 export function normalizePacienteGaleriaResponse(data) {
   if (data == null) return [];
@@ -33,11 +33,26 @@ function absolutizeUrl(u) {
   return resolveApiUrl(path);
 }
 
+/**
+ * Monta `url` exibível para a UI / hooks de galeria:
+ * 1) Primeiro campo não vazio entre `arquivoUrl`, `url`, `urlFoto`, `urlPublica`, `presignedUrl`, `signedUrl`, `link`, `caminho`.
+ * 2) `absolutizeUrl`: se já for `https?://` (ex.: presigned R2), mantém; se for path `/api/v1/...`, prefixa `VITE_API_BASE_URL`.
+ * Se o backend mandar só `arquivoUrl` com R2, esse valor ganha prioridade sobre `url`.
+ */
 export function normalizePacienteGaleriaItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.foto && typeof raw.foto === 'object') return normalizePacienteGaleriaItem(raw.foto);
   if (raw.item && typeof raw.item === 'object') return normalizePacienteGaleriaItem(raw.item);
-  const url = raw.url || raw.urlFoto || raw.urlPublica || raw.link || raw.caminho;
+  console.log('galeria item:', raw);
+  const url =
+    raw.arquivoUrl ||
+    raw.url ||
+    raw.urlFoto ||
+    raw.urlPublica ||
+    raw.presignedUrl ||
+    raw.signedUrl ||
+    raw.link ||
+    raw.caminho;
   if (!url) return null;
   const id = raw.id ?? raw.fotoId;
   if (id == null || id === '') return null;
