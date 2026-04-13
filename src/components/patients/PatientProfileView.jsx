@@ -41,7 +41,6 @@ import {
   getBirthdayAlertInfo,
   parsePatientBirthDate,
 } from '../../utils/birthday.js';
-import { convertToWebP } from '../../utils/imageUtils.js';
 import {
   compressImageFileToJpegDataUrl,
   getPatientProfilePhotoDisplayUrl,
@@ -491,8 +490,6 @@ export function PatientProfileView({
   /** 'loading' | 'api' = lista no servidor; 'local' = fallback (fotos da jornada / legado). */
   const [galeriaBackend, setGaleriaBackend] = useState('loading');
   const [apiGaleriaItems, setApiGaleriaItems] = useState([]);
-  const [galleryPreviewLoadFailed, setGalleryPreviewLoadFailed] = useState(false);
-  const profilePhotoRefetchAfterErrorRef = useRef(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [modalProcedimento, setModalProcedimento] = useState(false);
   const [nomeProcedimento, setNomeProcedimento] = useState('');
@@ -524,14 +521,6 @@ export function PatientProfileView({
     [selectedPatient, mergePatientById, onUpdatePatient],
   );
 
-  useEffect(() => {
-    profilePhotoRefetchAfterErrorRef.current = false;
-  }, [selectedPatient?.id]);
-
-  useEffect(() => {
-    setGalleryPreviewLoadFailed(false);
-  }, [galleryPreview?.url, galleryPreview?.authFetch]);
-
   const mergeServerPatientIntoState = useCallback(
     (dto) => {
       if (!selectedPatient?.id || !dto) return;
@@ -555,17 +544,6 @@ export function PatientProfileView({
     },
     [selectedPatient?.id, selectedPatient?.cpf, mergePatientById, onUpdatePatient],
   );
-
-  const handleProfilePhotoImageError = useCallback(async () => {
-    if (!selectedPatient?.id || profilePhotoRefetchAfterErrorRef.current) return;
-    profilePhotoRefetchAfterErrorRef.current = true;
-    try {
-      const dto = await pacientesApi.get(selectedPatient.id);
-      mergeServerPatientIntoState(dto);
-    } catch {
-      /* ignore */
-    }
-  }, [selectedPatient?.id, mergeServerPatientIntoState]);
 
   const isServerProfilePhotoType = (file) => {
     const t = (file?.type || '').toLowerCase();
@@ -593,9 +571,7 @@ export function PatientProfileView({
       }
       setProfilePhotoBusy(true);
       try {
-        const webpFile = await convertToWebP(file);
-        console.log('Enviando WebP:', webpFile.name, webpFile.size, webpFile.type);
-        const updated = await pacientesApi.uploadFotoPerfil(selectedPatient.id, webpFile);
+        const updated = await pacientesApi.uploadFotoPerfil(selectedPatient.id, file);
         const key = profilePhotoStorageKey(selectedPatient);
         if (key) setStoredProfilePhotoDataUrl(key, null);
         const sameId =
@@ -614,12 +590,6 @@ export function PatientProfileView({
       return;
     }
 
-    if (import.meta.env.DEV) {
-      console.warn(
-        '[PatientProfileView] Foto de perfil: fluxo LOCAL (não chama uploadFotoPerfil). Sem `selectedPatient.id` do backend a foto só vai para data URL / localStorage.',
-        { selectedPatientId: selectedPatient?.id ?? null },
-      );
-    }
     try {
       const dataUrl = await compressImageFileToJpegDataUrl(file, 480, 0.86);
       applyProfilePhoto(dataUrl);
@@ -798,10 +768,6 @@ export function PatientProfileView({
   }, [selectedPatient?.id]);
 
   useEffect(() => {
-    console.log('galeriaBackend:', galeriaBackend);
-  }, [galeriaBackend]);
-
-  useEffect(() => {
     const id = selectedPatient?.id;
     if (!id) {
       setGaleriaBackend('local');
@@ -813,7 +779,6 @@ export function PatientProfileView({
     setApiGaleriaItems([]);
     (async () => {
       try {
-        console.log('listando galeria para pacienteId:', selectedPatient?.id);
         const data = await pacientesGaleriaApi.list(id);
         if (cancelled) return;
         setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
@@ -1029,16 +994,7 @@ export function PatientProfileView({
         const slice = fileArr.slice(0, 30);
         let mergedSingle = false;
         for (const file of slice) {
-          const webpFile = await convertToWebP(file);
-          if (import.meta.env.DEV) {
-            console.log(
-              '[PatientProfileView] Galeria API: enviando WebP',
-              webpFile.name,
-              webpFile.size,
-              webpFile.type,
-            );
-          }
-          const created = await pacientesGaleriaApi.upload(selectedPatient.id, webpFile, { roleUserId });
+          const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, { roleUserId });
           if (slice.length === 1) {
             const one = normalizePacienteGaleriaItem(created);
             if (one) {
@@ -1048,7 +1004,6 @@ export function PatientProfileView({
           }
         }
         if (!mergedSingle) {
-          console.log('listando galeria para pacienteId:', selectedPatient?.id);
           const data = await pacientesGaleriaApi.list(selectedPatient.id);
           setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
         }
@@ -1061,15 +1016,6 @@ export function PatientProfileView({
       return;
     }
 
-    if (import.meta.env.DEV) {
-      console.warn(
-        '[PatientProfileView] Galeria: fluxo LOCAL onAddGalleryFiles (pacientesGaleriaApi.upload não é chamado).',
-        {
-          galeriaBackend,
-          selectedPatientId: selectedPatient?.id ?? null,
-        },
-      );
-    }
     onAddGalleryFiles?.(selectedPatient.cpf, fileArr);
   };
 
@@ -1220,10 +1166,10 @@ export function PatientProfileView({
     if (!ctx) return;
 
     ctx.drawImage(video, 0, 0, width, height);
-    const blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/webp', 0.85));
+    const blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
     if (!blob) return;
 
-    const file = new File([blob], `galeria_${Date.now()}.webp`, { type: 'image/webp' });
+    const file = new File([blob], `galeria_${Date.now()}.jpg`, { type: 'image/jpeg' });
 
     if (selectedPatient?.id && galeriaBackend === 'api') {
       try {
@@ -1232,7 +1178,6 @@ export function PatientProfileView({
         if (one) {
           setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
         } else {
-          console.log('listando galeria para pacienteId:', selectedPatient?.id);
           const data = await pacientesGaleriaApi.list(selectedPatient.id);
           setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
         }
@@ -1302,7 +1247,6 @@ export function PatientProfileView({
                 <PatientAvatar
                   patient={patient}
                   getPatientInitials={getPatientInitials}
-                  onProfilePhotoImageError={handleProfilePhotoImageError}
                   className="relative w-[88px] h-[88px] rounded-full border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] overflow-hidden flex items-center justify-center shadow-sm"
                   initialsClassName="text-2xl font-bold"
                   spinnerClassName="w-7 h-7"
@@ -1901,16 +1845,11 @@ export function PatientProfileView({
             </button>
             {galleryPreview.authFetch ? (
               <GaleriaArquivoLightbox url={galleryPreview.url} alt={galleryPreview.caption || 'Preview da foto'} />
-            ) : galleryPreviewLoadFailed ? (
-              <p className="text-center text-white text-[14px] font-medium px-4 max-w-md">
-                Imagem indisponível ou link expirado. Feche e abra o preview de novo, ou atualize a galeria.
-              </p>
             ) : (
               <img
                 src={galleryPreview.url}
                 alt={galleryPreview.caption || 'Preview da foto'}
                 className="max-w-[90vw] max-h-[85vh] rounded-xl border-[3px] border-white/30 object-contain"
-                onError={() => setGalleryPreviewLoadFailed(true)}
               />
             )}
           </div>

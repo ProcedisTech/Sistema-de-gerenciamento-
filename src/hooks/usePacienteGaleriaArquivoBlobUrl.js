@@ -1,25 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { shouldAttachApiAuthToFetchUrl } from '../config/apiEnv.js';
+import { useEffect, useRef, useState } from 'react';
 import { pacientesGaleriaApi } from '../services/api.js';
 
 /**
- * Resolve URL exibível para arquivo de galeria.
- * - Path / URL na própria API: fetch + blob (jwt/org), como antes.
- * - URL HTTPS em outro host (presigned R2): uso direto em `<img src>` — sem headers que invalidem a assinatura.
+ * GET /api/v1/pacientes/{id}/galeria/{fotoId}/arquivo exige X-Org-Id (como a foto de perfil).
+ * `url` deve ser o path ou URL já resolvido (ex.: /api/v1/.../arquivo?v=… ou absoluta com VITE_API_BASE_URL).
  */
 export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
-  const trimmed = typeof url === 'string' ? url.trim() : '';
-  const isDirectPresigned = useMemo(
-    () =>
-      Boolean(
-        enabled &&
-          trimmed &&
-          /^https?:\/\//i.test(trimmed) &&
-          !shouldAttachApiAuthToFetchUrl(trimmed),
-      ),
-    [enabled, trimmed],
-  );
-
   const [blobSrc, setBlobSrc] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -33,15 +19,7 @@ export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
       }
     };
 
-    if (!enabled || !trimmed) {
-      revoke();
-      setBlobSrc(null);
-      setLoading(false);
-      setError(false);
-      return undefined;
-    }
-
-    if (isDirectPresigned) {
+    if (!enabled || !url || typeof url !== 'string') {
       revoke();
       setBlobSrc(null);
       setLoading(false);
@@ -53,7 +31,7 @@ export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
     setError(false);
     let cancelled = false;
     pacientesGaleriaApi
-      .fetchArquivoBlob(trimmed)
+      .fetchArquivoBlob(url.trim())
       .then((blob) => {
         if (cancelled) return;
         revoke();
@@ -75,12 +53,7 @@ export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
       cancelled = true;
       revoke();
     };
-  }, [enabled, trimmed, isDirectPresigned]);
+  }, [enabled, url]);
 
-  if (isDirectPresigned) {
-    return { src: trimmed, loading: false, error: false, isDirect: true };
-  }
-
-  const loadingVisible = Boolean(loading && !blobSrc);
-  return { src: blobSrc, loading: loadingVisible, error, isDirect: false };
+  return { src: blobSrc, loading, error };
 }
