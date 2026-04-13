@@ -127,13 +127,22 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
         estadoCivilId: estadoCivilId || undefined,
       };
 
+      const cpfDigits = cpf.replace(/\D/g, '');
+      if (cpfDigits.length !== 11) {
+        setErrors((prev) => ({ ...prev, cpf: 'CPF deve conter 11 dígitos' }));
+        setErro('Por favor, preencha todos os campos obrigatórios (*).');
+        return;
+      }
+
       await pacientesApi.create(payload);
       setSucesso(true);
       if (onPatientCreated) onPatientCreated();
 
       setTimeout(() => setPatientView('list'), 1500);
     } catch (err) {
-      setErro(err.message || 'Erro ao cadastrar paciente.');
+      const msg = err.message || '';
+      const clean = msg.replace(/^\[HTTP \d+\]\s*/, '').trim();
+      setErro(clean || 'Erro ao cadastrar paciente.');
     } finally {
       setSalvando(false);
     }
