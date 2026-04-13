@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { Eye, Upload, Image as ImageIcon, CheckCircle, Square, CheckSquare, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
+import { formatPacienteGaleriaError } from '../../utils/pacienteGaleria.js';
 
 const colors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'];
 
@@ -24,6 +25,10 @@ export function Step3Evaluation({
   setEvaluationSelectedPhotoIndex,
   onSelectCapturedPhoto,
   onDeleteCapturedPhoto,
+  /** Quando há foto da câmera selecionada, substitui esse item pelo JPEG com desenho. */
+  onAnnotatedCaptureSaved,
+  /** Opcional: POST na galeria do paciente (id servidor + profissional na barra). */
+  persistAnnotatedPhotoToGallery,
   evaluationPhotoMax,
 }) {
   const toast = useToast();
@@ -152,7 +157,17 @@ export function Step3Evaluation({
     if (!blob) return;
 
     const url = URL.createObjectURL(blob);
-    if (evaluationAnnotatedPhotoUrl) {
+    const idx = evaluationSelectedPhotoIndex;
+    const listLen = evaluationCapturedPhotos?.length ?? 0;
+    const hasSlot =
+      typeof idx === 'number' &&
+      idx >= 0 &&
+      idx < listLen &&
+      typeof onAnnotatedCaptureSaved === 'function';
+
+    if (hasSlot) {
+      onAnnotatedCaptureSaved({ index: idx, newUrl: url, blob });
+    } else if (evaluationAnnotatedPhotoUrl) {
       try {
         URL.revokeObjectURL(evaluationAnnotatedPhotoUrl);
       } catch {
@@ -162,7 +177,7 @@ export function Step3Evaluation({
     setEvaluationAnnotatedPhotoUrl(url);
 
     const targetCpf = (selectedPatientCpf || cpf || '').trim();
-    if (targetCpf) {
+    if (targetCpf && !hasSlot) {
       setPatients((prev) =>
         prev.map((p) =>
           (p.cpf || '').trim() !== targetCpf ? p : { ...p, evaluationAnnotatedPhotoUrl: url }
@@ -170,7 +185,26 @@ export function Step3Evaluation({
       );
     }
 
-    toast.success('Foto anotada salva na ficha do paciente.');
+    let uploadedToServer = false;
+    if (typeof persistAnnotatedPhotoToGallery === 'function') {
+      try {
+        const r = await persistAnnotatedPhotoToGallery(blob);
+        if (r?.ok) uploadedToServer = true;
+        else if (r?.reason === 'no_server_id') {
+          toast.info(
+            'Paciente sem ID no servidor: a foto anotada ficou só neste aparelho. Após cadastrar, envie pela galeria do perfil ou salve de novo aqui.'
+          );
+        }
+      } catch (e) {
+        toast.error(formatPacienteGaleriaError(e));
+      }
+    }
+
+    toast.success(
+      uploadedToServer
+        ? 'Foto anotada salva na ficha e enviada à galeria no servidor.'
+        : 'Foto anotada salva na ficha do paciente.'
+    );
   };
 
   useEffect(() => {
