@@ -186,8 +186,6 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
 
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
-  console.log('headers requestForm:', headers);
-
   const res = await fetch(url, {
     ...rest,
     method,
@@ -279,22 +277,13 @@ export const pacientesApi = {
     const q = order ? `?order=${encodeURIComponent(order)}` : '';
     return request(`/api/v1/pacientes${q}`);
   },
-  /**
-   * DTO do paciente. Quando há foto, o backend costuma enviar `fotoPerfilUrl` (path em `/api/v1/...` ou URL HTTPS
-   * presigned no R2). URLs presigned expiram (ex.: TTL ~900s / 15min): se a miniatura falhar (403/404 no img),
-   * chame de novo `get(id)` (ou `list`) para obter um link novo antes de expirar de novo.
-   */
   get: (id) => request(`/api/v1/pacientes/${id}`),
   search: (q) => request(`/api/v1/pacientes/search?q=${encodeURIComponent(q)}`),
   create: (data) => request('/api/v1/pacientes', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/api/v1/pacientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/pacientes/${id}`, { method: 'DELETE' }),
-  /**
-   * Multipart `file` — o perfil (PatientProfileView) envia WebP após `convertToWebP` (canvas).
-   * Backend pode normalizar para JPEG 480px; tipos jpeg/png/webp, limite ~5 MiB.
-   */
+  /** Multipart `file` — backend normaliza para JPEG 480px; tipos jpeg/png/webp, limite ~5 MiB. */
   uploadFotoPerfil: (pacienteId, file) => {
-    console.log('uploadFotoPerfil chamado:', pacienteId);
     const fd = new FormData();
     fd.append('file', file);
     return requestForm(`/api/v1/pacientes/${pacienteId}/foto-perfil`, { method: 'POST', body: fd });
@@ -325,12 +314,9 @@ export const pacientesApi = {
  *
  * GET    /api/v1/pacientes/{id}/galeria  → { fotos: [...] }; query opcional: dataDesde, dataAte,
  *        catalogoProcedimentoSaudeId, procedimentoFeitoId (datas YYYY-MM-DD).
- * POST   /api/v1/pacientes/{id}/galeria  → multipart file + opcionais (dataReferencia, legenda, …);
- *          o front costuma enviar WebP (conversão canvas antes do upload ou captura em WebP).
+ * POST   /api/v1/pacientes/{id}/galeria  → multipart file + opcionais (dataReferencia, legenda, …)
  * DELETE /api/v1/pacientes/{id}/galeria/{fotoId} → 204
- * Arquivo: GET …/galeria/{fotoId}/arquivo?v=… — fetch+blob com X-Org-Id quando a URL é da própria API.
- * Se o JSON trouxer URL HTTPS presigned (R2), o front usa `<img src>` direto (sem headers que quebrem a assinatura);
- * presigned também expira — em caso de falha, novo `list` / `get` devolve URLs atualizadas.
+ * Arquivo: GET …/galeria/{fotoId}/arquivo?v=… — usar fetch+blob (X-Org-Id), não <img src> direto se a rota exigir org.
  *
  * Normalização: src/utils/pacienteGaleria.js
  */
@@ -359,7 +345,6 @@ export const pacientesGaleriaApi = {
     const path = raw.startsWith('/') ? raw : `/${raw}`;
     return requestBlob(path, { needsOrg: true });
   },
-  /** `file` frequentemente `image/webp` após conversão no cliente (PatientProfileView). */
   upload: (pacienteId, file, options = {}) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -385,8 +370,6 @@ export const pacientesGaleriaApi = {
     if (legenda != null && String(legenda).trim()) {
       fd.append('legenda', String(legenda).trim());
     }
-    /** Debug: org deve estar alinhada ao backend (OrgProvider + `setOrgId` no login/`/me`). Se só aparecer o DEFAULT, confira `organizacaoSaudeId` na resposta de auth. */
-    console.log('currentOrgId no upload galeria:', currentOrgId);
     return requestForm(`/api/v1/pacientes/${pacienteId}/galeria`, { method: 'POST', body: fd });
   },
   remove: (pacienteId, fotoId) =>

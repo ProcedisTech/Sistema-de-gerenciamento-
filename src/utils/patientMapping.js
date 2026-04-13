@@ -17,10 +17,7 @@ function normalizeFotoPerfilUrl(raw) {
 /** Shape usada nas telas (lista, jornada, perfil). */
 export function mapBackendPatient(dto) {
   if (!dto) return null;
-  /**
-   * Contrato: `fotoPerfilUrl` (path `/api/v1/.../foto-perfil?v=…` ou URL absoluta presigned R2).
-   * Aliases: `urlFotoPerfil`, `fotoUrl`. Após upload, o Spring costuma devolver o DTO já com a URL atualizada.
-   */
+  /** Contrato atual: fotoPerfilUrl (path /api/v1/.../foto-perfil?v=… ou URL absoluta). Aliases só para legado. */
   const rawFoto =
     (typeof dto.fotoPerfilUrl === 'string' && dto.fotoPerfilUrl.trim()) ||
     (typeof dto.urlFotoPerfil === 'string' && dto.urlFotoPerfil.trim()) ||
