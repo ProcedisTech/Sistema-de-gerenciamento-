@@ -27,6 +27,8 @@ export function TermosManager() {
   const [editingId, setEditingId] = useState(null);
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState(null);
+  const [viewingRow, setViewingRow] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,10 +95,12 @@ export function TermosManager() {
     }
   };
 
-  const handleRemove = async (row) => {
-    const id = row?.id;
+  const handleRemoveClick = (row) => setConfirmDeleteRow(row);
+
+  const handleRemoveConfirm = async () => {
+    const id = confirmDeleteRow?.id;
+    setConfirmDeleteRow(null);
     if (id == null) return;
-    if (!window.confirm('Excluir este termo?')) return;
     try {
       await termosApi.remove(id);
       toastSuccess('Termo removido.');
@@ -194,7 +198,10 @@ export function TermosManager() {
                 key={row.id}
                 className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
               >
-                <div className="min-w-0 flex-1">
+                <div
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() => setViewingRow(row)}
+                >
                   <p className="font-bold text-[#0f172a] text-[15px] truncate">{row.titulo ?? row.title ?? '—'}</p>
                   <p className="mt-1 text-[12px] text-[#64748b] line-clamp-2 whitespace-pre-wrap">
                     {row.conteudo ?? row.content ?? ''}
@@ -211,7 +218,7 @@ export function TermosManager() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleRemove(row)}
+                    onClick={() => handleRemoveClick(row)}
                     className="inline-flex items-center gap-1.5 rounded-xl border-[3px] border-red-100 bg-red-50 px-3 py-2 text-[12px] font-bold text-red-600 hover:bg-red-100"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -223,6 +230,64 @@ export function TermosManager() {
           </ul>
         )}
       </div>
+
+      {viewingRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-800">
+                {viewingRow.titulo ?? viewingRow.title ?? '—'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setViewingRow(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+              {viewingRow.conteudo ?? viewingRow.content ?? ''}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingRow(null)}
+                className="px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-base font-bold text-gray-800 mb-2">Excluir termo</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Tem certeza que deseja excluir este termo? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteRow(null)}
+                className="px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveConfirm}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-red-500 text-white hover:bg-red-600"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
