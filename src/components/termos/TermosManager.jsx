@@ -27,6 +27,7 @@ export function TermosManager() {
   const [editingId, setEditingId] = useState(null);
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
+  const [formErrors, setFormErrors] = useState({});
   const [confirmDeleteRow, setConfirmDeleteRow] = useState(null);
   const [viewingRow, setViewingRow] = useState(null);
 
@@ -52,6 +53,7 @@ export function TermosManager() {
     setEditingId(null);
     setTitulo('');
     setConteudo('');
+    setFormErrors({});
     setFormOpen(true);
   };
 
@@ -59,6 +61,7 @@ export function TermosManager() {
     setEditingId(row.id);
     setTitulo(row.titulo ?? row.title ?? '');
     setConteudo(row.conteudo ?? row.content ?? '');
+    setFormErrors({});
     setFormOpen(true);
   };
 
@@ -67,15 +70,20 @@ export function TermosManager() {
     setEditingId(null);
     setTitulo('');
     setConteudo('');
+    setFormErrors({});
   };
 
   const handleSave = async () => {
     const t = String(titulo || '').trim();
     const c = String(conteudo || '').trim();
-    if (!t || !c) {
-      toastError('Preencha título e conteúdo.');
+    const fe = {};
+    if (!t) fe.titulo = true;
+    if (!c) fe.conteudo = true;
+    if (Object.keys(fe).length > 0) {
+      setFormErrors(fe);
       return;
     }
+    setFormErrors({});
     setSaving(true);
     try {
       const body = { titulo: t, conteudo: c, ativo: true };
@@ -145,8 +153,9 @@ export function TermosManager() {
                 value={titulo}
                 onChange={(e) => setTitulo(e.target.value)}
                 placeholder="Ex.: Termo de consentimento"
-                className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[14px] outline-none focus:border-[#00a88e]"
+                className={`w-full rounded-xl border-[2px] px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] ${formErrors.titulo ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'}`}
               />
+              {formErrors.titulo && <p className="mt-1 text-[12px] text-red-500 font-medium">Título obrigatório.</p>}
             </div>
             <div>
               <label className="mb-1.5 block text-[12px] font-bold text-[#64748b]">Conteúdo</label>
@@ -155,8 +164,9 @@ export function TermosManager() {
                 onChange={(e) => setConteudo(e.target.value)}
                 placeholder="Texto completo do termo..."
                 rows={8}
-                className="w-full resize-y rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] min-h-[160px]"
+                className={`w-full resize-y rounded-xl border-[2px] px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] min-h-[160px] ${formErrors.conteudo ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'}`}
               />
+              {formErrors.conteudo && <p className="mt-1 text-[12px] text-red-500 font-medium">Conteúdo obrigatório.</p>}
             </div>
             <div className="flex flex-wrap gap-2">
               <button

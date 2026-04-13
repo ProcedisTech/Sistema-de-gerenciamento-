@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Download,
   FileText,
+  Filter,
   Image as ImageIcon,
   Loader2,
   Mail,
@@ -52,6 +53,14 @@ import {
   formatPacienteGaleriaError,
   normalizePacienteGaleriaItem,
   normalizePacienteGaleriaResponse,
+  formatGaleriaLegendaForUpload,
+  filterGaleriaItemsForUi,
+  groupGaleriaItemsBySession,
+  GALERIA_CATEGORIA_LABELS,
+  GALERIA_CATEGORIA,
+  itemMesReferenciaISO,
+  formatDataSessaoPtBr,
+  formatMesAnoCurtoPt,
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
@@ -490,6 +499,15 @@ export function PatientProfileView({
   /** 'loading' | 'api' = lista no servidor; 'local' = fallback (fotos da jornada / legado). */
   const [galeriaBackend, setGaleriaBackend] = useState('loading');
   const [apiGaleriaItems, setApiGaleriaItems] = useState([]);
+  const [galeriaFilterCategoria, setGaleriaFilterCategoria] = useState('all');
+  const [galeriaFilterMes, setGaleriaFilterMes] = useState('all');
+  const [galeriaFilterProcedimento, setGaleriaFilterProcedimento] = useState('all');
+  const [galeriaUploadCategoria, setGaleriaUploadCategoria] = useState(GALERIA_CATEGORIA.ANTES);
+  const [galeriaUploadDataRef, setGaleriaUploadDataRef] = useState(() => new Date().toISOString().slice(0, 10));
+  const [galeriaUploadProcedimentoId, setGaleriaUploadProcedimentoId] = useState('');
+  const [galeriaUploadDescricao, setGaleriaUploadDescricao] = useState('');
+  /** Painel de metadados do upload: só abre ao iniciar envio (galeria API). */
+  const [galeriaUploadMetaOpen, setGaleriaUploadMetaOpen] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [modalProcedimento, setModalProcedimento] = useState(false);
   const [nomeProcedimento, setNomeProcedimento] = useState('');
@@ -501,6 +519,17 @@ export function PatientProfileView({
   const galleryVideoRef = useRef(null);
   const galleryStreamRef = useRef(null);
   const profilePhotoInputRef = useRef(null);
+
+  useEffect(() => {
+    setGaleriaFilterCategoria('all');
+    setGaleriaFilterMes('all');
+    setGaleriaFilterProcedimento('all');
+    setGaleriaUploadCategoria(GALERIA_CATEGORIA.ANTES);
+    setGaleriaUploadDataRef(new Date().toISOString().slice(0, 10));
+    setGaleriaUploadProcedimentoId('');
+    setGaleriaUploadDescricao('');
+    setGaleriaUploadMetaOpen(false);
+  }, [selectedPatient?.id]);
 
   const isEditing = Boolean(editing);
 
@@ -680,10 +709,54 @@ export function PatientProfileView({
         serverId: it.serverId,
         source: 'api',
         index: -1,
+        categoria: it.categoria,
+        descricaoLegenda: it.descricaoLegenda,
+        nomeProcedimento: it.nomeProcedimento,
       }));
     }
     return capturedPhotos.length > 0 ? capturedPhotos : fallbackGalleryPhotos;
   }, [galeriaBackend, apiGaleriaItems, capturedPhotos, fallbackGalleryPhotos]);
+
+  const galeriaMesesOpcoes = useMemo(() => {
+    const set = new Set();
+    (apiGaleriaItems || []).forEach((it) => {
+      const m = itemMesReferenciaISO(it);
+      if (m) set.add(m);
+    });
+    return Array.from(set).sort().reverse();
+  }, [apiGaleriaItems]);
+
+  const galeriaProcedimentosOpcoes = useMemo(() => {
+    const set = new Set();
+    (apiGaleriaItems || []).forEach((it) => {
+      const n = (it.nomeProcedimento || '').trim();
+      if (n) set.add(n);
+      const d = (it.descricaoLegenda || '').trim();
+      if (d && !n) set.add(d);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [apiGaleriaItems]);
+
+  const galeriaSessionsForView = useMemo(() => {
+    if (galeriaBackend !== 'api') return [];
+    const filtered = filterGaleriaItemsForUi(apiGaleriaItems, {
+      categoria: galeriaFilterCategoria,
+      mesAno: galeriaFilterMes,
+      procedimentoToken: galeriaFilterProcedimento,
+    });
+    return groupGaleriaItemsBySession(filtered);
+  }, [galeriaBackend, apiGaleriaItems, galeriaFilterCategoria, galeriaFilterMes, galeriaFilterProcedimento]);
+
+  const buildGaleriaUploadApiOptions = useCallback(() => {
+    const opt = {
+      roleUserId,
+      dataReferencia: galeriaUploadDataRef || undefined,
+      legenda: formatGaleriaLegendaForUpload(galeriaUploadCategoria, galeriaUploadDescricao),
+    };
+    const procId = String(galeriaUploadProcedimentoId || '').trim();
+    if (procId) opt.procedimentoFeitoId = procId;
+    return opt;
+  }, [roleUserId, galeriaUploadDataRef, galeriaUploadCategoria, galeriaUploadDescricao, galeriaUploadProcedimentoId]);
 
   const dismissBirthdayModal = useCallback(() => {
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
@@ -1003,7 +1076,7 @@ export function PatientProfileView({
         const slice = fileArr.slice(0, 30);
         let mergedSingle = false;
         for (const file of slice) {
-          const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, { roleUserId });
+          const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, buildGaleriaUploadApiOptions());
           if (slice.length === 1) {
             const one = normalizePacienteGaleriaItem(created);
             if (one) {
@@ -1022,6 +1095,7 @@ export function PatientProfileView({
         toast.success(
           fileArr.length === 1 ? 'Foto enviada para a galeria.' : 'Fotos enviadas para a galeria.',
         );
+        setGaleriaUploadMetaOpen(false);
       } catch (e) {
         toast.error(formatPacienteGaleriaError(e));
       }
@@ -1185,7 +1259,7 @@ export function PatientProfileView({
 
     if (selectedPatient?.id && galeriaBackend === 'api') {
       try {
-        const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, { roleUserId });
+        const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, buildGaleriaUploadApiOptions());
         const one = normalizePacienteGaleriaItem(created);
         if (one) {
           setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
@@ -1501,7 +1575,7 @@ export function PatientProfileView({
               {patientDetailTab === 'galeria' && (
                 <div className="space-y-6">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de Evolucao</h4>
+                    <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de evolução</h4>
                     {galeriaBackend === 'loading' && selectedPatient?.id ? (
                       <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
                         <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
@@ -1517,22 +1591,185 @@ export function PatientProfileView({
                       </span>
                     ) : null}
                   </div>
+
+                  {galeriaBackend === 'api' && selectedPatient?.id && galeriaBackend !== 'loading' ? (
+                    <>
+                      <div className="rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] p-4 space-y-3">
+                        <div className="flex items-center gap-2 text-[12px] font-bold text-[#0f766e]">
+                          <Filter className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                          Filtrar visualização
+                        </div>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                          <label className="flex flex-col gap-1 min-w-[140px] flex-1">
+                            <span className="text-[11px] font-bold text-[#64748b]">Categoria</span>
+                            <select
+                              value={galeriaFilterCategoria}
+                              onChange={(e) => setGaleriaFilterCategoria(e.target.value)}
+                              className="rounded-xl border-[2px] border-[#e2e8f0] bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
+                            >
+                              <option value="all">Todas</option>
+                              <option value="antes">{GALERIA_CATEGORIA_LABELS.antes}</option>
+                              <option value="planejamento">{GALERIA_CATEGORIA_LABELS.planejamento}</option>
+                              <option value="avaliacao">{GALERIA_CATEGORIA_LABELS.avaliacao}</option>
+                              <option value="depois">{GALERIA_CATEGORIA_LABELS.depois}</option>
+                              <option value="outro">{GALERIA_CATEGORIA_LABELS.outro}</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 min-w-[160px] flex-1">
+                            <span className="text-[11px] font-bold text-[#64748b]">Mês</span>
+                            <select
+                              value={galeriaFilterMes}
+                              onChange={(e) => setGaleriaFilterMes(e.target.value)}
+                              className="rounded-xl border-[2px] border-[#e2e8f0] bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
+                            >
+                              <option value="all">Todos</option>
+                              {galeriaMesesOpcoes.map((m) => (
+                                <option key={m} value={m}>
+                                  {new Date(`${m}-01T12:00:00`).toLocaleDateString('pt-BR', {
+                                    month: 'long',
+                                    year: 'numeric',
+                                  })}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 min-w-[180px] flex-[1.2]">
+                            <span className="text-[11px] font-bold text-[#64748b]">Procedimento / texto</span>
+                            <select
+                              value={galeriaFilterProcedimento}
+                              onChange={(e) => setGaleriaFilterProcedimento(e.target.value)}
+                              className="rounded-xl border-[2px] border-[#e2e8f0] bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
+                            >
+                              <option value="all">Todos</option>
+                              {galeriaProcedimentosOpcoes.map((p) => (
+                                <option key={p} value={p}>
+                                  {p.length > 48 ? `${p.slice(0, 48)}…` : p}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+
+                      {galeriaUploadMetaOpen ? (
+                        <div className="rounded-2xl border-[3px] border-[#00a88e]/20 bg-white p-4 space-y-3 shadow-sm animate-in fade-in duration-200">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <div className="text-[12px] font-bold text-[#0f172a]">Enviar fotos para a galeria</div>
+                              <p className="text-[11px] text-[#64748b] leading-snug mt-0.5">
+                                Ajuste categoria, data e procedimento; em seguida escolha as imagens.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setGaleriaUploadMetaOpen(false)}
+                              className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]"
+                            >
+                              Fechar
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[11px] font-bold text-[#64748b]">Categoria</span>
+                              <select
+                                value={galeriaUploadCategoria}
+                                onChange={(e) => setGaleriaUploadCategoria(e.target.value)}
+                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] font-medium outline-none focus:border-[#00a88e]"
+                              >
+                                <option value={GALERIA_CATEGORIA.ANTES}>{GALERIA_CATEGORIA_LABELS.antes}</option>
+                                <option value={GALERIA_CATEGORIA.PLANEJAMENTO}>{GALERIA_CATEGORIA_LABELS.planejamento}</option>
+                                <option value={GALERIA_CATEGORIA.AVALIACAO}>{GALERIA_CATEGORIA_LABELS.avaliacao}</option>
+                                <option value={GALERIA_CATEGORIA.DEPOIS}>{GALERIA_CATEGORIA_LABELS.depois}</option>
+                                <option value={GALERIA_CATEGORIA.OUTRO}>{GALERIA_CATEGORIA_LABELS.outro}</option>
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[11px] font-bold text-[#64748b]">Data da sessão</span>
+                              <input
+                                type="date"
+                                value={galeriaUploadDataRef}
+                                onChange={(e) => setGaleriaUploadDataRef(e.target.value)}
+                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] font-medium outline-none focus:border-[#00a88e]"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-2">
+                              <span className="text-[11px] font-bold text-[#64748b]">Vincular a procedimento (opcional)</span>
+                              <select
+                                value={galeriaUploadProcedimentoId}
+                                onChange={(e) => setGaleriaUploadProcedimentoId(e.target.value)}
+                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] font-medium outline-none focus:border-[#00a88e]"
+                              >
+                                <option value="">Nenhum</option>
+                                {(apiProcedures || []).map((proc) => (
+                                  <option key={proc.id ?? proc.procedimentoId} value={proc.id ?? proc.procedimentoId}>
+                                    {proc.procedimentoNome || proc.nome || 'Procedimento'}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
+                              <span className="text-[11px] font-bold text-[#64748b]">Descrição (ex.: nome do procedimento)</span>
+                              <input
+                                type="text"
+                                value={galeriaUploadDescricao}
+                                onChange={(e) => setGaleriaUploadDescricao(e.target.value)}
+                                placeholder="Ex.: Botox + preenchimento"
+                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#00a88e]"
+                              />
+                            </label>
+                          </div>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <label
+                              className={`inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#00a88e] px-4 py-2.5 text-[13px] font-bold text-white border-[2px] border-transparent shadow-sm hover:bg-[#00967f]`}
+                            >
+                              <ImageIcon className="w-4 h-4 shrink-0" />
+                              Escolher imagens
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
+                                onChange={handleUploadGalleryFiles}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+
                   <div className="flex flex-wrap items-center gap-2">
-                    <label
-                      className={`px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent ${
-                        galeriaBackend === 'loading' && selectedPatient?.id ? 'opacity-50 pointer-events-none' : 'cursor-pointer'
-                      }`}
-                    >
-                      <ImageIcon className="w-4 h-4 inline mr-1" /> Upload
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
+                    {galeriaBackend === 'api' && selectedPatient?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => setGaleriaUploadMetaOpen(true)}
                         disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
-                        onChange={handleUploadGalleryFiles}
-                      />
-                    </label>
+                        className={`px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent inline-flex items-center gap-1.5 ${
+                          galeriaBackend === 'loading' && selectedPatient?.id
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-[#00967f]'
+                        }`}
+                      >
+                        <ImageIcon className="w-4 h-4" /> Upload
+                      </button>
+                    ) : (
+                      <label
+                        className={`px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent ${
+                          galeriaBackend === 'loading' && selectedPatient?.id ? 'opacity-50 pointer-events-none' : 'cursor-pointer'
+                        }`}
+                      >
+                        <ImageIcon className="w-4 h-4 inline mr-1" /> Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
+                          onChange={handleUploadGalleryFiles}
+                        />
+                      </label>
+                    )}
                     <button
                       type="button"
                       onClick={openGalleryCamera}
@@ -1543,7 +1780,91 @@ export function PatientProfileView({
                     </button>
                   </div>
 
-                  {galleryItemsForGrid.length ? (
+                  {galeriaBackend === 'api' && galeriaSessionsForView.length > 0 ? (
+                    <div className="space-y-4">
+                      {galeriaSessionsForView.map((sess) => {
+                        const mesTitulo =
+                          sess.dataISO === 'sem-data' ? 'Sem data' : formatMesAnoCurtoPt(sess.dataISO);
+                        const subtitulo =
+                          sess.nomeProcedimento ||
+                          sess.fotos.map((f) => f.descricaoLegenda).find(Boolean) ||
+                          'Procedimento não informado';
+                        return (
+                          <div
+                            key={sess.key}
+                            className="rounded-[20px] border-[3px] border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-md shadow-[#00a88e]/[0.06]"
+                          >
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-4">
+                              <div className="min-w-0">
+                                <h5 className="text-[15px] font-bold text-[#0f172a]">
+                                  Sessão {sess.sessionNumber}
+                                  {mesTitulo ? ` — ${mesTitulo}` : ''}
+                                </h5>
+                                <p className="text-[13px] font-medium text-[#64748b] mt-0.5 line-clamp-2">{subtitulo}</p>
+                              </div>
+                              <span className="text-[12px] font-bold text-[#64748b] tabular-nums shrink-0 sm:pt-0.5">
+                                {formatDataSessaoPtBr(sess.dataISO)}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-5">
+                              {sess.fotos.map((foto) => {
+                                const gridItem = {
+                                  id: `api_${foto.serverId}`,
+                                  url: foto.url,
+                                  fileName: foto.fileName,
+                                  serverId: foto.serverId,
+                                  source: 'api',
+                                  index: -1,
+                                };
+                                const catLabel = GALERIA_CATEGORIA_LABELS[foto.categoria] || foto.categoria;
+                                return (
+                                  <div key={foto.serverId} className="flex w-[92px] sm:w-[108px] flex-col items-center gap-2">
+                                    <div className="relative w-full">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setGalleryPreview({
+                                            url: foto.url,
+                                            authFetch: true,
+                                            caption: foto.legenda || foto.fileName,
+                                          })
+                                        }
+                                        className="aspect-square w-full rounded-xl bg-[#e6f7f5] border-[2px] border-[#00a88e]/15 overflow-hidden flex items-center justify-center"
+                                      >
+                                        <GaleriaArquivoImage
+                                          url={foto.url}
+                                          alt=""
+                                          className="w-full h-full"
+                                          imgClassName="w-full h-full object-cover"
+                                        />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveGalleryItem(gridItem)}
+                                        className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[2px] border-white text-[11px] font-bold shadow-sm"
+                                        aria-label="Remover foto"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                    <span className="text-[11px] font-bold text-[#0f766e] text-center leading-tight px-0.5">
+                                      {catLabel}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : galeriaBackend === 'api' && apiGaleriaItems.length > 0 && galeriaSessionsForView.length === 0 ? (
+                    <p className="text-center py-8 text-[#94a3b8] text-[13px] font-medium px-2">
+                      Nenhuma foto com estes filtros. Ajuste categoria, mês ou procedimento.
+                    </p>
+                  ) : galeriaBackend === 'api' && apiGaleriaItems.length === 0 ? (
+                    <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
+                  ) : galleryItemsForGrid.length ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {galleryItemsForGrid.map((item) => {
                         const canDelete =

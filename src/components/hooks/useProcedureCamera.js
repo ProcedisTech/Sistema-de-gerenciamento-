@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { generateJourneyId } from '../utils';
 
 export function useProcedureCamera({
@@ -255,6 +255,57 @@ export function useProcedureCamera({
     }
   };
 
+  /** Substitui um item da lista de avaliação pelo JPEG já com desenho (mesmo índice selecionado na etapa 3). */
+  const replaceEvaluationCapturedPhotoAt = useCallback(
+    (index, entry) => {
+      const newUrl = entry?.url;
+      if (!newUrl) return;
+
+      let nextSnapshot = null;
+      setEvaluationCapturedPhotos((prev) => {
+        if (!Array.isArray(prev) || index < 0 || index >= prev.length) return prev;
+        const old = prev[index];
+        try {
+          if (old?.url) URL.revokeObjectURL(old.url);
+        } catch {
+          // ignore
+        }
+        const mergedMeta = {
+          ...(old?.meta || {}),
+          ...(entry.meta || {}),
+          annotated: true,
+        };
+        nextSnapshot = [...prev];
+        nextSnapshot[index] = {
+          url: newUrl,
+          blob: entry.blob ?? null,
+          meta: mergedMeta,
+        };
+        return nextSnapshot;
+      });
+
+      if (!nextSnapshot) return;
+
+      const targetCpf = (selectedPatientCpf || cpf || '').trim();
+      if (targetCpf) {
+        setPatients((pPrev) =>
+          pPrev.map((p) => {
+            if ((p.cpf || '').trim() !== targetCpf) return p;
+            return {
+              ...p,
+              evaluationCapturedPhotos: nextSnapshot.map((ph) => ({
+                url: ph.url,
+                meta: ph.meta,
+              })),
+              evaluationAnnotatedPhotoUrl: newUrl,
+            };
+          })
+        );
+      }
+    },
+    [selectedPatientCpf, cpf, setPatients]
+  );
+
   useEffect(() => {
     if (!photoModalOpen) return;
     startCamera().catch(() => {});
@@ -296,6 +347,7 @@ export function useProcedureCamera({
     capturePhoto,
     confirmPhoto,
     uploadPhotoFiles,
+    replaceEvaluationCapturedPhotoAt,
     preferredFacing,
     toggleCameraFacing,
   };

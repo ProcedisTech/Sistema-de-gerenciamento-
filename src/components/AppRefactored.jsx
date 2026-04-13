@@ -17,8 +17,9 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesApi, procedimentosApi, termosApi } from '../services/api';
+import { anamneseApi, pacientesApi, pacientesGaleriaApi, procedimentosApi, termosApi } from '../services/api';
 import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
+import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 
 import { PatientsView } from './patients';
 import { AnamneseAdminView } from './anamnese';
@@ -124,6 +125,13 @@ export default function App() {
     journeyState.setImageSrc(photo.url);
     journeyState.setPaths([]);
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
+  };
+
+  /** Grava na lista da câmera o JPEG já com desenho (etapa 3), para LGPD/galeria usarem a mesma imagem. */
+  const handleAnnotatedCaptureSaved = ({ index, newUrl, blob }) => {
+    cameraState.replaceEvaluationCapturedPhotoAt(index, { url: newUrl, blob });
+    journeyState.setImageSrc(newUrl);
+    journeyState.setPaths([]);
   };
 
   const handleDeleteCapturedPhoto = (idx) => {
@@ -706,6 +714,30 @@ export default function App() {
     return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
   }, [patients, selectedPatientCpf, journeyState.cpf]);
 
+  /** Envia o JPEG com desenho para a galeria do paciente (mesma API do perfil). */
+  const persistAnnotatedPhotoToGallery = React.useCallback(
+    async (blob) => {
+      if (!blob || !(blob instanceof Blob)) return { ok: false, skipped: true };
+      const pid = pacienteAtual?.id;
+      if (!pid) return { ok: false, skipped: true, reason: 'no_server_id' };
+      const rid = roleUserId;
+      if (!rid || !/^[0-9a-f-]{36}$/i.test(String(rid))) {
+        toast.warning(
+          'Selecione o profissional na barra de contexto para enviar a foto desenhada à galeria no servidor.'
+        );
+        return { ok: false, skipped: true };
+      }
+      const file = new File([blob], `avaliacao_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      await pacientesGaleriaApi.upload(pid, file, {
+        roleUserId: rid,
+        legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.PLANEJAMENTO, 'Mapeamento'),
+        dataReferencia: new Date().toISOString().slice(0, 10),
+      });
+      return { ok: true };
+    },
+    [pacienteAtual?.id, roleUserId, toast]
+  );
+
   const isJornadaView = activeView === 'jornada';
 
   // ============ RENDERIZAÇÃO ============
@@ -896,6 +928,8 @@ export default function App() {
                       setEvaluationSelectedPhotoIndex={cameraState.setEvaluationSelectedPhotoIndex}
                       onSelectCapturedPhoto={handleSelectCapturedPhoto}
                       onDeleteCapturedPhoto={handleDeleteCapturedPhoto}
+                      onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                      persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
                       evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     />
                   )}
