@@ -76,7 +76,7 @@ export const usePatientState = (opts = {}) => {
     readSessionValue(PATIENT_VIEW_KEY, 'list')
   );
   const [patientDetailTab, setPatientDetailTab] = useState(() =>
-    readSessionValue(PATIENT_DETAIL_TAB_KEY, 'timeline')
+    readSessionValue(PATIENT_DETAIL_TAB_KEY, 'atendimento')
   );
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
@@ -109,7 +109,7 @@ export const usePatientState = (opts = {}) => {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(PATIENT_DETAIL_TAB_KEY, patientDetailTab || 'timeline');
+      sessionStorage.setItem(PATIENT_DETAIL_TAB_KEY, patientDetailTab || 'atendimento');
     } catch {
       // ignore
     }

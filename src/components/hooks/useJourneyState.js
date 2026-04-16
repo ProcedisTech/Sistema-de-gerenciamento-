@@ -5,26 +5,11 @@ export const useJourneyState = () => {
   const [isFinishing, setIsFinishing] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
 
-  // ============ ETAPA 1: CHECK-IN ============
-  const [activeTab, setActiveTab] = useState('existente');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dataNascimento, setDataNascimento] = useState('');
-  const [idade, setIdade] = useState('');
-  const [nome, setNome] = useState('');
-  const [sexo, setSexo] = useState('');
-  const [estadoCivilId, setEstadoCivilId] = useState('');
-  const [profissao, setProfissao] = useState('');
-  const [step1Errors, setStep1Errors] = useState({});
   const [step2Errors, setStep2Errors] = useState({});
   const [step4Errors, setStep4Errors] = useState({});
   const [step5Errors, setStep5Errors] = useState({});
-  const [cpf, setCpf] = useState('');
-  const [rg, setRg] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [email, setEmail] = useState('');
-  const [endereco, setEndereco] = useState('');
 
-  // ============ ETAPA 2: ANAMNESE ============
+  // ============ ETAPA 1: ANAMNESE (UI Step2Anamnese) ============
   const [queixa, setQueixa] = useState('');
   const [expectativas, setExpectativas] = useState('');
   const [step2AnamneseDraft, setStep2AnamneseDraft] = useState({
@@ -44,7 +29,7 @@ export const useJourneyState = () => {
     }));
   }, []);
 
-  // ============ ETAPA 3: AVALIAÇÃO ============
+  // ============ ETAPA 2: AVALIAÇÃO ============
   const [imageSrc, setImageSrc] = useState(null);
   const [activeTool, setActiveTool] = useState('draw');
   const [activeColor, setActiveColor] = useState('#ef4444');
@@ -57,14 +42,17 @@ export const useJourneyState = () => {
   const [paths, setPaths] = useState([]);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  // ============ EXECUÇÃO / PROCEDIMENTO ============
+  // ============ ETAPA 4: PROCEDIMENTO (campos gravados no passo 4) ============
   const [observacoesExecucao, setObservacoesExecucao] = useState('');
   const [nomeProcedimento, setNomeProcedimento] = useState('');
 
-  // ============ ETAPA 4: LGPD ============
+  // ============ ETAPA 3: TERMOS / LGPD ============
   const [termoLido, setTermoLido] = useState(false);
   const [termoAssinado, setTermoAssinado] = useState(false);
   const [termoAssinaturaDataUrl, setTermoAssinaturaDataUrl] = useState('');
+  const [profissionalAssinaturaDataUrl, setProfissionalAssinaturaDataUrl] = useState('');
+  /** Id do termo escolhido na etapa LGPD (sincronizado via Step3Termos → onTermoChange). */
+  const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
   const [orientacoes, setOrientacoes] = useState(false);
@@ -82,49 +70,18 @@ export const useJourneyState = () => {
   const [anamnesePhotoMeta, setAnamnesePhotoMeta] = useState(null);
 
   return {
-    // Gerais
     currentStep,
     setCurrentStep,
     isFinishing,
     setIsFinishing,
     journeyId,
     setJourneyId,
-    // Etapa 1
-    activeTab,
-    setActiveTab,
-    searchQuery,
-    setSearchQuery,
-    dataNascimento,
-    setDataNascimento,
-    idade,
-    setIdade,
-    nome,
-    setNome,
-    sexo,
-    setSexo,
-    estadoCivilId,
-    setEstadoCivilId,
-    profissao,
-    setProfissao,
-    step1Errors,
-    setStep1Errors,
     step2Errors,
     setStep2Errors,
     step4Errors,
     setStep4Errors,
     step5Errors,
     setStep5Errors,
-    cpf,
-    setCpf,
-    rg,
-    setRg,
-    telefone,
-    setTelefone,
-    email,
-    setEmail,
-    endereco,
-    setEndereco,
-    // Etapa 2
     queixa,
     setQueixa,
     expectativas,
@@ -134,7 +91,6 @@ export const useJourneyState = () => {
     respostasAnamnese,
     setRespostasAnamnese,
     salvarRespostaAnamnese,
-    // Etapa 3
     imageSrc,
     setImageSrc,
     activeTool,
@@ -156,24 +112,24 @@ export const useJourneyState = () => {
     setPaths,
     isDrawing,
     setIsDrawing,
-    // Execução / procedimento
     observacoesExecucao,
     setObservacoesExecucao,
     nomeProcedimento,
     setNomeProcedimento,
-    // Etapa 4
     termoLido,
     setTermoLido,
     termoAssinado,
     setTermoAssinado,
     termoAssinaturaDataUrl,
     setTermoAssinaturaDataUrl,
-    // Etapa 5
+    profissionalAssinaturaDataUrl,
+    setProfissionalAssinaturaDataUrl,
+    termoSelecionadoId,
+    setTermoSelecionadoId,
     orientacoes,
     setOrientacoes,
     satisfacao,
     setSatisfacao,
-    // Fotos
     EVALUATION_PHOTO_MAX,
     evaluationCapturedPhotos,
     setEvaluationCapturedPhotos,
@@ -189,4 +145,3 @@ export const useJourneyState = () => {
     setAnamnesePhotoMeta,
   };
 };
-
