@@ -9,7 +9,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
+  Clock,
   ClipboardList,
   Download,
   FileText,
@@ -20,11 +20,10 @@ import {
   MapPin,
   Phone,
   Play,
-  Plus,
   Save,
+  Sparkles,
   StickyNote,
   Trash2,
-  Upload,
   User as UserIcon,
   X,
 } from 'lucide-react';
@@ -98,6 +97,25 @@ function isRespostaPrioridadeAlerta(resp) {
 
 function textoPerguntaResposta(resp) {
   return (resp?.perguntaDescricao || resp?.pergunta?.descricao || 'Pergunta').trim() || 'Pergunta';
+}
+
+function isRespostaCategoria(resp, nomeCategoria) {
+  const cat = (
+    resp?.pergunta?.categoria?.nome ||
+    resp?.pergunta?.categoriaNome ||
+    resp?.categoriaName ||
+    resp?.categoria?.nome ||
+    ''
+  ).trim().toLowerCase();
+  return cat === nomeCategoria.toLowerCase();
+}
+
+function isRespostaPositiva(resp) {
+  if (resp.respostaBoolean === true) return true;
+  if (resp.respostaTexto && resp.respostaTexto.trim() !== '') return true;
+  if (resp.perguntaOpcaoId) return true;
+  if (Array.isArray(resp.opcoesSelecionadas) && resp.opcoesSelecionadas.length > 0) return true;
+  return false;
 }
 
 /** Formato gravado em AppRefactored: `Queixa: …. Expectativas: …` */
@@ -461,6 +479,31 @@ function AnamneseTab({ pacienteId }) {
   );
 }
 
+function ModuloFuturoBadge({ children }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-1 text-[11px] font-bold text-[#64748b]">
+      <Clock className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
+      {children}
+    </span>
+  );
+}
+
+function monthsSinceDate(isoOrStr) {
+  const d = new Date(isoOrStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let m = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+  if (now.getDate() < d.getDate()) m -= 1;
+  return Math.max(1, m);
+}
+
+function formatDataHoraPtBr(dataHora) {
+  if (!dataHora) return '—';
+  const t = new Date(dataHora);
+  if (Number.isNaN(t.getTime())) return String(dataHora);
+  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
@@ -486,7 +529,6 @@ export function PatientProfileView({
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [timelineLoading, setTimelineLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
   const [editing, setEditing] = useState(null);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
@@ -509,12 +551,12 @@ export function PatientProfileView({
   /** Painel de metadados do upload: só abre ao iniciar envio (galeria API). */
   const [galeriaUploadMetaOpen, setGaleriaUploadMetaOpen] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
-  const [modalProcedimento, setModalProcedimento] = useState(false);
-  const [nomeProcedimento, setNomeProcedimento] = useState('');
-  const [observacaoProcedimento, setObservacaoProcedimento] = useState('');
-  const [salvandoProcedimento, setSalvandoProcedimento] = useState(false);
   const [alertasAnamnese, setAlertasAnamnese] = useState([]);
+  const [alertasAlergia, setAlertasAlergia] = useState([]);
   const [alertasAnamneseLoading, setAlertasAnamneseLoading] = useState(false);
+  /** Lista leve de anamneses (mesmo endpoint que AnamneseTab) para decisão na aba Atendimento. */
+  const [anamneseListSummary, setAnamneseListSummary] = useState([]);
+  const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
   const galleryVideoRef = useRef(null);
   const galleryStreamRef = useRef(null);
@@ -529,7 +571,15 @@ export function PatientProfileView({
     setGaleriaUploadProcedimentoId('');
     setGaleriaUploadDescricao('');
     setGaleriaUploadMetaOpen(false);
+    setAnamneseListSummary([]);
+    setProntuarioExpanded({});
   }, [selectedPatient?.id]);
+
+  useEffect(() => {
+    if (patientDetailTab === 'timeline') {
+      setPatientDetailTab('atendimento');
+    }
+  }, [patientDetailTab, setPatientDetailTab]);
 
   const isEditing = Boolean(editing);
 
@@ -793,7 +843,6 @@ export function PatientProfileView({
     if (!id) return undefined;
     let cancelled = false;
     setDetailLoading(true);
-    setTimelineLoading(true);
     (async () => {
       try {
         const [dtoResult, notasResult, procResult] = await Promise.allSettled([
@@ -830,7 +879,6 @@ export function PatientProfileView({
       } finally {
         if (!cancelled) {
           setDetailLoading(false);
-          setTimelineLoading(false);
         }
       }
     })();
@@ -886,6 +934,8 @@ export function PatientProfileView({
     setAlertasModalOpen(false);
     if (!pacienteId) {
       setAlertasAnamnese([]);
+      setAlertasAlergia([]);
+      setAnamneseListSummary([]);
       setAlertasAnamneseLoading(false);
       return undefined;
     }
@@ -895,6 +945,7 @@ export function PatientProfileView({
       try {
         const list = await anamneseApi.listPaciente(pacienteId);
         const arr = Array.isArray(list) ? list : [];
+        if (!cancelled) setAnamneseListSummary(arr);
         const pairs = await Promise.all(
           arr.map((an) =>
             anamneseApi
@@ -904,15 +955,31 @@ export function PatientProfileView({
           )
         );
         if (cancelled) return;
-        const items = [];
+        const alergiasDetectadas = [];
+        const itemsAlergia = [];
+        const itemsGeral = [];
         for (const { an, det } of pairs) {
           if (!det || !Array.isArray(det.respostas)) continue;
           const ts = an.dataHora ? new Date(an.dataHora).getTime() : 0;
           const nome = an.anamneseNome || 'Anamnese';
           det.respostas.forEach((resp, rIdx) => {
+            if (isRespostaCategoria(resp, 'alergias') && isRespostaPositiva(resp)) {
+              const valorAlergia = renderRespostaValue(resp);
+              const perguntaTexto = textoPerguntaResposta(resp);
+              alergiasDetectadas.push(`${perguntaTexto}: ${valorAlergia}`);
+              const pidA = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
+              itemsAlergia.push({
+                key: `${an.id}-${pidA}`,
+                titulo: textoPerguntaResposta(resp),
+                valor: renderRespostaValue(resp),
+                fichaNome: nome,
+                dataHora: an.dataHora,
+                ts,
+              });
+            }
             if (!isRespostaPrioridadeAlerta(resp)) return;
             const pid = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
-            items.push({
+            itemsGeral.push({
               key: `${an.id}-${pid}`,
               titulo: textoPerguntaResposta(resp),
               valor: renderRespostaValue(resp),
@@ -922,10 +989,30 @@ export function PatientProfileView({
             });
           });
         }
-        items.sort((a, b) => b.ts - a.ts);
-        setAlertasAnamnese(items);
+        itemsAlergia.sort((a, b) => b.ts - a.ts);
+        itemsGeral.sort((a, b) => b.ts - a.ts);
+        const seen = new Set();
+        const merged = [];
+        for (const it of [...itemsAlergia, ...itemsGeral]) {
+          if (seen.has(it.key)) continue;
+          seen.add(it.key);
+          merged.push(it);
+        }
+        merged.sort((a, b) => b.ts - a.ts);
+        if (!cancelled) setAlertasAlergia(itemsAlergia);
+        if (!cancelled) setAlertasAnamnese(merged);
+        if (alergiasDetectadas.length > 0 && pacienteId) {
+          const alergiasTexto = alergiasDetectadas.join(' · ');
+          mergePatientById?.(pacienteId, (prev) => ({
+            ...prev,
+            alergias: alergiasTexto,
+          }));
+        }
       } catch {
-        if (!cancelled) setAlertasAnamnese([]);
+        if (!cancelled) {
+          setAlertasAnamnese([]);
+          setAlertasAlergia([]);
+        }
       } finally {
         if (!cancelled) setAlertasAnamneseLoading(false);
       }
@@ -933,7 +1020,12 @@ export function PatientProfileView({
     return () => {
       cancelled = true;
     };
-  }, [selectedPatient?.id]);
+  }, [selectedPatient?.id, mergePatientById]);
+
+  const alertasSidebarGeral = useMemo(() => {
+    const keys = new Set(alertasAlergia.map((x) => x.key));
+    return alertasAnamnese.filter((row) => !keys.has(row.key));
+  }, [alertasAnamnese, alertasAlergia]);
 
   const displayNotes = useMemo(() => {
     const fromApi = (apiNotes || []).map((n) => ({
@@ -951,6 +1043,8 @@ export function PatientProfileView({
     return [...fromApi, ...local];
   }, [apiNotes, selectedPatient?.notas]);
 
+  /* Agregação (procedimentos + galeria); mantida — Prontuário usa apiProcedures na UI. */
+  // eslint-disable-next-line no-unused-vars -- valor agregado intencionalmente preservado
   const timelineEvents = useMemo(() => {
     const events = [];
 
@@ -998,6 +1092,40 @@ export function PatientProfileView({
 
     return events;
   }, [patient, capturedPhotos, apiProcedures, galeriaBackend, apiGaleriaItems]);
+
+  const anamneseAtendimentoInfo = useMemo(() => {
+    const rows = (Array.isArray(anamneseListSummary) ? [...anamneseListSummary] : []).filter((r) => r?.dataHora);
+    rows.sort((a, b) => {
+      const ta = new Date(a.dataHora).getTime();
+      const tb = new Date(b.dataHora).getTime();
+      return tb - ta;
+    });
+    const latest = rows[0] || null;
+    if (!latest?.dataHora) return { status: 'nova', latest: null };
+    const t = new Date(latest.dataHora);
+    if (Number.isNaN(t.getTime())) return { status: 'nova', latest: null };
+    const lim = new Date();
+    lim.setMonth(lim.getMonth() - 6);
+    if (t >= lim) return { status: 'recente', latest };
+    return { status: 'vencida', latest };
+  }, [anamneseListSummary]);
+
+  const galeriaItemsForProcedure = useCallback(
+    (proc) => {
+      const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
+      const pid = proc?.id != null && proc?.id !== '' ? String(proc.id) : '';
+      return (apiGaleriaItems || []).filter((it) => {
+        if (pid && it.procedimentoFeitoId != null && String(it.procedimentoFeitoId) === pid) return true;
+        if (nome && it.nomeProcedimento && String(it.nomeProcedimento).trim() === nome) return true;
+        return false;
+      });
+    },
+    [apiGaleriaItems],
+  );
+
+  const toggleProntuarioRow = useCallback((rowKey) => {
+    setProntuarioExpanded((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }));
+  }, []);
 
   const saveEditProfile = async () => {
     if (!selectedPatient?.id) {
@@ -1155,34 +1283,6 @@ export function PatientProfileView({
     }
   };
 
-  const handleRegistrarProcedimento = async () => {
-    if (!nomeProcedimento.trim() || !selectedPatient?.id) return;
-    if (!roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
-      toast.warning(
-        'Selecione o profissional na barra de contexto ou faça login com usuário vinculado à equipe para registrar o procedimento.',
-      );
-      return;
-    }
-    setSalvandoProcedimento(true);
-    try {
-      await procedimentosApi.registrarManual(selectedPatient.id, {
-        nome: nomeProcedimento.trim(),
-        roleUserId,
-        observacao: observacaoProcedimento.trim() || null,
-      });
-      const procList = await procedimentosApi.byPaciente(selectedPatient.id);
-      setApiProcedures(Array.isArray(procList) ? procList : []);
-      setModalProcedimento(false);
-      setNomeProcedimento('');
-      setObservacaoProcedimento('');
-      toast.success('Procedimento registrado com sucesso.');
-    } catch (e) {
-      toast.error(e.message || 'Erro ao registrar procedimento.');
-    } finally {
-      setSalvandoProcedimento(false);
-    }
-  };
-
   const stopGalleryCamera = () => {
     try {
       const stream = galleryStreamRef.current;
@@ -1294,7 +1394,7 @@ export function PatientProfileView({
   if (!selectedPatient) return null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {detailLoading && (
         <div className="flex items-center gap-2 text-[#64748b] text-[13px] font-medium">
           <Loader2 className="w-4 h-4 animate-spin text-[#00a88e]" /> Sincronizando com o servidor...
@@ -1309,18 +1409,18 @@ export function PatientProfileView({
         type="button"
         onClick={() => {
           setPatientView('list');
-          setPatientDetailTab('timeline');
+          setPatientDetailTab('atendimento');
         }}
-        className="inline-flex items-center gap-2 text-[#00a88e] hover:text-[#00967f] font-bold text-[14px] transition-all w-fit"
+        className="mb-3 inline-flex w-fit items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
       >
         <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-6 mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-              <div className="flex flex-col items-center sm:items-start gap-2 flex-shrink-0">
+          <div className="mb-6 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
+            <div className="flex flex-col items-start gap-4 sm:flex-row">
+              <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
                 <input
                   ref={profilePhotoInputRef}
                   type="file"
@@ -1336,79 +1436,91 @@ export function PatientProfileView({
                 <PatientAvatar
                   patient={patient}
                   getPatientInitials={getPatientInitials}
-                  className="relative w-[88px] h-[88px] rounded-full border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] overflow-hidden flex items-center justify-center shadow-sm"
-                  initialsClassName="text-2xl font-bold"
-                  spinnerClassName="w-7 h-7"
+                  className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5] shadow-sm md:h-16 md:w-16"
+                  initialsClassName="text-base font-bold text-[#0f766e] md:text-lg"
+                  spinnerClassName="h-5 w-5"
                 />
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-1 max-w-[120px] sm:max-w-none">
+                <button
+                  type="button"
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                  disabled={profilePhotoBusy}
+                  className="text-[12px] font-medium text-[#00a88e] underline decoration-[#00a88e]/40 underline-offset-2 transition-colors hover:text-[#00967f] disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {profilePhotoBusy ? 'Enviando…' : 'Trocar foto'}
+                </button>
+                {profilePhotoDisplayUrl ? (
                   <button
                     type="button"
-                    onClick={() => profilePhotoInputRef.current?.click()}
+                    onClick={handleRemoveProfilePhoto}
                     disabled={profilePhotoBusy}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00a88e] hover:text-[#00967f] transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                    className="text-[12px] font-medium text-[#94a3b8] transition-colors hover:text-red-600 disabled:opacity-50"
                   >
-                    {profilePhotoBusy ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.5} aria-hidden />
-                    ) : (
-                      <Upload className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden />
-                    )}
-                    {profilePhotoBusy ? 'Enviando…' : 'Enviar foto'}
+                    Remover foto
                   </button>
-                  {profilePhotoDisplayUrl ? (
-                    <button
-                      type="button"
-                      onClick={handleRemoveProfilePhoto}
-                      disabled={profilePhotoBusy}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#94a3b8] hover:text-red-600 transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden />
-                      Remover
-                    </button>
-                  ) : null}
-                </div>
-                <p className="text-[10px] text-[#94a3b8] text-center sm:text-left leading-snug max-w-[200px] sm:max-w-[220px]">
-                  {selectedPatient?.id
-                    ? 'Servidor: JPEG/PNG/WebP até 50 MB; imagem autenticada (cookie). CORS deve incluir a origem do front.'
-                    : 'Referência só neste aparelho até o paciente existir na API.'}
-                </p>
+                ) : null}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-[20px] font-bold text-[#0f172a]">{selectedPatient.nome}</h3>
-                  <span className="px-3 py-1 bg-[#dcfce7] text-[#16a34a] rounded-full text-[11px] font-bold border-[2px] border-[#16a34a]/20">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-[17px] font-bold tracking-tight text-[#0f172a] md:text-[20px]">{selectedPatient.nome}</h3>
+                  <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
                     ATIVO
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-4 text-[13px] text-[#64748b] font-medium">
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {selectedPatient.idade} anos</span>
-                  <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> {selectedPatient.cpf}</span>
-                  <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {selectedPatient.telefone}</span>
-                  <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {selectedPatient.email}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] font-medium text-[#475569]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                    {selectedPatient.idade != null ? `${selectedPatient.idade} anos` : '—'}
+                  </span>
+                  <span className="text-[#cbd5e1]" aria-hidden>
+                    ·
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                    {selectedPatient.cpf || '—'}
+                  </span>
+                  <span className="text-[#cbd5e1]" aria-hidden>
+                    ·
+                  </span>
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                    <span className="truncate">{selectedPatient.telefone || '—'}</span>
+                  </span>
+                  <span className="text-[#cbd5e1]" aria-hidden>
+                    ·
+                  </span>
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                    <span className="truncate">{selectedPatient.email || '—'}</span>
+                  </span>
                 </div>
                 {selectedPatient.endereco ? (
-                  <div className="flex items-start gap-2 text-[13px] text-[#64748b] mt-2">
-                    <MapPin className="w-4 h-4 text-[#00a88e] shrink-0 mt-0.5" strokeWidth={2.25} aria-hidden />
+                  <div className="mt-2 flex items-start gap-2 text-[13px] font-normal text-[#64748b]">
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
                     <span className="min-w-0 break-words">{selectedPatient.endereco}</span>
                   </div>
                 ) : null}
               </div>
-              <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
                 <button
                   type="button"
                   onClick={() => onStartAttendance?.(selectedPatient)}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] transition-all border-[3px] border-transparent shadow-md"
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:bg-[#00967f]"
                 >
-                  <Play className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Iniciar Atendimento
+                  <Play className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditing((prev) => (prev ? null : createEditDraft()))}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all"
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors active:border-[#cbd5e1] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:border-[#cbd5e1]"
                 >
-                  <UserIcon className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Editar Cadastro
+                  <UserIcon className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Editar Cadastro
                 </button>
-                <button type="button" className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-[#f0fdfa] text-[#0f172a] rounded-xl font-bold text-[13px] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all" disabled>
-                  <Download className="w-4 h-4 inline mr-1.5" strokeWidth={2.5} /> Gerar PDF
+                <button
+                  type="button"
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors md:min-h-[44px] md:w-auto md:text-[13px]"
+                  disabled
+                >
+                  <Download className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Gerar PDF
                 </button>
               </div>
             </div>
@@ -1416,10 +1528,10 @@ export function PatientProfileView({
             {isEditing && (
               <div className="mt-5 p-4 border-[3px] border-[#00a88e]/20 rounded-2xl bg-[#f8fbfb]">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input value={editing?.nome || ''} onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="Nome" />
-                  <input value={editing?.email || ''} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="E-mail" />
-                  <input value={editing?.telefone || ''} onChange={(e) => setEditing((p) => ({ ...p, telefone: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="Telefone" />
-                  <input value={editing?.profissao || ''} onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20" placeholder="Profissao" />
+                  <input value={editing?.nome || ''} onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Nome" />
+                  <input value={editing?.email || ''} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="E-mail" />
+                  <input value={editing?.telefone || ''} onChange={(e) => setEditing((p) => ({ ...p, telefone: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Telefone" />
+                  <input value={editing?.profissao || ''} onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Profissao" />
                   <div className="md:col-span-2">
                     <label className="text-[12px] font-bold text-[#475569] mb-1 block">Endereço</label>
                     <input
@@ -1427,12 +1539,12 @@ export function PatientProfileView({
                       value={editing?.endereco || ''}
                       onChange={(e) => setEditing((d) => ({ ...d, endereco: e.target.value }))}
                       placeholder="Rua, número, bairro, cidade - UF"
-                      className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-2 text-[13px] focus:border-[#00a88e] outline-none"
+                      className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-2 text-[16px] outline-none focus:border-[#00a88e] sm:text-[13px]"
                     />
                   </div>
-                  <input value={editing?.alergias || ''} onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20 md:col-span-2" placeholder="Alergias" />
-                  <input value={editing?.condicoesSaude || ''} onChange={(e) => setEditing((p) => ({ ...p, condicoesSaude: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20 md:col-span-2" placeholder="Condicoes de saude" />
-                  <input value={editing?.medicamentos || ''} onChange={(e) => setEditing((p) => ({ ...p, medicamentos: e.target.value }))} className="px-3 py-2 rounded-xl border-[2px] border-[#00a88e]/20 md:col-span-2" placeholder="Medicamentos (separe por virgula)" />
+                  <input value={editing?.alergias || ''} onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Alergias" />
+                  <input value={editing?.condicoesSaude || ''} onChange={(e) => setEditing((p) => ({ ...p, condicoesSaude: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Condicoes de saude" />
+                  <input value={editing?.medicamentos || ''} onChange={(e) => setEditing((p) => ({ ...p, medicamentos: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Medicamentos (separe por virgula)" />
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <button type="button" onClick={saveEditProfile} className="px-4 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[13px] border-[2px] border-transparent"><Save className="w-4 h-4 inline mr-1" />Salvar</button>
@@ -1441,18 +1553,20 @@ export function PatientProfileView({
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 pt-6 border-t-[3px] border-[#00a88e]/10">
-              <div className="bg-[#f0fdfa] rounded-xl p-3 border-[2px] border-[#00a88e]/20">
-                <div className="text-[12px] text-[#64748b] font-medium">Ultima Visita</div>
-                <div className="text-[14px] font-bold text-[#00a88e] mt-1">{selectedPatient.ultimaVisita || '-'}</div>
+            <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#f1f5f9] pt-4 max-sm:p-0">
+              <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Ultima Visita</div>
+                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{selectedPatient.ultimaVisita || '-'}</div>
               </div>
-              <div className="bg-[#f0fdfa] rounded-xl p-3 border-[2px] border-[#00a88e]/20">
-                <div className="text-[12px] text-[#64748b] font-medium">Proximo Retorno</div>
-                <div className="text-[14px] font-bold text-[#00a88e] mt-1">{selectedPatient.proximoRetorno || '-'}</div>
+              <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Proximo Retorno</div>
+                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{selectedPatient.proximoRetorno || '-'}</div>
               </div>
-              <div className={`rounded-xl p-3 border-[2px] ${selectedPatient.saldoDevedor > 0 ? 'bg-red-50 border-red-200' : 'bg-[#f0fdfa] border-[#00a88e]/20'}`}>
-                <div className={`text-[12px] font-medium ${selectedPatient.saldoDevedor > 0 ? 'text-red-700' : 'text-[#64748b]'}`}>Saldo Devedor</div>
-                <div className={`text-[14px] font-bold mt-1 ${selectedPatient.saldoDevedor > 0 ? 'text-red-600' : 'text-[#00a88e]'}`}>
+              <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Saldo Devedor</div>
+                <div
+                  className={`mt-1 text-[15px] font-bold ${selectedPatient.saldoDevedor > 0 ? 'text-[#dc2626]' : 'text-[#0f172a]'}`}
+                >
                   {selectedPatient.saldoDevedor > 0
                     ? `R$ ${selectedPatient.saldoDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                     : '-'}
@@ -1461,108 +1575,287 @@ export function PatientProfileView({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 overflow-hidden">
-            <div className="flex border-b-[3px] border-[#00a88e]/10 overflow-x-auto">
+          <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm">
+            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
-                { key: 'timeline', label: 'Linha do Tempo', icon: Calendar },
-                { key: 'anamnese', label: 'Anamnese', icon: Activity },
-                { key: 'galeria', label: 'Galeria', icon: ImageIcon },
-              ].map(({ key, label, icon }) => {
+                { key: 'atendimento', label: 'Atendimento', title: 'Atendimento', icon: Play },
+                { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
+                { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
+                { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
+              ].map(({ key, label, title, icon }) => {
                 const TabIcon = icon;
+                const active = patientDetailTab === key;
                 return (
                   <button
                     key={key}
                     type="button"
+                    title={title}
+                    aria-label={title}
                     onClick={() => setPatientDetailTab(key)}
-                    className={`flex items-center gap-2 px-5 py-4 font-bold text-[13px] whitespace-nowrap transition-all border-b-[3px] -mb-[3px] ${
-                      patientDetailTab === key
-                        ? 'text-[#00a88e] border-[#00a88e] bg-[#f0fdfa]'
-                        : 'text-[#64748b] border-transparent hover:text-[#00a88e] hover:bg-[#f8fbfb]'
+                    className={`flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-0.5 whitespace-nowrap px-2 py-2.5 text-[11px] font-semibold transition-colors sm:gap-1 sm:px-3 sm:text-[12px] ${
+                      active
+                        ? '-mb-px border-b-2 border-[#00a88e] text-[#00a88e]'
+                        : 'border-b-2 border-transparent text-[#64748b] hover:text-[#0f172a]'
                     }`}
                   >
-                    <TabIcon className="w-4 h-4" /> {label}
+                    <TabIcon className="h-3.5 w-3.5 shrink-0 sm:mr-1" strokeWidth={2.25} aria-hidden />
+                    <span className="hidden truncate sm:inline">{label}</span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="p-6">
-              {patientDetailTab === 'timeline' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-                    <h4 className="text-[16px] font-bold text-[#0f172a]">Historico Completo</h4>
-                    <button
-                      type="button"
-                      onClick={() => setModalProcedimento(true)}
-                      disabled={!selectedPatient?.id}
-                      className="flex items-center gap-2 px-3 py-2 bg-[#00a88e] text-white rounded-xl text-[13px] font-bold hover:bg-[#0f766e] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-4 h-4" /> Registrar Procedimento
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {timelineLoading ? (
-                      <div className="flex items-center justify-center py-8 text-[#64748b] text-[13px] font-medium gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-[#00a88e]" /> Carregando linha do tempo...
-                      </div>
-                    ) : timelineEvents.length ? timelineEvents.map((evt) => (
-                      <div key={evt.id} className="flex gap-4 p-4 rounded-xl border-[2px] border-[#e2e8f0] hover:border-[#00a88e]/30 transition-all bg-white">
-                        <div className="w-12 h-12 rounded-full bg-[#e6f7f5] flex items-center justify-center flex-shrink-0 border-[2px] border-[#00a88e]/20">
-                          <CheckCircle2 className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
+            <div className="p-5">
+              {patientDetailTab === 'atendimento' && (
+                <div className="space-y-5">
+                  {anamneseAtendimentoInfo.status === 'nova' ? (
+                    <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#6366f1] bg-[#eef2ff] p-4">
+                      <div className="flex items-start gap-3">
+                        <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#6366f1]" strokeWidth={2.25} aria-hidden />
+                        <div className="min-w-0">
+                          <h4 className="text-[14px] font-bold text-[#0f172a]">Primeira consulta detectada</h4>
+                          <p className="mt-1 text-[13px] font-normal leading-snug text-[#64748b]">
+                            Recomendamos iniciar com anamnese
+                          </p>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14px] font-bold text-[#0f766e]">{evt.title}</div>
-                          <div className="text-[12px] text-[#64748b] mt-1">{evt.meta}</div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-[#94a3b8] flex-shrink-0 mt-1" />
                       </div>
-                    )) : <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhum procedimento registrado ainda.</p>}
-                  </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => setPatientDetailTab('anamnese')}
+                          className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                        >
+                          Iniciar com Anamnese
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onStartAttendance?.(selectedPatient)}
+                          className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                        >
+                          Pular e ir para Execução
+                        </button>
+                      </div>
+                      <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
+                    </div>
+                  ) : null}
 
-                  {modalProcedimento && (
-                    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
-                      <div
-                        className="bg-white rounded-2xl border-[3px] border-[#00a88e] max-w-[500px] w-full p-6"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="modal-procedimento-title"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <h3 id="modal-procedimento-title" className="text-[16px] font-bold text-[#0f172a] mb-4">Registrar Procedimento</h3>
-                        <div className="space-y-3">
-                          <input
-                            type="text"
-                            placeholder="Nome do procedimento *"
-                            value={nomeProcedimento}
-                            onChange={(e) => setNomeProcedimento(e.target.value)}
-                            className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none"
-                          />
-                          <textarea
-                            placeholder="Observações (opcional)"
-                            value={observacaoProcedimento}
-                            onChange={(e) => setObservacaoProcedimento(e.target.value)}
-                            rows={4}
-                            className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none resize-none"
-                          />
-                        </div>
-                        <div className="flex gap-3 mt-4">
-                          <button
-                            type="button"
-                            onClick={() => setModalProcedimento(false)}
-                            className="flex-1 py-3 rounded-xl border-[2px] border-[#e2e8f0] text-[#64748b] font-bold text-[14px]"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleRegistrarProcedimento}
-                            disabled={!nomeProcedimento.trim() || salvandoProcedimento}
-                            className="flex-1 py-3 rounded-xl bg-[#00a88e] text-white font-bold text-[14px] hover:bg-[#0f766e] disabled:opacity-50 transition-all"
-                          >
-                            {salvandoProcedimento ? 'Salvando...' : 'Salvar'}
-                          </button>
+                  {anamneseAtendimentoInfo.status === 'recente' ? (
+                    <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#22c55e] bg-[#f0fdf4] p-4">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" strokeWidth={2.25} aria-hidden />
+                        <div className="min-w-0">
+                          <h4 className="text-[14px] font-bold text-[#0f172a]">Anamnese em dia</h4>
+                          <p className="mt-1 text-[13px] font-normal text-[#64748b]">
+                            Última: {formatDataHoraPtBr(anamneseAtendimentoInfo.latest?.dataHora)} ·{' '}
+                            {anamneseAtendimentoInfo.latest?.anamneseNome || 'Ficha'}
+                          </p>
                         </div>
                       </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => onStartAttendance?.(selectedPatient)}
+                          className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                        >
+                          <Play className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                          Iniciar Atendimento
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPatientDetailTab('anamnese')}
+                          className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                        >
+                          Ver/Atualizar Anamnese
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {anamneseAtendimentoInfo.status === 'vencida' ? (
+                    <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#f59e0b] bg-[#fffbeb] p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f59e0b]" strokeWidth={2.25} aria-hidden />
+                        <div className="min-w-0">
+                          <h4 className="text-[14px] font-bold text-[#0f172a]">
+                            Anamnese vencida (
+                            {(() => {
+                              const m = monthsSinceDate(anamneseAtendimentoInfo.latest?.dataHora);
+                              return m != null ? `${m} meses atrás` : 'há mais de 6 meses';
+                            })()}
+                            )
+                          </h4>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => setPatientDetailTab('anamnese')}
+                          className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                        >
+                          Atualizar Anamnese
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onStartAttendance?.(selectedPatient)}
+                          className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                        >
+                          Iniciar sem atualizar
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div>
+                    <h5 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+                      Resumo clínico
+                    </h5>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-[#94a3b8]">
+                          Último procedimento realizado
+                        </div>
+                        <div
+                          className="mt-0.5 truncate text-[14px] font-semibold text-[#0f172a]"
+                          title={(apiProcedures || [])[0]?.procedimentoNome || (apiProcedures || [])[0]?.nome}
+                        >
+                          {(apiProcedures || [])[0]?.procedimentoNome || (apiProcedures || [])[0]?.nome || '—'}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-[#94a3b8]">Próximo retorno</div>
+                        <div className="mt-0.5 text-[14px] font-semibold text-[#0f172a]">{selectedPatient.proximoRetorno || '—'}</div>
+                      </div>
+                    </div>
+                    <h5 className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-[#94a3b8]">Alertas ativos</h5>
+                    <div className="flex flex-col gap-2">
+                      {String(selectedPatient.alergias || '').trim() ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[13px] font-medium text-[#dc2626]">
+                          Alergias: {String(selectedPatient.alergias).trim()}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-3 py-2 text-[13px] font-medium text-[#94a3b8]">
+                          Nenhuma alergia registrada
+                        </div>
+                      )}
+                      {String(selectedPatient.condicoesSaude || '').trim() ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-[13px] font-medium text-[#ea580c]">
+                          Condições de saúde: {String(selectedPatient.condicoesSaude).trim()}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-3 py-2 text-[13px] font-medium text-[#94a3b8]">
+                          Nenhuma condição registrada
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {patientDetailTab === 'prontuario' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h4 className="text-[16px] font-bold text-[#0f172a]">Prontuário eletrônico</h4>
+                    {detailLoading ? (
+                      <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
+                        Carregando procedimentos…
+                      </span>
+                    ) : null}
+                  </div>
+                  {!(apiProcedures || []).length ? (
+                    <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {(apiProcedures || []).map((proc, idx) => {
+                        const rowKey = proc.id != null && proc.id !== '' ? String(proc.id) : `proc-${idx}`;
+                        const open = Boolean(prontuarioExpanded[rowKey]);
+                        const dataLabel = proc.criadoEm
+                          ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                          : '—';
+                        const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
+                        const fotosProc = galeriaItemsForProcedure(proc);
+                        return (
+                          <div key={rowKey} className="rounded-xl border-[2px] border-[#e2e8f0] bg-white overflow-hidden shadow-sm">
+                            <button
+                              type="button"
+                              onClick={() => toggleProntuarioRow(rowKey)}
+                              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#f8fafc]"
+                              aria-expanded={open}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                                  <span className="text-[13px] font-bold text-[#0f172a]">{dataLabel}</span>
+                                  <span className="text-[13px] font-bold text-[#0f766e] truncate">{nomeProc}</span>
+                                  {proc.profissionalNome ? (
+                                    <span className="text-[12px] text-[#64748b] font-medium truncate">· {proc.profissionalNome}</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {proc.statusNome ? (
+                                <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
+                                  {proc.statusNome}
+                                </span>
+                              ) : (
+                                <span className="shrink-0 rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
+                                  —
+                                </span>
+                              )}
+                              <ChevronDown
+                                className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform ${open ? 'rotate-180' : ''}`}
+                                strokeWidth={2.5}
+                                aria-hidden
+                              />
+                            </button>
+                            {open ? (
+                              <div className="space-y-4 border-t border-[#e2e8f0] bg-[#fafafa] px-4 py-4">
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                    Observações do profissional
+                                  </div>
+                                  <p className="mt-1.5 whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#334155]">
+                                    {proc.observacao && String(proc.observacao).trim() ? String(proc.observacao).trim() : '—'}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
+                                  <ModuloFuturoBadge>Módulo de assinaturas em breve</ModuloFuturoBadge>
+                                  <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
+                                  {fotosProc.length ? (
+                                    <div className="mt-2 grid grid-cols-4 gap-2">
+                                      {fotosProc.map((foto) => (
+                                        <button
+                                          key={foto.serverId}
+                                          type="button"
+                                          onClick={() =>
+                                            setGalleryPreview({
+                                              url: foto.url,
+                                              authFetch: true,
+                                              caption: foto.legenda || foto.fileName,
+                                            })
+                                          }
+                                          className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
+                                        >
+                                          <GaleriaArquivoImage
+                                            url={foto.url}
+                                            alt=""
+                                            className="h-full w-full"
+                                            imgClassName="h-full w-full object-cover"
+                                          />
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1920,133 +2213,137 @@ export function PatientProfileView({
           </div>
         </div>
 
-        <div className="lg:col-span-1 flex flex-col gap-4">
-          <div className="rounded-2xl border-[3px] border-red-300 bg-red-50 p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
-              <h5 className="text-[14px] font-bold text-[#0f172a]">Alertas</h5>
+        <div className="flex flex-col gap-4 lg:col-span-1">
+          <div className="overflow-hidden rounded-xl border border-[#fecaca] shadow-sm">
+            <div className="flex items-center gap-2 bg-[#fef2f2] px-4 py-2.5">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-[#dc2626]" strokeWidth={2.5} aria-hidden />
+              <h5 className="text-[13px] font-bold text-[#dc2626]">Alertas</h5>
             </div>
-            {alertasAnamneseLoading ? (
-              <div className="flex items-center gap-2 text-[12px] font-medium text-red-900/80">
-                <Loader2 className="h-4 w-4 animate-spin shrink-0 text-red-600" aria-hidden />
-                Carregando alertas da anamnese…
-              </div>
-            ) : alertasAnamnese.length === 0 ? (
-              <p className="text-[12px] font-medium leading-snug text-red-900/85">
-                Nenhuma pergunta em alerta nas anamneses preenchidas.
-              </p>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  {alertasAnamnese.slice(0, 3).map((row) => (
-                    <div
-                      key={row.key}
-                      className="rounded-lg border-[2px] border-red-200 bg-white p-3 shadow-sm"
-                    >
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-red-800 line-clamp-3">
-                        {row.titulo}
-                      </p>
-                      <p className="mt-1 break-words text-[12px] font-semibold text-[#0f172a]">{row.valor}</p>
+            <div className="space-y-2 bg-white p-3">
+              {alertasAnamneseLoading ? (
+                <div className="flex items-center gap-2 text-[13px] font-medium text-[#64748b]">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
+                  Carregando alertas da anamnese…
+                </div>
+              ) : alertasAnamnese.length === 0 ? (
+                <p className="text-[13px] font-medium leading-snug text-[#64748b]">
+                  Nenhuma pergunta em alerta nas anamneses preenchidas.
+                </p>
+              ) : (
+                <>
+                  {alertasAlergia.length > 0 ? (
+                    <div className="mb-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
+                        Alergias registradas
+                      </span>
+                      {alertasAlergia.map((item) => (
+                        <div
+                          key={item.key}
+                          className="mt-1 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2"
+                        >
+                          <p className="text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
+                          <p className="text-[13px] font-semibold text-[#0f172a]">{item.valor}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {alertasSidebarGeral.slice(0, 3).map((row) => (
+                    <div key={row.key} className="rounded-lg border border-[#fecaca] bg-[#fef2f2]/50 p-2.5">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">{row.titulo}</p>
+                      <p className="mt-0.5 break-words text-[13px] font-semibold text-[#0f172a]">{row.valor}</p>
                     </div>
                   ))}
-                </div>
-                {alertasAnamnese.length > 3 ? (
-                  <button
-                    type="button"
-                    onClick={() => setAlertasModalOpen(true)}
-                    className="mt-3 w-full rounded-xl border-[2px] border-red-400 bg-white py-2.5 text-[12px] font-bold text-red-700 shadow-sm transition-colors hover:bg-red-100/90"
-                  >
-                    Visualizar todos os alertas ({alertasAnamnese.length})
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          <div className="bg-amber-50 rounded-2xl border-[3px] border-amber-200 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <Bell className="w-5 h-5 text-amber-500" strokeWidth={2.5} />
-              <h5 className="text-[14px] font-bold text-[#0f172a]">Avisos</h5>
-            </div>
-            <div className="space-y-2">
-              <div
-                className={`rounded-lg p-3 border-[2px] ${
-                  birthAlert?.isToday
-                    ? 'bg-amber-100 border-amber-400 shadow-sm ring-2 ring-amber-300/50'
-                    : 'bg-white border-amber-200'
-                }`}
-              >
-                {birthAlert ? (
-                  <p
-                    className={`text-[12px] flex items-center gap-1.5 ${
-                      birthAlert.isToday
-                        ? 'font-bold text-amber-900'
-                        : 'font-bold text-amber-700'
-                    }`}
-                  >
-                    <Bell className="w-3.5 h-3.5 flex-shrink-0" />
-                    {birthdayAlertSidebarCopy(birthAlert)}
-                  </p>
-                ) : (
-                  <p className="text-[12px] font-medium text-amber-800/90">
-                    Cadastre a data de nascimento para ver quantos dias faltam para o aniversário.
-                  </p>
-                )}
-              </div>
-              {selectedPatient.saldoDevedor > 0 && (
-                <div className="bg-red-100 border-[2px] border-red-300 rounded-lg p-3">
-                  <p className="text-[12px] font-bold text-red-700 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Parcela vence em 7 dias
-                  </p>
-                </div>
+                  {alertasAnamnese.length > 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => setAlertasModalOpen(true)}
+                      className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-[#fecaca] text-[12px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
+                    >
+                      Ver todos ({alertasAnamnese.length})
+                    </button>
+                  ) : null}
+                </>
               )}
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/15 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <StickyNote className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
-              <h5 className="text-[14px] font-bold text-[#0f172a]">Notas Rapidas</h5>
+          <div className="overflow-hidden rounded-xl border border-[#fed7aa] shadow-sm">
+            <div className="bg-[#fff7ed] px-4 py-2.5">
+              <h5 className="text-[13px] font-bold text-[#ea580c]">Avisos</h5>
             </div>
-            <div className="mb-3 space-y-2">
+            <div className="space-y-2 bg-white p-3">
+              <div className="rounded-lg border border-[#fed7aa] bg-[#fffbeb] p-2.5 text-[13px] font-medium text-[#92400e]">
+                {birthAlert ? (
+                  <p className="flex items-center gap-1.5">
+                    <Bell className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                    {birthdayAlertSidebarCopy(birthAlert)}
+                  </p>
+                ) : (
+                  <p>Cadastre a data de nascimento para ver quantos dias faltam para o aniversário.</p>
+                )}
+              </div>
+              {selectedPatient.saldoDevedor > 0 ? (
+                <div className="rounded-lg border border-[#fed7aa] bg-[#fffbeb] p-2.5 text-[13px] font-medium text-[#92400e]">
+                  <p className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                    Parcela vence em 7 dias
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-[#e2e8f0] shadow-sm">
+            <div className="flex items-center gap-2 bg-[#f8fafc] px-4 py-2.5">
+              <StickyNote className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.25} aria-hidden />
+              <h5 className="text-[13px] font-bold text-[#0f172a]">Notas Rápidas</h5>
+            </div>
+            <div className="space-y-2 bg-white p-3">
               <textarea
                 value={quickNoteText}
                 onChange={(e) => setQuickNoteText(e.target.value)}
-                rows={2}
+                rows={3}
                 placeholder="Escreva uma nota rápida..."
-                className="w-full p-3 rounded-xl border-[2px] border-[#00a88e]/20 bg-white text-[12px] text-[#0f172a] font-medium focus:outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
+                className="w-full resize-none rounded-lg border border-[#e2e8f0] p-3 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
               />
               <button
                 type="button"
                 onClick={handleAddQuickNote}
                 disabled={!quickNoteText.trim()}
-                className="w-full px-3 py-2 rounded-xl bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-[12px] border-[2px] border-transparent"
+                className="mt-2 flex h-9 w-full items-center justify-center rounded-lg bg-[#00a88e] text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Adicionar nota rápida
               </button>
-            </div>
-            <div className="space-y-2">
-              {displayNotes.length ? displayNotes.map((nota, i) => (
-                <div key={nota.id || i} className={`p-3 rounded-lg border-[2px] ${i % 2 === 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
-                  <p className={`text-[12px] font-medium ${i % 2 === 0 ? 'text-yellow-800' : 'text-green-800'}`}>{nota.texto}</p>
-                  <div className="flex items-center justify-between mt-1 gap-2">
-                    <span className={`text-[11px] font-medium ${i % 2 === 0 ? 'text-yellow-600' : 'text-green-600'}`}>{nota.autor}{nota._fromApi ? ' · servidor' : ''}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[11px] ${i % 2 === 0 ? 'text-yellow-500' : 'text-green-500'}`}>{nota.data}</span>
-                      {nota._fromApi && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteNote(nota.id)}
-                          className="text-red-400 hover:text-red-600 transition-colors"
-                          aria-label="Excluir nota"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
+              <div className="space-y-2 pt-1">
+                {displayNotes.length ? (
+                  displayNotes.map((nota, i) => (
+                    <div key={nota.id || i} className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2.5">
+                      <p className="text-[13px] text-[#0f172a]">{nota.texto}</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-[#94a3b8]">
+                          {nota.autor}
+                          {nota._fromApi ? ' · servidor' : ''}
+                        </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-[11px] text-[#94a3b8]">{nota.data}</span>
+                          {nota._fromApi ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNote(nota.id)}
+                              className="text-[#94a3b8] transition-colors hover:text-red-600"
+                              aria-label="Excluir nota"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )) : <p className="text-[12px] text-[#94a3b8]">Nenhuma nota registrada</p>}
+                  ))
+                ) : (
+                  <p className="text-[13px] text-[#94a3b8]">Nenhuma nota registrada</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

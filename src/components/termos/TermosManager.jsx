@@ -1,5 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { FileText, Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  FileText,
+  Pencil,
+  Trash2,
+  Plus,
+  Loader2,
+  Search,
+  X,
+  Lightbulb,
+  MoreVertical,
+} from 'lucide-react';
 import { termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 
@@ -30,6 +40,8 @@ export function TermosManager() {
   const [formErrors, setFormErrors] = useState({});
   const [confirmDeleteRow, setConfirmDeleteRow] = useState(null);
   const [viewingRow, setViewingRow] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [menuOpenId, setMenuOpenId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,12 +61,23 @@ export function TermosManager() {
     load();
   }, [load]);
 
+  const filteredItems = useMemo(
+    () =>
+      items.filter((item) =>
+        String(item.titulo ?? item.title ?? '')
+          .toLowerCase()
+          .includes(searchQuery.trim().toLowerCase())
+      ),
+    [items, searchQuery]
+  );
+
   const openNew = () => {
     setEditingId(null);
     setTitulo('');
     setConteudo('');
     setFormErrors({});
     setFormOpen(true);
+    setViewingRow(null);
   };
 
   const openEdit = (row) => {
@@ -63,6 +86,8 @@ export function TermosManager() {
     setConteudo(row.conteudo ?? row.content ?? '');
     setFormErrors({});
     setFormOpen(true);
+    setViewingRow(null);
+    setMenuOpenId(null);
   };
 
   const closeForm = () => {
@@ -103,7 +128,11 @@ export function TermosManager() {
     }
   };
 
-  const handleRemoveClick = (row) => setConfirmDeleteRow(row);
+  const handleRemoveClick = (row) => {
+    setConfirmDeleteRow(row);
+    setMenuOpenId(null);
+    setViewingRow(null);
+  };
 
   const handleRemoveConfirm = async () => {
     const id = confirmDeleteRow?.id;
@@ -118,179 +147,367 @@ export function TermosManager() {
     }
   };
 
+  const openView = (row) => {
+    setViewingRow(row);
+    setMenuOpenId(null);
+  };
+
+  const emptyNoData = items.length === 0;
+  const emptyFiltered = !emptyNoData && filteredItems.length === 0;
+
   return (
     <div className="animate-in fade-in duration-300">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <div className="bg-[#e6f7f5] p-3 rounded-2xl text-[#00a88e] border-[3px] border-[#00a88e]/25">
-            <FileText className="w-7 h-7" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h3 className="text-[20px] font-bold text-[#0f172a]">Termos LGPD</h3>
-            <p className="text-[#64748b] text-[14px] font-medium">Texto exibido na etapa de consentimento da jornada</p>
-          </div>
+      {/* Toolbar */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative max-w-sm flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar termos..."
+            className="h-10 w-full rounded-lg border border-[#e2e8f0] py-2 pl-9 pr-3 text-[14px] outline-none transition-colors focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10"
+            aria-label="Buscar termos"
+          />
         </div>
         <button
           type="button"
           onClick={openNew}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-5 py-2.5 text-[13px] font-bold text-white shadow-sm transition-all hover:bg-[#00967f]"
+          className="ml-auto inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white"
         >
-          <Plus className="w-4 h-4" strokeWidth={2.5} />
-          Novo termo
+          <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+          Novo Termo
         </button>
       </div>
 
+      {/* Loading */}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((k) => (
+            <div key={k} className="h-[160px] animate-pulse rounded-xl bg-[#f1f5f9]" />
+          ))}
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <FileText className="mx-auto mb-4 h-12 w-12 text-[#cbd5e1]" strokeWidth={1.5} aria-hidden />
+          <p className="text-[16px] font-semibold text-[#64748b]">
+            {emptyFiltered ? 'Nenhum termo encontrado' : 'Nenhum termo cadastrado'}
+          </p>
+          <p className="mt-1 max-w-md text-[13px] text-[#94a3b8]">
+            {emptyFiltered
+              ? 'Tente outro termo na busca.'
+              : 'Crie termos de consentimento para cada procedimento que realiza'}
+          </p>
+          {emptyNoData ? (
+            <button
+              type="button"
+              onClick={openNew}
+              className="mt-4 inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              Criar primeiro termo
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredItems.map((row) => (
+            <div
+              key={row.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openView(row)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openView(row);
+                }
+              }}
+              className="relative cursor-pointer rounded-xl border border-[#e2e8f0] bg-white p-5 text-left transition-all hover:border-[#00a88e]/30 hover:shadow-sm"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#f0fdfa]">
+                  <FileText className="h-5 w-5 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                </div>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
+                    aria-label="Menu do termo"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId((id) => (id === row.id ? null : row.id));
+                    }}
+                  >
+                    <MoreVertical className="h-4 w-4" strokeWidth={2} />
+                  </button>
+                  {menuOpenId === row.id ? (
+                    <div
+                      className="absolute right-0 top-full z-10 mt-1 w-40 rounded-lg border border-[#e2e8f0] bg-white py-1 shadow-lg"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[#0f172a] hover:bg-[#f8fafc]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId(null);
+                          openEdit(row);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-red-600 hover:bg-red-50"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveClick(row);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                        Excluir
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <p className="text-[15px] font-semibold text-[#0f172a]">{row.titulo ?? row.title ?? '—'}</p>
+              <p className="mt-1 line-clamp-2 text-[13px] text-[#64748b]">{row.conteudo ?? row.content ?? ''}</p>
+
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-4">
+                <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
+                  Ativo
+                </span>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#00a88e]"
+                    aria-label="Editar"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEdit(row);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#dc2626]"
+                    aria-label="Excluir"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveClick(row);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal criar / editar */}
       {formOpen && (
-        <div className="mb-6 rounded-2xl border-[3px] border-[#00a88e]/25 bg-[#f8fbfb] p-4 sm:p-6 shadow-inner">
-          <h4 className="text-[15px] font-bold text-[#0f172a] mb-4">
-            {editingId != null ? 'Editar termo' : 'Novo termo'}
-          </h4>
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-[12px] font-bold text-[#64748b]">Título</label>
-              <input
-                type="text"
-                value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Ex.: Termo de consentimento"
-                className={`w-full rounded-xl border-[2px] px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] ${formErrors.titulo ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'}`}
-              />
-              {formErrors.titulo && <p className="mt-1 text-[12px] text-red-500 font-medium">Título obrigatório.</p>}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12px] font-bold text-[#64748b]">Conteúdo</label>
-              <textarea
-                value={conteudo}
-                onChange={(e) => setConteudo(e.target.value)}
-                placeholder="Texto completo do termo..."
-                rows={8}
-                className={`w-full resize-y rounded-xl border-[2px] px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] min-h-[160px] ${formErrors.conteudo ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'}`}
-              />
-              {formErrors.conteudo && <p className="mt-1 text-[12px] text-red-500 font-medium">Conteúdo obrigatório.</p>}
-            </div>
-            <div className="flex flex-wrap gap-2">
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
+          onClick={closeForm}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="termo-form-title"
+            className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-2xl bg-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
+              <h2 id="termo-form-title" className="text-[18px] font-bold text-[#0f172a]">
+                {editingId != null ? 'Editar Termo' : 'Novo Termo'}
+              </h2>
               <button
                 type="button"
-                disabled={saving}
-                onClick={handleSave}
-                className="inline-flex items-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-5 py-2.5 text-[13px] font-bold text-white disabled:opacity-60"
+                onClick={closeForm}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
+                aria-label="Fechar"
               >
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar
+                <X className="h-5 w-5" strokeWidth={2} />
               </button>
+            </div>
+            <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+              <div>
+                <label className="block text-[13px] font-semibold text-[#0f172a]">
+                  Nome do termo <span className="text-red-500">*</span>
+                </label>
+                <p className="mt-0.5 text-[12px] text-[#64748b]">
+                  Ex: Termo Botox, Termo Preenchimento, Termo Cirurgia
+                </p>
+                <input
+                  type="text"
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  placeholder="Ex: Termo de Consentimento — Toxina Botulínica"
+                  className={`mt-2 h-11 w-full rounded-xl border px-4 text-[14px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10 ${
+                    formErrors.titulo ? 'border-[#dc2626]' : 'border-[#e2e8f0]'
+                  }`}
+                />
+                {formErrors.titulo ? (
+                  <p className="mt-1 text-[12px] text-[#dc2626]">Título obrigatório</p>
+                ) : null}
+              </div>
+              <div>
+                <label className="block text-[13px] font-semibold text-[#0f172a]">
+                  Conteúdo do termo <span className="text-red-500">*</span>
+                </label>
+                <p className="mt-0.5 text-[12px] text-[#64748b]">
+                  Texto completo que será exibido ao paciente para leitura e assinatura
+                </p>
+                <textarea
+                  value={conteudo}
+                  onChange={(e) => setConteudo(e.target.value)}
+                  rows={12}
+                  className={`mt-2 w-full resize-none rounded-xl border px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10 ${
+                    formErrors.conteudo ? 'border-[#dc2626]' : 'border-[#e2e8f0]'
+                  }`}
+                />
+                {formErrors.conteudo ? (
+                  <p className="mt-1 text-[12px] text-[#dc2626]">Conteúdo obrigatório</p>
+                ) : null}
+                <div className="mt-2 flex gap-3 rounded-lg border border-[#99f6e4] bg-[#f0fdfa] p-3">
+                  <Lightbulb className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                  <p className="text-[12px] leading-relaxed text-[#0f766e]">
+                    Inclua: identificação do procedimento, riscos conhecidos, cuidados pós-procedimento e autorização
+                    de uso de dados (LGPD).
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
               <button
                 type="button"
                 disabled={saving}
                 onClick={closeForm}
-                className="rounded-xl border-[3px] border-[#00a88e]/25 bg-white px-5 py-2.5 text-[13px] font-bold text-[#00a88e]"
+                className="h-10 rounded-lg border border-[#e2e8f0] px-4 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc] disabled:opacity-50"
               >
                 Cancelar
               </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSave}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                Salvar
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="rounded-2xl border-[3px] border-[#00a88e]/25 bg-white overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-[#00a88e] font-bold">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            Carregando…
-          </div>
-        ) : items.length === 0 ? (
-          <div className="py-14 px-4 text-center text-[#64748b] text-[14px] font-medium">
-            Nenhum termo ativo. Clique em &quot;Novo termo&quot; para cadastrar.
-          </div>
-        ) : (
-          <ul className="divide-y divide-[#00a88e]/10">
-            {items.map((row) => (
-              <li
-                key={row.id}
-                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
-              >
-                <div
-                  className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => setViewingRow(row)}
+      {/* Modal visualizar */}
+      {viewingRow && !formOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setViewingRow(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-2xl bg-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2e8f0] px-6 py-4">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <h3 className="truncate text-[18px] font-bold text-[#0f172a]">
+                  {viewingRow.titulo ?? viewingRow.title ?? '—'}
+                </h3>
+                <span className="inline-flex shrink-0 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
+                  Ativo
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openEdit(viewingRow)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#e2e8f0] px-3 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc]"
                 >
-                  <p className="font-bold text-[#0f172a] text-[15px] truncate">{row.titulo ?? row.title ?? '—'}</p>
-                  <p className="mt-1 text-[12px] text-[#64748b] line-clamp-2 whitespace-pre-wrap">
-                    {row.conteudo ?? row.content ?? ''}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(row)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border-[3px] border-[#00a88e]/25 bg-white px-3 py-2 text-[12px] font-bold text-[#00a88e] hover:bg-[#e6f7f5]"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveClick(row)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border-[3px] border-red-100 bg-red-50 px-3 py-2 text-[12px] font-bold text-red-600 hover:bg-red-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Excluir
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {viewingRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="text-base font-bold text-gray-800">
-                {viewingRow.titulo ?? viewingRow.title ?? '—'}
-              </h3>
+                  <Pencil className="h-4 w-4" strokeWidth={2} />
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewingRow(null)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
+                  aria-label="Fechar"
+                >
+                  <X className="h-5 w-5" strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-[#334155]">
+                {viewingRow.conteudo ?? viewingRow.content ?? ''}
+              </p>
+            </div>
+            <div className="flex flex-col items-center gap-3 border-t border-[#e2e8f0] px-6 py-4 sm:flex-row sm:justify-center">
               <button
                 type="button"
                 onClick={() => setViewingRow(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-              {viewingRow.conteudo ?? viewingRow.content ?? ''}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setViewingRow(null)}
-                className="px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50"
+                className="h-10 w-full rounded-lg border border-[#e2e8f0] px-4 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc] sm:w-auto"
               >
                 Fechar
               </button>
+              <button
+                type="button"
+                onClick={() => openEdit(viewingRow)}
+                className="h-10 w-full rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white sm:w-auto"
+              >
+                Editar termo
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Confirmar exclusão */}
       {confirmDeleteRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
-            <h3 className="text-base font-bold text-gray-800 mb-2">Excluir termo</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Tem certeza que deseja excluir este termo? Esta ação não pode ser desfeita.
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-sm rounded-2xl bg-white p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#fef2f2]">
+              <Trash2 className="h-6 w-6 text-[#dc2626]" strokeWidth={2} aria-hidden />
+            </div>
+            <h3 className="mt-4 text-center text-[17px] font-bold text-[#0f172a]">Excluir termo?</h3>
+            <p className="mt-2 text-center text-[13px] text-[#64748b]">
+              Esta ação não pode ser desfeita. O termo será removido permanentemente.
             </p>
-            <div className="flex gap-3 justify-end">
+            <p className="mt-3 text-center text-[14px] font-semibold text-[#0f172a]">
+              {confirmDeleteRow.titulo ?? confirmDeleteRow.title ?? '—'}
+            </p>
+            <div className="mt-6 flex gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmDeleteRow(null)}
-                className="px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50"
+                className="h-11 flex-1 rounded-xl border border-[#e2e8f0] text-[14px] font-medium text-[#0f172a] hover:bg-[#f8fafc]"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleRemoveConfirm}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-red-500 text-white hover:bg-red-600"
+                className="h-11 flex-1 rounded-xl bg-[#dc2626] text-[14px] font-semibold text-white hover:bg-[#b91c1c]"
               >
                 Excluir
               </button>

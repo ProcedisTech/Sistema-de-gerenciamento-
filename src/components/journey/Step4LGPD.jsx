@@ -1,546 +1,845 @@
-import React from 'react';
-import { Shield, Square, CheckSquare, PenLine, Eraser, RotateCw, X, Upload, Image as ImageIcon, Trash2, Stethoscope, ClipboardList } from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Shield,
+  RotateCw,
+  Image as ImageIcon,
+  Trash2,
+  Stethoscope,
+  ChevronDown,
+  Lock,
+  Check,
+  Camera,
+  PenLine,
+  X,
+  FileText,
+  Search,
+  Calendar,
+} from 'lucide-react';
+import { procedimentosApi, termosApi } from '../../services/api';
+import { useToast } from '../../contexts/useToast.js';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
 
-export function Step4LGPD({
-  termoLido, setTermoLido,
-  termoAssinado, setTermoAssinado,
-  termoAssinaturaDataUrl,
-  setTermoAssinaturaDataUrl,
-  lgpdCapturedPhotos = [],
-  lgpdPhotoMax = 30,
-  onLgpdUploadFiles,
-  onLgpdRemovePhoto,
-  step4Errors = {},
-  setStep4Errors = () => {},
-  nomeProcedimento = '',
-  setNomeProcedimento = () => {},
-  observacoesExecucao = '',
-  setObservacoesExecucao = () => {},
-  termoTitulo,
-  termoConteudo,
+function formatTimestamp(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** Modal fullscreen de assinatura (profissional ou paciente). */
+function SignatureFullscreenModal({
+  open,
+  title,
+  onClose,
+  canvasRef,
+  hasStrokeRef,
+  mobilePortrait,
+  onConfirm,
 }) {
-  const [arquivosSelecionados, setArquivosSelecionados] = React.useState([]);
-  const [signatureModalOpen, setSignatureModalOpen] = React.useState(false);
-  const [mobilePortrait, setMobilePortrait] = React.useState(false);
-  const dialogRef = React.useRef(null);
-  const closeButtonRef = React.useRef(null);
-  const openSignatureRef = React.useRef(null);
-  const canvasRef = React.useRef(null);
-  const isDrawingRef = React.useRef(false);
-  const hasStrokeRef = React.useRef(Boolean(termoAssinaturaDataUrl));
-  const lgpdUploadInputRef = React.useRef(null);
+  const wrapRef = useRef(null);
+  const drawingRef = useRef(false);
+  const [strokePresent, setStrokePresent] = useState(false);
 
-  React.useEffect(() => {
-    const evaluateOrientation = () => {
-      const isMobile = window.matchMedia('(max-width: 767px)').matches;
-      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-      setMobilePortrait(isMobile && isPortrait);
-    };
-
-    evaluateOrientation();
-    window.addEventListener('resize', evaluateOrientation);
-    return () => window.removeEventListener('resize', evaluateOrientation);
-  }, []);
-
-  const resizeAndPaintCanvas = React.useCallback((dataUrl) => {
+  const resizeAndPaintCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const rect = wrap.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
+    let snap = '';
+    try {
+      if (hasStrokeRef.current && canvas.width) snap = canvas.toDataURL('image/png');
+    } catch {
+      snap = '';
+    }
     canvas.width = Math.max(1, Math.floor(rect.width * ratio));
     canvas.height = Math.max(1, Math.floor(rect.height * ratio));
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-
-    if (dataUrl) {
+    if (snap) {
       const image = new Image();
       image.onload = () => {
         ctx.drawImage(image, 0, 0, rect.width, rect.height);
       };
-      image.src = dataUrl;
+      image.src = snap;
     }
-  }, []);
+  }, [canvasRef, hasStrokeRef]);
 
-  React.useEffect(() => {
-    if (!signatureModalOpen) return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    const previouslyFocused = document.activeElement;
-    const openSignatureNode = openSignatureRef.current;
-    document.body.style.overflow = 'hidden';
-
-    const onResize = () => {
-      const currentCanvas = canvasRef.current;
-      if (!currentCanvas) return;
-      const currentData = currentCanvas.toDataURL('image/png');
-      resizeAndPaintCanvas(currentData);
-    };
-
-    const raf = window.requestAnimationFrame(() => {
-      resizeAndPaintCanvas(termoAssinaturaDataUrl || '');
-      closeButtonRef.current?.focus();
-    });
-
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener('resize', onResize);
-      document.body.style.overflow = previousOverflow;
-
-      const focusTarget = openSignatureNode || previouslyFocused;
-      if (focusTarget && typeof focusTarget.focus === 'function') {
-        focusTarget.focus();
-      }
-    };
-  }, [signatureModalOpen, resizeAndPaintCanvas, termoAssinaturaDataUrl]);
-
-  React.useEffect(() => {
-    if (!signatureModalOpen) return undefined;
-
-    const getFocusableElements = () => {
-      if (!dialogRef.current) return [];
-      return Array.from(
-        dialogRef.current.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
-      ).filter((el) => !el.hasAttribute('disabled'));
-    };
-
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') setSignatureModalOpen(false);
-
-      if (event.key !== 'Tab') return;
-      const focusable = getFocusableElements();
-      if (!focusable.length) return;
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-
-      if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [signatureModalOpen]);
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    hasStrokeRef.current = false;
+    setStrokePresent(false);
+    drawingRef.current = false;
+    resizeAndPaintCanvas();
+    const wrap = wrapRef.current;
+    if (!wrap) return undefined;
+    const ro = new ResizeObserver(() => resizeAndPaintCanvas());
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [open, hasStrokeRef, resizeAndPaintCanvas]);
 
   const getPoint = (event) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
+    const touch = event.touches?.[0] || event.changedTouches?.[0];
+    const cx = (touch?.clientX ?? event.clientX) - rect.left;
+    const cy = (touch?.clientY ?? event.clientY) - rect.top;
+    return { x: cx, y: cy };
   };
 
-  const handlePointerDown = (event) => {
+  const onPointerDown = (event) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const point = getPoint(event);
     const ctx = canvas.getContext('2d');
     if (!point || !ctx) return;
-
     event.preventDefault();
     canvas.setPointerCapture?.(event.pointerId);
-
-    isDrawingRef.current = true;
+    drawingRef.current = true;
     hasStrokeRef.current = true;
-    ctx.beginPath();
-    ctx.moveTo(point.x, point.y);
+    setStrokePresent(true);
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.strokeStyle = '#0f766e';
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
   };
 
-  const handlePointerMove = (event) => {
-    if (!isDrawingRef.current) return;
-
+  const onPointerMove = (event) => {
+    if (!drawingRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const point = getPoint(event);
     const ctx = canvas.getContext('2d');
     if (!point || !ctx) return;
-
     event.preventDefault();
     ctx.lineTo(point.x, point.y);
     ctx.stroke();
   };
 
-  const handlePointerUp = () => {
-    isDrawingRef.current = false;
+  const onPointerUp = () => {
+    drawingRef.current = false;
   };
 
-  const clearSignature = () => {
-    resizeAndPaintCanvas('');
+  const clearCanvas = () => {
     hasStrokeRef.current = false;
-  };
-
-  const saveSignature = () => {
+    setStrokePresent(false);
+    drawingRef.current = false;
     const canvas = canvasRef.current;
-    if (!canvas || !hasStrokeRef.current) {
-      alert('Faça a assinatura antes de salvar.');
-      return;
-    }
-
-    const dataUrl = canvas.toDataURL('image/png');
-    setTermoAssinaturaDataUrl(dataUrl);
-    setTermoAssinado(true);
-    setStep4Errors((prev) => ({ ...prev, termoAssinado: false }));
-    setSignatureModalOpen(false);
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+    canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
   };
 
-  const handleSignatureAction = () => {
-    if (termoAssinado && termoAssinaturaDataUrl) {
-      setTermoAssinado(false);
-      setTermoAssinaturaDataUrl('');
-      return;
-    }
-
-    setSignatureModalOpen(true);
+  const handleConfirm = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasStrokeRef.current) return;
+    onConfirm(canvas.toDataURL('image/png'));
   };
 
-  const handleLgpdImageUpload = (event) => {
-    const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
-    event.target.value = '';
-    if (!files.length) return;
-    onLgpdUploadFiles?.(files);
-  };
-
-  const tituloDinamico =
-    typeof termoTitulo === 'string' && termoTitulo.trim() ? termoTitulo.trim() : DEFAULT_TERMO_TITULO;
-  const conteudoDinamico =
-    typeof termoConteudo === 'string' && termoConteudo.trim() ? termoConteudo.trim() : '';
-  const usarTextoApi = conteudoDinamico.length > 0;
-
-  const handleUploadDocumentFiles = (event) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    setArquivosSelecionados((prev) => [...prev, ...files]);
-    event.target.value = '';
-  };
-
-  const removerArquivo = (index) => {
-    setArquivosSelecionados((prev) => prev.filter((_, i) => i !== index));
-  };
+  if (!open) return null;
 
   return (
-    <div className="animate-in fade-in duration-300">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div className="fixed inset-0 z-[300] flex flex-col bg-white">
+      <header className="flex shrink-0 items-center justify-between border-b border-[#e2e8f0] px-4 py-3">
+        <h3 className="text-[16px] font-bold text-[#0f172a]">{title}</h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
+          aria-label="Fechar"
+        >
+          <X className="h-5 w-5" strokeWidth={2.5} />
+        </button>
+      </header>
+
+      <div
+        ref={wrapRef}
+        className="relative min-h-[200px] w-full flex-1 touch-none bg-white [-webkit-overflow-scrolling:touch] sm:min-h-0"
+      >
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 h-full w-full touch-none"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onPointerLeave={onPointerUp}
+        />
+        <div
+          className="pointer-events-none absolute left-0 right-0 border-b-2 border-dashed border-[#e2e8f0]"
+          style={{ top: '60%' }}
+          aria-hidden
+        />
+        {!strokePresent ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[15px] text-[#cbd5e1]">
+            Assine aqui
+          </div>
+        ) : null}
+      </div>
+
+      {mobilePortrait ? (
+        <div className="flex shrink-0 items-center gap-2 border-t border-[#e2e8f0] bg-[#e6f7f5] px-4 py-2.5 text-[11px] font-bold text-[#0f766e]">
+          <RotateCw className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+          Vire o aparelho na horizontal para assinar com mais conforto.
+        </div>
+      ) : null}
+
+      <footer className="flex shrink-0 flex-col gap-2 border-t border-[#e2e8f0] px-4 py-3 sm:flex-row sm:gap-3">
+        <button
+          type="button"
+          onClick={clearCanvas}
+          className="h-12 w-full rounded-lg border-2 border-[#e2e8f0] bg-white text-[14px] font-semibold text-[#64748b] active:bg-[#f8fafc] sm:h-11 sm:flex-1 sm:text-[13px] sm:hover:bg-[#f8fafc]"
+        >
+          Limpar
+        </button>
+        <button
+          type="button"
+          disabled={!strokePresent}
+          onClick={handleConfirm}
+          className="h-12 w-full rounded-lg bg-[#00a88e] text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] disabled:cursor-not-allowed disabled:bg-[#e2e8f0] disabled:text-[#94a3b8] sm:h-11 sm:flex-1 sm:text-[13px] sm:hover:bg-[#00967f]"
+        >
+          Confirmar assinatura
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+export function Step3Termos({
+  termoLido,
+  setTermoLido,
+  termoAssinaturaDataUrl,
+  setTermoAssinaturaDataUrl,
+  setTermoAssinado,
+  profissionalAssinaturaDataUrl,
+  setProfissionalAssinaturaDataUrl,
+  step4Errors = {},
+  setStep4Errors = () => {},
+  termoTitulo,
+  termoConteudo,
+  onTermoChange,
+}) {
+  const toast = useToast();
+  const [termosDisponiveis, setTermosDisponiveis] = useState([]);
+  const [termosLoading, setTermosLoading] = useState(true);
+  const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
+  const [termoSelecionado, setTermoSelecionado] = useState(null);
+  const [termoMenuOpen, setTermoMenuOpen] = useState(false);
+  const termoMenuRef = useRef(null);
+  const [termoSearch, setTermoSearch] = useState('');
+  const termoSearchInputRef = useRef(null);
+  const [profSigningOpen, setProfSigningOpen] = useState(false);
+  const [patSigningOpen, setPatSigningOpen] = useState(false);
+  const profCanvasRef = useRef(null);
+  const patCanvasRef = useRef(null);
+  const profHasStrokeRef = useRef(false);
+  const patHasStrokeRef = useRef(false);
+  const [mobilePortrait, setMobilePortrait] = useState(false);
+  const [profAssinaturaTimestamp, setProfAssinaturaTimestamp] = useState(null);
+  const [patAssinaturaTimestamp, setPatAssinaturaTimestamp] = useState(null);
+
+  useEffect(() => {
+    termosApi
+      .list()
+      .then((raw) => {
+        const list = Array.isArray(raw) ? raw : raw?.content ?? [];
+        setTermosDisponiveis(list.filter((t) => t.ativo !== false));
+      })
+      .catch(() => setTermosDisponiveis([]))
+      .finally(() => setTermosLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!termoMenuOpen) return undefined;
+    const handler = (e) => {
+      if (termoMenuRef.current && !termoMenuRef.current.contains(e.target)) {
+        setTermoMenuOpen(false);
+        setTermoSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [termoMenuOpen]);
+
+  useEffect(() => {
+    if (termoMenuOpen) {
+      termoSearchInputRef.current?.focus();
+    }
+  }, [termoMenuOpen]);
+
+  useEffect(() => {
+    const ev = () => {
+      const isMobile = window.matchMedia('(max-width: 639px)').matches;
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+      setMobilePortrait(isMobile && isPortrait);
+    };
+    ev();
+    window.addEventListener('resize', ev);
+    return () => window.removeEventListener('resize', ev);
+  }, []);
+
+  const tituloFallbackProp =
+    typeof termoTitulo === 'string' && termoTitulo.trim() ? termoTitulo.trim() : DEFAULT_TERMO_TITULO;
+  const conteudoFallbackProp =
+    typeof termoConteudo === 'string' && termoConteudo.trim() ? termoConteudo.trim() : '';
+
+  const tituloExibicao =
+    termoSelecionado?.titulo ?? termoSelecionado?.title ?? tituloFallbackProp;
+  const conteudoExibicao =
+    termoSelecionado?.conteudo ?? termoSelecionado?.content ?? conteudoFallbackProp;
+  const temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
+
+  const termosFiltradosBusca = useMemo(() => {
+    const q = termoSearch.trim().toLowerCase();
+    if (!q) return termosDisponiveis;
+    return termosDisponiveis.filter((t) =>
+      String(t.titulo ?? t.title ?? '')
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [termosDisponiveis, termoSearch]);
+
+  const aplicarSelecaoTermo = useCallback(
+    (termo) => {
+      if (!termo) return;
+      const id = termo.id != null ? String(termo.id) : null;
+      setTermoSelecionadoId(id);
+      setTermoSelecionado(termo);
+      setTermoMenuOpen(false);
+      setTermoSearch('');
+      setTermoLido(false);
+      setProfissionalAssinaturaDataUrl('');
+      setTermoAssinaturaDataUrl('');
+      if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+      setProfAssinaturaTimestamp(null);
+      setPatAssinaturaTimestamp(null);
+      setStep4Errors({});
+      onTermoChange?.(id, termo);
+    },
+    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors]
+  );
+
+  const handleConfirmProf = (dataUrl) => {
+    setProfissionalAssinaturaDataUrl(dataUrl);
+    setTermoAssinaturaDataUrl('');
+    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+    setStep4Errors((prev) => ({ ...prev, termoLido: false }));
+    setProfAssinaturaTimestamp(Date.now());
+    setPatAssinaturaTimestamp(null);
+    setProfSigningOpen(false);
+    toast.success('Assinatura do profissional registrada');
+  };
+
+  const handleConfirmPat = (dataUrl) => {
+    setTermoAssinaturaDataUrl(dataUrl);
+    if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
+    setStep4Errors((prev) => ({ ...prev, termoLido: false }));
+    setPatAssinaturaTimestamp(Date.now());
+    setPatSigningOpen(false);
+    toast.success('Assinatura do paciente registrada');
+  };
+
+  const podeExibirAssinaturas = Boolean(termoSelecionadoId) && termoLido;
+  const mostrarBuscaDropdown = termosDisponiveis.length > 3;
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <div className="bg-[#dcfce7] p-3 rounded-2xl text-[#22c55e] border-[3px] border-[#22c55e]/25">
-            <Shield className="w-7 h-7" strokeWidth={2.5} />
+          <div className="rounded-2xl border-[3px] border-[#22c55e]/25 bg-[#dcfce7] p-3 text-[#22c55e]">
+            <Shield className="h-7 w-7" strokeWidth={2.5} />
           </div>
           <div>
-            <h3 className="text-[20px] font-bold text-[#0f172a]">Termo de Consentimento LGPD</h3>
-            <p className="text-[#64748b] text-[14px] font-medium">Autorização antes do procedimento</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-start sm:items-end gap-1.5">
-          <button
-            type="button"
-            onClick={() => lgpdUploadInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-[3px] border-transparent bg-[#16a34a] text-white text-[13px] font-bold shadow-sm hover:bg-[#15803d] transition-all"
-          >
-            <Upload className="w-4 h-4" strokeWidth={2.5} />
-            Upload de imagens
-          </button>
-          <input
-            ref={lgpdUploadInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={handleLgpdImageUpload}
-          />
-          <span className="text-[12px] font-bold text-[#15803d]">
-            {(lgpdCapturedPhotos || []).length}/{lgpdPhotoMax} imagens na jornada
-          </span>
-        </div>
-      </div>
-
-      <div className="bg-white border-[3px] border-[#00a88e]/25 rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-[#e6f7f5] flex items-center justify-center">
-            <ClipboardList className="w-5 h-5 text-[#00a88e]" strokeWidth={2.25} />
-          </div>
-          <div>
-            <h4 className="text-[15px] font-bold text-[#0f172a]">Observações da Execução</h4>
-            <p className="text-[12px] text-[#64748b]">Registre o que foi realizado</p>
-          </div>
-        </div>
-        <textarea
-          value={observacoesExecucao}
-          onChange={(e) => setObservacoesExecucao(e.target.value)}
-          placeholder="Descreva o que foi feito durante o procedimento..."
-          rows={4}
-          className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none resize-none"
-        />
-
-        <div className="mt-4">
-          <div className="w-full">
-            <label
-              htmlFor="upload-docs"
-              className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal-400 bg-teal-50 p-6 transition-colors hover:bg-teal-100"
-            >
-              <Upload className="h-8 w-8 text-teal-500" />
-              <span className="text-sm font-semibold text-teal-700">Clique para enviar arquivos</span>
-              <span className="text-xs text-gray-400">PNG, JPG, PDF — max. 10MB</span>
-              <input
-                id="upload-docs"
-                type="file"
-                multiple
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={handleUploadDocumentFiles}
-              />
-            </label>
-
-            {arquivosSelecionados.length > 0 && (
-              <ul className="mt-3 space-y-1">
-                {arquivosSelecionados.map((file, i) => (
-                  <li
-                    key={`${file.name}_${i}`}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-                  >
-                    <span className="truncate text-gray-700">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removerArquivo(i)}
-                      className="ml-2 shrink-0 text-red-400 hover:text-red-600"
-                      aria-label={`Remover ${file.name}`}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h3 className="text-[20px] font-bold text-[#0f172a]">Termo de consentimento</h3>
+            <p className="text-[14px] font-medium text-[#64748b]">Leitura e assinaturas (profissional e paciente)</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white border-[3px] border-[#00a88e]/25 rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-[#e6f7f5] flex items-center justify-center">
-            <Stethoscope className="w-5 h-5 text-[#00a88e]" />
-          </div>
-          <div>
-            <h4 className="text-[15px] font-bold text-[#0f172a]">Procedimento Realizado</h4>
-            <p className="text-[12px] text-[#64748b]">Registre o procedimento executado</p>
-          </div>
-        </div>
-        <input
-          type="text"
-          placeholder="Nome do procedimento *"
-          value={nomeProcedimento}
-          onChange={(e) => setNomeProcedimento(e.target.value)}
-          className="w-full border-[2px] border-[#e2e8f0] rounded-xl px-4 py-3 text-[14px] focus:border-[#00a88e] outline-none"
-        />
-      </div>
-
-      <div className="bg-[#f0fdfa] border-[3px] border-[#00a88e]/25 rounded-2xl p-8 h-[240px] overflow-y-auto mb-6 shadow-inner">
-        <h4 className="font-bold text-[#0f766e] mb-3 text-[16px]">{tituloDinamico}</h4>
-        {usarTextoApi ? (
-          <div className="text-[14px] text-[#334155] font-medium leading-relaxed whitespace-pre-wrap">
-            {conteudoDinamico}
+      <div className="relative mb-6" ref={termoMenuRef}>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
+          Selecionar termo de consentimento
+        </p>
+        {termosLoading ? (
+          <div className="flex h-12 items-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-4 text-[13px] text-[#64748b]">
+            Carregando termos…
           </div>
         ) : (
           <>
-            <p className="text-[14px] text-[#334155] mb-3 font-medium leading-relaxed">
-              Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta, armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos estéticos.
-            </p>
-            <p className="text-[14px] text-[#334155] font-medium leading-relaxed">
-              Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por omitir qualquer condição de saúde que possa interferir no procedimento.
-            </p>
+            <button
+              type="button"
+              onClick={() => setTermoMenuOpen((o) => !o)}
+              className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 transition-all duration-150 ${
+                termoMenuOpen
+                  ? 'border-[#00a88e] bg-[#f0fdfa] ring-2 ring-[#00a88e]/20'
+                  : termoSelecionado
+                    ? 'border-[#00a88e] bg-[#f0fdfa]'
+                    : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/40 hover:bg-[#f8fafc]'
+              }`}
+            >
+              <div
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  termoSelecionado ? 'bg-[#00a88e]' : 'bg-[#f1f5f9]'
+                }`}
+              >
+                <FileText
+                  className={`h-4 w-4 ${termoSelecionado ? 'text-white' : 'text-[#94a3b8]'}`}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </div>
+              <div className="min-w-0 flex-1 text-left">
+                {termoSelecionado ? (
+                  <>
+                    <p className="text-[14px] font-semibold text-[#0f172a]">
+                      {termoSelecionado.titulo ?? termoSelecionado.title ?? '—'}
+                    </p>
+                    <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">
+                      {(termoSelecionado.conteudo ?? termoSelecionado.content ?? '').replace(/\s+/g, ' ').trim()}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[14px] text-[#94a3b8]">Selecione o termo...</p>
+                )}
+              </div>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform duration-150 ${termoMenuOpen ? 'rotate-180' : ''}`}
+                strokeWidth={2}
+                aria-hidden
+              />
+            </button>
+
+            {termoMenuOpen && termosDisponiveis.length > 0 ? (
+              <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
+                {mostrarBuscaDropdown ? (
+                  <div className="border-b border-[#f1f5f9] px-3 pb-2 pt-3">
+                    <div className="relative">
+                      <Search
+                        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                      <input
+                        ref={termoSearchInputRef}
+                        type="search"
+                        placeholder="Buscar termo..."
+                        value={termoSearch}
+                        onChange={(e) => setTermoSearch(e.target.value)}
+                        className="h-9 w-full rounded-lg border border-[#e2e8f0] py-2 pl-9 pr-3 text-[13px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                <div className="max-h-[240px] overflow-y-auto [-webkit-overflow-scrolling:touch]">
+                  {termosFiltradosBusca.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-[13px] text-[#94a3b8]">Nenhum termo encontrado</div>
+                  ) : (
+                    termosFiltradosBusca.map((t) => {
+                      const sel = termoSelecionadoId != null && String(t.id) === String(termoSelecionadoId);
+                      const preview = String(t.conteudo ?? t.content ?? '')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .slice(0, 96);
+                      return (
+                        <button
+                          key={String(t.id)}
+                          type="button"
+                          onClick={() => aplicarSelecaoTermo(t)}
+                          className="flex w-full items-start gap-3 border-b border-[#f8fafc] px-3 py-2.5 text-left last:border-0 hover:bg-[#f8fafc]"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[14px] font-semibold text-[#0f172a]">{t.titulo ?? t.title ?? '—'}</p>
+                            <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">{preview || '—'}</p>
+                          </div>
+                          {sel ? <Check className="mt-1 h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.5} /> : null}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </div>
 
-      <div className="space-y-3">
-        <div
-          onClick={() => {
-            setTermoLido(!termoLido);
-            setStep4Errors((prev) => ({ ...prev, termoLido: false }));
-          }}
-          className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-            step4Errors.termoLido
-              ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
-              : termoLido
-                ? 'border-[#00a88e] bg-[#e6f7f5]'
-                : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
-          }`}
-        >
-          {termoLido ? (
-            <CheckSquare className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
-          ) : (
-            <Square className="w-6 h-6 text-[#00a88e]/40" strokeWidth={2.5} />
-          )}
-          <span className={`text-[14px] font-bold ${termoLido ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
-            Li e concordo com os termos. Autorizo a realização do procedimento.
-          </span>
+      {!termosLoading && termosDisponiveis.length === 0 ? (
+        <div className="mb-6 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-4 text-[13px] font-medium text-[#92400e]">
+          Nenhum termo cadastrado. Crie termos em Configurações → Clínica → Termos
         </div>
+      ) : null}
 
-        <div
-          ref={openSignatureRef}
-          onClick={() => {
-            setStep4Errors((prev) => ({ ...prev, termoAssinado: false }));
-            handleSignatureAction();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              setStep4Errors((prev) => ({ ...prev, termoAssinado: false }));
-              handleSignatureAction();
-            }
-          }}
-          role="button"
-          tabIndex={0}
-          className={`flex items-center gap-4 p-4 border-[3px] rounded-xl cursor-pointer transition-all shadow-sm ${
-            step4Errors.termoAssinado
-              ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
-              : termoAssinado
-                ? 'border-[#00a88e] bg-[#e6f7f5]'
-                : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
-          }`}
-        >
-          {termoAssinado ? (
-            <CheckSquare className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
-          ) : (
-            <Square className="w-6 h-6 text-[#00a88e]/40" strokeWidth={2.5} />
-          )}
-          <span className={`text-[14px] font-bold ${termoAssinado ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
-            Assino digitalmente este termo de consentimento
-          </span>
-        </div>
+      {!termosLoading && termosDisponiveis.length > 0 && termoSelecionadoId ? (
+        <>
+          <h3 className="mb-3 text-[17px] font-bold text-[#0f172a]">{tituloExibicao}</h3>
+          <div className="mb-8 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-5">
+            {temConteudoTexto ? (
+              <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-[#334155]">{conteudoExibicao}</div>
+            ) : (
+              <>
+                <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">
+                  Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta,
+                  armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos
+                  estéticos.
+                </p>
+                <p className="text-[14px] leading-relaxed text-[#334155]">
+                  Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por
+                  omitir qualquer condição de saúde que possa interferir no procedimento.
+                </p>
+              </>
+            )}
+          </div>
 
-        {termoAssinaturaDataUrl && (
-          <div className="border-[3px] border-[#00a88e]/20 rounded-xl p-3 bg-white">
-            <p className="text-[12px] font-bold text-[#0f766e] mb-2">Assinatura registrada</p>
-            <div className="h-[120px] rounded-lg border-[2px] border-[#00a88e]/20 bg-[#f8fbfb] overflow-hidden">
-              <img src={termoAssinaturaDataUrl} alt="Assinatura digital" className="w-full h-full object-contain" />
+          <div className="mb-8">
+            <button
+              type="button"
+              onClick={() => {
+                setTermoLido(!termoLido);
+                setStep4Errors((prev) => ({ ...prev, termoLido: false }));
+              }}
+              className={`flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-all ${
+                step4Errors.termoLido
+                  ? 'border-red-400 bg-red-50 ring-1 ring-red-200'
+                  : termoLido
+                    ? 'border-[#86efac] bg-[#f0fdf4] shadow-sm'
+                    : 'border-[#e2e8f0] bg-white hover:bg-[#f8fafc]'
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                  termoLido ? 'border-[#16a34a] bg-[#16a34a]' : 'border-[#94a3b8] bg-white'
+                }`}
+                aria-hidden
+              >
+                {termoLido ? <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /> : null}
+              </span>
+              <span className={`text-[14px] font-bold ${termoLido ? 'text-[#166534]' : 'text-[#475569]'}`}>
+                Li e concordo com os termos. Autorizo a realização do procedimento.
+              </span>
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {podeExibirAssinaturas ? (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-[15px] font-bold text-[#0f172a]">1. Assinatura do Profissional</h4>
+              {profissionalAssinaturaDataUrl ? (
+                <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">✓ Assinado</span>
+              ) : (
+                <span className="rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  Obrigatório
+                </span>
+              )}
             </div>
-          </div>
-        )}
-
-        {(lgpdCapturedPhotos || []).length === 0 ? (
-          <div className="bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-4 text-[#64748b] text-[13px] font-medium flex items-center gap-2">
-            <ImageIcon className="w-4 h-4" />
-            Use o botao verde para anexar as imagens de consentimento/LGPD.
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {(lgpdCapturedPhotos || []).map((ph, idx) => (
-              <div key={`${ph.url}_${idx}`} className="relative">
-                <div className="w-20 h-20 rounded-2xl overflow-hidden border-[3px] border-[#00a88e]/15 bg-white">
-                  <img src={ph.url} alt="Imagem LGPD" className="w-full h-full object-cover" />
+            {profissionalAssinaturaDataUrl ? (
+              <div className="flex flex-col items-stretch gap-2">
+                <img
+                  src={profissionalAssinaturaDataUrl}
+                  alt="Assinatura do profissional"
+                  className="mx-auto h-20 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                />
+                <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                  <span>Assinado em {formatTimestamp(profAssinaturaTimestamp)}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => onLgpdRemovePhoto?.(idx)}
-                  className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[3px] border-white flex items-center justify-center shadow-md"
-                  aria-label="Remover imagem LGPD"
-                  title="Remover imagem"
+                  onClick={() => {
+                    setProfissionalAssinaturaDataUrl('');
+                    setProfAssinaturaTimestamp(null);
+                    setTermoAssinaturaDataUrl('');
+                    setPatAssinaturaTimestamp(null);
+                    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+                    setProfSigningOpen(true);
+                  }}
+                  className="self-start text-[12px] font-medium text-[#64748b] hover:text-[#475569]"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  Refazer assinatura
                 </button>
               </div>
-            ))}
+            ) : (
+              <div className="flex flex-col items-center gap-4 py-6 text-center">
+                <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
+                <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
+                <button
+                  type="button"
+                  onClick={() => setProfSigningOpen(true)}
+                  className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                >
+                  Assinar como Profissional
+                </button>
+              </div>
+            )}
           </div>
-        )}
+
+          <div className="relative min-h-[220px] overflow-hidden rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-[15px] font-bold text-[#0f172a]">2. Assinatura do Paciente</h4>
+              {termoAssinaturaDataUrl && profissionalAssinaturaDataUrl ? (
+                <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">✓ Assinado</span>
+              ) : (
+                <span className="rounded-md bg-[#64748b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  Após profissional
+                </span>
+              )}
+            </div>
+
+            {!profissionalAssinaturaDataUrl ? (
+              <div className="relative flex min-h-[180px] flex-col items-center justify-center rounded-lg bg-[#f8fafc]">
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-lg bg-slate-500/85 px-4 text-center">
+                  <Lock className="h-10 w-10 text-white" strokeWidth={2} aria-hidden />
+                  <p className="text-[13px] font-semibold text-white">Aguardando assinatura do profissional</p>
+                  <button
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white opacity-50"
+                  >
+                    Assinar como Paciente
+                  </button>
+                </div>
+              </div>
+            ) : termoAssinaturaDataUrl ? (
+              <div className="flex flex-col items-stretch gap-2">
+                <img
+                  src={termoAssinaturaDataUrl}
+                  alt="Assinatura do paciente"
+                  className="mx-auto h-20 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                />
+                <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                  <span>Assinado em {formatTimestamp(patAssinaturaTimestamp)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTermoAssinaturaDataUrl('');
+                    setPatAssinaturaTimestamp(null);
+                    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+                    setPatSigningOpen(true);
+                  }}
+                  className="self-start text-[12px] font-medium text-[#64748b] hover:text-[#475569]"
+                >
+                  Refazer assinatura
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 py-6 text-center">
+                <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
+                <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
+                <button
+                  type="button"
+                  onClick={() => setPatSigningOpen(true)}
+                  className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                >
+                  Assinar como Paciente
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <SignatureFullscreenModal
+        open={profSigningOpen}
+        title="Assinatura do Profissional"
+        onClose={() => setProfSigningOpen(false)}
+        canvasRef={profCanvasRef}
+        hasStrokeRef={profHasStrokeRef}
+        mobilePortrait={mobilePortrait}
+        onConfirm={handleConfirmProf}
+      />
+      <SignatureFullscreenModal
+        open={patSigningOpen}
+        title="Assinatura do Paciente"
+        onClose={() => setPatSigningOpen(false)}
+        canvasRef={patCanvasRef}
+        hasStrokeRef={patHasStrokeRef}
+        mobilePortrait={mobilePortrait}
+        onConfirm={handleConfirmPat}
+      />
+    </div>
+  );
+}
+
+export function Step4Procedimento({
+  pacienteIdForProcedures = null,
+  nomeProcedimento = '',
+  setNomeProcedimento = () => {},
+  observacoesExecucao = '',
+  setObservacoesExecucao = () => {},
+  procedureCapturedPhotos = [],
+  procedurePhotoMax = 30,
+  onProcedureUploadFiles,
+  onProcedureRemovePhoto,
+  step4Errors = {},
+  setStep4Errors = () => {},
+}) {
+  const uploadInputRef = React.useRef(null);
+  const datalistId = React.useId();
+  const [procedureSuggestions, setProcedureSuggestions] = React.useState([]);
+
+  React.useEffect(() => {
+    if (!pacienteIdForProcedures) {
+      setProcedureSuggestions([]);
+      return undefined;
+    }
+    let cancelled = false;
+    procedimentosApi
+      .byPaciente(pacienteIdForProcedures)
+      .then((rows) => {
+        if (cancelled) return;
+        const names = new Set();
+        (Array.isArray(rows) ? rows : []).forEach((r) => {
+          const n = String(r.procedimentoNome || r.nome || '').trim();
+          if (n) names.add(n);
+        });
+        setProcedureSuggestions([...names].sort((a, b) => a.localeCompare(b, 'pt-BR')));
+      })
+      .catch(() => {
+        if (!cancelled) setProcedureSuggestions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pacienteIdForProcedures]);
+
+  const handleImageUpload = (event) => {
+    const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
+    event.target.value = '';
+    if (!files.length) return;
+    onProcedureUploadFiles?.(files);
+  };
+
+  const photos = procedureCapturedPhotos || [];
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-6 flex items-center gap-4">
+        <div className="rounded-2xl border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] p-3 text-[#00a88e]">
+          <Stethoscope className="h-7 w-7" strokeWidth={2.5} />
+        </div>
+        <div>
+          <h3 className="text-[20px] font-bold text-[#0f172a]">Procedimento</h3>
+          <p className="text-[14px] font-medium text-[#64748b]">Registro do que foi realizado e imagens</p>
+        </div>
       </div>
 
-      {signatureModalOpen && (
-        <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center p-0 sm:p-4" onMouseDown={() => setSignatureModalOpen(false)}>
-          <div className="absolute inset-0 bg-black/65" onClick={() => setSignatureModalOpen(false)} />
-
-          <div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lgpd-sign-title"
-            className="relative w-full max-w-[980px] max-h-[100dvh] sm:max-h-[92vh] bg-white rounded-t-2xl sm:rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="p-3 sm:p-4 border-b-[3px] border-[#00a88e]/15 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="bg-[#e6f7f5] p-2 rounded-xl border-[3px] border-[#00a88e]/25">
-                  <PenLine className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
-                </div>
-                <div className="min-w-0">
-                  <h4 id="lgpd-sign-title" className="text-[14px] sm:text-[16px] font-bold text-[#0f172a] truncate">Assinatura Digital do Termo</h4>
-                  <p className="text-[11px] sm:text-[12px] font-medium text-[#64748b]">Use mouse no computador ou dedo no celular</p>
-                </div>
-              </div>
-
-              <button
-                ref={closeButtonRef}
-                type="button"
-                onClick={() => setSignatureModalOpen(false)}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center shrink-0"
-                aria-label="Fechar assinatura"
-              >
-                <X className="w-5 h-5" strokeWidth={2.5} />
-              </button>
-            </div>
-
-            <div className="p-3 sm:p-4 overflow-y-auto max-h-[calc(100dvh-72px)] sm:max-h-[calc(92vh-76px)] space-y-3">
-              {mobilePortrait && (
-                <div className="flex items-center gap-2 text-[12px] font-bold text-[#0f766e] bg-[#e6f7f5] border-[3px] border-[#00a88e]/20 rounded-xl px-3 py-2">
-                  <RotateCw className="w-4 h-4" strokeWidth={2.5} />
-                  Para assinar com mais conforto, vire o celular na horizontal.
-                </div>
-              )}
-
-              <div className="rounded-xl border-[3px] border-[#00a88e]/25 bg-[#f8fbfb] p-2 sm:p-3">
-                <canvas
-                  ref={canvasRef}
-                  className="w-full h-[220px] sm:h-[300px] bg-white rounded-lg border-[2px] border-[#00a88e]/20 touch-none"
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
-                  onPointerLeave={handlePointerUp}
-                />
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={clearSignature}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-[3px] border-[#f59e0b]/35 bg-[#fffbeb] text-[#b45309] font-bold text-[13px] hover:bg-[#fef3c7] transition-all"
-                >
-                  <Eraser className="w-4 h-4" strokeWidth={2.5} />
-                  Limpar assinatura
-                </button>
-                <button
-                  type="button"
-                  onClick={saveSignature}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-[3px] border-transparent bg-[#00a88e] text-white font-bold text-[13px] hover:bg-[#00967f] transition-all"
-                >
-                  <CheckSquare className="w-4 h-4" strokeWidth={2.5} />
-                  Salvar assinatura
-                </button>
-              </div>
-            </div>
-          </div>
+      <div
+        className={`mb-6 space-y-5 rounded-2xl border-[3px] bg-white p-4 sm:p-6 ${
+          step4Errors.nomeProcedimento || step4Errors.observacoesExecucao ? 'border-red-300' : 'border-[#00a88e]/25'
+        }`}
+      >
+        <div className="space-y-1.5">
+          <label className="text-[13px] font-bold text-[#00a88e]">
+            Nome do procedimento <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            list={procedureSuggestions.length ? datalistId : undefined}
+            placeholder="Nome do procedimento realizado"
+            value={nomeProcedimento}
+            onChange={(e) => {
+              setNomeProcedimento(e.target.value);
+              setStep4Errors((prev) => ({ ...prev, nomeProcedimento: false }));
+            }}
+            className={`w-full rounded-xl border-[2px] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px] ${
+              step4Errors.nomeProcedimento ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'
+            }`}
+          />
+          {procedureSuggestions.length > 0 ? (
+            <datalist id={datalistId}>
+              {procedureSuggestions.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          ) : null}
         </div>
-      )}
+        <div className="space-y-1.5">
+          <label className="text-[13px] font-bold text-[#00a88e]">
+            Descrição detalhada do que foi realizado <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            value={observacoesExecucao}
+            onChange={(e) => {
+              setObservacoesExecucao(e.target.value);
+              setStep4Errors((prev) => ({ ...prev, observacoesExecucao: false }));
+            }}
+            placeholder="Ex: Aplicação de 20U de toxina botulínica na glabela, 10U nas linhas frontais. Produto: Dysport lote #XXXX. Paciente tolerou bem..."
+            rows={5}
+            className={`w-full resize-none rounded-xl border-[2px] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px] ${
+              step4Errors.observacoesExecucao ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'
+            }`}
+          />
+        </div>
+      </div>
+
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="text-[13px] font-bold text-[#00a88e]">Fotos do procedimento</h4>
+        <span className="text-[12px] font-semibold text-[#64748b]">
+          {photos.length}/{procedurePhotoMax}
+        </span>
+      </div>
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {photos.map((ph, idx) => (
+          <div key={`${ph.url}_${idx}`} className="relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
+            <img src={ph.url} alt="" className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={() => onProcedureRemovePhoto?.(idx)}
+              className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
+              aria-label="Remover imagem"
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => uploadInputRef.current?.click()}
+          className="col-span-2 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#cbd5e1] bg-[#fafafa] px-4 py-2 text-[#64748b] transition-colors active:border-[#00a88e]/50 active:bg-[#f0fdf9] active:text-[#00a88e] sm:col-span-1 sm:aspect-square sm:min-h-0 sm:hover:border-[#00a88e]/50 sm:hover:bg-[#f0fdf9] sm:hover:text-[#00a88e]"
+        >
+          <Camera className="h-6 w-6" strokeWidth={2} />
+          <span className="px-1 text-center text-[11px] font-semibold leading-tight">Upload de imagens</span>
+        </button>
+      </div>
+
+      {photos.length === 0 ? (
+        <p className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#94a3b8]">
+          <ImageIcon className="h-4 w-4 shrink-0" />
+          A câmera flutuante da jornada também adiciona fotos aqui.
+        </p>
+      ) : null}
     </div>
   );
 }

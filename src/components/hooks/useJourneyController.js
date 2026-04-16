@@ -10,18 +10,6 @@ export function useJourneyController({
   const toast = useToast();
   const {
     currentStep,
-    activeTab,
-    nome,
-    dataNascimento,
-    sexo,
-    estadoCivilId,
-    profissao,
-    cpf,
-    rg,
-    telefone,
-    email,
-    endereco,
-    idade,
     queixa,
     expectativas,
     journeyId,
@@ -75,7 +63,7 @@ export function useJourneyController({
     setSatisfacao,
   } = setters;
 
-  const { calculateAgeFromISODate, generateJourneyId, api } = helpers;
+  const { generateJourneyId, api } = helpers;
 
   const selectPatient = (patient) => {
     if (!patient) return;
@@ -141,58 +129,6 @@ export function useJourneyController({
   };
 
   const handleNextStep = () => {
-    if (currentStep === 1 && activeTab === 'novo') {
-      const errors = {};
-      if (!nome.trim()) errors.nome = true;
-      if (!dataNascimento) errors.dataNascimento = true;
-      if (!sexo) errors.sexo = true;
-      if (!String(estadoCivilId || '').trim()) errors.estadoCivil = true;
-      if (!profissao.trim()) errors.profissao = true;
-      if (!cpf.trim()) errors.cpf = true;
-      if (!telefone.trim()) errors.telefone = true;
-      if (!email.trim()) errors.email = true;
-
-      if (Object.keys(errors).length > 0) {
-        setStep1Errors(errors);
-        return;
-      }
-
-      const newCpf = cpf.trim();
-      const patientAge = idade !== '' && idade !== null ? idade : calculateAgeFromISODate(dataNascimento);
-
-      const newPatient = {
-        id: crypto.randomUUID(),
-        nome: nome.trim(),
-        dataNascimento,
-        idade: patientAge !== '' ? patientAge : '',
-        sexo,
-        estadoCivil: '',
-        estadoCivilId,
-        profissao: profissao.trim(),
-        alergias: '',
-        endereco: (endereco || '').trim(),
-        cpf: newCpf,
-        rg: rg || '',
-        telefone: telefone || '',
-        email: email || '',
-      };
-
-      setPatients((prev) => {
-        if (!newCpf) return [...prev, newPatient];
-        const idx = prev.findIndex((p) => p.cpf === newCpf);
-        if (idx >= 0) {
-          const copy = [...prev];
-          copy[idx] = { ...copy[idx], ...newPatient, id: copy[idx].id };
-          return copy;
-        }
-        return [...prev, newPatient];
-      });
-
-      setSelectedPatientCpf(newCpf || null);
-      setActiveTab('existente');
-      setStep1Errors({});
-    }
-
     if (currentStep === 2) {
       if (!queixa.trim() || !expectativas.trim()) {
         toast.warning('Para prosseguir, preencha a queixa principal e as expectativas.');
@@ -204,11 +140,11 @@ export function useJourneyController({
   };
 
   const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+    if (currentStep > 2) setCurrentStep(currentStep - 1);
   };
 
   const resetJourney = () => {
-    setCurrentStep(1);
+    setCurrentStep(2);
     setActiveTab('existente');
     setSearchQuery('');
 

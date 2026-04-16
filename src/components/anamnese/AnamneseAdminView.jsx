@@ -44,9 +44,26 @@ function TabButton({ tabKey, label, icon, active, onSelect, variant }) {
   );
 }
 
-export function AnamneseAdminView() {
-  const [activeTab, setActiveTab] = useState('categorias');
+/**
+ * @param {object} [props]
+ * @param {'categorias' | 'perguntas' | 'fichas'} [props.embeddedSection] — quando definido pela tela pai (ex.: Configurações), oculta a navegação interna e fixa a aba.
+ */
+export function AnamneseAdminView({ embeddedSection } = {}) {
+  const [activeTab, setActiveTab] = useState(() =>
+    embeddedSection && ['categorias', 'perguntas', 'fichas'].includes(embeddedSection)
+      ? embeddedSection
+      : 'categorias'
+  );
   const [painelCategoria, setPainelCategoria] = useState(null);
+
+  const embedded = Boolean(
+    embeddedSection && ['categorias', 'perguntas', 'fichas'].includes(embeddedSection)
+  );
+
+  useEffect(() => {
+    if (!embeddedSection || !['categorias', 'perguntas', 'fichas'].includes(embeddedSection)) return;
+    setActiveTab(embeddedSection);
+  }, [embeddedSection]);
 
   const handleVerPerguntasDaCategoria = useCallback(({ id, nome }) => {
     setPainelCategoria({ id, nome });
@@ -77,8 +94,9 @@ export function AnamneseAdminView() {
   }, [painelCategoria, fecharPainelCategoria, activeTab]);
 
   return (
-    <div className="flex flex-col lg:flex-row lg:gap-8 xl:gap-10">
-      {/* Coluna esquerda: contexto + abas (mobile: topo; desktop: sidebar) */}
+    <div className={`flex flex-col ${embedded ? '' : 'lg:flex-row lg:gap-8 xl:gap-10'}`}>
+      {/* Coluna esquerda: contexto + abas (mobile: topo; desktop: sidebar) — oculto quando embutido em Configurações */}
+      {!embedded && (
       <div className="flex-shrink-0 lg:w-56 xl:w-64 lg:border-r-[3px] lg:border-[#00a88e]/10 lg:pr-8">
         <div className="flex items-center gap-3 sm:gap-4 mb-4 lg:mb-5">
           <div className="bg-[#f3e8ff] p-2.5 sm:p-3 rounded-2xl text-[#a855f7] border-[3px] border-[#a855f7]/25 lg:p-3">
@@ -119,6 +137,7 @@ export function AnamneseAdminView() {
           ))}
         </nav>
       </div>
+      )}
 
       {/* Área principal: ocupa o restante da largura no desktop */}
       <div className="flex-1 min-w-0 flex flex-col">

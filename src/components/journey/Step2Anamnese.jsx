@@ -1,5 +1,16 @@
-import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo, useRef } from 'react';
-import { ClipboardList, Square, CheckSquare, Loader2, FileText, CheckCircle } from 'lucide-react';
+import React, { Fragment, useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo, useRef } from 'react';
+import {
+  ClipboardList,
+  Square,
+  CheckSquare,
+  Loader2,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Check,
+  X,
+} from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
@@ -16,6 +27,25 @@ function parseQueixaExpectativasObs(observacoes) {
 function resolveFichaTemplateIdFromEntry(entry) {
   const v = entry?.anamneseId ?? entry?.fichaId ?? entry?.anamneseFichaId;
   return v != null && v !== '' ? String(v) : null;
+}
+
+function isConsultaBasicaFicha(f) {
+  if (!f) return false;
+  const n = (f.nome || '').trim().toLowerCase();
+  return n === 'consulta básica' || n === 'consulta basica';
+}
+
+function formatRelativo(dataHora) {
+  if (!dataHora) return '';
+  const dias = Math.floor(
+    (Date.now() - new Date(dataHora).getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (dias === 0) return 'hoje';
+  if (dias === 1) return 'há 1 dia';
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  if (meses === 1) return 'há 1 mês';
+  return `há ${meses} meses`;
 }
 
 function historicoEntryMatchesFichaId(entry, fichaId) {
@@ -285,11 +315,42 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         }),
       };
     },
-  }), [fichaSelecionadaId, fichaSelecionada, respostas]);
+    /** Permite avançar o passo 1 sem queixa/expectativas quando há preenchimento anterior ou modo leitura. */
+    skipQueixaExpectativas: () => Boolean(modoVisualizacao || preenchimentoAnterior),
+  }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior]);
   const [loadingFichas, setLoadingFichas] = useState(true);
   const [loadingFicha, setLoadingFicha] = useState(false);
   const [historicoPaciente, setHistoricoPaciente] = useState([]);
   const [loadingHistoricoPaciente, setLoadingHistoricoPaciente] = useState(false);
+  const [queixaCardOpen, setQueixaCardOpen] = useState(() => !Boolean(savedAnamneseState?.modoVisualizacao));
+  const [fichaMenuOpen, setFichaMenuOpen] = useState(false);
+  const [fichaSearch, setFichaSearch] = useState('');
+  const fichaMenuRef = useRef(null);
+  const fichaSearchInputRef = useRef(null);
+
+  const queixaOpcional = modoVisualizacao || preenchimentoAnterior != null;
+
+  useEffect(() => {
+    if (modoVisualizacao) setQueixaCardOpen(false);
+  }, [modoVisualizacao]);
+
+  useEffect(() => {
+    if (!fichaMenuOpen) return undefined;
+    const handler = (e) => {
+      if (fichaMenuRef.current && !fichaMenuRef.current.contains(e.target)) {
+        setFichaMenuOpen(false);
+        setFichaSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [fichaMenuOpen]);
+
+  useEffect(() => {
+    if (fichaMenuOpen) {
+      fichaSearchInputRef.current?.focus();
+    }
+  }, [fichaMenuOpen]);
 
   const respostasRef = useRef(respostas);
   respostasRef.current = respostas;
@@ -358,6 +419,20 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     rows.sort((a, b) => historicoTimestamp(b.ultimo) - historicoTimestamp(a.ultimo));
     return rows;
   }, [historicoPaciente, fichas]);
+
+  const ultimaAnamnese = resumoPreenchimentosPorFicha[0] ?? null;
+  const mesesAtrasUltima = ultimaAnamnese?.dataHora
+    ? (Date.now() - new Date(ultimaAnamnese.dataHora).getTime()) / (1000 * 60 * 60 * 24 * 30)
+    : null;
+  const estaAtualizadaUltima = mesesAtrasUltima !== null && mesesAtrasUltima < 6;
+  const dataLinhaUltima =
+    ultimaAnamnese && ultimaAnamnese.dataHora
+      ? `${new Date(ultimaAnamnese.dataHora).toLocaleString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+        })} · ${formatRelativo(ultimaAnamnese.dataHora)}`
+      : ultimaAnamnese
+        ? 'data não registrada'
+        : '';
 
   /** Select / novo preenchimento: só template; sem histórico; evita reidratar respostas do pai. */
   const selecionarFichaParaNovo = useCallback(async (id) => {
@@ -540,8 +615,75 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)
     : [];
 
+  const fichasFiltered = useMemo(
+    () =>
+      fichas.filter((f) => (f.nome || '').toLowerCase().includes(fichaSearch.toLowerCase())),
+    [fichas, fichaSearch],
+  );
+
+  const selectedFichaLista = useMemo(
+    () => fichas.find((f) => String(f.id) === String(fichaDropdownNovo)),
+    [fichas, fichaDropdownNovo],
+  );
+
+  function renderFichaItem(f) {
+    const selected = String(fichaDropdownNovo) === String(f.id);
+    const esp = (f.especialidadeNome || f.especialidade?.nome || '').trim();
+    const nPerg = Array.isArray(f.itens) ? f.itens.length : 0;
+    let iconWrap = 'bg-[#f1f5f9]';
+    let iconColor = 'text-[#64748b]';
+    if (selected) {
+      iconWrap = 'bg-[#00a88e]';
+      iconColor = 'text-white';
+    } else if (esp) {
+      iconWrap = 'bg-[#eff6ff]';
+      iconColor = 'text-[#3b82f6]';
+    }
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          selecionarFichaParaNovo(f.id);
+          setFichaMenuOpen(false);
+          setFichaSearch('');
+        }}
+        className="flex min-h-[56px] w-full items-center gap-3 border-b border-[#f8fafc] px-3 py-2.5 text-left transition-colors duration-100 last:border-0 hover:bg-[#f8fafc] sm:min-h-0"
+      >
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconWrap}`}>
+          <ClipboardList className={`h-5 w-5 ${iconColor}`} strokeWidth={2} aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[14px] font-semibold text-[#0f172a]">{f.nome || '—'}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            {esp ? (
+              <span className="rounded-md bg-[#eff6ff] px-1.5 py-0.5 text-[11px] font-semibold text-[#3b82f6]">
+                {esp}
+              </span>
+            ) : null}
+            {nPerg > 0 ? (
+              <span className="text-[12px] text-[#64748b]">· {nPerg} perguntas</span>
+            ) : (
+              <span className="text-[11px] text-[#94a3b8]">Ficha básica — só queixa e expectativas</span>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0">
+          {selected ? (
+            <Check className="h-4 w-4 text-[#00a88e]" strokeWidth={2.5} aria-hidden />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-[#cbd5e1]" strokeWidth={2} aria-hidden />
+          )}
+        </div>
+      </button>
+    );
+  }
+
+  const basicaFichaFiltered = fichasFiltered.find(isConsultaBasicaFicha);
+  const fichasCustomFiltered = fichasFiltered.filter((f) => !isConsultaBasicaFicha(f));
+  const showSplitSections = fichas.length > 1;
+
   return (
-    <div className="animate-in fade-in duration-300">
+    <div className="min-w-0">
       <div className="flex items-center gap-4 mb-8">
         <div className="bg-[#f3e8ff] p-3 rounded-2xl text-[#a855f7] border-[3px] border-[#a855f7]/25">
           <ClipboardList className="w-7 h-7" strokeWidth={2.5} />
@@ -559,69 +701,189 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      {pacienteId && !loadingHistoricoPaciente && resumoPreenchimentosPorFicha.length > 0 && (
-        <div className="mb-6 space-y-3">
-          <p className="text-[13px] font-bold text-[#0f172a]">Preenchimentos anteriores</p>
-          <div className="space-y-2">
-            {resumoPreenchimentosPorFicha.map((row) => (
-              <div
-                key={row.fichaId}
-                className="flex flex-col gap-3 p-4 rounded-xl border-[3px] border-[#00a88e]/20 bg-white shadow-sm"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <CheckCircle className="w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5" strokeWidth={2.5} aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-bold text-[#0f172a] break-words">{row.nome}</p>
-                    <p className="text-[12px] text-[#64748b] font-medium mt-0.5">
-                      Último preenchimento:{' '}
-                      {row.dataHora
-                        ? new Date(row.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-                        : 'data não registrada'}
-                    </p>
-                  </div>
+      {pacienteId && !loadingHistoricoPaciente && ultimaAnamnese ? (
+        <div className="mb-5">
+          <div className="flex min-h-[56px] flex-col gap-2 rounded-lg border border-[#e2e8f0] bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.5} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-[13px] font-bold text-[#0f172a]">{ultimaAnamnese.nome}</p>
+                  {estaAtualizadaUltima ? (
+                    <span className="shrink-0 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
+                      ✓ Atualizada
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-full border border-[#fde68a] bg-[#fef9c3] px-2 py-0.5 text-[11px] font-bold text-[#b45309]">
+                      ⚠ Desatualizada
+                    </span>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => consultarUltimoPreenchimento(row.fichaId)}
-                  className="w-full px-4 py-2.5 rounded-xl text-[13px] font-bold bg-[#00a88e] text-white border-[3px] border-transparent hover:bg-[#00967f] transition-colors"
-                >
-                  Abrir
-                </button>
+                <p className="mt-0.5 truncate text-[11px] font-medium text-[#64748b]">{dataLinhaUltima}</p>
               </div>
-            ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => consultarUltimoPreenchimento(ultimaAnamnese.fichaId)}
+              className={`h-8 shrink-0 self-end rounded-lg px-3 text-[12px] font-semibold text-white transition-colors sm:self-center ${
+                estaAtualizadaUltima
+                  ? 'bg-[#00a88e] hover:bg-[#00967f]'
+                  : 'bg-[#f59e0b] hover:bg-[#d97706]'
+              }`}
+            >
+              Abrir
+            </button>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Nova anamnese: select independente do fluxo Abrir (histórico) */}
-      <div className="mb-6 p-4 bg-[#f0fdfa] border-[3px] border-[#00a88e]/20 rounded-2xl">
-        <div className="flex items-center gap-3 mb-2">
-          <FileText className="w-5 h-5 text-[#00a88e]" strokeWidth={2} />
-          <label className="text-[14px] font-bold text-[#0f766e]">Nova anamnese</label>
-        </div>
-        <p className="text-[12px] text-[#64748b] font-medium mb-3 leading-snug">
-          Escolha a ficha para um novo preenchimento. Para ver o último envio já registrado, use <span className="font-bold text-[#0f766e]">Abrir</span> na lista acima.
+      <div className="mb-5 border-t border-[#e2e8f0] pt-5" aria-hidden />
+
+      <div className="relative mb-6" ref={fichaMenuRef}>
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
+          Selecionar ficha de anamnese
         </p>
-        {loadingFichas ? (
-          <div className="flex items-center gap-2 text-[#64748b] text-[13px]">
-            <Loader2 className="w-4 h-4 animate-spin" /> Carregando fichas...
-          </div>
-        ) : fichas.length === 0 ? (
-          <p className="text-[13px] text-[#94a3b8]">Nenhuma ficha disponível. Crie fichas na aba Anamnese do menu.</p>
-        ) : (
-          <select
-            value={fichaDropdownNovo}
-            onChange={(e) => selecionarFichaParaNovo(e.target.value)}
-            className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+        <button
+          type="button"
+          onClick={() => setFichaMenuOpen((o) => !o)}
+          className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 transition-all duration-150 ${
+            fichaMenuOpen
+              ? 'border-[#00a88e] bg-[#f0fdfa] ring-2 ring-[#00a88e]/20'
+              : selectedFichaLista
+                ? 'border-[#00a88e] bg-[#f0fdfa]'
+                : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/40 hover:bg-[#f8fafc]'
+          }`}
+        >
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+              selectedFichaLista ? 'bg-[#00a88e]' : 'bg-[#f1f5f9]'
+            }`}
           >
-            <option value="">Selecione uma ficha...</option>
-            {fichas.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome} {f.especialidadeNome ? `(${f.especialidadeNome})` : ''} — {f.itens?.length || 0} perguntas
-              </option>
-            ))}
-          </select>
-        )}
+            <ClipboardList
+              className={`h-4 w-4 ${selectedFichaLista ? 'text-white' : 'text-[#94a3b8]'}`}
+              strokeWidth={2}
+              aria-hidden
+            />
+          </div>
+          <div className="min-w-0 flex-1 text-left">
+            {selectedFichaLista ? (
+              <>
+                <p className="text-[14px] font-semibold text-[#0f172a]">{selectedFichaLista.nome || '—'}</p>
+                <p className="text-[12px] text-[#64748b]">
+                  {(selectedFichaLista.especialidadeNome || selectedFichaLista.especialidade?.nome || '').trim()
+                    ? `${(selectedFichaLista.especialidadeNome || selectedFichaLista.especialidade?.nome || '').trim()} · `
+                    : ''}
+                  {Array.isArray(selectedFichaLista.itens) ? selectedFichaLista.itens.length : 0} perguntas
+                </p>
+              </>
+            ) : (
+              <p className="text-[14px] text-[#94a3b8]">Selecione uma ficha de anamnese</p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {selectedFichaLista ? (
+              <Check className="h-4 w-4 text-[#00a88e]" strokeWidth={2.5} aria-hidden />
+            ) : null}
+            <ChevronDown
+              className={`h-4 w-4 text-[#94a3b8] transition-transform duration-150 ${fichaMenuOpen ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+              aria-hidden
+            />
+          </div>
+        </button>
+
+        {fichaMenuOpen ? (
+          <div className="flex max-h-[min(100dvh,100%)] flex-col overflow-hidden bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-150 max-sm:fixed max-sm:inset-0 max-sm:z-[200] sm:absolute sm:left-0 sm:right-0 sm:top-full sm:z-50 sm:mt-2 sm:max-h-none sm:rounded-xl sm:border sm:border-[#e2e8f0]">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#e2e8f0] px-4 py-3 sm:hidden">
+              <span className="text-[15px] font-bold text-[#0f172a]">Selecionar ficha</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setFichaMenuOpen(false);
+                  setFichaSearch('');
+                }}
+                className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-lg text-[#64748b] active:bg-[#f1f5f9]"
+                aria-label="Fechar"
+              >
+                <X className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="sticky top-0 z-10 border-b border-[#f1f5f9] bg-white px-3 pb-2 pt-3">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+                <input
+                  ref={fichaSearchInputRef}
+                  type="search"
+                  placeholder="Buscar ficha..."
+                  value={fichaSearch}
+                  onChange={(e) => setFichaSearch(e.target.value)}
+                  className="h-11 w-full rounded-lg border border-[#e2e8f0] py-2 pl-9 pr-3 text-[16px] outline-none placeholder:text-[#cbd5e1] focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10 sm:h-9 sm:text-[13px]"
+                />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] sm:max-h-[280px] sm:flex-none">
+              {loadingFichas ? (
+                <>
+                  <div className="mx-3 my-2 h-16 animate-pulse rounded-lg bg-[#f1f5f9]" />
+                  <div className="mx-3 my-2 h-16 animate-pulse rounded-lg bg-[#f1f5f9]" />
+                </>
+              ) : fichas.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-[13px] font-medium text-[#64748b]">Nenhuma ficha cadastrada ainda.</p>
+                  <p className="mt-1 text-[12px] text-[#94a3b8]">Crie fichas em Configurações → Anamnese</p>
+                </div>
+              ) : fichasFiltered.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-[13px] text-[#94a3b8]">Nenhuma ficha encontrada</p>
+                </div>
+              ) : showSplitSections && basicaFichaFiltered ? (
+                <>
+                  <div className="bg-[#f8fafc] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                    Padrão do sistema
+                  </div>
+                  {renderFichaItem(basicaFichaFiltered)}
+                  {fichasCustomFiltered.length > 0 ? (
+                    <>
+                      <div className="border-t border-[#f1f5f9] bg-[#f8fafc] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                        Suas fichas
+                      </div>
+                      {fichasCustomFiltered.map((f) => (
+                        <Fragment key={f.id}>{renderFichaItem(f)}</Fragment>
+                      ))}
+                    </>
+                  ) : null}
+                </>
+              ) : showSplitSections && !basicaFichaFiltered && fichasCustomFiltered.length > 0 ? (
+                <>
+                  <div className="bg-[#f8fafc] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                    Suas fichas
+                  </div>
+                  {fichasCustomFiltered.map((f) => (
+                    <Fragment key={f.id}>{renderFichaItem(f)}</Fragment>
+                  ))}
+                </>
+              ) : (
+                fichasFiltered.map((f) => (
+                  <Fragment key={f.id}>{renderFichaItem(f)}</Fragment>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {fichaDropdownNovo &&
+        fichaSelecionada &&
+        !isConsultaBasicaFicha(fichaSelecionada) &&
+        (fichaSelecionada.itens?.length || 0) > 0 ? (
+          <div className="mt-2 flex items-center gap-2 text-[12px] font-medium text-[#0f766e]">
+            <CheckCircle className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+            Ficha selecionada — as perguntas aparecerão abaixo
+          </div>
+        ) : null}
       </div>
 
       {preenchimentoAnterior && (
@@ -698,54 +960,83 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      {/* Campos fixos originais */}
-      <form
-        className={`space-y-6 bg-white border-[3px] rounded-2xl p-6 ${
-          step2Errors.queixa || step2Errors.expectativas ? 'border-red-300' : 'border-[#00a88e]/25'
+      {/* Campos fixos: card colapsável */}
+      <div
+        className={`overflow-hidden rounded-xl border bg-white ${
+          step2Errors.queixa || step2Errors.expectativas ? 'border-red-300' : 'border-[#e2e8f0]'
         }`}
       >
-        <div className="space-y-2">
-          <label className="text-[13px] font-bold text-[#00a88e] ml-1">Queixa Principal <span className="text-red-500">*</span></label>
-          <textarea
-            value={queixa}
-            onChange={(e) => {
-              setQueixa(e.target.value);
-              setStep2Errors((prev) => ({ ...prev, queixa: false }));
-            }}
-            rows={3}
-            readOnly={modoVisualizacao}
-            className={`w-full p-4 border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${
-              modoVisualizacao ? 'bg-slate-50 cursor-default opacity-95' : 'bg-[#f8fbfb]'
-            } ${
-              step2Errors.queixa
-                ? 'border-red-500 bg-red-50 focus:border-red-600 focus:ring-red-200'
-                : 'border-[#00a88e]/25 focus:border-[#00a88e]'
-            }`}
-            placeholder="Descreva o motivo da consulta..."
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => setQueixaCardOpen((o) => !o)}
+          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-[#f8fafc] transition-colors"
+        >
+          <span className="text-[13px] font-bold text-[#0f172a]">
+            Queixa e Expectativas
+            {queixaOpcional ? (
+              <span className="block text-[11px] font-medium text-[#64748b]">
+                (opcional se anamnese já preenchida)
+              </span>
+            ) : null}
+          </span>
+          {queixaCardOpen ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-[#64748b]" aria-hidden />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-[#64748b]" aria-hidden />
+          )}
+        </button>
+        {queixaCardOpen ? (
+          <form className="space-y-4 border-t border-[#e2e8f0] px-4 pb-4 pt-3">
+            <div className="space-y-2">
+              <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
+                Queixa Principal
+                {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
+              </label>
+              <textarea
+                value={queixa}
+                onChange={(e) => {
+                  setQueixa(e.target.value);
+                  setStep2Errors((prev) => ({ ...prev, queixa: false }));
+                }}
+                rows={4}
+                readOnly={modoVisualizacao}
+                className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
+                  modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
+                } ${
+                  step2Errors.queixa
+                    ? 'border-red-500 bg-red-50 focus:border-red-600'
+                    : 'border-[#e2e8f0] focus:border-[#00a88e]'
+                }`}
+                placeholder="Descreva o motivo da consulta..."
+              />
+            </div>
 
-        <div className="space-y-2">
-          <label className="text-[13px] font-bold text-[#00a88e] ml-1">Expectativas do Paciente <span className="text-red-500">*</span></label>
-          <textarea
-            value={expectativas}
-            onChange={(e) => {
-              setExpectativas(e.target.value);
-              setStep2Errors((prev) => ({ ...prev, expectativas: false }));
-            }}
-            rows={3}
-            readOnly={modoVisualizacao}
-            className={`w-full p-4 border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${
-              modoVisualizacao ? 'bg-slate-50 cursor-default opacity-95' : 'bg-[#f8fbfb]'
-            } ${
-              step2Errors.expectativas
-                ? 'border-red-500 bg-red-50 focus:border-red-600 focus:ring-red-200'
-                : 'border-[#00a88e]/25 focus:border-[#00a88e]'
-            }`}
-            placeholder="O que o paciente espera do procedimento..."
-          />
-        </div>
-      </form>
+            <div className="space-y-2">
+              <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
+                Expectativas do Paciente
+                {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
+              </label>
+              <textarea
+                value={expectativas}
+                onChange={(e) => {
+                  setExpectativas(e.target.value);
+                  setStep2Errors((prev) => ({ ...prev, expectativas: false }));
+                }}
+                rows={4}
+                readOnly={modoVisualizacao}
+                className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
+                  modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
+                } ${
+                  step2Errors.expectativas
+                    ? 'border-red-500 bg-red-50 focus:border-red-600'
+                    : 'border-[#e2e8f0] focus:border-[#00a88e]'
+                }`}
+                placeholder="O que o paciente espera do procedimento..."
+              />
+            </div>
+          </form>
+        ) : null}
+      </div>
     </div>
   );
 });

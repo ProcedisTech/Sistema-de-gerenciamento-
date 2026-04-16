@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ArrowUpDown,
-  Calendar,
-  ChevronRight,
-  Clock,
-  ExternalLink,
-  Image as ImageIcon,
-  Plus,
-  Search,
-  X,
-} from 'lucide-react';
+import { ArrowUpDown, ChevronRight, ExternalLink, Image as ImageIcon, Plus, Search, X } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
 import { procedimentosApi } from '../../services/api';
 
@@ -20,6 +10,54 @@ function parseUltimaVisitaMs(s) {
   const [d, m, y] = parts.map((n) => parseInt(n, 10));
   if (!y || !m || !d) return 0;
   return new Date(y, m - 1, d).getTime();
+}
+
+function hasClinicalAlert(p) {
+  return Boolean(String(p?.alergias || '').trim() || String(p?.condicoesSaude || '').trim());
+}
+
+/** Dias desde última visita (DD/MM/AAAA); `null` se data ausente ou inválida. */
+function daysSinceUltimaVisita(p) {
+  const ms = parseUltimaVisitaMs(p?.ultimaVisita);
+  if (!ms) return null;
+  return (Date.now() - ms) / 86400000;
+}
+
+function semRetorno60d(p) {
+  const d = daysSinceUltimaVisita(p);
+  return d != null && d > 60;
+}
+
+function lastProcedureLabel(p) {
+  const procs = Array.isArray(p?.procedures) ? p.procedures : [];
+  if (!procs.length) return '—';
+  const last = procs[procs.length - 1];
+  const n = last?.nome || last?.nomeProcedimento;
+  return n ? String(n) : '—';
+}
+
+/** Heurística visual: sem visita nem procedimento na lista local. */
+function isPatientLikelyNovo(p) {
+  const uv = String(p?.ultimaVisita || '').trim();
+  const noVisita = !uv || uv === '-' || uv === '—';
+  return noVisita && lastProcedureLabel(p) === '—';
+}
+
+/** Quando o backend enviar ISO da última anamnese no DTO da lista. */
+function anamneseVencidaFromPatient(p) {
+  const raw = p?.ultimaAnamneseDataHora || p?.ultimaAnamneseEm;
+  if (!raw) return false;
+  const t = new Date(raw);
+  if (Number.isNaN(t.getTime())) return false;
+  const lim = new Date();
+  lim.setMonth(lim.getMonth() - 6);
+  return t < lim;
+}
+
+function rowStatusDot(p) {
+  if (hasClinicalAlert(p)) return { className: 'bg-[#ef4444]', title: 'Alerta clínico' };
+  if (semRetorno60d(p)) return { className: 'bg-[#f59e0b]', title: 'Sem retorno há 60+ dias' };
+  return { className: 'bg-[#22c55e]', title: 'Ativo' };
 }
 
 const SORT_OPTIONS = [
@@ -64,126 +102,105 @@ function PatientPreviewPanel({
       : (selectedPatient.procedures || []);
 
   return (
-    <div className={shellClassName}>
+    <div
+      className={`relative flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-lg ${shellClassName}`}
+    >
       <button
         type="button"
         onClick={closeDetail}
-        className="absolute right-3 top-3 z-20 p-2 rounded-xl border-[2px] border-[#00a88e]/35 bg-[#e6f7f5] text-[#0f766e] hover:bg-[#d1fae5] hover:border-[#00a88e]/50 hover:text-[#0d5c52] transition-colors shadow-sm"
+        className="absolute right-4 top-4 z-30 flex h-9 w-9 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] transition-colors hover:border-[#cbd5e1] hover:text-[#0f172a]"
         aria-label="Fechar painel"
       >
-        <X className="w-4 h-4" strokeWidth={2.5} />
+        <X className="h-4 w-4" strokeWidth={2.5} />
       </button>
 
-      <div className="w-full flex flex-wrap flex-[1_1_100%] items-center gap-4 rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 pr-12 shadow-sm">
+      <div className="flex items-start gap-3 border-b border-[#f1f5f9] pb-4 pr-10">
         <PatientAvatar
           patient={selectedPatient}
           getPatientInitials={getPatientInitials}
-          className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-full border-2 border-[#00a88e]/25 bg-[#e6f7f5] overflow-hidden flex items-center justify-center text-white font-bold"
-          initialsClassName="text-base sm:text-lg font-bold"
-          spinnerClassName="w-5 h-5"
+          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5]"
+          initialsClassName="text-[11px] font-bold text-[#0f766e]"
+          spinnerClassName="h-4 w-4"
         />
-        <div className="min-w-0 flex-1 basis-[12rem]">
-          <h3
-            id={detailTitleId}
-            className="text-lg sm:text-xl font-bold text-[#0f172a] leading-snug break-words"
-          >
+        <div className="min-w-0 flex-1">
+          <h3 id={detailTitleId} className="text-[16px] font-bold leading-snug text-[#0f172a] break-words">
             {selectedPatient.nome}
           </h3>
-          <p className="mt-1 text-sm text-[#64748b] break-all">{selectedPatient.email || '—'}</p>
-          <p className="text-sm text-[#64748b]">{selectedPatient.telefone || '—'}</p>
+          {selectedPatient.email ? (
+            <p className="mt-1 text-[13px] font-normal text-[#64748b] break-all">{selectedPatient.email}</p>
+          ) : null}
+          <p className={`text-[13px] font-normal text-[#64748b] ${selectedPatient.email ? 'mt-0.5' : 'mt-1'}`}>
+            {selectedPatient.telefone || '—'}
+          </p>
         </div>
       </div>
 
-      <section className="w-full flex-[1_1_100%] rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-sm">
-        <div className="mb-4 flex items-center gap-2 text-[#0f172a]">
-          <Clock className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
-          <h4 className="text-base font-bold">Linha do Tempo de Procedimentos</h4>
-        </div>
+      <div>
+        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+          Linha do Tempo de Procedimentos
+        </h4>
         {loadingPreviewProcedures ? (
-          <div className="py-6 text-center text-sm text-[#94a3b8]">Carregando procedimentos...</div>
+          <div className="py-6 text-center text-[13px] font-normal text-[#64748b]">Carregando procedimentos...</div>
         ) : timelineProcedures.length > 0 ? (
-          <div className="relative pl-2">
-            <div className="absolute left-[15px] top-3 bottom-3 w-px bg-[#e2e8f0]" aria-hidden />
-            <ul className="space-y-3">
-              {timelineProcedures.map((proc, idx) => (
-                <li key={idx} className="relative flex gap-3 pl-8">
-                  <span
-                    className="absolute left-[11px] top-5 h-3 w-3 rounded-full border-2 border-white bg-[#00a88e] shadow-sm"
-                    aria-hidden
-                  />
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-3.5 sm:p-4 transition-colors hover:border-[#00a88e]/35 hover:bg-[#f0fdfa]/80"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex items-center gap-2 text-[#64748b]">
-                          <Calendar className="w-4 h-4 shrink-0 text-[#94a3b8]" strokeWidth={2} />
-                          <span className="text-sm font-medium">{proc.data}</span>
-                          {proc.hora ? (
-                            <span className="text-sm text-[#94a3b8]">· {proc.hora}</span>
-                          ) : null}
-                        </div>
-                        <p className="text-base font-bold text-[#0f766e] leading-snug">{proc.nome}</p>
-                        <p className="text-sm text-[#64748b]">
-                          Realizado por {proc.profissional || '—'}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-5 h-5 shrink-0 text-[#cbd5e1] mt-1" strokeWidth={2} aria-hidden />
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ul className="flex flex-col gap-2">
+            {timelineProcedures.map((proc, idx) => (
+              <li key={idx}>
+                <div className="rounded-lg border border-[#f1f5f9] p-3 transition-colors duration-100 hover:border-[#00a88e]/30">
+                  <p className="text-[11px] font-normal text-[#94a3b8]">
+                    {proc.data}
+                    {proc.hora ? ` · ${proc.hora}` : ''}
+                  </p>
+                  <p className="mt-0.5 text-[13px] font-semibold text-[#0f766e]">{proc.nome}</p>
+                  <p className="mt-0.5 text-[12px] font-normal text-[#64748b]">Realizado por {proc.profissional || '—'}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : (
-          <p className="py-6 text-center text-sm text-[#94a3b8]">Nenhum procedimento registrado</p>
+          <p className="py-6 text-center text-[13px] font-normal text-[#64748b]">Nenhum procedimento registrado</p>
         )}
-      </section>
+      </div>
 
-      <section className="w-full flex-[1_1_100%] rounded-xl border border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[#0f172a]">
-            <ImageIcon className="w-5 h-5 text-[#00a88e] shrink-0" strokeWidth={2.25} />
-            <h4 className="text-base font-bold">Galeria de Evolução</h4>
-          </div>
-          <span className="text-sm font-semibold text-[#64748b]">
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">Galeria de Evolução</h4>
+          <span className="text-[12px] font-medium text-[#64748b]">
             {galleryPhotoCount} {galleryPhotoCount === 1 ? 'foto' : 'fotos'}
           </span>
         </div>
-        <div className="grid min-h-0 grid-cols-6 gap-1 sm:gap-1.5">
+        <div className="grid min-h-0 grid-cols-6 gap-1.5">
           {galleryPreviewSlots.map((slot) => (
             <div
               key={slot.key}
-              className={`relative h-12 min-h-0 overflow-hidden rounded-md border-2 sm:h-14 ${
-                slot.highlight ? 'border-[#cbd5e1] bg-[#94a3b8]/35' : 'border-[#e2e8f0] bg-[#e2e8f0]'
-              } flex flex-col items-center justify-center`}
+              className={`relative flex h-10 min-h-0 flex-col items-center justify-center overflow-hidden rounded-md border border-[#f1f5f9] sm:h-12 ${
+                slot.highlight ? 'bg-[#e2e8f0]/80' : 'bg-[#f8fafc]'
+              }`}
             >
-              <span className="absolute left-1 top-1 rounded bg-white/90 px-1 py-0.5 text-[8px] font-bold text-[#64748b] shadow-sm sm:text-[9px]">
+              <span className="absolute left-1 top-1 rounded bg-white/95 px-1 py-0.5 text-[8px] font-semibold text-[#64748b] shadow-sm sm:text-[9px]">
                 {slot.label}
               </span>
               {slot.highlight && selectedPatient.galeria?.length ? (
-                <span className="text-[10px] font-semibold text-white drop-shadow-sm sm:text-xs">
+                <span className="text-[10px] font-semibold text-[#475569] drop-shadow-sm sm:text-[11px]">
                   {selectedPatient.procedures?.[0]?.data || '—'}
                 </span>
               ) : (
-                <ImageIcon className="h-4 w-4 text-[#94a3b8]/80 sm:h-5 sm:w-5" strokeWidth={1.75} aria-hidden />
+                <ImageIcon className="h-4 w-4 text-[#94a3b8]/90 sm:h-5 sm:w-5" strokeWidth={1.75} aria-hidden />
               )}
             </div>
           ))}
         </div>
-      </section>
+      </div>
 
-      <div className="w-full flex-[1_1_100%] pb-1 max-lg:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="max-lg:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => {
-            setPatientDetailTab('timeline');
+            setPatientDetailTab('atendimento');
             setPatientView('profile');
           }}
-          className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-4 py-3.5 text-sm sm:text-base font-bold text-white shadow-md transition-colors hover:bg-[#00967f] active:scale-[0.99]"
+          className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
         >
-          <ExternalLink className="h-5 w-5 shrink-0 opacity-95" strokeWidth={2.25} />
+          <ExternalLink className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2.25} />
           Ver Visão Geral Completa do Paciente
         </button>
       </div>
@@ -338,7 +355,7 @@ export function PatientsListView({
   const closeDetail = () => {
     setPreviewPatientCpf(null);
     setSelectedPatientCpf(null);
-    setPatientDetailTab('timeline');
+    setPatientDetailTab('atendimento');
     setPreviewProcedures([]);
   };
 
@@ -348,7 +365,7 @@ export function PatientsListView({
       if (e.key === 'Escape') {
         setPreviewPatientCpf(null);
         setSelectedPatientCpf(null);
-        setPatientDetailTab('timeline');
+        setPatientDetailTab('atendimento');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -370,189 +387,383 @@ export function PatientsListView({
   }, [previewPatient]);
 
   return (
-    <div className="flex flex-col lg:flex-row lg:items-start lg:gap-5 xl:gap-6 w-full min-w-0">
-      <div className="min-w-0 flex-1 flex flex-col lg:min-w-[min(100%,19rem)]">
-      <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 p-4 sm:p-5 md:p-6 flex flex-col">
-        <div className="flex flex-col gap-3 mb-4">
-          <div className="flex gap-2 items-stretch w-full min-w-0">
-            <select
-              value={tipoBusca}
-              onChange={(e) => {
-                setTipoBusca(e.target.value);
-                setPatientSearchQuery('');
-              }}
-              className="shrink-0 border-[2px] border-[#e2e8f0] rounded-xl px-3 py-2.5 text-[13px] font-medium text-[#475569] focus:border-[#00a88e] outline-none bg-white min-w-0 max-w-[9.5rem] sm:max-w-none"
-              aria-label="Tipo de busca"
-            >
-              <option value="nome">Nome</option>
-              <option value="cpf">CPF</option>
-              <option value="telefone">Telefone</option>
-              <option value="email">E-mail</option>
-            </select>
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#00a88e]/60 pointer-events-none" strokeWidth={2.5} />
-              <input
-                type="text"
-                value={patientSearchQuery}
-                onChange={(e) => handleBuscaChange(e.target.value)}
-                placeholder={
-                  tipoBusca === 'cpf'
-                    ? '000.000.000-00'
-                    : tipoBusca === 'telefone'
-                      ? '(00) 00000-0000'
-                      : tipoBusca === 'email'
-                        ? 'email@exemplo.com'
-                        : 'Buscar por nome...'
-                }
-                className="w-full min-w-0 pl-10 pr-4 py-3 border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium text-[#0f172a] bg-white focus:outline-none focus:border-[#00a88e]/50 focus:ring-2 focus:ring-[#00a88e]/10 placeholder:text-[#94a3b8]"
-                autoComplete="off"
-              />
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
-            <div className="relative min-w-0 flex-1 max-w-[min(100%,18rem)]">
-              <ArrowUpDown
-                className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#00a88e]"
-                strokeWidth={2.5}
-                aria-hidden
-              />
-              <label className="sr-only" htmlFor="patient-sort">
-                Ordenar lista
-              </label>
+    <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
+      <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
+        <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm">
+          <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[#e2e8f0] bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
               <select
-                id="patient-sort"
-                value={sortBy}
+                value={tipoBusca}
                 onChange={(e) => {
-                  const v = e.target.value;
-                  setSortBy(v);
-                  setPatientsListOrder?.(v === 'birthday-asc' ? 'birthday_asc' : null);
+                  setTipoBusca(e.target.value);
+                  setPatientSearchQuery('');
                 }}
-                className="w-full min-w-0 cursor-pointer appearance-none rounded-xl border-[3px] border-[#00a88e]/20 bg-white py-2.5 pl-9 pr-3 text-[13px] font-bold text-[#0f172a] focus:border-[#00a88e]/50 focus:outline-none"
+                className="h-11 min-h-[44px] w-full shrink-0 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[16px] font-medium text-[#475569] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:w-28 sm:text-[14px]"
+                aria-label="Tipo de busca"
               >
-                {SORT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
+                <option value="nome">Nome</option>
+                <option value="cpf">CPF</option>
+                <option value="telefone">Telefone</option>
+                <option value="email">E-mail</option>
               </select>
-            </div>
-            <button
-              type="button"
-              onClick={onCreatePatient}
-              className="shrink-0 w-full sm:w-auto px-4 py-3 sm:py-3 bg-[#00a88e] hover:bg-[#00967f] text-white rounded-xl font-bold text-[13px] flex items-center justify-center gap-1.5 border-[3px] border-transparent transition-all shadow-sm whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Paciente
-            </button>
-          </div>
-        </div>
-
-        <div className="grid w-full min-w-0 grid-cols-1 content-start gap-3 md:gap-4 sm:[grid-template-columns:repeat(auto-fit,minmax(min(100%,16.25rem),1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(min(100%,17.25rem),1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(min(100%,18.25rem),1fr))]">
-            {filteredPatients.length === 0 ? (
-              <div className="col-span-full text-center py-12 text-[#94a3b8] text-[14px]">
-                <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                Nenhum paciente encontrado
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                  strokeWidth={2.25}
+                  aria-hidden
+                />
+                <input
+                  type="text"
+                  value={patientSearchQuery}
+                  onChange={(e) => handleBuscaChange(e.target.value)}
+                  placeholder={
+                    tipoBusca === 'cpf'
+                      ? '000.000.000-00'
+                      : tipoBusca === 'telefone'
+                        ? '(00) 00000-0000'
+                        : tipoBusca === 'email'
+                          ? 'email@exemplo.com'
+                          : 'Buscar por nome...'
+                  }
+                  className="h-11 min-h-[44px] w-full min-w-0 rounded-lg border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] font-medium text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[14px]"
+                  autoComplete="off"
+                />
               </div>
-            ) : (
-              filteredPatients.map((patient) => {
-                const selected = selectedPatientCpf === patient.cpf;
-                return (
-                  <button
-                    key={patient.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPatientCpf(patient.cpf);
-                      setPreviewPatientCpf(patient.cpf);
-                    }}
-                    className={`min-h-0 w-full min-w-0 text-left rounded-xl border-[3px] transition-all active:scale-[0.99] p-3 sm:p-3.5 flex flex-col h-full min-h-[4.5rem] sm:min-h-0 ${
-                      selected
-                        ? 'border-[#00a88e] bg-[#f0fdfa] shadow-sm ring-2 ring-[#00a88e]/15'
-                        : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/35 hover:bg-[#f8fbfb]'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5 min-w-0 w-full flex-1">
+            </div>
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:min-w-0 sm:flex-nowrap">
+              <div className="relative min-w-0 flex-1 sm:w-44 sm:flex-none">
+                <ArrowUpDown
+                  className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                  strokeWidth={2.25}
+                  aria-hidden
+                />
+                <label className="sr-only" htmlFor="patient-sort">
+                  Ordenar lista
+                </label>
+                <select
+                  id="patient-sort"
+                  value={sortBy}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSortBy(v);
+                    setPatientsListOrder?.(v === 'birthday-asc' ? 'birthday_asc' : null);
+                  }}
+                  className="h-11 min-h-[44px] w-full cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white py-2 pl-8 pr-3 text-[16px] font-semibold text-[#0f172a] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[13px]"
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={onCreatePatient}
+                className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:ml-auto sm:w-auto sm:min-h-[44px]"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
+              </button>
+            </div>
+          </div>
+
+          <div className="min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
+            {/* Mobile: cards */}
+            <div className="divide-y divide-[#f1f5f9] sm:hidden">
+              {filteredPatients.length === 0 ? (
+                <div className="px-4 py-12 text-center text-[14px] font-medium text-[#64748b]">
+                  <Search className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                  Nenhum paciente encontrado
+                </div>
+              ) : (
+                filteredPatients.map((patient) => {
+                  const selected = selectedPatientCpf === patient.cpf;
+                  const dot = rowStatusDot(patient);
+                  const clinical = hasClinicalAlert(patient);
+                  const semRet = semRetorno60d(patient);
+                  const anamVenc = anamneseVencidaFromPatient(patient);
+                  const menor = patient.idade != null && Number(patient.idade) < 18;
+                  const novo = isPatientLikelyNovo(patient);
+                  const procLabel = lastProcedureLabel(patient);
+                  const visitLabel = patient.ultimaVisita || '—';
+                  const procMuted = procLabel === '—' || procLabel === '-';
+                  const visitMuted = !patient.ultimaVisita || visitLabel === '—' || visitLabel === '-';
+                  return (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPatientCpf(patient.cpf);
+                        setPreviewPatientCpf(patient.cpf);
+                      }}
+                      className={`flex min-h-[72px] w-full gap-3 p-3 text-left transition-colors active:bg-[#fafafa] ${
+                        selected ? 'bg-[#f0fdfa]' : 'bg-white'
+                      }`}
+                    >
+                      <span
+                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dot.className}`}
+                        title={dot.title}
+                        aria-hidden
+                      />
                       <PatientAvatar
                         patient={patient}
                         getPatientInitials={getPatientInitials}
-                        className="w-10 h-10 rounded-full border-[2px] border-[#00a88e]/20 bg-[#e6f7f5] overflow-hidden flex items-center justify-center text-white font-bold shrink-0"
-                        initialsClassName="text-[12px] font-bold"
-                        spinnerClassName="w-4 h-4"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5]"
+                        initialsClassName="text-[12px] font-bold text-[#0f766e]"
+                        spinnerClassName="h-4 w-4"
                       />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[15px] sm:text-[14px] lg:text-[15px] font-bold text-[#0f766e] leading-snug line-clamp-2">
-                          {patient.nome}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[15px] font-semibold leading-snug text-[#0f172a]">{patient.nome}</p>
+                            <p className="text-[13px] text-[#64748b]">
+                              {patient.idade != null ? `${patient.idade} anos` : '—'}
+                            </p>
+                          </div>
+                          <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[#cbd5e1]" aria-hidden />
                         </div>
-                        <div className="mt-1.5 text-[13px] text-[#64748b] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                          <span>{patient.idade != null ? `${patient.idade} anos` : '—'}</span>
-                          {patient.telefone ? (
-                            <>
-                              <span className="text-[#cbd5e1]" aria-hidden>
-                                ·
-                              </span>
-                              <span className="truncate max-w-full">{patient.telefone}</span>
-                            </>
+                        <p
+                          className={`mt-1 text-[13px] font-medium ${procMuted ? 'text-[#cbd5e1]' : 'text-[#475569]'}`}
+                        >
+                          <span className="text-[#94a3b8]">Proc.:</span> {procLabel}
+                        </p>
+                        <p className={`text-[12px] font-medium ${visitMuted ? 'text-[#cbd5e1]' : 'text-[#64748b]'}`}>
+                          <span className="text-[#94a3b8]">Visita:</span> {visitLabel}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {clinical ? (
+                            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
+                              Alerta
+                            </span>
+                          ) : null}
+                          {semRet ? (
+                            <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2 py-0.5 text-[11px] font-semibold text-[#ea580c]">
+                              Sem retorno
+                            </span>
+                          ) : null}
+                          {anamVenc ? (
+                            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
+                              Anamnese vencida
+                            </span>
+                          ) : null}
+                          {menor ? (
+                            <span className="inline-flex items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[11px] font-semibold text-[#2563eb]">
+                              Menor
+                            </span>
+                          ) : null}
+                          {novo ? (
+                            <span className="inline-flex items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-2 py-0.5 text-[11px] font-semibold text-[#0f766e]">
+                              Novo
+                            </span>
                           ) : null}
                         </div>
-                        {patient.email ? (
-                          <div className="text-[13px] text-[#64748b] truncate mt-1" title={patient.email}>
-                            {patient.email}
-                          </div>
-                        ) : null}
-                        <div className="mt-2 pt-2 border-t border-[#e2e8f0]/80">
-                          <div className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-wide">
-                            Últ. procedimento
-                          </div>
-                          <div className="text-[13px] font-bold text-[#00a88e] truncate mt-0.5">
-                            {patient.ultimaVisita || '—'}
-                          </div>
-                        </div>
                       </div>
-                      <ChevronRight
-                        className={`w-5 h-5 shrink-0 mt-0.5 opacity-80 ${selected ? 'text-[#00a88e]' : 'text-[#94a3b8]'}`}
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Tablet+ : tabela */}
+            <table className="hidden w-full min-w-0 table-fixed border-collapse text-left sm:table">
+              <thead>
+                <tr className="border-y border-[#e2e8f0] bg-[#f8fafc]">
+                  <th className="min-w-0 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+                    Paciente
+                  </th>
+                  <th className="hidden w-[160px] shrink-0 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8] md:table-cell">
+                    Último procedimento
+                  </th>
+                  <th className="hidden w-[120px] shrink-0 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8] md:table-cell">
+                    Última visita
+                  </th>
+                  <th className="hidden px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8] lg:table-cell">
+                    Tags
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPatients.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-12 text-center text-[14px] font-medium text-[#64748b]">
+                      <Search className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                      Nenhum paciente encontrado
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPatients.map((patient) => {
+                    const selected = selectedPatientCpf === patient.cpf;
+                    const dot = rowStatusDot(patient);
+                    const clinical = hasClinicalAlert(patient);
+                    const semRet = semRetorno60d(patient);
+                    const anamVenc = anamneseVencidaFromPatient(patient);
+                    const menor = patient.idade != null && Number(patient.idade) < 18;
+                    const novo = isPatientLikelyNovo(patient);
+                    const procLabel = lastProcedureLabel(patient);
+                    const visitLabel = patient.ultimaVisita || '—';
+                    const procMuted = procLabel === '—' || procLabel === '-';
+                    const visitMuted = !patient.ultimaVisita || visitLabel === '—' || visitLabel === '-';
+                    return (
+                      <tr
+                        key={patient.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setSelectedPatientCpf(patient.cpf);
+                          setPreviewPatientCpf(patient.cpf);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedPatientCpf(patient.cpf);
+                            setPreviewPatientCpf(patient.cpf);
+                          }
+                        }}
+                        className={`box-border min-h-[56px] cursor-pointer border-b border-[#f1f5f9] py-1.5 transition-colors duration-100 hover:bg-[#fafafa] md:min-h-[64px] md:py-2 ${
+                          selected ? 'border-l-[3px] border-l-[#00a88e] bg-[#f0fdfa]' : 'border-l-[3px] border-l-transparent'
+                        }`}
+                      >
+                        <td className="px-4 align-middle">
+                          <div className="flex min-w-0 items-center gap-3 md:gap-4">
+                            <span
+                              className={`h-2 w-2 shrink-0 rounded-full md:h-2.5 md:w-2.5 ${dot.className}`}
+                              title={dot.title}
+                              aria-label={dot.title}
+                            />
+                            <PatientAvatar
+                              patient={patient}
+                              getPatientInitials={getPatientInitials}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5] sm:h-11 sm:w-11 md:h-12 md:w-12"
+                              initialsClassName="text-[12px] font-bold text-[#0f766e] sm:text-[13px] md:text-[14px]"
+                              spinnerClassName="h-4 w-4 md:h-5 md:w-5"
+                            />
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <span className="truncate text-[15px] font-semibold leading-snug text-[#0f172a] sm:text-[16px] md:text-[17px]">
+                                {patient.nome}
+                              </span>
+                              <span className="text-[13px] font-normal leading-tight text-[#64748b] sm:text-[14px] md:text-[15px]">
+                                {patient.idade != null ? `${patient.idade} anos` : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="hidden max-w-[180px] px-4 align-middle md:table-cell w-[180px]">
+                          <span
+                            className={`block truncate text-[13px] font-medium md:text-[14px] ${procMuted ? 'text-[#cbd5e1]' : 'text-[#475569]'}`}
+                            title={procLabel}
+                          >
+                            {procLabel}
+                          </span>
+                        </td>
+                        <td className="hidden w-[130px] shrink-0 whitespace-nowrap px-4 align-middle md:table-cell">
+                          <span
+                            className={`text-[13px] font-medium md:text-[14px] ${visitMuted ? 'text-[#cbd5e1]' : 'text-[#475569]'}`}
+                          >
+                            {visitLabel}
+                          </span>
+                        </td>
+                        <td className="hidden px-4 align-middle lg:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {clinical ? (
+                              <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
+                                Alerta
+                              </span>
+                            ) : null}
+                            {semRet ? (
+                              <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2 py-0.5 text-[11px] font-semibold text-[#ea580c]">
+                                Sem retorno
+                              </span>
+                            ) : null}
+                            {anamVenc ? (
+                              <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
+                                Anamnese vencida
+                              </span>
+                            ) : null}
+                            {menor ? (
+                              <span className="inline-flex items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[11px] font-semibold text-[#2563eb]">
+                                Menor
+                              </span>
+                            ) : null}
+                            {novo ? (
+                              <span className="inline-flex items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-2 py-0.5 text-[11px] font-semibold text-[#0f766e]">
+                                Novo
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
 
       {previewPatient ? (
         <>
-          {/* Mobile / tablet (< lg): modal com backdrop — resumo imediato sem rolar a página */}
+          {/* Mobile (&lt;640px): bottom sheet */}
           <div
-            className="lg:hidden fixed inset-0 z-[140] flex items-end justify-center p-0 sm:p-4"
+            className="fixed inset-0 z-[200] flex flex-col justify-end sm:hidden"
             role="dialog"
             aria-modal="true"
             aria-label="Resumo do paciente"
           >
             <button
               type="button"
-              className="patient-preview-backdrop absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+              className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
               aria-label="Fechar resumo do paciente"
               onClick={closeDetail}
             />
-            <PatientPreviewPanel
-              selectedPatient={previewPatient}
-              detailTitleId={undefined}
-              closeDetail={closeDetail}
-              galleryPhotoCount={galleryPhotoCount}
-              galleryPreviewSlots={galleryPreviewSlots}
-              getPatientInitials={getPatientInitials}
-              setPatientDetailTab={setPatientDetailTab}
-              setPatientView={setPatientView}
-              previewProcedures={previewProcedures}
-              loadingPreviewProcedures={loadingPreviewProcedures}
-              shellClassName="patient-preview-sheet relative z-10 flex w-full max-w-lg flex-row flex-wrap content-start items-start justify-start gap-4 rounded-t-[20px] border border-[#e2e8f0] border-b-0 bg-[#f1f5f9] p-4 pb-6 shadow-[0_-8px_40px_-12px_rgba(15,23,42,0.2)] sm:rounded-2xl sm:border-b sm:shadow-[0_16px_48px_-10px_rgba(15,23,42,0.14)] max-h-[min(calc(100dvh-env(safe-area-inset-bottom)-12px),92dvh)] overflow-y-auto overflow-x-hidden custom-scrollbar sm:max-h-[min(88dvh,720px)]"
+            <div className="relative z-10 w-full max-h-[85dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border border-b-0 border-[#e2e8f0] bg-white pb-[env(safe-area-inset-bottom)] [-webkit-overflow-scrolling:touch] custom-scrollbar">
+              <div className="sticky top-0 z-20 flex justify-center bg-white pt-3 pb-1">
+                <div className="h-1 w-10 rounded-full bg-[#e2e8f0]" aria-hidden />
+              </div>
+              <PatientPreviewPanel
+                selectedPatient={previewPatient}
+                detailTitleId={undefined}
+                closeDetail={closeDetail}
+                galleryPhotoCount={galleryPhotoCount}
+                galleryPreviewSlots={galleryPreviewSlots}
+                getPatientInitials={getPatientInitials}
+                setPatientDetailTab={setPatientDetailTab}
+                setPatientView={setPatientView}
+                previewProcedures={previewProcedures}
+                loadingPreviewProcedures={loadingPreviewProcedures}
+                shellClassName="patient-preview-sheet w-full border-0 shadow-none"
+              />
+            </div>
+          </div>
+
+          {/* Tablet (640px–1023px): drawer direita */}
+          <div className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex lg:hidden" role="dialog" aria-modal="true" aria-label="Resumo do paciente">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/30"
+              aria-label="Fechar resumo do paciente"
+              onClick={closeDetail}
             />
+            <aside className="relative ml-auto flex h-full w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
+              <PatientPreviewPanel
+                selectedPatient={previewPatient}
+                detailTitleId={undefined}
+                closeDetail={closeDetail}
+                galleryPhotoCount={galleryPhotoCount}
+                galleryPreviewSlots={galleryPreviewSlots}
+                getPatientInitials={getPatientInitials}
+                setPatientDetailTab={setPatientDetailTab}
+                setPatientView={setPatientView}
+                previewProcedures={previewProcedures}
+                loadingPreviewProcedures={loadingPreviewProcedures}
+                shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
+              />
+            </aside>
           </div>
 
           {/* Desktop (lg+): painel lateral que empurra a lista */}
           <aside
-            className="hidden lg:flex patient-preview-sheet relative z-10 mt-0 flex-row flex-wrap content-start items-start justify-start gap-4 w-full lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:shrink rounded-2xl border border-[#e2e8f0] bg-[#f1f5f9] p-4 sm:p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] overflow-y-auto overflow-x-hidden custom-scrollbar"
+            className="patient-preview-sheet relative z-10 mt-0 hidden w-full shrink-0 flex-col gap-0 lg:flex lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0 custom-scrollbar"
             aria-labelledby={desktopTitleId}
             aria-label="Resumo do paciente"
           >
@@ -567,7 +778,7 @@ export function PatientsListView({
               setPatientView={setPatientView}
               previewProcedures={previewProcedures}
               loadingPreviewProcedures={loadingPreviewProcedures}
-              shellClassName="contents"
+              shellClassName="w-full min-w-0"
             />
           </aside>
         </>

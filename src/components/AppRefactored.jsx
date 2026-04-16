@@ -17,41 +17,25 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesApi, pacientesGaleriaApi, procedimentosApi, termosApi } from '../services/api';
-import { mapBackendPatient, journeyToPacienteCreateDTO } from '../utils/patientMapping';
+import { anamneseApi, pacientesGaleriaApi, procedimentosApi, termosApi } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 
 import { PatientsView } from './patients';
-import { AnamneseAdminView } from './anamnese';
-import { TermosManager } from './termos/TermosManager';
+import { ConfiguracoesView } from './configuracoes';
 import { ProcedureCameraWidget } from './canvas';
 
-// Componentes da Jornada (5 Etapas)
-import { Step1CheckIn, Step2Anamnese, Step3Evaluation, Step4LGPD, Step5Finalization } from './journey';
+// Componentes da Jornada (paciente na aba Pacientes; etapas 1–5)
+import {
+  Step2Anamnese,
+  Step3Evaluation,
+  Step3Termos,
+  Step4Procedimento,
+  Step5Finalization,
+  JourneyPatientContextHeader,
+} from './journey';
 
 // Utilitarios
 import { getPatientInitials } from './utils';
-
-const STEP1_FIELD_LABELS = {
-  nome: 'nome completo',
-  dataNascimento: 'data de nascimento',
-  sexo: 'sexo',
-  estadoCivil: 'estado civil',
-  profissao: 'profissão',
-  cpf: 'CPF',
-  telefone: 'telefone',
-  email: 'e-mail',
-};
-
-function messageForMissingStep1Fields(errors) {
-  const keys = Object.keys(errors);
-  if (keys.length === 0) return '';
-  const labels = keys.map((k) => STEP1_FIELD_LABELS[k] || k);
-  if (labels.length === 1) return `Para prosseguir, preencha ${labels[0]}.`;
-  if (labels.length === 2) return `Para prosseguir, preencha ${labels[0]} e ${labels[1]}.`;
-  const last = labels.pop();
-  return `Para prosseguir, preencha ${labels.join(', ')} e ${last}.`;
-}
 
 function normalizeTermosList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -76,8 +60,6 @@ export default function App() {
   const authSessionReady = authState.authReady && authState.cookieConsentAccepted && authState.isLoggedIn;
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
-  /** Remonta Step1CheckIn ao resetar jornada (estado local da data mascarada). */
-  const [step1CheckInKey, setStep1CheckInKey] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
   const canvasRef = useRef(null);
@@ -108,12 +90,18 @@ export default function App() {
     mergePatientById,
   } = patientState;
 
+  const pacienteAtual = React.useMemo(() => {
+    const sCpf = String(selectedPatientCpf || '').trim();
+    if (!sCpf) return null;
+    return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
+  }, [patients, selectedPatientCpf]);
+
   const cameraState = useProcedureCamera({
     currentStep,
     journeyId,
     setJourneyId: journeyState.setJourneyId,
     selectedPatientCpf,
-    cpf: journeyState.cpf,
+    cpf: pacienteAtual?.cpf || '',
     setPatients,
   });
 
@@ -157,7 +145,7 @@ export default function App() {
     journeyState.setPaths([]);
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
 
-    const targetCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+    const targetCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
     if (targetCpf) {
       setPatients((prev) =>
         prev.map((p) => {
@@ -195,9 +183,15 @@ export default function App() {
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [activeView, _setActiveView] = React.useState(() => {
     try {
-      return sessionStorage.getItem('activeView') || 'jornada';
+      const v = sessionStorage.getItem('activeView');
+      if (v === 'jornada') return 'pacientes';
+      if (v === 'anamnese' || v === 'termos') {
+        sessionStorage.setItem('activeView', 'configuracoes');
+        return 'configuracoes';
+      }
+      return v || 'pacientes';
     } catch {
-      return 'jornada';
+      return 'pacientes';
     }
   });
   const setActiveView = React.useCallback((view) => {
@@ -215,6 +209,20 @@ export default function App() {
   const goToView = (view) => {
     setActiveView(view);
   };
+
+  /** Migração de `activeView` salvo: jornada → pacientes; anamnese/termos → configuracoes. */
+  React.useEffect(() => {
+    try {
+      const cur = sessionStorage.getItem('activeView');
+      if (cur === 'jornada') {
+        sessionStorage.setItem('activeView', 'pacientes');
+      } else if (cur === 'anamnese' || cur === 'termos') {
+        sessionStorage.setItem('activeView', 'configuracoes');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   React.useEffect(() => {
     if (activeView !== 'jornada') return undefined;
@@ -239,29 +247,6 @@ export default function App() {
     };
   }, [activeView]);
 
-  React.useEffect(() => {
-    if (activeView !== 'jornada' || currentStep !== 4) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const raw = await termosApi.list();
-        if (cancelled) return;
-        const list = normalizeTermosList(raw).filter(isTermoAtivoRow);
-        const first = list[0];
-        setJourneyTermoTitulo(first ? String(first.titulo ?? first.title ?? '').trim() : '');
-        setJourneyTermoConteudo(first ? String(first.conteudo ?? first.content ?? '').trim() : '');
-      } catch {
-        if (!cancelled) {
-          setJourneyTermoTitulo('');
-          setJourneyTermoConteudo('');
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeView, currentStep]);
-
   const updatePatientByCpf = (cpfKey, updater) => {
     const key = String(cpfKey || '').trim();
     if (!key) return;
@@ -276,11 +261,17 @@ export default function App() {
 
   const handleStartAttendance = (patient) => {
     if (!patient) return;
-    selectPatient(patient);
-    setCurrentStep(2);
+    const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
+    setSelectedPatientCpf(cpf);
+    setCurrentStep(1);
     setActiveView('jornada');
     setPatientView('list');
   };
+
+  const onCancelJourney = React.useCallback(() => {
+    setCurrentStep(1);
+    setActiveView('pacientes');
+  }, [setCurrentStep, setActiveView]);
 
   const handleCreatePatientFromPatients = () => {
     setPatientView('create');
@@ -357,31 +348,18 @@ export default function App() {
   };
 
   const upsertPatientLocal = ({ ensureSelected = false } = {}) => {
-    const cpfTrim = String(journeyState.cpf || '').trim();
     const selectedTrim = String(selectedPatientCpf || '').trim();
-    const matchKey = cpfTrim || selectedTrim;
+    if (!selectedTrim && !pacienteAtual) return;
 
-    const existingPatient = patients.find((p) => {
-      const pCpf = String(p?.cpf || '').trim();
-      return matchKey && pCpf === matchKey;
-    });
+    const existingPatient =
+      pacienteAtual ||
+      patients.find((p) => String(p?.cpf || '').trim() === selectedTrim);
+    if (!existingPatient) return;
+
+    const matchKey = String(existingPatient.cpf || '').trim() || selectedTrim;
 
     const patientPayload = {
-      id: existingPatient?.id || crypto.randomUUID(),
-      nome: journeyState.nome || '',
-      dataNascimento: journeyState.dataNascimento || '',
-      idade: journeyState.idade || '',
-      sexo: journeyState.sexo || '',
-      estadoCivil: existingPatient?.estadoCivil || '',
-      estadoCivilId: journeyState.estadoCivilId || existingPatient?.estadoCivilId || '',
-      profissao: journeyState.profissao || '',
-      alergias: existingPatient?.alergias ?? '',
-      endereco: journeyState.endereco || existingPatient?.endereco || '',
-      cpf: cpfTrim,
-      rg: journeyState.rg || '',
-      telefone: journeyState.telefone || '',
-      email: journeyState.email || '',
-      // Persistencia local da anamnese (mock) ate migracao para banco.
+      ...existingPatient,
       anamnese: {
         queixa: journeyState.queixa || '',
         expectativas: journeyState.expectativas || '',
@@ -390,6 +368,7 @@ export default function App() {
       termoLido: Boolean(journeyState.termoLido),
       termoAssinado: Boolean(journeyState.termoAssinado),
       termoAssinaturaDataUrl: journeyState.termoAssinaturaDataUrl || '',
+      profissionalAssinaturaDataUrl: journeyState.profissionalAssinaturaDataUrl || '',
       orientacoes: Boolean(journeyState.orientacoes),
       satisfacao: Boolean(journeyState.satisfacao),
     };
@@ -411,79 +390,35 @@ export default function App() {
       return [...list, patientPayload];
     });
 
-    if (ensureSelected) {
-      const selectedKey = cpfTrim || selectedTrim;
-      if (selectedKey) {
-        setSelectedPatientCpf(selectedKey);
-      }
+    if (ensureSelected && matchKey) {
+      setSelectedPatientCpf(matchKey);
     }
   };
 
   const handleNextStep = async () => {
     if (currentStep === 5 && isFinishing) return;
+
     if (currentStep === 1) {
-      if (journeyState.activeTab === 'novo') {
-        const { nome, dataNascimento, sexo, estadoCivilId, profissao, cpf, telefone, email } = journeyState;
-        const errors = {};
-        if (!nome.trim()) errors.nome = true;
-        if (!dataNascimento) errors.dataNascimento = true;
-        if (!sexo) errors.sexo = true;
-        if (!String(estadoCivilId || '').trim()) errors.estadoCivil = true;
-        if (!profissao.trim()) errors.profissao = true;
-        if (!cpf.trim()) errors.cpf = true;
-        if (!telefone.trim()) errors.telefone = true;
-        if (!email.trim()) errors.email = true;
-
-        if (Object.keys(errors).length > 0) {
-          journeyState.setStep1Errors(errors);
-          toast.error(messageForMissingStep1Fields(errors));
-          return;
-        }
-
-        try {
-          const dto = await pacientesApi.create(journeyToPacienteCreateDTO(journeyState));
-          const mapped = mapBackendPatient(dto);
-          setPatients((prev) => {
-            const cpfKey = String(mapped.cpf || '').trim();
-            const idx = prev.findIndex((p) => String(p?.cpf || '').trim() === cpfKey);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = { ...copy[idx], ...mapped };
-              return copy;
-            }
-            return [...prev, mapped];
-          });
-          patientState.setSelectedPatientCpf(mapped.cpf || null);
-          journeyState.setCpf(mapped.cpf || '');
-          upsertPatientLocal({ ensureSelected: true });
-        } catch (err) {
-          toast.error(err.message || 'Erro ao cadastrar paciente no servidor.');
-          return;
-        }
-      } else {
-        const hasSelectedPatient = Boolean((selectedPatientCpf || '').trim() || (journeyState.cpf || '').trim());
-        if (!hasSelectedPatient) {
-          toast.error('Para prosseguir, selecione um paciente para continuar à anamnese.');
-          return;
-        }
-        upsertPatientLocal({ ensureSelected: true });
-      }
-
-      journeyState.setStep1Errors({});
-    }
-
-    if (currentStep === 2) {
-      const { queixa, expectativas, observacoesExecucao } = journeyState;
-      if (!queixa.trim() || !expectativas.trim()) {
-        const e2 = {};
-        if (!queixa.trim()) e2.queixa = true;
-        if (!expectativas.trim()) e2.expectativas = true;
-        journeyState.setStep2Errors(e2);
-        toast.error('Para prosseguir, preencha a queixa principal e as expectativas.');
+      if (!pacienteAtual) {
+        toast.error('Selecione um paciente na aba Pacientes antes de continuar a jornada.');
         return;
       }
+      upsertPatientLocal({ ensureSelected: true });
 
+      const { queixa, expectativas, observacoesExecucao } = journeyState;
+      const skipQueixaExpectativas = anamneseRef.current?.skipQueixaExpectativas?.() === true;
+      if (!skipQueixaExpectativas) {
+        if (!queixa.trim() || !expectativas.trim()) {
+          const e2 = {};
+          if (!queixa.trim()) e2.queixa = true;
+          if (!expectativas.trim()) e2.expectativas = true;
+          journeyState.setStep2Errors(e2);
+          toast.error('Para prosseguir, preencha a queixa principal e as expectativas.');
+          return;
+        }
+      }
       journeyState.setStep2Errors({});
+
       upsertPatientLocal({ ensureSelected: true });
 
       const anamneseData = anamneseRef.current?.getAnamneseData?.();
@@ -492,11 +427,13 @@ export default function App() {
       const temObservacoes = Boolean(queixa.trim() || expectativas.trim());
 
       if (temFicha || temObservacoes) {
-        const paciente = patients.find((p) => {
-          const pCpf = String(p?.cpf || '').trim();
-          const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
-          return sCpf && pCpf === sCpf;
-        });
+        const paciente =
+          pacienteAtual ||
+          patients.find((p) => {
+            const pCpf = String(p?.cpf || '').trim();
+            const sCpf = String(selectedPatientCpf || '').trim();
+            return sCpf && pCpf === sCpf;
+          });
         const rid = roleUserId;
         if (!rid) {
           console.warn('roleUserId ausente: faça login novamente para vincular o profissional.');
@@ -537,17 +474,40 @@ export default function App() {
       }
     }
 
-    if (currentStep === 4) {
-      const { termoLido, termoAssinado } = journeyState;
-      if (!termoLido || !termoAssinado) {
+    if (currentStep === 3) {
+      if (journeyState.termoSelecionadoId == null || String(journeyState.termoSelecionadoId).trim() === '') {
+        toast.error('Selecione um termo de consentimento');
+        return;
+      }
+      const { termoLido, profissionalAssinaturaDataUrl, termoAssinaturaDataUrl } = journeyState;
+      const hasProf = Boolean(profissionalAssinaturaDataUrl && String(profissionalAssinaturaDataUrl).length > 50);
+      const hasPac = Boolean(termoAssinaturaDataUrl && String(termoAssinaturaDataUrl).length > 50);
+      if (!termoLido || !hasProf || !hasPac) {
         journeyState.setStep4Errors({
           termoLido: !termoLido,
-          termoAssinado: !termoAssinado,
         });
-        toast.error('Para prosseguir, confirme a leitura e a assinatura do termo LGPD.');
+        toast.error(
+          'Para prosseguir, confirme a leitura do termo e as assinaturas do profissional e do paciente.'
+        );
         return;
       }
 
+      journeyState.setTermoAssinado(true);
+      journeyState.setStep4Errors({});
+      upsertPatientLocal({ ensureSelected: true });
+    }
+
+    if (currentStep === 4) {
+      const nomeP = String(journeyState.nomeProcedimento || '').trim();
+      const obsP = String(journeyState.observacoesExecucao || '').trim();
+      if (!nomeP || !obsP) {
+        journeyState.setStep4Errors({
+          nomeProcedimento: !nomeP,
+          observacoesExecucao: !obsP,
+        });
+        toast.error('Preencha o nome do procedimento e as observações da execução para continuar.');
+        return;
+      }
       journeyState.setStep4Errors({});
       upsertPatientLocal({ ensureSelected: true });
     }
@@ -576,8 +536,7 @@ export default function App() {
 
   const prevStep = () => {
     if (currentStep > 1) {
-      if (currentStep === 2) journeyState.setStep2Errors({});
-      if (currentStep === 4) journeyState.setStep4Errors({});
+      if (currentStep === 3 || currentStep === 4) journeyState.setStep4Errors({});
       if (currentStep === 5) journeyState.setStep5Errors({});
       setCurrentStep(currentStep - 1);
     }
@@ -589,7 +548,7 @@ export default function App() {
     setIsFinishing(true);
     try {
       const execTrim = String(journeyState.observacoesExecucao || '').trim();
-      const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
+      const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
       const paciente = sCpf
         ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
         : null;
@@ -609,7 +568,14 @@ export default function App() {
       }
       refreshPatients();
       toast.success('Jornada finalizada com sucesso.');
+      const cpfParaPerfil = sCpf;
+      setActiveView('pacientes');
       resetJourney();
+      if (cpfParaPerfil) {
+        setSelectedPatientCpf(cpfParaPerfil);
+      }
+      setPatientView('profile');
+      setPatientDetailTab('timeline');
     } catch (error) {
       console.error('Erro ao finalizar jornada:', error);
       toast.error(error.message || 'Erro ao finalizar jornada.');
@@ -625,17 +591,6 @@ export default function App() {
 
   const resetJourney = () => {
     setCurrentStep(1);
-    journeyState.setNome('');
-    journeyState.setDataNascimento('');
-    journeyState.setIdade('');
-    journeyState.setSexo('');
-    journeyState.setEstadoCivilId('');
-    journeyState.setProfissao('');
-    journeyState.setEndereco('');
-    journeyState.setCpf('');
-    journeyState.setRg('');
-    journeyState.setTelefone('');
-    journeyState.setEmail('');
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
     journeyState.setStep2AnamneseDraft({
@@ -651,6 +606,7 @@ export default function App() {
     journeyState.setTermoLido(false);
     journeyState.setTermoAssinado(false);
     journeyState.setTermoAssinaturaDataUrl('');
+    journeyState.setProfissionalAssinaturaDataUrl('');
     journeyState.setOrientacoes(false);
     journeyState.setSatisfacao(false);
     journeyState.setObservacoesExecucao('');
@@ -659,60 +615,10 @@ export default function App() {
     journeyState.setStep4Errors({});
     journeyState.setStep5Errors({});
     anamnesePreenchimentoIdRef.current = null;
-    setStep1CheckInKey((k) => k + 1);
+    journeyState.setTermoSelecionadoId(null);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
   };
-
-  const selectPatient = (patient) => {
-    const selectedCpfNorm = String(selectedPatientCpf || '').trim();
-    const patientCpfNorm = String(patient?.cpf || '').trim();
-
-    // Toggle: clicking the same selected patient deselects it.
-    if (!patient || (patientCpfNorm && selectedCpfNorm === patientCpfNorm)) {
-      journeyState.setNome('');
-      journeyState.setDataNascimento('');
-      journeyState.setIdade('');
-      journeyState.setSexo('');
-      journeyState.setEstadoCivilId('');
-      journeyState.setProfissao('');
-      journeyState.setEndereco('');
-      journeyState.setCpf('');
-      journeyState.setRg('');
-      journeyState.setTelefone('');
-      journeyState.setEmail('');
-      journeyState.setStep1Errors({});
-      patientState.setSelectedPatientCpf(null);
-      journeyState.setActiveTab('existente');
-      return;
-    }
-
-    journeyState.setNome(patient.nome || '');
-    journeyState.setDataNascimento(patient.dataNascimento || '');
-    journeyState.setIdade(patient.idade !== undefined && patient.idade !== null ? String(patient.idade) : '');
-    const sx = String(patient.sexo || '').trim().toUpperCase();
-    journeyState.setSexo(sx === 'F' || sx === 'M' ? sx : '');
-    journeyState.setEstadoCivilId(
-      patient.estadoCivilId != null && String(patient.estadoCivilId).trim() !== ''
-        ? String(patient.estadoCivilId)
-        : ''
-    );
-    journeyState.setProfissao(patient.profissao || '');
-    journeyState.setEndereco(patient.endereco || '');
-    journeyState.setCpf(patient.cpf || '');
-    journeyState.setRg(patient.rg || '');
-    journeyState.setTelefone(patient.telefone || '');
-    journeyState.setEmail(patient.email || '');
-    journeyState.setStep1Errors({});
-    patientState.setSelectedPatientCpf(patient.cpf || null);
-    journeyState.setActiveTab('existente');
-  };
-
-  const pacienteAtual = React.useMemo(() => {
-    const sCpf = String(selectedPatientCpf || journeyState.cpf || '').trim();
-    if (!sCpf) return null;
-    return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
-  }, [patients, selectedPatientCpf, journeyState.cpf]);
 
   /** Envia o JPEG com desenho para a galeria do paciente (mesma API do perfil). */
   const persistAnnotatedPhotoToGallery = React.useCallback(
@@ -775,107 +681,45 @@ export default function App() {
 
       {/* Main Content */}
       <main
-        className={`flex flex-1 flex-col h-full pb-[112px] md:pb-0 ${
-          isJornadaView ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'
+        className={`flex flex-1 flex-col h-full ${
+          isJornadaView
+            ? 'min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0'
+            : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0`
         }`}
       >
+        {(isJornadaView || (activeView !== 'pacientes' && activeView !== 'configuracoes')) && (
         <header
           className={`border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] ${
             isJornadaView
               ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
               : `z-0 bg-white ${
-                  activeView === 'anamnese' || activeView === 'pacientes' || activeView === 'termos'
+                  activeView === 'configuracoes'
                     ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
                     : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
                 }`
           }`}
         >
-          {activeView === 'anamnese' ? (
-            <div className="min-w-0">
-              <h2 className="text-[18px] sm:text-[21px] md:text-[22px] font-bold text-[#0f172a] leading-tight mb-0.5">Anamnese</h2>
-              <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
-                Categorias, perguntas e fichas reutilizáveis
-              </p>
-            </div>
-          ) : activeView === 'pacientes' ? (
-            <div className="min-w-0">
-              <h2 className="text-[19px] sm:text-[22px] md:text-[24px] font-bold text-[#0f172a] leading-tight mb-0.5">Pacientes</h2>
-              <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
-                Cadastro, prontuário, histórico e galeria
-              </p>
-            </div>
-          ) : activeView === 'termos' ? (
-            <div className="min-w-0">
-              <h2 className="text-[18px] sm:text-[21px] md:text-[22px] font-bold text-[#0f172a] leading-tight mb-0.5">Termos</h2>
-              <p className="text-[#64748b] text-[12px] sm:text-[13px] md:text-[14px] font-medium leading-snug">
-                Texto de consentimento exibido na jornada (LGPD)
-              </p>
-            </div>
-          ) : activeView === 'jornada' ? (
+          {activeView === 'jornada' ? (
             <>
+              <JourneyPatientContextHeader
+                pacienteAtual={pacienteAtual}
+                onCancelJourney={onCancelJourney}
+                getPatientInitials={getPatientInitials}
+              />
               <Stepper currentStep={currentStep} />
-              {(journeyState.nome || journeyState.telefone) && (
-                <div className="flex items-center gap-4 mt-2 px-1 text-[13px] text-[#475569]">
-                  {journeyState.nome && (
-                    <span className="font-bold text-[#0f766e]">{journeyState.nome}</span>
-                  )}
-                  {journeyState.idade && (
-                    <span>{journeyState.idade} anos</span>
-                  )}
-                  {journeyState.telefone && (
-                    <span>{journeyState.telefone}</span>
-                  )}
-                </div>
-              )}
             </>
           ) : null}
         </header>
+        )}
 
         {isJornadaView ? (
           <>
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-                <div className="mx-auto w-full max-w-[1600px] p-3 pb-20 sm:p-6 md:px-8 md:pt-8 md:pb-8">
+                <div className="mx-auto w-full max-w-[1600px] p-3 pb-28 [-webkit-overflow-scrolling:touch] sm:p-6 md:px-8 md:pt-8 md:pb-28">
                   <div className="rounded-[20px] border-[3px] border-[#00a88e]/25 bg-white p-4 pb-5 shadow-lg shadow-[#00a88e]/5 sm:p-8 sm:pb-6 md:pb-8">
+                  <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
                   {currentStep === 1 && (
-                    <Step1CheckIn
-                      key={step1CheckInKey}
-                      activeTab={journeyState.activeTab}
-                      setActiveTab={journeyState.setActiveTab}
-                      searchQuery={journeyState.searchQuery}
-                      setSearchQuery={journeyState.setSearchQuery}
-                      selectedPatientCpf={selectedPatientCpf}
-                      setSelectedPatientCpf={setSelectedPatientCpf}
-                      patients={patients}
-                      nome={journeyState.nome}
-                      setNome={journeyState.setNome}
-                      dataNascimento={journeyState.dataNascimento}
-                      setDataNascimento={journeyState.setDataNascimento}
-                      idade={journeyState.idade}
-                      setIdade={journeyState.setIdade}
-                      sexo={journeyState.sexo}
-                      setSexo={journeyState.setSexo}
-                      estadoCivilId={journeyState.estadoCivilId}
-                      setEstadoCivilId={journeyState.setEstadoCivilId}
-                      profissao={journeyState.profissao}
-                      setProfissao={journeyState.setProfissao}
-                      endereco={journeyState.endereco}
-                      setEndereco={journeyState.setEndereco}
-                      cpf={journeyState.cpf}
-                      setCpf={journeyState.setCpf}
-                      rg={journeyState.rg}
-                      setRg={journeyState.setRg}
-                      telefone={journeyState.telefone}
-                      setTelefone={journeyState.setTelefone}
-                      email={journeyState.email}
-                      setEmail={journeyState.setEmail}
-                      step1Errors={journeyState.step1Errors}
-                      setStep1Errors={journeyState.setStep1Errors}
-                      selectPatient={selectPatient}
-                    />
-                  )}
-
-                  {currentStep === 2 && (
                     <Step2Anamnese
                       ref={anamneseRef}
                       queixa={journeyState.queixa}
@@ -893,7 +737,7 @@ export default function App() {
                     />
                   )}
 
-                  {currentStep === 3 && (
+                  {currentStep === 2 && (
                     <Step3Evaluation
                       imageSrc={journeyState.imageSrc}
                       setImageSrc={journeyState.setImageSrc}
@@ -920,7 +764,7 @@ export default function App() {
                       evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
                       setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
                       selectedPatientCpf={selectedPatientCpf}
-                      cpf={journeyState.cpf}
+                      cpf={pacienteAtual?.cpf || ''}
                       patients={patients}
                       setPatients={setPatients}
                       evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos}
@@ -931,29 +775,40 @@ export default function App() {
                       onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
                       persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
                       evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                      onUploadFiles={cameraState.uploadPhotoFiles}
+                    />
+                  )}
+
+                  {currentStep === 3 && (
+                    <Step3Termos
+                      termoLido={journeyState.termoLido}
+                      setTermoLido={journeyState.setTermoLido}
+                      termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
+                      setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
+                      setTermoAssinado={journeyState.setTermoAssinado}
+                      profissionalAssinaturaDataUrl={journeyState.profissionalAssinaturaDataUrl}
+                      setProfissionalAssinaturaDataUrl={journeyState.setProfissionalAssinaturaDataUrl}
+                      step4Errors={journeyState.step4Errors}
+                      setStep4Errors={journeyState.setStep4Errors}
+                      termoTitulo={journeyTermoTitulo || undefined}
+                      termoConteudo={journeyTermoConteudo || undefined}
+                      onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
                     />
                   )}
 
                   {currentStep === 4 && (
-                    <Step4LGPD
-                      termoLido={journeyState.termoLido}
-                      setTermoLido={journeyState.setTermoLido}
-                      termoAssinado={journeyState.termoAssinado}
-                      setTermoAssinado={journeyState.setTermoAssinado}
-                      termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
-                      setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
-                      lgpdCapturedPhotos={cameraState.evaluationCapturedPhotos}
-                      lgpdPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                      onLgpdUploadFiles={cameraState.uploadPhotoFiles}
-                      onLgpdRemovePhoto={handleDeleteCapturedPhoto}
-                      step4Errors={journeyState.step4Errors}
-                      setStep4Errors={journeyState.setStep4Errors}
+                    <Step4Procedimento
+                      pacienteIdForProcedures={pacienteAtual?.id || null}
                       nomeProcedimento={journeyState.nomeProcedimento}
                       setNomeProcedimento={journeyState.setNomeProcedimento}
                       observacoesExecucao={journeyState.observacoesExecucao}
                       setObservacoesExecucao={journeyState.setObservacoesExecucao}
-                      termoTitulo={journeyTermoTitulo || undefined}
-                      termoConteudo={journeyTermoConteudo || undefined}
+                      procedureCapturedPhotos={cameraState.evaluationCapturedPhotos}
+                      procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                      onProcedureUploadFiles={cameraState.uploadPhotoFiles}
+                      onProcedureRemovePhoto={handleDeleteCapturedPhoto}
+                      step4Errors={journeyState.step4Errors}
+                      setStep4Errors={journeyState.setStep4Errors}
                     />
                   )}
 
@@ -967,87 +822,117 @@ export default function App() {
                       setStep5Errors={journeyState.setStep5Errors}
                     />
                   )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="hidden md:block shrink-0 border-t-[3px] border-[#00a88e]/15 bg-[#f8fbfb]/98 backdrop-blur-sm shadow-[0_-6px_28px_-8px_rgba(15,23,42,0.08)] z-20">
-              <div className="mx-auto w-full max-w-[1600px] px-3 py-3 sm:px-6 md:px-8 md:py-4">
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <button
-                    type="button"
-                    onClick={prevStep}
-                    disabled={currentStep === 1 || isFinishing}
-                    className={`flex w-full items-center justify-center gap-2 rounded-xl border-[3px] px-6 py-3 text-[14px] font-bold shadow-sm outline-none transition-all sm:w-auto ${
-                      currentStep === 1 || isFinishing
-                        ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
-                        : 'border-[#00a88e]/25 bg-white text-[#00a88e] hover:border-[#00a88e] hover:bg-[#e6f7f5]'
-                    }`}
-                  >
-                    <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Etapa anterior
-                  </button>
-
-                  {currentStep < 5 ? (
+            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[30] hidden md:block md:pl-16 lg:pl-[220px]">
+              <div className="pointer-events-auto border-t border-[#e2e8f0] bg-white px-6 py-4 shadow-[0_-4px_24px_rgba(15,23,42,0.06)]">
+                <div className="mx-auto grid w-full max-w-[1600px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4">
+                  <div className="flex justify-start">
                     <button
                       type="button"
-                      onClick={handleNextStep}
-                      disabled={isFinishing}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      onClick={prevStep}
+                      disabled={currentStep === 1 || isFinishing}
+                      className={`flex items-center justify-center gap-2 rounded-xl border-[2px] px-5 py-2.5 text-[13px] font-semibold outline-none transition-all ${
+                        currentStep === 1 || isFinishing
+                          ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                          : 'border-[#e2e8f0] bg-white text-[#00a88e] hover:border-[#00a88e]/40 hover:bg-[#f0fdf9]'
+                      }`}
                     >
-                      Próxima etapa <ChevronRight className="h-4 w-4" strokeWidth={3} />
+                      <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Anterior
                     </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleNextStep}
-                      disabled={isFinishing}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#22c55e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition-all hover:bg-[#16a34a] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                    >
-                      Finalizar procedimento ✓
-                    </button>
-                  )}
+                  </div>
+                  <p className="text-center text-[12px] font-medium text-[#94a3b8]">
+                    Etapa {currentStep} de 5
+                  </p>
+                  <div className="flex justify-end">
+                    {currentStep < 5 ? (
+                      <button
+                        type="button"
+                        onClick={handleNextStep}
+                        disabled={isFinishing}
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Próximo <ChevronRight className="h-4 w-4" strokeWidth={3} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleNextStep}
+                        disabled={isFinishing || !journeyState.orientacoes || !journeyState.satisfacao}
+                        className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
+                          journeyState.orientacoes && journeyState.satisfacao && !isFinishing
+                            ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
+                            : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
+                        }`}
+                      >
+                        {isFinishing
+                          ? 'Salvando...'
+                          : !journeyState.orientacoes || !journeyState.satisfacao
+                            ? 'Confirme as orientações para finalizar'
+                            : 'Finalizar Atendimento ✓'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-            <div className="md:hidden pointer-events-none fixed inset-x-0 top-0 bottom-0 z-[125]">
-              <div className="pointer-events-auto absolute left-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
-                <button
-                  type="button"
-                  onClick={prevStep}
-                  disabled={currentStep === 1 || isFinishing}
-                  aria-label="Etapa anterior"
-                  className={`flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-white/40 bg-[#00a88e] text-white shadow-lg outline-none transition-all ${
-                    currentStep === 1 || isFinishing
-                      ? 'cursor-not-allowed opacity-45'
-                      : 'hover:bg-[#00967f] active:scale-[0.98]'
-                  }`}
-                >
-                  <ChevronLeft className="h-6 w-6" strokeWidth={2.75} aria-hidden />
-                </button>
-              </div>
-              <div className="pointer-events-auto absolute right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
-                <button
-                  type="button"
-                  onClick={handleNextStep}
-                  disabled={isFinishing}
-                  aria-label={currentStep < 5 ? 'Próxima etapa' : 'Finalizar procedimento'}
-                  className={`flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-white/40 text-white shadow-lg outline-none transition-all ${
-                    currentStep < 5 ? 'bg-[#00a88e]' : 'bg-[#22c55e] border-[#22c55e]/50'
-                  } ${
-                    isFinishing ? 'cursor-not-allowed opacity-45' : 'hover:opacity-95 active:scale-[0.98]'
-                  }`}
-                >
-                  <ChevronRight className="h-6 w-6" strokeWidth={2.75} aria-hidden />
-                </button>
-              </div>
+            <div className="fixed inset-x-0 bottom-0 z-[125] flex h-16 min-h-[4rem] items-center gap-2 border-t border-[#e2e8f0] bg-white px-3 pb-[env(safe-area-inset-bottom)] pt-1 md:hidden">
+              <button
+                type="button"
+                onClick={prevStep}
+                disabled={currentStep === 1 || isFinishing}
+                className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-xl border-[2px] px-4 text-[14px] font-semibold ${
+                  currentStep === 1 || isFinishing
+                    ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                    : 'border-[#e2e8f0] bg-white text-[#00a88e] active:border-[#00a88e]/40'
+                }`}
+              >
+                <ChevronLeft className="h-4 w-4" strokeWidth={3} aria-hidden />
+                <span>Anterior</span>
+              </button>
+              <p className="min-w-0 flex-1 text-center text-[11px] font-medium text-[#94a3b8]">
+                Etapa {currentStep} de 5
+              </p>
+              <button
+                type="button"
+                onClick={handleNextStep}
+                disabled={
+                  isFinishing ||
+                  (currentStep === 5 && (!journeyState.orientacoes || !journeyState.satisfacao))
+                }
+                className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${
+                  currentStep < 5
+                    ? isFinishing
+                      ? 'cursor-not-allowed bg-[#00a88e]/50'
+                      : 'bg-[#00a88e] active:bg-[#00967f]'
+                    : journeyState.orientacoes && journeyState.satisfacao && !isFinishing
+                      ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
+                      : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
+                }`}
+              >
+                {currentStep < 5 ? (
+                  <>
+                    Próximo <ChevronRight className="h-4 w-4" strokeWidth={3} aria-hidden />
+                  </>
+                ) : isFinishing ? (
+                  'Salvando...'
+                ) : !journeyState.orientacoes || !journeyState.satisfacao ? (
+                  'Finalizar'
+                ) : (
+                  'Finalizar ✓'
+                )}
+              </button>
             </div>
           </>
         ) : (
         <div
           className={`w-full mx-auto ${
-            activeView === 'anamnese' || activeView === 'termos'
+            activeView === 'configuracoes'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
               : activeView === 'pacientes'
                 ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
@@ -1056,7 +941,7 @@ export default function App() {
         >
           <div
             className={`bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 ${
-              activeView === 'anamnese' || activeView === 'termos'
+              activeView === 'configuracoes'
                 ? 'px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                 : activeView === 'pacientes'
                   ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
@@ -1090,11 +975,9 @@ export default function App() {
               />
             )}
 
-            {activeView === 'anamnese' && <AnamneseAdminView />}
+            {activeView === 'configuracoes' && <ConfiguracoesView />}
 
-            {activeView === 'termos' && <TermosManager />}
-
-            {!['jornada', 'pacientes', 'anamnese', 'termos'].includes(activeView) && (
+            {!['jornada', 'pacientes', 'configuracoes'].includes(activeView) && (
               <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
@@ -1112,16 +995,17 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00967f; }
       `}} />
 
-      <MobileNavigation
-        activeView={activeView}
-        onGoJornada={() => goToView('jornada')}
-        onGoPacientes={() => goToView('pacientes')}
-        onGoAnamnese={() => goToView('anamnese')}
-        onLogout={handleLogout}
-      />
+      {activeView !== 'jornada' ? (
+        <MobileNavigation
+          activeView={activeView}
+          onGoPacientes={() => goToView('pacientes')}
+          onGoConfiguracoes={() => goToView('configuracoes')}
+          onLogout={handleLogout}
+        />
+      ) : null}
 
       <ProcedureCameraWidget
-        visible={activeView === 'jornada' && currentStep >= 2 && currentStep <= 5}
+        visible={activeView === 'jornada' && currentStep >= 2 && currentStep <= 4}
         photoThumbUrl={cameraState.anamnesePhotoUrl}
         photoModalOpen={cameraState.photoModalOpen}
         openPhotoModal={cameraState.openPhotoModal}
