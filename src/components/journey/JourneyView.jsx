@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { toLocalISODate } from '../../utils/dateLimits.js';
+import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { Step2Anamnese } from './Step2Anamnese';
 import { Step3Evaluation } from './Step3Evaluation';
@@ -173,6 +174,8 @@ export function JourneyView({
   orientacoes,
   setOrientacoes,
   procedureDateIso = toLocalISODate(),
+  proximoRetornoDisplay: proximoRetornoDisplayProp,
+  setProximoRetornoDisplay: setProximoRetornoDisplayProp,
   step5Errors,
   setStep5Errors,
   prevStep,
@@ -184,6 +187,34 @@ export function JourneyView({
   getPatientInitials,
 }) {
   const toast = useToast();
+
+  const [localProximoRetornoDisplay, setLocalProximoRetornoDisplay] = React.useState('');
+  const proximoRetornoDisplay =
+    proximoRetornoDisplayProp !== undefined
+      ? proximoRetornoDisplayProp
+      : localProximoRetornoDisplay;
+  const setProximoRetornoDisplay =
+    setProximoRetornoDisplayProp ?? setLocalProximoRetornoDisplay;
+
+  const step5RetornoBloqueiaFinal = React.useMemo(
+    () =>
+      evaluateProximoRetornoStep5(procedureDateIso, proximoRetornoDisplay).blocksFinish,
+    [procedureDateIso, proximoRetornoDisplay]
+  );
+
+  const onFinishJourney = () => {
+    if (!orientacoes) {
+      toast.error(
+        'Para prosseguir, confirme que recebeu e compreendeu as orientações pós-procedimento.'
+      );
+      return;
+    }
+    if (step5RetornoBloqueiaFinal) {
+      toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
+      return;
+    }
+    handleFinishJourney();
+  };
 
   const onNext = () => {
     if (currentStep === 3) {
@@ -312,6 +343,8 @@ export function JourneyView({
       {currentStep === 5 && (
         <Step5Finalization
           procedureDateIso={procedureDateIso}
+          proximoRetornoDisplay={proximoRetornoDisplay}
+          setProximoRetornoDisplay={setProximoRetornoDisplay}
           orientacoes={orientacoes}
           setOrientacoes={setOrientacoes}
           step5Errors={step5Errors}
@@ -352,10 +385,10 @@ export function JourneyView({
               ) : (
                 <button
                   type="button"
-                  onClick={handleFinishJourney}
-                  disabled={!orientacoes || isFinishing}
+                  onClick={onFinishJourney}
+                  disabled={!orientacoes || isFinishing || step5RetornoBloqueiaFinal}
                   className={`flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                    orientacoes && !isFinishing
+                    orientacoes && !isFinishing && !step5RetornoBloqueiaFinal
                       ? 'animate-pulse bg-[#00a88e] text-white hover:bg-[#00967f]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                   }`}
@@ -364,7 +397,9 @@ export function JourneyView({
                     ? 'Salvando...'
                     : !orientacoes
                       ? 'Confirme as orientações para finalizar'
-                      : 'Finalizar Atendimento'}
+                      : step5RetornoBloqueiaFinal
+                        ? 'Corrija a data de retorno'
+                        : 'Finalizar Atendimento'}
                   <CheckCircle className="h-4 w-4" strokeWidth={3} />
                 </button>
               )}

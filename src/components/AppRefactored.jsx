@@ -27,6 +27,7 @@ import {
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
+import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
@@ -119,6 +120,15 @@ export default function App() {
     if (!sCpf) return null;
     return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
   }, [patients, selectedPatientCpf]);
+
+  const step5RetornoBloqueiaFinal = React.useMemo(
+    () =>
+      evaluateProximoRetornoStep5(
+        journeyProcedureDateIso,
+        journeyState.proximoRetornoDisplay
+      ).blocksFinish,
+    [journeyProcedureDateIso, journeyState.proximoRetornoDisplay]
+  );
 
   const cameraState = useProcedureCamera({
     currentStep,
@@ -548,6 +558,15 @@ export default function App() {
         return;
       }
 
+      const { blocksFinish } = evaluateProximoRetornoStep5(
+        journeyProcedureDateIso,
+        journeyState.proximoRetornoDisplay
+      );
+      if (blocksFinish) {
+        toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
+        return;
+      }
+
       journeyState.setStep5Errors({});
       upsertPatientLocal({ ensureSelected: true });
     }
@@ -675,6 +694,7 @@ export default function App() {
     journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setProfissionalAssinaturaDataUrl('');
     journeyState.setOrientacoes(false);
+    journeyState.setProximoRetornoDisplay('');
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
     journeyState.setStep2Errors({});
@@ -894,6 +914,8 @@ export default function App() {
                   {currentStep === 5 && (
                     <Step5Finalization
                       procedureDateIso={journeyProcedureDateIso}
+                      proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
+                      setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
                       orientacoes={journeyState.orientacoes}
                       setOrientacoes={journeyState.setOrientacoes}
                       step5Errors={journeyState.step5Errors}
@@ -942,9 +964,15 @@ export default function App() {
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        disabled={isFinishing || !journeyState.orientacoes}
+                        disabled={
+                          isFinishing ||
+                          !journeyState.orientacoes ||
+                          step5RetornoBloqueiaFinal
+                        }
                         className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                          journeyState.orientacoes && !isFinishing
+                          journeyState.orientacoes &&
+                          !step5RetornoBloqueiaFinal &&
+                          !isFinishing
                             ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
                             : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                         }`}
@@ -953,7 +981,9 @@ export default function App() {
                           ? 'Salvando...'
                           : !journeyState.orientacoes
                             ? 'Confirme as orientações para finalizar'
-                            : 'Finalizar Atendimento ✓'}
+                            : step5RetornoBloqueiaFinal
+                              ? 'Corrija a data de retorno'
+                              : 'Finalizar Atendimento ✓'}
                       </button>
                     )}
                   </div>
@@ -982,13 +1012,19 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleNextStep}
-                disabled={isFinishing || (currentStep === 5 && !journeyState.orientacoes)}
+                disabled={
+                  isFinishing ||
+                  (currentStep === 5 &&
+                    (!journeyState.orientacoes || step5RetornoBloqueiaFinal))
+                }
                 className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${
                   currentStep < 5
                     ? isFinishing
                       ? 'cursor-not-allowed bg-[#00a88e]/50'
                       : 'bg-[#00a88e] active:bg-[#00967f]'
-                    : journeyState.orientacoes && !isFinishing
+                    : journeyState.orientacoes &&
+                        !step5RetornoBloqueiaFinal &&
+                        !isFinishing
                       ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                 }`}
@@ -1001,6 +1037,8 @@ export default function App() {
                   'Salvando...'
                 ) : !journeyState.orientacoes ? (
                   'Finalizar'
+                ) : step5RetornoBloqueiaFinal ? (
+                  'Data inválida'
                 ) : (
                   'Finalizar ✓'
                 )}

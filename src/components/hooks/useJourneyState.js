@@ -56,6 +56,8 @@ export const useJourneyState = () => {
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
   const [orientacoes, setOrientacoes] = useState(false);
+  /** Texto mascarado DD/MM/AAAA do próximo retorno (opcional). */
+  const [proximoRetornoDisplay, setProximoRetornoDisplay] = useState('');
 
   // ============ FOTOS ============
   const EVALUATION_PHOTO_MAX = 30;
@@ -127,6 +129,8 @@ export const useJourneyState = () => {
     setTermoSelecionadoId,
     orientacoes,
     setOrientacoes,
+    proximoRetornoDisplay,
+    setProximoRetornoDisplay,
     EVALUATION_PHOTO_MAX,
     evaluationCapturedPhotos,
     setEvaluationCapturedPhotos,
