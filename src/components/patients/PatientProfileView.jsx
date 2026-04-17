@@ -66,6 +66,7 @@ import {
   GaleriaArquivoLightbox,
   GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
+import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -558,6 +559,11 @@ export function PatientProfileView({
   const [anamneseListSummary, setAnamneseListSummary] = useState([]);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
+  const [relatoModal, setRelatoModal] = useState({
+    open: false,
+    procedimentoFeitoId: null,
+    pacienteId: null,
+  });
   const galleryVideoRef = useRef(null);
   const galleryStreamRef = useRef(null);
   const profilePhotoInputRef = useRef(null);
@@ -573,7 +579,12 @@ export function PatientProfileView({
     setGaleriaUploadMetaOpen(false);
     setAnamneseListSummary([]);
     setProntuarioExpanded({});
+    setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
   }, [selectedPatient?.id]);
+
+  const closeRelatoModal = useCallback(() => {
+    setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
+  }, []);
 
   useEffect(() => {
     if (patientDetailTab === 'timeline') {
@@ -1121,6 +1132,38 @@ export function PatientProfileView({
       });
     },
     [apiGaleriaItems],
+  );
+
+  const resolveProcedimentoFeitoIdForSessao = useCallback(
+    (sess) => {
+      const direct = sess?.procedimentoFeitoId;
+      if (direct != null && String(direct).trim() !== '') return String(direct);
+
+      const fotoId = Array.isArray(sess?.fotos)
+        ? sess.fotos.find((f) => f?.procedimentoFeitoId != null && String(f.procedimentoFeitoId).trim() !== '')
+            ?.procedimentoFeitoId
+        : null;
+      if (fotoId != null && String(fotoId).trim() !== '') return String(fotoId);
+
+      const nomeSessao = (
+        sess?.nomeProcedimento ||
+        (Array.isArray(sess?.fotos) ? sess.fotos.map((f) => f?.nomeProcedimento).find(Boolean) : '') ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+      if (!nomeSessao) return null;
+
+      const match = (apiProcedures || []).find((proc) => {
+        const nomeProc = (proc?.procedimentoNome || proc?.nome || '').trim().toLowerCase();
+        if (!nomeProc) return false;
+        return nomeProc === nomeSessao || nomeProc.includes(nomeSessao) || nomeSessao.includes(nomeProc);
+      });
+
+      const matchId = match?.id ?? match?.procedimentoFeitoId ?? match?.procedimentoId ?? null;
+      return matchId != null && String(matchId).trim() !== '' ? String(matchId) : null;
+    },
+    [apiProcedures],
   );
 
   const toggleProntuarioRow = useCallback((rowKey) => {
@@ -2076,6 +2119,7 @@ export function PatientProfileView({
                   {galeriaBackend === 'api' && galeriaSessionsForView.length > 0 ? (
                     <div className="space-y-4">
                       {galeriaSessionsForView.map((sess) => {
+                        const procedimentoFeitoIdSessao = resolveProcedimentoFeitoIdForSessao(sess);
                         const mesTitulo =
                           sess.dataISO === 'sem-data' ? 'Sem data' : formatMesAnoCurtoPt(sess.dataISO);
                         const subtitulo =
@@ -2095,9 +2139,25 @@ export function PatientProfileView({
                                 </h5>
                                 <p className="text-[13px] font-medium text-[#64748b] mt-0.5 line-clamp-2">{subtitulo}</p>
                               </div>
-                              <span className="text-[12px] font-bold text-[#64748b] tabular-nums shrink-0 sm:pt-0.5">
-                                {formatDataSessaoPtBr(sess.dataISO)}
-                              </span>
+                              <div className="flex w-full min-w-0 items-start gap-2 sm:w-auto sm:shrink-0 sm:flex-col sm:items-end">
+                                <span className="text-[12px] font-bold text-[#64748b] tabular-nums sm:pt-0.5">
+                                  {formatDataSessaoPtBr(sess.dataISO)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setRelatoModal({
+                                      open: true,
+                                      procedimentoFeitoId: procedimentoFeitoIdSessao,
+                                      pacienteId: selectedPatient?.id || null,
+                                    })
+                                  }
+                                  disabled={!selectedPatient?.id}
+                                  className="w-full rounded-lg border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] px-2.5 py-1 text-center text-[11px] font-bold text-[#0f766e] transition-colors hover:bg-[#d2f3ee] sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Acompanhamento
+                                </button>
+                              </div>
                             </div>
                             <div className="flex flex-wrap gap-5">
                               {sess.fotos.map((foto) => {
@@ -2538,6 +2598,22 @@ export function PatientProfileView({
           </div>
         </div>
       )}
+
+      <RelatoAcompanhamentoModal
+        isOpen={relatoModal.open}
+        onClose={closeRelatoModal}
+        procedimentoFeitoId={relatoModal.procedimentoFeitoId}
+        pacienteId={relatoModal.pacienteId}
+        procedures={apiProcedures}
+        onConfirmProsseguir={() => {
+          closeRelatoModal();
+          onStartAttendance?.(selectedPatient);
+        }}
+        onAjustarPlano={() => {
+          closeRelatoModal();
+          setPatientDetailTab('anamnese');
+        }}
+      />
     </div>
   );
 }
