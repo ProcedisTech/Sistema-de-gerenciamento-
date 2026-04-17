@@ -452,6 +452,21 @@ export const procedimentosApi = {
   deletar: (id) => request(`/api/v1/procedimentos/${id}`, { method: 'DELETE' }),
 };
 
+export const criarRelatoAcompanhamento = (dados) =>
+  request('/api/relatos-acompanhamento', { method: 'POST', body: JSON.stringify(dados) });
+
+export const buscarRelatoPorSessao = (procedimentoFeitoId) =>
+  request(`/api/relatos-acompanhamento/procedimento/${procedimentoFeitoId}`);
+
+export const listarRelatosPorPaciente = (pacienteId) =>
+  request(`/api/relatos-acompanhamento/paciente/${pacienteId}`);
+
+export const atualizarRelatoAcompanhamento = (relatoAcompanhamentoId, dados) =>
+  request(`/api/relatos-acompanhamento/${relatoAcompanhamentoId}`, {
+    method: 'PUT',
+    body: JSON.stringify(dados),
+  });
+
 // ── Estoque / Insumos ───────────────────────────────────────
 
 export const estoqueApi = {
