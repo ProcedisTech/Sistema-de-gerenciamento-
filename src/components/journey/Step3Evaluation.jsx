@@ -185,7 +185,9 @@ export function Step3Evaluation({
       onSelectCapturedPhoto?.(nextIdx);
       setPaths([]);
     } else {
-      setPhase('review');
+      /* Todas as fotos atuais já estão anotadas: volta à captura (nunca review automático).
+         Review só em handleStartEvaluation quando o usuário clica em "Iniciar Avaliação". */
+      setPhase('capture');
       setEditingIndex(null);
     }
   }, [evaluationCapturedPhotos, cap, onSelectCapturedPhoto, setEvaluationSelectedPhotoIndex, setPaths]);

@@ -26,6 +26,7 @@ import {
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
+import { convertToWebP } from '../utils/imageUtils.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
@@ -284,6 +285,11 @@ export default function App() {
 
   const handleStartAttendance = (patient) => {
     if (!patient) return;
+
+    // Limpar fotos do paciente anterior ANTES de iniciar novo atendimento
+    cameraState.resetEvaluationPhotos();
+    cameraState.resetProcedureCapturedPhotos();
+
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     setSelectedPatientCpf(cpf);
     setJourneyProcedureDateIso(toLocalISODate());
@@ -428,7 +434,7 @@ export default function App() {
       }
       upsertPatientLocal({ ensureSelected: true });
 
-      const { queixa, expectativas, observacoesExecucao } = journeyState;
+      const { queixa, expectativas } = journeyState;
       const skipQueixaExpectativas =
         !queixaVisivel || anamneseRef.current?.skipQueixaExpectativas?.() === true;
       if (!skipQueixaExpectativas) {
@@ -476,11 +482,7 @@ export default function App() {
         }
 
         if (paciente?.id && rid && anamneseId) {
-          const observacoesBase = `Queixa: ${queixa}. Expectativas: ${expectativas}`;
-          const execTrim = String(observacoesExecucao || '').trim();
-          const observacoes = execTrim
-            ? `${observacoesBase}\n\nObservações de execução: ${execTrim}`
-            : observacoesBase;
+          const observacoes = `Queixa: ${queixa}. Expectativas: ${expectativas}`;
           try {
             const created = await anamneseApi.createPaciente(paciente.id, rid, {
               anamneseId,
@@ -570,18 +572,10 @@ export default function App() {
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
-      const execTrim = String(journeyState.observacoesExecucao || '').trim();
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
       const paciente = sCpf
         ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
         : null;
-      if (execTrim && paciente?.id && anamnesePreenchimentoIdRef.current) {
-        await anamneseApi.atualizarObservacoesAnamnese(
-          paciente.id,
-          anamnesePreenchimentoIdRef.current,
-          execTrim
-        );
-      }
       let procedimentoFeitoIdParaVinculo = null;
       if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
         const resultado = await procedimentosApi.registrarManual(paciente.id, {
@@ -602,6 +596,43 @@ export default function App() {
           console.warn('Não foi possível vincular assinatura ao procedimento:', e);
         }
       }
+
+      const fotosProcedimento = cameraState.procedureCapturedPhotos || [];
+      const ridUpload = roleUserId;
+      if (
+        fotosProcedimento.length > 0 &&
+        paciente?.id &&
+        ridUpload &&
+        /^[0-9a-f-]{36}$/i.test(String(ridUpload))
+      ) {
+        const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
+        const uploads = fotosProcedimento.map(async (foto) => {
+          try {
+            let fileToUpload = foto.blob;
+            if (!fileToUpload && foto.url) {
+              const resp = await fetch(foto.url);
+              const blob = await resp.blob();
+              fileToUpload = new File([blob], 'foto-procedimento.jpg', {
+                type: blob.type || 'image/jpeg',
+              });
+            }
+            if (!fileToUpload) return;
+            const webp = await convertToWebP(fileToUpload, 0.85, 1920);
+            await pacientesGaleriaApi.upload(paciente.id, webp, {
+              roleUserId: ridUpload,
+              procedimentoFeitoId: procIdOpt,
+              legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.DEPOIS, 'Foto do procedimento'),
+              dataReferencia: new Date().toISOString().slice(0, 10),
+            });
+          } catch (e) {
+            console.warn('Erro ao salvar foto do procedimento:', e);
+          }
+        });
+        await Promise.allSettled(uploads);
+      } else if (fotosProcedimento.length > 0 && paciente?.id && (!ridUpload || !/^[0-9a-f-]{36}$/i.test(String(ridUpload)))) {
+        console.warn('Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.');
+      }
+
       refreshPatients();
       toast.success('Jornada finalizada com sucesso.');
       const cpfParaPerfil = sCpf;
@@ -657,6 +688,8 @@ export default function App() {
     patientState.setPatientView('list');
     setJourneyProcedureDateIso(toLocalISODate());
     setQueixaVisivel(true);
+    cameraState.resetProcedureCapturedPhotos();
+    cameraState.resetEvaluationPhotos();
   };
 
   /** Envia o JPEG com desenho para a galeria do paciente (mesma API do perfil). */
@@ -849,10 +882,10 @@ export default function App() {
                       setNomeProcedimento={journeyState.setNomeProcedimento}
                       observacoesExecucao={journeyState.observacoesExecucao}
                       setObservacoesExecucao={journeyState.setObservacoesExecucao}
-                      procedureCapturedPhotos={cameraState.evaluationCapturedPhotos}
+                      procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
                       procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                      onProcedureUploadFiles={cameraState.uploadPhotoFiles}
-                      onProcedureRemovePhoto={handleDeleteCapturedPhoto}
+                      onProcedureUploadFiles={cameraState.uploadProcedureFiles}
+                      onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
                       step4Errors={journeyState.step4Errors}
                       setStep4Errors={journeyState.setStep4Errors}
                     />
