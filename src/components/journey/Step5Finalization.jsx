@@ -1,5 +1,13 @@
-import React from 'react';
-import { CheckCircle, Square, CheckSquare, CheckCircle2, BookOpen, ThumbsUp } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { CheckCircle, Square, CheckSquare, CheckCircle2, BookOpen } from 'lucide-react';
+import { useToast } from '../../contexts/useToast.js';
+import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
+import {
+  sanitizeBirthDateDigits,
+  formatBirthDigitsBR,
+  validateCalendarDateDigits8,
+  calendarDateValidationUserMessage,
+} from '../utils/formatters';
 
 const ORIENTACOES_ITENS = [
   'Evite exposição solar direta por 48 horas',
@@ -10,15 +18,69 @@ const ORIENTACOES_ITENS = [
   'Entre em contato conosco em caso de dúvidas ou reações',
 ];
 
+function isoToBR(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return '';
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
 export function Step5Finalization({
+  procedureDateIso,
   orientacoes,
   setOrientacoes,
-  satisfacao,
-  setSatisfacao,
   step5Errors = {},
   setStep5Errors = () => {},
 }) {
-  const [nextReturnDate, setNextReturnDate] = React.useState('');
+  const toast = useToast();
+  const todayIso = useMemo(() => toLocalISODate(), []);
+  const minReturnIso = useMemo(
+    () => maxIsoDate(procedureDateIso || todayIso, todayIso),
+    [procedureDateIso, todayIso]
+  );
+  const maxReturnIso = useMemo(() => addCalendarYearsToIso(todayIso, 10), [todayIso]);
+
+  const [returnDateDisplay, setReturnDateDisplay] = useState('');
+  const lastRangeToastIsoRef = useRef('');
+
+  const handleReturnDateChange = (raw) => {
+    const digits = sanitizeBirthDateDigits(raw);
+    const display = formatBirthDigitsBR(digits);
+    setReturnDateDisplay(display);
+
+    if (digits.length < 8) {
+      lastRangeToastIsoRef.current = '';
+      return;
+    }
+
+    const cal = validateCalendarDateDigits8(digits);
+    if (!cal.ok) {
+      lastRangeToastIsoRef.current = '';
+      return;
+    }
+
+    if (cal.iso < minReturnIso || cal.iso > maxReturnIso) {
+      if (lastRangeToastIsoRef.current !== cal.iso) {
+        lastRangeToastIsoRef.current = cal.iso;
+        toast.error('Data de retorno fora do período permitido.');
+      }
+      return;
+    }
+
+    lastRangeToastIsoRef.current = '';
+  };
+
+  const digitsForUi = returnDateDisplay.replace(/\D/g, '');
+  let returnDateFieldMessage = null;
+  if (digitsForUi.length === 8) {
+    const cal = validateCalendarDateDigits8(digitsForUi);
+    if (!cal.ok) {
+      returnDateFieldMessage = calendarDateValidationUserMessage(cal.reason);
+    } else if (cal.iso < minReturnIso || cal.iso > maxReturnIso) {
+      returnDateFieldMessage = `A data deve estar entre ${isoToBR(minReturnIso)} e ${isoToBR(maxReturnIso)}.`;
+    }
+  }
+
+  const returnDateInputInvalid = Boolean(returnDateFieldMessage);
 
   return (
     <div className="pb-4 min-w-0">
@@ -34,7 +96,7 @@ export function Step5Finalization({
 
       <div
         className={`space-y-6 rounded-2xl border-[3px] bg-white p-6 ${
-          step5Errors.orientacoes || step5Errors.satisfacao ? 'border-red-300' : 'border-[#00a88e]/25'
+          step5Errors.orientacoes ? 'border-red-300' : 'border-[#00a88e]/25'
         }`}
       >
         <div>
@@ -58,11 +120,27 @@ export function Step5Finalization({
           </label>
           <input
             id="next-return-date"
-            type="date"
-            value={nextReturnDate}
-            onChange={(e) => setNextReturnDate(e.target.value)}
-            className="w-full max-w-xs rounded-xl border-[2px] border-[#e2e8f0] px-4 py-2.5 text-[14px] outline-none focus:border-[#00a88e]"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={returnDateDisplay}
+            onChange={(e) => handleReturnDateChange(e.target.value)}
+            placeholder="DD/MM/AAAA"
+            maxLength={10}
+            className={`w-full max-w-xs rounded-xl border-[3px] bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:ring-4 focus:ring-[#00a88e]/20 ${
+              returnDateInputInvalid
+                ? 'border-red-400 bg-red-50'
+                : 'border-[#00a88e]/25 focus:border-[#00a88e]'
+            }`}
           />
+          <p className="text-[12px] font-medium text-[#64748b]">
+            Entre {isoToBR(minReturnIso)} e {isoToBR(maxReturnIso)}.
+          </p>
+          {returnDateFieldMessage ? (
+            <p className="text-[12px] font-bold text-red-600" role="alert">
+              {returnDateFieldMessage}
+            </p>
+          ) : null}
         </div>
 
         <div className="border-t border-[#e2e8f0] pt-5">
@@ -96,39 +174,6 @@ export function Step5Finalization({
             <BookOpen className="h-4 w-4 shrink-0 text-[#64748b]" strokeWidth={2.5} aria-hidden />
             <span className={`text-[14px] font-bold ${orientacoes ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
               Recebi e compreendi as orientações pós-procedimento
-            </span>
-          </div>
-
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              setSatisfacao(!satisfacao);
-              setStep5Errors((prev) => ({ ...prev, satisfacao: false }));
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setSatisfacao(!satisfacao);
-                setStep5Errors((prev) => ({ ...prev, satisfacao: false }));
-              }
-            }}
-            className={`mt-3 flex cursor-pointer items-center gap-4 rounded-xl border-[3px] p-4 transition-all shadow-sm ${
-              step5Errors.satisfacao
-                ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
-                : satisfacao
-                  ? 'border-[#00a88e] bg-[#e6f7f5]'
-                  : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
-            }`}
-          >
-            {satisfacao ? (
-              <CheckSquare className="h-6 w-6 shrink-0 text-[#00a88e]" strokeWidth={2.5} />
-            ) : (
-              <Square className="h-6 w-6 shrink-0 text-[#00a88e]/40" strokeWidth={2.5} />
-            )}
-            <ThumbsUp className="h-4 w-4 shrink-0 text-[#64748b]" strokeWidth={2.5} aria-hidden />
-            <span className={`text-[14px] font-bold ${satisfacao ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
-              Paciente confirma satisfação com o resultado
             </span>
           </div>
         </div>

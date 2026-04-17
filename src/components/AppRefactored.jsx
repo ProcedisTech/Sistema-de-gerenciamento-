@@ -19,6 +19,7 @@ import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
 import { anamneseApi, pacientesGaleriaApi, procedimentosApi, termosApi } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
+import { toLocalISODate } from '../utils/dateLimits.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
@@ -60,6 +61,10 @@ export default function App() {
   const authSessionReady = authState.authReady && authState.cookieConsentAccepted && authState.isLoggedIn;
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
+  /** Data local (YYYY-MM-DD) do início do atendimento — limite mínimo para “próximo retorno”. */
+  const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(() => toLocalISODate());
+  /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
+  const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
   const canvasRef = useRef(null);
@@ -263,6 +268,7 @@ export default function App() {
     if (!patient) return;
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     setSelectedPatientCpf(cpf);
+    setJourneyProcedureDateIso(toLocalISODate());
     setCurrentStep(1);
     setActiveView('jornada');
     setPatientView('list');
@@ -370,7 +376,6 @@ export default function App() {
       termoAssinaturaDataUrl: journeyState.termoAssinaturaDataUrl || '',
       profissionalAssinaturaDataUrl: journeyState.profissionalAssinaturaDataUrl || '',
       orientacoes: Boolean(journeyState.orientacoes),
-      satisfacao: Boolean(journeyState.satisfacao),
     };
 
     setPatients((prev) => {
@@ -513,13 +518,12 @@ export default function App() {
     }
 
     if (currentStep === 5) {
-      const { orientacoes, satisfacao } = journeyState;
-      if (!orientacoes || !satisfacao) {
+      const { orientacoes } = journeyState;
+      if (!orientacoes) {
         journeyState.setStep5Errors({
           orientacoes: !orientacoes,
-          satisfacao: !satisfacao,
         });
-        toast.error('Para prosseguir, confirme as orientações e o nível de satisfação.');
+        toast.error('Para prosseguir, confirme que recebeu e compreendeu as orientações pós-procedimento.');
         return;
       }
 
@@ -608,7 +612,6 @@ export default function App() {
     journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setProfissionalAssinaturaDataUrl('');
     journeyState.setOrientacoes(false);
-    journeyState.setSatisfacao(false);
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
     journeyState.setStep2Errors({});
@@ -618,6 +621,7 @@ export default function App() {
     journeyState.setTermoSelecionadoId(null);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
+    setJourneyProcedureDateIso(toLocalISODate());
   };
 
   /** Envia o JPEG com desenho para a galeria do paciente (mesma API do perfil). */
@@ -677,6 +681,7 @@ export default function App() {
         setActiveView={setActiveView}
         handleLogout={handleLogout}
         authUser={authUser}
+        onRailWidthPxChange={setSidebarRailWidthPx}
       />
 
       {/* Main Content */}
@@ -739,6 +744,7 @@ export default function App() {
 
                   {currentStep === 2 && (
                     <Step3Evaluation
+                      sidebarInsetPx={sidebarRailWidthPx}
                       imageSrc={journeyState.imageSrc}
                       setImageSrc={journeyState.setImageSrc}
                       activeTool={journeyState.activeTool}
@@ -814,10 +820,9 @@ export default function App() {
 
                   {currentStep === 5 && (
                     <Step5Finalization
+                      procedureDateIso={journeyProcedureDateIso}
                       orientacoes={journeyState.orientacoes}
                       setOrientacoes={journeyState.setOrientacoes}
-                      satisfacao={journeyState.satisfacao}
-                      setSatisfacao={journeyState.setSatisfacao}
                       step5Errors={journeyState.step5Errors}
                       setStep5Errors={journeyState.setStep5Errors}
                     />
@@ -827,7 +832,10 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[30] hidden md:block md:pl-16 lg:pl-[220px]">
+            <div
+              className="pointer-events-none fixed inset-x-0 bottom-0 z-[30] hidden md:block"
+              style={{ paddingLeft: sidebarRailWidthPx }}
+            >
               <div className="pointer-events-auto border-t border-[#e2e8f0] bg-white px-6 py-4 shadow-[0_-4px_24px_rgba(15,23,42,0.06)]">
                 <div className="mx-auto grid w-full max-w-[1600px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4">
                   <div className="flex justify-start">
@@ -861,16 +869,16 @@ export default function App() {
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        disabled={isFinishing || !journeyState.orientacoes || !journeyState.satisfacao}
+                        disabled={isFinishing || !journeyState.orientacoes}
                         className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                          journeyState.orientacoes && journeyState.satisfacao && !isFinishing
+                          journeyState.orientacoes && !isFinishing
                             ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
                             : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                         }`}
                       >
                         {isFinishing
                           ? 'Salvando...'
-                          : !journeyState.orientacoes || !journeyState.satisfacao
+                          : !journeyState.orientacoes
                             ? 'Confirme as orientações para finalizar'
                             : 'Finalizar Atendimento ✓'}
                       </button>
@@ -901,16 +909,13 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleNextStep}
-                disabled={
-                  isFinishing ||
-                  (currentStep === 5 && (!journeyState.orientacoes || !journeyState.satisfacao))
-                }
+                disabled={isFinishing || (currentStep === 5 && !journeyState.orientacoes)}
                 className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${
                   currentStep < 5
                     ? isFinishing
                       ? 'cursor-not-allowed bg-[#00a88e]/50'
                       : 'bg-[#00a88e] active:bg-[#00967f]'
-                    : journeyState.orientacoes && journeyState.satisfacao && !isFinishing
+                    : journeyState.orientacoes && !isFinishing
                       ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                 }`}
@@ -921,7 +926,7 @@ export default function App() {
                   </>
                 ) : isFinishing ? (
                   'Salvando...'
-                ) : !journeyState.orientacoes || !journeyState.satisfacao ? (
+                ) : !journeyState.orientacoes ? (
                   'Finalizar'
                 ) : (
                   'Finalizar ✓'

@@ -4,6 +4,7 @@ import {
   maskCPF,
   maskRG,
   maskTelefone,
+  isCpfIncomplete,
   calculateAgeFromISODate,
   getPatientInitials,
   sanitizeBirthDateDigits,
@@ -11,6 +12,7 @@ import {
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
+import { useToast } from '../../contexts/useToast.js';
 import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 
@@ -35,6 +37,7 @@ export function Step1CheckIn({
   step1Errors, setStep1Errors,
   selectPatient,
 }) {
+  const toast = useToast();
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
   const [tipoBusca, setTipoBusca] = useState('nome');
   const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
@@ -111,6 +114,13 @@ export function Step1CheckIn({
     const br = validateBirthDateDigits8(birthDigitsForUi);
     if (!br.ok) dataNascimentoFieldMessage = birthDateValidationUserMessage(br.reason);
   }
+
+  const handleCpfBlur = () => {
+    if (isCpfIncomplete(cpf)) {
+      setStep1Errors((prev) => ({ ...prev, cpf: true }));
+      toast.error('O CPF deve conter 11 dígitos.');
+    }
+  };
 
   const filteredPatients = patients.filter((p) => {
     const q = searchQuery.trim();
@@ -324,6 +334,7 @@ export function Step1CheckIn({
                   <option value="">Selecione...</option>
                   <option value="F">Feminino</option>
                   <option value="M">Masculino</option>
+                  <option value="N">Prefiro não dizer</option>
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -395,6 +406,7 @@ export function Step1CheckIn({
                     setCpf(maskCPF(e.target.value));
                     setStep1Errors({...step1Errors, cpf: false});
                   }}
+                  onBlur={handleCpfBlur}
                   placeholder="000.000.000-00"
                   className={`w-full px-4 py-3 bg-[#eff6ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${step1Errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'}`}
                 />

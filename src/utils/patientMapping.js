@@ -1,6 +1,13 @@
 import { calculateAgeFromISODate } from '../components/utils/formatters';
 import { resolveApiUrl } from '../config/apiEnv.js';
 
+/** Códigos de sexo aceitos na API (Spring): M, F, N (prefiro não dizer / não declarado). */
+export function normalizeSexoForApi(raw) {
+  const u = String(raw ?? '').trim().toUpperCase();
+  if (u === 'F' || u === 'M' || u === 'N') return u;
+  return null;
+}
+
 /**
  * Backend pode enviar path relativo à API (ex. /api/v1/pacientes/{id}/foto-perfil?v=…).
  * Com front em outro host (Netlify), precisamos prefixar VITE_API_BASE_URL para o <img> carregar.
@@ -65,7 +72,6 @@ export function mapBackendPatient(dto) {
 
 /** Monta PacienteCreateDTO a partir do check-in da jornada (paciente novo). */
 export function journeyToPacienteCreateDTO(j) {
-  const sexo = (j.sexo || '').toUpperCase();
   return {
     nomeCompleto: (j.nome || '').trim(),
     dataNascimento: j.dataNascimento || null,
@@ -74,7 +80,7 @@ export function journeyToPacienteCreateDTO(j) {
     telefone: (j.telefone || '').trim() || null,
     email: (j.email || '').trim() || null,
     profissao: (j.profissao || '').trim() || null,
-    sexo: sexo === 'F' || sexo === 'M' ? sexo : null,
+    sexo: normalizeSexoForApi(j.sexo),
     estadoCivilId: j.estadoCivilId || undefined,
     endereco: (j.endereco || '').trim() || null,
   };
@@ -82,7 +88,6 @@ export function journeyToPacienteCreateDTO(j) {
 
 /** Mescla edição leve do perfil em PacienteCreateDTO para PUT completo. */
 export function patientToPacienteUpdateDTO(patient, editing) {
-  const sexo = (editing?.sexo ?? patient.sexo ?? '').toUpperCase();
   return {
     nomeCompleto: (editing?.nome ?? patient.nome ?? '').trim(),
     dataNascimento: patient.dataNascimento || null,
@@ -91,7 +96,7 @@ export function patientToPacienteUpdateDTO(patient, editing) {
     telefone: (editing?.telefone ?? patient.telefone ?? '').trim() || null,
     email: (editing?.email ?? patient.email ?? '').trim() || null,
     profissao: (editing?.profissao ?? patient.profissao ?? '').trim() || null,
-    sexo: sexo === 'F' || sexo === 'M' ? sexo : null,
+    sexo: normalizeSexoForApi(editing?.sexo ?? patient.sexo),
     instagram: patient.instagram || null,
     tiktok: patient.tiktok || null,
     nomeMae: patient.nomeMae || null,
@@ -106,7 +111,7 @@ export function patientToPacienteUpdateDTO(patient, editing) {
 /** PUT completo: parte do GET /pacientes/{id} + campos editados na UI. */
 export function mergePacienteDtoWithEditing(dto, editing) {
   if (!dto) return null;
-  const sexo = (dto.sexo || '').toUpperCase();
+  const sexoNorm = normalizeSexoForApi(dto.sexo);
   return {
     nomeCompleto: (editing?.nome ?? dto.nomeCompleto ?? '').trim(),
     dataNascimento: dto.dataNascimento || null,
@@ -121,7 +126,7 @@ export function mergePacienteDtoWithEditing(dto, editing) {
     profissao: (editing?.profissao ?? dto.profissao ?? '').trim() || null,
     indicacao: dto.indicacao || null,
     endereco: (editing?.endereco ?? dto.endereco ?? '').trim() || null,
-    sexo: sexo === 'F' || sexo === 'M' ? sexo : dto.sexo || null,
+    sexo: (sexoNorm ?? dto.sexo) || null,
     genero: dto.genero || null,
     estadoCivilId: dto.estadoCivilId || undefined,
   };

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useToast } from '../../contexts/useToast.js';
 import { authHeadersForFetch } from '../../services/api.js';
+import { normalizeSexoForApi } from '../../utils/patientMapping.js';
 
 export function useJourneyController({
   state,
@@ -60,7 +61,6 @@ export function useJourneyController({
     setTermoLido,
     setTermoAssinado,
     setOrientacoes,
-    setSatisfacao,
   } = setters;
 
   const { generateJourneyId, api } = helpers;
@@ -70,8 +70,8 @@ export function useJourneyController({
     setNome(patient.nome || '');
     setDataNascimento(patient.dataNascimento || '');
     setIdade(patient.idade !== undefined && patient.idade !== null ? String(patient.idade) : '');
-    const sx = String(patient.sexo || '').trim().toUpperCase();
-    setSexo(sx === 'F' || sx === 'M' ? sx : '');
+    const sx = normalizeSexoForApi(patient.sexo);
+    setSexo(sx || '');
     setEstadoCivilId(
       patient.estadoCivilId != null && String(patient.estadoCivilId).trim() !== ''
         ? String(patient.estadoCivilId)
@@ -207,7 +207,6 @@ export function useJourneyController({
     setTermoLido(false);
     setTermoAssinado(false);
     setOrientacoes(false);
-    setSatisfacao(false);
   };
 
   const handleFinishJourney = () => {

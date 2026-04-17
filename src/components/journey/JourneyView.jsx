@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
+import { toLocalISODate } from '../../utils/dateLimits.js';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { Step2Anamnese } from './Step2Anamnese';
 import { Step3Evaluation } from './Step3Evaluation';
@@ -166,8 +167,7 @@ export function JourneyView({
   onProcedureRemovePhoto,
   orientacoes,
   setOrientacoes,
-  satisfacao,
-  setSatisfacao,
+  procedureDateIso = toLocalISODate(),
   step5Errors,
   setStep5Errors,
   prevStep,
@@ -305,10 +305,9 @@ export function JourneyView({
 
       {currentStep === 5 && (
         <Step5Finalization
+          procedureDateIso={procedureDateIso}
           orientacoes={orientacoes}
           setOrientacoes={setOrientacoes}
-          satisfacao={satisfacao}
-          setSatisfacao={setSatisfacao}
           step5Errors={step5Errors}
           setStep5Errors={setStep5Errors}
         />
@@ -348,16 +347,16 @@ export function JourneyView({
                 <button
                   type="button"
                   onClick={handleFinishJourney}
-                  disabled={!orientacoes || !satisfacao || isFinishing}
+                  disabled={!orientacoes || isFinishing}
                   className={`flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                    orientacoes && satisfacao && !isFinishing
+                    orientacoes && !isFinishing
                       ? 'animate-pulse bg-[#00a88e] text-white hover:bg-[#00967f]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                   }`}
                 >
                   {isFinishing
                     ? 'Salvando...'
-                    : !orientacoes || !satisfacao
+                    : !orientacoes
                       ? 'Confirme as orientações para finalizar'
                       : 'Finalizar Atendimento'}
                   <CheckCircle className="h-4 w-4" strokeWidth={3} />
