@@ -22,11 +22,48 @@ export function useProcedureCamera({
 
   const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
+  const [procedureCapturedPhotos, setProcedureCapturedPhotos] = useState([]);
   const [evaluationSelectedPhotoIndex, setEvaluationSelectedPhotoIndex] = useState(null);
   const [evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl] = useState(null);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  const revokePreviewUrl = (url) => {
+    if (!url) return;
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  };
+
+  const resetProcedureCapturedPhotos = useCallback(() => {
+    setProcedureCapturedPhotos((prev) => {
+      (prev || []).forEach((ph) => {
+        try {
+          if (ph?.url) URL.revokeObjectURL(ph.url);
+        } catch {
+          /* ignore */
+        }
+      });
+      return [];
+    });
+  }, []);
+
+  const resetEvaluationPhotos = useCallback(() => {
+    setEvaluationCapturedPhotos((prev) => {
+      (prev || []).forEach((ph) => {
+        try {
+          if (ph?.url) URL.revokeObjectURL(ph.url);
+        } catch {
+          /* ignore */
+        }
+      });
+      return [];
+    });
+    setEvaluationSelectedPhotoIndex(null);
+  }, []);
 
   const stopCamera = () => {
     try {
@@ -88,17 +125,10 @@ export function useProcedureCamera({
     setPreferredFacing((f) => (f === 'environment' ? 'user' : 'environment'));
   };
 
-  const revokePreviewUrl = (url) => {
-    if (!url) return;
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      // ignore
-    }
-  };
-
   const openPhotoModal = () => {
-    if (evaluationCapturedPhotos.length >= EVALUATION_PHOTO_MAX) {
+    const count =
+      currentStep === 4 ? procedureCapturedPhotos.length : evaluationCapturedPhotos.length;
+    if (count >= EVALUATION_PHOTO_MAX) {
       setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
       return;
     }
@@ -150,6 +180,37 @@ export function useProcedureCamera({
 
   const confirmPhoto = () => {
     if (!photoPreviewUrl) return;
+
+    if (currentStep === 4) {
+      if (procedureCapturedPhotos.length >= EVALUATION_PHOTO_MAX) {
+        setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
+        return;
+      }
+
+      const meta = {
+        journeyId: journeyId || generateJourneyId(),
+        capturedAt: new Date().toISOString(),
+        stepCaptured: 4,
+        source: 'camera',
+        categoria: 'procedimento',
+      };
+
+      const newEntry = { url: photoPreviewUrl, blob: photoPreviewBlob, meta };
+      const newPhotos = [...procedureCapturedPhotos, newEntry];
+
+      setAnamnesePhotoUrl(photoPreviewUrl);
+      setAnamnesePhotoBlob(photoPreviewBlob);
+      setAnamnesePhotoMeta(meta);
+
+      setProcedureCapturedPhotos(newPhotos);
+
+      setPhotoPreviewUrl(null);
+      setPhotoPreviewBlob(null);
+      stopCamera();
+      setPhotoModalOpen(false);
+      setCameraError('');
+      return;
+    }
 
     if (evaluationCapturedPhotos.length >= EVALUATION_PHOTO_MAX) {
       setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
@@ -255,6 +316,55 @@ export function useProcedureCamera({
     }
   };
 
+  const uploadProcedureFiles = (fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f && String(f.type || '').startsWith('image/'));
+    if (!files.length) return;
+
+    setProcedureCapturedPhotos((prev) => {
+      const remaining = Math.max(0, EVALUATION_PHOTO_MAX - prev.length);
+      if (remaining <= 0) {
+        setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
+        return prev;
+      }
+      const slice = files.slice(0, remaining);
+      const nowIso = new Date().toISOString();
+      const nextPhotos = [
+        ...prev,
+        ...slice.map((file) => ({
+          url: URL.createObjectURL(file),
+          blob: file,
+          meta: {
+            journeyId: journeyId || generateJourneyId(),
+            capturedAt: nowIso,
+            stepCaptured: 4,
+            source: 'upload',
+            fileName: file.name,
+            categoria: 'procedimento',
+          },
+        })),
+      ];
+      if (slice.length < files.length) {
+        setCameraError(`Foram adicionadas ${slice.length} fotos. Limite de ${EVALUATION_PHOTO_MAX} atingido.`);
+      } else {
+        setCameraError('');
+      }
+      return nextPhotos;
+    });
+  };
+
+  const removeProcedurePhoto = useCallback((idx) => {
+    setProcedureCapturedPhotos((prev) => {
+      if (!Array.isArray(prev) || idx < 0 || idx >= prev.length) return prev;
+      const row = prev[idx];
+      try {
+        if (row?.url) URL.revokeObjectURL(row.url);
+      } catch {
+        /* ignore */
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
+
   /** Substitui um item da lista de avaliação pelo JPEG já com desenho (mesmo índice selecionado na etapa 3). */
   const replaceEvaluationCapturedPhotoAt = useCallback(
     (index, entry) => {
@@ -335,6 +445,10 @@ export function useProcedureCamera({
     videoRef,
     evaluationCapturedPhotos,
     setEvaluationCapturedPhotos,
+    procedureCapturedPhotos,
+    setProcedureCapturedPhotos,
+    resetProcedureCapturedPhotos,
+    resetEvaluationPhotos,
     evaluationSelectedPhotoIndex,
     setEvaluationSelectedPhotoIndex,
     evaluationAnnotatedPhotoUrl,
@@ -347,10 +461,10 @@ export function useProcedureCamera({
     capturePhoto,
     confirmPhoto,
     uploadPhotoFiles,
+    uploadProcedureFiles,
+    removeProcedurePhoto,
     replaceEvaluationCapturedPhotoAt,
     preferredFacing,
     toggleCameraFacing,
   };
 }
-
-

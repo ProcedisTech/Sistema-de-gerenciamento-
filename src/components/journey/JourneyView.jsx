@@ -167,6 +167,10 @@ export function JourneyView({
   setObservacoesExecucao,
   onProcedureUploadFiles,
   onProcedureRemovePhoto,
+  /** Fotos do step 4; se omitido, usa `evaluationCapturedPhotos` (legado). */
+  procedureCapturedPhotos: procedureCapturedPhotosStep4,
+  uploadProcedureFiles: uploadProcedureFilesStep4,
+  removeProcedurePhoto: removeProcedurePhotoStep4,
   orientacoes,
   setOrientacoes,
   procedureDateIso = toLocalISODate(),
@@ -327,10 +331,10 @@ export function JourneyView({
           setNomeProcedimento={setNomeProcedimento}
           observacoesExecucao={observacoesExecucao}
           setObservacoesExecucao={setObservacoesExecucao}
-          procedureCapturedPhotos={evaluationCapturedPhotos}
+          procedureCapturedPhotos={procedureCapturedPhotosStep4 ?? evaluationCapturedPhotos}
           procedurePhotoMax={EVALUATION_PHOTO_MAX}
-          onProcedureUploadFiles={onProcedureUploadFiles}
-          onProcedureRemovePhoto={onProcedureRemovePhoto}
+          onProcedureUploadFiles={uploadProcedureFilesStep4 ?? onProcedureUploadFiles}
+          onProcedureRemovePhoto={removeProcedurePhotoStep4 ?? onProcedureRemovePhoto}
           step4Errors={step4Errors}
           setStep4Errors={setStep4Errors}
         />

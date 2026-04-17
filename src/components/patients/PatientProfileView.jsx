@@ -1806,27 +1806,6 @@ export function PatientProfileView({
                         <div className="mt-0.5 text-[14px] font-semibold text-[#0f172a]">{selectedPatient.proximoRetorno || '—'}</div>
                       </div>
                     </div>
-                    <h5 className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-[#94a3b8]">Alertas ativos</h5>
-                    <div className="flex flex-col gap-2">
-                      {String(selectedPatient.alergias || '').trim() ? (
-                        <div className="flex items-center gap-2 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[13px] font-medium text-[#dc2626]">
-                          Alergias: {String(selectedPatient.alergias).trim()}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-3 py-2 text-[13px] font-medium text-[#94a3b8]">
-                          Nenhuma alergia registrada
-                        </div>
-                      )}
-                      {String(selectedPatient.condicoesSaude || '').trim() ? (
-                        <div className="flex items-center gap-2 rounded-lg border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-[13px] font-medium text-[#ea580c]">
-                          Condições de saúde: {String(selectedPatient.condicoesSaude).trim()}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-3 py-2 text-[13px] font-medium text-[#94a3b8]">
-                          Nenhuma condição registrada
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
