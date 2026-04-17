@@ -15,7 +15,7 @@ import {
   Search,
   Calendar,
 } from 'lucide-react';
-import { procedimentosApi, termosApi } from '../../services/api';
+import { procedimentosApi, termoAssinaturaApi, termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
@@ -236,6 +236,10 @@ export function Step3Termos({
   termoTitulo,
   termoConteudo,
   onTermoChange,
+  onAssinaturaSalva,
+  pacienteId = null,
+  procedimentoFeitoId = null,
+  roleUserId = null,
 }) {
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
@@ -255,6 +259,64 @@ export function Step3Termos({
   const [mobilePortrait, setMobilePortrait] = useState(false);
   const [profAssinaturaTimestamp, setProfAssinaturaTimestamp] = useState(null);
   const [patAssinaturaTimestamp, setPatAssinaturaTimestamp] = useState(null);
+  const [assinaturaPersistida, setAssinaturaPersistida] = useState(false);
+
+  useEffect(() => {
+    setAssinaturaPersistida(false);
+  }, [termoSelecionadoId]);
+
+  useEffect(() => {
+    if (
+      !profissionalAssinaturaDataUrl ||
+      !termoAssinaturaDataUrl ||
+      !termoSelecionadoId ||
+      !pacienteId ||
+      assinaturaPersistida
+    ) {
+      return;
+    }
+
+    const salvar = async () => {
+      try {
+        setAssinaturaPersistida(true);
+        const resultado = await termoAssinaturaApi.criar({
+          termoId: termoSelecionadoId,
+          pacienteId,
+          procedimentoFeitoId: procedimentoFeitoId ?? null,
+          roleUserId: roleUserId ?? null,
+          assinaturaProfissional: profissionalAssinaturaDataUrl,
+          assinaturaPaciente: termoAssinaturaDataUrl,
+          profissionalAssinouEm:
+            profAssinaturaTimestamp != null
+              ? new Date(profAssinaturaTimestamp).toISOString()
+              : new Date().toISOString(),
+          pacienteAssinouEm:
+            patAssinaturaTimestamp != null
+              ? new Date(patAssinaturaTimestamp).toISOString()
+              : new Date().toISOString(),
+        });
+        toast.success('Termo assinado e salvo com sucesso.');
+        onAssinaturaSalva?.(resultado);
+      } catch (e) {
+        setAssinaturaPersistida(false);
+        toast.error('Erro ao salvar assinatura: ' + (e?.message || 'Tente novamente'));
+      }
+    };
+
+    salvar();
+  }, [
+    profissionalAssinaturaDataUrl,
+    termoAssinaturaDataUrl,
+    termoSelecionadoId,
+    pacienteId,
+    assinaturaPersistida,
+    procedimentoFeitoId,
+    roleUserId,
+    profAssinaturaTimestamp,
+    patAssinaturaTimestamp,
+    onAssinaturaSalva,
+    toast,
+  ]);
 
   useEffect(() => {
     termosApi
@@ -331,6 +393,7 @@ export function Step3Termos({
       if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
       setProfAssinaturaTimestamp(null);
       setPatAssinaturaTimestamp(null);
+      setAssinaturaPersistida(false);
       setStep4Errors({});
       onTermoChange?.(id, termo);
     },
@@ -566,6 +629,7 @@ export function Step3Termos({
                 <button
                   type="button"
                   onClick={() => {
+                    setAssinaturaPersistida(false);
                     setProfissionalAssinaturaDataUrl('');
                     setProfAssinaturaTimestamp(null);
                     setTermoAssinaturaDataUrl('');
@@ -633,6 +697,7 @@ export function Step3Termos({
                 <button
                   type="button"
                   onClick={() => {
+                    setAssinaturaPersistida(false);
                     setTermoAssinaturaDataUrl('');
                     setPatAssinaturaTimestamp(null);
                     if (typeof setTermoAssinado === 'function') setTermoAssinado(false);

@@ -33,6 +33,7 @@ import {
   pacientesGaleriaApi,
   notasApi,
   procedimentosApi,
+  termoAssinaturaApi,
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
@@ -95,6 +96,18 @@ function isRespostaPrioridadeAlerta(resp) {
   return pr === 'ALERTA' || s === 'alerta' || s === 'alert';
 }
 
+/** Pergunta em ALERTA só entra no painel se o paciente de fato respondeu algo relevante. */
+function isRespostaPreocupante(resp) {
+  if (resp.respostaBoolean === true) return true;
+  if (resp.respostaBoolean === false) return false;
+  if (resp.respostaTexto != null && String(resp.respostaTexto).trim() !== '') return true;
+  if (resp.perguntaOpcaoId != null && resp.perguntaOpcaoId !== '') return true;
+  if (Array.isArray(resp.opcoesSelecionadas) && resp.opcoesSelecionadas.length > 0) return true;
+  if (Array.isArray(resp.opcoes_selecionadas) && resp.opcoes_selecionadas.length > 0) return true;
+  if (resp.respostaNumero != null && resp.respostaNumero !== '') return true;
+  return false;
+}
+
 function textoPerguntaResposta(resp) {
   return (resp?.perguntaDescricao || resp?.pergunta?.descricao || 'Pergunta').trim() || 'Pergunta';
 }
@@ -111,10 +124,12 @@ function isRespostaCategoria(resp, nomeCategoria) {
 }
 
 function isRespostaPositiva(resp) {
+  if (resp.respostaBoolean === false) return false;
   if (resp.respostaBoolean === true) return true;
   if (resp.respostaTexto && resp.respostaTexto.trim() !== '') return true;
   if (resp.perguntaOpcaoId) return true;
   if (Array.isArray(resp.opcoesSelecionadas) && resp.opcoesSelecionadas.length > 0) return true;
+  if (Array.isArray(resp.opcoes_selecionadas) && resp.opcoes_selecionadas.length > 0) return true;
   return false;
 }
 
@@ -504,6 +519,21 @@ function formatDataHoraPtBr(dataHora) {
   return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
+/** Data e hora para blocos de assinatura no prontuário (ex.: 16/04/2026, 14:32). */
+function formatDataHoraAssinaturaPtBr(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return '—';
+  return t.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
@@ -528,6 +558,7 @@ export function PatientProfileView({
   const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
+  const [assinaturas, setAssinaturas] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
   const [editing, setEditing] = useState(null);
@@ -845,10 +876,11 @@ export function PatientProfileView({
     setDetailLoading(true);
     (async () => {
       try {
-        const [dtoResult, notasResult, procResult] = await Promise.allSettled([
+        const [dtoResult, notasResult, procResult, assinResult] = await Promise.allSettled([
           pacientesApi.get(id),
           notasApi.list(id),
           procedimentosApi.byPaciente(id),
+          termoAssinaturaApi.listarPorPaciente(id),
         ]);
         if (cancelled) return;
         const dto = dtoResult.status === 'fulfilled' ? dtoResult.value : null;
@@ -869,12 +901,16 @@ export function PatientProfileView({
         }
         const notasList = notasResult.status === 'fulfilled' ? notasResult.value : [];
         const procList = procResult.status === 'fulfilled' ? procResult.value : [];
+        const assinRaw = assinResult.status === 'fulfilled' ? assinResult.value : [];
+        const assinList = Array.isArray(assinRaw) ? assinRaw : assinRaw?.content ?? [];
         setApiNotes(Array.isArray(notasList) ? notasList : []);
         setApiProcedures(Array.isArray(procList) ? procList : []);
+        setAssinaturas(Array.isArray(assinList) ? assinList : []);
       } catch {
         if (!cancelled) {
           setApiNotes([]);
           setApiProcedures([]);
+          setAssinaturas([]);
         }
       } finally {
         if (!cancelled) {
@@ -978,6 +1014,7 @@ export function PatientProfileView({
               });
             }
             if (!isRespostaPrioridadeAlerta(resp)) return;
+            if (!isRespostaPreocupante(resp)) return;
             const pid = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
             itemsGeral.push({
               key: `${an.id}-${pid}`,
@@ -1622,7 +1659,7 @@ export function PatientProfileView({
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <button
                           type="button"
-                          onClick={() => setPatientDetailTab('anamnese')}
+                          onClick={() => onStartAttendance?.(selectedPatient)}
                           className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
                         >
                           Iniciar com Anamnese
@@ -1662,7 +1699,7 @@ export function PatientProfileView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPatientDetailTab('anamnese')}
+                          onClick={() => onStartAttendance?.(selectedPatient)}
                           className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
                         >
                           Ver/Atualizar Anamnese
@@ -1689,7 +1726,7 @@ export function PatientProfileView({
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <button
                           type="button"
-                          onClick={() => setPatientDetailTab('anamnese')}
+                          onClick={() => onStartAttendance?.(selectedPatient)}
                           className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
                         >
                           Atualizar Anamnese
@@ -1774,6 +1811,31 @@ export function PatientProfileView({
                           : '—';
                         const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                         const fotosProc = galeriaItemsForProcedure(proc);
+                        const procId = proc.id ?? proc.procedimentoId;
+                        const assinaturaVinculada = (assinaturas || []).find(
+                          (a) =>
+                            a &&
+                            a.procedimentoFeitoId != null &&
+                            procId != null &&
+                            String(a.procedimentoFeitoId) === String(procId),
+                        );
+                        const tituloTermoAssinado =
+                          assinaturaVinculada?.termoTitulo ??
+                          assinaturaVinculada?.termo?.titulo ??
+                          assinaturaVinculada?.termo?.title ??
+                          'Termo';
+                        const imgAssinProf =
+                          assinaturaVinculada?.assinaturaProfissional ??
+                          assinaturaVinculada?.assinatura_profissional;
+                        const imgAssinPac =
+                          assinaturaVinculada?.assinaturaPaciente ??
+                          assinaturaVinculada?.assinatura_paciente;
+                        const emAssinProf =
+                          assinaturaVinculada?.profissionalAssinouEm ??
+                          assinaturaVinculada?.profissional_assinou_em;
+                        const emAssinPac =
+                          assinaturaVinculada?.pacienteAssinouEm ??
+                          assinaturaVinculada?.paciente_assinou_em;
                         return (
                           <div key={rowKey} className="rounded-xl border-[2px] border-[#e2e8f0] bg-white overflow-hidden shadow-sm">
                             <button
@@ -1816,9 +1878,57 @@ export function PatientProfileView({
                                     {proc.observacao && String(proc.observacao).trim() ? String(proc.observacao).trim() : '—'}
                                   </p>
                                 </div>
+                                {assinaturaVinculada ? (
+                                  <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm">
+                                    <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
+                                      <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                                      Termo Assinado
+                                    </div>
+                                    <p className="mb-4 text-[13px] font-medium text-[#64748b]">
+                                      <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
+                                      {' · '}
+                                      {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
+                                    </p>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                          Assinatura do Profissional
+                                        </div>
+                                        {imgAssinProf ? (
+                                          <img
+                                            src={imgAssinProf}
+                                            alt=""
+                                            className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                                          />
+                                        ) : (
+                                          <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
+                                        )}
+                                        <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
+                                          Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf)}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                          Assinatura do Paciente
+                                        </div>
+                                        {imgAssinPac ? (
+                                          <img
+                                            src={imgAssinPac}
+                                            alt=""
+                                            className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                                          />
+                                        ) : (
+                                          <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
+                                        )}
+                                        <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
+                                          Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
                                 <div className="flex flex-wrap gap-2">
                                   <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
-                                  <ModuloFuturoBadge>Módulo de assinaturas em breve</ModuloFuturoBadge>
                                   <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
                                 </div>
                                 <div>

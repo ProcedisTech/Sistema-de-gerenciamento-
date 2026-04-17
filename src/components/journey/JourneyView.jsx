@@ -109,6 +109,7 @@ export function JourneyView({
   respostasAnamnese,
   salvarRespostaAnamnese,
   setRespostasAnamnese,
+  onQueixaVisibilityChange,
   imageSrc,
   setImageSrc,
   activeTool,
@@ -226,6 +227,7 @@ export function JourneyView({
           respostasAnamnese={respostasAnamnese}
           salvarRespostaAnamnese={salvarRespostaAnamnese}
           setRespostasAnamnese={setRespostasAnamnese}
+          onQueixaVisibilityChange={onQueixaVisibilityChange}
         />
       )}
 

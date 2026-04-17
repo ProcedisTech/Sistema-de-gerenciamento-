@@ -17,7 +17,13 @@ import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { anamneseApi, pacientesGaleriaApi, procedimentosApi, termosApi } from '../services/api';
+import {
+  anamneseApi,
+  pacientesGaleriaApi,
+  procedimentosApi,
+  termoAssinaturaApi,
+  termosApi,
+} from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 
@@ -63,6 +69,18 @@ export default function App() {
   const journeyState = useJourneyState();
   /** Data local (YYYY-MM-DD) do início do atendimento — limite mínimo para “próximo retorno”. */
   const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(() => toLocalISODate());
+  /** Sincronizado com Step2: false quando a ficha tem perguntas (bloco queixa oculto). */
+  const [queixaVisivel, setQueixaVisivel] = useState(true);
+  /** Procedimento já registrado no Step 4, quando existir (na etapa 3 costuma ser null). */
+  const [ultimoProcedimentoId, setUltimoProcedimentoId] = React.useState(null);
+  /** Id da assinatura de termo persistida no Step 3 (para vincular ao procedimento no finalizar). */
+  const [ultimaAssinaturaId, setUltimaAssinaturaId] = React.useState(null);
+
+  const handleTermoAssinaturaSalva = React.useCallback((assinaturaObj) => {
+    if (assinaturaObj?.id) {
+      setUltimaAssinaturaId(assinaturaObj.id);
+    }
+  }, []);
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
@@ -411,7 +429,8 @@ export default function App() {
       upsertPatientLocal({ ensureSelected: true });
 
       const { queixa, expectativas, observacoesExecucao } = journeyState;
-      const skipQueixaExpectativas = anamneseRef.current?.skipQueixaExpectativas?.() === true;
+      const skipQueixaExpectativas =
+        !queixaVisivel || anamneseRef.current?.skipQueixaExpectativas?.() === true;
       if (!skipQueixaExpectativas) {
         if (!queixa.trim() || !expectativas.trim()) {
           const e2 = {};
@@ -563,12 +582,25 @@ export default function App() {
           execTrim
         );
       }
+      let procedimentoFeitoIdParaVinculo = null;
       if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
-        await procedimentosApi.registrarManual(paciente.id, {
+        const resultado = await procedimentosApi.registrarManual(paciente.id, {
           nome: journeyState.nomeProcedimento.trim(),
           roleUserId,
           observacao: String(journeyState.observacoesExecucao || '').trim() || null,
         });
+        const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
+        if (pid != null && pid !== '') {
+          procedimentoFeitoIdParaVinculo = String(pid);
+          setUltimoProcedimentoId(String(pid));
+        }
+      }
+      if (ultimaAssinaturaId && procedimentoFeitoIdParaVinculo) {
+        try {
+          await termoAssinaturaApi.vincularProcedimento(ultimaAssinaturaId, procedimentoFeitoIdParaVinculo);
+        } catch (e) {
+          console.warn('Não foi possível vincular assinatura ao procedimento:', e);
+        }
       }
       refreshPatients();
       toast.success('Jornada finalizada com sucesso.');
@@ -619,9 +651,12 @@ export default function App() {
     journeyState.setStep5Errors({});
     anamnesePreenchimentoIdRef.current = null;
     journeyState.setTermoSelecionadoId(null);
+    setUltimoProcedimentoId(null);
+    setUltimaAssinaturaId(null);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
     setJourneyProcedureDateIso(toLocalISODate());
+    setQueixaVisivel(true);
   };
 
   /** Envia o JPEG com desenho para a galeria do paciente (mesma API do perfil). */
@@ -739,6 +774,7 @@ export default function App() {
                       respostasAnamnese={journeyState.respostasAnamnese}
                       salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
                       setRespostasAnamnese={journeyState.setRespostasAnamnese}
+                      onQueixaVisibilityChange={setQueixaVisivel}
                     />
                   )}
 
@@ -799,6 +835,10 @@ export default function App() {
                       termoTitulo={journeyTermoTitulo || undefined}
                       termoConteudo={journeyTermoConteudo || undefined}
                       onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
+                      pacienteId={pacienteAtual?.id ?? null}
+                      procedimentoFeitoId={ultimoProcedimentoId ?? null}
+                      roleUserId={roleUserId ?? null}
+                      onAssinaturaSalva={handleTermoAssinaturaSalva}
                     />
                   )}
 

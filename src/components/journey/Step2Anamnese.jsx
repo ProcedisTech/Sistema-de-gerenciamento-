@@ -276,6 +276,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   respostasAnamnese = {},
   salvarRespostaAnamnese = () => {},
   setRespostasAnamnese = () => {},
+  onQueixaVisibilityChange,
 }, ref) {
   const [fichas, setFichas] = useState([]);
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState(
@@ -294,6 +295,16 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const [fichaDropdownNovo, setFichaDropdownNovo] = useState(
     () => savedAnamneseState?.fichaDropdownNovo ?? ''
   );
+
+  const itensOrdenados = useMemo(
+    () =>
+      fichaSelecionada?.itens
+        ? [...fichaSelecionada.itens].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+        : [],
+    [fichaSelecionada],
+  );
+
+  const mostrarQueixaExpectativas = !fichaSelecionada || itensOrdenados.length === 0;
 
   useImperativeHandle(ref, () => ({
     getAnamneseData: () => {
@@ -315,14 +326,13 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         }),
       };
     },
-    /** Permite avançar o passo 1 sem queixa/expectativas quando há preenchimento anterior ou modo leitura. */
+    /** Modo leitura ou reaproveitando preenchimento anterior — queixa opcional no UI. */
     skipQueixaExpectativas: () => Boolean(modoVisualizacao || preenchimentoAnterior),
   }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior]);
   const [loadingFichas, setLoadingFichas] = useState(true);
   const [loadingFicha, setLoadingFicha] = useState(false);
   const [historicoPaciente, setHistoricoPaciente] = useState([]);
   const [loadingHistoricoPaciente, setLoadingHistoricoPaciente] = useState(false);
-  const [queixaCardOpen, setQueixaCardOpen] = useState(() => !Boolean(savedAnamneseState?.modoVisualizacao));
   const [fichaMenuOpen, setFichaMenuOpen] = useState(false);
   const [fichaSearch, setFichaSearch] = useState('');
   const fichaMenuRef = useRef(null);
@@ -331,8 +341,14 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const queixaOpcional = modoVisualizacao || preenchimentoAnterior != null;
 
   useEffect(() => {
-    if (modoVisualizacao) setQueixaCardOpen(false);
-  }, [modoVisualizacao]);
+    if (!mostrarQueixaExpectativas) {
+      setStep2Errors((prev) => ({ ...prev, queixa: false, expectativas: false }));
+    }
+  }, [mostrarQueixaExpectativas, setStep2Errors]);
+
+  useEffect(() => {
+    onQueixaVisibilityChange?.(mostrarQueixaExpectativas);
+  }, [mostrarQueixaExpectativas, onQueixaVisibilityChange]);
 
   useEffect(() => {
     if (!fichaMenuOpen) return undefined;
@@ -610,10 +626,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       cancelled = true;
     };
   }, [fichaSelecionadaId, fichaSelecionada]);
-
-  const itensOrdenados = fichaSelecionada?.itens
-    ? [...fichaSelecionada.itens].sort((a, b) => a.ordem - b.ordem)
-    : [];
 
   const fichasFiltered = useMemo(
     () =>
@@ -960,83 +972,67 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      {/* Campos fixos: card colapsável */}
-      <div
-        className={`overflow-hidden rounded-xl border bg-white ${
-          step2Errors.queixa || step2Errors.expectativas ? 'border-red-300' : 'border-[#e2e8f0]'
-        }`}
-      >
-        <button
-          type="button"
-          onClick={() => setQueixaCardOpen((o) => !o)}
-          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-[#f8fafc] transition-colors"
+      {/* Queixa/expectativas: só ficha básica ou sem perguntas; ficha com itens usa só perguntas */}
+      {mostrarQueixaExpectativas ? (
+        <form
+          className={`space-y-6 bg-white border-[3px] rounded-2xl p-6 ${
+            step2Errors.queixa || step2Errors.expectativas ? 'border-red-300' : 'border-[#00a88e]/25'
+          }`}
         >
-          <span className="text-[13px] font-bold text-[#0f172a]">
-            Queixa e Expectativas
+          <div>
+            <h4 className="mb-1 text-[15px] font-bold text-[#0f172a]">Queixa e Expectativas</h4>
             {queixaOpcional ? (
-              <span className="block text-[11px] font-medium text-[#64748b]">
-                (opcional se anamnese já preenchida)
-              </span>
+              <p className="text-[12px] font-medium text-[#64748b]">(opcional se anamnese já preenchida)</p>
             ) : null}
-          </span>
-          {queixaCardOpen ? (
-            <ChevronDown className="h-4 w-4 shrink-0 text-[#64748b]" aria-hidden />
-          ) : (
-            <ChevronRight className="h-4 w-4 shrink-0 text-[#64748b]" aria-hidden />
-          )}
-        </button>
-        {queixaCardOpen ? (
-          <form className="space-y-4 border-t border-[#e2e8f0] px-4 pb-4 pt-3">
-            <div className="space-y-2">
-              <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
-                Queixa Principal
-                {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
-              </label>
-              <textarea
-                value={queixa}
-                onChange={(e) => {
-                  setQueixa(e.target.value);
-                  setStep2Errors((prev) => ({ ...prev, queixa: false }));
-                }}
-                rows={4}
-                readOnly={modoVisualizacao}
-                className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
-                  modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
-                } ${
-                  step2Errors.queixa
-                    ? 'border-red-500 bg-red-50 focus:border-red-600'
-                    : 'border-[#e2e8f0] focus:border-[#00a88e]'
-                }`}
-                placeholder="Descreva o motivo da consulta..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
-                Expectativas do Paciente
-                {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
-              </label>
-              <textarea
-                value={expectativas}
-                onChange={(e) => {
-                  setExpectativas(e.target.value);
-                  setStep2Errors((prev) => ({ ...prev, expectativas: false }));
-                }}
-                rows={4}
-                readOnly={modoVisualizacao}
-                className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
-                  modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
-                } ${
-                  step2Errors.expectativas
-                    ? 'border-red-500 bg-red-50 focus:border-red-600'
-                    : 'border-[#e2e8f0] focus:border-[#00a88e]'
-                }`}
-                placeholder="O que o paciente espera do procedimento..."
-              />
-            </div>
-          </form>
-        ) : null}
-      </div>
+          </div>
+          <div className="space-y-2">
+            <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
+              Queixa Principal
+              {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
+            </label>
+            <textarea
+              value={queixa}
+              onChange={(e) => {
+                setQueixa(e.target.value);
+                setStep2Errors((prev) => ({ ...prev, queixa: false }));
+              }}
+              rows={4}
+              readOnly={modoVisualizacao}
+              className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
+                modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
+              } ${
+                step2Errors.queixa
+                  ? 'border-red-500 bg-red-50 focus:border-red-600'
+                  : 'border-[#e2e8f0] focus:border-[#00a88e]'
+              }`}
+              placeholder="Descreva o motivo da consulta..."
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
+              Expectativas do Paciente
+              {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
+            </label>
+            <textarea
+              value={expectativas}
+              onChange={(e) => {
+                setExpectativas(e.target.value);
+                setStep2Errors((prev) => ({ ...prev, expectativas: false }));
+              }}
+              rows={4}
+              readOnly={modoVisualizacao}
+              className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
+                modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
+              } ${
+                step2Errors.expectativas
+                  ? 'border-red-500 bg-red-50 focus:border-red-600'
+                  : 'border-[#e2e8f0] focus:border-[#00a88e]'
+              }`}
+              placeholder="O que o paciente espera do procedimento..."
+            />
+          </div>
+        </form>
+      ) : null}
     </div>
   );
 });

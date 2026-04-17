@@ -580,3 +580,22 @@ export const termosApi = {
     request(`/api/v1/termos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/termos/${id}`, { method: 'DELETE' }),
 };
+
+export const termoAssinaturaApi = {
+  criar: (data) =>
+    request('/api/v1/termos/assinaturas', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  listarPorPaciente: (pacienteId) =>
+    request(`/api/v1/termos/assinaturas/paciente/${pacienteId}`),
+
+  buscar: (id) => request(`/api/v1/termos/assinaturas/${id}`),
+
+  vincularProcedimento: (id, procedimentoFeitoId) =>
+    request(`/api/v1/termos/assinaturas/${id}/vincular-procedimento`, {
+      method: 'PATCH',
+      body: JSON.stringify({ procedimentoFeitoId }),
+    }),
+};
