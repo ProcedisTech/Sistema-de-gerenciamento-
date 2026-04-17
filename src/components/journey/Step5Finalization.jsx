@@ -1,12 +1,12 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { CheckCircle, Square, CheckSquare, CheckCircle2, BookOpen } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
+import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 import {
   sanitizeBirthDateDigits,
   formatBirthDigitsBR,
   validateCalendarDateDigits8,
-  calendarDateValidationUserMessage,
 } from '../utils/formatters';
 
 const ORIENTACOES_ITENS = [
@@ -26,6 +26,8 @@ function isoToBR(iso) {
 
 export function Step5Finalization({
   procedureDateIso,
+  proximoRetornoDisplay,
+  setProximoRetornoDisplay,
   orientacoes,
   setOrientacoes,
   step5Errors = {},
@@ -39,13 +41,12 @@ export function Step5Finalization({
   );
   const maxReturnIso = useMemo(() => addCalendarYearsToIso(todayIso, 10), [todayIso]);
 
-  const [returnDateDisplay, setReturnDateDisplay] = useState('');
   const lastRangeToastIsoRef = useRef('');
 
   const handleReturnDateChange = (raw) => {
     const digits = sanitizeBirthDateDigits(raw);
     const display = formatBirthDigitsBR(digits);
-    setReturnDateDisplay(display);
+    setProximoRetornoDisplay(display);
 
     if (digits.length < 8) {
       lastRangeToastIsoRef.current = '';
@@ -69,17 +70,10 @@ export function Step5Finalization({
     lastRangeToastIsoRef.current = '';
   };
 
-  const digitsForUi = returnDateDisplay.replace(/\D/g, '');
-  let returnDateFieldMessage = null;
-  if (digitsForUi.length === 8) {
-    const cal = validateCalendarDateDigits8(digitsForUi);
-    if (!cal.ok) {
-      returnDateFieldMessage = calendarDateValidationUserMessage(cal.reason);
-    } else if (cal.iso < minReturnIso || cal.iso > maxReturnIso) {
-      returnDateFieldMessage = `A data deve estar entre ${isoToBR(minReturnIso)} e ${isoToBR(maxReturnIso)}.`;
-    }
-  }
-
+  const { fieldMessage: returnDateFieldMessage } = evaluateProximoRetornoStep5(
+    procedureDateIso,
+    proximoRetornoDisplay
+  );
   const returnDateInputInvalid = Boolean(returnDateFieldMessage);
 
   return (
@@ -123,7 +117,7 @@ export function Step5Finalization({
             type="text"
             inputMode="numeric"
             autoComplete="off"
-            value={returnDateDisplay}
+            value={proximoRetornoDisplay}
             onChange={(e) => handleReturnDateChange(e.target.value)}
             placeholder="DD/MM/AAAA"
             maxLength={10}
