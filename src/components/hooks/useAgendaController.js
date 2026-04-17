@@ -262,6 +262,16 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       return;
     }
 
+    if (agendaModePatient === 'novo') {
+      const nome = agendaNewPatientNome.trim();
+      const cpfD = normalizeCpf(agendaNewPatientCpf);
+      const telInput = agendaNewPatientTelefone.trim();
+      if (nome && String(agendaNewPatientCpf || '').trim() && telInput && cpfD.length !== 11) {
+        toast.error('O CPF deve conter 11 dígitos.');
+        return;
+      }
+    }
+
     const nomeCat =
       agendaCatalogoId &&
       catalogosList.find(

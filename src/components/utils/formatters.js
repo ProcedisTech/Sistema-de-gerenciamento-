@@ -32,6 +32,19 @@ export const normalizeCpf = (cpf) => {
   return (cpf || '').replace(/\D/g, '');
 };
 
+/** Quantidade esperada de dígitos numéricos do CPF. */
+export const CPF_DIGIT_COUNT = 11;
+
+export function cpfDigitCount(value) {
+  return normalizeCpf(value).length;
+}
+
+/** Pelo menos um dígito e menos de 11 — entrada incompleta (blur / validação incremental). */
+export function isCpfIncomplete(value) {
+  const n = cpfDigitCount(value);
+  return n > 0 && n < CPF_DIGIT_COUNT;
+}
+
 export const normalizeTelefone = (tel) => {
   return (tel || '').replace(/\D/g, '');
 };
@@ -134,6 +147,43 @@ export function validateBirthDateDigits8(digits) {
   if (!rules.ok) return rules;
   const iso = birthDigitsToISO(digits);
   return { ok: true, iso: iso || '' };
+}
+
+/**
+ * Valida exatamente 8 dígitos DDMMYYYY como data de calendário (sem regras de nascimento).
+ * @returns {{ ok: true, iso: string } | { ok: false, reason: 'incomplete' | 'invalid_calendar' }}
+ */
+export function validateCalendarDateDigits8(digits) {
+  if (digits.length !== 8) {
+    return { ok: false, reason: 'incomplete' };
+  }
+  const d = Number(digits.slice(0, 2));
+  const m = Number(digits.slice(2, 4));
+  const y = Number(digits.slice(4, 8));
+  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) {
+    return { ok: false, reason: 'invalid_calendar' };
+  }
+  if (m < 1 || m > 12 || d < 1 || d > 31) {
+    return { ok: false, reason: 'invalid_calendar' };
+  }
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
+    return { ok: false, reason: 'invalid_calendar' };
+  }
+  const iso = birthDigitsToISO(digits);
+  return { ok: true, iso: iso || '' };
+}
+
+/** Mensagens para campo de data genérico (ex.: retorno) — mesmo texto base do nascimento onde aplicável. */
+export function calendarDateValidationUserMessage(reason) {
+  switch (reason) {
+    case 'incomplete':
+      return 'Informe a data completa no formato DD/MM/AAAA.';
+    case 'invalid_calendar':
+      return 'Esta data não existe no calendário (ex.: 31/02 ou 29/02 em ano que não é bissexto).';
+    default:
+      return 'Data inválida.';
+  }
 }
 
 /** Mensagem em português para exibição abaixo do campo ou no submit. */

@@ -1,5 +1,7 @@
 import React from 'react';
 import { Calendar, X, Loader2 } from 'lucide-react';
+import { isCpfIncomplete } from '../utils/formatters';
+import { useToast } from '../../contexts/useToast.js';
 
 export function AgendaModal({
   isOpen,
@@ -39,6 +41,8 @@ export function AgendaModal({
   agendaSaving,
   onAgendaTimeChange,
 }) {
+  const toast = useToast();
+
   if (!isOpen) return null;
 
   const catalogOptions = Array.isArray(catalogosList) ? catalogosList : [];
@@ -168,6 +172,11 @@ export function AgendaModal({
                   <input
                     value={agendaNewPatientCpf}
                     onChange={(e) => setAgendaNewPatientCpf(maskCPF(e.target.value))}
+                    onBlur={() => {
+                      if (isCpfIncomplete(agendaNewPatientCpf)) {
+                        toast.error('O CPF deve conter 11 dígitos.');
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
                     placeholder="000.000.000-00"
                   />

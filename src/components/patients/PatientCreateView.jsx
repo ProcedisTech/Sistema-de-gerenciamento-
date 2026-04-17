@@ -4,6 +4,8 @@ import {
   maskCPF,
   maskRG,
   maskTelefone,
+  normalizeCpf,
+  isCpfIncomplete,
   calculateAgeFromISODate,
   sanitizeBirthDateDigits,
   formatBirthDigitsBR,
@@ -103,6 +105,15 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
       return;
     }
 
+    const cpfDigits = normalizeCpf(cpf);
+    if (cpfDigits.length !== 11) {
+      setErrors((prev) => ({ ...prev, cpf: true }));
+      setErro('Por favor, preencha todos os campos obrigatórios (*).');
+      toast.error('O CPF deve conter 11 dígitos.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setErro('');
     setErrors({});
     setSalvando(true);
@@ -111,7 +122,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
       const payload = {
         nomeCompleto: nome.trim(),
         dataNascimento: dataNascimento || null,
-        cpf: cpf.replace(/\D/g, '') || null,
+        cpf: cpfDigits || null,
         rg: rg.replace(/\D/g, '') || null,
         telefone: telefone || null,
         email: email || null,
@@ -126,13 +137,6 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
         genero: genero || null,
         estadoCivilId: estadoCivilId || undefined,
       };
-
-      const cpfDigits = cpf.replace(/\D/g, '');
-      if (cpfDigits.length !== 11) {
-        setErrors((prev) => ({ ...prev, cpf: 'CPF deve conter 11 dígitos' }));
-        setErro('Por favor, preencha todos os campos obrigatórios (*).');
-        return;
-      }
 
       await pacientesApi.create(payload);
       setSucesso(true);
@@ -149,6 +153,13 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   };
 
   const clearError = (field) => setErrors((prev) => ({ ...prev, [field]: false }));
+
+  const handleCpfBlur = () => {
+    if (isCpfIncomplete(cpf)) {
+      setErrors((prev) => ({ ...prev, cpf: true }));
+      toast.error('O CPF deve conter 11 dígitos.');
+    }
+  };
 
   const handleProfissaoChange = (value) => {
     setProfissao(value);
@@ -303,6 +314,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
                 <option value="">Selecione...</option>
                 <option value="F">Feminino</option>
                 <option value="M">Masculino</option>
+                <option value="N">Prefiro não dizer</option>
               </select>
             </div>
             <div className="space-y-1.5">
@@ -377,7 +389,17 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#3b82f6]">CPF <span className="text-red-500">*</span></label>
-              <input type="text" value={cpf} onChange={(e) => { setCpf(maskCPF(e.target.value)); clearError('cpf'); }} placeholder="000.000.000-00" className={`w-full px-4 py-3 bg-[#eff6ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'}`} />
+              <input
+                type="text"
+                value={cpf}
+                onChange={(e) => {
+                  setCpf(maskCPF(e.target.value));
+                  clearError('cpf');
+                }}
+                onBlur={handleCpfBlur}
+                placeholder="000.000.000-00"
+                className={`w-full px-4 py-3 bg-[#eff6ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'}`}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#3b82f6]">RG</label>

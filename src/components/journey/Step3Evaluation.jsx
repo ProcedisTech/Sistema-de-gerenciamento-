@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Eye, Image as ImageIcon, Trash2, Camera, Plus, ChevronRight, Check, X, Upload } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { formatPacienteGaleriaError } from '../../utils/pacienteGaleria.js';
 
 const colors = [
@@ -33,6 +34,8 @@ function isPhotoAnnotated(ph, idx, evaluationAnnotatedPhotoUrl, evaluationSelect
 }
 
 export function Step3Evaluation({
+  /** Offset à esquerda em px (largura da sidebar) a partir de `md`, para fullscreen do editor. */
+  sidebarInsetPx = 220,
   imageSrc,
   setImageSrc,
   activeTool,
@@ -74,6 +77,7 @@ export function Step3Evaluation({
   onUploadFiles,
 }) {
   const toast = useToast();
+  const isMdUp = useMediaQuery('(min-width: 768px)');
   const [phase, setPhase] = useState('capture');
   const [editingIndex, setEditingIndex] = useState(null);
   const [patientAgreed, setPatientAgreed] = useState(false);
@@ -386,7 +390,10 @@ export function Step3Evaluation({
   if (phase === 'editor' && editingIndex != null && photos[editingIndex]) {
     const otherIndices = photos.map((_, i) => i).filter((i) => i !== editingIndex);
     return (
-      <div className="fixed inset-0 z-[140] flex flex-col bg-[#0f172a] md:left-16 lg:left-[220px]">
+      <div
+        className="fixed inset-0 z-[140] flex flex-col bg-[#0f172a]"
+        style={{ left: isMdUp ? sidebarInsetPx : 0 }}
+      >
         <div className="flex shrink-0 flex-col gap-2 border-b border-slate-700 bg-[#1e293b] px-3 py-2 text-white">
           <div className="flex flex-wrap items-center gap-2">
             {(['draw', 'point', 'erase']).map((t) => (

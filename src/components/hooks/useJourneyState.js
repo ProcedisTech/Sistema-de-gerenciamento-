@@ -56,7 +56,6 @@ export const useJourneyState = () => {
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
   const [orientacoes, setOrientacoes] = useState(false);
-  const [satisfacao, setSatisfacao] = useState(false);
 
   // ============ FOTOS ============
   const EVALUATION_PHOTO_MAX = 30;
@@ -128,8 +127,6 @@ export const useJourneyState = () => {
     setTermoSelecionadoId,
     orientacoes,
     setOrientacoes,
-    satisfacao,
-    setSatisfacao,
     EVALUATION_PHOTO_MAX,
     evaluationCapturedPhotos,
     setEvaluationCapturedPhotos,
