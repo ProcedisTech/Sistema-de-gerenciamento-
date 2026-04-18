@@ -23,6 +23,8 @@ export function useProcedureCamera({
   const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
   const [procedureCapturedPhotos, setProcedureCapturedPhotos] = useState([]);
+  /** 'antes' | 'depois' — alinhado ao seletor do Step 4 e à câmera flutuante. */
+  const [procedureFotoCategoria, setProcedureFotoCategoria] = useState('antes');
   const [evaluationSelectedPhotoIndex, setEvaluationSelectedPhotoIndex] = useState(null);
   const [evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl] = useState(null);
 
@@ -192,7 +194,7 @@ export function useProcedureCamera({
         capturedAt: new Date().toISOString(),
         stepCaptured: 4,
         source: 'camera',
-        categoria: 'procedimento',
+        categoria: procedureFotoCategoria === 'depois' ? 'depois' : 'antes',
       };
 
       const newEntry = { url: photoPreviewUrl, blob: photoPreviewBlob, meta };
@@ -316,9 +318,11 @@ export function useProcedureCamera({
     }
   };
 
-  const uploadProcedureFiles = (fileList) => {
+  const uploadProcedureFiles = (fileList, categoria = 'antes') => {
     const files = Array.from(fileList || []).filter((f) => f && String(f.type || '').startsWith('image/'));
     if (!files.length) return;
+
+    const cat = categoria === 'depois' ? 'depois' : 'antes';
 
     setProcedureCapturedPhotos((prev) => {
       const remaining = Math.max(0, EVALUATION_PHOTO_MAX - prev.length);
@@ -339,7 +343,7 @@ export function useProcedureCamera({
             stepCaptured: 4,
             source: 'upload',
             fileName: file.name,
-            categoria: 'procedimento',
+            categoria: cat,
           },
         })),
       ];
@@ -462,6 +466,8 @@ export function useProcedureCamera({
     confirmPhoto,
     uploadPhotoFiles,
     uploadProcedureFiles,
+    procedureFotoCategoria,
+    setProcedureFotoCategoria,
     removeProcedurePhoto,
     replaceEvaluationCapturedPhotoAt,
     preferredFacing,

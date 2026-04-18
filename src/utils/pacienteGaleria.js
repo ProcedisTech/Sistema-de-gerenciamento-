@@ -17,7 +17,7 @@ export const GALERIA_CATEGORIA_LABELS = {
   outro: 'Outros',
 };
 
-const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliacao)\]\s*(.*)$/i;
+const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o)\]\s*(.*)$/i;
 
 /**
  * Lê categoria e texto livre da legenda enviada/recuperada da API.
@@ -27,8 +27,13 @@ export function parseGaleriaLegenda(legenda) {
   if (!s) return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: null };
   const m = s.match(LEGENDA_TAG_RE);
   if (m) {
+    const catRaw = m[1]
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const catNorm = catRaw === 'avaliacao' ? GALERIA_CATEGORIA.AVALIACAO : catRaw;
     return {
-      categoria: m[1].toLowerCase(),
+      categoria: catNorm,
       descricao: m[2].trim() || null,
     };
   }

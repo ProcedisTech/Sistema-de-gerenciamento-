@@ -14,6 +14,7 @@ import {
   FileText,
   Search,
   Calendar,
+  Eye,
 } from 'lucide-react';
 import { procedimentosApi, termoAssinaturaApi, termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
@@ -759,10 +760,34 @@ export function Step4Procedimento({
   onProcedureRemovePhoto,
   step4Errors = {},
   setStep4Errors = () => {},
+  fotosAvaliacao = [],
+  onProcedureFotoCategoriaSync = () => {},
 }) {
   const uploadInputRef = React.useRef(null);
   const datalistId = React.useId();
   const [procedureSuggestions, setProcedureSuggestions] = React.useState([]);
+  /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
+  const [legendas, setLegendas] = React.useState({});
+  const [fotoCategoria, setFotoCategoria] = React.useState('antes');
+
+  React.useEffect(() => {
+    onProcedureFotoCategoriaSync(fotoCategoria);
+  }, [fotoCategoria, onProcedureFotoCategoriaSync]);
+
+  React.useEffect(() => {
+    const urls = new Set((procedureCapturedPhotos || []).map((p) => p.url).filter(Boolean));
+    setLegendas((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach((u) => {
+        if (!urls.has(u)) {
+          delete next[u];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [procedureCapturedPhotos]);
 
   React.useEffect(() => {
     if (!pacienteIdForProcedures) {
@@ -793,7 +818,7 @@ export function Step4Procedimento({
     const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
     event.target.value = '';
     if (!files.length) return;
-    onProcedureUploadFiles?.(files);
+    onProcedureUploadFiles?.(files, fotoCategoria);
   };
 
   const photos = procedureCapturedPhotos || [];
@@ -859,6 +884,59 @@ export function Step4Procedimento({
         </div>
       </div>
 
+      {fotosAvaliacao.length > 0 && (
+        <div className="mb-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Eye className="h-4 w-4 text-[#64748b]" strokeWidth={2} />
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">
+              Avaliação — apenas referência
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 opacity-70">
+            {fotosAvaliacao.slice(0, 3).map((foto, idx) => (
+              <div
+                key={idx}
+                className="relative aspect-square overflow-hidden rounded-xl border-2 border-dashed border-[#e2e8f0]"
+              >
+                <img src={foto.url} alt="" className="h-full w-full object-cover" />
+                <div className="absolute inset-0 bg-black/10" />
+                <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1 text-[9px] font-bold text-white">
+                  Ref.{idx + 1}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-[13px] font-semibold text-[#64748b]">Categoria das fotos:</span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setFotoCategoria('antes')}
+            className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-colors ${
+              fotoCategoria === 'antes'
+                ? 'border-[#00a88e] bg-[#e6f7f5] text-[#00a88e]'
+                : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/40'
+            }`}
+          >
+            Antes
+          </button>
+          <button
+            type="button"
+            onClick={() => setFotoCategoria('depois')}
+            className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-colors ${
+              fotoCategoria === 'depois'
+                ? 'border-[#00a88e] bg-[#e6f7f5] text-[#00a88e]'
+                : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/40'
+            }`}
+          >
+            Depois
+          </button>
+        </div>
+      </div>
+
       <div className="mb-2 flex items-center justify-between gap-2">
         <h4 className="text-[13px] font-bold text-[#00a88e]">Fotos do procedimento</h4>
         <span className="text-[12px] font-semibold text-[#64748b]">
@@ -877,16 +955,34 @@ export function Step4Procedimento({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {photos.map((ph, idx) => (
-          <div key={`${ph.url}_${idx}`} className="relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
-            <img src={ph.url} alt="" className="h-full w-full object-cover" />
-            <button
-              type="button"
-              onClick={() => onProcedureRemovePhoto?.(idx)}
-              className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
-              aria-label="Remover imagem"
-            >
-              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </button>
+          <div key={`${ph.url}_${idx}`} className="min-w-0">
+            <div className="relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
+              <div
+                className={`absolute left-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                  ph.meta?.categoria === 'depois' ? 'bg-[#22c55e]' : 'bg-[#f59e0b]'
+                }`}
+              >
+                {ph.meta?.categoria === 'depois' ? 'Depois' : 'Antes'}
+              </div>
+              <img src={ph.url} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => onProcedureRemovePhoto?.(idx)}
+                className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
+                aria-label="Remover imagem"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={legendas[ph.url] ?? ''}
+              onChange={(e) =>
+                setLegendas((prev) => ({ ...prev, [ph.url]: e.target.value }))
+              }
+              placeholder="Ex: Antes, Depois, Detalhe..."
+              className="mt-1 w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-2 py-1 text-[11px] text-[#0f172a] outline-none placeholder:text-[#cbd5e1] focus:border-[#00a88e]"
+            />
           </div>
         ))}
         <button
