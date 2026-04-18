@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   Bell,
-  Camera,
   Cake,
   Calendar,
   CheckCircle2,
@@ -53,14 +52,11 @@ import {
   formatPacienteGaleriaError,
   normalizePacienteGaleriaItem,
   normalizePacienteGaleriaResponse,
-  formatGaleriaLegendaForUpload,
   filterGaleriaItemsForUi,
   groupGaleriaItemsBySession,
   GALERIA_CATEGORIA_LABELS,
-  GALERIA_CATEGORIA,
   itemMesReferenciaISO,
   formatDataSessaoPtBr,
-  formatMesAnoCurtoPt,
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
@@ -68,6 +64,36 @@ import {
   GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
+
+const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'depois', 'outro'];
+
+const GALERIA_SESSAO_CATEGORIA_LABEL_CLASS = {
+  antes: 'text-[#f59e0b]',
+  planejamento: 'text-[#6366f1]',
+  avaliacao: 'text-[#0ea5e9]',
+  depois: 'text-[#22c55e]',
+  outro: 'text-[#94a3b8]',
+};
+
+function formatMesAno(isoDate) {
+  if (!isoDate || isoDate === 'sem-data') return 'Data desconhecida';
+  const [year, month] = isoDate.split('-');
+  const meses = [
+    'Jan',
+    'Fev',
+    'Mar',
+    'Abr',
+    'Mai',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Set',
+    'Out',
+    'Nov',
+    'Dez',
+  ];
+  return `${meses[parseInt(month, 10) - 1]}/${year}`;
+}
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -565,23 +591,15 @@ export function PatientProfileView({
   const [editing, setEditing] = useState(null);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
   const [galleryPreview, setGalleryPreview] = useState(null);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [sessoesExpandidas, setSessoesExpandidas] = useState({});
   const [quickNoteText, setQuickNoteText] = useState('');
-  const [galleryCameraOpen, setGalleryCameraOpen] = useState(false);
-  const [galleryCameraError, setGalleryCameraError] = useState('');
-  const [galleryCameraStarting, setGalleryCameraStarting] = useState(false);
-  const [galleryVideoReady, setGalleryVideoReady] = useState(false);
   /** 'loading' | 'api' = lista no servidor; 'local' = fallback (fotos da jornada / legado). */
   const [galeriaBackend, setGaleriaBackend] = useState('loading');
   const [apiGaleriaItems, setApiGaleriaItems] = useState([]);
   const [galeriaFilterCategoria, setGaleriaFilterCategoria] = useState('all');
   const [galeriaFilterMes, setGaleriaFilterMes] = useState('all');
   const [galeriaFilterProcedimento, setGaleriaFilterProcedimento] = useState('all');
-  const [galeriaUploadCategoria, setGaleriaUploadCategoria] = useState(GALERIA_CATEGORIA.ANTES);
-  const [galeriaUploadDataRef, setGaleriaUploadDataRef] = useState(() => new Date().toISOString().slice(0, 10));
-  const [galeriaUploadProcedimentoId, setGaleriaUploadProcedimentoId] = useState('');
-  const [galeriaUploadDescricao, setGaleriaUploadDescricao] = useState('');
-  /** Painel de metadados do upload: só abre ao iniciar envio (galeria API). */
-  const [galeriaUploadMetaOpen, setGaleriaUploadMetaOpen] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [alertasAnamnese, setAlertasAnamnese] = useState([]);
   const [alertasAlergia, setAlertasAlergia] = useState([]);
@@ -595,21 +613,22 @@ export function PatientProfileView({
     procedimentoFeitoId: null,
     pacienteId: null,
   });
-  const galleryVideoRef = useRef(null);
-  const galleryStreamRef = useRef(null);
   const profilePhotoInputRef = useRef(null);
+
+  const toggleSessao = (key) => {
+    setSessoesExpandidas((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
   useEffect(() => {
     setGaleriaFilterCategoria('all');
     setGaleriaFilterMes('all');
     setGaleriaFilterProcedimento('all');
-    setGaleriaUploadCategoria(GALERIA_CATEGORIA.ANTES);
-    setGaleriaUploadDataRef(new Date().toISOString().slice(0, 10));
-    setGaleriaUploadProcedimentoId('');
-    setGaleriaUploadDescricao('');
-    setGaleriaUploadMetaOpen(false);
     setAnamneseListSummary([]);
     setProntuarioExpanded({});
+    setSessoesExpandidas({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
   }, [selectedPatient?.id]);
 
@@ -838,17 +857,6 @@ export function PatientProfileView({
     });
     return groupGaleriaItemsBySession(filtered);
   }, [galeriaBackend, apiGaleriaItems, galeriaFilterCategoria, galeriaFilterMes, galeriaFilterProcedimento]);
-
-  const buildGaleriaUploadApiOptions = useCallback(() => {
-    const opt = {
-      roleUserId,
-      dataReferencia: galeriaUploadDataRef || undefined,
-      legenda: formatGaleriaLegendaForUpload(galeriaUploadCategoria, galeriaUploadDescricao),
-    };
-    const procId = String(galeriaUploadProcedimentoId || '').trim();
-    if (procId) opt.procedimentoFeitoId = procId;
-    return opt;
-  }, [roleUserId, galeriaUploadDataRef, galeriaUploadCategoria, galeriaUploadDescricao, galeriaUploadProcedimentoId]);
 
   const dismissBirthdayModal = useCallback(() => {
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
@@ -1272,47 +1280,6 @@ export function PatientProfileView({
     }
   };
 
-  const handleUploadGalleryFiles = async (event) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-    const fileArr = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    event.target.value = '';
-    if (fileArr.length === 0) return;
-
-    if (selectedPatient?.id && galeriaBackend === 'api') {
-      try {
-        const slice = fileArr.slice(0, 30);
-        let mergedSingle = false;
-        for (const file of slice) {
-          const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, buildGaleriaUploadApiOptions());
-          if (slice.length === 1) {
-            const one = normalizePacienteGaleriaItem(created);
-            if (one) {
-              setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
-              mergedSingle = true;
-            }
-          }
-        }
-        if (!mergedSingle) {
-          if (import.meta.env.DEV) {
-            console.log('listando galeria para pacienteId:', selectedPatient?.id);
-          }
-          const data = await pacientesGaleriaApi.list(selectedPatient.id);
-          setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
-        }
-        toast.success(
-          fileArr.length === 1 ? 'Foto enviada para a galeria.' : 'Fotos enviadas para a galeria.',
-        );
-        setGaleriaUploadMetaOpen(false);
-      } catch (e) {
-        toast.error(formatPacienteGaleriaError(e));
-      }
-      return;
-    }
-
-    onAddGalleryFiles?.(selectedPatient.cpf, fileArr);
-  };
-
   const handleAddQuickNote = async () => {
     const text = quickNoteText.trim();
     if (!text) return;
@@ -1362,114 +1329,6 @@ export function PatientProfileView({
       toast.error(e.message || 'Erro ao excluir nota.');
     }
   };
-
-  const stopGalleryCamera = () => {
-    try {
-      const stream = galleryStreamRef.current;
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-    } catch {
-      // ignore
-    } finally {
-      galleryStreamRef.current = null;
-      setGalleryVideoReady(false);
-      if (galleryVideoRef.current) {
-        galleryVideoRef.current.srcObject = null;
-      }
-    }
-  };
-
-  const startGalleryCamera = async () => {
-    if (!navigator?.mediaDevices?.getUserMedia) {
-      setGalleryCameraError('Seu navegador não suporta câmera.');
-      return;
-    }
-
-    setGalleryCameraError('');
-    setGalleryCameraStarting(true);
-    stopGalleryCamera();
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      });
-      galleryStreamRef.current = stream;
-      if (galleryVideoRef.current) {
-        galleryVideoRef.current.srcObject = stream;
-        await galleryVideoRef.current.play();
-      }
-      setGalleryVideoReady(true);
-    } catch (error) {
-      setGalleryCameraError(
-        error?.name === 'NotAllowedError'
-          ? 'Permissão da câmera negada. Libere o acesso no navegador.'
-          : 'Não foi possível iniciar a câmera.'
-      );
-    } finally {
-      setGalleryCameraStarting(false);
-    }
-  };
-
-  const openGalleryCamera = () => {
-    setGalleryCameraOpen(true);
-  };
-
-  const closeGalleryCamera = () => {
-    setGalleryCameraOpen(false);
-    setGalleryCameraError('');
-    stopGalleryCamera();
-  };
-
-  const captureGalleryPhoto = async () => {
-    const video = galleryVideoRef.current;
-    if (!video || !galleryVideoReady) return;
-
-    const canvas = document.createElement('canvas');
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(video, 0, 0, width, height);
-    const blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
-    if (!blob) return;
-
-    const file = new File([blob], `galeria_${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-    if (selectedPatient?.id && galeriaBackend === 'api') {
-      try {
-        const created = await pacientesGaleriaApi.upload(selectedPatient.id, file, buildGaleriaUploadApiOptions());
-        const one = normalizePacienteGaleriaItem(created);
-        if (one) {
-          setApiGaleriaItems((prev) => [one, ...prev.filter((x) => x.serverId !== one.serverId)]);
-        } else {
-          if (import.meta.env.DEV) {
-            console.log('listando galeria para pacienteId:', selectedPatient?.id);
-          }
-          const data = await pacientesGaleriaApi.list(selectedPatient.id);
-          setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
-        }
-        toast.success('Foto adicionada à galeria.');
-      } catch (e) {
-        toast.error(formatPacienteGaleriaError(e));
-      }
-      closeGalleryCamera();
-      return;
-    }
-
-    onAddGalleryFiles?.(selectedPatient.cpf, [file]);
-    closeGalleryCamera();
-  };
-
-  useEffect(() => {
-    if (!galleryCameraOpen) return;
-    startGalleryCamera().catch(() => {});
-    return () => {
-      stopGalleryCamera();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [galleryCameraOpen]);
 
   if (!selectedPatient) return null;
 
@@ -2075,227 +1934,132 @@ export function PatientProfileView({
                           </label>
                         </div>
                       </div>
-
-                      {galeriaUploadMetaOpen ? (
-                        <div className="rounded-2xl border-[3px] border-[#00a88e]/20 bg-white p-4 space-y-3 shadow-sm animate-in fade-in duration-200">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <div className="text-[12px] font-bold text-[#0f172a]">Enviar fotos para a galeria</div>
-                              <p className="text-[11px] text-[#64748b] leading-snug mt-0.5">
-                                Ajuste categoria, data e procedimento; em seguida escolha as imagens.
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setGaleriaUploadMetaOpen(false)}
-                              className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]"
-                            >
-                              Fechar
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[11px] font-bold text-[#64748b]">Categoria</span>
-                              <select
-                                value={galeriaUploadCategoria}
-                                onChange={(e) => setGaleriaUploadCategoria(e.target.value)}
-                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] font-medium outline-none focus:border-[#00a88e]"
-                              >
-                                <option value={GALERIA_CATEGORIA.ANTES}>{GALERIA_CATEGORIA_LABELS.antes}</option>
-                                <option value={GALERIA_CATEGORIA.PLANEJAMENTO}>{GALERIA_CATEGORIA_LABELS.planejamento}</option>
-                                <option value={GALERIA_CATEGORIA.AVALIACAO}>{GALERIA_CATEGORIA_LABELS.avaliacao}</option>
-                                <option value={GALERIA_CATEGORIA.DEPOIS}>{GALERIA_CATEGORIA_LABELS.depois}</option>
-                                <option value={GALERIA_CATEGORIA.OUTRO}>{GALERIA_CATEGORIA_LABELS.outro}</option>
-                              </select>
-                            </label>
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[11px] font-bold text-[#64748b]">Data da sessão</span>
-                              <input
-                                type="date"
-                                value={galeriaUploadDataRef}
-                                onChange={(e) => setGaleriaUploadDataRef(e.target.value)}
-                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] font-medium outline-none focus:border-[#00a88e]"
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-2">
-                              <span className="text-[11px] font-bold text-[#64748b]">Vincular a procedimento (opcional)</span>
-                              <select
-                                value={galeriaUploadProcedimentoId}
-                                onChange={(e) => setGaleriaUploadProcedimentoId(e.target.value)}
-                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] font-medium outline-none focus:border-[#00a88e]"
-                              >
-                                <option value="">Nenhum</option>
-                                {(apiProcedures || []).map((proc) => (
-                                  <option key={proc.id ?? proc.procedimentoId} value={proc.id ?? proc.procedimentoId}>
-                                    {proc.procedimentoNome || proc.nome || 'Procedimento'}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
-                              <span className="text-[11px] font-bold text-[#64748b]">Descrição (ex.: nome do procedimento)</span>
-                              <input
-                                type="text"
-                                value={galeriaUploadDescricao}
-                                onChange={(e) => setGaleriaUploadDescricao(e.target.value)}
-                                placeholder="Ex.: Botox + preenchimento"
-                                className="rounded-xl border-[2px] border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#00a88e]"
-                              />
-                            </label>
-                          </div>
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            <label
-                              className={`inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#00a88e] px-4 py-2.5 text-[13px] font-bold text-white border-[2px] border-transparent shadow-sm hover:bg-[#00967f]`}
-                            >
-                              <ImageIcon className="w-4 h-4 shrink-0" />
-                              Escolher imagens
-                              <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="hidden"
-                                disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
-                                onChange={handleUploadGalleryFiles}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      ) : null}
                     </>
                   ) : null}
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {galeriaBackend === 'api' && selectedPatient?.id ? (
-                      <button
-                        type="button"
-                        onClick={() => setGaleriaUploadMetaOpen(true)}
-                        disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
-                        className={`px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent inline-flex items-center gap-1.5 ${
-                          galeriaBackend === 'loading' && selectedPatient?.id
-                            ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-[#00967f]'
-                        }`}
-                      >
-                        <ImageIcon className="w-4 h-4" /> Upload
-                      </button>
-                    ) : (
-                      <label
-                        className={`px-3 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[12px] border-[2px] border-transparent ${
-                          galeriaBackend === 'loading' && selectedPatient?.id ? 'opacity-50 pointer-events-none' : 'cursor-pointer'
-                        }`}
-                      >
-                        <ImageIcon className="w-4 h-4 inline mr-1" /> Upload
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
-                          onChange={handleUploadGalleryFiles}
-                        />
-                      </label>
-                    )}
-                    <button
-                      type="button"
-                      onClick={openGalleryCamera}
-                      disabled={galeriaBackend === 'loading' && Boolean(selectedPatient?.id)}
-                      className="px-3 py-2 rounded-xl bg-white text-[#00a88e] font-bold text-[12px] border-[2px] border-[#00a88e]/25 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Camera className="w-4 h-4 inline mr-1" /> Tirar na hora
-                    </button>
-                  </div>
-
                   {galeriaBackend === 'api' && galeriaSessionsForView.length > 0 ? (
                     <div className="space-y-4">
-                      {galeriaSessionsForView.map((sess) => {
+                      {galeriaSessionsForView.map((sess, idx) => {
                         const procedimentoFeitoIdSessao = resolveProcedimentoFeitoIdForSessao(sess);
-                        const mesTitulo =
-                          sess.dataISO === 'sem-data' ? 'Sem data' : formatMesAnoCurtoPt(sess.dataISO);
-                        const subtitulo =
-                          sess.nomeProcedimento ||
-                          sess.fotos.map((f) => f.descricaoLegenda).find(Boolean) ||
-                          'Procedimento não informado';
+                        const expandida = sessoesExpandidas[sess.key] ?? false;
                         return (
                           <div
                             key={sess.key}
-                            className="rounded-[20px] border-[3px] border-[#e2e8f0] bg-white p-4 sm:p-5 shadow-md shadow-[#00a88e]/[0.06]"
+                            className="rounded-[20px] border-[3px] border-[#e2e8f0] bg-white shadow-md shadow-[#00a88e]/[0.06] overflow-hidden"
                           >
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-4">
-                              <div className="min-w-0">
-                                <h5 className="text-[15px] font-bold text-[#0f172a]">
-                                  Sessão {sess.sessionNumber}
-                                  {mesTitulo ? ` — ${mesTitulo}` : ''}
-                                </h5>
-                                <p className="text-[13px] font-medium text-[#64748b] mt-0.5 line-clamp-2">{subtitulo}</p>
+                            <div
+                              className="flex items-center justify-between cursor-pointer select-none p-4 hover:bg-[#f8fafc] transition-colors rounded-xl"
+                              onClick={() => toggleSessao(sess.key)}
+                            >
+                              <div>
+                                <div className="text-[14px] font-bold text-[#0f172a]">
+                                  Sessão {galeriaSessionsForView.length - idx} — {formatMesAno(sess.dataISO)}
+                                </div>
+                                <div className="text-[12px] text-[#64748b] mt-0.5">
+                                  {sess.nomeProcedimento || 'Procedimento não informado'} · {sess.fotos.length}{' '}
+                                  foto(s)
+                                </div>
                               </div>
-                              <div className="flex w-full min-w-0 items-start gap-2 sm:w-auto sm:shrink-0 sm:flex-col sm:items-end">
-                                <span className="text-[12px] font-bold text-[#64748b] tabular-nums sm:pt-0.5">
-                                  {formatDataSessaoPtBr(sess.dataISO)}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[11px] font-medium text-[#94a3b8]">
+                                  {expandida ? 'Recolher' : 'Ver fotos'}
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setRelatoModal({
-                                      open: true,
-                                      procedimentoFeitoId: procedimentoFeitoIdSessao,
-                                      pacienteId: selectedPatient?.id || null,
-                                    })
-                                  }
-                                  disabled={!selectedPatient?.id}
-                                  className="w-full rounded-lg border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] px-2.5 py-1 text-center text-[11px] font-bold text-[#0f766e] transition-colors hover:bg-[#d2f3ee] sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Acompanhamento
-                                </button>
+                                <ChevronDown
+                                  className={`w-4 h-4 text-[#94a3b8] transition-transform duration-200 ${
+                                    expandida ? 'rotate-180' : ''
+                                  }`}
+                                  strokeWidth={2}
+                                />
                               </div>
                             </div>
-                            <div className="flex flex-wrap gap-5">
-                              {sess.fotos.map((foto) => {
-                                const gridItem = {
-                                  id: `api_${foto.serverId}`,
-                                  url: foto.url,
-                                  fileName: foto.fileName,
-                                  serverId: foto.serverId,
-                                  source: 'api',
-                                  index: -1,
-                                };
-                                const catLabel = GALERIA_CATEGORIA_LABELS[foto.categoria] || foto.categoria;
-                                return (
-                                  <div key={foto.serverId} className="flex w-[92px] sm:w-[108px] flex-col items-center gap-2">
-                                    <div className="relative w-full">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setGalleryPreview({
-                                            url: foto.url,
-                                            authFetch: true,
-                                            caption: foto.legenda || foto.fileName,
-                                          })
-                                        }
-                                        className="aspect-square w-full rounded-xl bg-[#e6f7f5] border-[2px] border-[#00a88e]/15 overflow-hidden flex items-center justify-center"
-                                      >
-                                        <GaleriaArquivoImage
-                                          url={foto.url}
-                                          alt=""
-                                          className="w-full h-full"
-                                          imgClassName="w-full h-full object-cover"
-                                        />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveGalleryItem(gridItem)}
-                                        className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[2px] border-white text-[11px] font-bold shadow-sm"
-                                        aria-label="Remover foto"
-                                      >
-                                        ×
-                                      </button>
-                                    </div>
-                                    <span className="text-[11px] font-bold text-[#0f766e] text-center leading-tight px-0.5">
-                                      {catLabel}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                            <div className="flex flex-col gap-2 px-4 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                              <span className="text-[12px] font-bold text-[#64748b] tabular-nums">
+                                {formatDataSessaoPtBr(sess.dataISO)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRelatoModal({
+                                    open: true,
+                                    procedimentoFeitoId: procedimentoFeitoIdSessao,
+                                    pacienteId: selectedPatient?.id || null,
+                                  });
+                                }}
+                                disabled={!selectedPatient?.id}
+                                className="w-full rounded-lg border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] px-2.5 py-1 text-center text-[11px] font-bold text-[#0f766e] transition-colors hover:bg-[#d2f3ee] sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Acompanhamento
+                              </button>
                             </div>
+                            {expandida && (
+                              <div className="px-4 pb-4">
+                                <div className="space-y-4">
+                                  {(() => {
+                                    const fotosPorCategoria = {};
+                                    sess.fotos.forEach((foto) => {
+                                      const cat = foto.categoria || 'outro';
+                                      if (!fotosPorCategoria[cat]) fotosPorCategoria[cat] = [];
+                                      fotosPorCategoria[cat].push(foto);
+                                    });
+                                    return ORDEM_CATEGORIAS.map((cat) => {
+                                      const fotosCat = fotosPorCategoria[cat];
+                                      if (!fotosCat?.length) return null;
+                                      const labelText = GALERIA_CATEGORIA_LABELS[cat] || cat;
+                                      const labelColorClass =
+                                        GALERIA_SESSAO_CATEGORIA_LABEL_CLASS[cat] || 'text-[#94a3b8]';
+                                      return (
+                                        <div key={cat}>
+                                          <div
+                                            className={`mb-2 text-[11px] font-bold uppercase tracking-wide ${labelColorClass}`}
+                                          >
+                                            {labelText}
+                                          </div>
+                                          <div className="grid grid-cols-3 gap-2">
+                                            {fotosCat.map((foto) => {
+                                              const gridItem = {
+                                                id: `api_${foto.serverId}`,
+                                                url: foto.url,
+                                                fileName: foto.fileName,
+                                                serverId: foto.serverId,
+                                                source: 'api',
+                                                index: -1,
+                                              };
+                                              return (
+                                                <div key={foto.serverId} className="relative min-w-0">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setLightboxUrl(foto.url ?? foto.src ?? foto.presignedUrl)
+                                                    }
+                                                    className="aspect-square w-full rounded-xl overflow-hidden border border-[#e2e8f0] cursor-pointer flex items-center justify-center"
+                                                  >
+                                                    <GaleriaArquivoImage
+                                                      url={foto.url}
+                                                      alt=""
+                                                      className="h-full w-full"
+                                                      imgClassName="h-full w-full object-cover"
+                                                    />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveGalleryItem(gridItem)}
+                                                    className="absolute -top-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border-[2px] border-white bg-red-500 text-[11px] font-bold text-white shadow-sm hover:bg-red-600"
+                                                    aria-label="Remover foto"
+                                                  >
+                                                    ×
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -2354,6 +2118,29 @@ export function PatientProfileView({
                     </div>
                   ) : (
                     <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
+                  )}
+
+                  {lightboxUrl && (
+                    <div
+                      className="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center p-4"
+                      onClick={() => setLightboxUrl(null)}
+                      role="presentation"
+                    >
+                      <img
+                        src={lightboxUrl}
+                        alt=""
+                        className="max-h-[90dvh] max-w-full rounded-xl object-contain"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setLightboxUrl(null)}
+                        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30"
+                        aria-label="Fechar"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -2634,56 +2421,6 @@ export function PatientProfileView({
                 className="max-w-[90vw] max-h-[85vh] rounded-xl border-[3px] border-white/30 object-contain"
               />
             )}
-          </div>
-        </div>
-      )}
-
-      {galleryCameraOpen && (
-        <div className="fixed inset-0 z-[230] bg-black/70 flex items-center justify-center p-4" onClick={closeGalleryCamera}>
-          <div className="relative w-full max-w-[920px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
-              <div className="text-[16px] font-bold text-[#0f172a]">Tirar foto para galeria</div>
-              <button type="button" onClick={closeGalleryCamera} className="w-10 h-10 rounded-xl border-[3px] border-transparent hover:bg-[#f8fbfb] text-[#64748b] hover:text-[#00a88e]">
-                <X className="w-5 h-5 mx-auto" />
-              </button>
-            </div>
-
-            <div className="p-4">
-              <div className="relative rounded-[16px] overflow-hidden border-[3px] border-[#00a88e]/20 bg-black">
-                <video ref={galleryVideoRef} playsInline className="w-full max-h-[70vh] object-contain" />
-
-                {!galleryVideoReady && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white text-[14px] font-bold bg-black/35">
-                    {galleryCameraStarting ? 'Abrindo câmera...' : 'Carregando câmera...'}
-                  </div>
-                )}
-              </div>
-
-              {galleryCameraError && (
-                <div className="mt-3 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
-                  {galleryCameraError}
-                </div>
-              )}
-
-              <div className="mt-4 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={captureGalleryPhoto}
-                  disabled={!galleryVideoReady || galleryCameraStarting}
-                  className="px-5 py-3 rounded-xl font-bold text-white bg-[#00a88e] disabled:opacity-60 disabled:cursor-not-allowed hover:bg-[#00967f] transition-all border-[3px] border-transparent"
-                >
-                  <Camera className="w-4 h-4 inline mr-1" /> Capturar e salvar
-                </button>
-
-                <button
-                  type="button"
-                  onClick={closeGalleryCamera}
-                  className="px-5 py-3 rounded-xl font-bold text-[#64748b] bg-white hover:bg-[#f8fbfb] transition-all border-[3px] border-[#94a3b8]/30"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

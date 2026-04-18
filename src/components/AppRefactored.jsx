@@ -94,6 +94,8 @@ export default function App() {
   const anamnesePreenchimentoIdRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
+  /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
+  const pendingAnnotatedGalleryBlobsRef = useRef([]);
 
   // ============ Estados destructurados para facilitar leitura ============
   const { authReady, isLoggedIn, authUser, handleLogout, cookieConsentAccepted, acceptCookies } = authState;
@@ -616,15 +618,39 @@ export default function App() {
         }
       }
 
-      const fotosProcedimento = cameraState.procedureCapturedPhotos || [];
+      const dataRefSessao = new Date().toISOString().slice(0, 10);
+      const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
       const ridUpload = roleUserId;
+      const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
+
+      const fotosProcedimento = cameraState.procedureCapturedPhotos || [];
+      const queuedAnnotated = ridOk && paciente?.id ? pendingAnnotatedGalleryBlobsRef.current.splice(0) : [];
+
+      if (queuedAnnotated.length > 0 && paciente?.id && ridOk) {
+        const uploadsAval = queuedAnnotated.map(async (blob, idx) => {
+          try {
+            const file = new File([blob], `avaliacao_${Date.now()}_${idx}.jpg`, { type: 'image/jpeg' });
+            await pacientesGaleriaApi.upload(paciente.id, file, {
+              roleUserId: ridUpload,
+              procedimentoFeitoId: procIdOpt,
+              legenda: formatGaleriaLegendaForUpload(
+                GALERIA_CATEGORIA.PLANEJAMENTO,
+                journeyState.nomeProcedimento.trim() || 'Mapeamento'
+              ),
+              dataReferencia: dataRefSessao,
+            });
+          } catch (e) {
+            console.warn('Erro ao salvar foto de avaliação na galeria:', e);
+          }
+        });
+        await Promise.allSettled(uploadsAval);
+      }
+
       if (
         fotosProcedimento.length > 0 &&
         paciente?.id &&
-        ridUpload &&
-        /^[0-9a-f-]{36}$/i.test(String(ridUpload))
+        ridOk
       ) {
-        const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
         const uploads = fotosProcedimento.map(async (foto) => {
           try {
             let fileToUpload = foto.blob;
@@ -640,15 +666,18 @@ export default function App() {
             await pacientesGaleriaApi.upload(paciente.id, webp, {
               roleUserId: ridUpload,
               procedimentoFeitoId: procIdOpt,
-              legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.DEPOIS, 'Foto do procedimento'),
-              dataReferencia: new Date().toISOString().slice(0, 10),
+              legenda: formatGaleriaLegendaForUpload(
+                foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS,
+                journeyState.nomeProcedimento.trim() || 'Foto do procedimento'
+              ),
+              dataReferencia: dataRefSessao,
             });
           } catch (e) {
             console.warn('Erro ao salvar foto do procedimento:', e);
           }
         });
         await Promise.allSettled(uploads);
-      } else if (fotosProcedimento.length > 0 && paciente?.id && (!ridUpload || !/^[0-9a-f-]{36}$/i.test(String(ridUpload)))) {
+      } else if (fotosProcedimento.length > 0 && paciente?.id && !ridOk) {
         console.warn('Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.');
       }
 
@@ -701,6 +730,7 @@ export default function App() {
     journeyState.setStep4Errors({});
     journeyState.setStep5Errors({});
     anamnesePreenchimentoIdRef.current = null;
+    pendingAnnotatedGalleryBlobsRef.current = [];
     journeyState.setTermoSelecionadoId(null);
     setUltimoProcedimentoId(null);
     setUltimaAssinaturaId(null);
@@ -712,7 +742,7 @@ export default function App() {
     cameraState.resetEvaluationPhotos();
   };
 
-  /** Envia o JPEG com desenho para a galeria do paciente (mesma API do perfil). */
+  /** Enfileira JPEG anotado; o envio à API ocorre em finishJourney com procedimentoFeitoId e data iguais às fotos do procedimento. */
   const persistAnnotatedPhotoToGallery = React.useCallback(
     async (blob) => {
       if (!blob || !(blob instanceof Blob)) return { ok: false, skipped: true };
@@ -725,12 +755,7 @@ export default function App() {
         );
         return { ok: false, skipped: true };
       }
-      const file = new File([blob], `avaliacao_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      await pacientesGaleriaApi.upload(pid, file, {
-        roleUserId: rid,
-        legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.PLANEJAMENTO, 'Mapeamento'),
-        dataReferencia: new Date().toISOString().slice(0, 10),
-      });
+      pendingAnnotatedGalleryBlobsRef.current.push(blob);
       return { ok: true };
     },
     [pacienteAtual?.id, roleUserId, toast]
@@ -904,10 +929,14 @@ export default function App() {
                       setObservacoesExecucao={journeyState.setObservacoesExecucao}
                       procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
                       procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                      onProcedureUploadFiles={cameraState.uploadProcedureFiles}
+                      onProcedureUploadFiles={(files, cat) =>
+                        cameraState.uploadProcedureFiles(files, cat)
+                      }
                       onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
                       step4Errors={journeyState.step4Errors}
                       setStep4Errors={journeyState.setStep4Errors}
+                      fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                      onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                     />
                   )}
 
@@ -920,6 +949,24 @@ export default function App() {
                       setOrientacoes={journeyState.setOrientacoes}
                       step5Errors={journeyState.step5Errors}
                       setStep5Errors={journeyState.setStep5Errors}
+                      pacienteNome={pacienteAtual?.nome ?? ''}
+                      pacienteIdade={pacienteAtual?.idade ?? null}
+                      pacienteCpf={pacienteAtual?.cpf ?? ''}
+                      nomeProcedimento={journeyState.nomeProcedimento ?? ''}
+                      observacoesProcedimento={journeyState.observacoesExecucao ?? ''}
+                      queixa={journeyState.queixa ?? ''}
+                      alertasAnamnese={[]}
+                      alertasAlergia={[]}
+                      profissionalAssinaturaDataUrl={journeyState.profissionalAssinaturaDataUrl ?? ''}
+                      termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl ?? ''}
+                      profAssinaturaTimestamp={null}
+                      patAssinaturaTimestamp={null}
+                      termoTitulo={journeyTermoTitulo ?? ''}
+                      fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                      fotosProcedimento={cameraState.procedureCapturedPhotos ?? []}
+                      nomeUsuario={
+                        authUser?.nome || authUser?.name || authUser?.email || authUser?.username || ''
+                      }
                     />
                   )}
                   </div>
