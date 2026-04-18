@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-import React, { useMemo, useRef } from 'react';
-import { CheckCircle, Square, CheckSquare, CheckCircle2, BookOpen } from 'lucide-react';
-=======
 import React, { useMemo, useRef, useState } from 'react';
 import {
   CheckCircle,
@@ -18,7 +14,6 @@ import {
   Camera,
   PenLine,
 } from 'lucide-react';
->>>>>>> ccfdc95 (feat: sprint 2 completo - galeria, fotos e sessoes)
 import { useToast } from '../../contexts/useToast.js';
 import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
