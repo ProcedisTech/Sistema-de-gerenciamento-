@@ -563,6 +563,26 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     }
   }, [onSavedAnamneseStateChange, pacienteId, setExpectativas, setQueixa]);
 
+  const autoOpenedRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !pacienteId ||
+      loadingHistoricoPaciente ||
+      !ultimaAnamnese ||
+      fichaSelecionadaId ||
+      autoOpenedRef.current
+    ) return;
+    autoOpenedRef.current = true;
+    consultarUltimoPreenchimento(ultimaAnamnese.fichaId);
+  }, [
+    pacienteId,
+    loadingHistoricoPaciente,
+    ultimaAnamnese,
+    fichaSelecionadaId,
+    consultarUltimoPreenchimento,
+  ]);
+
   const handleRespostaChange = useCallback((resposta) => {
     if (modoVisualizacao) return;
     const key = String(resposta.perguntaId);
@@ -713,7 +733,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      {pacienteId && !loadingHistoricoPaciente && ultimaAnamnese ? (
+      {pacienteId && !loadingHistoricoPaciente && ultimaAnamnese && !fichaSelecionadaId ? (
         <div className="mb-5">
           <div className="flex min-h-[56px] flex-col gap-2 rounded-lg border border-[#e2e8f0] bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -749,8 +769,38 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       ) : null}
 
+      {fichaSelecionadaId && preenchimentoAnterior && !estaAtualizadaUltima && (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border-[2px] border-[#f59e0b]/50 bg-[#fffbeb] px-4 py-3">
+          <span className="mt-0.5 text-[#f59e0b] text-[18px]">⚠</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-bold text-[#b45309]">Anamnese desatualizada</p>
+            <p className="text-[12px] font-medium text-[#92400e] mt-0.5">
+              O último preenchimento foi há mais de 6 meses. Recomendamos atualizar antes de continuar.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setModoVisualizacao(false);
+              onSavedAnamneseStateChange({
+                ...(savedDraftRef.current || {}),
+                fichaSelecionadaId,
+                fichaDropdownNovo,
+                respostas: respostasRef.current,
+                preenchimentoAnterior,
+                modoVisualizacao: false,
+              });
+            }}
+            className="shrink-0 rounded-lg bg-[#f59e0b] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#d97706] transition-colors"
+          >
+            Atualizar agora
+          </button>
+        </div>
+      )}
+
       <div className="mb-5 border-t border-[#e2e8f0] pt-5" aria-hidden />
 
+      {!fichaSelecionadaId && (
       <div className="relative mb-6" ref={fichaMenuRef}>
         <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
           Selecionar ficha de anamnese
@@ -897,6 +947,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </div>
         ) : null}
       </div>
+      )}
 
       {preenchimentoAnterior && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-[#e6f7f5] border border-[#00a88e] rounded-xl px-4 py-3 mb-4">
@@ -969,6 +1020,35 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               </div>
             );
           })}
+          {preenchimentoAnterior && (
+            <div className="pt-4 border-t border-[#e2e8f0] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => selecionarFichaParaNovo('')}
+                className="text-[12px] font-bold text-[#64748b] hover:text-[#f59e0b] transition-colors flex items-center gap-1.5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Trocar ficha
+              </button>
+              <button
+                type="button"
+                onClick={toggleModoVisualizacao}
+                className="text-[12px] font-bold text-[#64748b] hover:text-[#00a88e] transition-colors flex items-center gap-1.5"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                {modoVisualizacao ? 'Modificar anamnese' : 'Cancelar modificação'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
