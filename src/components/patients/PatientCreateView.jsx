@@ -3,7 +3,6 @@ import { ArrowLeft, Save, Loader2, UserPlus, AlertTriangle } from 'lucide-react'
 import {
   maskCPF,
   maskRG,
-  maskTelefone,
   normalizeCpf,
   isCpfIncomplete,
   calculateAgeFromISODate,
@@ -12,6 +11,8 @@ import {
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
+import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
+import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
 import { pacientesApi } from '../../services/api';
 import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
@@ -33,7 +34,9 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
   const [showProfissoes, setShowProfissoes] = useState(false);
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
-  const [telefone, setTelefone] = useState('');
+  const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
+  const [telefoneNumero, setTelefoneNumero] = useState('');
+  const [telefoneTouched, setTelefoneTouched] = useState(false);
   const [email, setEmail] = useState('');
   const [endereco, setEndereco] = useState('');
   const [instagram, setInstagram] = useState('');
@@ -75,7 +78,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
     if (!estadoCivilId.trim()) e.estadoCivil = true;
     if (!profissao.trim()) e.profissao = true;
     if (!cpf.trim()) e.cpf = true;
-    if (!telefone.trim()) e.telefone = true;
+    if (!telefoneNumero.trim() || !isPhoneValid(telefoneCountryCode, telefoneNumero)) e.telefone = true;
     if (!email.trim()) e.email = true;
     return e;
   };
@@ -124,7 +127,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
         dataNascimento: dataNascimento || null,
         cpf: cpfDigits || null,
         rg: rg.replace(/\D/g, '') || null,
-        telefone: telefone || null,
+        telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
         email: email || null,
         instagram: instagram || null,
         tiktok: tiktok || null,
@@ -421,7 +424,44 @@ export function PatientCreateView({ setPatientView, onPatientCreated }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#a855f7]">Telefone <span className="text-red-500">*</span></label>
-              <input type="text" value={telefone} onChange={(e) => { setTelefone(maskTelefone(e.target.value)); clearError('telefone'); }} placeholder="(00) 00000-0000" className={`w-full px-4 py-3 bg-[#faf5ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${errors.telefone ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`} />
+              <div className={`flex items-stretch gap-1 rounded-xl border-[3px] bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${errors.telefone || (telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero)) ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'}`}>
+                <select
+                  value={telefoneCountryCode}
+                  title={getCountryByCode(telefoneCountryCode).name}
+                  onChange={(e) => { setTelefoneCountryCode(e.target.value); setTelefoneNumero(''); setTelefoneTouched(false); clearError('telefone'); }}
+                  className="max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none"
+                  aria-label="País"
+                >
+                  {[
+                    COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
+                    ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
+                  ].filter(Boolean).map((c) => (
+                    <option key={c.code} value={c.code} title={c.name}>
+                      {countrySelectDisplayLabel(c)}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                  <span className="flex items-center text-[13px] font-semibold text-[#a855f7] shrink-0 tabular-nums">
+                    {getDdi(telefoneCountryCode)}
+                  </span>
+                  <input
+                    type="tel"
+                    value={telefoneNumero}
+                    autoComplete="tel-national"
+                    onChange={(e) => {
+                      setTelefoneNumero(formatPhoneAsYouType(telefoneCountryCode, e.target.value));
+                      clearError('telefone');
+                    }}
+                    onBlur={() => setTelefoneTouched(true)}
+                    placeholder={telefoneCountryCode === 'BR' ? '(00) 00000-0000' : 'Número'}
+                    className="min-w-0 flex-1 rounded-r-[9px] bg-transparent py-3 pr-3 text-[14px] font-medium outline-none"
+                  />
+                </div>
+              </div>
+              {telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
+                <p className="text-[12px] font-bold text-red-600">Número inválido para este país</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#a855f7]">E-mail <span className="text-red-500">*</span></label>

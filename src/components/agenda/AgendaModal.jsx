@@ -2,6 +2,8 @@ import React from 'react';
 import { Calendar, X, Loader2 } from 'lucide-react';
 import { isCpfIncomplete } from '../utils/formatters';
 import { useToast } from '../../contexts/useToast.js';
+import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
+import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUtils';
 
 export function AgendaModal({
   isOpen,
@@ -13,10 +15,13 @@ export function AgendaModal({
   setAgendaNewPatientNome,
   agendaNewPatientCpf,
   setAgendaNewPatientCpf,
-  agendaNewPatientTelefone,
-  setAgendaNewPatientTelefone,
+  agendaNewPatientTelefoneCountry,
+  setAgendaNewPatientTelefoneCountry,
+  agendaNewPatientTelefoneNumero,
+  setAgendaNewPatientTelefoneNumero,
+  agendaNewPatientTelefoneTouched,
+  setAgendaNewPatientTelefoneTouched,
   maskCPF,
-  maskTelefone,
   agendaPatientSearch,
   setAgendaPatientSearch,
   patients,
@@ -183,12 +188,43 @@ export function AgendaModal({
                 </div>
                 <div className="space-y-1.5 md:col-span-1">
                   <label className="text-[13px] font-bold text-[#00a88e]">Telefone</label>
-                  <input
-                    value={agendaNewPatientTelefone}
-                    onChange={(e) => setAgendaNewPatientTelefone(maskTelefone(e.target.value))}
-                    className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
-                    placeholder="(00) 00000-0000"
-                  />
+                  <div className={`flex items-stretch gap-1 rounded-xl border-[3px] bg-[#f8fbfb] transition-all focus-within:ring-4 focus-within:ring-[#00a88e]/10 ${agendaNewPatientTelefoneTouched && !isPhoneValid(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero) ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/20 focus-within:border-[#00a88e]'}`}>
+                    <select
+                      value={agendaNewPatientTelefoneCountry}
+                      title={getCountryByCode(agendaNewPatientTelefoneCountry).name}
+                      onChange={(e) => {
+                        setAgendaNewPatientTelefoneCountry(e.target.value);
+                        setAgendaNewPatientTelefoneNumero('');
+                        setAgendaNewPatientTelefoneTouched(false);
+                      }}
+                      className="max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none"
+                      aria-label="País"
+                    >
+                      {[
+                        COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
+                        ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
+                      ].filter(Boolean).map((c) => (
+                        <option key={c.code} value={c.code} title={c.name}>{countrySelectDisplayLabel(c)}</option>
+                      ))}
+                    </select>
+                    <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                      <span className="flex items-center text-[12px] font-semibold text-[#00a88e] shrink-0 tabular-nums">
+                        {getDdi(agendaNewPatientTelefoneCountry)}
+                      </span>
+                      <input
+                        type="tel"
+                        value={agendaNewPatientTelefoneNumero}
+                        autoComplete="tel-national"
+                        onChange={(e) => setAgendaNewPatientTelefoneNumero(formatPhoneAsYouType(agendaNewPatientTelefoneCountry, e.target.value))}
+                        onBlur={() => setAgendaNewPatientTelefoneTouched(true)}
+                        placeholder={agendaNewPatientTelefoneCountry === 'BR' ? '(00) 00000-0000' : 'Número'}
+                        className="min-w-0 flex-1 rounded-r-[9px] bg-transparent py-3 pr-3 text-[14px] font-medium outline-none"
+                      />
+                    </div>
+                  </div>
+                  {agendaNewPatientTelefoneTouched && !isPhoneValid(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero) && (
+                    <p className="text-[11px] font-bold text-red-600 mt-0.5">Número inválido para este país</p>
+                  )}
                 </div>
               </div>
             ) : (
