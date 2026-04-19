@@ -453,7 +453,7 @@ export function TermosManager() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-[#334155]">
+              <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[#334155]">
                 {viewingRow.conteudo ?? viewingRow.content ?? ''}
               </p>
             </div>
