@@ -369,6 +369,34 @@ export function useProcedureCamera({
     });
   }, []);
 
+  /** Substitui um item da lista de fotos do procedimento pelo JPEG já com desenho. */
+  const replaceProcedureCapturedPhotoAt = useCallback((index, entry) => {
+    const newUrl = entry?.url;
+    if (!newUrl) return;
+
+    setProcedureCapturedPhotos((prev) => {
+      if (!Array.isArray(prev) || index < 0 || index >= prev.length) return prev;
+      const old = prev[index];
+      try {
+        if (old?.url) URL.revokeObjectURL(old.url);
+      } catch {
+        // ignore
+      }
+      const mergedMeta = {
+        ...(old?.meta || {}),
+        ...(entry.meta || {}),
+        annotated: true,
+      };
+      const next = [...prev];
+      next[index] = {
+        url: newUrl,
+        blob: entry.blob ?? null,
+        meta: mergedMeta,
+      };
+      return next;
+    });
+  }, []);
+
   /** Substitui um item da lista de avaliação pelo JPEG já com desenho (mesmo índice selecionado na etapa 3). */
   const replaceEvaluationCapturedPhotoAt = useCallback(
     (index, entry) => {
@@ -469,6 +497,7 @@ export function useProcedureCamera({
     procedureFotoCategoria,
     setProcedureFotoCategoria,
     removeProcedurePhoto,
+    replaceProcedureCapturedPhotoAt,
     replaceEvaluationCapturedPhotoAt,
     preferredFacing,
     toggleCameraFacing,

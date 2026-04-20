@@ -762,6 +762,7 @@ export function Step4Procedimento({
   setStep4Errors = () => {},
   fotosAvaliacao = [],
   onProcedureFotoCategoriaSync = () => {},
+  onProcedureAnnotatePhoto,
 }) {
   const uploadInputRef = React.useRef(null);
   const datalistId = React.useId();
@@ -769,10 +770,21 @@ export function Step4Procedimento({
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState('antes');
+  /** Lightbox somente leitura para fotos da avaliação (referência). */
+  const [referencePreviewUrl, setReferencePreviewUrl] = React.useState(null);
 
   React.useEffect(() => {
     onProcedureFotoCategoriaSync(fotoCategoria);
   }, [fotoCategoria, onProcedureFotoCategoriaSync]);
+
+  React.useEffect(() => {
+    if (!referencePreviewUrl) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setReferencePreviewUrl(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [referencePreviewUrl]);
 
   React.useEffect(() => {
     const urls = new Set((procedureCapturedPhotos || []).map((p) => p.url).filter(Boolean));
@@ -894,16 +906,22 @@ export function Step4Procedimento({
           </div>
           <div className="grid grid-cols-3 gap-2 opacity-70">
             {fotosAvaliacao.slice(0, 3).map((foto, idx) => (
-              <div
-                key={idx}
-                className="relative aspect-square overflow-hidden rounded-xl border-2 border-dashed border-[#e2e8f0]"
+              <button
+                key={foto.url ? `${foto.url}_${idx}` : idx}
+                type="button"
+                onClick={() => foto.url && setReferencePreviewUrl(foto.url)}
+                title="Ampliar (somente visualização)"
+                className="group relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-xl border-2 border-dashed border-[#e2e8f0] p-0 text-left outline-none transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-2"
               >
                 <img src={foto.url} alt="" className="h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-black/10" />
-                <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1 text-[9px] font-bold text-white">
+                <div className="pointer-events-none absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/5" />
+                <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/50 px-1 text-[9px] font-bold text-white">
                   Ref.{idx + 1}
                 </span>
-              </div>
+                <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/45 px-1.5 py-0.5 text-[8px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:text-[9px]">
+                  Ver
+                </span>
+              </button>
             ))}
           </div>
         </div>
@@ -956,19 +974,30 @@ export function Step4Procedimento({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {photos.map((ph, idx) => (
           <div key={`${ph.url}_${idx}`} className="min-w-0">
-            <div className="relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
+            <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
               <div
-                className={`absolute left-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
+                className={`absolute left-1 top-1 z-10 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
                   ph.meta?.categoria === 'depois' ? 'bg-[#22c55e]' : 'bg-[#f59e0b]'
                 }`}
               >
                 {ph.meta?.categoria === 'depois' ? 'Depois' : 'Antes'}
               </div>
               <img src={ph.url} alt="" className="h-full w-full object-cover" />
+              {typeof onProcedureAnnotatePhoto === 'function' ? (
+                <button
+                  type="button"
+                  onClick={() => onProcedureAnnotatePhoto(idx)}
+                  className="absolute inset-0 z-[1] flex items-center justify-center bg-black/35 opacity-100 transition-all sm:bg-black/0 sm:opacity-0 sm:group-hover:bg-black/45 sm:group-hover:opacity-100"
+                >
+                  <span className="rounded-lg bg-white px-3 py-2 text-[12px] font-bold text-[#0f172a] shadow sm:py-1.5">
+                    Anotar
+                  </span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onProcedureRemovePhoto?.(idx)}
-                className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
+                className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
                 aria-label="Remover imagem"
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -1000,6 +1029,32 @@ export function Step4Procedimento({
           <ImageIcon className="h-4 w-4 shrink-0" />
           A câmera flutuante da jornada também adiciona fotos aqui.
         </p>
+      ) : null}
+
+      {referencePreviewUrl ? (
+        <div
+          className="fixed inset-0 z-[145] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setReferencePreviewUrl(null)}
+          role="presentation"
+        >
+          <img
+            src={referencePreviewUrl}
+            alt=""
+            className="max-h-[90dvh] max-w-full rounded-xl object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setReferencePreviewUrl(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-lg font-bold text-white transition-colors hover:bg-white/30"
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+          <p className="pointer-events-none absolute bottom-6 left-0 right-0 text-center text-[12px] font-medium text-white/80">
+            Referência da avaliação — somente visualização
+          </p>
+        </div>
       ) : null}
     </div>
   );
