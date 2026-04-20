@@ -348,6 +348,9 @@ export default function App() {
   const handleStartAttendance = (patient, options = {}) => {
     if (!patient) return;
 
+    /* Fecha modal da câmera e limpa preview (evita blob revogado na UI). */
+    cameraState.closePhotoModal();
+
     /* Evita ERR_FILE_NOT_FOUND em blob: após reset — canvas ainda apontava para URLs revogadas. */
     revokeBlobUrlIfAny(journeyState.evaluationAnnotatedPhotoUrl);
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
@@ -357,6 +360,12 @@ export default function App() {
 
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
+
+    /* ProcedureCameraWidget usa anamnesePhotoUrl na miniatura — mesmo blob das fotos confirmadas. */
+    revokeBlobUrlIfAny(cameraState.anamnesePhotoUrl);
+    cameraState.setAnamnesePhotoUrl(null);
+    cameraState.setAnamnesePhotoBlob(null);
+    cameraState.setAnamnesePhotoMeta(null);
 
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     const cpfKey = cpf != null ? String(cpf).trim() : '';
