@@ -62,6 +62,16 @@ function isTermoAtivoRow(row) {
   return true;
 }
 
+function revokeBlobUrlIfAny(url) {
+  if (url == null || typeof url !== 'string') return;
+  if (!url.startsWith('blob:')) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    // ignore
+  }
+}
+
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId } = useOrg();
   const toast = useToast();
@@ -338,11 +348,35 @@ export default function App() {
   const handleStartAttendance = (patient, options = {}) => {
     if (!patient) return;
 
-    // Limpar fotos do paciente anterior ANTES de iniciar novo atendimento
+    /* Evita ERR_FILE_NOT_FOUND em blob: após reset — canvas ainda apontava para URLs revogadas. */
+    revokeBlobUrlIfAny(journeyState.evaluationAnnotatedPhotoUrl);
+    journeyState.setEvaluationAnnotatedPhotoUrl(null);
+    revokeBlobUrlIfAny(journeyState.imageSrc);
+    journeyState.setImageSrc(null);
+    journeyState.setPaths([]);
+
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
 
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
+    const cpfKey = cpf != null ? String(cpf).trim() : '';
+    if (cpfKey) {
+      setPatients((prev) =>
+        prev.map((p) => {
+          if (String(p?.cpf || '').trim() !== cpfKey) return p;
+          const photos = Array.isArray(p.evaluationCapturedPhotos) ? p.evaluationCapturedPhotos : [];
+          photos.forEach((ph) => revokeBlobUrlIfAny(ph?.url));
+          revokeBlobUrlIfAny(p.evaluationAnnotatedPhotoUrl);
+          return {
+            ...p,
+            evaluationCapturedPhotos: [],
+            evaluationSelectedPhotoIndex: null,
+            evaluationAnnotatedPhotoUrl: null,
+          };
+        })
+      );
+    }
+
     setSelectedPatientCpf(cpf);
     setJourneyProcedureDateIso(toLocalISODate());
     setCurrentStep(options.initialStep ?? 1);
