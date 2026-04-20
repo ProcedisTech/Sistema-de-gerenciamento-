@@ -74,6 +74,8 @@ export function Step5Finalization({
   fotosAvaliacao = [],
   fotosProcedimento = [],
   nomeUsuario = '',
+  onAnnotateEvaluationPhoto,
+  onAnnotateProcedurePhoto,
 }) {
   const toast = useToast();
   const todayIso = useMemo(() => toLocalISODate(), []);
@@ -546,7 +548,7 @@ export function Step5Finalization({
                         {fotosAvaliacao.map((foto, idx) => (
                           <div
                             key={idx}
-                            className="relative aspect-square overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f1f5f9]"
+                            className="group relative aspect-square overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f1f5f9]"
                           >
                             <img
                               src={foto.url}
@@ -557,6 +559,17 @@ export function Step5Finalization({
                             <div className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-bold text-white">
                               {idx + 1}
                             </div>
+                            {typeof onAnnotateEvaluationPhoto === 'function' ? (
+                              <button
+                                type="button"
+                                onClick={() => onAnnotateEvaluationPhoto(idx)}
+                                className="absolute inset-0 z-[1] flex items-center justify-center bg-black/35 opacity-100 transition-all sm:bg-black/0 sm:opacity-0 sm:group-hover:bg-black/45 sm:group-hover:opacity-100"
+                              >
+                                <span className="rounded-lg bg-white px-2 py-1.5 text-[11px] font-bold text-[#0f172a] shadow sm:text-[12px]">
+                                  Anotar
+                                </span>
+                              </button>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -572,7 +585,7 @@ export function Step5Finalization({
                         {fotosProcedimento.map((foto, idx) => (
                           <div
                             key={idx}
-                            className="relative aspect-square overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f1f5f9]"
+                            className="group relative aspect-square overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f1f5f9]"
                           >
                             <img
                               src={foto.url}
@@ -583,6 +596,17 @@ export function Step5Finalization({
                             <div className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-bold text-white">
                               {idx + 1}
                             </div>
+                            {typeof onAnnotateProcedurePhoto === 'function' ? (
+                              <button
+                                type="button"
+                                onClick={() => onAnnotateProcedurePhoto(idx)}
+                                className="absolute inset-0 z-[1] flex items-center justify-center bg-black/35 opacity-100 transition-all sm:bg-black/0 sm:opacity-0 sm:group-hover:bg-black/45 sm:group-hover:opacity-100"
+                              >
+                                <span className="rounded-lg bg-white px-2 py-1.5 text-[11px] font-bold text-[#0f172a] shadow sm:text-[12px]">
+                                  Anotar
+                                </span>
+                              </button>
+                            ) : null}
                           </div>
                         ))}
                       </div>

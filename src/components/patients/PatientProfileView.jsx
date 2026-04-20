@@ -662,6 +662,8 @@ export function PatientProfileView({
     setCategoriasExpandidas({});
     setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
+    setApiProcedures([]);
+    setApiNotes([]);
   }, [selectedPatient?.id]);
 
   const closeRelatoModal = useCallback(() => {
@@ -1217,6 +1219,13 @@ export function PatientProfileView({
     return { status: 'vencida', latest };
   }, [anamneseListSummary]);
 
+  const hasConsultasAnteriores = useMemo(() => {
+    if (detailLoading) return false;
+    const apiCount = Array.isArray(apiProcedures) ? apiProcedures.length : 0;
+    const localCount = Array.isArray(patient.procedures) ? patient.procedures.length : 0;
+    return apiCount > 0 || localCount > 0;
+  }, [detailLoading, apiProcedures, patient.procedures]);
+
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
       const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
@@ -1650,23 +1659,31 @@ export function PatientProfileView({
                           </p>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <div
+                        className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
+                      >
                         <button
                           type="button"
                           onClick={() => onStartAttendance?.(selectedPatient)}
-                          className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                          className={`flex h-10 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
+                            hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
+                          }`}
                         >
                           Iniciar com Anamnese
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                          className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                        >
-                          Pular para avaliação
-                        </button>
+                        {hasConsultasAnteriores ? (
+                          <button
+                            type="button"
+                            onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
+                            className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                          >
+                            Pular para avaliação
+                          </button>
+                        ) : null}
                       </div>
-                      <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
+                      {hasConsultasAnteriores ? (
+                        <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -1682,22 +1699,28 @@ export function PatientProfileView({
                           </p>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <div
+                        className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
+                      >
                         <button
                           type="button"
                           onClick={() => onStartAttendance?.(selectedPatient)}
-                          className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                          className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
+                            hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
+                          }`}
                         >
                           <Play className="h-4 w-4" strokeWidth={2.5} aria-hidden />
                           Iniciar Atendimento
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient)}
-                          className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                        >
-                          Ver/Atualizar Anamnese
-                        </button>
+                        {hasConsultasAnteriores ? (
+                          <button
+                            type="button"
+                            onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
+                            className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                          >
+                            Pular para avaliação
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}

@@ -10,6 +10,8 @@ import { Step3Termos, Step4Procedimento } from './Step4LGPD';
 import { Step5Finalization } from './Step5Finalization';
 
 export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, getPatientInitials }) {
+  const [cancelModalOpen, setCancelModalOpen] = React.useState(false);
+
   if (!pacienteAtual) return null;
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = initialsFn(pacienteAtual.nome || '') || '—';
@@ -21,47 +23,90 @@ export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, ge
     : [];
 
   return (
-    <div className="sticky top-0 z-10 mb-3 flex w-full shrink-0 items-center gap-2 border-b border-[#e2e8f0] bg-white px-4 py-3 sm:gap-3 sm:px-6">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[12px] font-bold text-white sm:h-9 sm:w-9 sm:text-[13px] md:h-10 md:w-10">
-        {iniciais}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="max-w-[160px] truncate text-[14px] font-bold text-[#0f172a] sm:max-w-none md:max-w-none">
-            {pacienteAtual.nome || '—'}
-          </span>
-          {idadeLabel ? (
-            <span className="hidden text-[12px] text-[#64748b] sm:inline">{idadeLabel}</span>
-          ) : null}
-          {alertas.map((alerta, i) => {
-            const label = [alerta.titulo, alerta.valor].filter(Boolean).join(': ');
-            const truncated = label.length > 50 ? `${label.slice(0, 47)}…` : label;
-            return (
-              <span
-                key={i}
-                title={label}
-                className="inline-flex max-w-[min(100%,240px)] shrink-0 items-center gap-1 truncate rounded-full bg-[#DC2626] px-2 py-0.5 text-[10px] font-bold text-white sm:text-[11px]"
-              >
-                <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
-                {truncated}
-              </span>
-            );
-          })}
+    <>
+      <div className="sticky top-0 z-10 mb-3 flex w-full shrink-0 items-center gap-2 border-b border-[#e2e8f0] bg-white px-4 py-3 sm:gap-3 sm:px-6">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[12px] font-bold text-white sm:h-9 sm:w-9 sm:text-[13px] md:h-10 md:w-10">
+          {iniciais}
         </div>
-        <div className="text-[12px] text-[#94a3b8]">Em atendimento</div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="max-w-[160px] truncate text-[14px] font-bold text-[#0f172a] sm:max-w-none md:max-w-none">
+              {pacienteAtual.nome || '—'}
+            </span>
+            {idadeLabel ? (
+              <span className="hidden text-[12px] text-[#64748b] sm:inline">{idadeLabel}</span>
+            ) : null}
+            {alertas.map((alerta, i) => {
+              const label = [alerta.titulo, alerta.valor].filter(Boolean).join(': ');
+              const truncated = label.length > 50 ? `${label.slice(0, 47)}…` : label;
+              return (
+                <span
+                  key={i}
+                  title={label}
+                  className="inline-flex max-w-[min(100%,240px)] shrink-0 items-center gap-1 truncate rounded-full bg-[#DC2626] px-2 py-0.5 text-[10px] font-bold text-white sm:text-[11px]"
+                >
+                  <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
+                  {truncated}
+                </span>
+              );
+            })}
+          </div>
+          <div className="text-[12px] text-[#94a3b8]">Em atendimento</div>
+        </div>
+
+        {typeof onCancelJourney === 'function' ? (
+          <button
+            type="button"
+            onClick={() => setCancelModalOpen(true)}
+            className="flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl border border-transparent bg-red-500 px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-red-600 active:bg-red-600 sm:px-4 sm:text-[13px]"
+          >
+            ← Cancelar
+          </button>
+        ) : null}
       </div>
 
-      {typeof onCancelJourney === 'function' ? (
-        <button
-          type="button"
-          onClick={onCancelJourney}
-          className="flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-[#64748b] active:bg-[#f8fafc] active:text-[#0f172a] sm:px-3"
-        >
-          ← Cancelar
-        </button>
+      {cancelModalOpen && typeof onCancelJourney === 'function' ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="journey-cancel-title"
+            className="flex w-full max-w-md flex-col rounded-2xl border-[3px] border-[#00a88e]/20 bg-white shadow-2xl"
+          >
+            <div className="border-b border-[#e2e8f0] px-6 py-4">
+              <h3 id="journey-cancel-title" className="text-[16px] font-bold text-[#0f172a]">
+                Sair do atendimento?
+              </h3>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-[14px] font-medium leading-relaxed text-[#475569]">
+                Se sair agora, o progresso desta jornada pode ser perdido. Deseja realmente cancelar o atendimento?
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-6">
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="rounded-xl border-[3px] border-[#e2e8f0] bg-white px-5 py-3 text-[14px] font-bold text-[#64748b] hover:border-[#00a88e]/20"
+              >
+                Continuar atendimento
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelModalOpen(false);
+                  onCancelJourney();
+                }}
+                className="flex items-center gap-2 rounded-xl border-[3px] border-transparent bg-red-500 px-5 py-3 text-[14px] font-bold text-white shadow-md transition-colors hover:bg-red-600"
+              >
+                Sair
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -143,6 +188,12 @@ export function JourneyView({
   setObservacoesExecucao,
   onProcedureUploadFiles,
   onProcedureRemovePhoto,
+  onProcedureAnnotatePhoto,
+  /** Fotos no resumo da etapa 5; padrão vazio se o integrador não enviar. */
+  fotosAvaliacaoResumo = [],
+  fotosProcedimentoResumo = [],
+  onAnnotateEvaluationPhoto,
+  onAnnotateProcedurePhoto,
   /** Fotos do step 4; se omitido, usa `evaluationCapturedPhotos` (legado). */
   procedureCapturedPhotos: procedureCapturedPhotosStep4,
   uploadProcedureFiles: uploadProcedureFilesStep4,
@@ -315,6 +366,7 @@ export function JourneyView({
           onProcedureRemovePhoto={removeProcedurePhotoStep4 ?? onProcedureRemovePhoto}
           step4Errors={step4Errors}
           setStep4Errors={setStep4Errors}
+          onProcedureAnnotatePhoto={onProcedureAnnotatePhoto}
         />
       )}
 
@@ -327,6 +379,10 @@ export function JourneyView({
           setOrientacoes={setOrientacoes}
           step5Errors={step5Errors}
           setStep5Errors={setStep5Errors}
+          fotosAvaliacao={fotosAvaliacaoResumo}
+          fotosProcedimento={fotosProcedimentoResumo}
+          onAnnotateEvaluationPhoto={onAnnotateEvaluationPhoto}
+          onAnnotateProcedurePhoto={onAnnotateProcedurePhoto}
         />
       )}
       </div>
