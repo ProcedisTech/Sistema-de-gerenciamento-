@@ -36,6 +36,8 @@ import {
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
+import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 import {
   birthdayModalStorageKey,
   getBirthdayAlertInfo,
@@ -792,18 +794,23 @@ export function PatientProfileView({
   };
 
 
-  const createEditDraft = () => ({
-    nome: patient.nome || '',
-    email: patient.email || '',
-    telefone: patient.telefone || '',
-    profissao: patient.profissao || '',
-    endereco: patient.endereco || '',
-    alergias: patient.alergias || '',
-    condicoesSaude: patient.condicoesSaude || '',
-    medicamentos: Array.isArray(patient.medicamentos)
-      ? patient.medicamentos.join(', ')
-      : '',
-  });
+  const createEditDraft = () => {
+    const { countryCode, nationalNumber } = parsePhoneFromApi(patient.telefone || '', 'BR');
+    return {
+      nome: patient.nome || '',
+      email: patient.email || '',
+      telefoneCountryCode: countryCode,
+      telefoneNumero: formatPhoneAsYouType(countryCode, nationalNumber),
+      telefoneTouched: false,
+      profissao: patient.profissao || '',
+      endereco: patient.endereco || '',
+      alergias: patient.alergias || '',
+      condicoesSaude: patient.condicoesSaude || '',
+      medicamentos: Array.isArray(patient.medicamentos)
+        ? patient.medicamentos.join(', ')
+        : '',
+    };
+  };
 
   const capturedPhotos = useMemo(() => {
     const list = Array.isArray(patient.evaluationCapturedPhotos)
@@ -1100,11 +1107,12 @@ export function PatientProfileView({
         merged.sort((a, b) => b.ts - a.ts);
         if (!cancelled) setAlertasAlergia(itemsAlergia);
         if (!cancelled) setAlertasAnamnese(merged);
-        if (alergiasDetectadas.length > 0 && pacienteId) {
-          const alergiasTexto = alergiasDetectadas.join(' · ');
+
+        if (pacienteId) {
           mergePatientById?.(pacienteId, (prev) => ({
             ...prev,
-            alergias: alergiasTexto,
+            ...(alergiasDetectadas.length > 0 ? { alergias: alergiasDetectadas.join(' · ') } : {}),
+            alertasClinicosAtivos: merged.map((a) => ({ titulo: a.titulo, valor: a.valor })),
           }));
         }
       } catch {
@@ -1267,7 +1275,7 @@ export function PatientProfileView({
       onUpdatePatient?.(selectedPatient.cpf, {
         nome: editing?.nome || '',
         email: editing?.email || '',
-        telefone: editing?.telefone || '',
+        telefone: formatPhoneForApi(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') || '',
         profissao: editing?.profissao || '',
         endereco: editing?.endereco || '',
         alergias: editing?.alergias || '',
@@ -1280,7 +1288,11 @@ export function PatientProfileView({
     setProfileSaveError('');
     try {
       const dto = await pacientesApi.get(selectedPatient.id);
-      const payload = mergePacienteDtoWithEditing(dto, editing);
+      const editingWithTelefone = {
+        ...editing,
+        telefone: formatPhoneForApi(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') || editing?.telefone || '',
+      };
+      const payload = mergePacienteDtoWithEditing(dto, editingWithTelefone);
       await pacientesApi.update(selectedPatient.id, payload);
       const fresh = await pacientesApi.get(selectedPatient.id);
       mergePatientById?.(selectedPatient.id, (prev) => {
@@ -1512,7 +1524,44 @@ export function PatientProfileView({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input value={editing?.nome || ''} onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Nome" />
                   <input value={editing?.email || ''} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="E-mail" />
-                  <input value={editing?.telefone || ''} onChange={(e) => setEditing((p) => ({ ...p, telefone: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Telefone" />
+                  <div className="space-y-1">
+                    <div className="flex items-stretch gap-1 rounded-xl border-[2px] border-[#00a88e]/20 bg-white overflow-hidden">
+                      <select
+                        value={editing?.telefoneCountryCode ?? 'BR'}
+                        title={getCountryByCode(editing?.telefoneCountryCode ?? 'BR').name}
+                        onChange={(e) => setEditing((p) => ({ ...p, telefoneCountryCode: e.target.value, telefoneNumero: '', telefoneTouched: false }))}
+                        className="max-w-[7.25rem] min-w-0 shrink-0 truncate border-0 bg-transparent py-2 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none"
+                        aria-label="País"
+                      >
+                        {[
+                          COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
+                          ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
+                        ].filter(Boolean).map((c) => (
+                          <option key={c.code} value={c.code} title={c.name}>{countrySelectDisplayLabel(c)}</option>
+                        ))}
+                      </select>
+                      <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                        <span className="flex items-center text-[12px] font-semibold text-[#00a88e] shrink-0 tabular-nums">
+                          {getDdi(editing?.telefoneCountryCode ?? 'BR')}
+                        </span>
+                        <input
+                          type="tel"
+                          value={editing?.telefoneNumero ?? ''}
+                          autoComplete="tel-national"
+                          onChange={(e) => {
+                            const formatted = formatPhoneAsYouType(editing?.telefoneCountryCode ?? 'BR', e.target.value);
+                            setEditing((p) => ({ ...p, telefoneNumero: formatted }));
+                          }}
+                          onBlur={() => setEditing((p) => ({ ...p, telefoneTouched: true }))}
+                          placeholder={(editing?.telefoneCountryCode ?? 'BR') === 'BR' ? '(00) 00000-0000' : 'Número'}
+                          className="min-w-0 flex-1 bg-transparent py-2 pr-2 text-[16px] sm:text-[14px] outline-none"
+                        />
+                      </div>
+                    </div>
+                    {editing?.telefoneTouched && !isPhoneValid(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') && (
+                      <p className="text-[11px] font-bold text-red-600">Número inválido para este país</p>
+                    )}
+                  </div>
                   <input value={editing?.profissao || ''} onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Profissao" />
                   <div className="md:col-span-2">
                     <label className="text-[12px] font-bold text-[#475569] mb-1 block">Endereço</label>
@@ -1590,7 +1639,7 @@ export function PatientProfileView({
             <div className="p-5">
               {patientDetailTab === 'atendimento' && (
                 <div className="space-y-5">
-                  {anamneseAtendimentoInfo.status === 'nova' ? (
+                  {!alertasAnamneseLoading && anamneseAtendimentoInfo.status === 'nova' ? (
                     <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#6366f1] bg-[#eef2ff] p-4">
                       <div className="flex items-start gap-3">
                         <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#6366f1]" strokeWidth={2.25} aria-hidden />
@@ -1611,10 +1660,10 @@ export function PatientProfileView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient)}
+                          onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
                           className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
                         >
-                          Pular e ir para Execução
+                          Pular para avaliação
                         </button>
                       </div>
                       <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>

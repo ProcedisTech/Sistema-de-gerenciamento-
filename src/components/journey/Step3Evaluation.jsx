@@ -36,6 +36,8 @@ function isPhotoAnnotated(ph, idx, evaluationAnnotatedPhotoUrl, evaluationSelect
 export function Step3Evaluation({
   /** Offset à esquerda em px (largura da sidebar) a partir de `md`, para fullscreen do editor. */
   sidebarInsetPx = 220,
+  observacoes = '',
+  setObservacoes,
   imageSrc,
   setImageSrc,
   activeTool,
@@ -668,6 +670,19 @@ export function Step3Evaluation({
           <h3 className="text-[18px] font-bold text-[#0f172a]">Avaliação e Mapeamento</h3>
           <p className="text-[13px] font-medium text-[#64748b]">Capture, anote e revise com o paciente</p>
         </div>
+      </div>
+
+      <div className="mb-6 space-y-1.5">
+        <label className="text-[13px] font-bold text-[#475569]">
+          Observações e expectativas do paciente
+        </label>
+        <textarea
+          rows={4}
+          value={observacoes}
+          onChange={(e) => typeof setObservacoes === 'function' && setObservacoes(e.target.value)}
+          placeholder="Descreva as expectativas do paciente, procedimentos planejados, observações clínicas relevantes..."
+          className="w-full resize-y rounded-xl border-[3px] border-[#e2e8f0] bg-[#f8fafc] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/10"
+        />
       </div>
 
       {photos.length === 0 ? (

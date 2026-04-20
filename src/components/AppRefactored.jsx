@@ -295,7 +295,7 @@ export default function App() {
     );
   };
 
-  const handleStartAttendance = (patient) => {
+  const handleStartAttendance = (patient, options = {}) => {
     if (!patient) return;
 
     // Limpar fotos do paciente anterior ANTES de iniciar novo atendimento
@@ -305,7 +305,7 @@ export default function App() {
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     setSelectedPatientCpf(cpf);
     setJourneyProcedureDateIso(toLocalISODate());
-    setCurrentStep(1);
+    setCurrentStep(options.initialStep ?? 1);
     setActiveView('jornada');
     setPatientView('list');
   };
@@ -708,6 +708,7 @@ export default function App() {
     setCurrentStep(1);
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
+    journeyState.setObservacoes('');
     journeyState.setStep2AnamneseDraft({
       fichaSelecionadaId: '',
       fichaDropdownNovo: '',
@@ -896,6 +897,8 @@ export default function App() {
                       persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
                       evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                       onUploadFiles={cameraState.uploadPhotoFiles}
+                      observacoes={journeyState.observacoes}
+                      setObservacoes={journeyState.setObservacoes}
                     />
                   )}
 

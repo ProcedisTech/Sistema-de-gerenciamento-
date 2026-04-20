@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { toLocalISODate } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
@@ -9,48 +9,16 @@ import { Step3Evaluation } from './Step3Evaluation';
 import { Step3Termos, Step4Procedimento } from './Step4LGPD';
 import { Step5Finalization } from './Step5Finalization';
 
-/** Faixa de contexto do paciente (fixa no topo quando dentro de área com scroll). */
-function textoAlergiaParaBadge(alergias) {
-  if (alergias == null) return '';
-  if (typeof alergias === 'string') return alergias.trim();
-  if (Array.isArray(alergias)) {
-    const parts = alergias
-      .map((a) => (typeof a === 'string' ? a : a?.nome || a?.descricao || a?.label || ''))
-      .map((s) => String(s).trim())
-      .filter(Boolean);
-    return parts.slice(0, 2).join(', ');
-  }
-  return String(alergias).trim();
-}
-
-function textoCondicoesCurto(condicoes) {
-  if (condicoes == null) return '';
-  if (typeof condicoes === 'string') return condicoes.trim();
-  if (Array.isArray(condicoes)) {
-    const parts = condicoes
-      .map((c) => (typeof c === 'string' ? c : c?.nome || c?.descricao || ''))
-      .map((s) => String(s).trim())
-      .filter(Boolean);
-    return parts.slice(0, 1).join(', ');
-  }
-  return String(condicoes).trim();
-}
-
 export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, getPatientInitials }) {
   if (!pacienteAtual) return null;
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = initialsFn(pacienteAtual.nome || '') || '—';
-  const alergiaTxt = textoAlergiaParaBadge(pacienteAtual.alergias);
-  const condTxt = textoCondicoesCurto(pacienteAtual.condicoesSaude);
-  const alertaLabel = alergiaTxt
-    ? `⚠ ${alergiaTxt.length > 48 ? `${alergiaTxt.slice(0, 45)}…` : alergiaTxt}`
-    : condTxt
-      ? `⚠ ${condTxt.length > 48 ? `${condTxt.slice(0, 45)}…` : condTxt}`
-      : pacienteAtual.alergias || pacienteAtual.condicoesSaude
-        ? '⚠ Alerta clínico'
-        : '';
   const idadeLabel =
     pacienteAtual.idade != null && pacienteAtual.idade !== '' ? `${pacienteAtual.idade} anos` : null;
+
+  const alertas = Array.isArray(pacienteAtual.alertasClinicosAtivos)
+    ? pacienteAtual.alertasClinicosAtivos
+    : [];
 
   return (
     <div className="sticky top-0 z-10 mb-3 flex w-full shrink-0 items-center gap-2 border-b border-[#e2e8f0] bg-white px-4 py-3 sm:gap-3 sm:px-6">
@@ -66,14 +34,20 @@ export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, ge
           {idadeLabel ? (
             <span className="hidden text-[12px] text-[#64748b] sm:inline">{idadeLabel}</span>
           ) : null}
-          {alertaLabel ? (
-            <span
-              title={alergiaTxt || condTxt || undefined}
-              className="inline-flex max-w-[min(100%,220px)] items-center truncate rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[10px] font-bold text-[#dc2626] sm:text-[11px]"
-            >
-              {alertaLabel}
-            </span>
-          ) : null}
+          {alertas.map((alerta, i) => {
+            const label = [alerta.titulo, alerta.valor].filter(Boolean).join(': ');
+            const truncated = label.length > 50 ? `${label.slice(0, 47)}…` : label;
+            return (
+              <span
+                key={i}
+                title={label}
+                className="inline-flex max-w-[min(100%,240px)] shrink-0 items-center gap-1 truncate rounded-full bg-[#DC2626] px-2 py-0.5 text-[10px] font-bold text-white sm:text-[11px]"
+              >
+                <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
+                {truncated}
+              </span>
+            );
+          })}
         </div>
         <div className="text-[12px] text-[#94a3b8]">Em atendimento</div>
       </div>
@@ -102,6 +76,8 @@ export function JourneyView({
   setQueixa,
   expectativas,
   setExpectativas,
+  observacoes = '',
+  setObservacoes,
   pacienteId = null,
   step2Errors,
   setStep2Errors,
@@ -304,6 +280,8 @@ export function JourneyView({
           onAnnotatedCaptureSaved={onAnnotatedCaptureSaved}
           persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
           evaluationPhotoMax={EVALUATION_PHOTO_MAX}
+          observacoes={observacoes}
+          setObservacoes={setObservacoes}
         />
       )}
 
