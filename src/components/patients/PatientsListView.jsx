@@ -64,12 +64,6 @@ function anamneseVencidaFromPatient(p) {
   return t < lim;
 }
 
-function rowStatusDot(p) {
-  if (hasClinicalAlert(p)) return { className: 'bg-[#ef4444]', title: 'Alerta clínico' };
-  if (semRetorno60d(p)) return { className: 'bg-[#f59e0b]', title: 'Sem retorno há 60+ dias' };
-  return { className: 'bg-[#22c55e]', title: 'Ativo' };
-}
-
 const SORT_OPTIONS = [
   { value: 'nome-asc', label: 'Nome (A–Z)' },
   { value: 'nome-desc', label: 'Nome (Z–A)' },
@@ -631,7 +625,6 @@ export function PatientsListView({
               ) : (
                 filteredPatients.map((patient) => {
                   const selected = selectedPatientCpf === patient.cpf;
-                  const dot = rowStatusDot(patient);
                   const clinical = hasClinicalAlert(patient);
                   const semRet = semRetorno60d(patient);
                   const anamVenc = anamneseVencidaFromPatient(patient);
@@ -653,11 +646,6 @@ export function PatientsListView({
                         selected ? 'bg-[#f0fdfa]' : 'bg-white'
                       }`}
                     >
-                      <span
-                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dot.className}`}
-                        title={dot.title}
-                        aria-hidden
-                      />
                       <PatientAvatar
                         patient={patient}
                         getPatientInitials={getPatientInitials}
@@ -746,7 +734,6 @@ export function PatientsListView({
                 ) : (
                   filteredPatients.map((patient) => {
                     const selected = selectedPatientCpf === patient.cpf;
-                    const dot = rowStatusDot(patient);
                     const clinical = hasClinicalAlert(patient);
                     const semRet = semRetorno60d(patient);
                     const anamVenc = anamneseVencidaFromPatient(patient);
@@ -778,11 +765,6 @@ export function PatientsListView({
                       >
                         <td className="px-4 align-middle">
                           <div className="flex min-w-0 items-center gap-3 md:gap-4">
-                            <span
-                              className={`h-2 w-2 shrink-0 rounded-full md:h-2.5 md:w-2.5 ${dot.className}`}
-                              title={dot.title}
-                              aria-label={dot.title}
-                            />
                             <PatientAvatar
                               patient={patient}
                               getPatientInitials={getPatientInitials}
