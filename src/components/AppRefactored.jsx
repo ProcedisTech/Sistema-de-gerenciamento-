@@ -736,6 +736,11 @@ export default function App() {
       ) {
         const uploads = fotosProcedimento.map(async (foto) => {
           try {
+            console.log('foto state:', {
+              hasBlob: !!foto.blob,
+              url: foto.url?.substring(0, 50),
+              meta: foto.meta,
+            });
             let fileToUpload = foto.blob;
             if (!fileToUpload && foto.url) {
               const resp = await fetch(foto.url);

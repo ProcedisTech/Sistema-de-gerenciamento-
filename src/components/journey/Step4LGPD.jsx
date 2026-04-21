@@ -556,7 +556,7 @@ export function Step3Termos({
           <h3 className="mb-3 text-[17px] font-bold text-[#0f172a]">{tituloExibicao}</h3>
           <div className="mb-8 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-5">
             {temConteudoTexto ? (
-              <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-[#334155]">{conteudoExibicao}</div>
+              <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[#334155]">{conteudoExibicao}</div>
             ) : (
               <>
                 <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">
