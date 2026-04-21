@@ -24,14 +24,6 @@ export function PatientsView(props) {
 
   const selectedPatient = patients.find((p) => p.cpf === selectedPatientCpf) || null;
 
-  if (patientView === 'create') {
-    return <PatientCreateView setPatientView={setPatientView} onPatientCreated={onPatientCreated} />;
-  }
-
-  if (patientView === 'list') {
-    return <PatientsListView {...props} />;
-  }
-
   if (patientView === 'profile' && selectedPatient) {
     return (
       <PatientProfileView
@@ -51,6 +43,18 @@ export function PatientsView(props) {
     );
   }
 
+  if (patientView === 'create') {
+    return (
+      <>
+        <PatientsListView {...props} />
+        <PatientCreateView
+          variant="modal"
+          setPatientView={setPatientView}
+          onPatientCreated={onPatientCreated}
+        />
+      </>
+    );
+  }
+
   return <PatientsListView {...props} />;
 }
-
