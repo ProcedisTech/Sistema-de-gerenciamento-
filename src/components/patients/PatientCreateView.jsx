@@ -196,10 +196,10 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       };
 
       const created = await pacientesApi.create(payload);
-      const pid = created?.id;
-      if (fotoPerfilFile && pid) {
+      const patientId = created?.id ?? created?.pacienteId;
+      if (fotoPerfilFile && patientId) {
         try {
-          await pacientesApi.uploadFotoPerfil(pid, fotoPerfilFile);
+          await pacientesApi.uploadFotoPerfil(patientId, fotoPerfilFile);
         } catch (uploadErr) {
           console.warn(uploadErr);
           toast.error('Paciente cadastrado, mas a foto de perfil não pôde ser enviada.');
@@ -207,10 +207,9 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       }
       setSucesso(true);
       if (onPatientCreated) onPatientCreated();
-
       setTimeout(() => setPatientView('list'), 1500);
     } catch (err) {
-      const msg = err.message || '';
+      const msg = err?.message || '';
       const clean = msg.replace(/^\[HTTP \d+\]\s*/, '').trim();
       setErro(clean || 'Erro ao cadastrar paciente.');
     } finally {
