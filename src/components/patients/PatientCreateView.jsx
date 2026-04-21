@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, UserPlus, AlertTriangle, X, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, UserPlus, UserRound, Plus, AlertTriangle, X, Calendar } from 'lucide-react';
 import {
   maskCPF,
   maskRG,
@@ -67,6 +67,41 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   const [errors, setErrors] = useState({});
 
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
+  const fotoBlobUrlRef = useRef(null);
+  const [fotoPerfilFile, setFotoPerfilFile] = useState(null);
+  const [fotoPerfilPreview, setFotoPerfilPreview] = useState(null);
+
+  useEffect(() => {
+    return () => {
+      if (fotoBlobUrlRef.current) {
+        URL.revokeObjectURL(fotoBlobUrlRef.current);
+        fotoBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleFotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem.');
+      e.target.value = '';
+      return;
+    }
+    const maxBytes = 5 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast.error('A imagem deve ter no máximo 5 MB.');
+      e.target.value = '';
+      return;
+    }
+    if (fotoBlobUrlRef.current) {
+      URL.revokeObjectURL(fotoBlobUrlRef.current);
+      fotoBlobUrlRef.current = null;
+    }
+    fotoBlobUrlRef.current = URL.createObjectURL(file);
+    setFotoPerfilPreview(fotoBlobUrlRef.current);
+    setFotoPerfilFile(file);
+  };
 
   const handleDataNascimentoChange = (raw) => {
     const digits = sanitizeBirthDateDigits(raw);
@@ -160,7 +195,16 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         estadoCivilId: estadoCivilId || undefined,
       };
 
-      await pacientesApi.create(payload);
+      const created = await pacientesApi.create(payload);
+      const pid = created?.id;
+      if (fotoPerfilFile && pid) {
+        try {
+          await pacientesApi.uploadFotoPerfil(pid, fotoPerfilFile);
+        } catch (uploadErr) {
+          console.warn(uploadErr);
+          toast.error('Paciente cadastrado, mas a foto de perfil não pôde ser enviada.');
+        }
+      }
       setSucesso(true);
       if (onPatientCreated) onPatientCreated();
 
@@ -368,6 +412,46 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
 
   const formInner = (
     <form onSubmit={handleSalvar} className={isModal ? 'space-y-5' : 'space-y-6'}>
+        {/* Avatar — foto de perfil opcional */}
+        <div className={`flex justify-center ${isModal ? '-mt-1 mb-1' : 'mb-2'}`}>
+          <label className="group relative cursor-pointer" title="Adicionar foto de perfil">
+            <div
+              className={
+                isModal
+                  ? 'flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 shadow-sm transition-all hover:border-[#00a88e]/40'
+                  : 'flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#00a88e]/30 bg-[#e6f7f5] shadow-sm transition-all group-hover:border-[#00a88e]'
+              }
+            >
+              {fotoPerfilPreview ? (
+                <img src={fotoPerfilPreview} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <UserRound
+                  className={isModal ? 'h-9 w-9 text-slate-300' : 'h-10 w-10 text-[#00a88e]/50'}
+                  strokeWidth={1.5}
+                />
+              )}
+            </div>
+            <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#00a88e] shadow">
+              <Plus className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
+            </div>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFotoChange}
+            />
+          </label>
+        </div>
+        <p
+          className={
+            isModal
+              ? '-mt-2 mb-1 text-center text-[12px] font-medium text-slate-500'
+              : '-mt-2 mb-2 text-center text-[12px] font-medium text-[#94a3b8]'
+          }
+        >
+          Foto de perfil (opcional)
+        </p>
+
         {(Object.keys(errors).length > 0 || erro) && (
           <div
             className={
