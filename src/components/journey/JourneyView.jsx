@@ -59,9 +59,9 @@ export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, ge
           <button
             type="button"
             onClick={() => setCancelModalOpen(true)}
-            className="flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl border border-transparent bg-red-500 px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-red-600 active:bg-red-600 sm:px-4 sm:text-[13px]"
+            className="flex min-h-[44px] shrink-0 items-center justify-center rounded-xl border border-transparent bg-red-500 px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-red-600 active:bg-red-600 sm:px-4 sm:text-[13px]"
           >
-            ← Cancelar
+            Cancelar
           </button>
         ) : null}
       </div>
