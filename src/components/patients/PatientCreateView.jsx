@@ -81,7 +81,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     };
   }, []);
 
-  const handleFotoChange = (e) => {
+  const handleFotoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -101,11 +101,9 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     }
     fotoBlobUrlRef.current = URL.createObjectURL(file);
     setFotoPerfilPreview(fotoBlobUrlRef.current);
-    setFotoPerfilFile(file);
+    const converted = await convertToWebP(file, 0.85, 1920);
+    setFotoPerfilFile(converted);
   };
-
-  const [fotoFile, setFotoFile] = useState(null);
-  const [fotoPreview, setFotoPreview] = useState(null);
 
   const handleDataNascimentoChange = (raw) => {
     const digits = sanitizeBirthDateDigits(raw);
@@ -139,15 +137,6 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     if (!telefoneNumero.trim() || !isPhoneValid(telefoneCountryCode, telefoneNumero)) e.telefone = true;
     if (!email.trim()) e.email = true;
     return e;
-  };
-
-  const handleFotoChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const preview = URL.createObjectURL(file);
-    setFotoPreview(preview);
-    const converted = await convertToWebP(file, 0.85, 1920);
-    setFotoFile(converted);
   };
 
   const handleSalvar = async (e) => {
@@ -461,37 +450,6 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               : '-mt-2 mb-2 text-center text-[12px] font-medium text-[#94a3b8]'
           }
         >
-          Foto de perfil (opcional)
-        </p>
-
-      <form onSubmit={handleSalvar} className="space-y-6">
-        {/* Avatar — foto de perfil opcional */}
-        <div className="flex justify-center mb-2">
-          <label className="cursor-pointer group relative" title="Adicionar foto de perfil">
-            <div className="w-24 h-24 rounded-full border-[3px] border-[#00a88e]/30 bg-[#e6f7f5] flex items-center justify-center overflow-hidden shadow-sm group-hover:border-[#00a88e] transition-all">
-              {fotoPreview ? (
-                <img src={fotoPreview} alt="Preview" className="w-full h-full object-cover" />
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-[#00a88e]/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-                </svg>
-              )}
-            </div>
-            <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#00a88e] flex items-center justify-center border-2 border-white shadow">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </div>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFotoChange}
-            />
-          </label>
-        </div>
-        <p className="text-center text-[12px] text-[#94a3b8] font-medium -mt-2 mb-2">
           Foto de perfil (opcional)
         </p>
 
