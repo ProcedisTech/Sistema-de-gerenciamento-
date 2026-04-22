@@ -10,13 +10,17 @@ import {
 } from './hooks';
 
 // Componentes de Autenticação
-import { LoginForm, CookieConsent } from './auth';
+import { LoginForm } from './auth';
+import { CompletarPerfil } from './auth/CompletarPerfil.jsx';
+import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
 import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
+import { resolveApiUrl } from '../config/apiEnv.js';
+import { authHeadersForFetch } from '../services/api.js';
 import {
   anamneseApi,
   pacientesGaleriaApi,
@@ -66,7 +70,65 @@ export default function App() {
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
-  const authSessionReady = authState.authReady && authState.cookieConsentAccepted && authState.isLoggedIn;
+  /** null = deslogado ou pendente; checking = carregando gates; profile | clinic | ready = fluxo pós-login */
+  const [postLoginGate, setPostLoginGate] = React.useState(null);
+  const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
+
+  React.useEffect(() => {
+    if (!authState.isLoggedIn || !authState.authUser) {
+      setPostLoginGate(null);
+      return;
+    }
+    let cancelled = false;
+    setPostLoginGate('checking');
+    (async () => {
+      try {
+        const meRes = await fetch(resolveApiUrl('/api/auth/me'), {
+          credentials: 'include',
+          headers: { ...authHeadersForFetch({ needsOrg: false }) },
+        });
+        const meJson = await meRes.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!meRes.ok) {
+          setPostLoginGate('ready');
+          return;
+        }
+        const nome =
+          meJson?.nomeCompleto ??
+          meJson?.nome_completo ??
+          meJson?.user?.nomeCompleto ??
+          meJson?.user?.nome_completo;
+        if (!nome || !String(nome).trim()) {
+          setPostLoginGate('profile');
+          return;
+        }
+        const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
+          credentials: 'include',
+          headers: { ...authHeadersForFetch({ needsOrg: true }) },
+        });
+        const orgJson = await orgRes.json().catch(() => ({}));
+        if (cancelled) return;
+        const list = Array.isArray(orgJson) ? orgJson : orgJson?.content ?? orgJson?.organizacoes ?? orgJson?.data ?? [];
+        const arr = Array.isArray(list) ? list : [];
+        if (arr.length === 1) {
+          const id = arr[0]?.id ?? arr[0]?.organizacaoSaudeId;
+          if (id) setOrgId(String(id));
+          setPostLoginGate('ready');
+          return;
+        }
+        if (arr.length === 0) {
+          setPostLoginGate('ready');
+          return;
+        }
+        setPostLoginGate('clinic');
+      } catch {
+        if (!cancelled) setPostLoginGate('ready');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authState.isLoggedIn, authState.authUser, setOrgId]);
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   /** Data local (YYYY-MM-DD) do início do atendimento — limite mínimo para “próximo retorno”. */
@@ -98,7 +160,7 @@ export default function App() {
   const pendingAnnotatedGalleryBlobsRef = useRef([]);
 
   // ============ Estados destructurados para facilitar leitura ============
-  const { authReady, isLoggedIn, authUser, handleLogout, cookieConsentAccepted, acceptCookies } = authState;
+  const { authReady, isLoggedIn, authUser, handleLogout } = authState;
   const { currentStep, setCurrentStep, isFinishing, setIsFinishing, journeyId } = journeyState;
   const {
     patients,
@@ -781,17 +843,43 @@ export default function App() {
   }
 
   if (!isLoggedIn) {
+    return <LoginForm {...authState} />;
+  }
+
+  if (isLoggedIn && authUser && (postLoginGate === null || postLoginGate === 'checking')) {
     return (
-      <>
-        <LoginForm {...authState} />
-        <CookieConsent cookieConsentAccepted={cookieConsentAccepted} acceptCookies={acceptCookies} />
-      </>
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb]">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-[#00a88e] border-t-transparent" />
+          <p className="font-bold text-[#00a88e]">Preparando sessão…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoggedIn && postLoginGate === 'profile') {
+    return (
+      <CompletarPerfil
+        onComplete={() => {
+          setPostLoginGate('clinic');
+        }}
+      />
+    );
+  }
+
+  if (isLoggedIn && postLoginGate === 'clinic') {
+    return (
+      <SelecionarClinica
+        setOrgId={setOrgId}
+        onComplete={() => {
+          setPostLoginGate('ready');
+        }}
+      />
     );
   }
 
   return (
     <div className="flex min-h-screen md:h-screen flex-col md:flex-row font-sans overflow-x-hidden md:overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
-      <CookieConsent cookieConsentAccepted={cookieConsentAccepted} acceptCookies={acceptCookies} />
 
       {/* Sidebar */}
       <Sidebar
