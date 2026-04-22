@@ -46,6 +46,7 @@ import {
   Step5Finalization,
   JourneyPatientContextHeader,
 } from './journey';
+import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
 
 // Utilitarios
 import { getPatientInitials } from './utils';
@@ -63,6 +64,16 @@ function isTermoAtivoRow(row) {
   const s = String(row.status || '').toUpperCase();
   if (s === 'INATIVO' || s === 'INACTIVE') return false;
   return true;
+}
+
+function revokeBlobUrlIfAny(url) {
+  if (url == null || typeof url !== 'string') return;
+  if (!url.startsWith('blob:')) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    // ignore
+  }
 }
 
 export default function App() {
@@ -277,7 +288,46 @@ export default function App() {
       journeyState.setEvaluationAnnotatedPhotoUrl(null);
     }
   };
-  
+
+  /** Editor fullscreen compartilhado (procedimento / resumo etapa 5). */
+  const [photoAnnotationScope, setPhotoAnnotationScope] = React.useState(null);
+  const [photoAnnotationIndex, setPhotoAnnotationIndex] = React.useState(null);
+
+  const closeJourneyPhotoAnnotation = React.useCallback(() => {
+    setPhotoAnnotationScope(null);
+    setPhotoAnnotationIndex(null);
+    journeyState.setPaths([]);
+  }, [journeyState]);
+
+  const openProcedurePhotoAnnotation = React.useCallback(
+    (idx) => {
+      const list = cameraState.procedureCapturedPhotos || [];
+      const ph = list[idx];
+      if (!ph?.url) return;
+      setPhotoAnnotationScope('procedure');
+      setPhotoAnnotationIndex(idx);
+      journeyState.setImageSrc(ph.url);
+      journeyState.setPaths([]);
+      journeyState.setEvaluationAnnotatedPhotoUrl(null);
+    },
+    [cameraState.procedureCapturedPhotos, journeyState]
+  );
+
+  const openEvaluationPhotoAnnotationFromSummary = React.useCallback(
+    (idx) => {
+      const list = cameraState.evaluationCapturedPhotos || [];
+      const ph = list[idx];
+      if (!ph?.url) return;
+      setPhotoAnnotationScope('evaluation');
+      setPhotoAnnotationIndex(idx);
+      cameraState.setEvaluationSelectedPhotoIndex(idx);
+      journeyState.setImageSrc(ph.url);
+      journeyState.setPaths([]);
+      journeyState.setEvaluationAnnotatedPhotoUrl(null);
+    },
+    [cameraState.evaluationCapturedPhotos, cameraState, journeyState]
+  );
+
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [activeView, _setActiveView] = React.useState(() => {
     try {
@@ -357,17 +407,50 @@ export default function App() {
     );
   };
 
-  const handleStartAttendance = (patient) => {
+  const handleStartAttendance = (patient, options = {}) => {
     if (!patient) return;
 
-    // Limpar fotos do paciente anterior ANTES de iniciar novo atendimento
+    /* Fecha modal da câmera e limpa preview (evita blob revogado na UI). */
+    cameraState.closePhotoModal();
+
+    /* Evita ERR_FILE_NOT_FOUND em blob: após reset — canvas ainda apontava para URLs revogadas. */
+    revokeBlobUrlIfAny(journeyState.evaluationAnnotatedPhotoUrl);
+    journeyState.setEvaluationAnnotatedPhotoUrl(null);
+    revokeBlobUrlIfAny(journeyState.imageSrc);
+    journeyState.setImageSrc(null);
+    journeyState.setPaths([]);
+
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
 
+    /* ProcedureCameraWidget usa anamnesePhotoUrl na miniatura — mesmo blob das fotos confirmadas. */
+    revokeBlobUrlIfAny(cameraState.anamnesePhotoUrl);
+    cameraState.setAnamnesePhotoUrl(null);
+    cameraState.setAnamnesePhotoBlob(null);
+    cameraState.setAnamnesePhotoMeta(null);
+
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
+    const cpfKey = cpf != null ? String(cpf).trim() : '';
+    if (cpfKey) {
+      setPatients((prev) =>
+        prev.map((p) => {
+          if (String(p?.cpf || '').trim() !== cpfKey) return p;
+          const photos = Array.isArray(p.evaluationCapturedPhotos) ? p.evaluationCapturedPhotos : [];
+          photos.forEach((ph) => revokeBlobUrlIfAny(ph?.url));
+          revokeBlobUrlIfAny(p.evaluationAnnotatedPhotoUrl);
+          return {
+            ...p,
+            evaluationCapturedPhotos: [],
+            evaluationSelectedPhotoIndex: null,
+            evaluationAnnotatedPhotoUrl: null,
+          };
+        })
+      );
+    }
+
     setSelectedPatientCpf(cpf);
     setJourneyProcedureDateIso(toLocalISODate());
-    setCurrentStep(1);
+    setCurrentStep(options.initialStep ?? 1);
     setActiveView('jornada');
     setPatientView('list');
   };
@@ -772,9 +855,12 @@ export default function App() {
   };
 
   const resetJourney = () => {
+    setPhotoAnnotationScope(null);
+    setPhotoAnnotationIndex(null);
     setCurrentStep(1);
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
+    journeyState.setObservacoes('');
     journeyState.setStep2AnamneseDraft({
       fichaSelecionadaId: '',
       fichaDropdownNovo: '',
@@ -989,6 +1075,8 @@ export default function App() {
                       persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
                       evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                       onUploadFiles={cameraState.uploadPhotoFiles}
+                      observacoes={journeyState.observacoes}
+                      setObservacoes={journeyState.setObservacoes}
                     />
                   )}
 
@@ -1030,6 +1118,7 @@ export default function App() {
                       setStep4Errors={journeyState.setStep4Errors}
                       fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
                       onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
+                      onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
                     />
                   )}
 
@@ -1060,12 +1149,90 @@ export default function App() {
                       nomeUsuario={
                         authUser?.nome || authUser?.name || authUser?.email || authUser?.username || ''
                       }
+                      onAnnotateEvaluationPhoto={openEvaluationPhotoAnnotationFromSummary}
+                      onAnnotateProcedurePhoto={openProcedurePhotoAnnotation}
                     />
                   )}
                   </div>
                 </div>
               </div>
             </div>
+
+            {photoAnnotationScope != null &&
+            photoAnnotationIndex != null &&
+            (photoAnnotationScope === 'procedure'
+              ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
+              : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+              <JourneyPhotoAnnotationEditor
+                sidebarInsetPx={sidebarRailWidthPx}
+                photos={
+                  photoAnnotationScope === 'procedure'
+                    ? cameraState.procedureCapturedPhotos || []
+                    : cameraState.evaluationCapturedPhotos || []
+                }
+                editingIndex={photoAnnotationIndex}
+                setEditingIndex={setPhotoAnnotationIndex}
+                fallbackSelectedPhotoIndex={photoAnnotationIndex}
+                saveListLength={
+                  (photoAnnotationScope === 'procedure'
+                    ? cameraState.procedureCapturedPhotos
+                    : cameraState.evaluationCapturedPhotos
+                  )?.length ?? 0
+                }
+                imageSrc={journeyState.imageSrc}
+                activeTool={journeyState.activeTool}
+                setActiveTool={journeyState.setActiveTool}
+                activeColor={journeyState.activeColor}
+                setActiveColor={journeyState.setActiveColor}
+                pointSize={journeyState.pointSize}
+                setPointSize={journeyState.setPointSize}
+                showPointNumbers={journeyState.showPointNumbers}
+                setShowPointNumbers={journeyState.setShowPointNumbers}
+                eraserSize={journeyState.eraserSize}
+                setEraserSize={journeyState.setEraserSize}
+                cursorPos={journeyState.cursorPos}
+                setCursorPos={journeyState.setCursorPos}
+                isHoveringCanvas={journeyState.isHoveringCanvas}
+                setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
+                paths={journeyState.paths}
+                setPaths={journeyState.setPaths}
+                isDrawing={journeyState.isDrawing}
+                setIsDrawing={journeyState.setIsDrawing}
+                canvasRef={canvasRef}
+                containerRef={containerRef}
+                evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
+                setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
+                selectedPatientCpf={selectedPatientCpf}
+                cpf={pacienteAtual?.cpf || ''}
+                setPatients={setPatients}
+                onSelectCapturedPhoto={(i) => {
+                  if (photoAnnotationScope === 'procedure') {
+                    const ph = (cameraState.procedureCapturedPhotos || [])[i];
+                    if (ph?.url) {
+                      journeyState.setImageSrc(ph.url);
+                      journeyState.setPaths([]);
+                    }
+                    setPhotoAnnotationIndex(i);
+                  } else {
+                    handleSelectCapturedPhoto(i);
+                    setPhotoAnnotationIndex(i);
+                  }
+                }}
+                onAnnotatedCaptureSaved={
+                  photoAnnotationScope === 'procedure'
+                    ? ({ index, newUrl, blob }) => {
+                        cameraState.replaceProcedureCapturedPhotoAt(index, { url: newUrl, blob });
+                        journeyState.setImageSrc(newUrl);
+                        journeyState.setPaths([]);
+                      }
+                    : handleAnnotatedCaptureSaved
+                }
+                persistAnnotatedPhotoToGallery={
+                  photoAnnotationScope === 'evaluation' ? persistAnnotatedPhotoToGallery : undefined
+                }
+                onClose={closeJourneyPhotoAnnotation}
+              />
+            ) : null}
 
             <div
               className="pointer-events-none fixed inset-x-0 bottom-0 z-[30] hidden md:block"

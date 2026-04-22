@@ -4,6 +4,7 @@ import { agendasApi, equipeApi, pacientesApi, catalogosApi, agendamentosApi } fr
 import { mapAgendaDtoToAppointment, addMinutesToTime } from '../../utils/agendaMapping';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { mapBackendPatient } from '../../utils/patientMapping';
+import { formatPhoneForApi } from '../../utils/phoneUtils';
 
 const normalizeCpf = (v) => String(v || '').replace(/\D/g, '');
 
@@ -12,7 +13,7 @@ function profissionalRoleUserId(p) {
   return p.roleUserId || p.role_user_id || p.id || '';
 }
 
-export function useAgendaController({ patients, setPatients, maskCPF, maskTelefone, authEnabled = false }) {
+export function useAgendaController({ patients, setPatients, maskCPF, authEnabled = false }) {
   const toast = useToast();
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -42,7 +43,9 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
 
   const [agendaNewPatientNome, setAgendaNewPatientNome] = useState('');
   const [agendaNewPatientCpf, setAgendaNewPatientCpf] = useState('');
-  const [agendaNewPatientTelefone, setAgendaNewPatientTelefone] = useState('');
+  const [agendaNewPatientTelefoneCountry, setAgendaNewPatientTelefoneCountry] = useState('BR');
+  const [agendaNewPatientTelefoneNumero, setAgendaNewPatientTelefoneNumero] = useState('');
+  const [agendaNewPatientTelefoneTouched, setAgendaNewPatientTelefoneTouched] = useState(false);
 
   const [compromissoModalOpen, setCompromissoModalOpen] = useState(false);
   const [slotParaCompromisso, setSlotParaCompromisso] = useState(null);
@@ -236,7 +239,9 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
     setAgendaSelectedPatientCpf('');
     setAgendaNewPatientNome('');
     setAgendaNewPatientCpf('');
-    setAgendaNewPatientTelefone('');
+    setAgendaNewPatientTelefoneCountry('BR');
+    setAgendaNewPatientTelefoneNumero('');
+    setAgendaNewPatientTelefoneTouched(false);
     loadModalCatalogs();
     equipeApi
       .list()
@@ -265,7 +270,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
     if (agendaModePatient === 'novo') {
       const nome = agendaNewPatientNome.trim();
       const cpfD = normalizeCpf(agendaNewPatientCpf);
-      const telInput = agendaNewPatientTelefone.trim();
+      const telInput = formatPhoneForApi(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero);
       if (nome && String(agendaNewPatientCpf || '').trim() && telInput && cpfD.length !== 11) {
         toast.error('O CPF deve conter 11 dígitos.');
         return;
@@ -285,7 +290,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
       if (agendaModePatient === 'novo') {
         const nome = agendaNewPatientNome.trim();
         const cpfInput = agendaNewPatientCpf.trim();
-        const telInput = agendaNewPatientTelefone.trim();
+        const telInput = formatPhoneForApi(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero);
         if (nome && cpfInput && telInput) {
           const cpfDigits = normalizeCpf(cpfInput);
           const dto = await pacientesApi.create({
@@ -431,10 +436,13 @@ export function useAgendaController({ patients, setPatients, maskCPF, maskTelefo
     setAgendaNewPatientNome,
     agendaNewPatientCpf,
     setAgendaNewPatientCpf,
-    agendaNewPatientTelefone,
-    setAgendaNewPatientTelefone,
+    agendaNewPatientTelefoneCountry,
+    setAgendaNewPatientTelefoneCountry,
+    agendaNewPatientTelefoneNumero,
+    setAgendaNewPatientTelefoneNumero,
+    agendaNewPatientTelefoneTouched,
+    setAgendaNewPatientTelefoneTouched,
     maskCPF,
-    maskTelefone,
     agendaPatientSearch,
     setAgendaPatientSearch,
     patients,

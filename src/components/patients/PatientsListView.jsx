@@ -1,7 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowUpDown, ChevronRight, ExternalLink, Image as ImageIcon, Plus, Search, X } from 'lucide-react';
+import {
+  ArrowUpDown,
+  ChevronRight,
+  ExternalLink,
+  Image as ImageIcon,
+  Loader2,
+  Play,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
-import { procedimentosApi } from '../../services/api';
+import { anamneseApi, procedimentosApi } from '../../services/api';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -54,12 +64,6 @@ function anamneseVencidaFromPatient(p) {
   return t < lim;
 }
 
-function rowStatusDot(p) {
-  if (hasClinicalAlert(p)) return { className: 'bg-[#ef4444]', title: 'Alerta clínico' };
-  if (semRetorno60d(p)) return { className: 'bg-[#f59e0b]', title: 'Sem retorno há 60+ dias' };
-  return { className: 'bg-[#22c55e]', title: 'Ativo' };
-}
-
 const SORT_OPTIONS = [
   { value: 'nome-asc', label: 'Nome (A–Z)' },
   { value: 'nome-desc', label: 'Nome (Z–A)' },
@@ -69,6 +73,19 @@ const SORT_OPTIONS = [
   { value: 'visita-asc', label: 'Última visita (antiga)' },
   { value: 'birthday-asc', label: 'Aniversário (mais próximo)' },
 ];
+
+function previewHasExistingAnamneseFromList(list) {
+  const rows = (Array.isArray(list) ? [...list] : []).filter((r) => r?.dataHora);
+  rows.sort((a, b) => {
+    const ta = new Date(a.dataHora).getTime();
+    const tb = new Date(b.dataHora).getTime();
+    return tb - ta;
+  });
+  const latest = rows[0] || null;
+  if (!latest?.dataHora) return false;
+  const t = new Date(latest.dataHora);
+  return !Number.isNaN(t.getTime());
+}
 
 function PatientPreviewPanel({
   selectedPatient,
@@ -82,7 +99,12 @@ function PatientPreviewPanel({
   shellClassName,
   previewProcedures = [],
   loadingPreviewProcedures = false,
+  onStartAttendance,
+  previewHasExistingAnamnese = false,
+  previewAnamneseLoading = false,
 }) {
+  const [attendanceChoiceModalOpen, setAttendanceChoiceModalOpen] = useState(false);
+
   const timelineProcedures =
     previewProcedures.length > 0
       ? previewProcedures.map((proc) => ({
@@ -101,10 +123,77 @@ function PatientPreviewPanel({
       }))
       : (selectedPatient.procedures || []);
 
+  const handleIniciarAtendimentoClick = () => {
+    if (previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
+    if (previewHasExistingAnamnese) {
+      setAttendanceChoiceModalOpen(true);
+      return;
+    }
+    onStartAttendance(selectedPatient);
+  };
+
+  const runStartAttendance = (options = {}) => {
+    if (typeof onStartAttendance !== 'function') return;
+    setAttendanceChoiceModalOpen(false);
+    onStartAttendance(selectedPatient, options);
+  };
+
   return (
     <div
       className={`relative flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-lg ${shellClassName}`}
     >
+      {attendanceChoiceModalOpen ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setAttendanceChoiceModalOpen(false);
+          }}
+        >
+          <div
+            className="flex max-h-[min(90dvh,520px)] w-full max-w-md flex-col rounded-t-2xl border border-[#e2e8f0] bg-white shadow-xl sm:rounded-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preview-attendance-choice-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-[#f1f5f9] p-4 pb-3 sm:p-5">
+              <h2 id="preview-attendance-choice-title" className="pr-2 text-[16px] font-bold leading-snug text-[#0f172a]">
+                Como deseja iniciar?
+              </h2>
+              <button
+                type="button"
+                onClick={() => setAttendanceChoiceModalOpen(false)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] transition-colors hover:border-[#cbd5e1] hover:text-[#0f172a]"
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
+              <p className="text-[13px] font-normal leading-snug text-[#64748b]">
+                Este paciente já possui anamnese registrada. Escolha se deseja preencher uma nova ficha ou seguir direto para a avaliação.
+              </p>
+              <button
+                type="button"
+                onClick={() => runStartAttendance()}
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] active:bg-[#00967f]"
+              >
+                <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                Fazer outra anamnese
+              </button>
+              <button
+                type="button"
+                onClick={() => runStartAttendance({ initialStep: 2 })}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1] sm:min-h-[44px]"
+              >
+                Pular para avaliação
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <button
         type="button"
         onClick={closeDetail}
@@ -114,7 +203,7 @@ function PatientPreviewPanel({
         <X className="h-4 w-4" strokeWidth={2.5} />
       </button>
 
-      <div className="flex items-start gap-3 border-b border-[#f1f5f9] pb-4 pr-10">
+      <div className="flex w-full min-w-0 flex-wrap items-start gap-3 border-b border-[#f1f5f9] pb-4 pr-12 sm:pr-24 lg:pr-[7.25rem]">
         <PatientAvatar
           patient={selectedPatient}
           getPatientInitials={getPatientInitials}
@@ -122,7 +211,7 @@ function PatientPreviewPanel({
           initialsClassName="text-[11px] font-bold text-[#0f766e]"
           spinnerClassName="h-4 w-4"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
           <h3 id={detailTitleId} className="text-[16px] font-bold leading-snug text-[#0f172a] break-words">
             {selectedPatient.nome}
           </h3>
@@ -132,6 +221,21 @@ function PatientPreviewPanel({
           <p className={`text-[13px] font-normal text-[#64748b] ${selectedPatient.email ? 'mt-0.5' : 'mt-1'}`}>
             {selectedPatient.telefone || '—'}
           </p>
+        </div>
+        <div className="flex w-full shrink-0 flex-col items-stretch justify-start sm:ml-auto sm:w-auto sm:max-w-[13rem] sm:items-end">
+          <button
+            type="button"
+            onClick={handleIniciarAtendimentoClick}
+            disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
+            className="flex min-h-[48px] w-full flex-row items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-3 py-2 text-[13px] font-semibold leading-snug text-white transition-colors hover:bg-[#00967f] active:bg-[#00967f] disabled:pointer-events-none disabled:opacity-60 sm:min-h-[44px] sm:w-auto sm:max-w-full sm:px-3.5 sm:text-[12px] sm:leading-tight"
+          >
+            {previewAnamneseLoading ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
+            ) : (
+              <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+            )}
+            <span className="min-w-0 whitespace-normal text-center sm:text-right">Iniciar Atendimento</span>
+          </button>
         </div>
       </div>
 
@@ -218,6 +322,7 @@ export function PatientsListView({
   setPatientView,
   getPatientInitials,
   onCreatePatient,
+  onStartAttendance,
   patientsListOrder,
   setPatientsListOrder,
 }) {
@@ -230,10 +335,15 @@ export function PatientsListView({
   const desktopTitleId = 'patient-detail-title';
   const [previewProcedures, setPreviewProcedures] = useState([]);
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
+  const [previewAnamneseList, setPreviewAnamneseList] = useState([]);
+  /** Paciente ao qual `previewAnamneseList` corresponde após o último fetch concluído; `null` = nenhum. */
+  const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- espelhar ordenação vinda do pai */
   useEffect(() => {
     if (patientsListOrder === 'birthday_asc') setSortBy('birthday-asc');
   }, [patientsListOrder]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
 
@@ -299,6 +409,7 @@ export function PatientsListView({
   const previewPatient =
     (previewPatientCpf && patients.find((p) => p.cpf === previewPatientCpf)) || null;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset ao fechar / carregar procedimentos do preview */
   useEffect(() => {
     if (!previewPatient?.id) {
       setPreviewProcedures([]);
@@ -322,6 +433,42 @@ export function PatientsListView({
       cancelled = true;
     };
   }, [previewPatient?.id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /* Reset ao fechar o preview / lista por paciente (mesmo padrão do efeito de procedimentos acima). */
+  /* eslint-disable react-hooks/set-state-in-effect -- branch síncrono ao trocar paciente ou fechar */
+  useEffect(() => {
+    if (!previewPatient?.id) {
+      setPreviewAnamneseList([]);
+      setPreviewAnamneseListOwnerId(null);
+      return undefined;
+    }
+    let cancelled = false;
+    anamneseApi
+      .listPaciente(previewPatient.id)
+      .then((list) => {
+        if (!cancelled) setPreviewAnamneseList(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewAnamneseList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewAnamneseListOwnerId(previewPatient.id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewPatient?.id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const previewAnamneseLoading = Boolean(
+    previewPatient?.id && previewAnamneseListOwnerId !== previewPatient.id,
+  );
+
+  const previewHasExistingAnamnese = useMemo(() => {
+    if (!previewPatient?.id || previewAnamneseListOwnerId !== previewPatient.id) return false;
+    return previewHasExistingAnamneseFromList(previewAnamneseList);
+  }, [previewPatient?.id, previewAnamneseListOwnerId, previewAnamneseList]);
 
   const galleryPhotoCount = useMemo(() => {
     if (!previewPatient?.galeria?.length) return 0;
@@ -478,7 +625,6 @@ export function PatientsListView({
               ) : (
                 filteredPatients.map((patient) => {
                   const selected = selectedPatientCpf === patient.cpf;
-                  const dot = rowStatusDot(patient);
                   const clinical = hasClinicalAlert(patient);
                   const semRet = semRetorno60d(patient);
                   const anamVenc = anamneseVencidaFromPatient(patient);
@@ -500,11 +646,6 @@ export function PatientsListView({
                         selected ? 'bg-[#f0fdfa]' : 'bg-white'
                       }`}
                     >
-                      <span
-                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dot.className}`}
-                        title={dot.title}
-                        aria-hidden
-                      />
                       <PatientAvatar
                         patient={patient}
                         getPatientInitials={getPatientInitials}
@@ -593,7 +734,6 @@ export function PatientsListView({
                 ) : (
                   filteredPatients.map((patient) => {
                     const selected = selectedPatientCpf === patient.cpf;
-                    const dot = rowStatusDot(patient);
                     const clinical = hasClinicalAlert(patient);
                     const semRet = semRetorno60d(patient);
                     const anamVenc = anamneseVencidaFromPatient(patient);
@@ -625,11 +765,6 @@ export function PatientsListView({
                       >
                         <td className="px-4 align-middle">
                           <div className="flex min-w-0 items-center gap-3 md:gap-4">
-                            <span
-                              className={`h-2 w-2 shrink-0 rounded-full md:h-2.5 md:w-2.5 ${dot.className}`}
-                              title={dot.title}
-                              aria-label={dot.title}
-                            />
                             <PatientAvatar
                               patient={patient}
                               getPatientInitials={getPatientInitials}
@@ -721,6 +856,7 @@ export function PatientsListView({
                 <div className="h-1 w-10 rounded-full bg-[#e2e8f0]" aria-hidden />
               </div>
               <PatientPreviewPanel
+                key={previewPatient.cpf || String(previewPatient.id || '')}
                 selectedPatient={previewPatient}
                 detailTitleId={undefined}
                 closeDetail={closeDetail}
@@ -731,6 +867,9 @@ export function PatientsListView({
                 setPatientView={setPatientView}
                 previewProcedures={previewProcedures}
                 loadingPreviewProcedures={loadingPreviewProcedures}
+                onStartAttendance={onStartAttendance}
+                previewHasExistingAnamnese={previewHasExistingAnamnese}
+                previewAnamneseLoading={previewAnamneseLoading}
                 shellClassName="patient-preview-sheet w-full border-0 shadow-none"
               />
             </div>
@@ -746,6 +885,7 @@ export function PatientsListView({
             />
             <aside className="relative ml-auto flex h-full w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
               <PatientPreviewPanel
+                key={previewPatient.cpf || String(previewPatient.id || '')}
                 selectedPatient={previewPatient}
                 detailTitleId={undefined}
                 closeDetail={closeDetail}
@@ -756,6 +896,9 @@ export function PatientsListView({
                 setPatientView={setPatientView}
                 previewProcedures={previewProcedures}
                 loadingPreviewProcedures={loadingPreviewProcedures}
+                onStartAttendance={onStartAttendance}
+                previewHasExistingAnamnese={previewHasExistingAnamnese}
+                previewAnamneseLoading={previewAnamneseLoading}
                 shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
               />
             </aside>
@@ -768,6 +911,7 @@ export function PatientsListView({
             aria-label="Resumo do paciente"
           >
             <PatientPreviewPanel
+              key={previewPatient.cpf || String(previewPatient.id || '')}
               selectedPatient={previewPatient}
               detailTitleId={desktopTitleId}
               closeDetail={closeDetail}
@@ -778,6 +922,9 @@ export function PatientsListView({
               setPatientView={setPatientView}
               previewProcedures={previewProcedures}
               loadingPreviewProcedures={loadingPreviewProcedures}
+              onStartAttendance={onStartAttendance}
+              previewHasExistingAnamnese={previewHasExistingAnamnese}
+              previewAnamneseLoading={previewAnamneseLoading}
               shellClassName="w-full min-w-0"
             />
           </aside>

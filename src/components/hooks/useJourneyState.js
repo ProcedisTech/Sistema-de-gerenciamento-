@@ -30,6 +30,8 @@ export const useJourneyState = () => {
   }, []);
 
   // ============ ETAPA 2: AVALIAÇÃO ============
+  /** Observações clínicas e expectativas registradas durante a avaliação (antes do upload de fotos). */
+  const [observacoes, setObservacoes] = useState('');
   const [imageSrc, setImageSrc] = useState(null);
   const [activeTool, setActiveTool] = useState('draw');
   const [activeColor, setActiveColor] = useState('#ef4444');
@@ -92,6 +94,8 @@ export const useJourneyState = () => {
     respostasAnamnese,
     setRespostasAnamnese,
     salvarRespostaAnamnese,
+    observacoes,
+    setObservacoes,
     imageSrc,
     setImageSrc,
     activeTool,

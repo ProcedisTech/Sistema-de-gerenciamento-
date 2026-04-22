@@ -3,7 +3,6 @@ import { UserCheck, AlertTriangle, Search } from 'lucide-react';
 import {
   maskCPF,
   maskRG,
-  maskTelefone,
   isCpfIncomplete,
   calculateAgeFromISODate,
   getPatientInitials,
@@ -12,6 +11,8 @@ import {
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
+import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
+import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
 import { useToast } from '../../contexts/useToast.js';
 import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
@@ -40,6 +41,9 @@ export function Step1CheckIn({
   const toast = useToast();
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
   const [tipoBusca, setTipoBusca] = useState('nome');
+  const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
+  const [telefoneDisplay, setTelefoneDisplay] = useState('');
+  const [telefoneTouched, setTelefoneTouched] = useState(false);
   const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
   const [showProfissoes, setShowProfissoes] = useState(false);
 
@@ -173,6 +177,9 @@ export function Step1CheckIn({
             setCpf('');
             setRg('');
             setTelefone('');
+            setTelefoneDisplay('');
+            setTelefoneCountryCode('BR');
+            setTelefoneTouched(false);
             setEmail('');
             setStep1Errors({});
             setDataNascimentoDisplay('');
@@ -433,16 +440,50 @@ export function Step1CheckIn({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#a855f7]">Telefone <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={telefone}
-                  onChange={(e) => {
-                    setTelefone(maskTelefone(e.target.value));
-                    setStep1Errors({...step1Errors, telefone: false});
-                  }}
-                  placeholder="(00) 00000-0000"
-                  className={`w-full px-4 py-3 bg-[#faf5ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${step1Errors.telefone ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`}
-                />
+                <div className={`flex items-stretch gap-1 rounded-xl border-[3px] bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${step1Errors.telefone || (telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneDisplay)) ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'}`}>
+                  <select
+                    value={telefoneCountryCode}
+                    title={getCountryByCode(telefoneCountryCode).name}
+                    onChange={(e) => {
+                      setTelefoneCountryCode(e.target.value);
+                      setTelefoneDisplay('');
+                      setTelefone('');
+                      setTelefoneTouched(false);
+                      setStep1Errors({ ...step1Errors, telefone: false });
+                    }}
+                    className="max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none"
+                    aria-label="País"
+                  >
+                    {[
+                      COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
+                      ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
+                    ].filter(Boolean).map((c) => (
+                      <option key={c.code} value={c.code} title={c.name}>{countrySelectDisplayLabel(c)}</option>
+                    ))}
+                  </select>
+                  <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                    <span className="flex items-center text-[13px] font-semibold text-[#a855f7] shrink-0 tabular-nums">
+                      {getDdi(telefoneCountryCode)}
+                    </span>
+                    <input
+                      type="tel"
+                      value={telefoneDisplay}
+                      autoComplete="tel-national"
+                      onChange={(e) => {
+                        const formatted = formatPhoneAsYouType(telefoneCountryCode, e.target.value);
+                        setTelefoneDisplay(formatted);
+                        setTelefone(formatPhoneForApi(telefoneCountryCode, formatted));
+                        setStep1Errors({ ...step1Errors, telefone: false });
+                      }}
+                      onBlur={() => setTelefoneTouched(true)}
+                      placeholder={telefoneCountryCode === 'BR' ? '(00) 00000-0000' : 'Número'}
+                      className="min-w-0 flex-1 rounded-r-[9px] bg-transparent py-3 pr-3 text-[14px] font-medium outline-none"
+                    />
+                  </div>
+                </div>
+                {telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneDisplay) && (
+                  <p className="text-[12px] font-bold text-red-600">Número inválido para este país</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#a855f7]">E-mail <span className="text-red-500">*</span></label>
