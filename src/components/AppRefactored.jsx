@@ -102,7 +102,11 @@ export default function App() {
         const meJson = await meRes.json().catch(() => ({}));
         if (cancelled) return;
         if (!meRes.ok) {
-          setPostLoginGate('ready');
+          if (meRes.status === 404) {
+            setPostLoginGate('profile'); // usuário não completou o perfil ainda
+            return;
+          }
+          setPostLoginGate('ready'); // outros erros, deixa passar
           return;
         }
         const nome =
