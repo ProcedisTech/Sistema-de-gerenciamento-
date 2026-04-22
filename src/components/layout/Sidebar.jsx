@@ -35,7 +35,11 @@ function displayRole(role) {
  * @param {{ activeView: string, setActiveView: (v: string) => void, handleLogout: () => void, authUser?: object, onRailWidthPxChange?: (px: number) => void }} props
  */
 export function Sidebar({ activeView, setActiveView, handleLogout, authUser, onRailWidthPxChange }) {
-  const displayName = authUser?.email || authUser?.username || 'Usuário';
+  const displayName =
+    (authUser?.nomeCompleto && String(authUser.nomeCompleto).trim()) ||
+    authUser?.email ||
+    authUser?.username ||
+    'Usuário';
   const roleLabel = displayRole(authUser?.role);
   const isTabletSidebar = useMediaQuery('(min-width: 768px) and (max-width: 1023px)');
   const isDesktop = useMediaQuery('(min-width: 1024px)');

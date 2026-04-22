@@ -106,3 +106,19 @@ export function parsePhoneFromApi(savedPhone, fallbackCountry = 'BR') {
     return { countryCode: fallbackCountry, nationalNumber: String(savedPhone) };
   }
 }
+
+/**
+ * Máscara opcional (login/onboarding): (XX) XXXXX-XXXX (11 díg.) ou (XX) XXXX-XXXX (10).
+ * @param {string} raw
+ * @returns {string}
+ */
+export function formatBrNationalParentheses(raw) {
+  const d = String(raw || '')
+    .replace(/\D/g, '')
+    .slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7, 11)}`;
+}
