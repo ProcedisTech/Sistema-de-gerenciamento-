@@ -12,6 +12,7 @@ import {
 // Componentes de Autenticação
 import { LoginForm } from './auth';
 import { CompletarPerfil } from './auth/CompletarPerfil.jsx';
+import { CadastrarClinica } from './auth/CadastrarClinica.jsx';
 import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
@@ -81,7 +82,7 @@ export default function App() {
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
-  /** null = deslogado ou pendente; checking = carregando gates; profile | clinic | ready = fluxo pós-login */
+  /** null = deslogado ou pendente; checking = carregando gates; profile | cadastrar-clinica | clinic | ready = pós-login */
   const [postLoginGate, setPostLoginGate] = React.useState(null);
   const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
 
@@ -128,7 +129,7 @@ export default function App() {
           return;
         }
         if (arr.length === 0) {
-          setPostLoginGate('ready');
+          setPostLoginGate('cadastrar-clinica');
           return;
         }
         setPostLoginGate('clinic');
@@ -947,7 +948,18 @@ export default function App() {
     return (
       <CompletarPerfil
         onComplete={() => {
-          setPostLoginGate('clinic');
+          setPostLoginGate('cadastrar-clinica');
+        }}
+      />
+    );
+  }
+
+  if (isLoggedIn && postLoginGate === 'cadastrar-clinica') {
+    return (
+      <CadastrarClinica
+        onComplete={(organizacaoId) => {
+          if (organizacaoId) setOrgId(String(organizacaoId));
+          setPostLoginGate('ready');
         }}
       />
     );

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, User } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { authHeadersForFetch } from '../../services/api';
+import { formatBrNationalParentheses } from '../../utils/phoneUtils';
 
 /**
  * Exibe enquanto o usuário (Supabase) ainda não tem nome completo registrado no backend Java.
@@ -10,6 +11,7 @@ export function CompletarPerfil({ onComplete }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [nomeCompleto, setNomeCompleto] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [error, setError] = useState('');
 
   const checkPerfil = useCallback(async () => {
@@ -62,7 +64,12 @@ export function CompletarPerfil({ onComplete }) {
           ...authHeadersForFetch({ needsOrg: false }),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ nome_completo: nome }),
+        body: JSON.stringify({
+          nome_completo: nome,
+          ...(telefone.replace(/\D/g, '')
+            ? { telefone: telefone.replace(/\D/g, '') }
+            : {}),
+        }),
       });
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -111,6 +118,22 @@ export function CompletarPerfil({ onComplete }) {
               placeholder="Seu nome completo"
               disabled={saving}
               autoComplete="name"
+            />
+          </div>
+          <div>
+            <label htmlFor="perfil_telefone" className="mb-2 block text-[13px] font-bold text-[#00a88e]">
+              Telefone <span className="font-medium text-[#94a3b8]">(opcional)</span>
+            </label>
+            <input
+              id="perfil_telefone"
+              type="tel"
+              inputMode="numeric"
+              value={telefone}
+              onChange={(e) => setTelefone(formatBrNationalParentheses(e.target.value))}
+              className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+              placeholder="(00) 00000-0000"
+              disabled={saving}
+              autoComplete="tel"
             />
           </div>
           {error ? (

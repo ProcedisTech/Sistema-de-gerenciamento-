@@ -30,10 +30,6 @@ export function SelecionarClinica({ setOrgId, onComplete }) {
         const list = Array.isArray(raw) ? raw : raw?.content ?? raw?.organizacoes ?? raw?.data ?? [];
         if (!cancelled) setOrgs(Array.isArray(list) ? list : []);
 
-        if (!cancelled && list.length === 0 && typeof onComplete === 'function') {
-          onComplete();
-        }
-
         if (!cancelled && list.length === 1) {
           const id = list[0]?.id ?? list[0]?.organizacaoSaudeId;
           if (id && typeof setOrgId === 'function') {
