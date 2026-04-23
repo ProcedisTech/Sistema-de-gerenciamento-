@@ -6,8 +6,9 @@ import { formatBrNationalParentheses } from '../../utils/phoneUtils';
 
 /**
  * Exibe enquanto o usuário (Supabase) ainda não tem nome completo registrado no backend Java.
+ * @param {{ onComplete: () => void, email: string }} props — email: sessão (ex.: authUser.email)
  */
-export function CompletarPerfil({ onComplete }) {
+export function CompletarPerfil({ onComplete, email }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [nomeCompleto, setNomeCompleto] = useState('');
@@ -54,6 +55,18 @@ export function CompletarPerfil({ onComplete }) {
       setError('Informe seu nome completo.');
       return;
     }
+    const emailStr = String(email || '').trim();
+    if (!emailStr) {
+      setError('E-mail da sessão indisponível. Entre novamente.');
+      return;
+    }
+    const telDigits = telefone.replace(/\D/g, '');
+    /** Backend: sempre as três chaves; telefone opcional → null ou "" */
+    const body = {
+      nomeCompleto: nome,
+      email: emailStr,
+      telefone: telDigits || null,
+    };
     setSaving(true);
     setError('');
     try {
@@ -64,12 +77,7 @@ export function CompletarPerfil({ onComplete }) {
           ...authHeadersForFetch({ needsOrg: false }),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          nome_completo: nome,
-          ...(telefone.replace(/\D/g, '')
-            ? { telefone: telefone.replace(/\D/g, '') }
-            : {}),
-        }),
+        body: JSON.stringify(body),
       });
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) {
