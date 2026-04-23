@@ -51,8 +51,18 @@ export const useAuthState = (options = {}) => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      applySessionFromSupabase(session);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setAccessToken(null);
+        setAuthUser(null);
+        setIsLoggedIn(false);
+        return;
+      }
+      if (session?.access_token) {
+        setAccessToken(session.access_token);
+        setAuthUser({ id: session.user.id, email: session.user.email });
+        setIsLoggedIn(true);
+      }
     });
 
     return () => {
