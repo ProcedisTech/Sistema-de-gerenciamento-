@@ -91,6 +91,10 @@ export default function App() {
       setPostLoginGate(null);
       return;
     }
+    // Só após getSession() em useAuthState — accessToken e sessionStorage prontos para Bearer
+    if (!authState.authReady) {
+      return;
+    }
     let cancelled = false;
     setPostLoginGate('checking');
     (async () => {
@@ -144,7 +148,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [authState.isLoggedIn, authState.authUser, setOrgId]);
+  }, [authState.isLoggedIn, authState.authUser, authState.authReady, setOrgId]);
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   /** Data local (YYYY-MM-DD) do início do atendimento — limite mínimo para “próximo retorno”. */
@@ -937,7 +941,12 @@ export default function App() {
     return <LoginForm {...authState} />;
   }
 
-  if (isLoggedIn && authUser && (postLoginGate === null || postLoginGate === 'checking')) {
+  if (
+    isLoggedIn &&
+    authUser &&
+    authReady &&
+    (postLoginGate === null || postLoginGate === 'checking')
+  ) {
     return (
       <div className="flex h-screen items-center justify-center bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb]">
         <div className="text-center">
@@ -948,7 +957,7 @@ export default function App() {
     );
   }
 
-  if (isLoggedIn && postLoginGate === 'profile') {
+  if (isLoggedIn && authReady && postLoginGate === 'profile') {
     return (
       <CompletarPerfil
         email={authUser?.email}
@@ -959,7 +968,7 @@ export default function App() {
     );
   }
 
-  if (isLoggedIn && postLoginGate === 'cadastrar-clinica') {
+  if (isLoggedIn && authReady && postLoginGate === 'cadastrar-clinica') {
     return (
       <CadastrarClinica
         onComplete={(organizacaoId) => {
@@ -970,7 +979,7 @@ export default function App() {
     );
   }
 
-  if (isLoggedIn && postLoginGate === 'clinic') {
+  if (isLoggedIn && authReady && postLoginGate === 'clinic') {
     return (
       <SelecionarClinica
         setOrgId={setOrgId}
