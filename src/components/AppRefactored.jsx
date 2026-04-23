@@ -951,6 +951,7 @@ export default function App() {
   if (isLoggedIn && postLoginGate === 'profile') {
     return (
       <CompletarPerfil
+        email={authUser?.email}
         onComplete={() => {
           setPostLoginGate('cadastrar-clinica');
         }}
