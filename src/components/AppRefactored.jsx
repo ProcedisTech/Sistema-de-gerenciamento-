@@ -122,6 +122,10 @@ export default function App() {
           setPostLoginGate('profile');
           return;
         }
+        const roleId = meJson?.roleUserId ?? meJson?.role_user_id ?? null;
+        if (roleId && typeof setRoleUserId === 'function') {
+          setRoleUserId(String(roleId));
+        }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
           headers: { ...authHeadersForFetch({ needsOrg: true }) },
