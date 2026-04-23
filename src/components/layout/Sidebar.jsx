@@ -32,9 +32,29 @@ function displayRole(role) {
 }
 
 /**
- * @param {{ activeView: string, setActiveView: (v: string) => void, handleLogout: () => void, authUser?: object, onRailWidthPxChange?: (px: number) => void }} props
+ * @param {{
+ *   activeView: string,
+ *   setActiveView: (v: string) => void,
+ *   handleLogout: () => void,
+ *   authUser?: object,
+ *   onRailWidthPxChange?: (px: number) => void,
+ *   clinicaNome?: string,
+ *   clinicaSubtitulo?: string,
+ * }} props
  */
-export function Sidebar({ activeView, setActiveView, handleLogout, authUser, onRailWidthPxChange }) {
+export function Sidebar({
+  activeView,
+  setActiveView,
+  handleLogout,
+  authUser,
+  onRailWidthPxChange,
+  clinicaNome,
+  clinicaSubtitulo,
+}) {
+  const tituloClinica =
+    (typeof clinicaNome === 'string' && clinicaNome.trim()) || 'Procedi';
+  const subtituloClinica =
+    (typeof clinicaSubtitulo === 'string' && clinicaSubtitulo.trim()) || 'Harmonização Premium';
   const displayName =
     (authUser?.nomeCompleto && String(authUser.nomeCompleto).trim()) ||
     authUser?.email ||
@@ -156,8 +176,8 @@ export function Sidebar({ activeView, setActiveView, handleLogout, authUser, onR
                   <Shield className="h-6 w-6 text-white" strokeWidth={2} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">Procedi</h1>
-                  <p className="text-[11px] font-medium text-[#64748b]">Harmonização Premium</p>
+                  <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
+                  <p className="text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
                 </div>
               </div>
               <button
@@ -235,8 +255,8 @@ export function Sidebar({ activeView, setActiveView, handleLogout, authUser, onR
                 <Shield className="h-6 w-6 text-white" strokeWidth={2} />
               </div>
               <div className="min-w-0 flex-1">
-                <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">Procedi</h1>
-                <p className="text-[11px] font-medium text-[#64748b]">Harmonização Premium</p>
+                <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
+                <p className="text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
               </div>
             </div>
 
