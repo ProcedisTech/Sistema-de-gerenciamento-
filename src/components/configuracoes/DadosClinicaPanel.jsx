@@ -98,7 +98,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
     loadClinica();
   }, [loadClinica]);
 
-  const onPickLogo = (e) => {
+  const onPickLogo = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !file.type.startsWith('image/')) return;
@@ -108,6 +108,29 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       if (typeof r === 'string') setLogoUrlPreview(r);
     };
     reader.readAsDataURL(file);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(resolveApiUrl('/api/v1/clinica/foto'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { ...fetchHeaders() },
+        body: formData,
+      });
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setLogoUrlServidor(json.logoUrl ?? json.logo_url ?? '');
+        onClinicaAtualizada?.(json.nome, json.logoUrl ?? '');
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        toast.error(
+          errBody?.message || errBody?.detail || errBody?.error || `Falha ao enviar logo (${res.status}).`
+        );
+      }
+    } catch {
+      toast.error('Falha de rede ao enviar o logo.');
+    }
   };
 
   const handleSubmit = async (ev) => {
@@ -204,8 +227,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
             onChange={onPickLogo}
           />
           <div className="min-w-0 text-[12px] font-medium leading-snug text-[#64748b]">
-            Toque no círculo para escolher uma imagem. O preview é apenas local; o envio ao servidor será
-            habilitado em breve.
+            Toque no círculo para escolher: preview imediato e envio automático ao servidor.
           </div>
         </div>
       </div>

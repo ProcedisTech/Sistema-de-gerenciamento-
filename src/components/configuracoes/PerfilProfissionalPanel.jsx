@@ -111,7 +111,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
     loadPerfil();
   }, [loadPerfil]);
 
-  const onPickFoto = (e) => {
+  const onPickFoto = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !file.type.startsWith('image/')) return;
@@ -121,13 +121,35 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
       if (typeof r === 'string') setFotoUrlPreview(r);
     };
     reader.readAsDataURL(file);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(resolveApiUrl('/api/v1/perfil/foto'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { ...fetchHeaders() },
+        body: formData,
+      });
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setFotoUrlServidor(json.fotoUrl ?? json.foto_url ?? '');
+        toast.success('Foto atualizada.');
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        toast.error(
+          errBody?.message || errBody?.detail || errBody?.error || `Falha ao enviar foto (${res.status}).`
+        );
+      }
+    } catch {
+      toast.error('Falha de rede ao enviar a foto.');
+    }
   };
 
   const handleSubmit = async (ev) => {
     ev.preventDefault();
     setSaving(true);
     try {
-      /** Preview local (base64) não é enviado; mantém-se a URL já persistida em `fotoUrlServidor`. */
       const body = {
         nomeCompleto: nomeCompleto.trim(),
         apelido: apelido.trim(),
@@ -216,8 +238,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
             onChange={onPickFoto}
           />
           <div className="min-w-0 text-[12px] font-medium leading-snug text-[#64748b]">
-            Toque no círculo para escolher uma imagem. O preview é apenas local; o envio ao servidor será
-            habilitado em breve.
+            Toque no círculo para escolher: preview imediato e envio automático ao servidor.
           </div>
         </div>
       </div>
