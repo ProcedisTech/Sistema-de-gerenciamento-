@@ -8,8 +8,11 @@ import {
   Building2,
   Settings,
 } from 'lucide-react';
+import { authHeadersForFetch } from '../../services/api';
 import { AnamneseAdminView } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
+import { DadosClinicaPanel } from './DadosClinicaPanel';
+import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
 
 const CONFIG_SECTION_KEY = 'procedi_config_section';
 const LEGACY_TAB_KEY = 'procedi_config_tab';
@@ -76,8 +79,9 @@ function SidebarNavItem({ icon: Icon, label, active, onClick, badge }) {
  * @param {object} [props]
  * @param {Record<string, unknown>} [props.anamneseAdminProps] — repassadas a {@link AnamneseAdminView}
  * @param {Record<string, unknown>} [props.termosManagerProps] — repassadas a {@link TermosManager}
+ * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada] — repassada a {@link DadosClinicaPanel}
  */
-export function ConfiguracoesView({ anamneseAdminProps = {}, termosManagerProps = {} }) {
+export function ConfiguracoesView({ anamneseAdminProps = {}, termosManagerProps = {}, onClinicaAtualizada }) {
   const [configSection, setConfigSectionState] = useState(readStoredSection);
 
   const setConfigSection = useCallback((section) => {
@@ -201,11 +205,14 @@ export function ConfiguracoesView({ anamneseAdminProps = {}, termosManagerProps 
           )}
 
           {configSection === 'perfil' && (
-            <PlaceholderPanel title="Perfil do Profissional" body="Em breve você poderá editar suas informações profissionais aqui." />
+            <PerfilProfissionalPanel getAuthHeaders={() => authHeadersForFetch({ needsOrg: false })} />
           )}
 
           {configSection === 'clinica' && (
-            <PlaceholderPanel title="Dados da Clínica" body="Em breve você poderá gerenciar os dados da clínica nesta seção." />
+            <DadosClinicaPanel
+              getAuthHeaders={() => authHeadersForFetch({ needsOrg: true })}
+              onClinicaAtualizada={onClinicaAtualizada}
+            />
           )}
         </div>
       </div>
