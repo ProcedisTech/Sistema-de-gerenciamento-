@@ -22,33 +22,30 @@ export const useAuthState = (options = {}) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const applySessionFromSupabase = useCallback((session) => {
-    if (session?.access_token) {
-      setAccessToken(session.access_token);
-    } else {
-      setAccessToken(null);
-    }
-    if (session?.user) {
-      setAuthUser({
-        id: session.user.id,
-        email: session.user.email,
-      });
-      setIsLoggedIn(true);
-    } else {
-      setAuthUser(null);
-      setIsLoggedIn(false);
-    }
-  }, []);
-
   useEffect(() => {
-    let alive = true;
+    // Primeiro tenta restaurar sessão existente
+    supabase.auth
+      .getSession()
+      .then(({ data: { session }, error }) => {
+        if (session?.access_token) {
+          setAccessToken(session.access_token);
+          setAuthUser({ id: session.user.id, email: session.user.email });
+          setIsLoggedIn(true);
+        } else {
+          setAccessToken(null);
+          setAuthUser(null);
+          setIsLoggedIn(false);
+        }
+        setAuthReady(true);
+      })
+      .catch(() => {
+        setAccessToken(null);
+        setAuthUser(null);
+        setIsLoggedIn(false);
+        setAuthReady(true);
+      });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!alive) return;
-      applySessionFromSupabase(session);
-      setAuthReady(true);
-    });
-
+    // Ouve mudanças de sessão
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -65,11 +62,8 @@ export const useAuthState = (options = {}) => {
       }
     });
 
-    return () => {
-      alive = false;
-      subscription.unsubscribe();
-    };
-  }, [applySessionFromSupabase]);
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
