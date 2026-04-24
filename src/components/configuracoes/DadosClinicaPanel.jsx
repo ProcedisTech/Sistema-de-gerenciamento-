@@ -52,7 +52,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
   const [email, setEmail] = useState('');
 
   const [logoUrlServidor, setLogoUrlServidor] = useState('');
-  const [logoUrlPreview, setLogoUrlPreview] = useState('');
+  const [fotoPreview, setFotoPreview] = useState('');
 
   const fetchHeaders = useCallback(() => {
     const h = typeof getAuthHeaders === 'function' ? getAuthHeaders() : {};
@@ -84,7 +84,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       setEmail(m.email);
       const srv = m.logoUrl != null && typeof m.logoUrl === 'string' ? m.logoUrl.trim() : '';
       setLogoUrlServidor(srv);
-      setLogoUrlPreview(srv ? resolveLogoSrc(srv) : '');
+      setFotoPreview(srv ? resolveLogoSrc(srv) : '');
       return { nome: m.nome, logoUrl: srv };
     } catch {
       setLoadError('Falha de rede ao carregar a clínica.');
@@ -105,7 +105,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
     const reader = new FileReader();
     reader.onload = () => {
       const r = reader.result;
-      if (typeof r === 'string') setLogoUrlPreview(r);
+      if (typeof r === 'string') setFotoPreview(r);
     };
     reader.readAsDataURL(file);
 
@@ -122,7 +122,8 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
         setLogoUrlServidor(json.logoUrl ?? json.logo_url ?? '');
-        onClinicaAtualizada?.(json.nome, json.logoUrl ?? '');
+        setFotoPreview(json.logoUrl ?? json.logo_url ?? '');
+        onClinicaAtualizada?.(json.nome, json.logoUrl ?? json.logo_url ?? '');
       } else {
         const errBody = await res.json().catch(() => ({}));
         toast.error(
@@ -162,7 +163,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       toast.success('Dados da clínica salvos com sucesso.');
       const snap = await loadClinica();
       if (snap && typeof onClinicaAtualizada === 'function') {
-        onClinicaAtualizada(snap.nome, snap.logoUrl);
+        onClinicaAtualizada(snap.nome, snap.logoUrl ?? snap.logo_url ?? '');
       }
     } catch {
       toast.error('Falha ao salvar. Tente novamente.');
@@ -194,7 +195,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
     );
   }
 
-  const imgSrc = logoUrlPreview || '';
+  const imagemExibida = fotoPreview || logoUrlServidor;
   const logoInputId = `${formId}-logo`;
 
   return (
@@ -210,8 +211,8 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
             className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e] shadow-sm ring-offset-2 transition hover:border-[#00a88e]/45 focus:outline-none focus:ring-2 focus:ring-[#00a88e]/40"
             aria-label="Alterar logo da clínica"
           >
-            {imgSrc ? (
-              <img src={imgSrc} alt="" className="h-full w-full object-cover" />
+            {imagemExibida ? (
+              <img src={resolveLogoSrc(imagemExibida)} alt="" className="h-full w-full object-cover" />
             ) : (
               <Building2 className="h-10 w-10" strokeWidth={1.75} aria-hidden />
             )}
