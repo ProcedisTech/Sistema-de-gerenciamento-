@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, LogOut, Menu, Settings, Shield, Users } from 'lucide-react';
+import { resolveApiUrl } from '../../config/apiEnv';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+
+function clinicaLogoDisplaySrc(u) {
+  if (u == null || typeof u !== 'string') return '';
+  const t = u.trim();
+  if (!t) return '';
+  if (t.startsWith('data:') || t.startsWith('http://') || t.startsWith('https://')) return t;
+  if (t.startsWith('/')) return resolveApiUrl(t);
+  return t;
+}
 
 const NAV_ITEMS = [
   { view: 'pacientes', label: 'Pacientes', icon: Users },
@@ -40,6 +50,7 @@ function displayRole(role) {
  *   onRailWidthPxChange?: (px: number) => void,
  *   clinicaNome?: string,
  *   clinicaSubtitulo?: string,
+ *   clinicaLogoUrl?: string,
  * }} props
  */
 export function Sidebar({
@@ -50,11 +61,14 @@ export function Sidebar({
   onRailWidthPxChange,
   clinicaNome,
   clinicaSubtitulo,
+  clinicaLogoUrl,
 }) {
   const tituloClinica =
     (typeof clinicaNome === 'string' && clinicaNome.trim()) || 'Procedi';
   const subtituloClinica =
     (typeof clinicaSubtitulo === 'string' && clinicaSubtitulo.trim()) || 'Harmonização Premium';
+  const clinicaLogoResolved =
+    clinicaLogoUrl && String(clinicaLogoUrl).trim() ? clinicaLogoDisplaySrc(clinicaLogoUrl) : '';
   const displayName =
     (authUser?.nomeCompleto && String(authUser.nomeCompleto).trim()) ||
     authUser?.email ||
@@ -173,7 +187,15 @@ export function Sidebar({
             <div className="flex items-center gap-2 border-b border-[#00a88e]/10 p-4 pl-4 pr-3 transition-opacity duration-200">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="rounded-xl border-[3px] border-[#00a88e]/25 bg-[#00a88e] p-2 shadow-sm">
-                  <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                  {clinicaLogoUrl && clinicaLogoResolved ? (
+                    <img
+                      src={clinicaLogoResolved}
+                      alt="Logo"
+                      className="h-10 w-10 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
@@ -252,7 +274,15 @@ export function Sidebar({
 
             <div className="flex items-center gap-3 border-b border-[#00a88e]/10 px-6 pb-4 pt-2">
               <div className="rounded-xl border-[3px] border-[#00a88e]/25 bg-[#00a88e] p-2 shadow-sm">
-                <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                {clinicaLogoUrl && clinicaLogoResolved ? (
+                  <img
+                    src={clinicaLogoResolved}
+                    alt="Logo"
+                    className="h-10 w-10 rounded-xl object-cover"
+                  />
+                ) : (
+                  <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>

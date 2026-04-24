@@ -144,7 +144,13 @@ export default function App() {
           if (clinicaRes.ok) {
             const clinicaJson = await clinicaRes.json().catch(() => ({}));
             const nomeClinica = clinicaJson?.nome || clinicaJson?.nomeFantasia || '';
-            if (nomeClinica) setClinicaInfo({ nome: nomeClinica, subtitulo: 'Harmonização Premium' });
+            if (nomeClinica) {
+              setClinicaInfo((prev) => ({
+                ...prev,
+                nome: nomeClinica,
+                subtitulo: 'Harmonização Premium',
+              }));
+            }
           }
           setPostLoginGate('ready');
           return;
@@ -180,7 +186,11 @@ export default function App() {
   }, []);
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
-  const [clinicaInfo, setClinicaInfo] = useState({ nome: 'Procedi', subtitulo: 'Harmonização Premium' });
+  const [clinicaInfo, setClinicaInfo] = useState({
+    nome: 'Procedi',
+    subtitulo: 'Harmonização Premium',
+    logoUrl: '',
+  });
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
   const canvasRef = useRef(null);
@@ -1016,6 +1026,7 @@ export default function App() {
         onRailWidthPxChange={setSidebarRailWidthPx}
         clinicaNome={clinicaInfo.nome}
         clinicaSubtitulo={clinicaInfo.subtitulo}
+        clinicaLogoUrl={clinicaInfo.logoUrl}
       />
 
       {/* Main Content */}
@@ -1442,8 +1453,8 @@ export default function App() {
 
             {activeView === 'configuracoes' && (
               <ConfiguracoesView
-                onClinicaAtualizada={(nome) =>
-                  setClinicaInfo({ nome, subtitulo: 'Harmonização Premium' })
+                onClinicaAtualizada={(nome, logoUrl) =>
+                  setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
                 }
               />
             )}
