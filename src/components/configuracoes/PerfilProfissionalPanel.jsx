@@ -125,6 +125,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
     const formData = new FormData();
     formData.append('file', file);
     try {
+      console.log('headers upload:', getAuthHeaders());
       const res = await fetch(resolveApiUrl('/api/v1/perfil/foto'), {
         method: 'POST',
         credentials: 'include',

@@ -112,6 +112,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
     const formData = new FormData();
     formData.append('file', file);
     try {
+      console.log('headers upload:', getAuthHeaders());
       const res = await fetch(resolveApiUrl('/api/v1/clinica/foto'), {
         method: 'POST',
         credentials: 'include',
