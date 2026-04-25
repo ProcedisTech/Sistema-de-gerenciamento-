@@ -265,7 +265,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
       }`;
     }
-    return `w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
+    return `w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
       errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
     }`;
   };
@@ -277,7 +277,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
       }`;
     }
-    return `w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${
+    return `w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${
       errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
     }`;
   };
@@ -289,7 +289,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
       }`;
     }
-    return `w-full px-4 py-3 bg-[#eff6ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${
+    return `w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${
       errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'
     }`;
   };
@@ -298,7 +298,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     if (isModal) {
       return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
     }
-    return 'w-full px-4 py-3 bg-[#eff6ff] border-[3px] border-[#3b82f6]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all';
+    return 'w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all';
   };
 
   const emailInputClass = () => {
@@ -307,21 +307,21 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         errors.email ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
       }`;
     }
-    return `w-full px-4 py-3 bg-[#faf5ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`;
+    return `w-full px-4 py-3 bg-[#faf5ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`;
   };
 
   const socialInputClass = () => {
     if (isModal) {
       return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
     }
-    return 'w-full px-4 py-3 bg-[#faf5ff] border-[3px] border-[#a855f7]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 focus:border-[#a855f7] transition-all';
+    return 'w-full px-4 py-3 bg-[#faf5ff] border border-[#a855f7]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 focus:border-[#a855f7] transition-all';
   };
 
   const complementInputClass = () => {
     if (isModal) {
       return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
     }
-    return 'w-full px-4 py-3 bg-[#fffbeb] border-[3px] border-[#f59e0b]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all';
+    return 'w-full px-4 py-3 bg-[#fffbeb] border border-amber-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all';
   };
 
   const phoneWrapClass = () => {
@@ -331,7 +331,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         errors.telefone || invalid ? 'border-red-300 bg-red-50/60' : 'border-slate-200'
       }`;
     }
-    return `flex items-stretch gap-1 rounded-xl border-[3px] bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${
+    return `flex items-stretch gap-1 rounded-xl border bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${
       errors.telefone || invalid ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'
     }`;
   };
@@ -340,7 +340,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     if (isModal) {
       return 'w-full cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 text-[14px] font-medium text-slate-500';
     }
-    return 'w-full px-4 py-3 bg-[#e2e8f0]/40 border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed';
+    return 'w-full px-4 py-3 bg-[#e2e8f0]/40 border border-app-border rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed';
   };
 
   const hasPersonalSectionError =
@@ -420,7 +420,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               className={
                 isModal
                   ? 'flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 shadow-sm transition-all hover:border-[#00a88e]/40'
-                  : 'flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#00a88e]/30 bg-[#e6f7f5] shadow-sm transition-all group-hover:border-[#00a88e]'
+                  : 'flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] shadow-sm transition-all group-hover:border-[#00a88e]'
               }
             >
               {fotoPerfilPreview ? (
@@ -458,7 +458,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
             className={
               isModal
                 ? 'flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/80 px-3 py-2.5 text-[13px] font-semibold text-red-700'
-                : 'flex items-start gap-2 rounded-xl border-[3px] border-red-200 bg-red-50 px-4 py-3 text-[14px] font-bold text-red-600'
+                : 'flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-bold text-red-600'
             }
           >
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.5} />
@@ -473,7 +473,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         <div
           className={sectionCardCls(
             hasPersonalSectionError,
-            `rounded-2xl border-[3px] p-6 transition-colors ${
+            `rounded-2xl border p-6 transition-colors ${
               hasPersonalSectionError ? 'border-red-300 bg-red-50/10' : 'border-[#00a88e]/25 bg-white'
             }`
           )}
@@ -641,7 +641,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         <div
           className={sectionCardCls(
             false,
-            'rounded-2xl border-[3px] border-[#3b82f6]/25 bg-white p-6'
+            'rounded-2xl border border-blue-200 bg-white p-6'
           )}
         >
           <div className={`flex items-center gap-3 ${isModal ? 'mb-5' : 'mb-6'}`}>
@@ -684,7 +684,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         <div
           className={sectionCardCls(
             Boolean(errors.telefone || errors.email),
-            `rounded-2xl border-[3px] p-6 transition-colors ${
+            `rounded-2xl border p-6 transition-colors ${
               errors.telefone || errors.email ? 'border-red-300 bg-red-50/10' : 'border-[#a855f7]/25 bg-white'
             }`
           )}
@@ -800,7 +800,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         <div
           className={sectionCardCls(
             false,
-            'rounded-2xl border-[3px] border-[#f59e0b]/25 bg-white p-6'
+            'rounded-2xl border border-amber-200 bg-white p-6'
           )}
         >
           <div className={`flex items-center gap-3 ${isModal ? 'mb-5' : 'mb-6'}`}>
@@ -869,7 +869,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
             className={
               isModal
                 ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-[14px] font-semibold text-slate-700 outline-none transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto'
-                : 'flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-[#00a88e]/25 bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto'
+                : 'flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto'
             }
           >
             Cancelar
@@ -880,7 +880,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
             className={
               isModal
                 ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-[#00a88e] px-5 py-2.5 text-[14px] font-semibold text-white outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-                : 'flex w-full items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+                : 'flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
             }
           >
             {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
@@ -907,7 +907,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       </div>
 
       <div className="mb-2 flex items-center gap-4">
-        <div className="rounded-2xl border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] p-3 text-[#00a88e]">
+        <div className="rounded-2xl border border-app-border bg-[#e6f7f5] p-3 text-[#00a88e]">
           <UserPlus className="h-7 w-7" strokeWidth={2.5} />
         </div>
         <div>

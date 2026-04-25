@@ -208,7 +208,7 @@ export function FichaBuilder() {
           <div
             role="dialog"
             aria-modal="true"
-            className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 shadow-2xl w-full max-w-md flex flex-col"
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md flex flex-col"
           >
             <div className="px-6 py-4 border-b border-[#e2e8f0]">
               <h3 className="text-[16px] font-bold text-[#0f172a]">Desativar ficha</h3>
@@ -223,7 +223,7 @@ export function FichaBuilder() {
                 type="button"
                 onClick={() => setFichaParaExcluir(null)}
                 disabled={excluindo}
-                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/20 disabled:opacity-50"
+                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border border-slate-200 hover:border-[#00a88e]/20 disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -231,7 +231,7 @@ export function FichaBuilder() {
                 type="button"
                 onClick={confirmarExcluir}
                 disabled={excluindo}
-                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-red-500 hover:bg-red-600 text-white border-[3px] border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-red-500 hover:bg-red-600 text-white border border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {excluindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 Desativar
@@ -260,13 +260,13 @@ export function FichaBuilder() {
             <h4 className="text-[16px] font-bold text-[#0f172a]">
               {editando === 'nova' ? 'Nova Ficha' : 'Editar Ficha'}
             </h4>
-            <button type="button" onClick={fecharEditor} className="px-4 py-2 rounded-xl font-bold text-[13px] bg-white text-[#64748b] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/20 flex items-center gap-1.5">
+            <button type="button" onClick={fecharEditor} className="px-4 py-2 rounded-xl font-bold text-[13px] bg-white text-[#64748b] border border-slate-200 hover:border-[#00a88e]/20 flex items-center gap-1.5">
               <X className="w-4 h-4" /> Cancelar
             </button>
           </div>
 
           {erro && (
-            <div className="bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
+            <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -277,7 +277,7 @@ export function FichaBuilder() {
                 value={fichaNome}
                 onChange={(e) => setFichaNome(e.target.value)}
                 placeholder="Ex: Anamnese Cardiológica Padrão"
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
               />
             </div>
             <div className="space-y-1.5">
@@ -285,7 +285,7 @@ export function FichaBuilder() {
               <select
                 value={fichaEspecialidadeId}
                 onChange={(e) => setFichaEspecialidadeId(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
               >
                 <option value="">Nenhuma</option>
                 {especialidades.map((e) => (
@@ -300,7 +300,7 @@ export function FichaBuilder() {
             <div className="space-y-3 min-h-0 min-w-0 flex flex-col">
               <h5 className="text-[14px] font-bold text-[#0f172a]">Perguntas na ficha ({fichaItens.length})</h5>
               {fichaItens.length === 0 ? (
-                <div className="text-center py-8 text-[#94a3b8] bg-[#f8fbfb] border-[3px] border-dashed border-[#00a88e]/20 rounded-xl">
+                <div className="text-center py-8 text-[#94a3b8] bg-[#f8fbfb] border border-dashed border-slate-200 rounded-xl">
                   <p className="text-[13px]">Selecione perguntas do banco ao lado</p>
                 </div>
               ) : (
@@ -310,7 +310,7 @@ export function FichaBuilder() {
                     return (
                     <div
                       key={item.perguntaId}
-                      className={`flex flex-col gap-2 p-3 rounded-xl border-[3px] cursor-pointer transition-all sm:flex-row sm:items-center sm:gap-2 ${
+                      className={`flex flex-col gap-2 p-3 rounded-xl border cursor-pointer transition-all sm:flex-row sm:items-center sm:gap-2 ${
                         itemAlerta
                           ? 'border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] hover:border-red-400'
                           : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
@@ -415,7 +415,7 @@ export function FichaBuilder() {
                 <select
                   value={filtroCategoria}
                   onChange={(e) => setFiltroCategoria(e.target.value)}
-                  className="px-2 py-1 bg-[#f8fbfb] border-[2px] border-[#00a88e]/15 rounded-lg text-[12px] font-medium focus:outline-none appearance-none"
+                  className="px-2 py-1 bg-[#f8fbfb] border border-app-border rounded-lg text-[12px] font-medium focus:outline-none appearance-none"
                 >
                   <option value="">Todas</option>
                   {categorias.map((c) => (
@@ -470,7 +470,7 @@ export function FichaBuilder() {
               type="button"
               onClick={handleSalvar}
               disabled={salvando}
-              className="px-6 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Salvar Ficha
@@ -481,7 +481,7 @@ export function FichaBuilder() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div />
-            <button type="button" onClick={abrirNova} className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md flex items-center gap-2">
+            <button type="button" onClick={abrirNova} className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md flex items-center gap-2">
               <Plus className="w-4 h-4" strokeWidth={2.5} /> Nova Ficha
             </button>
           </div>
@@ -498,7 +498,7 @@ export function FichaBuilder() {
                 <div
                   key={ficha.id}
                   onClick={() => abrirEdicao(ficha)}
-                  className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/40 hover:bg-[#f0fdfa] transition-all shadow-sm flex flex-col cursor-pointer"
+                  className="p-4 rounded-xl border border-app-border bg-white hover:border-[#00a88e]/40 hover:bg-[#f0fdfa] transition-all shadow-sm flex flex-col cursor-pointer"
                 >
                   <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between xl:gap-3">
                     <div className="flex-1 min-w-0">
@@ -507,7 +507,7 @@ export function FichaBuilder() {
                         <h5 className="text-[15px] font-bold text-[#0f172a] break-words [overflow-wrap:anywhere] leading-snug">{ficha.nome}</h5>
                       </div>
                       {ficha.especialidadeNome && (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/15">
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border border-app-border">
                           {ficha.especialidadeNome}
                         </span>
                       )}

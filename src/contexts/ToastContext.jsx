@@ -48,7 +48,7 @@ function ToastItem({ id, message, variant, onDismiss }) {
         width: isError ? 'min(calc(100vw - 2rem), 28rem)' : 'min(calc(100vw - 2rem), 22rem)',
       }}
       className={`pointer-events-auto flex max-w-md items-stretch overflow-hidden rounded-xl bg-white shadow-[0_8px_30px_rgba(15,23,42,0.12)] toast-pop-in ${
-        isError ? 'border-[3px] border-rose-400' : 'border border-slate-200/90'
+        isError ? 'border border-rose-400' : 'border border-slate-200/90'
       }`}
     >
       <div className={`w-1 shrink-0 ${cfg.bar}`} aria-hidden />

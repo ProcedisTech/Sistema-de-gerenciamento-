@@ -1039,7 +1039,7 @@ export default function App() {
       >
         {(isJornadaView || (activeView !== 'pacientes' && activeView !== 'configuracoes')) && (
         <header
-          className={`border-b-[3px] border-[#00a88e]/15 shadow-[0_4px_24px_rgb(0,168,142,0.02)] ${
+          className={`border-b border-app-border shadow-app-card ${
             isJornadaView
               ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
               : `z-0 bg-white ${
@@ -1067,7 +1067,7 @@ export default function App() {
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto w-full max-w-[1600px] p-3 pb-28 [-webkit-overflow-scrolling:touch] sm:p-6 md:px-8 md:pt-8 md:pb-28">
-                  <div className="rounded-[20px] border-[3px] border-[#00a88e]/25 bg-white p-4 pb-5 shadow-lg shadow-[#00a88e]/5 sm:p-8 sm:pb-6 md:pb-8">
+                  <div className="rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6 md:pb-8">
                   <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
                   {currentStep === 1 && (
                     <Step2Anamnese
@@ -1416,7 +1416,7 @@ export default function App() {
           }`}
         >
           <div
-            className={`bg-white rounded-[20px] border-[3px] border-[#00a88e]/25 shadow-lg shadow-[#00a88e]/5 ${
+            className={`bg-white rounded-[20px] border border-app-border shadow-app-card ${
               activeView === 'configuracoes'
                 ? 'px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                 : activeView === 'pacientes'
@@ -1460,7 +1460,7 @@ export default function App() {
             )}
 
             {!['jornada', 'pacientes', 'configuracoes'].includes(activeView) && (
-              <div className="p-6 rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] text-[#64748b] font-bold text-[14px]">
+              <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
             )}

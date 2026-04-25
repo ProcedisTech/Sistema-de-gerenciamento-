@@ -141,7 +141,7 @@ export function Step1CheckIn({
   return (
     <div className="animate-in fade-in duration-300">
       <div className="flex items-center gap-4 mb-8">
-        <div className="bg-[#e6f7f5] p-3 rounded-2xl text-[#00a88e] border-[3px] border-[#00a88e]/25">
+        <div className="bg-[#e6f7f5] p-3 rounded-2xl text-[#00a88e] border border-app-border">
           <UserCheck className="w-7 h-7" strokeWidth={2.5} />
         </div>
         <div>
@@ -150,7 +150,7 @@ export function Step1CheckIn({
         </div>
       </div>
 
-      <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-8 border-[3px] border-[#00a88e]/15">
+      <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-8 border border-app-border">
         <button
           type="button"
           onClick={() => setActiveTab('existente')}
@@ -203,7 +203,7 @@ export function Step1CheckIn({
                 setTipoBusca(e.target.value);
                 setSearchQuery('');
               }}
-              className="shrink-0 border-[2px] border-[#e2e8f0] rounded-xl px-3 py-2.5 text-[13px] font-medium text-[#475569] focus:border-[#00a88e] outline-none bg-white min-w-0 max-w-[9.5rem] sm:max-w-none"
+              className="shrink-0 border border-slate-200 rounded-xl px-3 py-2.5 text-[13px] font-medium text-[#475569] focus:border-[#00a88e] outline-none bg-white min-w-0 max-w-[9.5rem] sm:max-w-none"
               aria-label="Tipo de busca"
             >
               <option value="nome">Nome</option>
@@ -224,7 +224,7 @@ export function Step1CheckIn({
                       : 'Buscar por nome...'
                 }
                 autoComplete="off"
-                className="w-full min-w-0 pl-12 pr-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                className="w-full min-w-0 pl-12 pr-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               />
             </div>
           </div>
@@ -237,7 +237,7 @@ export function Step1CheckIn({
                 <div
                   key={p.id}
                   onClick={() => selectPatient(p)}
-                  className={`p-4 border-[3px] rounded-xl cursor-pointer transition-all flex items-center gap-4 ${
+                  className={`p-4 border rounded-xl cursor-pointer transition-all flex items-center gap-4 ${
                     isSelected
                       ? 'bg-[#e6f7f5] border-[#00a88e]'
                       : 'bg-white border-[#00a88e]/15 hover:border-[#00a88e]/50 hover:bg-[#f8fbfb]'
@@ -254,7 +254,7 @@ export function Step1CheckIn({
                       <p>{p.cpf}</p>
                       <p>{p.telefone}</p>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[#ef4444] text-[12px] font-bold bg-red-50 w-fit px-2.5 py-1.5 rounded-lg border-[3px] border-red-100">
+                    <div className="flex items-center gap-1.5 text-[#ef4444] text-[12px] font-bold bg-red-50 w-fit px-2.5 py-1.5 rounded-lg border border-red-100">
                       <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} /> Alergias: {p.alergias || '—'}
                     </div>
                   </div>
@@ -270,14 +270,14 @@ export function Step1CheckIn({
       ) : (
         <form className="space-y-6">
           {Object.keys(step1Errors).length > 0 && (
-            <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[14px] font-bold border-[3px] border-red-200 flex items-center gap-2">
+            <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[14px] font-bold border border-red-200 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 flex-shrink-0" strokeWidth={2.5} />
               Por favor, preencha todos os campos obrigatórios (*) para avançar.
             </div>
           )}
 
           {/* Dados Pessoais */}
-          <div className={`border-[3px] rounded-2xl p-6 transition-colors ${step1Errors.nome || step1Errors.dataNascimento || step1Errors.sexo || step1Errors.estadoCivil || step1Errors.profissao ? 'border-red-300 bg-red-50/10' : 'border-[#00a88e]/25 bg-white'}`}>
+          <div className={`border rounded-2xl p-6 transition-colors ${step1Errors.nome || step1Errors.dataNascimento || step1Errors.sexo || step1Errors.estadoCivil || step1Errors.profissao ? 'border-red-300 bg-red-50/10' : 'border-[#00a88e]/25 bg-white'}`}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-full bg-[#00a88e] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">1</div>
               <h4 className="text-[18px] font-bold text-[#0f766e]">Dados Pessoais</h4>
@@ -294,7 +294,7 @@ export function Step1CheckIn({
                     setStep1Errors({...step1Errors, nome: false});
                   }}
                   placeholder="Nome completo do paciente"
-                  className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.nome ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                  className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.nome ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 />
               </div>
               <div className="space-y-1.5">
@@ -310,7 +310,7 @@ export function Step1CheckIn({
                   }}
                   placeholder="DD/MM/AAAA"
                   maxLength={10}
-                  className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.dataNascimento ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                  className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.dataNascimento ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 />
                 {dataNascimentoFieldMessage ? (
                   <p className="text-[12px] font-bold text-red-600" role="alert">
@@ -325,7 +325,7 @@ export function Step1CheckIn({
                   value={idade !== '' ? `${idade} anos` : ''}
                   placeholder="Calculada automaticamente"
                   disabled
-                  className="w-full px-4 py-3 bg-[#e2e8f0]/40 border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-[#e2e8f0]/40 border border-app-border rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed"
                 />
               </div>
               <div className="space-y-1.5">
@@ -336,7 +336,7 @@ export function Step1CheckIn({
                     setSexo(e.target.value);
                     setStep1Errors({...step1Errors, sexo: false});
                   }}
-                  className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.sexo ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                  className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.sexo ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 >
                   <option value="">Selecione...</option>
                   <option value="F">Feminino</option>
@@ -352,7 +352,7 @@ export function Step1CheckIn({
                     setEstadoCivilId(e.target.value);
                     setStep1Errors({...step1Errors, estadoCivil: false});
                   }}
-                  className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.estadoCivil ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                  className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.estadoCivil ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                 >
                   <option value="">Selecione...</option>
                   {ESTADOS_CIVIS.map((ec) => (
@@ -372,7 +372,7 @@ export function Step1CheckIn({
                     onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
                     placeholder="Digite sua profissão..."
                     autoComplete="off"
-                    className={`w-full px-4 py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.profissao ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                    className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.profissao ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
                   />
                   {showProfissoes ? (
                     <div className="absolute z-50 w-full bg-white border-[2px] border-[#00a88e]/30 rounded-xl shadow-lg mt-1 overflow-hidden">
@@ -398,7 +398,7 @@ export function Step1CheckIn({
           </div>
 
           {/* Documentos */}
-          <div className="border-[3px] border-[#3b82f6]/25 rounded-2xl p-6 bg-white">
+          <div className="border border-blue-200 rounded-2xl p-6 bg-white">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-full bg-[#3b82f6] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">2</div>
               <h4 className="text-[18px] font-bold text-[#1d4ed8]">Documentos</h4>
@@ -415,7 +415,7 @@ export function Step1CheckIn({
                   }}
                   onBlur={handleCpfBlur}
                   placeholder="000.000.000-00"
-                  className={`w-full px-4 py-3 bg-[#eff6ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${step1Errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'}`}
+                  className={`w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${step1Errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'}`}
                 />
               </div>
               <div className="space-y-1.5">
@@ -425,14 +425,14 @@ export function Step1CheckIn({
                   value={rg}
                   onChange={(e) => setRg(maskRG(e.target.value))}
                   placeholder="00.000.000-0"
-                  className="w-full px-4 py-3 bg-[#eff6ff] border-[3px] border-[#3b82f6]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all"
+                  className="w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all"
                 />
               </div>
             </div>
           </div>
 
           {/* Contato */}
-          <div className={`border-[3px] rounded-2xl p-6 transition-colors ${step1Errors.telefone || step1Errors.email ? 'border-red-300 bg-red-50/10' : 'border-[#a855f7]/25 bg-white'}`}>
+          <div className={`border rounded-2xl p-6 transition-colors ${step1Errors.telefone || step1Errors.email ? 'border-red-300 bg-red-50/10' : 'border-[#a855f7]/25 bg-white'}`}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-full bg-[#a855f7] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">3</div>
               <h4 className="text-[18px] font-bold text-[#7e22ce]">Contato</h4>
@@ -440,7 +440,7 @@ export function Step1CheckIn({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#a855f7]">Telefone <span className="text-red-500">*</span></label>
-                <div className={`flex items-stretch gap-1 rounded-xl border-[3px] bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${step1Errors.telefone || (telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneDisplay)) ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'}`}>
+                <div className={`flex items-stretch gap-1 rounded-xl border bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${step1Errors.telefone || (telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneDisplay)) ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'}`}>
                   <select
                     value={telefoneCountryCode}
                     title={getCountryByCode(telefoneCountryCode).name}
@@ -498,14 +498,14 @@ export function Step1CheckIn({
                     if (e.key === ' ') e.preventDefault();
                   }}
                   placeholder="email@exemplo.com"
-                  className={`w-full px-4 py-3 bg-[#faf5ff] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${step1Errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`}
+                  className={`w-full px-4 py-3 bg-[#faf5ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${step1Errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`}
                 />
               </div>
             </div>
           </div>
 
           {/* Endereço (opcional) */}
-          <div className="border-[3px] border-[#f59e0b]/25 rounded-2xl p-6 bg-white">
+          <div className="border border-amber-200 rounded-2xl p-6 bg-white">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-full bg-[#f59e0b] text-white flex items-center justify-center font-bold text-[14px] shadow-sm">4</div>
               <h4 className="text-[18px] font-bold text-[#b45309]">Endereço</h4>
@@ -517,7 +517,7 @@ export function Step1CheckIn({
                 value={endereco}
                 onChange={(e) => setEndereco(e.target.value)}
                 placeholder="Rua, número, bairro, cidade - UF"
-                className="w-full px-4 py-3 bg-[#fffbeb] border-[3px] border-[#f59e0b]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all"
+                className="w-full px-4 py-3 bg-[#fffbeb] border border-amber-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all"
               />
             </div>
           </div>

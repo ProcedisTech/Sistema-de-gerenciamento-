@@ -236,11 +236,11 @@ function AnamneseObservacoesBlock({ texto }) {
       <div className="p-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/20">
         <span className="text-[12px] font-bold text-[#b45309]">Observações</span>
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="p-4 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]">
+          <div className="p-4 rounded-xl bg-[#f8fbfb] border border-slate-200">
             <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wide">Queixa principal</span>
             <p className="text-[13px] text-[#0f172a] mt-1.5 whitespace-pre-wrap">{parsed.queixa}</p>
           </div>
-          <div className="p-4 rounded-xl bg-[#f8fbfb] border-[2px] border-[#e2e8f0]">
+          <div className="p-4 rounded-xl bg-[#f8fbfb] border border-slate-200">
             <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wide">Expectativas do paciente</span>
             <p className="text-[13px] text-[#0f172a] mt-1.5 whitespace-pre-wrap">{parsed.expectativas}</p>
           </div>
@@ -462,7 +462,7 @@ function AnamneseTab({ pacienteId }) {
           : [];
 
         return (
-          <div key={an.id} className="border-[3px] border-[#00a88e]/15 rounded-xl overflow-hidden">
+          <div key={an.id} className="border border-app-border rounded-xl overflow-hidden">
             <button
               type="button"
               onClick={() => setExpandedId(isOpen ? null : an.id)}
@@ -490,7 +490,7 @@ function AnamneseTab({ pacienteId }) {
             </button>
 
             {isOpen && (
-              <div className="p-4 border-t-[3px] border-[#00a88e]/10 space-y-3">
+              <div className="p-4 border-t border-app-border space-y-3">
                 {detalhe.observacoes ? (
                   <AnamneseObservacoesBlock texto={detalhe.observacoes} />
                 ) : null}
@@ -1404,7 +1404,7 @@ export function PatientProfileView({
         </div>
       )}
       {profileSaveError ? (
-        <div className="p-3 rounded-xl border-[3px] border-red-200 bg-red-50 text-red-700 text-[13px] font-bold">
+        <div className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-[13px] font-bold">
           {profileSaveError}
         </div>
       ) : null}
@@ -1529,7 +1529,7 @@ export function PatientProfileView({
             </div>
 
             {isEditing && (
-              <div className="mt-5 p-4 border-[3px] border-[#00a88e]/20 rounded-2xl bg-[#f8fbfb]">
+              <div className="mt-5 p-4 border border-slate-200 rounded-2xl bg-[#f8fbfb]">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input value={editing?.nome || ''} onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Nome" />
                   <input value={editing?.email || ''} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="E-mail" />
@@ -1579,7 +1579,7 @@ export function PatientProfileView({
                       value={editing?.endereco || ''}
                       onChange={(e) => setEditing((d) => ({ ...d, endereco: e.target.value }))}
                       placeholder="Rua, número, bairro, cidade - UF"
-                      className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-2 text-[16px] outline-none focus:border-[#00a88e] sm:text-[13px]"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2 text-[16px] outline-none focus:border-[#00a88e] sm:text-[13px]"
                     />
                   </div>
                   <input value={editing?.alergias || ''} onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Alergias" />
@@ -1588,7 +1588,7 @@ export function PatientProfileView({
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <button type="button" onClick={saveEditProfile} className="px-4 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[13px] border-[2px] border-transparent"><Save className="w-4 h-4 inline mr-1" />Salvar</button>
-                  <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl bg-white text-[#475569] font-bold text-[13px] border-[2px] border-[#e2e8f0]"><X className="w-4 h-4 inline mr-1" />Cancelar</button>
+                  <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl bg-white text-[#475569] font-bold text-[13px] border border-slate-200"><X className="w-4 h-4 inline mr-1" />Cancelar</button>
                 </div>
               </div>
             )}
@@ -1833,7 +1833,7 @@ export function PatientProfileView({
                           assinaturaVinculada?.pacienteAssinouEm ??
                           assinaturaVinculada?.paciente_assinou_em;
                         return (
-                          <div key={rowKey} className="rounded-xl border-[2px] border-[#e2e8f0] bg-white overflow-hidden shadow-sm">
+                          <div key={rowKey} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
                             <button
                               type="button"
                               onClick={() => toggleProntuarioRow(rowKey)}
@@ -2016,7 +2016,7 @@ export function PatientProfileView({
 
                   {galeriaBackend === 'api' && selectedPatient?.id && galeriaBackend !== 'loading' ? (
                     <>
-                      <div className="rounded-2xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] p-4 space-y-3">
+                      <div className="rounded-2xl border border-app-border bg-[#f8fbfb] p-4 space-y-3">
                         <div className="flex items-center gap-2 text-[12px] font-bold text-[#0f766e]">
                           <Filter className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden />
                           Filtrar visualização
@@ -2027,7 +2027,7 @@ export function PatientProfileView({
                             <select
                               value={galeriaFilterCategoria}
                               onChange={(e) => setGaleriaFilterCategoria(e.target.value)}
-                              className="rounded-xl border-[2px] border-[#e2e8f0] bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
                             >
                               <option value="all">Todas</option>
                               <option value="antes">{GALERIA_CATEGORIA_LABELS.antes}</option>
@@ -2042,7 +2042,7 @@ export function PatientProfileView({
                             <select
                               value={galeriaFilterMes}
                               onChange={(e) => setGaleriaFilterMes(e.target.value)}
-                              className="rounded-xl border-[2px] border-[#e2e8f0] bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
                             >
                               <option value="all">Todos</option>
                               {galeriaMesesOpcoes.map((m) => (
@@ -2060,7 +2060,7 @@ export function PatientProfileView({
                             <select
                               value={galeriaFilterProcedimento}
                               onChange={(e) => setGaleriaFilterProcedimento(e.target.value)}
-                              className="rounded-xl border-[2px] border-[#e2e8f0] bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
                             >
                               <option value="all">Todos</option>
                               {galeriaProcedimentosOpcoes.map((p) => (
@@ -2097,7 +2097,7 @@ export function PatientProfileView({
                         return (
                           <div
                             key={sess.key}
-                            className="rounded-[20px] border-[3px] border-[#e2e8f0] bg-white shadow-md shadow-[#00a88e]/[0.06] overflow-hidden"
+                            className="rounded-[20px] border border-slate-200 bg-white shadow-app-card overflow-hidden"
                           >
                             <div
                               className="flex items-center justify-between cursor-pointer select-none p-4 hover:bg-[#f8fafc] transition-colors rounded-xl"
@@ -2165,7 +2165,7 @@ export function PatientProfileView({
                                       return (
                                         <div
                                           key={cat}
-                                          className="rounded-xl border-[2px] border-[#e2e8f0] overflow-hidden"
+                                          className="rounded-xl border border-slate-200 overflow-hidden"
                                         >
                                           <div className="w-full flex items-center justify-between px-4 py-3 bg-[#f8fafc]">
                                             <button
@@ -2242,7 +2242,7 @@ export function PatientProfileView({
                                                           modoComparar &&
                                                           (compararSelecionadas.antes?.serverId === foto.serverId ||
                                                             compararSelecionadas.depois?.serverId === foto.serverId)
-                                                            ? 'border-[3px] border-[#00a88e] ring-2 ring-[#00a88e]/40'
+                                                            ? 'border border-[#00a88e] ring-2 ring-[#00a88e]/40'
                                                             : 'border border-[#e2e8f0]'
                                                         }`}
                                                       >
@@ -2302,7 +2302,7 @@ export function PatientProfileView({
                                   caption: item.fileName,
                                 })
                               }
-                              className="aspect-square rounded-xl bg-[#e6f7f5] border-[2px] border-[#00a88e]/15 flex items-center justify-center overflow-hidden w-full"
+                              className="aspect-square rounded-xl bg-[#e6f7f5] border border-app-border flex items-center justify-center overflow-hidden w-full"
                             >
                               {item.source === 'api' ? (
                                 <GaleriaArquivoImage
@@ -2559,13 +2559,13 @@ export function PatientProfileView({
           onClick={() => setAlertasModalOpen(false)}
         >
           <div
-            className="relative flex max-h-[min(88dvh,720px)] w-full max-w-lg flex-col rounded-2xl border-[3px] border-red-300 bg-white p-5 shadow-xl sm:p-6"
+            className="relative flex max-h-[min(88dvh,720px)] w-full max-w-lg flex-col rounded-2xl border border-red-300 bg-white p-5 shadow-xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setAlertasModalOpen(false)}
-              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border-[2px] border-[#e2e8f0] text-[#64748b] transition-colors hover:border-red-200 hover:text-red-600"
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-[#64748b] transition-colors hover:border-red-200 hover:text-red-600"
               aria-label="Fechar"
             >
               <X className="h-4 w-4" strokeWidth={2.5} />
@@ -2624,13 +2624,13 @@ export function PatientProfileView({
           onClick={dismissBirthdayModal}
         >
           <div
-            className="birthday-modal-pop relative w-full max-w-md rounded-2xl border-[3px] border-amber-300 bg-white p-6 shadow-xl"
+            className="birthday-modal-pop relative w-full max-w-md rounded-2xl border border-amber-300 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={dismissBirthdayModal}
-              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border-[2px] border-[#e2e8f0] text-[#64748b] transition-colors hover:border-[#00a88e]/30 hover:text-[#00a88e]"
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-[#64748b] transition-colors hover:border-[#00a88e]/30 hover:text-[#00a88e]"
               aria-label="Fechar"
             >
               <X className="h-4 w-4" strokeWidth={2.5} />
@@ -2683,7 +2683,7 @@ export function PatientProfileView({
               <img
                 src={galleryPreview.url}
                 alt={galleryPreview.caption || 'Preview da foto'}
-                className="max-w-[90vw] max-h-[85vh] rounded-xl border-[3px] border-white/30 object-contain"
+                className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30 object-contain"
               />
             )}
           </div>

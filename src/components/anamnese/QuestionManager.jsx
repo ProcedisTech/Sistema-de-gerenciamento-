@@ -210,7 +210,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2e8f0]">
           <h3 className="text-[16px] font-bold text-[#0f172a]">Editar Pergunta</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-[#64748b] hover:bg-[#f1f5f9]">
@@ -220,7 +220,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
 
         <form onSubmit={handleSalvar} className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           {erro && (
-            <div className="bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
+            <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -229,7 +229,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
               <select
                 value={categoriaId}
                 onChange={(e) => setCategoriaId(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
               >
                 <option value="">Selecione...</option>
                 {categorias.map((c) => (
@@ -241,7 +241,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e] ml-1">Tipo de Resposta *</label>
               {tipoTravado ? (
-                <div className="w-full px-4 py-3 bg-[#f1f5f9] border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] font-medium text-[#475569] flex items-center gap-2">
+                <div className="w-full px-4 py-3 bg-[#f1f5f9] border border-app-border rounded-xl text-[14px] font-medium text-[#475569] flex items-center gap-2">
                   <span>{tipoLabel(tipoStrOriginal || tipoSelecionado)}</span>
                   <span className="text-[11px] text-[#94a3b8] font-normal ml-auto">(não editável)</span>
                 </div>
@@ -249,7 +249,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
                 <select
                   value={tipoRespostaId}
                   onChange={(e) => { setTipoRespostaId(e.target.value); }}
-                  className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                  className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
                 >
                   <option value="">Selecione...</option>
                 {tiposResposta.filter((t) => t.ativo !== false).map((t) => (
@@ -265,7 +265,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
             <select
               value={prioridade}
               onChange={(e) => setPrioridade(e.target.value)}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
             >
               <option value="NORMAL">Normal</option>
               <option value="ALERTA">⚠️ Alerta</option>
@@ -278,12 +278,12 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               rows={3}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
             />
           </div>
 
           {mostrarAlternativas && (
-            <div className="space-y-3 p-4 bg-[#f8fbfb] border-[3px] border-[#a855f7]/20 rounded-xl">
+            <div className="space-y-3 p-4 bg-[#f8fbfb] border border-fuchsia-200 rounded-xl">
               <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas (arraste para reordenar)</label>
 
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -316,7 +316,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
             <button
               type="submit"
               disabled={salvando}
-              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" strokeWidth={2.5} />}
               Salvar
@@ -324,7 +324,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/20"
+              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border border-slate-200 hover:border-[#00a88e]/20"
             >
               Cancelar
             </button>
@@ -584,7 +584,7 @@ export function QuestionManager({
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-conflict-title"
-            className="bg-white rounded-2xl border-[3px] border-[#00a88e]/20 shadow-2xl w-full max-w-md flex flex-col"
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md flex flex-col"
           >
             <div className="px-6 py-4 border-b border-[#e2e8f0]">
               <h3 id="delete-conflict-title" className="text-[16px] font-bold text-[#0f172a]">
@@ -600,7 +600,7 @@ export function QuestionManager({
               <button
                 type="button"
                 onClick={() => setDeleteConflictModal(null)}
-                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md"
+                className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md"
               >
                 Entendi
               </button>
@@ -625,7 +625,7 @@ export function QuestionManager({
               <select
                 value={filtroCategoria}
                 onChange={(e) => setFiltroCategoria(e.target.value)}
-                className="px-3 py-2 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[13px] font-medium focus:outline-none focus:border-[#00a88e] appearance-none"
+                className="px-3 py-2 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[13px] font-medium focus:outline-none focus:border-[#00a88e] appearance-none"
               >
                 <option value="">Todas</option>
                 {categorias.map((c) => (
@@ -647,7 +647,7 @@ export function QuestionManager({
               setFormAberto(true);
             }
           }}
-          className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent flex items-center gap-2"
+          className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent flex items-center gap-2"
         >
           {formAberto ? <ChevronUp className="w-4 h-4" /> : <Plus className="w-4 h-4" strokeWidth={2.5} />}
           {formAberto ? 'Fechar' : 'Nova Pergunta'}
@@ -656,25 +656,25 @@ export function QuestionManager({
 
       {/* Create form */}
       {formAberto && (
-        <form onSubmit={handleCriar} className="bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-2xl p-6 space-y-4">
+        <form onSubmit={handleCriar} className="bg-[#f8fbfb] border border-slate-200 rounded-2xl p-6 space-y-4">
           <h4 className="text-[16px] font-bold text-[#0f172a]">Criar Pergunta</h4>
 
           {erro && (
-            <div className="bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
+            <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e] ml-1">Categoria *</label>
               {lockedIdStr ? (
-                <div className="w-full px-4 py-3 bg-[#f1f5f9] border-[3px] border-[#00a88e]/15 rounded-xl text-[14px] font-medium text-[#475569]">
+                <div className="w-full px-4 py-3 bg-[#f1f5f9] border border-app-border rounded-xl text-[14px] font-medium text-[#475569]">
                   {panelTitle || categorias.find((c) => String(c.id) === lockedIdStr)?.nome || '—'}
                 </div>
               ) : (
                 <select
                   value={categoriaId}
                   onChange={(e) => setCategoriaId(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                  className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
                 >
                   <option value="">Selecione...</option>
                   {categorias.map((c) => (
@@ -689,7 +689,7 @@ export function QuestionManager({
               <select
                 value={tipoRespostaId}
                 onChange={(e) => { setTipoRespostaId(e.target.value); setAlternativas([]); }}
-                className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
               >
                 <option value="">Selecione...</option>
                 {tiposResposta.filter((t) => t.ativo !== false).map((t) => (
@@ -704,7 +704,7 @@ export function QuestionManager({
             <select
               value={prioridade}
               onChange={(e) => setPrioridade(e.target.value)}
-              className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+              className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
             >
               <option value="NORMAL">Normal</option>
               <option value="ALERTA">⚠️ Alerta</option>
@@ -718,7 +718,7 @@ export function QuestionManager({
               onChange={(e) => setDescricao(e.target.value)}
               rows={2}
               placeholder="Ex: O paciente faz uso de medicamentos controlados?"
-              className="w-full px-4 py-3 bg-white border-[3px] border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
             />
           </div>
 
@@ -761,7 +761,7 @@ export function QuestionManager({
           )}
 
           {precisaAlternativas && (
-            <div className="space-y-3 p-4 bg-white border-[3px] border-[#a855f7]/20 rounded-xl">
+            <div className="space-y-3 p-4 bg-white border border-fuchsia-200 rounded-xl">
               <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas *</label>
 
               {alternativas.map((alt, idx) => (
@@ -794,12 +794,12 @@ export function QuestionManager({
             <button
               type="submit"
               disabled={criando}
-              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Salvar Pergunta
             </button>
-            <button type="button" onClick={() => { setFormAberto(false); resetForm(); }} className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border-[3px] border-[#e2e8f0] hover:border-[#00a88e]/20">
+            <button type="button" onClick={() => { setFormAberto(false); resetForm(); }} className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border border-slate-200 hover:border-[#00a88e]/20">
               Cancelar
             </button>
           </div>
@@ -837,7 +837,7 @@ export function QuestionManager({
               <div
                 key={p.id}
                 onClick={() => { if (!isDeleting) setEditingPergunta(p); }}
-                className={`p-4 rounded-xl border-[3px] transition-all flex flex-col shadow-sm cursor-pointer ${
+                className={`p-4 rounded-xl border transition-all flex flex-col shadow-sm cursor-pointer ${
                   prioridadePergunta === 'ALERTA'
                     ? 'border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] hover:border-red-400'
                     : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
@@ -848,7 +848,7 @@ export function QuestionManager({
                   <div className="flex-1 min-w-0">
                     <p className="text-[14px] font-bold text-[#0f172a] break-words [overflow-wrap:anywhere]">{p.descricao}</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border-[2px] border-[#00a88e]/15">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#e6f7f5] text-[#0f766e] border border-app-border">
                         {p.categoriaNome || 'Sem categoria'}
                       </span>
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] ${tipoBadgeColor(p.tipoResposta)}`}>

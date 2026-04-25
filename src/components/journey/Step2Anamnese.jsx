@@ -95,7 +95,7 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
   const tipo = pergunta.tipoResposta;
   const qLabel = `text-[13px] font-bold ml-1 ${alerta ? 'text-[#1f2937]' : 'text-[#0f766e]'}`;
   const qTitle = 'text-[14px] font-bold text-[#1f2937]';
-  const fieldBase = 'w-full p-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]';
+  const fieldBase = 'w-full p-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]';
 
   if (tipo === 'texto') {
     return (
@@ -184,14 +184,14 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
                     onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id });
                   }
                 }}
-                className={`flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                className={`flex items-center gap-3 p-3 border rounded-xl transition-all ${
                   readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
                 }${
                   ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
                 }`}
               >
                 <div
-                  className={`w-5 h-5 rounded-full border-[3px] flex items-center justify-center flex-shrink-0 ${
+                  className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
                     ativa ? 'border-[#00a88e]' : 'border-[#94a3b8]'
                   }`}
                 >
@@ -235,7 +235,7 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
                     toggle();
                   }
                 }}
-                className={`flex items-center gap-3 p-3 border-[3px] rounded-xl transition-all ${
+                className={`flex items-center gap-3 p-3 border rounded-xl transition-all ${
                   readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
                 }${
                   ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
@@ -256,7 +256,7 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
 
   return (
     <div
-      className={`p-3 border-[3px] rounded-xl text-[13px] ${
+      className={`p-3 border rounded-xl text-[13px] ${
         alerta ? 'bg-[#fff5f5] border-red-300 text-[#1f2937]' : 'bg-[#f8fbfb] border-[#e2e8f0] text-[#64748b]'
       }`}
     >
@@ -717,7 +717,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-4 mb-8">
-        <div className="bg-[#f3e8ff] p-3 rounded-2xl text-[#a855f7] border-[3px] border-[#a855f7]/25">
+        <div className="bg-[#f3e8ff] p-3 rounded-2xl text-[#a855f7] border border-fuchsia-200">
           <ClipboardList className="w-7 h-7" strokeWidth={2.5} />
         </div>
         <div>
@@ -979,7 +979,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
-        <div className="space-y-5 mb-6 p-6 bg-white border-[3px] border-[#a855f7]/20 rounded-2xl">
+        <div className="mx-auto w-full max-w-3xl space-y-5 mb-6 p-6 bg-white border border-fuchsia-200 rounded-2xl">
           <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">{fichaSelecionada.nome}</h4>
           {itensOrdenados.map((item) => {
             const isAlerta = item.pergunta?.prioridade === 'ALERTA';
@@ -989,7 +989,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 key={item.id}
                 className={isAlerta
                   ? 'rounded-xl border-[2px] border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] p-4'
-                  : 'rounded-xl border-[2px] border-[#00a88e]/15 bg-white p-4'}
+                  : 'rounded-xl border border-app-border bg-white p-4'}
               >
                 {(isAlerta || showObrigatorio) && (
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -1055,7 +1055,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       {/* Queixa/expectativas: só ficha básica ou sem perguntas; ficha com itens usa só perguntas */}
       {mostrarQueixaExpectativas ? (
         <form
-          className={`space-y-6 bg-white border-[3px] rounded-2xl p-6 ${
+          className={`space-y-6 bg-white border rounded-2xl p-6 ${
             step2Errors.queixa || step2Errors.expectativas ? 'border-red-300' : 'border-[#00a88e]/25'
           }`}
         >

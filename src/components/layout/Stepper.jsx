@@ -41,12 +41,12 @@ export function Stepper({ currentStep }) {
           return (
             <React.Fragment key={step.id}>
               <div
-                className={`flex min-h-[44px] min-w-0 flex-col items-center justify-center rounded-xl border-[3px] px-2 py-2 transition-all sm:min-w-[118px] sm:px-3 sm:py-3 md:min-w-[140px] ${
+                className={`flex min-h-[44px] min-w-0 flex-col items-center justify-center rounded-xl border px-2 py-2 shadow-app-card transition-all sm:min-w-[118px] sm:px-3 sm:py-3 md:min-w-[140px] ${
                   isCompleted
-                    ? 'border-[#00a88e] bg-[#00a88e] shadow-sm'
+                    ? 'border-app-accent bg-app-accent text-white shadow-sm'
                     : isActive
-                      ? 'border-[#00a88e]/40 bg-[#e6f7f5] shadow-sm'
-                      : 'border-[#00a88e]/15 bg-white'
+                      ? 'border-app-accent bg-app-nav-active shadow-sm'
+                      : 'border-app-border bg-white hover:bg-app-nav-hover'
                 }`}
               >
                 <div

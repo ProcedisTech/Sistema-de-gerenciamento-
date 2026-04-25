@@ -428,7 +428,7 @@ export function Step3Termos({
     <div className="min-w-0">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <div className="rounded-2xl border-[3px] border-[#22c55e]/25 bg-[#dcfce7] p-3 text-[#22c55e]">
+          <div className="rounded-2xl border border-emerald-200 bg-[#dcfce7] p-3 text-[#22c55e]">
             <Shield className="h-7 w-7" strokeWidth={2.5} />
           </div>
           <div>
@@ -838,7 +838,7 @@ export function Step4Procedimento({
   return (
     <div className="min-w-0">
       <div className="mb-6 flex items-center gap-4">
-        <div className="rounded-2xl border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] p-3 text-[#00a88e]">
+        <div className="rounded-2xl border border-app-border bg-[#e6f7f5] p-3 text-[#00a88e]">
           <Stethoscope className="h-7 w-7" strokeWidth={2.5} />
         </div>
         <div>
@@ -848,7 +848,7 @@ export function Step4Procedimento({
       </div>
 
       <div
-        className={`mb-6 space-y-5 rounded-2xl border-[3px] bg-white p-4 sm:p-6 ${
+        className={`mb-6 space-y-5 rounded-2xl border bg-white p-4 sm:p-6 ${
           step4Errors.nomeProcedimento || step4Errors.observacoesExecucao ? 'border-red-300' : 'border-[#00a88e]/25'
         }`}
       >

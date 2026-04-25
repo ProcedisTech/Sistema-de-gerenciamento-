@@ -14,7 +14,7 @@ function BackendWaitScreen({ variant, onManualRetry }) {
   if (variant === 'checking') {
     return (
       <div className="backend-gate-bg flex min-h-screen flex-col items-center justify-center px-5 py-10">
-        <div className="backend-gate-card w-full max-w-lg rounded-[22px] border-[3px] border-[#00a88e]/25 bg-white p-8 shadow-xl shadow-[#00a88e]/10">
+        <div className="backend-gate-card w-full max-w-lg rounded-[22px] border border-app-border bg-white p-8 shadow-xl shadow-app-card">
           <div className="backend-gate-pulse-ring mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-[#e6f7f5]">
             <Loader2 className="h-11 w-11 animate-spin text-[#00a88e]" strokeWidth={2.25} aria-hidden />
           </div>
@@ -42,7 +42,7 @@ function BackendWaitScreen({ variant, onManualRetry }) {
 
   return (
     <div className="backend-gate-bg flex min-h-screen flex-col items-center justify-center px-5 py-10">
-      <div className="backend-gate-card w-full max-w-lg rounded-[22px] border-[3px] border-amber-200/90 bg-white p-8 shadow-xl shadow-amber-100/80">
+      <div className="backend-gate-card w-full max-w-lg rounded-[22px] border border-amber-200/90 bg-white p-8 shadow-xl shadow-amber-100/80">
         <div
           className={`mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl ${
             isSlow ? 'bg-amber-50' : 'bg-red-50'

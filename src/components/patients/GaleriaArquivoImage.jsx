@@ -42,7 +42,7 @@ export function GaleriaArquivoLightbox({ url, alt = 'Preview da foto' }) {
     <img
       src={src}
       alt={alt}
-      className="max-w-[90vw] max-h-[85vh] rounded-xl border-[3px] border-white/30 object-contain"
+      className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30 object-contain"
     />
   );
 }

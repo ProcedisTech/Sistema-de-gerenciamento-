@@ -75,8 +75,8 @@ export function LoginForm({
   return (
     <div className="flex items-center justify-center h-screen bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb]">
       <div className="w-full max-w-[420px] mx-4">
-        <div className="bg-white rounded-2xl border-[3px] border-[#00a88e]/15 shadow-xl overflow-hidden">
-          <div className="bg-gradient-to-br from-[#e6f7f5] to-[#f0fdfa] p-10 flex items-center justify-center border-b-[3px] border-[#00a88e]/15">
+        <div className="bg-white rounded-2xl border border-app-border shadow-xl overflow-hidden">
+          <div className="bg-gradient-to-br from-[#e6f7f5] to-[#f0fdfa] p-10 flex items-center justify-center border-b border-app-border">
             <div className="bg-[#00a88e] p-4 rounded-2xl shadow-lg">
               <Shield className="w-8 h-8 text-white" strokeWidth={2} />
             </div>
@@ -99,13 +99,13 @@ export function LoginForm({
             </p>
 
             {signUpSuccess ? (
-              <div className="mb-6 rounded-xl border-[3px] border-[#86efac] bg-[#f0fdf4] p-4 text-[13px] font-semibold text-[#166534]">
+              <div className="mb-6 rounded-xl border border-emerald-200 bg-[#f0fdf4] p-4 text-[13px] font-semibold text-[#166534]">
                 Conta criada! Verifique seu e-mail para confirmar o cadastro.
               </div>
             ) : null}
 
             {bannerError ? (
-              <div className="mb-6 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-4 text-[13px] font-bold">
+              <div className="mb-6 bg-red-50 text-red-600 border border-red-200 rounded-xl p-4 text-[13px] font-bold">
                 {bannerError}
               </div>
             ) : null}
@@ -122,7 +122,7 @@ export function LoginForm({
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="seu@email.com"
-                    className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
+                    className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
                     disabled={disabled}
                     required
                   />
@@ -141,7 +141,7 @@ export function LoginForm({
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Mínimo 6 caracteres"
                       minLength={6}
-                      className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
+                      className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
                       disabled={disabled}
                       required
                     />
@@ -171,7 +171,7 @@ export function LoginForm({
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Repita a senha"
-                      className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
+                      className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
                       disabled={disabled}
                       required
                     />
@@ -193,7 +193,7 @@ export function LoginForm({
                 <button
                   type="submit"
                   disabled={disabled}
-                  className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl font-bold text-[14px] transition-all shadow-md border-[3px] border-transparent mt-6 flex items-center justify-center gap-2"
+                  className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl font-bold text-[14px] transition-all shadow-md border border-transparent mt-6 flex items-center justify-center gap-2"
                 >
                   <Shield className="w-5 h-5" strokeWidth={2.5} />
                   {signUpSubmitting ? 'Criando conta…' : 'Cadastrar'}
@@ -210,7 +210,7 @@ export function LoginForm({
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="E-mail ou nome cadastrado"
-                    className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
+                    className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
                     disabled={disabled}
                   />
                 </div>
@@ -225,7 +225,7 @@ export function LoginForm({
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Sua senha"
-                      className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
+                      className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] transition-all"
                       disabled={disabled}
                     />
                     <button
@@ -246,7 +246,7 @@ export function LoginForm({
                 <button
                   type="submit"
                   disabled={disabled}
-                  className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl font-bold text-[14px] transition-all shadow-md border-[3px] border-transparent mt-6 flex items-center justify-center gap-2"
+                  className="w-full bg-[#00a88e] hover:bg-[#00967f] disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl font-bold text-[14px] transition-all shadow-md border border-transparent mt-6 flex items-center justify-center gap-2"
                 >
                   <Shield className="w-5 h-5" strokeWidth={2.5} />
                   {loginSubmitting ? 'Entrando…' : 'Entrar no Sistema'}

@@ -87,7 +87,7 @@ export function CadastrarClinica({ onComplete }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb] px-4">
-      <div className="w-full max-w-md rounded-2xl border-[3px] border-[#00a88e]/20 bg-white p-8 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
         <div className="mb-6 flex justify-center">
           <div className="rounded-2xl bg-[#e6f7f5] p-4 text-[#00a88e]">
             <Building2 className="h-8 w-8" strokeWidth={2} aria-hidden />
@@ -107,7 +107,7 @@ export function CadastrarClinica({ onComplete }) {
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
               placeholder="Razão social ou nome fantasia"
               disabled={saving}
               autoComplete="organization"
@@ -123,7 +123,7 @@ export function CadastrarClinica({ onComplete }) {
               inputMode="numeric"
               value={cnpj}
               onChange={handleCnpjChange}
-              className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
               placeholder="00.000.000/0000-00"
               disabled={saving}
               autoComplete="off"
@@ -139,7 +139,7 @@ export function CadastrarClinica({ onComplete }) {
               inputMode="numeric"
               value={telefone}
               onChange={handleTelChange}
-              className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
               placeholder="(00) 00000-0000"
               disabled={saving}
               autoComplete="tel"

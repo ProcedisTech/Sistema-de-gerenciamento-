@@ -148,7 +148,7 @@ export function UsersCrudView() {
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[14px] text-white bg-[#00a88e] border-[3px] border-[#00a88e]/25 hover:bg-[#00967f] shadow-sm"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[14px] text-white bg-[#00a88e] border border-app-border hover:bg-[#00967f] shadow-sm"
         >
           <Plus className="w-5 h-5" strokeWidth={2.5} />
           Novo usuário
@@ -156,7 +156,7 @@ export function UsersCrudView() {
       </div>
 
       {error && (
-        <div className="rounded-xl border-[3px] border-red-200 bg-red-50 text-red-700 px-4 py-3 text-[13px] font-bold">
+        <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-[13px] font-bold">
           {error}
         </div>
       )}
@@ -167,10 +167,10 @@ export function UsersCrudView() {
           Carregando…
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb]">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-[#f8fbfb]">
           <table className="w-full text-left text-[13px] sm:text-[14px]">
             <thead>
-              <tr className="border-b-[3px] border-[#00a88e]/15 bg-white">
+              <tr className="border-b border-app-border bg-white">
                 <th className="p-3 font-bold text-[#0f766e]">Nome (login)</th>
                 <th className="p-3 font-bold text-[#0f766e] hidden sm:table-cell">Papel</th>
                 <th className="p-3 font-bold text-[#0f766e] hidden md:table-cell">roleUserId</th>
@@ -208,7 +208,7 @@ export function UsersCrudView() {
                       <button
                         type="button"
                         onClick={() => openEdit(row)}
-                        className="inline-flex items-center justify-center p-2 rounded-xl border-[3px] border-[#00a88e]/20 text-[#00a88e] hover:bg-[#e6f7f5] mr-1"
+                        className="inline-flex items-center justify-center p-2 rounded-xl border border-slate-200 text-[#00a88e] hover:bg-[#e6f7f5] mr-1"
                         title="Editar"
                       >
                         <Pencil className="w-4 h-4" />
@@ -216,7 +216,7 @@ export function UsersCrudView() {
                       <button
                         type="button"
                         onClick={() => handleDelete(row)}
-                        className="inline-flex items-center justify-center p-2 rounded-xl border-[3px] border-red-100 text-[#ef4444] hover:bg-red-50"
+                        className="inline-flex items-center justify-center p-2 rounded-xl border border-red-100 text-[#ef4444] hover:bg-red-50"
                         title="Desativar"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -238,7 +238,7 @@ export function UsersCrudView() {
             aria-label="Fechar"
             onClick={closeModal}
           />
-          <div className="relative w-full max-w-md bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl p-6">
+          <div className="relative w-full max-w-md bg-white rounded-2xl border border-app-border shadow-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[17px] font-bold text-[#0f172a]">
                 {editRow ? 'Editar usuário' : 'Novo usuário'}
@@ -246,7 +246,7 @@ export function UsersCrudView() {
               <button
                 type="button"
                 onClick={closeModal}
-                className="p-2 rounded-xl border-[3px] border-[#e2e8f0] text-[#64748b] hover:bg-[#f8fbfb]"
+                className="p-2 rounded-xl border border-slate-200 text-[#64748b] hover:bg-[#f8fbfb]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -262,7 +262,7 @@ export function UsersCrudView() {
                 <input
                   value={formUsername}
                   onChange={(e) => setFormUsername(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] text-[14px] font-medium"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-[#f8fbfb] text-[14px] font-medium"
                   placeholder="Ex.: Maria Silva"
                   disabled={saving}
                 />
@@ -276,7 +276,7 @@ export function UsersCrudView() {
                   type="password"
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] text-[14px] font-medium"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-[#f8fbfb] text-[14px] font-medium"
                   placeholder="••••••••"
                   disabled={saving}
                   autoComplete="new-password"
@@ -292,7 +292,7 @@ export function UsersCrudView() {
                     <select
                       value={formRoleUserId}
                       onChange={(e) => setFormRoleUserId(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] text-[14px] font-medium"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-[#f8fbfb] text-[14px] font-medium"
                       disabled={saving}
                     >
                       <option value="">Selecione…</option>
@@ -309,7 +309,7 @@ export function UsersCrudView() {
                     <input
                       value={formRoleUserId}
                       onChange={(e) => setFormRoleUserId(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] text-[14px] font-mono"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-[#f8fbfb] text-[14px] font-mono"
                       placeholder="UUID do RoleUser"
                       disabled={saving}
                     />
@@ -325,14 +325,14 @@ export function UsersCrudView() {
                   type="button"
                   onClick={closeModal}
                   disabled={saving}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-[14px] border-[3px] border-[#e2e8f0] text-[#64748b] hover:bg-[#f8fbfb]"
+                  className="flex-1 py-2.5 rounded-xl font-bold text-[14px] border border-slate-200 text-[#64748b] hover:bg-[#f8fbfb]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-[14px] text-white bg-[#00a88e] border-[3px] border-[#00a88e]/25 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 rounded-xl font-bold text-[14px] text-white bg-[#00a88e] border border-app-border disabled:opacity-60 inline-flex items-center justify-center gap-2"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Salvar

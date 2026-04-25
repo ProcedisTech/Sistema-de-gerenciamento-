@@ -102,7 +102,7 @@ export function CompletarPerfil({ onComplete, email }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb] px-4">
-      <div className="w-full max-w-md rounded-2xl border-[3px] border-[#00a88e]/20 bg-white p-8 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
         <div className="mb-6 flex justify-center">
           <div className="rounded-2xl bg-[#e6f7f5] p-4 text-[#00a88e]">
             <User className="h-8 w-8" strokeWidth={2} aria-hidden />
@@ -122,7 +122,7 @@ export function CompletarPerfil({ onComplete, email }) {
               type="text"
               value={nomeCompleto}
               onChange={(e) => setNomeCompleto(e.target.value)}
-              className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
               placeholder="Seu nome completo"
               disabled={saving}
               autoComplete="name"
@@ -138,7 +138,7 @@ export function CompletarPerfil({ onComplete, email }) {
               inputMode="numeric"
               value={telefone}
               onChange={(e) => setTelefone(formatBrNationalParentheses(e.target.value))}
-              className="w-full rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-[15px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
               placeholder="(00) 00000-0000"
               disabled={saving}
               autoComplete="tel"

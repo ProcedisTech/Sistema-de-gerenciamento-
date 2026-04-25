@@ -72,7 +72,7 @@ export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, ge
             role="dialog"
             aria-modal="true"
             aria-labelledby="journey-cancel-title"
-            className="flex w-full max-w-md flex-col rounded-2xl border-[3px] border-[#00a88e]/20 bg-white shadow-2xl"
+            className="flex w-full max-w-md flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl"
           >
             <div className="border-b border-[#e2e8f0] px-6 py-4">
               <h3 id="journey-cancel-title" className="text-[16px] font-bold text-[#0f172a]">
@@ -88,7 +88,7 @@ export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, ge
               <button
                 type="button"
                 onClick={() => setCancelModalOpen(false)}
-                className="rounded-xl border-[3px] border-[#e2e8f0] bg-white px-5 py-3 text-[14px] font-bold text-[#64748b] hover:border-[#00a88e]/20"
+                className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-[14px] font-bold text-[#64748b] hover:border-[#00a88e]/20"
               >
                 Continuar atendimento
               </button>
@@ -98,7 +98,7 @@ export function JourneyPatientContextHeader({ pacienteAtual, onCancelJourney, ge
                   setCancelModalOpen(false);
                   onCancelJourney();
                 }}
-                className="flex items-center gap-2 rounded-xl border-[3px] border-transparent bg-red-500 px-5 py-3 text-[14px] font-bold text-white shadow-md transition-colors hover:bg-red-600"
+                className="flex items-center gap-2 rounded-xl border border-transparent bg-red-500 px-5 py-3 text-[14px] font-bold text-white shadow-md transition-colors hover:bg-red-600"
               >
                 Sair
               </button>

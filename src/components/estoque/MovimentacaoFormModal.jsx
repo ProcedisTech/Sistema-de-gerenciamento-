@@ -64,13 +64,13 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-2xl w-full max-w-[520px] max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b-[3px] border-[#00a88e]/10">
+      <div className="relative bg-white rounded-2xl border border-app-border shadow-2xl w-full max-w-[520px] max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-app-border">
           <h3 className="text-[18px] font-bold text-[#0f172a]">Nova Movimentação</h3>
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-xl border-[3px] border-[#00a88e]/20 text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa] flex items-center justify-center"
+            className="w-9 h-9 rounded-xl border border-slate-200 text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa] flex items-center justify-center"
           >
             <X className="w-4 h-4" strokeWidth={2.5} />
           </button>
@@ -78,7 +78,7 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
+            <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">
               {error}
             </div>
           )}
@@ -90,7 +90,7 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
             <select
               value={tipo}
               onChange={(e) => setTipo(e.target.value)}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
             >
               <optgroup label="Entrada">
                 {TIPOS.filter((t) => t.grupo === 'entrada').map((t) => (
@@ -112,7 +112,7 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
             <select
               value={itemEstoqueId}
               onChange={(e) => { setItemEstoqueId(e.target.value); setLoteItemEstoqueId(''); }}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
             >
               <option value="">Selecione o item...</option>
               {(itens || []).filter((i) => i.ativo !== false).map((i) => (
@@ -136,7 +136,7 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
                 value={loteItemEstoqueId}
                 onChange={(e) => setLoteItemEstoqueId(e.target.value)}
                 disabled={!itemEstoqueId || lotesDisp.length === 0}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none disabled:opacity-60"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none disabled:opacity-60"
               >
                 <option value="">
                   {!itemEstoqueId ? 'Selecione um item primeiro' : lotesDisp.length === 0 ? 'Nenhum lote disponível' : 'Selecione o lote...'}
@@ -163,7 +163,7 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
               placeholder="0"
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               required
             />
             {isSaida && selectedLote && (
@@ -180,7 +180,7 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
               onChange={(e) => setObservacao(e.target.value)}
               rows={2}
               placeholder="Motivo, NF, fornecedor..."
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
             />
           </div>
 
@@ -189,14 +189,14 @@ export function MovimentacaoFormModal({ isOpen, onClose, onSave, itens, saving, 
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex-1 py-3 rounded-xl font-bold text-[14px] border-[3px] border-[#00a88e]/25 text-[#64748b] hover:bg-[#f8fbfb] transition-all"
+              className="flex-1 py-3 rounded-xl font-bold text-[14px] border border-app-border text-[#64748b] hover:bg-[#f8fbfb] transition-all"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving || !itemEstoqueId || !loteItemEstoqueId || !quantidade}
-              className={`flex-1 py-3 rounded-xl font-bold text-[14px] border-[3px] border-transparent shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3 rounded-xl font-bold text-[14px] border border-transparent shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                 isSaida
                   ? 'bg-[#f59e0b] hover:bg-[#d97706] text-white'
                   : 'bg-[#00a88e] hover:bg-[#00967f] text-white'

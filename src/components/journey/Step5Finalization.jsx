@@ -672,7 +672,7 @@ export function Step5Finalization({
       {/* ── FIM RESUMO ── */}
 
       <div className="mb-8 flex items-center gap-4">
-        <div className="rounded-2xl border-[3px] border-[#22c55e]/25 bg-[#dcfce7] p-3 text-[#22c55e]">
+        <div className="rounded-2xl border border-emerald-200 bg-[#dcfce7] p-3 text-[#22c55e]">
           <CheckCircle className="h-7 w-7" strokeWidth={2.5} />
         </div>
         <div>
@@ -682,7 +682,7 @@ export function Step5Finalization({
       </div>
 
       <div
-        className={`space-y-6 rounded-2xl border-[3px] bg-white p-6 ${
+        className={`space-y-6 rounded-2xl border bg-white p-6 ${
           step5Errors.orientacoes ? 'border-red-300' : 'border-[#00a88e]/25'
         }`}
       >
@@ -714,7 +714,7 @@ export function Step5Finalization({
             onChange={(e) => handleReturnDateChange(e.target.value)}
             placeholder="DD/MM/AAAA"
             maxLength={10}
-            className={`w-full max-w-xs rounded-xl border-[3px] bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:ring-4 focus:ring-[#00a88e]/20 ${
+            className={`w-full max-w-xs rounded-xl border bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:ring-4 focus:ring-[#00a88e]/20 ${
               returnDateInputInvalid
                 ? 'border-red-400 bg-red-50'
                 : 'border-[#00a88e]/25 focus:border-[#00a88e]'
@@ -745,7 +745,7 @@ export function Step5Finalization({
                 setStep5Errors((prev) => ({ ...prev, orientacoes: false }));
               }
             }}
-            className={`flex cursor-pointer items-center gap-4 rounded-xl border-[3px] p-4 shadow-sm transition-all ${
+            className={`flex cursor-pointer items-center gap-4 rounded-xl border p-4 shadow-sm transition-all ${
               step5Errors.orientacoes
                 ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
                 : orientacoes
