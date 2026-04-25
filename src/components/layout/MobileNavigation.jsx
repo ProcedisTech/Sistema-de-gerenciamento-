@@ -1,9 +1,9 @@
 import React from 'react';
-import { LogOut, Settings, Users } from 'lucide-react';
+import { CalendarDays, LogOut, Settings, Users } from 'lucide-react';
 
-export function MobileNavigation({ activeView, onGoPacientes, onGoConfiguracoes, onLogout }) {
+export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoConfiguracoes, onLogout }) {
   const tabClass = (isActive) =>
-    `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1 transition-all ${
+    `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1 transition-all ${
       isActive
         ? 'border-app-border bg-app-nav-active text-app-accent-deep shadow-sm'
         : 'border-transparent bg-white text-[#64748b] hover:bg-app-nav-hover active:bg-app-nav-active'
@@ -18,8 +18,18 @@ export function MobileNavigation({ activeView, onGoPacientes, onGoConfiguracoes,
           className={tabClass(activeView === 'pacientes')}
           aria-current={activeView === 'pacientes' ? 'page' : undefined}
         >
-          <Users className="h-6 w-6" strokeWidth={2.5} />
-          <span className="text-[11px] font-bold leading-tight">Pacientes</span>
+          <Users className="h-5 w-5" strokeWidth={2.5} />
+          <span className="text-[10px] font-bold leading-tight">Pacientes</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onGoAgenda}
+          className={tabClass(activeView === 'agenda')}
+          aria-current={activeView === 'agenda' ? 'page' : undefined}
+        >
+          <CalendarDays className="h-5 w-5" strokeWidth={2.5} />
+          <span className="text-[10px] font-bold leading-tight">Agenda</span>
         </button>
 
         <button
@@ -28,8 +38,8 @@ export function MobileNavigation({ activeView, onGoPacientes, onGoConfiguracoes,
           className={tabClass(activeView === 'configuracoes')}
           aria-current={activeView === 'configuracoes' ? 'page' : undefined}
         >
-          <Settings className="h-6 w-6" strokeWidth={2.5} />
-          <span className="text-[11px] font-bold leading-tight">Configurações</span>
+          <Settings className="h-5 w-5" strokeWidth={2.5} />
+          <span className="text-[10px] font-bold leading-tight">Configurações</span>
         </button>
 
         <button
@@ -38,8 +48,8 @@ export function MobileNavigation({ activeView, onGoPacientes, onGoConfiguracoes,
           className="flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl border border-transparent bg-white py-1 text-[#ef4444] hover:bg-red-50 active:bg-red-100"
           aria-label="Sair do sistema"
         >
-          <LogOut className="h-6 w-6" strokeWidth={2.5} />
-          <span className="text-[11px] font-bold leading-tight">Sair</span>
+          <LogOut className="h-5 w-5" strokeWidth={2.5} />
+          <span className="text-[10px] font-bold leading-tight">Sair</span>
         </button>
       </div>
     </div>

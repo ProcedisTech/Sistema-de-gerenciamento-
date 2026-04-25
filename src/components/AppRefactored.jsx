@@ -36,6 +36,7 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
+import { AgendaDashboard } from './agenda';
 import { ProcedureCameraWidget } from './canvas';
 
 // Componentes da Jornada (paciente na aba Pacientes; etapas 1–5)
@@ -1037,7 +1038,7 @@ export default function App() {
             : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0`
         }`}
       >
-        {(isJornadaView || (activeView !== 'pacientes' && activeView !== 'configuracoes')) && (
+        {isJornadaView && (
         <header
           className={`border-b border-app-border shadow-app-card ${
             isJornadaView
@@ -1410,7 +1411,7 @@ export default function App() {
           className={`w-full mx-auto ${
             activeView === 'configuracoes'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
-              : activeView === 'pacientes'
+              : activeView === 'pacientes' || activeView === 'agenda'
                 ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
                 : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
           }`}
@@ -1419,7 +1420,7 @@ export default function App() {
             className={`bg-white rounded-[20px] border border-app-border shadow-app-card ${
               activeView === 'configuracoes'
                 ? 'px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
-                : activeView === 'pacientes'
+                : activeView === 'pacientes' || activeView === 'agenda'
                   ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
                   : 'p-4 sm:p-8 pb-5 sm:pb-6'
             }`}
@@ -1459,7 +1460,14 @@ export default function App() {
               />
             )}
 
-            {!['jornada', 'pacientes', 'configuracoes'].includes(activeView) && (
+            {activeView === 'agenda' && (
+              <AgendaDashboard
+                patients={patients}
+                onStartAttendance={handleStartAttendance}
+              />
+            )}
+
+            {!['jornada', 'pacientes', 'agenda', 'configuracoes'].includes(activeView) && (
               <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
@@ -1481,6 +1489,7 @@ export default function App() {
         <MobileNavigation
           activeView={activeView}
           onGoPacientes={() => goToView('pacientes')}
+          onGoAgenda={() => goToView('agenda')}
           onGoConfiguracoes={() => goToView('configuracoes')}
           onLogout={handleLogout}
         />
