@@ -16,7 +16,8 @@ import {
   Calendar,
   Eye,
 } from 'lucide-react';
-import { procedimentosApi, termoAssinaturaApi, termosApi } from '../../services/api';
+import { authHeadersForFetch, procedimentosApi, termoAssinaturaApi, termosApi } from '../../services/api';
+import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
@@ -34,7 +35,7 @@ function formatTimestamp(ts) {
 }
 
 /** Modal fullscreen de assinatura (profissional ou paciente). */
-function SignatureFullscreenModal({
+export function SignatureFullscreenModal({
   open,
   title,
   onClose,
@@ -261,6 +262,10 @@ export function Step3Termos({
   const [profAssinaturaTimestamp, setProfAssinaturaTimestamp] = useState(null);
   const [patAssinaturaTimestamp, setPatAssinaturaTimestamp] = useState(null);
   const [assinaturaPersistida, setAssinaturaPersistida] = useState(false);
+  const [showSalvarPadraoPrompt, setShowSalvarPadraoPrompt] = useState(false);
+  const [savingPadraoPrompt, setSavingPadraoPrompt] = useState(false);
+  const [autoSignatureApplied, setAutoSignatureApplied] = useState(false);
+  const assinaturaProfRecenteRef = useRef('');
 
   useEffect(() => {
     setAssinaturaPersistida(false);
@@ -390,6 +395,7 @@ export function Step3Termos({
       setTermoSearch('');
       setTermoLido(false);
       setProfissionalAssinaturaDataUrl('');
+      setAutoSignatureApplied(false);
       setTermoAssinaturaDataUrl('');
       if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
       setProfAssinaturaTimestamp(null);
@@ -401,15 +407,73 @@ export function Step3Termos({
     [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors]
   );
 
-  const handleConfirmProf = (dataUrl) => {
+  const applyProfissionalSignature = useCallback((dataUrl, { auto = false } = {}) => {
+    assinaturaProfRecenteRef.current = dataUrl;
     setProfissionalAssinaturaDataUrl(dataUrl);
+    setAutoSignatureApplied(auto);
     setTermoAssinaturaDataUrl('');
     if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
     setStep4Errors((prev) => ({ ...prev, termoLido: false }));
     setProfAssinaturaTimestamp(Date.now());
     setPatAssinaturaTimestamp(null);
+  }, [setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors]);
+
+  const fetchAssinaturaPadrao = useCallback(async () => {
+    const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
+      credentials: 'include',
+      headers: { ...authHeadersForFetch({ needsOrg: false }) },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return null;
+    return data?.assinaturaPadrao ?? data?.assinatura_padrao ?? null;
+  }, []);
+
+  useEffect(() => {
+    if (profissionalAssinaturaDataUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const assinaturaPadrao = await fetchAssinaturaPadrao();
+        if (cancelled || !assinaturaPadrao) return;
+        applyProfissionalSignature(assinaturaPadrao, { auto: true });
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyProfissionalSignature, fetchAssinaturaPadrao, profissionalAssinaturaDataUrl]);
+
+  useEffect(() => {
+    if (!profSigningOpen) return;
+    if (profissionalAssinaturaDataUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const assinaturaPadrao = await fetchAssinaturaPadrao();
+        if (cancelled || !assinaturaPadrao) return;
+        applyProfissionalSignature(assinaturaPadrao, { auto: true });
+        setProfSigningOpen(false);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profSigningOpen, profissionalAssinaturaDataUrl, fetchAssinaturaPadrao, applyProfissionalSignature]);
+
+  const handleConfirmProf = async (dataUrl) => {
+    applyProfissionalSignature(dataUrl, { auto: false });
     setProfSigningOpen(false);
     toast.success('Assinatura do profissional registrada');
+    try {
+      const assinaturaPadrao = await fetchAssinaturaPadrao();
+      if (!assinaturaPadrao) setShowSalvarPadraoPrompt(true);
+    } catch {
+      // ignore
+    }
   };
 
   const handleConfirmPat = (dataUrl) => {
@@ -423,6 +487,47 @@ export function Step3Termos({
 
   const podeExibirAssinaturas = Boolean(termoSelecionadoId) && termoLido;
   const mostrarBuscaDropdown = termosDisponiveis.length > 3;
+
+  const handleAssinarManualmente = () => {
+    setAutoSignatureApplied(false);
+    setProfissionalAssinaturaDataUrl('');
+    setProfAssinaturaTimestamp(null);
+    setTermoAssinaturaDataUrl('');
+    setPatAssinaturaTimestamp(null);
+    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+    setProfSigningOpen(true);
+  };
+
+  const handleSalvarAssinaturaPadrao = async () => {
+    if (!assinaturaProfRecenteRef.current) {
+      setShowSalvarPadraoPrompt(false);
+      return;
+    }
+    setSavingPadraoPrompt(true);
+    try {
+      const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ assinaturaPadrao: assinaturaProfRecenteRef.current }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(
+          errBody?.message || errBody?.detail || errBody?.error || `Erro ao salvar assinatura padrão (${res.status}).`
+        );
+        return;
+      }
+      toast.success('Assinatura padrão salva com sucesso.');
+      setShowSalvarPadraoPrompt(false);
+    } catch {
+      toast.error('Falha ao salvar assinatura padrão.');
+    } finally {
+      setSavingPadraoPrompt(false);
+    }
+  };
 
   return (
     <div className="min-w-0">
@@ -632,6 +737,7 @@ export function Step3Termos({
                   onClick={() => {
                     setAssinaturaPersistida(false);
                     setProfissionalAssinaturaDataUrl('');
+                    setAutoSignatureApplied(false);
                     setProfAssinaturaTimestamp(null);
                     setTermoAssinaturaDataUrl('');
                     setPatAssinaturaTimestamp(null);
@@ -642,6 +748,20 @@ export function Step3Termos({
                 >
                   Refazer assinatura
                 </button>
+                {autoSignatureApplied ? (
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      Assinatura automática aplicada
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAssinarManualmente}
+                      className="text-[12px] font-medium text-[#00a88e] hover:text-[#0f766e]"
+                    >
+                      Assinar manualmente
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-4 py-6 text-center">
@@ -744,6 +864,34 @@ export function Step3Termos({
         mobilePortrait={mobilePortrait}
         onConfirm={handleConfirmPat}
       />
+      {showSalvarPadraoPrompt ? (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
+            <h4 className="text-[16px] font-bold text-[#0f172a]">Assinatura detectada!</h4>
+            <p className="mt-2 text-[14px] text-[#475569]">
+              Deseja salvar esta assinatura para agilizar os próximos atendimentos?
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleSalvarAssinaturaPadrao}
+                disabled={savingPadraoPrompt}
+                className="h-10 flex-1 rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white hover:bg-[#00967f] disabled:cursor-not-allowed disabled:bg-[#e2e8f0] disabled:text-[#94a3b8]"
+              >
+                {savingPadraoPrompt ? 'Salvando…' : 'Sim, salvar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSalvarPadraoPrompt(false)}
+                disabled={savingPadraoPrompt}
+                className="h-10 flex-1 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Agora não
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

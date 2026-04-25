@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Camera, Loader2, User } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
+import { SignatureFullscreenModal } from '../journey/Step4LGPD.jsx';
 
 const STATUS_OPTIONS = [
   { value: 'online', label: 'Online' },
@@ -55,9 +56,12 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
   const toast = useToast();
   const fileInputRef = useRef(null);
   const formId = useId();
+  const sigCanvasRef = useRef(null);
+  const sigHasStrokeRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAssinatura, setSavingAssinatura] = useState(false);
   const [loadError, setLoadError] = useState('');
 
   const [nomeCompleto, setNomeCompleto] = useState('');
@@ -69,6 +73,9 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
   const [fotoUrlServidor, setFotoUrlServidor] = useState('');
   /** Valor exibido no círculo: URL do servidor ou data URL do arquivo local. */
   const [fotoUrlPreview, setFotoUrlPreview] = useState('');
+  const [assinaturaPadraoPreview, setAssinaturaPadraoPreview] = useState('');
+  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  const [mobilePortrait, setMobilePortrait] = useState(false);
 
   const fetchHeaders = useCallback(() => {
     const h = typeof getAuthHeaders === 'function' ? getAuthHeaders() : {};
@@ -115,9 +122,97 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     }
   }, [fetchHeaders]);
 
+  const loadAssinaturaPadrao = useCallback(async () => {
+    try {
+      const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
+        credentials: 'include',
+        headers: { ...fetchHeaders() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const assinatura = String(data?.assinaturaPadrao ?? data?.assinatura_padrao ?? '').trim();
+      setAssinaturaPadraoPreview(assinatura);
+    } catch {
+      // ignore
+    }
+  }, [fetchHeaders]);
+
   useEffect(() => {
     loadPerfil();
   }, [loadPerfil]);
+
+  useEffect(() => {
+    loadAssinaturaPadrao();
+  }, [loadAssinaturaPadrao]);
+
+  useEffect(() => {
+    const ev = () => {
+      const isMobile = window.matchMedia('(max-width: 639px)').matches;
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+      setMobilePortrait(isMobile && isPortrait);
+    };
+    ev();
+    window.addEventListener('resize', ev);
+    return () => window.removeEventListener('resize', ev);
+  }, []);
+
+  const saveAssinaturaPadrao = async (assinaturaPadrao) => {
+    if (!assinaturaPadrao) return;
+    setSavingAssinatura(true);
+    try {
+      const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          ...fetchHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ assinaturaPadrao }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(
+          errBody?.message || errBody?.detail || errBody?.error || `Erro ao salvar assinatura (${res.status}).`
+        );
+        return;
+      }
+      setAssinaturaPadraoPreview(assinaturaPadrao);
+      toast.success('Assinatura padrão salva com sucesso.');
+      setSignatureModalOpen(false);
+    } catch {
+      toast.error('Falha ao salvar assinatura padrão.');
+    } finally {
+      setSavingAssinatura(false);
+    }
+  };
+
+  const removeAssinaturaPadrao = async () => {
+    setSavingAssinatura(true);
+    try {
+      const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          ...fetchHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ assinaturaPadrao: null }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(
+          errBody?.message || errBody?.detail || errBody?.error || `Erro ao remover assinatura (${res.status}).`
+        );
+        return;
+      }
+      setAssinaturaPadraoPreview('');
+      toast.success('Assinatura removida.');
+    } catch {
+      toast.error('Falha ao remover assinatura.');
+    } finally {
+      setSavingAssinatura(false);
+    }
+  };
 
   const onPickFoto = async (e) => {
     const file = e.target.files?.[0];
@@ -316,6 +411,49 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         </select>
       </div>
 
+      <div className="rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
+        <h3 className="text-[14px] font-bold text-[#0f172a]">Assinatura Padrão</h3>
+        {assinaturaPadraoPreview ? (
+          <div className="mt-3 rounded-lg border border-[#e2e8f0] bg-white p-3 text-center">
+            <img
+              src={assinaturaPadraoPreview}
+              alt="Assinatura padrão"
+              className="mx-auto h-20 max-w-full rounded border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+            />
+            <p className="mt-2 text-[12px] font-semibold text-[#64748b]">Assinatura configurada</p>
+          </div>
+        ) : (
+          <p className="mt-3 text-[12px] font-semibold text-[#64748b]">Nenhuma assinatura configurada</p>
+        )}
+        {assinaturaPadraoPreview ? (
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSignatureModalOpen(true)}
+              className="h-10 flex-1 rounded-lg bg-[#00a88e] text-[13px] font-semibold text-white hover:bg-[#00967f]"
+            >
+              Alterar assinatura
+            </button>
+            <button
+              type="button"
+              onClick={removeAssinaturaPadrao}
+              disabled={savingAssinatura}
+              className="h-10 flex-1 rounded-lg border border-red-200 bg-red-50 text-[13px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Remover assinatura
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setSignatureModalOpen(true)}
+            className="mt-3 h-10 w-full rounded-lg bg-[#00a88e] text-[13px] font-semibold text-white hover:bg-[#00967f]"
+          >
+            Adicionar assinatura
+          </button>
+        )}
+      </div>
+
       <div className="pt-2">
         <button
           type="submit"
@@ -326,6 +464,17 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
           {saving ? 'Salvando…' : 'Salvar alterações'}
         </button>
       </div>
+      <SignatureFullscreenModal
+        open={signatureModalOpen}
+        title="Assinatura Padrão"
+        onClose={() => {
+          if (!savingAssinatura) setSignatureModalOpen(false);
+        }}
+        canvasRef={sigCanvasRef}
+        hasStrokeRef={sigHasStrokeRef}
+        mobilePortrait={mobilePortrait}
+        onConfirm={saveAssinaturaPadrao}
+      />
     </form>
   );
 }
