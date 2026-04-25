@@ -1,3 +1,5 @@
+import { toDateKey } from '../../utils/agendaDateUtils';
+
 const STATUS = {
   confirmado: 'confirmado',
   pendente: 'pendente',
@@ -14,12 +16,6 @@ const PROCEDIMENTOS = [
 ];
 
 let mockRows = [];
-
-/** Normaliza data (YYYY-MM-DD ou ISO com hora) para comparação e filtros. */
-export function toDateKey(value) {
-  const s = String(value || '');
-  return s.length >= 10 ? s.slice(0, 10) : s;
-}
 
 function sortByDateTime(rows) {
   return [...rows].sort((a, b) => `${a.data} ${a.horaInicio}`.localeCompare(`${b.data} ${b.horaInicio}`));

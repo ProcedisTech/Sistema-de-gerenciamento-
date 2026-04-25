@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
-import { agendasApi, equipeApi, pacientesApi, catalogosApi, agendamentosApi } from '../../services/api';
+import { agendasApi, pacientesApi, catalogosApi, agendamentosApi } from '../../services/api';
 import { mapAgendaDtoToAppointment, addMinutesToTime } from '../../utils/agendaMapping';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { mapBackendPatient } from '../../utils/patientMapping';
@@ -8,13 +9,9 @@ import { formatPhoneForApi } from '../../utils/phoneUtils';
 
 const normalizeCpf = (v) => String(v || '').replace(/\D/g, '');
 
-function profissionalRoleUserId(p) {
-  if (!p) return '';
-  return p.roleUserId || p.role_user_id || p.id || '';
-}
-
 export function useAgendaController({ patients, setPatients, maskCPF, authEnabled = false }) {
   const toast = useToast();
+  const { roleUserId } = useOrg();
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const [appointments, setAppointments] = useState([]);
@@ -24,7 +21,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarMonthIndex, setCalendarMonthIndex] = useState(new Date().getMonth());
 
-  const [equipeList, setEquipeList] = useState([]);
   const [catalogosList, setCatalogosList] = useState([]);
 
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
@@ -34,7 +30,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const [agendaHoraFim, setAgendaHoraFim] = useState('09:45');
   const [agendaProcedure, setAgendaProcedure] = useState('');
   const [agendaCatalogoId, setAgendaCatalogoId] = useState('');
-  const [agendaRoleUserId, setAgendaRoleUserId] = useState('');
 
   const [agendaPatientSearch, setAgendaPatientSearch] = useState('');
   const [agendaSelectedPatientCpf, setAgendaSelectedPatientCpf] = useState('');
@@ -132,12 +127,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
         if (Array.isArray(data)) setCatalogosList(data.filter((c) => c.ativo !== false));
       })
       .catch(() => setCatalogosList([]));
-    equipeApi
-      .list()
-      .then((data) => {
-        if (Array.isArray(data)) setEquipeList(data.filter((p) => p.ativo !== false));
-      })
-      .catch(() => setEquipeList([]));
   }, []);
 
   const calendarCells = useMemo(
@@ -243,15 +232,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     setAgendaNewPatientTelefoneNumero('');
     setAgendaNewPatientTelefoneTouched(false);
     loadModalCatalogs();
-    equipeApi
-      .list()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const first = data.find((p) => p.ativo !== false) || data[0];
-          setAgendaRoleUserId(profissionalRoleUserId(first));
-        }
-      })
-      .catch(() => {});
   };
 
   const closeAgendaModal = () => {
@@ -262,8 +242,13 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const confirmAgendaAppointment = async () => {
     setAgendaModalError('');
 
-    if (!agendaDate || !agendaTime || !agendaRoleUserId) {
-      setAgendaModalError('Preencha data, horário e profissional.');
+    if (!agendaDate || !agendaTime) {
+      setAgendaModalError('Preencha data e horário.');
+      return;
+    }
+    const contextRole = String(roleUserId || '').trim();
+    if (!contextRole) {
+      setAgendaModalError('Sessão sem vínculo de profissional (role). Faça login novamente ou complete o perfil na clínica.');
       return;
     }
 
@@ -318,7 +303,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
         dataAgendamento: agendaDate,
         horaInicio: agendaTime.length === 5 ? `${agendaTime}:00` : agendaTime,
         horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
-        roleUserId: agendaRoleUserId,
+        roleUserId: contextRole,
         tipo: 'atendimento',
         observacao,
       });
@@ -459,10 +444,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     agendaCatalogoId,
     setAgendaCatalogoId,
     catalogosList,
-    equipeList,
-    agendaRoleUserId,
-    setAgendaRoleUserId,
-    profissionalRoleUserId,
     onConfirm: confirmAgendaAppointment,
     agendaSaving,
     onAgendaTimeChange: (t) => {

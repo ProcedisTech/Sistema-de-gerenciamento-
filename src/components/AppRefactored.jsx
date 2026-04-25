@@ -554,6 +554,9 @@ export default function App() {
 
     setSelectedPatientCpf(cpf);
     setJourneyProcedureDateIso(toLocalISODate());
+    const nomeAgenda = options.procedimentoNome != null ? String(options.procedimentoNome).trim() : '';
+    journeyState.setNomeProcedimento(nomeAgenda);
+    journeyState.setAgendaId(options.agendaId ?? null);
     setCurrentStep(options.initialStep ?? 1);
     setActiveView('jornada');
     setPatientView('list');
@@ -848,10 +851,16 @@ export default function App() {
         : null;
       let procedimentoFeitoIdParaVinculo = null;
       if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
+        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const agendaIdValido =
+          journeyState.agendaId && UUID_REGEX.test(journeyState.agendaId)
+            ? journeyState.agendaId
+            : null;
         const resultado = await procedimentosApi.registrarManual(paciente.id, {
           nome: journeyState.nomeProcedimento.trim(),
           roleUserId,
           observacao: String(journeyState.observacoesExecucao || '').trim() || null,
+          agendaId: agendaIdValido,
         });
         const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
         if (pid != null && pid !== '') {
@@ -983,6 +992,7 @@ export default function App() {
     journeyState.setProximoRetornoDisplay('');
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
+    journeyState.setAgendaId(null);
     journeyState.setStep2Errors({});
     journeyState.setStep4Errors({});
     journeyState.setStep5Errors({});
@@ -1540,6 +1550,7 @@ export default function App() {
             {activeView === 'agenda' && (
               <AgendaDashboard
                 patients={patients}
+                authEnabled={authSessionReady}
                 onStartAttendance={handleStartAttendance}
               />
             )}

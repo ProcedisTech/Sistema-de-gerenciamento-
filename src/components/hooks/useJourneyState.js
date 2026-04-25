@@ -4,6 +4,7 @@ export const useJourneyState = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
+  const [agendaId, setAgendaId] = useState(null);
 
   const [step2Errors, setStep2Errors] = useState({});
   const [step4Errors, setStep4Errors] = useState({});
@@ -20,14 +21,6 @@ export const useJourneyState = () => {
     modoVisualizacao: false,
   });
   const [respostasAnamnese, setRespostasAnamnese] = useState({});
-
-  const salvarRespostaAnamnese = useCallback((perguntaId, valor) => {
-    if (perguntaId == null || perguntaId === '') return;
-    setRespostasAnamnese((prev) => ({
-      ...prev,
-      [String(perguntaId)]: valor,
-    }));
-  }, []);
 
   // ============ ETAPA 2: AVALIAÇÃO ============
   /** Observações clínicas e expectativas registradas durante a avaliação (antes do upload de fotos). */
@@ -72,6 +65,14 @@ export const useJourneyState = () => {
   const [anamnesePhotoBlob, setAnamnesePhotoBlob] = useState(null);
   const [anamnesePhotoMeta, setAnamnesePhotoMeta] = useState(null);
 
+  const salvarRespostaAnamnese = useCallback((perguntaId, valor) => {
+    if (perguntaId == null || perguntaId === '') return;
+    setRespostasAnamnese((prev) => ({
+      ...prev,
+      [String(perguntaId)]: valor,
+    }));
+  }, []);
+
   return {
     currentStep,
     setCurrentStep,
@@ -79,6 +80,8 @@ export const useJourneyState = () => {
     setIsFinishing,
     journeyId,
     setJourneyId,
+    agendaId,
+    setAgendaId,
     step2Errors,
     setStep2Errors,
     step4Errors,
