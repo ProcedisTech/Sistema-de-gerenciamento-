@@ -979,7 +979,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
-        <div className="space-y-5 mb-6 p-6 bg-white border border-fuchsia-200 rounded-2xl">
+        <div className="mx-auto w-full max-w-3xl space-y-5 mb-6 p-6 bg-white border border-fuchsia-200 rounded-2xl">
           <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">{fichaSelecionada.nome}</h4>
           {itensOrdenados.map((item) => {
             const isAlerta = item.pergunta?.prioridade === 'ALERTA';
