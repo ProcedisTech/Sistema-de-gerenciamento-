@@ -92,9 +92,33 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
         } catch {
           items = [];
         }
-        for (const c of items) {
-          const row = mapSlotAndCompromissoToDashboardRow(slot, c);
-          if (row) rows.push(row);
+        if (items.length === 0) {
+          const raw = slot.raw || {};
+          const hi = raw.horaInicio != null ? String(raw.horaInicio).slice(0, 5) : String(slot.time || '').slice(0, 5);
+          const hf = raw.horaFim != null ? String(raw.horaFim).slice(0, 5) : '';
+          rows.push({
+            id: String(slot.id),
+            agendaId: String(slot.id),
+            data: raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : slot.date || '',
+            horaInicio: hi,
+            duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
+            status: slot.status,
+            statusNome: slot.statusNome,
+            procedimentoNome: (raw.observacao && String(raw.observacao).trim()) || 'Sem procedimento',
+            pacienteNome: 'Sem paciente',
+            pacienteId: null,
+            profissionalNome: slot.profissionalNome || '',
+            telefone: '',
+            catalogoProcedimentoSaudeId: '',
+            observacao: '',
+            rawSlot: raw,
+            rawAgendamento: null,
+          });
+        } else {
+          for (const c of items) {
+            const row = mapSlotAndCompromissoToDashboardRow(slot, c);
+            if (row) rows.push(row);
+          }
         }
       })
     );
