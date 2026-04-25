@@ -20,6 +20,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { anamneseApi, dimensoesApi, getApiErrorDetail } from '../../services/api';
 
 const TIPOS_COM_ALTERNATIVAS = ['escolha_unica', 'multipla_escolha'];
+const DESCRICAO_MAX_CHARS = 300;
 
 // ── Sortable alternative row (used in edit modal) ─────────────────────────────
 
@@ -181,7 +182,7 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
       const body = {
         categoriaId,
         tipoRespostaId,
-        descricao: descricao.trim(),
+        descricao: descricao.trim().slice(0, DESCRICAO_MAX_CHARS),
         prioridade,
       };
       if (mostrarAlternativas) {
@@ -273,11 +274,17 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[13px] font-bold text-[#00a88e] ml-1">Pergunta / Descrição *</label>
+            <div className="flex items-baseline justify-between gap-2 ml-1">
+              <label className="text-[13px] font-bold text-[#00a88e]">Pergunta / Descrição *</label>
+              <span className={`text-[11px] font-medium tabular-nums ${descricao.length >= DESCRICAO_MAX_CHARS ? 'text-red-600' : 'text-[#94a3b8]'}`}>
+                {descricao.length}/{DESCRICAO_MAX_CHARS}
+              </span>
+            </div>
             <textarea
               value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
+              onChange={(e) => setDescricao(e.target.value.slice(0, DESCRICAO_MAX_CHARS))}
               rows={3}
+              maxLength={DESCRICAO_MAX_CHARS}
               className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
             />
           </div>
@@ -335,6 +342,22 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
   );
 }
 
+function getMissingCreateFieldLabels({ categoriaId, tipoRespostaId, descricao, lockedIdStr }) {
+  const labels = [];
+  const categoriaOk = Boolean(lockedIdStr) || Boolean(categoriaId && String(categoriaId).trim());
+  if (!categoriaOk) labels.push('Categoria');
+  if (!tipoRespostaId || !String(tipoRespostaId).trim()) labels.push('Tipo de resposta');
+  if (!descricao || !String(descricao).trim()) labels.push('Descrição');
+  return labels;
+}
+
+function formatPreenchaMessage(labels) {
+  if (!labels?.length) return '';
+  if (labels.length === 1) return `Preencha: ${labels[0]}`;
+  if (labels.length === 2) return `Preencha: ${labels[0]} e ${labels[1]}`;
+  return `Preencha: ${labels.slice(0, -1).join(', ')} e ${labels[labels.length - 1]}`;
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function QuestionManager({
@@ -364,6 +387,8 @@ export function QuestionManager({
   const [prioridade, setPrioridade] = useState('NORMAL');
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
+  const [showRequiredFieldHighlights, setShowRequiredFieldHighlights] = useState(false);
+  const [validationBannerDismissed, setValidationBannerDismissed] = useState(false);
 
   // edit
   const [editingPergunta, setEditingPergunta] = useState(null);
@@ -385,6 +410,18 @@ export function QuestionManager({
   }, [tiposResposta, tipoRespostaId]);
 
   const precisaAlternativas = TIPOS_COM_ALTERNATIVAS.includes(tipoSelecionado);
+
+  const missingCreateFieldLabels = useMemo(
+    () => getMissingCreateFieldLabels({ categoriaId, tipoRespostaId, descricao, lockedIdStr }),
+    [categoriaId, tipoRespostaId, descricao, lockedIdStr]
+  );
+
+  useEffect(() => {
+    if (missingCreateFieldLabels.length === 0) {
+      setShowRequiredFieldHighlights(false);
+      setValidationBannerDismissed(false);
+    }
+  }, [missingCreateFieldLabels.length]);
 
   // Derive which pergunta ids are in use across all fichas
   const perguntasEmUso = useMemo(() => {
@@ -445,14 +482,21 @@ export function QuestionManager({
     setNovaAlternativa('');
     setPrioridade('NORMAL');
     setErro('');
+    setShowRequiredFieldHighlights(false);
+    setValidationBannerDismissed(false);
   };
 
   const handleCriar = async (e) => {
     e.preventDefault();
-    if (!categoriaId || !tipoRespostaId || !descricao.trim()) {
-      setErro('Preencha categoria, tipo de resposta e descrição.');
+    const missing = getMissingCreateFieldLabels({ categoriaId, tipoRespostaId, descricao, lockedIdStr });
+    if (missing.length > 0) {
+      setShowRequiredFieldHighlights(true);
+      setValidationBannerDismissed(false);
+      setErro('');
       return;
     }
+    setShowRequiredFieldHighlights(false);
+    setValidationBannerDismissed(false);
     if (precisaAlternativas && alternativas.length < 2) {
       setErro('Adicione pelo menos 2 alternativas para perguntas de escolha.');
       return;
@@ -463,7 +507,7 @@ export function QuestionManager({
       const habito = await anamneseApi.createHabito({
         categoriaId,
         tipoRespostaId,
-        descricao: descricao.trim(),
+        descricao: descricao.trim().slice(0, DESCRICAO_MAX_CHARS),
         prioridade,
       });
       if (precisaAlternativas && alternativas.length > 0) {
@@ -659,6 +703,20 @@ export function QuestionManager({
         <form onSubmit={handleCriar} className="bg-[#f8fbfb] border border-slate-200 rounded-2xl p-6 space-y-4">
           <h4 className="text-[16px] font-bold text-[#0f172a]">Criar Pergunta</h4>
 
+          {showRequiredFieldHighlights && !validationBannerDismissed && missingCreateFieldLabels.length > 0 && (
+            <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold flex items-start gap-2">
+              <span className="flex-1 min-w-0">{formatPreenchaMessage(missingCreateFieldLabels)}</span>
+              <button
+                type="button"
+                onClick={() => setValidationBannerDismissed(true)}
+                className="p-1 rounded-lg text-red-600 hover:bg-red-100 flex-shrink-0"
+                aria-label="Fechar aviso"
+              >
+                <X className="w-4 h-4" strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
+
           {erro && (
             <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
           )}
@@ -674,7 +732,12 @@ export function QuestionManager({
                 <select
                   value={categoriaId}
                   onChange={(e) => setCategoriaId(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                  aria-invalid={showRequiredFieldHighlights && !categoriaId}
+                  className={`w-full px-4 py-3 bg-white rounded-xl text-[14px] font-medium outline-none appearance-none ${
+                    showRequiredFieldHighlights && !categoriaId
+                      ? 'border-2 border-red-500 focus:ring-4 focus:ring-red-200/40 focus:border-red-500'
+                      : 'border border-app-border focus:ring-4 focus:ring-[#00a88e]/20 focus:border-[#00a88e]'
+                  }`}
                 >
                   <option value="">Selecione...</option>
                   {categorias.map((c) => (
@@ -689,7 +752,12 @@ export function QuestionManager({
               <select
                 value={tipoRespostaId}
                 onChange={(e) => { setTipoRespostaId(e.target.value); setAlternativas([]); }}
-                className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                aria-invalid={showRequiredFieldHighlights && !tipoRespostaId}
+                className={`w-full px-4 py-3 bg-white rounded-xl text-[14px] font-medium outline-none appearance-none ${
+                  showRequiredFieldHighlights && !tipoRespostaId
+                    ? 'border-2 border-red-500 focus:ring-4 focus:ring-red-200/40 focus:border-red-500'
+                    : 'border border-app-border focus:ring-4 focus:ring-[#00a88e]/20 focus:border-[#00a88e]'
+                }`}
               >
                 <option value="">Selecione...</option>
                 {tiposResposta.filter((t) => t.ativo !== false).map((t) => (
@@ -712,13 +780,24 @@ export function QuestionManager({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[13px] font-bold text-[#00a88e] ml-1">Pergunta / Descrição *</label>
+            <div className="flex items-baseline justify-between gap-2 ml-1">
+              <label className="text-[13px] font-bold text-[#00a88e]">Pergunta / Descrição *</label>
+              <span className={`text-[11px] font-medium tabular-nums ${descricao.length >= DESCRICAO_MAX_CHARS ? 'text-red-600' : 'text-[#94a3b8]'}`}>
+                {descricao.length}/{DESCRICAO_MAX_CHARS}
+              </span>
+            </div>
             <textarea
               value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
+              onChange={(e) => setDescricao(e.target.value.slice(0, DESCRICAO_MAX_CHARS))}
               rows={2}
+              maxLength={DESCRICAO_MAX_CHARS}
               placeholder="Ex: O paciente faz uso de medicamentos controlados?"
-              className="w-full px-4 py-3 bg-white border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+              aria-invalid={showRequiredFieldHighlights && !descricao.trim()}
+              className={`w-full px-4 py-3 bg-white rounded-xl text-[14px] font-medium outline-none ${
+                showRequiredFieldHighlights && !descricao.trim()
+                  ? 'border-2 border-red-500 focus:ring-4 focus:ring-red-200/40 focus:border-red-500'
+                  : 'border border-app-border focus:ring-4 focus:ring-[#00a88e]/20 focus:border-[#00a88e]'
+              }`}
             />
           </div>
 

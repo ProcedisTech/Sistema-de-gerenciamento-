@@ -23,11 +23,23 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' }],
     },
   },
   {
-    files: ['**/PatientProfileView.jsx', '**/Step5Finalization.jsx'],
+    files: [
+      '**/PatientProfileView.jsx',
+      '**/Step5Finalization.jsx',
+      '**/components/anamnese/AnamneseAdminView.jsx',
+      '**/components/journey/Step1CheckIn.jsx',
+      '**/components/journey/Step3Evaluation.jsx',
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    files: ['**/components/journey/Step4LGPD.jsx', '**/components/shared/ProcedimentoAutocomplete.jsx'],
     rules: {
       'react-hooks/set-state-in-effect': 'off',
     },

@@ -10,6 +10,10 @@ export default {
           app: {
             border: '#E5E7EB',
             surface: '#F9FAFB',
+            /** Fundo principal do app (shell / telas logadas) */
+            canvas: '#F8FBFB',
+            /** Texto principal sobre fundos claros */
+            ink: '#0F172A',
             'nav-hover': '#F0FDFA',
             'nav-active': '#E6F7F5',
             accent: '#00A88E',

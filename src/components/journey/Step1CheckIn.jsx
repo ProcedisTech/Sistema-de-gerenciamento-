@@ -33,7 +33,7 @@ export function Step1CheckIn({
   endereco, setEndereco,
   cpf, setCpf,
   rg, setRg,
-  telefone, setTelefone,
+  telefone: _telefone, setTelefone,
   email, setEmail,
   step1Errors, setStep1Errors,
   selectPatient,

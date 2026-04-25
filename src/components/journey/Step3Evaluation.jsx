@@ -18,7 +18,7 @@ export function Step3Evaluation({
   observacoes = '',
   setObservacoes,
   imageSrc,
-  setImageSrc,
+  setImageSrc: _setImageSrc,
   activeTool,
   setActiveTool,
   activeColor,

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 // Hooks de estado
 import {
@@ -24,7 +24,11 @@ import { resolveApiUrl } from '../config/apiEnv.js';
 import { authHeadersForFetch } from '../services/api.js';
 import {
   anamneseApi,
+  catalogosApi,
+  getApiErrorDetail,
+  orientacoesApi,
   pacientesGaleriaApi,
+  perfilApi,
   procedimentosApi,
   termoAssinaturaApi,
   termosApi,
@@ -50,6 +54,10 @@ import {
   JourneyPatientContextHeader,
 } from './journey';
 import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
+import {
+  normalizeOrientacoesTemplateResponse,
+  orientacoesTemplateSignature,
+} from '../utils/orientacoesJourney.js';
 
 // Utilitarios
 import { getPatientInitials } from './utils';
@@ -208,6 +216,24 @@ export default function App() {
   const finishJourneyLockRef = useRef(false);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
   const pendingAnnotatedGalleryBlobsRef = useRef([]);
+  const finishJourneyModalResolveRef = useRef(null);
+  const [finishJourneyModal, setFinishJourneyModal] = React.useState(null);
+
+  const askFinishJourneyConfirm = React.useCallback(
+    ({ title, message, confirmLabel = 'Sim', cancelLabel = 'Não' }) =>
+      new Promise((resolve) => {
+        finishJourneyModalResolveRef.current = resolve;
+        setFinishJourneyModal({ title, message, confirmLabel, cancelLabel });
+      }),
+    [],
+  );
+
+  const closeFinishJourneyModal = React.useCallback((value) => {
+    const fn = finishJourneyModalResolveRef.current;
+    finishJourneyModalResolveRef.current = null;
+    setFinishJourneyModal(null);
+    if (typeof fn === 'function') fn(Boolean(value));
+  }, []);
 
   // ============ Estados destructurados para facilitar leitura ============
   const { authReady, isLoggedIn, authUser, handleLogout } = authState;
@@ -555,6 +581,11 @@ export default function App() {
     setSelectedPatientCpf(cpf);
     setJourneyProcedureDateIso(toLocalISODate());
     const nomeAgenda = options.procedimentoNome != null ? String(options.procedimentoNome).trim() : '';
+    const catAgenda =
+      options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== ''
+        ? String(options.catalogoProcedimentoSaudeId).trim()
+        : null;
+    journeyState.setNomeProcedimentoCatalogoId(catAgenda);
     journeyState.setNomeProcedimento(nomeAgenda);
     journeyState.setAgendaId(options.agendaId ?? null);
     setCurrentStep(options.initialStep ?? 1);
@@ -808,7 +839,7 @@ export default function App() {
         journeyState.setStep5Errors({
           orientacoes: !orientacoes,
         });
-        toast.error('Para prosseguir, confirme que recebeu e compreendeu as orientações pós-procedimento.');
+        toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
         return;
       }
 
@@ -873,6 +904,89 @@ export default function App() {
           await termoAssinaturaApi.vincularProcedimento(ultimaAssinaturaId, procedimentoFeitoIdParaVinculo);
         } catch (e) {
           console.warn('Não foi possível vincular assinatura ao procedimento:', e);
+        }
+      }
+
+      const snapshotNome = String(journeyState.nomeProcedimento || '').trim();
+      const snapshotCatalogoId =
+        journeyState.nomeProcedimentoCatalogoId != null &&
+        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+          : null;
+      const snapshotItens = Array.isArray(journeyState.orientacoesItens)
+        ? journeyState.orientacoesItens.map((i) => ({ ...i }))
+        : [];
+
+      const orientacoesPayload = snapshotItens
+        .map((i, idx) => ({
+          descricao: String(i.descricao || '').trim(),
+          checado: Boolean(i.checado),
+          ordem: Number.isFinite(Number(i.ordem)) ? Number(i.ordem) : idx,
+        }))
+        .filter((x) => x.descricao);
+
+      if (procedimentoFeitoIdParaVinculo && orientacoesPayload.length > 0) {
+        await orientacoesApi.salvar(procedimentoFeitoIdParaVinculo, orientacoesPayload);
+      }
+
+      let tplSig = '';
+      if (snapshotNome) {
+        try {
+          const tplRaw = await perfilApi.getOrientacoesTemplate(snapshotNome);
+          const tplList = normalizeOrientacoesTemplateResponse(tplRaw);
+          tplSig = orientacoesTemplateSignature(
+            tplList.map((x) => ({ descricao: x.descricao, ordem: x.ordem })),
+          );
+        } catch (e) {
+          if (e?.status !== 404 && e?.status !== 400) {
+            console.warn('getOrientacoesTemplate:', e);
+          }
+          tplSig = '';
+        }
+      }
+      const curSig = orientacoesTemplateSignature(orientacoesPayload);
+      const shouldOfferTemplate = Boolean(
+        snapshotNome && orientacoesPayload.length > 0 && (tplSig === '' || tplSig !== curSig),
+      );
+      if (shouldOfferTemplate) {
+        const saveTpl = await askFinishJourneyConfirm({
+          title: 'Salvar como padrão?',
+          message: `Salvar estas orientações como padrão para "${snapshotNome}"?`,
+        });
+        if (saveTpl) {
+          try {
+            await perfilApi.salvarOrientacoesTemplate(snapshotNome, orientacoesPayload);
+          } catch (e) {
+            toast.error(getApiErrorDetail(e) || 'Não foi possível salvar o template de orientações.');
+          }
+        }
+      }
+
+      if (snapshotNome && !snapshotCatalogoId) {
+        let catalogNames = [];
+        try {
+          const cats = await catalogosApi.list();
+          const arr = Array.isArray(cats) ? cats : cats?.content || [];
+          catalogNames = (Array.isArray(arr) ? arr : [])
+            .map((c) => String(c.nomeProcedimento || c.nome || '').trim())
+            .filter(Boolean);
+        } catch (e) {
+          console.warn('catalogos list:', e);
+        }
+        const hit = catalogNames.some((n) => n.toLowerCase() === snapshotNome.toLowerCase());
+        if (!hit) {
+          const add = await askFinishJourneyConfirm({
+            title: 'Catálogo',
+            message: `Procedimento não cadastrado no catálogo. Deseja cadastrá-lo como "${snapshotNome}"?`,
+          });
+          if (add) {
+            try {
+              await catalogosApi.criar({ nomeProcedimento: snapshotNome });
+              toast.success('Procedimento adicionado ao catálogo.');
+            } catch (e) {
+              toast.error(getApiErrorDetail(e) || 'Não foi possível cadastrar no catálogo.');
+            }
+          }
         }
       }
 
@@ -988,10 +1102,12 @@ export default function App() {
     journeyState.setTermoAssinado(false);
     journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setProfissionalAssinaturaDataUrl('');
-    journeyState.setOrientacoes(false);
+    journeyState.setOrientacoesItens([]);
+    journeyState.setOrientacoesCarregadas(false);
     journeyState.setProximoRetornoDisplay('');
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
+    journeyState.setNomeProcedimentoCatalogoId(null);
     journeyState.setAgendaId(null);
     journeyState.setStep2Errors({});
     journeyState.setStep4Errors({});
@@ -1096,7 +1212,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen md:h-screen flex-col md:flex-row font-sans overflow-x-hidden md:overflow-hidden" style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}>
+    <div className="flex min-h-dvh md:h-screen flex-col md:flex-row font-sans overflow-x-hidden bg-app-canvas text-app-ink md:overflow-hidden">
 
       {/* Sidebar */}
       <Sidebar
@@ -1244,6 +1360,7 @@ export default function App() {
                       pacienteIdForProcedures={pacienteAtual?.id || null}
                       nomeProcedimento={journeyState.nomeProcedimento}
                       setNomeProcedimento={journeyState.setNomeProcedimento}
+                      setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                       observacoesExecucao={journeyState.observacoesExecucao}
                       setObservacoesExecucao={journeyState.setObservacoesExecucao}
                       procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
@@ -1262,16 +1379,27 @@ export default function App() {
 
                   {currentStep === 5 && (
                     <Step5Finalization
+                      key={String(journeyState.nomeProcedimento || '')}
                       procedureDateIso={journeyProcedureDateIso}
                       proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
                       setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
                       orientacoes={journeyState.orientacoes}
-                      setOrientacoes={journeyState.setOrientacoes}
+                      orientacoesItens={journeyState.orientacoesItens}
+                      setOrientacoesItens={journeyState.setOrientacoesItens}
+                      orientacoesCarregadas={journeyState.orientacoesCarregadas}
+                      setOrientacoesCarregadas={journeyState.setOrientacoesCarregadas}
                       step5Errors={journeyState.step5Errors}
                       setStep5Errors={journeyState.setStep5Errors}
                       pacienteNome={pacienteAtual?.nome ?? ''}
                       pacienteIdade={pacienteAtual?.idade ?? null}
                       pacienteCpf={pacienteAtual?.cpf ?? ''}
+                      telefonePaciente={
+                        pacienteAtual?.telefone ||
+                        pacienteAtual?.phone ||
+                        pacienteAtual?.telefoneNumero ||
+                        pacienteAtual?.telefonePrincipal ||
+                        ''
+                      }
                       nomeProcedimento={journeyState.nomeProcedimento ?? ''}
                       observacoesProcedimento={journeyState.observacoesExecucao ?? ''}
                       queixa={journeyState.queixa ?? ''}
@@ -1565,14 +1693,6 @@ export default function App() {
         )}
       </main>
 
-      {/* CSS Global */}
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #00a88e; border-radius: 10px; opacity: 0.5; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00967f; }
-      `}} />
-
       {activeView !== 'jornada' ? (
         <MobileNavigation
           activeView={activeView}
@@ -1581,6 +1701,48 @@ export default function App() {
           onGoConfiguracoes={() => goToView('configuracoes')}
           onLogout={handleLogout}
         />
+      ) : null}
+
+      {finishJourneyModal ? (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-slate-900/45 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="finish-journey-modal-title"
+            className="w-full max-w-md rounded-2xl border border-[#e2e8f0] bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h4 id="finish-journey-modal-title" className="text-[16px] font-bold text-[#0f172a]">
+                {finishJourneyModal.title}
+              </h4>
+              <button
+                type="button"
+                onClick={() => closeFinishJourneyModal(false)}
+                className="shrink-0 rounded-lg p-2 text-[#64748b] hover:bg-[#f1f5f9]"
+                aria-label="Fechar"
+              >
+                <X className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+            </div>
+            <p className="mt-3 text-[14px] font-medium leading-relaxed text-[#475569]">{finishJourneyModal.message}</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => closeFinishJourneyModal(false)}
+                className="h-10 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
+              >
+                {finishJourneyModal.cancelLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => closeFinishJourneyModal(true)}
+                className="h-10 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white hover:bg-[#00967f]"
+              >
+                {finishJourneyModal.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <ProcedureCameraWidget

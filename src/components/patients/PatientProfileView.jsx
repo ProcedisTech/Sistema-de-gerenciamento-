@@ -570,6 +570,7 @@ export function PatientProfileView({
   getPatientInitials,
   onStartAttendance,
   onUpdatePatient,
+  onAddGalleryFiles: _onAddGalleryFiles,
   onDeleteGalleryPhoto,
   mergePatientById,
   refreshPatients,
