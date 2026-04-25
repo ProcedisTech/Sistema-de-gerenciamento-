@@ -46,9 +46,12 @@ function resolveFotoSrc(fotoUrl) {
 }
 
 /**
- * @param {{ getAuthHeaders: () => Record<string, string> }} props
+ * @param {{
+ *   getAuthHeaders: () => Record<string, string>,
+ *   onPerfilAtualizado?: (data: { nomeCompleto: string, fotoUrl: string }) => void,
+ * }} props
  */
-export function PerfilProfissionalPanel({ getAuthHeaders }) {
+export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) {
   const toast = useToast();
   const fileInputRef = useRef(null);
   const formId = useId();
@@ -72,9 +75,12 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
     return h && typeof h === 'object' ? { ...h } : {};
   }, [getAuthHeaders]);
 
-  const loadPerfil = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
+  const loadPerfil = useCallback(async (opts = {}) => {
+    const silent = !!opts.silent;
+    if (!silent) {
+      setLoading(true);
+      setLoadError('');
+    }
     try {
       const res = await fetch(resolveApiUrl('/api/v1/perfil'), {
         credentials: 'include',
@@ -82,14 +88,16 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setLoadError(
-          data?.message || data?.detail || data?.error || `Não foi possível carregar o perfil (${res.status}).`
-        );
+        if (!silent) {
+          setLoadError(
+            data?.message || data?.detail || data?.error || `Não foi possível carregar o perfil (${res.status}).`
+          );
+        }
         return;
       }
       const m = mapPerfilFromDto(data);
       if (!m) {
-        setLoadError('Resposta inválida do servidor.');
+        if (!silent) setLoadError('Resposta inválida do servidor.');
         return;
       }
       setNomeCompleto(m.nomeCompleto);
@@ -101,9 +109,9 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
       setFotoUrlServidor(srv);
       setFotoUrlPreview(srv ? resolveFotoSrc(srv) : '');
     } catch {
-      setLoadError('Falha de rede ao carregar o perfil.');
+      if (!silent) setLoadError('Falha de rede ao carregar o perfil.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [fetchHeaders]);
 
@@ -173,6 +181,10 @@ export function PerfilProfissionalPanel({ getAuthHeaders }) {
         toast.error(errBody?.message || errBody?.detail || errBody?.error || `Erro ao salvar (${res.status}).`);
         return;
       }
+      onPerfilAtualizado?.({
+        nomeCompleto: body.nomeCompleto,
+        fotoUrl: fotoUrlServidor,
+      });
       toast.success('Perfil salvo com sucesso.');
       await loadPerfil();
     } catch {

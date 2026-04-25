@@ -37,6 +37,7 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
 import { AgendaDashboard } from './agenda';
+import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
 // Componentes da Jornada (paciente na aba Pacientes; etapas 1–5)
@@ -79,7 +80,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 export default function App() {
-  const { roleUserId, setRoleUserId, setOrgId } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId } = useOrg();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -145,11 +146,13 @@ export default function App() {
           if (clinicaRes.ok) {
             const clinicaJson = await clinicaRes.json().catch(() => ({}));
             const nomeClinica = clinicaJson?.nome || clinicaJson?.nomeFantasia || '';
-            if (nomeClinica) {
+            const logoRaw = clinicaJson?.logoUrl ?? clinicaJson?.logo_url;
+            const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
+            if (nomeClinica || logoUrl) {
               setClinicaInfo((prev) => ({
                 ...prev,
-                nome: nomeClinica,
-                subtitulo: 'Harmonização Premium',
+                ...(nomeClinica ? { nome: nomeClinica, subtitulo: 'Harmonização Premium' } : {}),
+                ...(logoUrl ? { logoUrl } : {}),
               }));
             }
           }
@@ -192,6 +195,8 @@ export default function App() {
     subtitulo: 'Harmonização Premium',
     logoUrl: '',
   });
+  const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', fotoUrl: '' });
+  const [configSection, setConfigSectionState] = useState(readStoredSection);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
   const canvasRef = useRef(null);
@@ -392,6 +397,22 @@ export default function App() {
     setActiveView(view);
   };
 
+  const setConfigSection = React.useCallback((section) => {
+    const next = VALID_SECTIONS.has(section) ? section : 'fichas';
+    setConfigSectionState(next);
+    persistSection(next);
+  }, []);
+
+  const onOpenClinicaSettings = React.useCallback(() => {
+    setActiveView('configuracoes');
+    setConfigSection('clinica');
+  }, [setActiveView, setConfigSection]);
+
+  const onOpenPerfilSettings = React.useCallback(() => {
+    setActiveView('configuracoes');
+    setConfigSection('perfil');
+  }, [setActiveView, setConfigSection]);
+
   /** Migração de `activeView` salvo: jornada → pacientes; anamnese/termos → configuracoes. */
   React.useEffect(() => {
     try {
@@ -428,6 +449,55 @@ export default function App() {
       cancelled = true;
     };
   }, [activeView]);
+
+  React.useEffect(() => {
+    if (!authSessionReady) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [perfilRes, clinicaRes] = await Promise.all([
+          fetch(resolveApiUrl('/api/v1/perfil'), {
+            credentials: 'include',
+            headers: { ...authHeadersForFetch({ needsOrg: false }) },
+          }),
+          fetch(resolveApiUrl('/api/v1/clinica'), {
+            credentials: 'include',
+            headers: { ...authHeadersForFetch({ needsOrg: true }) },
+          }),
+        ]);
+        if (cancelled) return;
+        if (perfilRes.ok) {
+          const p = await perfilRes.json().catch(() => ({}));
+          setPerfilInfo({
+            nomeCompleto: String(p?.nomeCompleto ?? p?.nome_completo ?? '').trim(),
+            fotoUrl: String(p?.fotoUrl ?? p?.foto_url ?? '').trim(),
+          });
+        }
+        if (clinicaRes.ok) {
+          const c = await clinicaRes.json().catch(() => ({}));
+          const nomeClinica = c?.nome || c?.nomeFantasia || c?.nome_fantasia || '';
+          const logoRaw = c?.logoUrl ?? c?.logo_url;
+          const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
+          setClinicaInfo((prev) => ({
+            ...prev,
+            ...(nomeClinica ? { nome: String(nomeClinica).trim(), subtitulo: 'Harmonização Premium' } : {}),
+            ...(logoUrl ? { logoUrl } : {}),
+          }));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSessionReady, orgId]);
+
+  React.useEffect(() => {
+    if (!isLoggedIn) {
+      setPerfilInfo({ nomeCompleto: '', fotoUrl: '' });
+    }
+  }, [isLoggedIn]);
 
   const updatePatientByCpf = (cpfKey, updater) => {
     const key = String(cpfKey || '').trim();
@@ -1028,6 +1098,10 @@ export default function App() {
         clinicaNome={clinicaInfo.nome}
         clinicaSubtitulo={clinicaInfo.subtitulo}
         clinicaLogoUrl={clinicaInfo.logoUrl}
+        perfilNomeCompleto={perfilInfo.nomeCompleto}
+        perfilFotoUrl={perfilInfo.fotoUrl}
+        onOpenClinicaSettings={onOpenClinicaSettings}
+        onOpenPerfilSettings={onOpenPerfilSettings}
       />
 
       {/* Main Content */}
@@ -1454,9 +1528,12 @@ export default function App() {
 
             {activeView === 'configuracoes' && (
               <ConfiguracoesView
+                configSection={configSection}
+                setConfigSection={setConfigSection}
                 onClinicaAtualizada={(nome, logoUrl) =>
                   setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
                 }
+                onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
               />
             )}
 
