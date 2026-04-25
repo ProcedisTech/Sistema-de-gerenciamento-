@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import {
   FileText,
   Tag,
@@ -14,11 +14,6 @@ import { TermosManager } from '../termos/TermosManager';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
 
-const CONFIG_SECTION_KEY = 'procedi_config_section';
-const LEGACY_TAB_KEY = 'procedi_config_tab';
-
-const VALID_SECTIONS = new Set(['termos', 'categorias', 'perguntas', 'fichas', 'perfil', 'clinica']);
-
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
   categorias: 'Organize categorias de perguntas',
@@ -27,19 +22,6 @@ const SECTION_SUBTITLE = {
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
 };
-
-function readStoredSection() {
-  try {
-    const v = sessionStorage.getItem(CONFIG_SECTION_KEY);
-    if (v && VALID_SECTIONS.has(v)) return v;
-    const legacy = sessionStorage.getItem(LEGACY_TAB_KEY);
-    if (legacy === 'termos') return 'termos';
-    if (legacy === 'anamnese') return 'fichas';
-  } catch {
-    /* ignore */
-  }
-  return 'fichas';
-}
 
 function NavGroupLabel({ children }) {
   return (
@@ -80,20 +62,18 @@ function SidebarNavItem({ icon: Icon, label, active, onClick, badge }) {
  * @param {Record<string, unknown>} [props.anamneseAdminProps] — repassadas a {@link AnamneseAdminView}
  * @param {Record<string, unknown>} [props.termosManagerProps] — repassadas a {@link TermosManager}
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada] — repassada a {@link DadosClinicaPanel}
+ * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
+ * @param {string} props.configSection
+ * @param {(s: string) => void} props.setConfigSection
  */
-export function ConfiguracoesView({ anamneseAdminProps = {}, termosManagerProps = {}, onClinicaAtualizada }) {
-  const [configSection, setConfigSectionState] = useState(readStoredSection);
-
-  const setConfigSection = useCallback((section) => {
-    const next = VALID_SECTIONS.has(section) ? section : 'fichas';
-    setConfigSectionState(next);
-    try {
-      sessionStorage.setItem(CONFIG_SECTION_KEY, next);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
+export function ConfiguracoesView({
+  anamneseAdminProps = {},
+  termosManagerProps = {},
+  onClinicaAtualizada,
+  onPerfilAtualizado,
+  configSection,
+  setConfigSection,
+}) {
   const subtitle = SECTION_SUBTITLE[configSection] ?? SECTION_SUBTITLE.fichas;
 
   return (
@@ -205,7 +185,10 @@ export function ConfiguracoesView({ anamneseAdminProps = {}, termosManagerProps 
           )}
 
           {configSection === 'perfil' && (
-            <PerfilProfissionalPanel getAuthHeaders={() => authHeadersForFetch({ needsOrg: false })} />
+            <PerfilProfissionalPanel
+              getAuthHeaders={() => authHeadersForFetch({ needsOrg: false })}
+              onPerfilAtualizado={onPerfilAtualizado}
+            />
           )}
 
           {configSection === 'clinica' && (
