@@ -28,6 +28,19 @@ function sortByDateTime(rows) {
   return [...rows].sort((a, b) => `${a.data} ${a.horaInicio}`.localeCompare(`${b.data} ${b.horaInicio}`));
 }
 
+/** Espera padrão gravado no slot: `procedimento - paciente` (opcionalmente seguido de ` — notas`). */
+function procedimentoPacienteFromSlotObservacao(obs) {
+  const s = obs != null ? String(obs).trim() : '';
+  if (!s) return { procedimentoNome: '', pacienteNome: '' };
+  const sep = ' - ';
+  const i = s.indexOf(sep);
+  if (i === -1) return { procedimentoNome: s, pacienteNome: '' };
+  return {
+    procedimentoNome: s.slice(0, i).trim() || '',
+    pacienteNome: s.slice(i + sep.length).trim() || '',
+  };
+}
+
 /**
  * Uma linha do dashboard = um compromisso (tb_agendamento).
  * `id` = agendamento.id (chave React); `agendaId` = slot (tb_agenda).
@@ -96,6 +109,8 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
           const raw = slot.raw || {};
           const hi = raw.horaInicio != null ? String(raw.horaInicio).slice(0, 5) : String(slot.time || '').slice(0, 5);
           const hf = raw.horaFim != null ? String(raw.horaFim).slice(0, 5) : '';
+          const obs = raw.observacao != null ? String(raw.observacao).trim() : '';
+          const { procedimentoNome: procFromObs, pacienteNome: pacFromObs } = procedimentoPacienteFromSlotObservacao(obs);
           rows.push({
             id: String(slot.id),
             agendaId: String(slot.id),
@@ -104,8 +119,8 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
             status: slot.status,
             statusNome: slot.statusNome,
-            procedimentoNome: (raw.observacao && String(raw.observacao).trim()) || 'Sem procedimento',
-            pacienteNome: 'Sem paciente',
+            procedimentoNome: procFromObs || 'Sem procedimento',
+            pacienteNome: pacFromObs || 'Sem paciente',
             pacienteId: null,
             profissionalNome: slot.profissionalNome || '',
             telefone: '',
