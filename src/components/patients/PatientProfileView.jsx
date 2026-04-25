@@ -52,7 +52,6 @@ import {
 import { PatientAvatar } from './PatientAvatar.jsx';
 import {
   formatPacienteGaleriaError,
-  normalizePacienteGaleriaItem,
   normalizePacienteGaleriaResponse,
   filterGaleriaItemsForUi,
   groupGaleriaItemsBySession,
@@ -62,9 +61,9 @@ import {
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
-  GaleriaArquivoLightbox,
   GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
+import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 
 const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'depois', 'outro'];
@@ -571,7 +570,6 @@ export function PatientProfileView({
   getPatientInitials,
   onStartAttendance,
   onUpdatePatient,
-  onAddGalleryFiles,
   onDeleteGalleryPhoto,
   mergePatientById,
   refreshPatients,
@@ -642,9 +640,6 @@ export function PatientProfileView({
       setCompararSelecionadas((prev) => ({ ...prev, depois: foto }));
     }
   };
-
-  // Abre modal automaticamente quando as duas estão selecionadas
-  const compararPronto = compararSelecionadas.antes && compararSelecionadas.depois;
 
   useEffect(() => {
     if (compararSelecionadas.antes && compararSelecionadas.depois) {
@@ -2677,15 +2672,11 @@ export function PatientProfileView({
             >
               Fechar
             </button>
-            {galleryPreview.authFetch ? (
-              <GaleriaArquivoLightbox url={galleryPreview.url} alt={galleryPreview.caption || 'Preview da foto'} />
-            ) : (
-              <img
-                src={galleryPreview.url}
-                alt={galleryPreview.caption || 'Preview da foto'}
-                className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30 object-contain"
-              />
-            )}
+            <ZoomableGalleryLightbox
+              url={galleryPreview.url}
+              alt={galleryPreview.caption || 'Preview da foto'}
+              authFetch={Boolean(galleryPreview.authFetch)}
+            />
           </div>
         </div>
       )}
