@@ -212,10 +212,10 @@ export function RelatoAcompanhamentoModal({
       <div className="absolute inset-0 bg-black/60" />
 
       <div
-        className="relative w-full max-w-2xl overflow-hidden rounded-2xl border-[3px] border-[#00a88e]/25 bg-white shadow-xl"
+        className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-app-border bg-white shadow-xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b-[3px] border-[#00a88e]/15 p-4">
+        <div className="flex items-center justify-between border-b border-app-border p-4">
           <div>
             <h3 id="relato-acompanhamento-title" className="text-[17px] font-bold text-[#0f172a]">
               Relato de acompanhamento
@@ -227,7 +227,7 @@ export function RelatoAcompanhamentoModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-10 w-10 rounded-xl border-[3px] border-transparent text-[#94a3b8] hover:bg-[#f8fbfb]"
+            className="h-10 w-10 rounded-xl border border-transparent text-[#94a3b8] hover:bg-[#f8fbfb]"
             aria-label="Fechar"
           >
             <X className="mx-auto h-5 w-5" />
@@ -243,13 +243,13 @@ export function RelatoAcompanhamentoModal({
           ) : (
             <>
               {error ? (
-                <div className="rounded-xl border-[3px] border-red-200 bg-red-50 p-3 text-[13px] font-bold text-red-700">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[13px] font-bold text-red-700">
                   {error}
                 </div>
               ) : null}
 
               {success ? (
-                <div className="rounded-xl border-[3px] border-emerald-200 bg-emerald-50 p-3 text-[13px] font-bold text-emerald-700">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[13px] font-bold text-emerald-700">
                   {success}
                 </div>
               ) : null}
@@ -264,7 +264,7 @@ export function RelatoAcompanhamentoModal({
                       setError('');
                       setSuccess('');
                     }}
-                    className="w-full appearance-none rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
+                    className="w-full appearance-none rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
                   >
                     <option value="">Selecione o procedimento...</option>
                     {procedureOptions.map((proc) => (
@@ -278,7 +278,7 @@ export function RelatoAcompanhamentoModal({
 
               {showReadMode ? (
                 <div className="space-y-3">
-                  <div className="rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3">
+                  <div className="rounded-xl border border-slate-200 bg-[#f8fbfb] p-3">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
                       Evolução desde a última sessão
                     </div>
@@ -287,7 +287,7 @@ export function RelatoAcompanhamentoModal({
                     </p>
                   </div>
 
-                  <div className="rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3">
+                  <div className="rounded-xl border border-slate-200 bg-[#f8fbfb] p-3">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
                       Reações ou intercorrências
                     </div>
@@ -296,7 +296,7 @@ export function RelatoAcompanhamentoModal({
                     </p>
                   </div>
 
-                  <div className="rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3">
+                  <div className="rounded-xl border border-slate-200 bg-[#f8fbfb] p-3">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
                       Observações gerais
                     </div>
@@ -305,7 +305,7 @@ export function RelatoAcompanhamentoModal({
                     </p>
                   </div>
 
-                  <div className="rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3">
+                  <div className="rounded-xl border border-slate-200 bg-[#f8fbfb] p-3">
                     <div className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
                       Paciente apto para próxima sessão
                     </div>
@@ -317,7 +317,7 @@ export function RelatoAcompanhamentoModal({
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
-                    className="w-full rounded-xl border-[3px] border-[#00a88e]/20 bg-white px-4 py-3 text-[13px] font-bold text-[#0f766e] hover:bg-[#f8fbfb]"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[13px] font-bold text-[#0f766e] hover:bg-[#f8fbfb]"
                   >
                     Editar
                   </button>
@@ -332,7 +332,7 @@ export function RelatoAcompanhamentoModal({
                         setForm((prev) => ({ ...prev, evolucao: event.target.value }))
                       }
                       rows={4}
-                      className="w-full resize-y rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
+                      className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
                     />
                   </label>
 
@@ -342,7 +342,7 @@ export function RelatoAcompanhamentoModal({
                       value={form.reacoes}
                       onChange={(event) => setForm((prev) => ({ ...prev, reacoes: event.target.value }))}
                       rows={4}
-                      className="w-full resize-y rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
+                      className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
                     />
                   </label>
 
@@ -354,11 +354,11 @@ export function RelatoAcompanhamentoModal({
                         setForm((prev) => ({ ...prev, observacoes: event.target.value }))
                       }
                       rows={4}
-                      className="w-full resize-y rounded-xl border-[3px] border-[#00a88e]/20 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
+                      className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium outline-none focus:border-[#00a88e]"
                     />
                   </label>
 
-                  <label className="flex items-center justify-between gap-3 rounded-xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb] px-4 py-3">
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-app-border bg-[#f8fbfb] px-4 py-3">
                     <div>
                       <div className="text-[13px] font-bold text-[#0f172a]">Paciente apto para próxima sessão</div>
                       <div className="text-[12px] font-medium text-[#64748b]">{aptoLabel}</div>
@@ -394,7 +394,7 @@ export function RelatoAcompanhamentoModal({
                           setForm(buildInitialForm(relato));
                           setError('');
                         }}
-                        className="rounded-xl border-[3px] border-[#e2e8f0] px-4 py-3 text-[13px] font-bold text-[#64748b] hover:bg-[#f8fbfb]"
+                        className="rounded-xl border border-slate-200 px-4 py-3 text-[13px] font-bold text-[#64748b] hover:bg-[#f8fbfb]"
                       >
                         Cancelar edição
                       </button>
@@ -402,7 +402,7 @@ export function RelatoAcompanhamentoModal({
                     <button
                       type="submit"
                       disabled={!canSubmit || isLoading}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border-[3px] border-transparent bg-[#00a88e] px-4 py-3 text-[13px] font-bold text-white hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-4 py-3 text-[13px] font-bold text-white hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                       Salvar relato
@@ -412,12 +412,12 @@ export function RelatoAcompanhamentoModal({
               )}
 
               {relato ? (
-                <div className="border-t-[3px] border-[#00a88e]/10 pt-4">
+                <div className="border-t border-app-border pt-4">
                   {relato.podeProsseguir ? (
                     <button
                       type="button"
                       onClick={onConfirmProsseguir}
-                      className="w-full rounded-xl border-[3px] border-transparent bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white hover:bg-[#00967f]"
+                      className="w-full rounded-xl border border-transparent bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white hover:bg-[#00967f]"
                     >
                       Prosseguir para Execução
                     </button>
@@ -425,7 +425,7 @@ export function RelatoAcompanhamentoModal({
                     <button
                       type="button"
                       onClick={onAjustarPlano}
-                      className="w-full rounded-xl border-[3px] border-transparent bg-amber-500 px-4 py-3 text-[14px] font-bold text-white hover:bg-amber-600"
+                      className="w-full rounded-xl border border-transparent bg-amber-500 px-4 py-3 text-[14px] font-bold text-white hover:bg-amber-600"
                     >
                       Ajustar Plano
                     </button>

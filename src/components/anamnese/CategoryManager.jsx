@@ -145,7 +145,7 @@ export function CategoryManager({ onVerPerguntas }) {
   return (
     <div className="flex flex-col gap-4 xl:gap-5">
       {/* Barra superior: buscar + criar */}
-      <div className="shrink-0 rounded-2xl border-[3px] border-[#00a88e]/10 bg-white p-3 sm:p-4 shadow-sm">
+      <div className="shrink-0 rounded-2xl border border-app-border bg-white p-3 sm:p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
           <div className="flex-1 min-w-0 space-y-1.5">
             <label htmlFor="category-search" className="text-[13px] font-bold text-[#00a88e] ml-1">
@@ -162,7 +162,7 @@ export function CategoryManager({ onVerPerguntas }) {
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Digite para filtrar a lista..."
-                className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+                className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
                 autoComplete="off"
               />
             </div>
@@ -179,13 +179,13 @@ export function CategoryManager({ onVerPerguntas }) {
                 value={novoNome}
                 onChange={(e) => { setNovoNome(e.target.value); if (erro) setErro(''); }}
                 placeholder="Ex.: Cardiológico, Estético..."
-                className={`w-full px-4 py-2.5 sm:py-3 bg-[#f8fbfb] border-[3px] rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${erro ? 'border-red-400 focus:border-red-500' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                className={`w-full px-4 py-2.5 sm:py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 ${erro ? 'border-red-400 focus:border-red-500' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
               />
             </div>
             <button
               type="submit"
               disabled={criando}
-              className="w-full sm:w-auto shrink-0 px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full sm:w-auto shrink-0 px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" strokeWidth={2.5} />}
               Criar
@@ -194,14 +194,14 @@ export function CategoryManager({ onVerPerguntas }) {
         </div>
 
         {erro && (
-          <div className="mt-3 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
+          <div className="mt-3 bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">
             {erro}
           </div>
         )}
       </div>
 
       {/* Lista */}
-      <div className="flex flex-col min-w-0 w-full rounded-2xl border-[3px] border-[#00a88e]/10 bg-[#f8fbfb]/80 p-4 sm:p-5 xl:p-6">
+      <div className="flex flex-col min-w-0 w-full rounded-2xl border border-app-border bg-[#f8fbfb]/80 p-4 sm:p-5 xl:p-6">
         {loading ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 py-8 text-center min-h-[12rem]">
             <Loader2 className="w-6 h-6 animate-spin text-[#00a88e]" />
@@ -235,7 +235,7 @@ export function CategoryManager({ onVerPerguntas }) {
               return (
                 <div
                   key={cat.id}
-                  className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30 transition-all shadow-sm min-w-[min(100%,14rem)]"
+                  className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-xl border border-app-border bg-white hover:border-[#00a88e]/30 transition-all shadow-sm min-w-[min(100%,14rem)]"
                 >
                   {isEditing ? (
                     /* ── Edit mode ── */

@@ -60,10 +60,10 @@ export function AgendaModal({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
       <div
-        className="relative w-full max-w-[860px] bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-y-auto max-h-[92vh]"
+        className="relative w-full max-w-[860px] bg-white rounded-2xl border border-app-border shadow-xl overflow-y-auto max-h-[92vh]"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
+        <div className="p-4 flex items-center justify-between border-b border-app-border">
           <div className="flex items-center gap-3">
             <Calendar className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
             <div>
@@ -78,7 +78,7 @@ export function AgendaModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
+            className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border border-transparent text-[#94a3b8] hover:text-[#00a88e] transition-all flex items-center justify-center"
             aria-label="Fechar"
           >
             <X className="w-5 h-5" strokeWidth={2.5} />
@@ -87,7 +87,7 @@ export function AgendaModal({
 
         <div className="p-4">
           {agendaModalError && (
-            <div className="mb-4 bg-red-50 text-red-600 border-[3px] border-red-200 rounded-xl p-3 text-[13px] font-bold">
+            <div className="mb-4 bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">
               {agendaModalError}
             </div>
           )}
@@ -98,7 +98,7 @@ export function AgendaModal({
               <select
                 value={agendaRoleUserId}
                 onChange={(e) => setAgendaRoleUserId(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
               >
                 <option value="">Selecione...</option>
                 {equipeList.map((p) => (
@@ -113,7 +113,7 @@ export function AgendaModal({
               <select
                 value={agendaCatalogoId}
                 onChange={(e) => setAgendaCatalogoId(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
               >
                 <option value="">Nenhum</option>
                 {catalogOptions.map((c) => (
@@ -136,7 +136,7 @@ export function AgendaModal({
               Opcional: incluir paciente só atualiza a lista para você usar em &quot;Marcar atendimento&quot;. Criar o horário não
               reserva vaga para ninguém.
             </p>
-            <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-3 border-[3px] border-[#00a88e]/15">
+            <div className="flex bg-[#f8fbfb] p-1.5 rounded-2xl mb-3 border border-app-border">
               <button
                 type="button"
                 onClick={() => setAgendaModePatient('novo')}
@@ -168,7 +168,7 @@ export function AgendaModal({
                   <input
                     value={agendaNewPatientNome}
                     onChange={(e) => setAgendaNewPatientNome(e.target.value)}
-                    className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                    className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
                     placeholder="Nome do paciente"
                   />
                 </div>
@@ -182,13 +182,13 @@ export function AgendaModal({
                         toast.error('O CPF deve conter 11 dígitos.');
                       }
                     }}
-                    className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                    className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
                     placeholder="000.000.000-00"
                   />
                 </div>
                 <div className="space-y-1.5 md:col-span-1">
                   <label className="text-[13px] font-bold text-[#00a88e]">Telefone</label>
-                  <div className={`flex items-stretch gap-1 rounded-xl border-[3px] bg-[#f8fbfb] transition-all focus-within:ring-4 focus-within:ring-[#00a88e]/10 ${agendaNewPatientTelefoneTouched && !isPhoneValid(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero) ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/20 focus-within:border-[#00a88e]'}`}>
+                  <div className={`flex items-stretch gap-1 rounded-xl border bg-[#f8fbfb] transition-all focus-within:ring-4 focus-within:ring-[#00a88e]/10 ${agendaNewPatientTelefoneTouched && !isPhoneValid(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero) ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/20 focus-within:border-[#00a88e]'}`}>
                     <select
                       value={agendaNewPatientTelefoneCountry}
                       title={getCountryByCode(agendaNewPatientTelefoneCountry).name}
@@ -232,7 +232,7 @@ export function AgendaModal({
                 <input
                   value={agendaPatientSearch}
                   onChange={(e) => setAgendaPatientSearch(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                  className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
                   placeholder="Buscar por nome, CPF ou telefone..."
                 />
 
@@ -252,7 +252,7 @@ export function AgendaModal({
                           type="button"
                           key={p.id || p.cpf}
                           onClick={() => setAgendaSelectedPatientCpf((p.cpf || '').trim())}
-                          className={`w-full text-left p-4 rounded-xl border-[3px] mb-2 ${
+                          className={`w-full text-left p-4 rounded-xl border mb-2 ${
                             selected
                               ? 'border-[#00a88e] bg-[#e6f7f5]'
                               : 'border-[#00a88e]/15 bg-white hover:bg-[#f0fdfa]'
@@ -278,7 +278,7 @@ export function AgendaModal({
                 type="date"
                 value={agendaDate}
                 onChange={(e) => setAgendaDate(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               />
             </div>
             <div className="space-y-1.5">
@@ -287,7 +287,7 @@ export function AgendaModal({
                 type="time"
                 value={agendaTime}
                 onChange={(e) => (onAgendaTimeChange ? onAgendaTimeChange(e.target.value) : setAgendaTime(e.target.value))}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               />
             </div>
             <div className="space-y-1.5">
@@ -296,7 +296,7 @@ export function AgendaModal({
                 type="time"
                 value={agendaHoraFim}
                 onChange={(e) => setAgendaHoraFim(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               />
             </div>
             <div className="space-y-1.5">
@@ -304,7 +304,7 @@ export function AgendaModal({
               <input
                 value={agendaProcedure}
                 onChange={(e) => setAgendaProcedure(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
                 placeholder="Ex.: manhã consultas, revisão…"
               />
             </div>
@@ -316,7 +316,7 @@ export function AgendaModal({
             type="button"
             onClick={onClose}
             disabled={agendaSaving}
-            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all border-[3px] border-[#00a88e]/20 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa] disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all border border-slate-200 bg-white text-[#64748b] hover:text-[#00a88e] hover:bg-[#f0fdfa] disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -324,7 +324,7 @@ export function AgendaModal({
             type="button"
             onClick={onConfirm}
             disabled={agendaSaving}
-            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {agendaSaving && <Loader2 className="w-4 h-4 animate-spin" />}
             Criar horário

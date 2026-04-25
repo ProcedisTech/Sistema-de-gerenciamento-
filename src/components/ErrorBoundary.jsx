@@ -34,7 +34,7 @@ export class ErrorBoundary extends React.Component {
         className="min-h-screen flex items-center justify-center p-6"
         style={{ backgroundColor: '#f8fbfb', color: '#0f172a' }}
       >
-        <div className="w-full max-w-[560px] bg-white border-[3px] border-red-200 rounded-2xl p-6 shadow-lg">
+        <div className="w-full max-w-[560px] bg-white border border-red-200 rounded-2xl p-6 shadow-lg">
           <h1 className="text-[20px] font-bold text-red-600 mb-2">O app encontrou um erro</h1>
           <p className="text-[14px] text-[#475569] mb-4">
             Evitamos a tela em branco e mantivemos o sistema ativo. Tente recarregar.

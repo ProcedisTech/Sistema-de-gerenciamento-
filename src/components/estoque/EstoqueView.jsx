@@ -16,7 +16,7 @@ function TabButton({ tabKey, label, icon, active, onSelect, variant }) {
       <button
         type="button"
         onClick={() => onSelect(tabKey)}
-        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-[13px] text-left transition-all border-[3px] ${
+        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-[13px] text-left transition-all border ${
           active
             ? 'text-[#00a88e] border-[#00a88e] bg-[#f0fdfa] shadow-sm'
             : 'text-[#64748b] border-transparent bg-[#f8fbfb] hover:border-[#00a88e]/20 hover:text-[#0f766e]'
@@ -50,7 +50,7 @@ export function EstoqueView() {
     <div className="flex flex-col flex-1 min-h-0 lg:flex-row lg:gap-8 xl:gap-10">
       <div className="flex-shrink-0 lg:w-56 xl:w-64 lg:border-r-[3px] lg:border-[#00a88e]/10 lg:pr-8">
         <div className="flex items-center gap-3 sm:gap-4 mb-4 lg:mb-5">
-          <div className="bg-[#fef3c7] p-2.5 sm:p-3 rounded-2xl text-[#f59e0b] border-[3px] border-[#f59e0b]/25 lg:p-3">
+          <div className="bg-[#fef3c7] p-2.5 sm:p-3 rounded-2xl text-[#f59e0b] border border-amber-200 lg:p-3">
             <Package className="w-6 h-6 sm:w-7 sm:h-7" strokeWidth={2.5} />
           </div>
           <div className="min-w-0 flex-1 lg:pr-0">
@@ -61,7 +61,7 @@ export function EstoqueView() {
           </div>
         </div>
 
-        <div className="flex border-b-[3px] border-[#00a88e]/10 mb-4 overflow-x-auto lg:hidden -mx-1 px-1">
+        <div className="flex border-b border-app-border mb-4 overflow-x-auto lg:hidden -mx-1 px-1">
           {TABS.map(({ key, label, icon }) => (
             <TabButton key={key} tabKey={key} label={label} icon={icon} active={activeTab === key} onSelect={setActiveTab} />
           ))}

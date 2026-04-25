@@ -319,7 +319,7 @@ export function Step3Evaluation({
           value={observacoes}
           onChange={(e) => typeof setObservacoes === 'function' && setObservacoes(e.target.value)}
           placeholder="Descreva as expectativas do paciente, procedimentos planejados, observações clínicas relevantes..."
-          className="w-full resize-y rounded-xl border-[3px] border-[#e2e8f0] bg-[#f8fafc] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/10"
+          className="w-full resize-y rounded-xl border border-slate-200 bg-[#f8fafc] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/10"
         />
       </div>
 

@@ -55,20 +55,20 @@ export function AgendaView({
         <button
           type="button"
           onClick={openAgendaModal}
-          className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border-[3px] border-transparent flex items-center justify-center gap-2"
+          className="px-5 py-3 rounded-xl font-bold text-[14px] transition-all shadow-md bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent flex items-center justify-center gap-2"
         >
           <Calendar className="w-5 h-5" /> + Novo horário
         </button>
       </div>
 
       {agendasError ? (
-        <div className="mb-4 p-3 rounded-xl border-[3px] border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium">
+        <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium">
           {agendasError}
         </div>
       ) : null}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white border border-app-border rounded-2xl p-4 shadow-sm">
           <div className="text-[12px] font-bold text-[#64748b] mb-1">Horários no mês</div>
           <div className="text-[20px] font-extrabold text-[#0f172a]">{stats.monthTotal}</div>
           {stats.compromissosMes > 0 && (
@@ -78,16 +78,16 @@ export function AgendaView({
             <div className="text-[11px] text-[#16a34a] mt-0.5 font-bold">{stats.monthConfirmed} confirmado(s)</div>
           )}
         </div>
-        <div className="bg-white border-[3px] border-[#22c55e]/15 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white border border-emerald-200 rounded-2xl p-4 shadow-sm">
           <div className="text-[12px] font-bold text-[#64748b] mb-1">Pacientes únicos (mês)</div>
           <div className="text-[20px] font-extrabold text-[#16a34a]">{monthPatientCpfs?.size ?? 0}</div>
           <div className="text-[11px] text-[#64748b] mt-1 font-medium">nos compromissos</div>
         </div>
-        <div className="bg-white border-[3px] border-[#f59e0b]/20 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white border border-amber-200 rounded-2xl p-4 shadow-sm">
           <div className="text-[12px] font-bold text-[#64748b] mb-1">Horários pendentes</div>
           <div className="text-[20px] font-extrabold text-[#b45309]">{stats.monthPending}</div>
         </div>
-        <div className="bg-white border-[3px] border-[#00a88e]/10 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white border border-app-border rounded-2xl p-4 shadow-sm">
           <div className="text-[12px] font-bold text-[#64748b] mb-1">Hoje</div>
           <div className="text-[20px] font-extrabold text-[#0f766e]">{stats.todayTotal}</div>
           {stats.compromissosHoje > 0 && (
@@ -97,7 +97,7 @@ export function AgendaView({
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-        <div className="flex-1 bg-[#f8fbfb] border-[3px] border-[#00a88e]/15 rounded-2xl p-3 sm:p-4 relative">
+        <div className="flex-1 bg-[#f8fbfb] border border-app-border rounded-2xl p-3 sm:p-4 relative">
           {agendasLoading && (
             <div className="absolute inset-0 z-10 bg-white/60 flex items-center justify-center rounded-2xl">
               <Loader2 className="w-8 h-8 animate-spin text-[#00a88e]" />
@@ -107,7 +107,7 @@ export function AgendaView({
             <button
               type="button"
               onClick={goPrevCalendarMonth}
-              className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white border-[3px] border-[#00a88e]/20 text-[#0f766e] font-bold hover:bg-[#e6f7f5]"
+              className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white border border-slate-200 text-[#0f766e] font-bold hover:bg-[#e6f7f5]"
             >
               Anterior
             </button>
@@ -115,7 +115,7 @@ export function AgendaView({
             <button
               type="button"
               onClick={goNextCalendarMonth}
-              className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white border-[3px] border-[#00a88e]/20 text-[#0f766e] font-bold hover:bg-[#e6f7f5]"
+              className="px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-white border border-slate-200 text-[#0f766e] font-bold hover:bg-[#e6f7f5]"
             >
               Proximo
             </button>
@@ -139,7 +139,7 @@ export function AgendaView({
                   type="button"
                   disabled={!dayNum}
                   onClick={() => dayNum && dateStr && setSelectedDay(dateStr)}
-                  className={`h-[44px] sm:h-[54px] rounded-xl border-[3px] text-left px-1.5 sm:px-2 py-1.5 sm:py-2 transition-all ${
+                  className={`h-[44px] sm:h-[54px] rounded-xl border text-left px-1.5 sm:px-2 py-1.5 sm:py-2 transition-all ${
                     dayNum
                       ? isSelected
                         ? 'border-[#00a88e] bg-[#e6f7f5]'
@@ -162,10 +162,10 @@ export function AgendaView({
         </div>
 
         <div className="w-full lg:w-[420px]">
-          <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-2xl p-3 sm:p-4 mt-2 lg:mt-0">
+          <div className="bg-white border border-app-border rounded-2xl p-3 sm:p-4 mt-2 lg:mt-0">
             <div className="flex items-center justify-between mb-2 sm:mb-3">
               <h4 className="text-[16px] font-bold text-[#0f172a]">{selectedDay}</h4>
-              <span className="text-[12px] font-bold text-[#0f766e] bg-[#e6f7f5] border-[3px] border-[#00a88e]/20 px-2 py-0.5 rounded-lg">
+              <span className="text-[12px] font-bold text-[#0f766e] bg-[#e6f7f5] border border-slate-200 px-2 py-0.5 rounded-lg">
                 {appointmentsForSelectedDay.length} horário(s)
                 {compromissosNoDia > 0 ? ` · ${compromissosNoDia} comprom.` : ''}
               </span>
@@ -188,7 +188,7 @@ export function AgendaView({
                   const podeMarcar = a.tipo !== 'bloqueio' && status !== 'cancelado';
 
                   return (
-                    <div key={a.id} className="p-4 rounded-xl border-[3px] border-[#00a88e]/15 bg-[#f8fbfb]">
+                    <div key={a.id} className="p-4 rounded-xl border border-app-border bg-[#f8fbfb]">
                       <div className="flex items-center justify-between gap-3 mb-1">
                         <div className="text-[14px] font-bold text-[#0f766e]">{a.profissionalNome || 'Profissional'}</div>
                         <div className="text-[12px] font-bold text-[#64748b]">{a.time}</div>
@@ -204,7 +204,7 @@ export function AgendaView({
                           {comps.map((c) => (
                             <div
                               key={c.id}
-                              className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white border-[2px] border-[#e2e8f0]"
+                              className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white border border-slate-200"
                             >
                               <div className="min-w-0 flex-1">
                                 <div className="text-[13px] font-bold text-[#0f172a]">{c.pacienteNome || 'Paciente'}</div>
@@ -227,14 +227,14 @@ export function AgendaView({
                       )}
 
                       <div className="flex flex-wrap items-center gap-2 mt-2">
-                        <span className={`text-[12px] font-bold px-2 py-1 rounded-lg border-[3px] ${statusPill}`}>
+                        <span className={`text-[12px] font-bold px-2 py-1 rounded-lg border ${statusPill}`}>
                           {a.statusNome || status}
                         </span>
                         {podeMarcar && (
                           <button
                             type="button"
                             onClick={() => openMarcarCompromisso?.(a)}
-                            className="text-[12px] font-bold px-3 py-2 rounded-xl border-[3px] border-[#00a88e]/30 bg-white text-[#00a88e] hover:bg-[#e6f7f5] flex items-center gap-1"
+                            className="text-[12px] font-bold px-3 py-2 rounded-xl border border-app-border bg-white text-[#00a88e] hover:bg-[#e6f7f5] flex items-center gap-1"
                           >
                             <UserPlus className="w-3.5 h-3.5" /> Marcar atendimento
                           </button>
@@ -243,7 +243,7 @@ export function AgendaView({
                           <button
                             type="button"
                             onClick={() => cancelAppointment?.(a.id)}
-                            className="text-[12px] font-bold px-3 py-2 rounded-xl border-[3px] border-red-200 bg-white text-red-600 hover:bg-red-50"
+                            className="text-[12px] font-bold px-3 py-2 rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50"
                           >
                             Cancelar horário
                           </button>

@@ -260,17 +260,17 @@ export function ItensEstoqueManager() {
     <div className="flex flex-col flex-1 min-h-0">
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-xl p-3">
+        <div className="bg-white border border-app-border rounded-xl p-3">
           <div className="text-[11px] font-bold text-[#64748b] mb-0.5">Total em Estoque</div>
           <div className="text-[20px] font-extrabold text-[#0f766e]">{stats.totalQty}</div>
         </div>
-        <div className="bg-white border-[3px] border-red-100 rounded-xl p-3">
+        <div className="bg-white border border-red-100 rounded-xl p-3">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#64748b] mb-0.5">
             Itens Críticos {stats.criticos > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}
           </div>
           <div className={`text-[20px] font-extrabold ${stats.criticos > 0 ? 'text-red-600' : 'text-[#0f172a]'}`}>{stats.criticos}</div>
         </div>
-        <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-xl p-3">
+        <div className="bg-white border border-app-border rounded-xl p-3">
           <div className="text-[11px] font-bold text-[#64748b] mb-0.5">Total de Produtos</div>
           <div className="text-[20px] font-extrabold text-[#0f172a]">{stats.totalProdutos}</div>
         </div>
@@ -285,7 +285,7 @@ export function ItensEstoqueManager() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar produto ou lote..."
-            className="w-full pl-10 pr-4 py-2.5 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[13px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+            className="w-full pl-10 pr-4 py-2.5 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[13px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
           />
         </div>
         <div className="flex gap-1.5">
@@ -294,7 +294,7 @@ export function ItensEstoqueManager() {
               key={f.key}
               type="button"
               onClick={() => setActiveFilter(f.key)}
-              className={`px-3 py-2 rounded-xl text-[12px] font-bold border-[3px] transition-all whitespace-nowrap ${
+              className={`px-3 py-2 rounded-xl text-[12px] font-bold border transition-all whitespace-nowrap ${
                 activeFilter === f.key
                   ? 'bg-[#00a88e] text-white border-[#00a88e] shadow-sm'
                   : 'bg-white text-[#64748b] border-[#e2e8f0] hover:border-[#00a88e]/30'
@@ -308,19 +308,19 @@ export function ItensEstoqueManager() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <button type="button" onClick={openNewProduct} className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-[#00a88e] hover:bg-[#00967f] text-white shadow-md border-[3px] border-transparent flex items-center gap-2">
+        <button type="button" onClick={openNewProduct} className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-[#00a88e] hover:bg-[#00967f] text-white shadow-md border border-transparent flex items-center gap-2">
           <Plus className="w-4 h-4" strokeWidth={3} /> Novo Produto
         </button>
-        <button type="button" onClick={() => setEntradaOpen(true)} className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-white hover:bg-[#dcfce7] text-[#16a34a] shadow-sm border-[3px] border-[#22c55e]/25 flex items-center gap-2">
+        <button type="button" onClick={() => setEntradaOpen(true)} className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-white hover:bg-[#dcfce7] text-[#16a34a] shadow-sm border border-emerald-200 flex items-center gap-2">
           <ArrowDownCircle className="w-4 h-4" strokeWidth={2} /> Entrada
         </button>
-        <button type="button" onClick={() => setBaixaOpen(true)} className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-white hover:bg-red-50 text-red-600 shadow-sm border-[3px] border-red-200 flex items-center gap-2">
+        <button type="button" onClick={() => setBaixaOpen(true)} className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-white hover:bg-red-50 text-red-600 shadow-sm border border-red-200 flex items-center gap-2">
           <ArrowUpCircle className="w-4 h-4" strokeWidth={2} /> Baixa Manual
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-xl border-[3px] border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium">{error}</div>
+        <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium">{error}</div>
       )}
 
       {/* Table */}
@@ -335,9 +335,9 @@ export function ItensEstoqueManager() {
           <p className="text-[13px] font-medium">{searchQuery || activeFilter !== 'todos' ? 'Ajuste os filtros.' : 'Comece adicionando um produto.'}</p>
         </div>
       ) : (
-        <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-2xl overflow-hidden flex-1 flex flex-col min-h-0">
+        <div className="bg-white border border-app-border rounded-2xl overflow-hidden flex-1 flex flex-col min-h-0">
           {/* Header */}
-          <div className="hidden md:grid grid-cols-[2.2fr_1.2fr_1fr_0.8fr_1.1fr_auto] gap-x-3 px-4 py-2.5 bg-[#f8fbfb] border-b-[3px] border-[#00a88e]/10 text-[11px] font-bold text-[#64748b] uppercase tracking-wide">
+          <div className="hidden md:grid grid-cols-[2.2fr_1.2fr_1fr_0.8fr_1.1fr_auto] gap-x-3 px-4 py-2.5 bg-[#f8fbfb] border-b border-app-border text-[11px] font-bold text-[#64748b] uppercase tracking-wide">
             <div>Produto</div>
             <div>Lote</div>
             <div>Validade</div>

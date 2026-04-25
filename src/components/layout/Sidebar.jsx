@@ -123,15 +123,15 @@ export function Sidebar({
       ) : null}
 
       <aside
-        className={`hidden h-full shrink-0 flex-col overflow-hidden border-r-[3px] border-[#00a88e]/15 bg-white shadow-[4px_0_24px_rgb(0,168,142,0.02)] transition-[width] duration-200 ease-out md:flex ${railW} ${asideZ}`}
+        className={`hidden h-full shrink-0 flex-col overflow-hidden border-r border-app-border bg-white shadow-app-sidebar transition-[width] duration-200 ease-out md:flex ${railW} ${asideZ}`}
       >
         {narrowRail ? (
           <>
-            <div className="flex w-full flex-col items-center border-b border-[#00a88e]/10 pb-2 pt-1 transition-opacity duration-200">
+            <div className="flex w-full flex-col items-center border-b border-app-border pb-2 pt-1 transition-opacity duration-200">
               <button
                 type="button"
                 onClick={openRailWide}
-                className="mx-auto mt-3 flex h-10 w-10 items-center justify-center rounded-xl border-[3px] border-transparent text-[#64748b] transition-all hover:border-[#00a88e]/15 hover:bg-[#f1f5f9] hover:text-[#0f172a]"
+                className="mx-auto mt-3 flex h-10 w-10 items-center justify-center rounded-xl text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
                 aria-label="Expandir menu"
                 title="Menu"
               >
@@ -157,10 +157,10 @@ export function Sidebar({
                     type="button"
                     title={item.label}
                     onClick={() => setActiveView(item.view)}
-                    className={`mx-auto flex h-10 w-10 items-center justify-center rounded-xl border-[3px] border-transparent transition-all ${
+                    className={`mx-auto flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                       activeView === item.view
-                        ? 'border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e]'
-                        : 'text-[#64748b] hover:border-[#00a88e]/15 hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                        ? 'bg-emerald-50 text-app-accent-deep shadow-sm ring-1 ring-emerald-200/60'
+                        : 'text-[#64748b] hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep'
                     }`}
                   >
                     <NavIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
@@ -169,12 +169,12 @@ export function Sidebar({
               })}
             </nav>
 
-            <div className="mt-auto border-t-[3px] border-[#00a88e]/10 p-3">
+            <div className="mt-auto border-t border-app-border p-3">
               <button
                 type="button"
                 title="Sair do Sistema"
                 onClick={handleLogout}
-                className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border-[3px] border-transparent text-[#ef4444] transition-all hover:border-red-200 hover:bg-red-50"
+                className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100"
               >
                 <LogOut className="h-5 w-5 shrink-0" strokeWidth={2.5} />
               </button>
@@ -184,9 +184,9 @@ export function Sidebar({
 
         {!narrowRail && isDesktop ? (
           <>
-            <div className="flex items-center gap-2 border-b border-[#00a88e]/10 p-4 pl-4 pr-3 transition-opacity duration-200">
+            <div className="flex items-center gap-2 border-b border-app-border p-4 pl-4 pr-3 transition-opacity duration-200">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="rounded-xl border-[3px] border-[#00a88e]/25 bg-[#00a88e] p-2 shadow-sm">
+                <div className="rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
                   {clinicaLogoUrl && clinicaLogoResolved ? (
                     <img
                       src={clinicaLogoResolved}
@@ -205,7 +205,7 @@ export function Sidebar({
               <button
                 type="button"
                 onClick={() => setDesktopCollapsed(true)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[3px] border-[#00a88e]/20 text-[#64748b] transition-all hover:border-[#00a88e]/35 hover:bg-[#f1f5f9] hover:text-[#0f172a]"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-app-border text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
                 aria-label="Recolher menu"
                 title="Recolher"
               >
@@ -213,13 +213,13 @@ export function Sidebar({
               </button>
             </div>
 
-            <div className="mx-4 mb-6 mt-4 flex items-center gap-3 rounded-[14px] border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] p-3 shadow-sm">
+            <div className="mx-4 mb-6 mt-4 flex items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 shadow-app-card">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-sm font-bold text-white">
                 {displayInitials(displayName)}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[14px] font-bold leading-tight text-[#0f766e]">{displayName}</h2>
-                <p className="truncate text-[12px] font-medium text-[#00a88e]">{roleLabel}</p>
+                <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
+                <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
               </div>
             </div>
 
@@ -232,10 +232,10 @@ export function Sidebar({
                     type="button"
                     title={item.label}
                     onClick={() => setActiveView(item.view)}
-                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl border-[3px] border-transparent px-4 py-3 text-[14px] font-semibold transition-all active:bg-[#f0fdfa] ${
+                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl pl-2 pr-4 py-3 text-left text-[14px] font-semibold transition-all border-l-2 ${
                       activeView === item.view
-                        ? 'border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e]'
-                        : 'bg-white text-[#64748b] hover:border-[#00a88e]/20 hover:text-[#00a88e]'
+                        ? 'border-l-app-accent bg-emerald-50 text-app-accent-deep'
+                        : 'border-l-transparent bg-white text-[#64748b] hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep'
                     }`}
                   >
                     <NavIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
@@ -245,11 +245,11 @@ export function Sidebar({
               })}
             </nav>
 
-            <div className="border-t-[3px] border-[#00a88e]/10 p-4">
+            <div className="border-t border-app-border p-4">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border-[3px] border-transparent px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all active:bg-red-50"
+                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100"
               >
                 <LogOut className="h-5 w-5 shrink-0" strokeWidth={2.5} />
                 <span>Sair do Sistema</span>
@@ -260,11 +260,11 @@ export function Sidebar({
 
         {!narrowRail && isTabletSidebar && tabletExpanded ? (
           <>
-            <div className="flex w-full items-center border-b border-[#00a88e]/10 px-4 pt-3">
+            <div className="flex w-full items-center border-b border-app-border px-4 pt-3">
               <button
                 type="button"
                 onClick={() => setTabletExpanded(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border-[3px] border-transparent text-[#64748b] transition-all hover:border-[#00a88e]/15 hover:bg-[#f1f5f9] hover:text-[#0f172a]"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
                 aria-label="Recolher menu"
                 title="Recolher"
               >
@@ -272,8 +272,8 @@ export function Sidebar({
               </button>
             </div>
 
-            <div className="flex items-center gap-3 border-b border-[#00a88e]/10 px-6 pb-4 pt-2">
-              <div className="rounded-xl border-[3px] border-[#00a88e]/25 bg-[#00a88e] p-2 shadow-sm">
+            <div className="flex items-center gap-3 border-b border-app-border px-6 pb-4 pt-2">
+              <div className="rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
                 {clinicaLogoUrl && clinicaLogoResolved ? (
                   <img
                     src={clinicaLogoResolved}
@@ -290,13 +290,13 @@ export function Sidebar({
               </div>
             </div>
 
-            <div className="mx-4 mb-6 mt-4 flex items-center gap-3 rounded-[14px] border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] p-3 shadow-sm">
+            <div className="mx-4 mb-6 mt-4 flex items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 shadow-app-card">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-sm font-bold text-white">
                 {displayInitials(displayName)}
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[14px] font-bold leading-tight text-[#0f766e]">{displayName}</h2>
-                <p className="truncate text-[12px] font-medium text-[#00a88e]">{roleLabel}</p>
+                <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
+                <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
               </div>
             </div>
 
@@ -309,10 +309,10 @@ export function Sidebar({
                     type="button"
                     title={item.label}
                     onClick={() => setActiveView(item.view)}
-                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl border-[3px] border-transparent px-4 py-3 text-[14px] font-semibold transition-all active:bg-[#f0fdfa] ${
+                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl pl-2 pr-4 py-3 text-left text-[14px] font-semibold transition-all border-l-2 ${
                       activeView === item.view
-                        ? 'border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e]'
-                        : 'bg-white text-[#64748b] hover:border-[#00a88e]/20 hover:text-[#00a88e]'
+                        ? 'border-l-app-accent bg-emerald-50 text-app-accent-deep'
+                        : 'border-l-transparent bg-white text-[#64748b] hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep'
                     }`}
                   >
                     <NavIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
@@ -322,11 +322,11 @@ export function Sidebar({
               })}
             </nav>
 
-            <div className="border-t-[3px] border-[#00a88e]/10 p-4">
+            <div className="border-t border-app-border p-4">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl border-[3px] border-transparent px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all active:bg-red-50"
+                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100"
               >
                 <LogOut className="h-5 w-5 shrink-0" strokeWidth={2.5} />
                 <span>Sair do Sistema</span>

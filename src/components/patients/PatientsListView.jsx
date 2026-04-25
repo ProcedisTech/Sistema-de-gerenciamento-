@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpDown,
-  ChevronRight,
   ExternalLink,
   Image as ImageIcon,
   Loader2,
   Play,
   Plus,
   Search,
+  Shield,
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
@@ -46,6 +46,25 @@ function lastProcedureLabel(p) {
   return n ? String(n) : '—';
 }
 
+/** Data a exibir no rodapé: último procedimento (criadoEm / data) ou fallback ultimaVisita. */
+function lastProcedureDateForCard(p) {
+  const procs = Array.isArray(p?.procedures) ? p.procedures : [];
+  if (procs.length) {
+    const last = procs[procs.length - 1];
+    if (last?.criadoEm) {
+      const t = new Date(last.criadoEm);
+      if (!Number.isNaN(t.getTime())) {
+        return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      }
+    }
+    const rawData = last?.data != null ? String(last.data).trim() : '';
+    if (rawData && rawData !== '—' && rawData !== '-') return rawData;
+  }
+  const uv = String(p?.ultimaVisita || '').trim();
+  if (uv && uv !== '—' && uv !== '-') return uv;
+  return '—';
+}
+
 /** Heurística visual: sem visita nem procedimento na lista local. */
 function isPatientLikelyNovo(p) {
   const uv = String(p?.ultimaVisita || '').trim();
@@ -73,6 +92,105 @@ const SORT_OPTIONS = [
   { value: 'visita-asc', label: 'Última visita (antiga)' },
   { value: 'birthday-asc', label: 'Aniversário (mais próximo)' },
 ];
+
+const patientListAvatarClass =
+  'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] sm:h-11 sm:w-11';
+
+/**
+ * Cartão de paciente na coluna esquerda (estilo protótipo: branco, sombra, sobre fundo suave).
+ */
+function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
+  const clinical = hasClinicalAlert(patient);
+  const semRet = semRetorno60d(patient);
+  const anamVenc = anamneseVencidaFromPatient(patient);
+  const menor = patient.idade != null && Number(patient.idade) < 18;
+  const novo = isPatientLikelyNovo(patient);
+  const lastProcDate = lastProcedureDateForCard(patient);
+  const lastProcDateMuted = lastProcDate === '—' || lastProcDate === '-';
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`flex w-full min-w-0 items-start gap-2.5 rounded-lg border-2 p-2.5 text-left shadow-app-card transition-all duration-150 active:bg-emerald-100/50 sm:gap-3 sm:p-3 ${
+        selected
+          ? 'border-[#0d9488] bg-white shadow-sm ring-1 ring-[#0d9488]/20'
+          : 'border-app-border bg-white hover:border-[#2dd4bf] hover:bg-emerald-50/40 hover:shadow-sm'
+      }`}
+    >
+      <PatientAvatar
+        patient={patient}
+        getPatientInitials={getPatientInitials}
+        className={patientListAvatarClass}
+        initialsClassName="text-xs font-bold text-app-accent-deep sm:text-[13px]"
+        spinnerClassName="h-4 w-4"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-1.5">
+          <p className="min-w-0 flex-1 truncate text-[14px] font-bold leading-snug text-[#0f172a] sm:text-[15px]">
+            {patient.nome}
+          </p>
+          <Shield
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-accent"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+        </div>
+        <div className="mt-0.5 space-y-0.5 text-[12px] text-[#64748b] sm:text-[13px]">
+          <p>{patient.idade != null ? `${patient.idade} anos` : '—'}</p>
+          <p className="truncate" title={patient.telefone || undefined}>
+            {patient.telefone || '—'}
+          </p>
+        </div>
+        <div className="mt-1.5 border-t border-slate-100 pt-1.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">
+              Último procedimento
+            </span>
+            <span
+              className={
+                lastProcDateMuted
+                  ? 'shrink-0 text-[13px] font-semibold text-[#cbd5e1]'
+                  : 'shrink-0 text-[13px] font-semibold text-app-accent'
+              }
+              title={String(lastProcDate)}
+            >
+              {lastProcDate}
+            </span>
+          </div>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-0.5">
+          {clinical ? (
+            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-1.5 py-px text-[10px] font-semibold text-[#dc2626]">
+              Alerta
+            </span>
+          ) : null}
+          {semRet ? (
+            <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-1.5 py-px text-[10px] font-semibold text-[#ea580c]">
+              Sem retorno
+            </span>
+          ) : null}
+          {anamVenc ? (
+            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-1.5 py-px text-[10px] font-semibold text-[#dc2626]">
+              Anamnese vencida
+            </span>
+          ) : null}
+          {menor ? (
+            <span className="inline-flex items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-1.5 py-px text-[10px] font-semibold text-[#2563eb]">
+              Menor
+            </span>
+          ) : null}
+          {novo ? (
+            <span className="inline-flex items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-1.5 py-px text-[10px] font-semibold text-[#0f766e]">
+              Novo
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
 
 function previewHasExistingAnamneseFromList(list) {
   const rows = (Array.isArray(list) ? [...list] : []).filter((r) => r?.dataHora);
@@ -249,7 +367,7 @@ function PatientPreviewPanel({
           <ul className="flex flex-col gap-2">
             {timelineProcedures.map((proc, idx) => (
               <li key={idx}>
-                <div className="rounded-lg border border-[#f1f5f9] p-3 transition-colors duration-100 hover:border-[#00a88e]/30">
+                <div className="rounded-lg border border-app-border p-3 transition-colors duration-100 shadow-sm hover:bg-app-nav-hover">
                   <p className="text-[11px] font-normal text-[#94a3b8]">
                     {proc.data}
                     {proc.hora ? ` · ${proc.hora}` : ''}
@@ -534,10 +652,29 @@ export function PatientsListView({
   }, [previewPatient]);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
-      <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
-        <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm">
-          <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-[#e2e8f0] bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
+            Gestão de Pacientes
+          </h1>
+          <p className="mt-1 text-[14px] font-medium text-[#64748b]">
+            Histórico completo e dados protegidos
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onCreatePatient}
+          className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:w-auto sm:min-w-0"
+        >
+          <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
+        </button>
+      </div>
+
+      <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
+        <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
+          <div className="overflow-hidden rounded-xl border border-app-border bg-white shadow-sm">
+            <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-app-border bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
               <select
                 value={tipoBusca}
@@ -570,15 +707,14 @@ export function PatientsListView({
                         ? '(00) 00000-0000'
                         : tipoBusca === 'email'
                           ? 'email@exemplo.com'
-                          : 'Buscar por nome...'
+                          : 'Buscar paciente...'
                   }
                   className="h-11 min-h-[44px] w-full min-w-0 rounded-lg border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] font-medium text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[14px]"
                   autoComplete="off"
                 />
               </div>
             </div>
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:min-w-0 sm:flex-nowrap">
-              <div className="relative min-w-0 flex-1 sm:w-44 sm:flex-none">
+            <div className="relative w-full min-w-0 sm:w-44 sm:shrink-0">
                 <ArrowUpDown
                   className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
                   strokeWidth={2.25}
@@ -604,234 +740,42 @@ export function PatientsListView({
                   ))}
                 </select>
               </div>
-              <button
-                type="button"
-                onClick={onCreatePatient}
-                className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:ml-auto sm:w-auto sm:min-h-[44px]"
-              >
-                <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
-              </button>
-            </div>
           </div>
+          {!previewPatient ? (
+            <p
+              className="lg:hidden border-b border-app-border/80 bg-app-surface px-4 py-2.5 text-center text-[13px] font-medium text-[#64748b]"
+              role="status"
+            >
+              Toque em um paciente da lista para ver o resumo
+            </p>
+          ) : null}
 
-          <div className="min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
-            {/* Mobile: cards */}
-            <div className="divide-y divide-[#f1f5f9] sm:hidden">
+          <div className="min-w-0 overflow-x-hidden bg-app-surface [-webkit-overflow-scrolling:touch]">
+            <ul className="flex list-none flex-col gap-2.5 p-2.5 sm:gap-3 sm:p-3" aria-label="Lista de pacientes">
               {filteredPatients.length === 0 ? (
-                <div className="px-4 py-12 text-center text-[14px] font-medium text-[#64748b]">
+                <li className="px-2 py-12 text-center text-[14px] font-medium text-[#64748b]">
                   <Search className="mx-auto mb-2 h-8 w-8 opacity-40" />
                   Nenhum paciente encontrado
-                </div>
+                </li>
               ) : (
                 filteredPatients.map((patient) => {
                   const selected = selectedPatientCpf === patient.cpf;
-                  const clinical = hasClinicalAlert(patient);
-                  const semRet = semRetorno60d(patient);
-                  const anamVenc = anamneseVencidaFromPatient(patient);
-                  const menor = patient.idade != null && Number(patient.idade) < 18;
-                  const novo = isPatientLikelyNovo(patient);
-                  const procLabel = lastProcedureLabel(patient);
-                  const visitLabel = patient.ultimaVisita || '—';
-                  const procMuted = procLabel === '—' || procLabel === '-';
-                  const visitMuted = !patient.ultimaVisita || visitLabel === '—' || visitLabel === '-';
                   return (
-                    <button
-                      key={patient.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPatientCpf(patient.cpf);
-                        setPreviewPatientCpf(patient.cpf);
-                      }}
-                      className={`flex min-h-[72px] w-full gap-3 p-3 text-left transition-colors active:bg-[#fafafa] ${
-                        selected ? 'bg-[#f0fdfa]' : 'bg-white'
-                      }`}
-                    >
-                      <PatientAvatar
+                    <li key={patient.id} className="min-w-0">
+                      <PatientListCard
                         patient={patient}
-                        getPatientInitials={getPatientInitials}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5]"
-                        initialsClassName="text-[12px] font-bold text-[#0f766e]"
-                        spinnerClassName="h-4 w-4"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-[15px] font-semibold leading-snug text-[#0f172a]">{patient.nome}</p>
-                            <p className="text-[13px] text-[#64748b]">
-                              {patient.idade != null ? `${patient.idade} anos` : '—'}
-                            </p>
-                          </div>
-                          <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[#cbd5e1]" aria-hidden />
-                        </div>
-                        <p
-                          className={`mt-1 text-[13px] font-medium ${procMuted ? 'text-[#cbd5e1]' : 'text-[#475569]'}`}
-                        >
-                          <span className="text-[#94a3b8]">Proc.:</span> {procLabel}
-                        </p>
-                        <p className={`text-[12px] font-medium ${visitMuted ? 'text-[#cbd5e1]' : 'text-[#64748b]'}`}>
-                          <span className="text-[#94a3b8]">Visita:</span> {visitLabel}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {clinical ? (
-                            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
-                              Alerta
-                            </span>
-                          ) : null}
-                          {semRet ? (
-                            <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2 py-0.5 text-[11px] font-semibold text-[#ea580c]">
-                              Sem retorno
-                            </span>
-                          ) : null}
-                          {anamVenc ? (
-                            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
-                              Anamnese vencida
-                            </span>
-                          ) : null}
-                          {menor ? (
-                            <span className="inline-flex items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[11px] font-semibold text-[#2563eb]">
-                              Menor
-                            </span>
-                          ) : null}
-                          {novo ? (
-                            <span className="inline-flex items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-2 py-0.5 text-[11px] font-semibold text-[#0f766e]">
-                              Novo
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Tablet+ : tabela */}
-            <table className="hidden w-full min-w-0 table-fixed border-collapse text-left sm:table">
-              <thead>
-                <tr className="border-y border-[#e2e8f0] bg-[#f8fafc]">
-                  <th className="min-w-0 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-                    Paciente
-                  </th>
-                  <th className="hidden w-[160px] shrink-0 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8] md:table-cell">
-                    Último procedimento
-                  </th>
-                  <th className="hidden w-[120px] shrink-0 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8] md:table-cell">
-                    Última visita
-                  </th>
-                  <th className="hidden px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8] lg:table-cell">
-                    Tags
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPatients.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-12 text-center text-[14px] font-medium text-[#64748b]">
-                      <Search className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                      Nenhum paciente encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPatients.map((patient) => {
-                    const selected = selectedPatientCpf === patient.cpf;
-                    const clinical = hasClinicalAlert(patient);
-                    const semRet = semRetorno60d(patient);
-                    const anamVenc = anamneseVencidaFromPatient(patient);
-                    const menor = patient.idade != null && Number(patient.idade) < 18;
-                    const novo = isPatientLikelyNovo(patient);
-                    const procLabel = lastProcedureLabel(patient);
-                    const visitLabel = patient.ultimaVisita || '—';
-                    const procMuted = procLabel === '—' || procLabel === '-';
-                    const visitMuted = !patient.ultimaVisita || visitLabel === '—' || visitLabel === '-';
-                    return (
-                      <tr
-                        key={patient.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
+                        selected={selected}
+                        onSelect={() => {
                           setSelectedPatientCpf(patient.cpf);
                           setPreviewPatientCpf(patient.cpf);
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setSelectedPatientCpf(patient.cpf);
-                            setPreviewPatientCpf(patient.cpf);
-                          }
-                        }}
-                        className={`box-border min-h-[56px] cursor-pointer border-b border-[#f1f5f9] py-1.5 transition-colors duration-100 hover:bg-[#fafafa] md:min-h-[64px] md:py-2 ${
-                          selected ? 'border-l-[3px] border-l-[#00a88e] bg-[#f0fdfa]' : 'border-l-[3px] border-l-transparent'
-                        }`}
-                      >
-                        <td className="px-4 align-middle">
-                          <div className="flex min-w-0 items-center gap-3 md:gap-4">
-                            <PatientAvatar
-                              patient={patient}
-                              getPatientInitials={getPatientInitials}
-                              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5] sm:h-11 sm:w-11 md:h-12 md:w-12"
-                              initialsClassName="text-[12px] font-bold text-[#0f766e] sm:text-[13px] md:text-[14px]"
-                              spinnerClassName="h-4 w-4 md:h-5 md:w-5"
-                            />
-                            <div className="flex min-w-0 flex-col gap-0.5">
-                              <span className="truncate text-[15px] font-semibold leading-snug text-[#0f172a] sm:text-[16px] md:text-[17px]">
-                                {patient.nome}
-                              </span>
-                              <span className="text-[13px] font-normal leading-tight text-[#64748b] sm:text-[14px] md:text-[15px]">
-                                {patient.idade != null ? `${patient.idade} anos` : '—'}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="hidden max-w-[180px] px-4 align-middle md:table-cell w-[180px]">
-                          <span
-                            className={`block truncate text-[13px] font-medium md:text-[14px] ${procMuted ? 'text-[#cbd5e1]' : 'text-[#475569]'}`}
-                            title={procLabel}
-                          >
-                            {procLabel}
-                          </span>
-                        </td>
-                        <td className="hidden w-[130px] shrink-0 whitespace-nowrap px-4 align-middle md:table-cell">
-                          <span
-                            className={`text-[13px] font-medium md:text-[14px] ${visitMuted ? 'text-[#cbd5e1]' : 'text-[#475569]'}`}
-                          >
-                            {visitLabel}
-                          </span>
-                        </td>
-                        <td className="hidden px-4 align-middle lg:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {clinical ? (
-                              <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
-                                Alerta
-                              </span>
-                            ) : null}
-                            {semRet ? (
-                              <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2 py-0.5 text-[11px] font-semibold text-[#ea580c]">
-                                Sem retorno
-                              </span>
-                            ) : null}
-                            {anamVenc ? (
-                              <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
-                                Anamnese vencida
-                              </span>
-                            ) : null}
-                            {menor ? (
-                              <span className="inline-flex items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[11px] font-semibold text-[#2563eb]">
-                                Menor
-                              </span>
-                            ) : null}
-                            {novo ? (
-                              <span className="inline-flex items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-2 py-0.5 text-[11px] font-semibold text-[#0f766e]">
-                                Novo
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                        getPatientInitials={getPatientInitials}
+                      />
+                    </li>
+                  );
+                })
+              )}
+            </ul>
           </div>
         </div>
       </div>
@@ -929,7 +873,23 @@ export function PatientsListView({
             />
           </aside>
         </>
-      ) : null}
+      ) : (
+        <aside
+          className="patient-preview-sheet relative z-10 mt-0 hidden w-full shrink-0 flex-col gap-0 lg:flex lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0 custom-scrollbar"
+          aria-label="Detalhes do paciente"
+        >
+          <div
+            className="relative flex min-h-[min(280px,calc((100dvh-5rem-2rem)/2))] w-full min-w-0 flex-col items-center justify-center gap-3 rounded-xl border border-[#e2e8f0] bg-white p-5 text-center shadow-lg"
+            role="status"
+          >
+            <ImageIcon className="h-9 w-9 text-[#cbd5e1]" strokeWidth={1.25} aria-hidden />
+            <p className="px-1 text-[16px] font-semibold leading-snug text-[#334155] sm:text-[17px]">
+              Selecione um paciente para ver os detalhes
+            </p>
+          </div>
+        </aside>
+      )}
+    </div>
     </div>
   );
 }

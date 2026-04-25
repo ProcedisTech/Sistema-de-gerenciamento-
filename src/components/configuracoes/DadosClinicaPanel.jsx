@@ -208,7 +208,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-[#00a88e]/25 bg-[#e6f7f5] text-[#00a88e] shadow-sm ring-offset-2 transition hover:border-[#00a88e]/45 focus:outline-none focus:ring-2 focus:ring-[#00a88e]/40"
+            className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] text-[#00a88e] shadow-sm ring-offset-2 transition hover:border-[#00a88e]/45 focus:outline-none focus:ring-2 focus:ring-[#00a88e]/40"
             aria-label="Alterar logo da clínica"
           >
             {imagemExibida ? (
@@ -243,7 +243,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
           type="text"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
-          className="w-full rounded-xl border-[3px] border-[#e2e8f0] bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
           autoComplete="organization"
         />
       </div>
@@ -257,7 +257,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
           type="tel"
           value={telefone}
           onChange={(e) => setTelefone(e.target.value)}
-          className="w-full rounded-xl border-[3px] border-[#e2e8f0] bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
           autoComplete="tel"
         />
       </div>
@@ -271,7 +271,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-xl border-[3px] border-[#e2e8f0] bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
           autoComplete="email"
         />
       </div>
@@ -280,7 +280,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
         <button
           type="submit"
           disabled={saving}
-          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border-[3px] border-[#00a88e]/25 bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white shadow-sm transition hover:bg-[#00997f] disabled:opacity-60"
+          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white shadow-sm transition hover:bg-[#00997f] disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
           {saving ? 'Salvando…' : 'Salvar alterações'}

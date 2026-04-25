@@ -96,7 +96,7 @@ export function MovimentacoesManager() {
           <select
             value={filterTipo}
             onChange={(e) => setFilterTipo(e.target.value)}
-            className="px-3 py-2 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[12px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
+            className="px-3 py-2 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[12px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
           >
             {TIPO_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -105,7 +105,7 @@ export function MovimentacoesManager() {
           <select
             value={filterItemId}
             onChange={(e) => setFilterItemId(e.target.value)}
-            className="px-3 py-2 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[12px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none max-w-[200px]"
+            className="px-3 py-2 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[12px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none max-w-[200px]"
           >
             <option value="">Todos os itens</option>
             {itens.map((i) => (
@@ -116,29 +116,29 @@ export function MovimentacoesManager() {
         <button
           type="button"
           onClick={openModal}
-          className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-[#00a88e] hover:bg-[#00967f] text-white shadow-md border-[3px] border-transparent flex items-center justify-center gap-2"
+          className="px-4 py-2.5 rounded-xl font-bold text-[13px] bg-[#00a88e] hover:bg-[#00967f] text-white shadow-md border border-transparent flex items-center justify-center gap-2"
         >
           <Plus className="w-4 h-4" strokeWidth={3} /> Nova Movimentação
         </button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-white border-[3px] border-[#00a88e]/15 rounded-xl p-3">
+        <div className="bg-white border border-app-border rounded-xl p-3">
           <div className="text-[11px] font-bold text-[#64748b] mb-0.5">Total</div>
           <div className="text-[18px] font-extrabold text-[#0f172a]">{movs.length}</div>
         </div>
-        <div className="bg-white border-[3px] border-[#22c55e]/15 rounded-xl p-3">
+        <div className="bg-white border border-emerald-200 rounded-xl p-3">
           <div className="text-[11px] font-bold text-[#64748b] mb-0.5">Entradas</div>
           <div className="text-[18px] font-extrabold text-[#16a34a]">{entradas.length}</div>
         </div>
-        <div className="bg-white border-[3px] border-red-100 rounded-xl p-3">
+        <div className="bg-white border border-red-100 rounded-xl p-3">
           <div className="text-[11px] font-bold text-[#64748b] mb-0.5">Saídas</div>
           <div className="text-[18px] font-extrabold text-red-600">{saidas.length}</div>
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-xl border-[3px] border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium">
+        <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium">
           {error}
         </div>
       )}
@@ -159,7 +159,7 @@ export function MovimentacoesManager() {
             const meta = TIPO_META[m.tipo] || { label: m.tipo, sign: '?', cls: 'bg-slate-100 text-slate-600 border-slate-200' };
             const isEntrada = (m.tipo || '').startsWith('entrada');
             return (
-              <div key={m.id} className="flex items-start gap-3 p-3 bg-white border-[2px] border-[#e2e8f0] rounded-xl hover:border-[#00a88e]/20 transition-all">
+              <div key={m.id} className="flex items-start gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:border-[#00a88e]/20 transition-all">
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isEntrada ? 'bg-[#dcfce7] text-[#16a34a]' : 'bg-red-50 text-red-500'}`}>
                   {isEntrada
                     ? <ArrowDownCircle className="w-5 h-5" strokeWidth={2} />

@@ -25,10 +25,10 @@ export function MarcarCompromissoModal({
     <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
-        className="relative w-full max-w-lg bg-white rounded-2xl border-[3px] border-[#00a88e]/25 shadow-xl overflow-y-auto max-h-[90vh]"
+        className="relative w-full max-w-lg bg-white rounded-2xl border border-app-border shadow-xl overflow-y-auto max-h-[90vh]"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="p-4 flex items-center justify-between border-b-[3px] border-[#00a88e]/15">
+        <div className="p-4 flex items-center justify-between border-b border-app-border">
           <div className="flex items-center gap-3">
             <Calendar className="w-6 h-6 text-[#00a88e]" strokeWidth={2.5} />
             <div>
@@ -40,7 +40,7 @@ export function MarcarCompromissoModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border-[3px] border-transparent text-[#94a3b8]"
+            className="w-10 h-10 rounded-xl hover:bg-[#f8fbfb] border border-transparent text-[#94a3b8]"
             aria-label="Fechar"
           >
             <X className="w-5 h-5" />
@@ -49,7 +49,7 @@ export function MarcarCompromissoModal({
 
         <div className="p-4 space-y-4">
           {error ? (
-            <div className="p-3 rounded-xl border-[3px] border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-bold">
+            <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-bold">
               {error}
             </div>
           ) : null}
@@ -60,9 +60,9 @@ export function MarcarCompromissoModal({
               value={patientSearch}
               onChange={(e) => setPatientSearch(e.target.value)}
               placeholder="Buscar nome, CPF ou telefone..."
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
             />
-            <div className="max-h-[160px] overflow-y-auto rounded-xl border-[2px] border-[#e2e8f0]">
+            <div className="max-h-[160px] overflow-y-auto rounded-xl border border-slate-200">
               {patients
                 .filter((p) => {
                   const q = patientSearch.trim().toLowerCase();
@@ -93,7 +93,7 @@ export function MarcarCompromissoModal({
             <select
               value={catalogoProcedimentoSaudeId}
               onChange={(e) => setCatalogoProcedimentoSaudeId(e.target.value)}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium appearance-none outline-none focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium appearance-none outline-none focus:border-[#00a88e]"
             >
               <option value="">Selecione...</option>
               {(catalogosList || []).map((c) => (
@@ -109,7 +109,7 @@ export function MarcarCompromissoModal({
             <input
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border-[3px] border-[#00a88e]/20 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
+              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
             />
           </div>
         </div>
@@ -119,7 +119,7 @@ export function MarcarCompromissoModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="px-5 py-3 rounded-xl font-bold text-[14px] border-[3px] border-[#e2e8f0] text-[#64748b] hover:bg-[#f8fbfb] disabled:opacity-50"
+            className="px-5 py-3 rounded-xl font-bold text-[14px] border border-slate-200 text-[#64748b] hover:bg-[#f8fbfb] disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -127,7 +127,7 @@ export function MarcarCompromissoModal({
             type="button"
             onClick={onConfirm}
             disabled={saving}
-            className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] text-white border-[3px] border-transparent flex items-center justify-center gap-2 disabled:opacity-60"
+            className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] text-white border border-transparent flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Confirmar
