@@ -59,9 +59,12 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
     return h && typeof h === 'object' ? { ...h } : {};
   }, [getAuthHeaders]);
 
-  const loadClinica = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
+  const loadClinica = useCallback(async (opts = {}) => {
+    const silent = !!opts.silent;
+    if (!silent) {
+      setLoading(true);
+      setLoadError('');
+    }
     try {
       const res = await fetch(resolveApiUrl('/api/v1/clinica'), {
         credentials: 'include',
@@ -69,14 +72,16 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setLoadError(
-          data?.message || data?.detail || data?.error || `Não foi possível carregar a clínica (${res.status}).`
-        );
+        if (!silent) {
+          setLoadError(
+            data?.message || data?.detail || data?.error || `Não foi possível carregar a clínica (${res.status}).`
+          );
+        }
         return null;
       }
       const m = mapClinicaFromDto(data);
       if (!m) {
-        setLoadError('Resposta inválida do servidor.');
+        if (!silent) setLoadError('Resposta inválida do servidor.');
         return null;
       }
       setNome(m.nome);
@@ -87,10 +92,10 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       setFotoPreview(srv ? resolveLogoSrc(srv) : '');
       return { nome: m.nome, logoUrl: srv };
     } catch {
-      setLoadError('Falha de rede ao carregar a clínica.');
+      if (!silent) setLoadError('Falha de rede ao carregar a clínica.');
       return null;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [fetchHeaders]);
 
@@ -197,6 +202,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
 
   const imagemExibida = fotoPreview || logoUrlServidor;
   const logoInputId = `${formId}-logo`;
+  const logoSrcResolvido = imagemExibida ? resolveLogoSrc(imagemExibida) : '';
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-lg space-y-5">
@@ -211,8 +217,12 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
             className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] text-[#00a88e] shadow-sm ring-offset-2 transition hover:border-[#00a88e]/45 focus:outline-none focus:ring-2 focus:ring-[#00a88e]/40"
             aria-label="Alterar logo da clínica"
           >
-            {imagemExibida ? (
-              <img src={resolveLogoSrc(imagemExibida)} alt="" className="h-full w-full object-cover" />
+            {logoSrcResolvido ? (
+              <img
+                src={logoSrcResolvido}
+                alt=""
+                className="h-full w-full object-cover"
+              />
             ) : (
               <Building2 className="h-10 w-10" strokeWidth={1.75} aria-hidden />
             )}
