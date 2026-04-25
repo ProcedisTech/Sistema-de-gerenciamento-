@@ -38,10 +38,6 @@ export function AgendaModal({
   agendaCatalogoId,
   setAgendaCatalogoId,
   catalogosList = [],
-  equipeList = [],
-  agendaRoleUserId,
-  setAgendaRoleUserId,
-  profissionalRoleUserId,
   onConfirm,
   agendaSaving,
   onAgendaTimeChange,
@@ -93,22 +89,7 @@ export function AgendaModal({
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e]">Profissional (role no servidor)</label>
-              <select
-                value={agendaRoleUserId}
-                onChange={(e) => setAgendaRoleUserId(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] appearance-none"
-              >
-                <option value="">Selecione...</option>
-                {equipeList.map((p) => (
-                  <option key={p.id} value={profissionalRoleUserId(p)}>
-                    {p.nomeCompleto || p.nome || p.id}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 md:col-span-2">
               <label className="text-[13px] font-bold text-[#00a88e]">Procedimento de referência (opcional)</label>
               <select
                 value={agendaCatalogoId}
@@ -126,7 +107,7 @@ export function AgendaModal({
                 Isso <span className="font-bold text-[#475569]">não é categoria</span>: vem do{' '}
                 <span className="font-bold text-[#475569]">catálogo de procedimentos</span> da clínica. Só ajuda a preencher a
                 observação deste horário na lista. Cada paciente continua com o procedimento escolhido em &quot;Marcar
-                atendimento&quot;.
+                atendimento&quot;. O profissional é o usuário logado (vínculo de perfil).
               </p>
             </div>
           </div>

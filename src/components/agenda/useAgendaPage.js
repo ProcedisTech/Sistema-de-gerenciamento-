@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { equipeApi } from '../../services/api';
-import { agendaMockOptions, agendaMockRepository, toDateKey } from './agendaMockRepository';
+import { useOrg } from '../../contexts/OrgContext';
+import { agendasApi, agendamentosApi, catalogosApi } from '../../services/api';
+import { formatAgendamentoApiError } from '../../utils/agendaErrors';
+import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
+import {
+  buildAgendaCreateBody,
+  buildAgendaUpdateBody,
+  fetchDashboardAppointmentsForRange,
+  normalizeApiList,
+} from '../../utils/agendaDashboardMapping';
 
 const STATUS_LABELS = {
   confirmado: 'confirmado',
@@ -37,36 +45,18 @@ function normalizePatientOption(patient) {
   return { id: String(id || nome), nome, telefone, raw: patient };
 }
 
-function normalizeEquipeMember(row) {
-  if (!row || typeof row !== 'object') return null;
-  const id =
-    row.roleUserId ||
-    row.role_user_id ||
-    row.id ||
-    row.usuarioId ||
-    row.usuario_id ||
-    '';
-  const nome =
-    String(row.nomeCompleto || row.nome_completo || row.nome || row.nomeUsuario || row.username || '')
-      .trim() || 'Profissional';
-  if (!id && !nome) return null;
-  return { id: String(id || nome), nome };
-}
-
-function defaultForm(selectedDay, patientOptions, profissionalOptions) {
+function defaultForm(selectedDay, patientOptions, firstProcedimentoOption) {
   const firstPatient = patientOptions[0] || {};
-  const firstProf = profissionalOptions[0] || {};
-  const procedimentos = agendaMockOptions.procedimentos || [];
+  const proc = firstProcedimentoOption || {};
   return {
     pacienteId: firstPatient.id || '',
     pacienteNome: firstPatient.nome || '',
     telefone: firstPatient.telefone || '',
-    procedimentoNome: procedimentos[0] || '',
+    procedimentoNome: proc.nome || '',
+    catalogoProcedimentoSaudeId: proc.id ? String(proc.id) : '',
     data: selectedDay || toLocalDateIso(),
     horaInicio: '09:00',
     duracaoMin: 60,
-    profissionalNome: firstProf.nome || '',
-    status: 'confirmado',
     observacao: '',
   };
 }
@@ -143,7 +133,8 @@ export function formatWeekRangeLabel(startIso, endIso) {
   return `${left} – ${right} de ${y2}`;
 }
 
-export function useAgendaPage({ patients = [] } = {}) {
+export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
+  const { roleUserId } = useOrg();
   const todayIso = toLocalDateIso();
   const [monthDate, setMonthDate] = useState(() => {
     const now = new Date();
@@ -156,13 +147,25 @@ export function useAgendaPage({ patients = [] } = {}) {
   const [error, setError] = useState('');
   const [modalMode, setModalMode] = useState(null);
   const [editingAppointment, setEditingAppointment] = useState(null);
-  const [profissionalOptions, setProfissionalOptions] = useState([]);
-  const [form, setForm] = useState(() => defaultForm(todayIso, [], []));
+  const [catalogRows, setCatalogRows] = useState([]);
+  const [form, setForm] = useState(() => defaultForm(todayIso, [], null));
   const [formErrors, setFormErrors] = useState({});
   const [daySheetOpen, setDaySheetOpen] = useState(false);
   const [hojeCount, setHojeCount] = useState(0);
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
+
+  const procedimentoOptions = useMemo(
+    () =>
+      (Array.isArray(catalogRows) ? catalogRows : [])
+        .filter((c) => c && c.ativo !== false)
+        .map((c) => ({
+          id: String(c.catalogoProcedimentoId || c.catalogoProcedimentoSaudeId || c.id || ''),
+          nome: c.nomeProcedimento || String(c.id || ''),
+        }))
+        .filter((o) => o.id),
+    [catalogRows]
+  );
 
   const patientOptions = useMemo(
     () => (Array.isArray(patients) ? patients : []).map(normalizePatientOption),
@@ -170,56 +173,61 @@ export function useAgendaPage({ patients = [] } = {}) {
   );
 
   useEffect(() => {
+    if (!authEnabled) {
+      setCatalogRows([]);
+      return;
+    }
     let cancelled = false;
-    equipeApi
+    catalogosApi
       .list()
       .then((data) => {
         if (cancelled) return;
-        const list = Array.isArray(data) ? data : [];
-        const mapped = list
-          .filter((p) => p.ativo !== false)
-          .map(normalizeEquipeMember)
-          .filter(Boolean);
-        setProfissionalOptions(mapped);
+        setCatalogRows(Array.isArray(data) ? data : []);
       })
       .catch(() => {
-        if (!cancelled) setProfissionalOptions([]);
+        if (!cancelled) setCatalogRows([]);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authEnabled]);
 
   const currentYm = useMemo(() => monthKey(monthDate), [monthDate]);
 
   const loadMonth = useCallback(async () => {
+    if (!authEnabled) {
+      setAppointments([]);
+      setHojeCount(0);
+      setLoading(false);
+      setError('');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const rows = await agendaMockRepository.listByMonth(currentYm);
+      const { start, end } = monthRangeIso(monthDate);
+      const rows = await fetchDashboardAppointmentsForRange(start, end);
       setAppointments(rows);
+
+      const hoje = toLocalDateIso();
+      try {
+        const rawSlots = await agendasApi.byRange(hoje, hoje);
+        setHojeCount(normalizeApiList(rawSlots).length);
+      } catch {
+        setHojeCount(0);
+      }
     } catch (e) {
       setError(e?.message || 'Não foi possível carregar a agenda.');
       setAppointments([]);
+      setHojeCount(0);
     } finally {
       setLoading(false);
     }
-  }, [currentYm]);
+  }, [authEnabled, monthDate]);
 
   useEffect(() => {
     loadMonth();
   }, [loadMonth]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const key = toLocalDateIso();
-    agendaMockRepository.listByDate(key).then((rows) => {
-      if (!cancelled) setHojeCount(rows.length);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [appointments, currentYm]);
 
   const weekEndIso = useMemo(() => addDaysIso(weekStartIso, 6), [weekStartIso]);
 
@@ -234,15 +242,33 @@ export function useAgendaPage({ patients = [] } = {}) {
   );
 
   useEffect(() => {
-    if (viewMode !== 'semana') return;
+    if (!authEnabled || viewMode !== 'semana') {
+      if (!authEnabled) setWeekGridAppointments([]);
+      return;
+    }
     let cancelled = false;
-    agendaMockRepository.listInDateRange(weekStartIso, weekEndIso).then((rows) => {
-      if (!cancelled) setWeekGridAppointments(rows);
-    });
+    (async () => {
+      try {
+        const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso);
+        if (!cancelled) setWeekGridAppointments(rows);
+      } catch {
+        if (!cancelled) setWeekGridAppointments([]);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [viewMode, weekStartIso, weekEndIso, appointments]);
+  }, [authEnabled, viewMode, weekStartIso, weekEndIso]);
+
+  const refreshWeekGrid = useCallback(async () => {
+    if (!authEnabled || viewMode !== 'semana') return;
+    try {
+      const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso);
+      setWeekGridAppointments(rows);
+    } catch {
+      setWeekGridAppointments([]);
+    }
+  }, [authEnabled, viewMode, weekStartIso, weekEndIso]);
 
   const syncWeekFromSelection = useCallback(() => {
     setWeekStartIso(startOfWeekSundayIso(selectedDay));
@@ -308,21 +334,40 @@ export function useAgendaPage({ patients = [] } = {}) {
   const openCreateModal = useCallback(
     (date = selectedDay) => {
       setEditingAppointment(null);
-      setForm(defaultForm(date, patientOptions, profissionalOptions));
+      setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
       setModalMode('create');
     },
-    [patientOptions, profissionalOptions, selectedDay]
+    [patientOptions, selectedDay]
   );
 
   const openEditModal = useCallback(
     (appointment) => {
       setEditingAppointment(appointment);
-      setForm({ ...defaultForm(appointment?.data || selectedDay, patientOptions, profissionalOptions), ...appointment });
+      const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
+      let catId = appointment?.catalogoProcedimentoSaudeId
+        ? String(appointment.catalogoProcedimentoSaudeId)
+        : '';
+      if (!catId && appointment?.procedimentoNome) {
+        const opt = procedimentoOptions.find((o) => o.nome === appointment.procedimentoNome);
+        if (opt) catId = String(opt.id);
+      }
+      setForm({
+        ...base,
+        pacienteId: appointment?.pacienteId || base.pacienteId,
+        pacienteNome: appointment?.pacienteNome || base.pacienteNome,
+        telefone: appointment?.telefone || base.telefone,
+        procedimentoNome: appointment?.procedimentoNome || base.procedimentoNome,
+        catalogoProcedimentoSaudeId: catId || base.catalogoProcedimentoSaudeId,
+        data: appointment?.data || base.data,
+        horaInicio: appointment?.horaInicio || base.horaInicio,
+        duracaoMin: appointment?.duracaoMin ?? base.duracaoMin,
+        observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
+      });
       setFormErrors({});
       setModalMode('edit');
     },
-    [patientOptions, profissionalOptions, selectedDay]
+    [patientOptions, procedimentoOptions, selectedDay]
   );
 
   const closeModal = useCallback(() => {
@@ -334,54 +379,126 @@ export function useAgendaPage({ patients = [] } = {}) {
   const validateForm = useCallback(() => {
     const nextErrors = {};
     if (!form.pacienteId && !String(form.pacienteNome || '').trim()) nextErrors.pacienteId = 'Selecione um paciente.';
-    if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Selecione o procedimento.';
+    if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Informe o procedimento.';
     if (!form.data) nextErrors.data = 'Informe a data.';
     if (!form.horaInicio) nextErrors.horaInicio = 'Informe o horário.';
     if (!Number(form.duracaoMin)) nextErrors.duracaoMin = 'Informe a duração.';
-    if (!String(form.profissionalNome || '').trim()) nextErrors.profissionalNome = 'Selecione o profissional.';
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }, [form]);
 
   const saveAppointment = useCallback(async () => {
     if (!validateForm()) return false;
-    const patient = patientOptions.find((p) => p.id === form.pacienteId);
-    const payload = {
-      ...form,
-      pacienteId: form.pacienteId || patient?.id || '',
-      pacienteNome: form.pacienteNome || patient?.nome || 'Paciente',
-      telefone: form.telefone || patient?.telefone || '',
-      duracaoMin: Number(form.duracaoMin) || 45,
-    };
-
-    if (modalMode === 'edit' && editingAppointment?.id) {
-      await agendaMockRepository.update(editingAppointment.id, payload);
-    } else {
-      await agendaMockRepository.create(payload);
+    const contextRole = String(roleUserId || '').trim();
+    if (!contextRole) {
+      setFormErrors((prev) => ({
+        ...prev,
+        _global: 'Sessão sem vínculo de profissional (role). Faça login novamente ou complete o perfil na clínica.',
+      }));
+      setError('Sessão sem vínculo de profissional (role).');
+      return false;
     }
-    const nextMonthDate = new Date(Number(payload.data.slice(0, 4)), Number(payload.data.slice(5, 7)) - 1, 1);
-    setSelectedDay(payload.data);
-    setMonthDate(nextMonthDate);
-    setAppointments(await agendaMockRepository.listByMonth(monthKey(nextMonthDate)));
-    closeModal();
-    return true;
-  }, [closeModal, editingAppointment, form, modalMode, patientOptions, validateForm]);
+
+    const patient = patientOptions.find((p) => p.id === form.pacienteId);
+
+    const observacaoSlot = (
+      form.observacao?.trim() ||
+      form.procedimentoNome?.trim() ||
+      'Atendimento'
+    ).slice(0, 500);
+
+    try {
+      if (modalMode === 'edit' && editingAppointment?.agendaId) {
+        const body = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
+        await agendasApi.update(editingAppointment.agendaId, body);
+      } else {
+        const createBody = buildAgendaCreateBody({
+          dataAgendamento: form.data,
+          horaInicio: form.horaInicio,
+          duracaoMin: form.duracaoMin,
+          roleUserId: contextRole,
+          observacao: observacaoSlot,
+        });
+        const created = await agendasApi.create(createBody);
+        const agendaId = created?.id != null ? String(created.id) : null;
+        if (!agendaId) throw new Error('Resposta da API sem id da agenda.');
+
+        const pid = form.pacienteId || patient?.id || '';
+        const catId = String(form.catalogoProcedimentoSaudeId || '').trim();
+        if (catId && pid) {
+          await agendamentosApi.create({
+            agendaId,
+            pacienteId: pid,
+            catalogoProcedimentoSaudeId: catId,
+            observacao: form.observacao?.trim() || undefined,
+          });
+        }
+      }
+
+      const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
+      setSelectedDay(form.data);
+      setMonthDate(nextMonthDate);
+      await loadMonth();
+      await refreshWeekGrid();
+      closeModal();
+      setError('');
+      return true;
+    } catch (e) {
+      setError(formatAgendamentoApiError(e));
+      return false;
+    }
+  }, [
+    closeModal,
+    editingAppointment,
+    form,
+    loadMonth,
+    modalMode,
+    patientOptions,
+    refreshWeekGrid,
+    roleUserId,
+    validateForm,
+  ]);
 
   const deleteAppointment = useCallback(async () => {
-    if (!editingAppointment?.id) return false;
-    await agendaMockRepository.remove(editingAppointment.id);
-    await loadMonth();
-    closeModal();
-    return true;
-  }, [closeModal, editingAppointment, loadMonth]);
+    const agendaId = editingAppointment?.agendaId;
+    if (!agendaId) return false;
+    try {
+      await agendasApi.cancelar(agendaId);
+      await loadMonth();
+      await refreshWeekGrid();
+      closeModal();
+      setError('');
+      return true;
+    } catch (e) {
+      setError(formatAgendamentoApiError(e));
+      return false;
+    }
+  }, [closeModal, editingAppointment, loadMonth, refreshWeekGrid]);
 
   const updateStatus = useCallback(
     async (appointment, status) => {
-      if (!appointment?.id) return;
-      await agendaMockRepository.update(appointment.id, { ...appointment, status });
-      await loadMonth();
+      if (!appointment?.agendaId) return;
+      if (status === 'confirmado') {
+        setAppointments((prev) =>
+          prev.map((row) => (row.id === appointment.id ? { ...row, status: 'confirmado' } : row))
+        );
+        setWeekGridAppointments((prev) =>
+          prev.map((row) => (row.id === appointment.id ? { ...row, status: 'confirmado' } : row))
+        );
+        return;
+      }
+      if (status === 'cancelado') {
+        try {
+          await agendasApi.cancelar(appointment.agendaId);
+          await loadMonth();
+          await refreshWeekGrid();
+          setError('');
+        } catch (e) {
+          setError(formatAgendamentoApiError(e));
+        }
+      }
     },
-    [loadMonth]
+    [loadMonth, refreshWeekGrid]
   );
 
   const selectDay = useCallback((date, openSheet = true) => {
@@ -437,8 +554,7 @@ export function useAgendaPage({ patients = [] } = {}) {
     openEditModal,
     closeModal,
     patientOptions,
-    procedimentoOptions: agendaMockOptions.procedimentos,
-    profissionalOptions,
+    procedimentoOptions,
     saveAppointment,
     selectDay,
     selectedDay,
@@ -448,7 +564,6 @@ export function useAgendaPage({ patients = [] } = {}) {
     stats,
     syncWeekFromSelection,
     statusLabels: STATUS_LABELS,
-    statusOptions: agendaMockOptions.status,
     updateForm,
     updateStatus,
     viewMode,

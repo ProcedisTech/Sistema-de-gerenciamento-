@@ -398,6 +398,11 @@ function AgendaFormModal({ agenda }) {
         </div>
 
         <div className="grid gap-4 p-5 md:grid-cols-2">
+          {agenda.formErrors._global ? (
+            <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] font-bold text-amber-900">
+              {agenda.formErrors._global}
+            </div>
+          ) : null}
           <FieldError error={agenda.formErrors.pacienteId}>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Paciente*</label>
             <select
@@ -417,17 +422,13 @@ function AgendaFormModal({ agenda }) {
 
           <FieldError error={agenda.formErrors.procedimentoNome}>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimento*</label>
-            <select
-              value={agenda.form.procedimentoNome}
-              onChange={(event) => agenda.updateForm('procedimentoNome', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
-            >
-              {agenda.procedimentoOptions.length === 0 ? (
-                <option value="">Nenhum procedimento na lista</option>
-              ) : (
-                agenda.procedimentoOptions.map((item) => <option key={item} value={item}>{item}</option>)
-              )}
-            </select>
+            <input
+              type="text"
+              value={agenda.form.procedimentoNome || ''}
+              onChange={(e) => agenda.updateForm('procedimentoNome', e.target.value)}
+              placeholder="Ex: Botox, Preenchimento..."
+              className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
+            />
           </FieldError>
 
           <FieldError error={agenda.formErrors.data}>
@@ -444,30 +445,6 @@ function AgendaFormModal({ agenda }) {
             <label className="text-[12px] font-bold text-[#1A1A2E]">Duração (min)*</label>
             <input type="number" min="15" step="5" value={agenda.form.duracaoMin} onChange={(event) => agenda.updateForm('duracaoMin', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]" />
           </FieldError>
-
-          <FieldError error={agenda.formErrors.profissionalNome}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Profissional*</label>
-            <select
-              value={agenda.form.profissionalNome}
-              onChange={(event) => agenda.updateForm('profissionalNome', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
-            >
-              <option value="">Selecione</option>
-              {agenda.profissionalOptions.map((p) => (
-                <option key={p.id} value={p.nome}>{p.nome}</option>
-              ))}
-            </select>
-            {agenda.profissionalOptions.length === 0 ? (
-              <p className="mt-1 text-[11px] font-medium text-[#888888]">Nenhum profissional na equipe ou falha ao carregar.</p>
-            ) : null}
-          </FieldError>
-
-          <div>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Status</label>
-            <select value={agenda.form.status} onChange={(event) => agenda.updateForm('status', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]">
-              {agenda.statusOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </div>
 
           <div>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Telefone</label>
@@ -525,8 +502,8 @@ function FieldError({ error, children }) {
   );
 }
 
-export function AgendaDashboard({ patients = [], onStartAttendance }) {
-  const agenda = useAgendaPage({ patients });
+export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled = false }) {
+  const agenda = useAgendaPage({ patients, authEnabled });
   const [listDaySummary, setListDaySummary] = React.useState(null);
 
   React.useEffect(() => {
@@ -545,7 +522,10 @@ export function AgendaDashboard({ patients = [], onStartAttendance }) {
 
     const patient = patients.find((item) => samePatient(item, appointment));
     if (patient && typeof onStartAttendance === 'function') {
-      onStartAttendance(patient);
+      onStartAttendance(patient, {
+        procedimentoNome: appointment.procedimentoNome,
+        agendaId: appointment.agendaId,
+      });
       return;
     }
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { toDateKey } from './agendaMockRepository';
+import { toDateKey } from '../../utils/agendaDateUtils';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
