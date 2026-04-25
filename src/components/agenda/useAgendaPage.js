@@ -401,10 +401,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
     const patient = patientOptions.find((p) => p.id === form.pacienteId);
 
-    const observacaoSlot = (
-      form.observacao?.trim() ||
-      form.procedimentoNome?.trim() ||
-      'Atendimento'
+    const pairObs = `${String(form.procedimentoNome || '').trim()} - ${String(form.pacienteNome || '').trim()}`.trim();
+    const observacaoForCreate = (
+      form.observacao?.trim() ? `${pairObs} — ${form.observacao.trim()}` : pairObs || 'Atendimento'
     ).slice(0, 500);
 
     try {
@@ -417,7 +416,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           horaInicio: form.horaInicio,
           duracaoMin: form.duracaoMin,
           roleUserId: contextRole,
-          observacao: observacaoSlot,
+          observacao: observacaoForCreate,
         });
         const created = await agendasApi.create(createBody);
         const agendaId = created?.id != null ? String(created.id) : null;
