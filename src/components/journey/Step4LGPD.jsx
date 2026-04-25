@@ -510,6 +510,7 @@ export function Step3Termos({
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeadersForFetch({ needsOrg: false }),
         },
         body: JSON.stringify({ assinaturaPadrao: assinaturaProfRecenteRef.current }),
       });
