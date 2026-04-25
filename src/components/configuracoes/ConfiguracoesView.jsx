@@ -39,7 +39,7 @@ function SoonBadge() {
   );
 }
 
-function SidebarNavItem({ icon: Icon, label, active, onClick, badge }) {
+function SidebarNavItem({ icon, label, active, onClick, badge }) {
   return (
     <button
       type="button"
@@ -50,7 +50,11 @@ function SidebarNavItem({ icon: Icon, label, active, onClick, badge }) {
           : 'text-[#64748b] hover:bg-white/60 hover:text-[#0f172a]'
       }`}
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+      {React.createElement(icon, {
+        className: 'mt-0.5 h-4 w-4 shrink-0',
+        strokeWidth: 2,
+        'aria-hidden': true,
+      })}
       <span className="min-w-0 flex-1 break-words leading-snug">{label}</span>
       {badge === 'soon' ? <SoonBadge /> : null}
     </button>

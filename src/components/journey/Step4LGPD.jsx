@@ -16,7 +16,13 @@ import {
   Calendar,
   Eye,
 } from 'lucide-react';
-import { authHeadersForFetch, procedimentosApi, termoAssinaturaApi, termosApi } from '../../services/api';
+import {
+  authHeadersForFetch,
+  catalogosApi,
+  termoAssinaturaApi,
+  termosApi,
+} from '../../services/api';
+import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 
@@ -898,9 +904,10 @@ export function Step3Termos({
 }
 
 export function Step4Procedimento({
-  pacienteIdForProcedures = null,
+  pacienteIdForProcedures: _pacienteIdForProcedures = null,
   nomeProcedimento = '',
   setNomeProcedimento = () => {},
+  setNomeProcedimentoCatalogoId = () => {},
   observacoesExecucao = '',
   setObservacoesExecucao = () => {},
   procedureCapturedPhotos = [],
@@ -914,8 +921,7 @@ export function Step4Procedimento({
   onProcedureAnnotatePhoto,
 }) {
   const uploadInputRef = React.useRef(null);
-  const datalistId = React.useId();
-  const [procedureSuggestions, setProcedureSuggestions] = React.useState([]);
+  const [catalogoOptions, setCatalogoOptions] = React.useState([]);
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState('antes');
@@ -951,29 +957,27 @@ export function Step4Procedimento({
   }, [procedureCapturedPhotos]);
 
   React.useEffect(() => {
-    if (!pacienteIdForProcedures) {
-      setProcedureSuggestions([]);
-      return undefined;
-    }
     let cancelled = false;
-    procedimentosApi
-      .byPaciente(pacienteIdForProcedures)
-      .then((rows) => {
+    catalogosApi
+      .list()
+      .then((raw) => {
         if (cancelled) return;
-        const names = new Set();
-        (Array.isArray(rows) ? rows : []).forEach((r) => {
-          const n = String(r.procedimentoNome || r.nome || '').trim();
-          if (n) names.add(n);
-        });
-        setProcedureSuggestions([...names].sort((a, b) => a.localeCompare(b, 'pt-BR')));
+        const arr = Array.isArray(raw) ? raw : raw?.content || [];
+        const rows = (Array.isArray(arr) ? arr : [])
+          .map((c) => ({
+            id: String(c.catalogoProcedimentoId || c.catalogoProcedimentoSaudeId || c.id || '').trim(),
+            nomeProcedimento: String(c.nomeProcedimento || c.nome || '').trim(),
+          }))
+          .filter((c) => c.id && c.nomeProcedimento);
+        setCatalogoOptions(rows);
       })
       .catch(() => {
-        if (!cancelled) setProcedureSuggestions([]);
+        if (!cancelled) setCatalogoOptions([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [pacienteIdForProcedures]);
+  }, []);
 
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
@@ -1005,26 +1009,17 @@ export function Step4Procedimento({
           <label className="text-[13px] font-bold text-[#00a88e]">
             Nome do procedimento <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
-            list={procedureSuggestions.length ? datalistId : undefined}
-            placeholder="Nome do procedimento realizado"
+          <ProcedimentoAutocomplete
             value={nomeProcedimento}
-            onChange={(e) => {
-              setNomeProcedimento(e.target.value);
+            onChange={(nome, catalogoId) => {
+              setNomeProcedimento(nome);
+              setNomeProcedimentoCatalogoId(catalogoId);
               setStep4Errors((prev) => ({ ...prev, nomeProcedimento: false }));
             }}
-            className={`w-full rounded-xl border-[2px] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px] ${
-              step4Errors.nomeProcedimento ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'
-            }`}
+            placeholder="Nome do procedimento realizado"
+            catalogoOptions={catalogoOptions}
+            error={Boolean(step4Errors.nomeProcedimento)}
           />
-          {procedureSuggestions.length > 0 ? (
-            <datalist id={datalistId}>
-              {procedureSuggestions.map((n) => (
-                <option key={n} value={n} />
-              ))}
-            </datalist>
-          ) : null}
         </div>
         <div className="space-y-1.5">
           <label className="text-[13px] font-bold text-[#00a88e]">

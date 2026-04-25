@@ -1,9 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle,
   Square,
   CheckSquare,
-  CheckCircle2,
   BookOpen,
   FileText,
   Download,
@@ -13,8 +12,17 @@ import {
   AlertTriangle,
   Camera,
   PenLine,
+  MessageCircle,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
+import { perfilApi } from '../../services/api.js';
+import {
+  newOrientacaoId,
+  normalizeOrientacoesTemplateResponse,
+  normalizeWaPhoneDigits,
+} from '../../utils/orientacoesJourney.js';
 import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 import {
@@ -31,6 +39,15 @@ const ORIENTACOES_ITENS = [
   'Evite atividades físicas intensas por 24 horas',
   'Entre em contato conosco em caso de dúvidas ou reações',
 ];
+
+function fallbackOrientacoesFromDefaults() {
+  return ORIENTACOES_ITENS.map((texto, ordem) => ({
+    id: newOrientacaoId(),
+    descricao: texto,
+    ordem,
+    checado: false,
+  }));
+}
 
 function isoToBR(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
@@ -54,13 +71,18 @@ export function Step5Finalization({
   procedureDateIso,
   proximoRetornoDisplay,
   setProximoRetornoDisplay,
-  orientacoes,
-  setOrientacoes,
+  /** Pelo menos um item checado (derivado no hook; usado para borda de erro). */
+  orientacoes: orientacoesOk = false,
+  orientacoesItens = [],
+  setOrientacoesItens = () => {},
+  orientacoesCarregadas = false,
+  setOrientacoesCarregadas = () => {},
   step5Errors = {},
   setStep5Errors = () => {},
   pacienteNome = '',
   pacienteIdade = null,
   pacienteCpf = '',
+  telefonePaciente = '',
   nomeProcedimento = '',
   observacoesProcedimento = '',
   queixa = '',
@@ -87,6 +109,96 @@ export function Step5Finalization({
 
   const lastRangeToastIsoRef = useRef('');
   const resumoRef = useRef(null);
+  const [editingId, setEditingId] = useState(null);
+
+  useEffect(() => {
+    if (orientacoesCarregadas) return;
+    let cancelled = false;
+    const nome = String(nomeProcedimento || '').trim();
+
+    (async () => {
+      if (nome) {
+        try {
+          const raw = await perfilApi.getOrientacoesTemplate(nome);
+          if (cancelled) return;
+          const parsed = normalizeOrientacoesTemplateResponse(raw);
+          if (parsed.length > 0) {
+            setOrientacoesItens(parsed);
+            setOrientacoesCarregadas(true);
+            return;
+          }
+        } catch (e) {
+          if (e?.status !== 404 && e?.status !== 400) {
+            console.warn('orientacoes-template:', e?.message || e);
+          }
+        }
+      }
+      if (!cancelled) {
+        setOrientacoesItens(fallbackOrientacoesFromDefaults());
+        setOrientacoesCarregadas(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nomeProcedimento, orientacoesCarregadas, setOrientacoesItens, setOrientacoesCarregadas]);
+
+  const sortedItens = useMemo(
+    () => [...(Array.isArray(orientacoesItens) ? orientacoesItens : [])].sort((a, b) => a.ordem - b.ordem),
+    [orientacoesItens],
+  );
+
+  const updateItem = (id, patch) => {
+    setOrientacoesItens((prev) =>
+      (Array.isArray(prev) ? prev : []).map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
+    setStep5Errors((e) => ({ ...e, orientacoes: false }));
+  };
+
+  const removeItem = (id) => {
+    setOrientacoesItens((prev) => {
+      const next = (Array.isArray(prev) ? prev : []).filter((row) => row.id !== id);
+      return next.map((row, idx) => ({ ...row, ordem: idx }));
+    });
+    if (editingId === id) setEditingId(null);
+    setStep5Errors((e) => ({ ...e, orientacoes: false }));
+  };
+
+  const addItem = () => {
+    setOrientacoesItens((prev) => {
+      const list = Array.isArray(prev) ? prev : [];
+      const maxOrd = list.reduce((m, r) => Math.max(m, Number(r.ordem) || 0), -1);
+      return [
+        ...list,
+        { id: newOrientacaoId(), descricao: '', ordem: maxOrd + 1, checado: false },
+      ];
+    });
+    setStep5Errors((e) => ({ ...e, orientacoes: false }));
+  };
+
+  const handleWhatsApp = () => {
+    const phone = normalizeWaPhoneDigits(telefonePaciente);
+    if (!phone) {
+      toast.error('Cadastre o telefone do paciente para enviar por WhatsApp.');
+      return;
+    }
+    const lines = sortedItens.filter((i) => i.checado && String(i.descricao || '').trim());
+    if (lines.length === 0) {
+      toast.error('Marque ao menos uma orientação para enviar.');
+      return;
+    }
+    const header = [
+      pacienteNome ? `Olá, ${pacienteNome}!` : 'Olá!',
+      nomeProcedimento ? `Orientações pós — ${nomeProcedimento}` : 'Orientações pós-procedimento',
+      '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const body = lines.map((i) => `• ${String(i.descricao).trim()}`).join('\n');
+    const texto = `${header}\n\n${body}`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener,noreferrer');
+  };
 
   const handleReturnDateChange = (raw) => {
     const digits = sanitizeBirthDateDigits(raw);
@@ -377,6 +489,27 @@ export function Step5Finalization({
       }
       if (fotosProcedimento.length > 0) {
         await drawFotos(fotosProcedimento, `Registro do Procedimento (${fotosProcedimento.length})`);
+      }
+
+      const orientChecked = (Array.isArray(orientacoesItens) ? orientacoesItens : []).filter(
+        (i) => i && i.checado && String(i.descricao || '').trim(),
+      );
+      if (orientChecked.length > 0) {
+        checkPage(14);
+        drawLabel('Orientações Pós-Procedimento');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...dark);
+        [...orientChecked]
+          .sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0))
+          .forEach((i) => {
+            checkPage(6);
+            const t = `✓ ${String(i.descricao || '').trim()}`;
+            const lines = doc.splitTextToSize(t, contentW);
+            doc.text(lines, margin, y);
+            y += lines.length * 4.2 + 1;
+          });
+        drawLine();
       }
 
       const totalPages = doc.internal.getNumberOfPages();
@@ -683,22 +816,92 @@ export function Step5Finalization({
 
       <div
         className={`space-y-6 rounded-2xl border bg-white p-6 ${
-          step5Errors.orientacoes ? 'border-red-300' : 'border-[#00a88e]/25'
+          step5Errors.orientacoes && !orientacoesOk ? 'border-red-300' : 'border-[#00a88e]/25'
         }`}
       >
         <div>
-          <h4 className="mb-4 text-[18px] font-bold text-[#0f766e]">Orientações Pós-Procedimento</h4>
-          <div className="space-y-2">
-            {ORIENTACOES_ITENS.map((texto) => (
-              <div
-                key={texto}
-                className="flex items-start gap-3 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] p-3"
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h4 className="text-[18px] font-bold text-[#0f766e]">Orientações Pós-Procedimento</h4>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={addItem}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/40 bg-[#f0fdf9] px-3 py-2 text-[12px] font-bold text-[#0f766e] transition-colors hover:bg-[#e6f7f5]"
               >
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#16a34a]" strokeWidth={2.5} aria-hidden />
-                <p className="text-[14px] font-medium leading-snug text-[#0f172a]">{texto}</p>
-              </div>
-            ))}
+                <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                Adicionar orientação
+              </button>
+              <button
+                type="button"
+                onClick={handleWhatsApp}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#25D366]/50 bg-[#dcfce7] px-3 py-2 text-[12px] font-bold text-[#166534] transition-colors hover:bg-[#bbf7d0]"
+              >
+                <MessageCircle className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                Enviar por WhatsApp
+              </button>
+            </div>
           </div>
+          <div className="space-y-2">
+            {sortedItens.length === 0 ? (
+              <p className="text-[13px] font-medium text-[#64748b]">Carregando orientações…</p>
+            ) : (
+              sortedItens.map((item) => (
+                <div
+                  key={item.id}
+                  className={`flex items-start gap-3 rounded-lg border p-3 ${
+                    item.checado ? 'border-[#86efac] bg-[#f0fdf4]' : 'border-[#e2e8f0] bg-[#f8fafc]'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={item.checado}
+                    onClick={() => updateItem(item.id, { checado: !item.checado })}
+                    className="mt-0.5 shrink-0 rounded p-0.5 text-[#00a88e] outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40"
+                  >
+                    {item.checado ? (
+                      <CheckSquare className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                    ) : (
+                      <Square className="h-5 w-5 text-[#94a3b8]" strokeWidth={2.5} aria-hidden />
+                    )}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    {editingId === item.id ? (
+                      <textarea
+                        value={item.descricao}
+                        onChange={(e) => updateItem(item.id, { descricao: e.target.value })}
+                        onBlur={() => setEditingId(null)}
+                        rows={2}
+                        className="w-full resize-y rounded-lg border border-[#00a88e]/40 bg-white px-3 py-2 text-[14px] font-medium text-[#0f172a] outline-none focus:ring-2 focus:ring-[#00a88e]/20"
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(item.id)}
+                        className="w-full rounded-lg px-1 py-0.5 text-left text-[14px] font-medium leading-snug text-[#0f172a] hover:bg-black/[0.03]"
+                      >
+                        {item.descricao ? item.descricao : <span className="text-[#94a3b8]">Clique para editar</span>}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    className="shrink-0 rounded-lg p-2 text-[#94a3b8] transition-colors hover:bg-red-50 hover:text-red-600"
+                    aria-label="Remover orientação"
+                  >
+                    <Trash2 className="h-4 w-4" strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          {step5Errors.orientacoes && !orientacoesOk ? (
+            <p className="mt-2 text-[12px] font-bold text-red-600" role="alert">
+              Marque ao menos uma orientação para continuar.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-1.5 border-t border-[#e2e8f0] pt-5">
@@ -730,40 +933,6 @@ export function Step5Finalization({
           ) : null}
         </div>
 
-        <div className="border-t border-[#e2e8f0] pt-5">
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              setOrientacoes(!orientacoes);
-              setStep5Errors((prev) => ({ ...prev, orientacoes: false }));
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setOrientacoes(!orientacoes);
-                setStep5Errors((prev) => ({ ...prev, orientacoes: false }));
-              }
-            }}
-            className={`flex cursor-pointer items-center gap-4 rounded-xl border p-4 shadow-sm transition-all ${
-              step5Errors.orientacoes
-                ? 'border-red-500 bg-red-50 ring-1 ring-red-200'
-                : orientacoes
-                  ? 'border-[#00a88e] bg-[#e6f7f5]'
-                  : 'border-[#00a88e]/25 bg-white hover:bg-[#f8fbfb]'
-            }`}
-          >
-            {orientacoes ? (
-              <CheckSquare className="h-6 w-6 shrink-0 text-[#00a88e]" strokeWidth={2.5} />
-            ) : (
-              <Square className="h-6 w-6 shrink-0 text-[#00a88e]/40" strokeWidth={2.5} />
-            )}
-            <BookOpen className="h-4 w-4 shrink-0 text-[#64748b]" strokeWidth={2.5} aria-hidden />
-            <span className={`text-[14px] font-bold ${orientacoes ? 'text-[#0f766e]' : 'text-[#475569]'}`}>
-              Recebi e compreendi as orientações pós-procedimento
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -16,7 +16,6 @@ export function ProcedureCameraWidget({
   capturePhoto,
   retakePhoto,
   confirmPhoto,
-  uploadPhotoFiles,
   uploadDocumentFiles,
   cameraFacing = 'environment',
   onToggleCameraFacing,
