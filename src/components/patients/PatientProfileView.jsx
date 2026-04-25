@@ -61,9 +61,9 @@ import {
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
-  GaleriaArquivoLightbox,
   GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
+import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 
 const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'depois', 'outro'];
@@ -2673,15 +2673,11 @@ export function PatientProfileView({
             >
               Fechar
             </button>
-            {galleryPreview.authFetch ? (
-              <GaleriaArquivoLightbox url={galleryPreview.url} alt={galleryPreview.caption || 'Preview da foto'} />
-            ) : (
-              <img
-                src={galleryPreview.url}
-                alt={galleryPreview.caption || 'Preview da foto'}
-                className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30 object-contain"
-              />
-            )}
+            <ZoomableGalleryLightbox
+              url={galleryPreview.url}
+              alt={galleryPreview.caption || 'Preview da foto'}
+              authFetch={Boolean(galleryPreview.authFetch)}
+            />
           </div>
         </div>
       )}
