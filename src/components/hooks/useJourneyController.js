@@ -38,7 +38,6 @@ export function useJourneyController({
     setEndereco,
     setStep1Errors,
     setSelectedPatientCpf,
-    setPatients,
     setEvaluationCapturedPhotos,
     setEvaluationSelectedPhotoIndex,
     setEvaluationAnnotatedPhotoUrl,
@@ -60,7 +59,8 @@ export function useJourneyController({
     setIsHoveringCanvas,
     setTermoLido,
     setTermoAssinado,
-    setOrientacoes,
+    setOrientacoesItens = () => {},
+    setOrientacoesCarregadas = () => {},
   } = setters;
 
   const { generateJourneyId, api } = helpers;
@@ -206,7 +206,8 @@ export function useJourneyController({
     setIsHoveringCanvas(false);
     setTermoLido(false);
     setTermoAssinado(false);
-    setOrientacoes(false);
+    setOrientacoesItens([]);
+    setOrientacoesCarregadas(false);
   };
 
   const handleFinishJourney = () => {

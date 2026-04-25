@@ -170,7 +170,6 @@ export function JourneyView({
   EVALUATION_PHOTO_MAX,
   termoLido,
   setTermoLido,
-  termoAssinado,
   setTermoAssinado,
   termoAssinaturaDataUrl,
   setTermoAssinaturaDataUrl,
@@ -199,7 +198,10 @@ export function JourneyView({
   uploadProcedureFiles: uploadProcedureFilesStep4,
   removeProcedurePhoto: removeProcedurePhotoStep4,
   orientacoes,
-  setOrientacoes,
+  orientacoesItens: orientacoesItensProp,
+  setOrientacoesItens: setOrientacoesItensProp,
+  orientacoesCarregadas: orientacoesCarregadasProp,
+  setOrientacoesCarregadas: setOrientacoesCarregadasProp,
   procedureDateIso = toLocalISODate(),
   proximoRetornoDisplay: proximoRetornoDisplayProp,
   setProximoRetornoDisplay: setProximoRetornoDisplayProp,
@@ -214,6 +216,19 @@ export function JourneyView({
   getPatientInitials,
 }) {
   const toast = useToast();
+  const [_nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoIdLocal] = React.useState(null);
+
+  const [localOrientItens, setLocalOrientItens] = React.useState([]);
+  const [localOrientCarregadas, setLocalOrientCarregadas] = React.useState(false);
+  const hasParentOrientItens =
+    orientacoesItensProp !== undefined && typeof setOrientacoesItensProp === 'function';
+  const orientacoesItens = hasParentOrientItens ? orientacoesItensProp : localOrientItens;
+  const setOrientacoesItens = hasParentOrientItens ? setOrientacoesItensProp : setLocalOrientItens;
+  const orientacoesCarregadas = orientacoesCarregadasProp ?? localOrientCarregadas;
+  const setOrientacoesCarregadas = setOrientacoesCarregadasProp ?? setLocalOrientCarregadas;
+  const orientacoesOk = hasParentOrientItens
+    ? Boolean(orientacoes)
+    : localOrientItens.some((i) => i && i.checado);
 
   const [localProximoRetornoDisplay, setLocalProximoRetornoDisplay] = React.useState('');
   const proximoRetornoDisplay =
@@ -230,10 +245,8 @@ export function JourneyView({
   );
 
   const onFinishJourney = () => {
-    if (!orientacoes) {
-      toast.error(
-        'Para prosseguir, confirme que recebeu e compreendeu as orientações pós-procedimento.'
-      );
+    if (!orientacoesOk) {
+      toast.error('Marque ao menos uma orientação pós-procedimento para finalizar.');
       return;
     }
     if (step5RetornoBloqueiaFinal) {
@@ -358,6 +371,7 @@ export function JourneyView({
           pacienteIdForProcedures={pacienteId ?? pacienteAtual?.id ?? null}
           nomeProcedimento={nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
+          setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoIdLocal}
           observacoesExecucao={observacoesExecucao}
           setObservacoesExecucao={setObservacoesExecucao}
           procedureCapturedPhotos={procedureCapturedPhotosStep4 ?? evaluationCapturedPhotos}
@@ -372,13 +386,27 @@ export function JourneyView({
 
       {currentStep === 5 && (
         <Step5Finalization
+          key={String(nomeProcedimento || '')}
           procedureDateIso={procedureDateIso}
           proximoRetornoDisplay={proximoRetornoDisplay}
           setProximoRetornoDisplay={setProximoRetornoDisplay}
-          orientacoes={orientacoes}
-          setOrientacoes={setOrientacoes}
+          orientacoes={orientacoesOk}
+          orientacoesItens={orientacoesItens}
+          setOrientacoesItens={setOrientacoesItens}
+          orientacoesCarregadas={orientacoesCarregadas}
+          setOrientacoesCarregadas={setOrientacoesCarregadas}
           step5Errors={step5Errors}
           setStep5Errors={setStep5Errors}
+          pacienteNome={pacienteAtual?.nome ?? ''}
+          telefonePaciente={
+            pacienteAtual?.telefone ||
+            pacienteAtual?.phone ||
+            pacienteAtual?.telefoneNumero ||
+            pacienteAtual?.telefonePrincipal ||
+            ''
+          }
+          nomeProcedimento={nomeProcedimento ?? ''}
+          observacoesProcedimento={observacoesExecucao ?? ''}
           fotosAvaliacao={fotosAvaliacaoResumo}
           fotosProcedimento={fotosProcedimentoResumo}
           onAnnotateEvaluationPhoto={onAnnotateEvaluationPhoto}
@@ -420,17 +448,17 @@ export function JourneyView({
                 <button
                   type="button"
                   onClick={onFinishJourney}
-                  disabled={!orientacoes || isFinishing || step5RetornoBloqueiaFinal}
+                  disabled={!orientacoesOk || isFinishing || step5RetornoBloqueiaFinal}
                   className={`flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                    orientacoes && !isFinishing && !step5RetornoBloqueiaFinal
+                    orientacoesOk && !isFinishing && !step5RetornoBloqueiaFinal
                       ? 'animate-pulse bg-[#00a88e] text-white hover:bg-[#00967f]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                   }`}
                 >
                   {isFinishing
                     ? 'Salvando...'
-                    : !orientacoes
-                      ? 'Confirme as orientações para finalizar'
+                    : !orientacoesOk
+                      ? 'Marque ao menos uma orientação'
                       : step5RetornoBloqueiaFinal
                         ? 'Corrija a data de retorno'
                         : 'Finalizar Atendimento'}

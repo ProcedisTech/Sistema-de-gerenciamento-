@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 export const useJourneyState = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -39,7 +39,9 @@ export const useJourneyState = () => {
 
   // ============ ETAPA 4: PROCEDIMENTO (campos gravados no passo 4) ============
   const [observacoesExecucao, setObservacoesExecucao] = useState('');
-  const [nomeProcedimento, setNomeProcedimento] = useState('');
+  const [nomeProcedimento, setNomeProcedimentoState] = useState('');
+  /** UUID do item do catálogo quando o profissional escolhe da lista (evita modal duplicado no finish). */
+  const [nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoId] = useState(null);
 
   // ============ ETAPA 3: TERMOS / LGPD ============
   const [termoLido, setTermoLido] = useState(false);
@@ -50,9 +52,33 @@ export const useJourneyState = () => {
   const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
-  const [orientacoes, setOrientacoes] = useState(false);
+  /** Itens editáveis de orientação pós-procedimento. */
+  const [orientacoesItens, setOrientacoesItens] = useState([]);
+  /** Evita refetch do template após primeira carga no Step 5 (reset ao reiniciar jornada). */
+  const [orientacoesCarregadas, setOrientacoesCarregadas] = useState(false);
+  /** Derivado: true se pelo menos um item estiver marcado (validação “continuar/finalizar”). */
+  const orientacoes = useMemo(
+    () => Array.isArray(orientacoesItens) && orientacoesItens.some((i) => i && i.checado),
+    [orientacoesItens],
+  );
   /** Texto mascarado DD/MM/AAAA do próximo retorno (opcional). */
   const [proximoRetornoDisplay, setProximoRetornoDisplay] = useState('');
+
+  /** Ao mudar o nome (trim), permite novo fetch de template no Step 5 e evita lista desalinhada. */
+  const setNomeProcedimento = useCallback((value) => {
+    setNomeProcedimentoState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const prevTrim = String(prev ?? '').trim();
+      const nextTrim = String(next ?? '').trim();
+      if (prevTrim !== nextTrim) {
+        queueMicrotask(() => {
+          setOrientacoesCarregadas(false);
+          setOrientacoesItens([]);
+        });
+      }
+      return next;
+    });
+  }, []);
 
   // ============ FOTOS ============
   const EVALUATION_PHOTO_MAX = 30;
@@ -124,6 +150,8 @@ export const useJourneyState = () => {
     setObservacoesExecucao,
     nomeProcedimento,
     setNomeProcedimento,
+    nomeProcedimentoCatalogoId,
+    setNomeProcedimentoCatalogoId,
     termoLido,
     setTermoLido,
     termoAssinado,
@@ -135,7 +163,10 @@ export const useJourneyState = () => {
     termoSelecionadoId,
     setTermoSelecionadoId,
     orientacoes,
-    setOrientacoes,
+    orientacoesItens,
+    setOrientacoesItens,
+    orientacoesCarregadas,
+    setOrientacoesCarregadas,
     proximoRetornoDisplay,
     setProximoRetornoDisplay,
     EVALUATION_PHOTO_MAX,

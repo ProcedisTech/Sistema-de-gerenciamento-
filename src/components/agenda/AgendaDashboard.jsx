@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatLongDate, useAgendaPage } from './useAgendaPage';
+import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { WeekTimeGrid } from './WeekTimeGrid';
 
 const STATUS_STYLES = {
@@ -422,13 +423,21 @@ function AgendaFormModal({ agenda }) {
 
           <FieldError error={agenda.formErrors.procedimentoNome}>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimento*</label>
-            <input
-              type="text"
-              value={agenda.form.procedimentoNome || ''}
-              onChange={(e) => agenda.updateForm('procedimentoNome', e.target.value)}
-              placeholder="Ex: Botox, Preenchimento..."
-              className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
-            />
+            <div className="mt-1">
+              <ProcedimentoAutocomplete
+                value={agenda.form.procedimentoNome || ''}
+                onChange={(nome, catalogoId) => {
+                  agenda.updateForm('procedimentoNome', nome);
+                  agenda.updateForm('catalogoProcedimentoSaudeId', catalogoId || '');
+                }}
+                placeholder="Ex: Botox, Preenchimento..."
+                catalogoOptions={agenda.procedimentoOptions.map((o) => ({
+                  id: o.id,
+                  nomeProcedimento: o.nome,
+                }))}
+                error={Boolean(agenda.formErrors.procedimentoNome)}
+              />
+            </div>
           </FieldError>
 
           <FieldError error={agenda.formErrors.data}>
@@ -525,6 +534,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
       onStartAttendance(patient, {
         procedimentoNome: appointment.procedimentoNome,
         agendaId: appointment.agendaId,
+        catalogoProcedimentoSaudeId: appointment.catalogoProcedimentoSaudeId || '',
       });
       return;
     }

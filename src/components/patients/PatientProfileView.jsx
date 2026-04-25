@@ -52,7 +52,6 @@ import {
 import { PatientAvatar } from './PatientAvatar.jsx';
 import {
   formatPacienteGaleriaError,
-  normalizePacienteGaleriaItem,
   normalizePacienteGaleriaResponse,
   filterGaleriaItemsForUi,
   groupGaleriaItemsBySession,
@@ -571,7 +570,7 @@ export function PatientProfileView({
   getPatientInitials,
   onStartAttendance,
   onUpdatePatient,
-  onAddGalleryFiles,
+  onAddGalleryFiles: _onAddGalleryFiles,
   onDeleteGalleryPhoto,
   mergePatientById,
   refreshPatients,
@@ -642,9 +641,6 @@ export function PatientProfileView({
       setCompararSelecionadas((prev) => ({ ...prev, depois: foto }));
     }
   };
-
-  // Abre modal automaticamente quando as duas estão selecionadas
-  const compararPronto = compararSelecionadas.antes && compararSelecionadas.depois;
 
   useEffect(() => {
     if (compararSelecionadas.antes && compararSelecionadas.depois) {

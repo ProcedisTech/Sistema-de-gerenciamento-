@@ -409,6 +409,39 @@ export const usuariosApi = {
 export const catalogosApi = {
   list: () => request('/api/v1/catalogos'),
   get: (id) => request(`/api/v1/catalogos/${id}`),
+  /** Body alinhado ao Spring (ajustar chaves se o DTO divergir). */
+  criar: (data) => request('/api/v1/catalogos', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+/**
+ * Orientações pós-procedimento + template por nome (contrato alinhar com `plataforma-procedimentos`).
+ * Esperado: POST body `[{ descricao, checado, ordem }]`, GET template JSON com `itens` ou array,
+ * PUT template `{ procedimentoNome, itens }`, POST catálogo `{ nomeProcedimento }` (ajustar se o DTO Spring divergir).
+ */
+export const orientacoesApi = {
+  salvar: (procedimentoFeitoId, itens) =>
+    request(`/api/v1/procedimentos/${encodeURIComponent(String(procedimentoFeitoId))}/orientacoes`, {
+      method: 'POST',
+      body: JSON.stringify(Array.isArray(itens) ? itens : []),
+    }),
+  listar: (procedimentoFeitoId) =>
+    request(`/api/v1/procedimentos/${encodeURIComponent(String(procedimentoFeitoId))}/orientacoes`),
+};
+
+/** Preferências de perfil / clínica (templates). */
+export const perfilApi = {
+  getOrientacoesTemplate: (procedimentoNome) => {
+    const q = encodeURIComponent(String(procedimentoNome || '').trim());
+    return request(`/api/v1/perfil/orientacoes-template?procedimentoNome=${q}`);
+  },
+  salvarOrientacoesTemplate: (procedimentoNome, itens) =>
+    request('/api/v1/perfil/orientacoes-template', {
+      method: 'PUT',
+      body: JSON.stringify({
+        procedimentoNome: String(procedimentoNome || '').trim(),
+        itens: Array.isArray(itens) ? itens : [],
+      }),
+    }),
 };
 
 // ── Agenda ─────────────────────────────────────────────────
