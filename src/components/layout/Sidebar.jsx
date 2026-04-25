@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, LogOut, Menu, Settings, Shield, Users } from 'lucide-react';
+import { CalendarDays, ChevronLeft, LogOut, Menu, Settings, Shield, Users } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 
@@ -18,6 +18,7 @@ function perfilFotoDisplaySrc(u) {
 
 const NAV_ITEMS = [
   { view: 'pacientes', label: 'Pacientes', icon: Users },
+  { view: 'agenda', label: 'Agenda', icon: CalendarDays },
   { view: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
