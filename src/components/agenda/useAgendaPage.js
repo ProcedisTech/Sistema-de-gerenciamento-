@@ -160,7 +160,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       (Array.isArray(catalogRows) ? catalogRows : [])
         .filter((c) => c && c.ativo !== false)
         .map((c) => ({
-          id: String(c.catalogoProcedimentoId || c.catalogoProcedimentoSaudeId || c.id || ''),
+          id: String(c.id || c.catalogoProcedimentoSaudeId || ''),
           nome: c.nomeProcedimento || String(c.id || ''),
         }))
         .filter((o) => o.id),
