@@ -16,6 +16,24 @@ const STATUS_LABELS = {
   cancelado: 'cancelado',
 };
 
+const DUR_MIN = 15;
+const DUR_MAX = 150;
+const DUR_STEP = 5;
+
+/** Opções de duração (min) para o select da agenda: 15–150, passo 5. */
+export const AGENDA_DURACAO_MINUTOS_OPCOES = Object.freeze(
+  Array.from({ length: (DUR_MAX - DUR_MIN) / DUR_STEP + 1 }, (_, i) => DUR_MIN + i * DUR_STEP)
+);
+
+/** Encaixa um valor vindo da API na grade 15–150 (múltiplos de 5). */
+export function snapAgendaDuracaoMin(value) {
+  const x = Number(value);
+  if (!Number.isFinite(x)) return 60;
+  const k = Math.round((x - DUR_MIN) / DUR_STEP);
+  const snapped = DUR_MIN + k * DUR_STEP;
+  return Math.min(DUR_MAX, Math.max(DUR_MIN, snapped));
+}
+
 function pad2(value) {
   return String(value).padStart(2, '0');
 }
@@ -361,7 +379,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         catalogoProcedimentoSaudeId: catId || base.catalogoProcedimentoSaudeId,
         data: appointment?.data || base.data,
         horaInicio: appointment?.horaInicio || base.horaInicio,
-        duracaoMin: appointment?.duracaoMin ?? base.duracaoMin,
+        duracaoMin: snapAgendaDuracaoMin(appointment?.duracaoMin ?? base.duracaoMin),
         observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
       });
       setFormErrors({});
@@ -382,7 +400,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Informe o procedimento.';
     if (!form.data) nextErrors.data = 'Informe a data.';
     if (!form.horaInicio) nextErrors.horaInicio = 'Informe o horário.';
-    if (!Number(form.duracaoMin)) nextErrors.duracaoMin = 'Informe a duração.';
+    const d = Number(form.duracaoMin);
+    if (!Number.isFinite(d) || d < DUR_MIN || d > DUR_MAX || (d - DUR_MIN) % DUR_STEP !== 0) {
+      nextErrors.duracaoMin = 'Duração entre 15 e 150 min, múltiplos de 5.';
+    }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }, [form]);
