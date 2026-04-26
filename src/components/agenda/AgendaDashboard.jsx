@@ -15,7 +15,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { formatLongDate, useAgendaPage } from './useAgendaPage';
+import { AGENDA_DURACAO_MINUTOS_OPCOES, formatLongDate, useAgendaPage } from './useAgendaPage';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { WeekTimeGrid } from './WeekTimeGrid';
 
@@ -381,8 +381,23 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary }) {
 }
 
 function AgendaFormModal({ agenda }) {
+  const horaInicioInputRef = React.useRef(null);
   if (!agenda.modalMode) return null;
   const isEdit = agenda.modalMode === 'edit';
+
+  const openHoraInicioPicker = () => {
+    const el = horaInicioInputRef.current;
+    if (!el) return;
+    if (typeof el.showPicker === 'function') {
+      try {
+        el.showPicker();
+        return;
+      } catch {
+        // Safari / contexto sem gesto
+      }
+    }
+    el.focus();
+  };
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
@@ -446,13 +461,36 @@ function AgendaFormModal({ agenda }) {
           </FieldError>
 
           <FieldError error={agenda.formErrors.horaInicio}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Horário*</label>
-            <input type="time" value={agenda.form.horaInicio} onChange={(event) => agenda.updateForm('horaInicio', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]" />
+            <label className="text-[12px] font-bold text-[#1A1A2E]" htmlFor="agenda-hora-inicio">
+              Horário*
+            </label>
+            <input
+              id="agenda-hora-inicio"
+              ref={horaInicioInputRef}
+              type="time"
+              value={agenda.form.horaInicio}
+              onChange={(event) => agenda.updateForm('horaInicio', event.target.value)}
+              onClick={openHoraInicioPicker}
+              className="mt-1 w-full cursor-pointer rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
+            />
           </FieldError>
 
           <FieldError error={agenda.formErrors.duracaoMin}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Duração (min)*</label>
-            <input type="number" min="15" step="5" value={agenda.form.duracaoMin} onChange={(event) => agenda.updateForm('duracaoMin', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]" />
+            <label className="text-[12px] font-bold text-[#1A1A2E]" htmlFor="agenda-duracao-min">
+              Duração (min)*
+            </label>
+            <select
+              id="agenda-duracao-min"
+              value={String(agenda.form.duracaoMin ?? '')}
+              onChange={(event) => agenda.updateForm('duracaoMin', event.target.value)}
+              className="mt-1 w-full cursor-pointer rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
+            >
+              {AGENDA_DURACAO_MINUTOS_OPCOES.map((m) => (
+                <option key={m} value={m}>
+                  {m} min
+                </option>
+              ))}
+            </select>
           </FieldError>
 
           <div>
