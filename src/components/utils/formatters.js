@@ -38,6 +38,31 @@ export function isCpfIncomplete(value) {
   return n > 0 && n < CPF_DIGIT_COUNT;
 }
 
+/**
+ * CPF com 11 dígitos e dígitos verificadores corretos (rejeita sequências repetidas).
+ * @param {string} digits Apenas números
+ * @returns {boolean}
+ */
+export function isCpfValidCheckDigits(digits) {
+  const s = normalizeCpf(digits);
+  if (s.length !== CPF_DIGIT_COUNT) return false;
+  if (/^(\d)\1{10}$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) {
+    sum += parseInt(s[i], 10) * (10 - i);
+  }
+  let d1 = 11 - (sum % 11);
+  if (d1 > 9) d1 = 0;
+  if (d1 !== parseInt(s[9], 10)) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i += 1) {
+    sum += parseInt(s[i], 10) * (11 - i);
+  }
+  let d2 = 11 - (sum % 11);
+  if (d2 > 9) d2 = 0;
+  return d2 === parseInt(s[10], 10);
+}
+
 export const normalizeTelefone = (tel) => {
   return (tel || '').replace(/\D/g, '');
 };
