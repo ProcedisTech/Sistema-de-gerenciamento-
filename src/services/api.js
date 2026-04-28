@@ -261,7 +261,6 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
 
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
-  console.log('requestForm token:', accessTokenMemory ? 'present' : 'null', 'orgId:', currentOrgId);
 
   const res = await fetch(url, {
     ...rest,
