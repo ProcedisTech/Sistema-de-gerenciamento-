@@ -19,16 +19,18 @@ import {
   MapPin,
   Phone,
   Play,
-  Save,
   Sparkles,
   StickyNote,
   Trash2,
+  Pencil,
+  Plus,
   User as UserIcon,
   X,
 } from 'lucide-react';
 import {
   anamneseApi,
   pacientesApi,
+  pacienteAlertasManuaisApi,
   pacientesGaleriaApi,
   notasApi,
   procedimentosApi,
@@ -36,9 +38,19 @@ import {
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
-import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
-import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
+import {
+  maskCPF,
+  maskRG,
+  calculateAgeFromISODate,
+  sanitizeBirthDateDigits,
+  formatBirthDigitsBR,
+  validateBirthDateDigits8,
+  birthDateValidationUserMessage,
+} from '../utils/formatters';
+import { PatientForm } from './PatientForm.jsx';
+import { formatPhoneAsYouType, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 import {
   birthdayModalStorageKey,
   getBirthdayAlertInfo,
@@ -102,6 +114,54 @@ function birthdayAlertSidebarCopy(alert) {
   if (alert.isToday) return 'Aniversário hoje — celebre com o paciente!';
   if (alert.daysUntil === 1) return 'Aniversário amanhã';
   return `Aniversário em ${alert.daysUntil} dias`;
+}
+
+/** ISO `YYYY-MM-DD` → exibição DD/MM/AAAA para o campo de data. */
+function isoDateToBrazilianDisplay(iso) {
+  if (!iso || typeof iso !== 'string') return '';
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/** Normaliza sexo vindo do backend / seeds para o select F|M|N. */
+function sexoForPatientFormSelect(patientSexoRaw) {
+  const u = String(patientSexoRaw ?? '').trim().toUpperCase();
+  if (['F', 'M', 'N'].includes(u)) return u;
+  const low = String(patientSexoRaw ?? '').trim().toLowerCase();
+  if (low === 'feminino') return 'F';
+  if (low === 'masculino') return 'M';
+  if (low === 'prefiro não dizer' || low === 'prefiro nao dizer') return 'N';
+  if (low === 'f') return 'F';
+  if (low === 'm') return 'M';
+  if (low === 'n') return 'N';
+  return '';
+}
+
+function normalizeListaAlertasManualApi(payload) {
+  if (payload == null) return [];
+  if (Array.isArray(payload)) return payload;
+  const c =
+    payload?.content ??
+    payload?.items ??
+    payload?.data ??
+    payload?.lista ??
+    payload?._embedded?.alertas ??
+    [];
+  return Array.isArray(c) ? c : [];
+}
+
+function normalizeAlertaManualItem(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = raw.id ?? raw.alertaId ?? raw.alertaManualId ?? raw.uuid;
+  if (id == null || String(id).trim() === '') return null;
+  return {
+    id: String(id),
+    titulo: String(raw.titulo ?? raw.title ?? '').trim(),
+    descricao: String(raw.descricao ?? raw.description ?? '').trim(),
+    createdAt: raw.createdAt ?? null,
+    updatedAt: raw.updatedAt ?? null,
+  };
 }
 
 function renderRespostaValue(resp) {
@@ -590,6 +650,8 @@ export function PatientProfileView({
   const [assinaturas, setAssinaturas] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
+  const [editFormErrors, setEditFormErrors] = useState({});
+  const [profileSaving, setProfileSaving] = useState(false);
   const [editing, setEditing] = useState(null);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
   const [galleryPreview, setGalleryPreview] = useState(null);
@@ -615,12 +677,20 @@ export function PatientProfileView({
   const [anamneseListSummary, setAnamneseListSummary] = useState([]);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
+  const [manualAlerts, setManualAlerts] = useState([]);
+  const [manualAlertsLoading, setManualAlertsLoading] = useState(false);
+  const [manualAlertEditorOpen, setManualAlertEditorOpen] = useState(false);
+  const [manualAlertDraft, setManualAlertDraft] = useState({ id: null, titulo: '', descricao: '' });
+  const [manualAlertSaving, setManualAlertSaving] = useState(false);
+  /** `{ type:'delete', id }` | `{ type:'save-edit' }` para confirmação em edit/excluir */
+  const [manualAlertConfirm, setManualAlertConfirm] = useState(null);
   const [relatoModal, setRelatoModal] = useState({
     open: false,
     procedimentoFeitoId: null,
     pacienteId: null,
   });
   const profilePhotoInputRef = useRef(null);
+  const alertasCardRef = useRef(null);
 
   const toggleSessao = (key) => {
     setSessoesExpandidas((prev) => ({
@@ -661,6 +731,12 @@ export function PatientProfileView({
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
     setApiProcedures([]);
     setApiNotes([]);
+    setManualAlerts([]);
+    setManualAlertsLoading(false);
+    setManualAlertEditorOpen(false);
+    setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+    setManualAlertConfirm(null);
+    setManualAlertSaving(false);
   }, [selectedPatient?.id]);
 
   const closeRelatoModal = useCallback(() => {
@@ -795,6 +871,8 @@ export function PatientProfileView({
 
   const createEditDraft = () => {
     const { countryCode, nationalNumber } = parsePhoneFromApi(patient.telefone || '', 'BR');
+    const cpfRaw = String(patient.cpf || '').replace(/\D/g, '');
+    const rgStr = patient.rg != null ? String(patient.rg) : '';
     return {
       nome: patient.nome || '',
       email: patient.email || '',
@@ -805,12 +883,169 @@ export function PatientProfileView({
       nomePai: patient.nomePai || '',
       nomeMae: patient.nomeMae || '',
       endereco: patient.endereco || '',
-      alergias: patient.alergias || '',
-      condicoesSaude: patient.condicoesSaude || '',
-      medicamentos: Array.isArray(patient.medicamentos)
-        ? patient.medicamentos.join(', ')
-        : '',
+      instagram: patient.instagram || '',
+      tiktok: patient.tiktok || '',
+      indicacao: patient.indicacao || '',
+      rg: rgStr ? maskRG(rgStr) : '',
+      cpfDisplay: cpfRaw ? maskCPF(cpfRaw) : '',
+      sexo: sexoForPatientFormSelect(patient.sexo),
+      estadoCivilId: patient.estadoCivilId || '',
+      genero: patient.genero || '',
+      dataNascimentoIso: patient.dataNascimento || '',
+      dataNascimentoDisplay: isoDateToBrazilianDisplay(patient.dataNascimento || ''),
+      idade: patient.idade ?? '',
     };
+  };
+
+  const clearEditFieldError = (field) =>
+    setEditFormErrors((prev) => ({ ...prev, [field]: false }));
+
+  const handleEditingBirthDisplayChange = (raw) => {
+    const digits = sanitizeBirthDateDigits(raw);
+    const display = formatBirthDigitsBR(digits);
+    let dataNascimentoIso = '';
+    let idadeCalc = '';
+    if (digits.length === 8) {
+      const r = validateBirthDateDigits8(digits);
+      if (r.ok) {
+        dataNascimentoIso = r.iso;
+        idadeCalc = calculateAgeFromISODate(r.iso);
+      }
+    }
+    setEditing((prev) =>
+      prev
+        ? {
+            ...prev,
+            dataNascimentoDisplay: display,
+            dataNascimentoIso,
+            idade: idadeCalc !== '' ? idadeCalc : '',
+          }
+        : prev,
+    );
+    setEditFormErrors((prev) => ({ ...prev, dataNascimento: false }));
+    setProfileSaveError('');
+  };
+
+  const handleScrollToAlertas = () => {
+    alertasCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const reloadManualAlerts = useCallback(async () => {
+    const pacienteId = selectedPatient?.id;
+    if (!pacienteId) {
+      setManualAlerts([]);
+      setManualAlertsLoading(false);
+      return;
+    }
+    setManualAlertsLoading(true);
+    try {
+      const data = await pacienteAlertasManuaisApi.list(pacienteId);
+      const lista = normalizeListaAlertasManualApi(data)
+        .map(normalizeAlertaManualItem)
+        .filter(Boolean);
+      setManualAlerts(lista);
+    } catch (e) {
+      if (e?.status === 404) {
+        setManualAlerts([]);
+      } else {
+        setManualAlerts([]);
+        const st = e?.status;
+        if (st != null && st !== 401 && st !== 403 && st !== 404) {
+          toast.error(e.message || 'Não foi possível carregar alertas manuais.');
+        }
+      }
+    } finally {
+      setManualAlertsLoading(false);
+    }
+  }, [selectedPatient?.id, toast]);
+
+  useEffect(() => {
+    reloadManualAlerts();
+  }, [reloadManualAlerts]);
+
+  const MANUAL_ALERTA_MAX = { titulo: 200, descricao: 2000 };
+
+  const openManualAlertCreate = () => {
+    setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+    setManualAlertConfirm(null);
+    setManualAlertEditorOpen(true);
+  };
+
+  const openManualAlertEdit = (item) => {
+    setManualAlertDraft({
+      id: item.id,
+      titulo: item.titulo || '',
+      descricao: item.descricao || '',
+    });
+    setManualAlertConfirm(null);
+    setManualAlertEditorOpen(true);
+  };
+
+  const handleSubmitManualAlertEditor = async () => {
+    const titulo = String(manualAlertDraft.titulo ?? '').trim().slice(0, MANUAL_ALERTA_MAX.titulo);
+    const descricao = String(manualAlertDraft.descricao ?? '').trim().slice(0, MANUAL_ALERTA_MAX.descricao);
+    if (!titulo || !descricao) {
+      toast.warning('Preencha título e descrição do alerta.');
+      return;
+    }
+    const pacienteId = selectedPatient?.id;
+    if (!pacienteId) return;
+
+    if (manualAlertDraft.id) {
+      setManualAlertConfirm({ type: 'save-edit' });
+      return;
+    }
+
+    setManualAlertSaving(true);
+    try {
+      await pacienteAlertasManuaisApi.create(pacienteId, { titulo, descricao });
+      toast.success('Alerta manual criado.');
+      setManualAlertEditorOpen(false);
+      setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+      await reloadManualAlerts();
+    } catch (e) {
+      toast.error(e.message || 'Erro ao criar alerta manual.');
+    } finally {
+      setManualAlertSaving(false);
+    }
+  };
+
+  const executeManualAlertSaveEdit = async () => {
+    const pacienteId = selectedPatient?.id;
+    const alertaId = manualAlertDraft.id;
+    const titulo = String(manualAlertDraft.titulo ?? '').trim().slice(0, MANUAL_ALERTA_MAX.titulo);
+    const descricao = String(manualAlertDraft.descricao ?? '').trim().slice(0, MANUAL_ALERTA_MAX.descricao);
+    if (!pacienteId || !alertaId || !titulo || !descricao) return;
+    setManualAlertSaving(true);
+    try {
+      await pacienteAlertasManuaisApi.update(pacienteId, alertaId, { titulo, descricao });
+      toast.success('Alerta manual atualizado.');
+      setManualAlertConfirm(null);
+      setManualAlertEditorOpen(false);
+      setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+      await reloadManualAlerts();
+    } catch (e) {
+      toast.error(e.message || 'Erro ao atualizar alerta manual.');
+    } finally {
+      setManualAlertSaving(false);
+    }
+  };
+
+  const executeManualAlertDelete = async () => {
+    const pacienteId = selectedPatient?.id;
+    const id = manualAlertConfirm?.id;
+    if (!pacienteId || !id) return;
+    setManualAlertSaving(true);
+    try {
+      await pacienteAlertasManuaisApi.remove(pacienteId, id);
+      toast.success('Alerta manual excluído.');
+      setManualAlertConfirm(null);
+      await reloadManualAlerts();
+    } catch (e) {
+      toast.error(e.message || 'Erro ao excluir alerta manual.');
+    } finally {
+      setManualAlertSaving(false);
+    }
   };
 
   const capturedPhotos = useMemo(() => {
@@ -1275,31 +1510,71 @@ export function PatientProfileView({
   }, []);
 
   const saveEditProfile = async () => {
-    if (!selectedPatient?.id) {
-      const meds = (editing?.medicamentos || '')
-        .split(',')
-        .map((m) => m.trim())
-        .filter(Boolean);
+    if (!editing || !selectedPatient) return;
+
+    const v = {
+      nome: editing.nome,
+      dataNascimentoIso: editing.dataNascimentoIso,
+      sexo: editing.sexo,
+      estadoCivilId: editing.estadoCivilId,
+      profissao: editing.profissao,
+      cpf: editing.cpfDisplay,
+      telefoneCountryCode: editing.telefoneCountryCode,
+      telefoneNumero: editing.telefoneNumero,
+      email: editing.email,
+    };
+    const validationErrors = validatePacienteFormBasics(v, { skipCpf: true });
+    const cy = new Date().getFullYear();
+    const dnDigits = String(editing.dataNascimentoDisplay ?? '').replace(/\D/g, '');
+
+    if (Object.keys(validationErrors).length > 0) {
+      setEditFormErrors(validationErrors);
+      let banner = 'Preencha os campos obrigatórios.';
+      if (validationErrors.dataNascimento) {
+        if (dnDigits.length > 0 && dnDigits.length < 8) {
+          banner = birthDateValidationUserMessage('incomplete', cy);
+        } else if (dnDigits.length === 8 && !editing.dataNascimentoIso) {
+          const r = validateBirthDateDigits8(dnDigits);
+          banner = !r.ok ? birthDateValidationUserMessage(r.reason, cy) : banner;
+        }
+      }
+      setProfileSaveError(banner);
+      toast.error('Preencha todos os campos obrigatórios antes de salvar.');
+      return;
+    }
+
+    setEditFormErrors({});
+    setProfileSaveError('');
+
+    if (!selectedPatient.id) {
+      const rgDigits = String(editing.rg ?? '').replace(/\D/g, '');
       onUpdatePatient?.(selectedPatient.cpf, {
-        nome: editing?.nome || '',
-        email: editing?.email || '',
-        telefone: formatPhoneForApi(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') || '',
-        profissao: editing?.profissao || '',
-        nomePai: editing?.nomePai || '',
-        nomeMae: editing?.nomeMae || '',
-        endereco: editing?.endereco || '',
-        alergias: editing?.alergias || '',
-        condicoesSaude: editing?.condicoesSaude || '',
-        medicamentos: meds,
+        nome: editing.nome || '',
+        email: editing.email || '',
+        telefone: formatPhoneForApi(editing.telefoneCountryCode ?? 'BR', editing.telefoneNumero ?? '') || '',
+        profissao: editing.profissao || '',
+        nomePai: editing.nomePai || '',
+        nomeMae: editing.nomeMae || '',
+        endereco: editing.endereco || '',
+        instagram: editing.instagram || '',
+        tiktok: editing.tiktok || '',
+        indicacao: editing.indicacao || '',
+        sexo: editing.sexo,
+        estadoCivilId: editing.estadoCivilId || '',
+        genero: editing.genero || '',
+        dataNascimento: editing.dataNascimentoIso || '',
+        rg: rgDigits || undefined,
       });
       setEditing(null);
       return;
     }
-    setProfileSaveError('');
+
+    setProfileSaving(true);
     try {
       const dto = await pacientesApi.get(selectedPatient.id);
       const editingWithTelefone = {
         ...editing,
+        nome: editing.nome,
         telefone: formatPhoneForApi(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') || editing?.telefone || '',
       };
       const payload = mergePacienteDtoWithEditing(dto, editingWithTelefone);
@@ -1314,18 +1589,14 @@ export function PatientProfileView({
           evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
           evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
           galeria: prev.galeria,
-          medicamentos: (editing?.medicamentos || '')
-            .split(',')
-            .map((m) => m.trim())
-            .filter(Boolean),
-          condicoesSaude: editing?.condicoesSaude ?? prev.condicoesSaude,
-          alergias: editing?.alergias ?? prev.alergias,
         };
       });
       refreshPatients?.();
       setEditing(null);
     } catch (e) {
       setProfileSaveError(e.message || 'Erro ao salvar cadastro.');
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -1525,7 +1796,18 @@ export function PatientProfileView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditing((prev) => (prev ? null : createEditDraft()))}
+                  onClick={() => {
+                    setEditing((prev) => {
+                      if (prev) {
+                        setEditFormErrors({});
+                        setProfileSaveError('');
+                        return null;
+                      }
+                      setEditFormErrors({});
+                      setProfileSaveError('');
+                      return createEditDraft();
+                    });
+                  }}
                   className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors active:border-[#cbd5e1] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:border-[#cbd5e1]"
                 >
                   <UserIcon className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Editar Cadastro
@@ -1540,125 +1822,81 @@ export function PatientProfileView({
               </div>
             </div>
 
-            {isEditing && (
-              <div className="mt-5 p-4 border border-slate-200 rounded-2xl bg-[#f8fbfb]">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    value={editing?.nome || ''}
-                    maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
-                    onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
-                    placeholder="Nome"
-                  />
-                  <input
-                    type="email"
-                    value={editing?.email || ''}
-                    maxLength={PACIENTE_FIELD_MAX.email}
-                    onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
-                    placeholder="E-mail"
-                  />
-                  <div className="space-y-1">
-                    <div className="flex items-stretch gap-1 rounded-xl border-[2px] border-[#00a88e]/20 bg-white overflow-hidden">
-                      <select
-                        value={editing?.telefoneCountryCode ?? 'BR'}
-                        title={getCountryByCode(editing?.telefoneCountryCode ?? 'BR').name}
-                        onChange={(e) => setEditing((p) => ({ ...p, telefoneCountryCode: e.target.value, telefoneNumero: '', telefoneTouched: false }))}
-                        className="max-w-[7.25rem] min-w-0 shrink-0 truncate border-0 bg-transparent py-2 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none"
-                        aria-label="País"
-                      >
-                        {[
-                          COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
-                          ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
-                        ].filter(Boolean).map((c) => (
-                          <option key={c.code} value={c.code} title={c.name}>{countrySelectDisplayLabel(c)}</option>
-                        ))}
-                      </select>
-                      <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
-                        <span className="flex items-center text-[12px] font-semibold text-[#00a88e] shrink-0 tabular-nums">
-                          {getDdi(editing?.telefoneCountryCode ?? 'BR')}
-                        </span>
-                        <input
-                          type="tel"
-                          value={editing?.telefoneNumero ?? ''}
-                          maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
-                          autoComplete="tel-national"
-                          onChange={(e) => {
-                            const formatted = formatPhoneAsYouType(editing?.telefoneCountryCode ?? 'BR', e.target.value);
-                            setEditing((p) => ({ ...p, telefoneNumero: formatted }));
-                          }}
-                          onBlur={() => setEditing((p) => ({ ...p, telefoneTouched: true }))}
-                          placeholder={(editing?.telefoneCountryCode ?? 'BR') === 'BR' ? '(00) 00000-0000' : 'Número'}
-                          className="min-w-0 flex-1 bg-transparent py-2 pr-2 text-[16px] sm:text-[14px] outline-none"
-                        />
-                      </div>
-                    </div>
-                    {editing?.telefoneTouched && !isPhoneValid(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') && (
-                      <p className="text-[11px] font-bold text-red-600">Número inválido para este país</p>
-                    )}
-                  </div>
-                  <input
-                    value={editing?.profissao || ''}
-                    maxLength={PACIENTE_FIELD_MAX.profissao}
-                    onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
-                    placeholder="Profissao"
-                  />
-                  <input
-                    value={editing?.nomePai || ''}
-                    maxLength={PACIENTE_FIELD_MAX.nomePai}
-                    onChange={(e) => setEditing((p) => ({ ...p, nomePai: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
-                    placeholder="Nome do pai"
-                    aria-label="Nome do pai"
-                  />
-                  <input
-                    value={editing?.nomeMae || ''}
-                    maxLength={PACIENTE_FIELD_MAX.nomeMae}
-                    onChange={(e) => setEditing((p) => ({ ...p, nomeMae: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
-                    placeholder="Nome da mãe"
-                    aria-label="Nome da mãe"
-                  />
-                  <div className="md:col-span-2">
-                    <label className="text-[12px] font-bold text-[#475569] mb-1 block">Endereço</label>
-                    <input
-                      type="text"
-                      value={editing?.endereco || ''}
-                      maxLength={PACIENTE_FIELD_MAX.endereco}
-                      onChange={(e) => setEditing((d) => ({ ...d, endereco: e.target.value }))}
-                      placeholder="Rua, número, bairro, cidade - UF"
-                      className="w-full rounded-xl border border-slate-200 px-4 py-2 text-[16px] outline-none focus:border-[#00a88e] sm:text-[13px]"
-                    />
-                  </div>
-                  <input
-                    value={editing?.alergias || ''}
-                    maxLength={PACIENTE_FIELD_MAX.alergias}
-                    onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2"
-                    placeholder="Alergias"
-                  />
-                  <input
-                    value={editing?.condicoesSaude || ''}
-                    maxLength={PACIENTE_FIELD_MAX.condicoesSaude}
-                    onChange={(e) => setEditing((p) => ({ ...p, condicoesSaude: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2"
-                    placeholder="Condicoes de saude"
-                  />
-                  <input
-                    value={editing?.medicamentos || ''}
-                    maxLength={PACIENTE_FIELD_MAX.medicamentos}
-                    onChange={(e) => setEditing((p) => ({ ...p, medicamentos: e.target.value }))}
-                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2"
-                    placeholder="Medicamentos (separe por virgula)"
-                  />
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <button type="button" onClick={saveEditProfile} className="px-4 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[13px] border-[2px] border-transparent"><Save className="w-4 h-4 inline mr-1" />Salvar</button>
-                  <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl bg-white text-[#475569] font-bold text-[13px] border border-slate-200"><X className="w-4 h-4 inline mr-1" />Cancelar</button>
-                </div>
+            {isEditing && editing ? (
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-[#f8fbfb] p-4">
+                <PatientForm
+                  mode="edit"
+                  variant="profile"
+                  showFormHeading
+                  formHeading="Editar Paciente"
+                  nome={editing.nome}
+                  dataNascimentoDisplay={editing.dataNascimentoDisplay}
+                  idade={editing.idade}
+                  sexo={editing.sexo}
+                  estadoCivilId={editing.estadoCivilId}
+                  profissao={editing.profissao}
+                  genero={editing.genero}
+                  cpf={editing.cpfDisplay}
+                  rg={editing.rg}
+                  telefoneCountryCode={editing.telefoneCountryCode ?? 'BR'}
+                  telefoneNumero={editing.telefoneNumero ?? ''}
+                  telefoneTouched={editing.telefoneTouched ?? false}
+                  email={editing.email}
+                  instagram={editing.instagram}
+                  tiktok={editing.tiktok}
+                  endereco={editing.endereco}
+                  nomeMae={editing.nomeMae}
+                  nomePai={editing.nomePai}
+                  indicacao={editing.indicacao}
+                  dataNascimentoIso={editing.dataNascimentoIso}
+                  errors={editFormErrors}
+                  erroBanner={profileSaveError}
+                  onNomeChange={(value) =>
+                    setEditing((p) => (p ? { ...p, nome: value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto) } : p))
+                  }
+                  onDataNascimentoDisplayChange={handleEditingBirthDisplayChange}
+                  onSexoChange={(value) => setEditing((p) => (p ? { ...p, sexo: value } : p))}
+                  onEstadoCivilChange={(value) => setEditing((p) => (p ? { ...p, estadoCivilId: value } : p))}
+                  onProfissaoChange={(value) => setEditing((p) => (p ? { ...p, profissao: value } : p))}
+                  onGeneroChange={(value) => setEditing((p) => (p ? { ...p, genero: value } : p))}
+                  onCpfChange={() => {}}
+                  onCpfBlur={undefined}
+                  onRgChange={(value) => setEditing((p) => (p ? { ...p, rg: value } : p))}
+                  onTelefoneCountryChange={(code) =>
+                    setEditing((p) =>
+                      p
+                        ? { ...p, telefoneCountryCode: code, telefoneNumero: '', telefoneTouched: false }
+                        : p,
+                    )
+                  }
+                  onTelefoneNumeroChange={(value) =>
+                    setEditing((p) => (p ? { ...p, telefoneNumero: value } : p))
+                  }
+                  onTelefoneBlur={() => setEditing((p) => (p ? { ...p, telefoneTouched: true } : p))}
+                  onEmailChange={(value) => setEditing((p) => (p ? { ...p, email: value } : p))}
+                  onInstagramChange={(value) => setEditing((p) => (p ? { ...p, instagram: value } : p))}
+                  onTiktokChange={(value) => setEditing((p) => (p ? { ...p, tiktok: value } : p))}
+                  onEnderecoChange={(value) => setEditing((p) => (p ? { ...p, endereco: value } : p))}
+                  onNomeMaeChange={(value) => setEditing((p) => (p ? { ...p, nomeMae: value } : p))}
+                  onNomePaiChange={(value) => setEditing((p) => (p ? { ...p, nomePai: value } : p))}
+                  onIndicacaoChange={(value) => setEditing((p) => (p ? { ...p, indicacao: value } : p))}
+                  clearError={clearEditFieldError}
+                  submitLabel="Salvar Alterações"
+                  onSubmit={(ev) => {
+                    ev.preventDefault();
+                    saveEditProfile();
+                  }}
+                  onCancel={() => {
+                    setEditing(null);
+                    setEditFormErrors({});
+                    setProfileSaveError('');
+                  }}
+                  salvando={profileSaving}
+                  cpfInputId="patient-profile-edit-cpf"
+                  onManageAlerts={handleScrollToAlertas}
+                />
               </div>
-            )}
+            ) : null}
 
             <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#f1f5f9] pt-4 max-sm:p-0">
               <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
@@ -2482,56 +2720,129 @@ export function PatientProfileView({
         </div>
 
         <div className="flex flex-col gap-4 lg:col-span-1">
-          <div className="overflow-hidden rounded-xl border border-[#fecaca] shadow-sm">
+          <div
+            ref={alertasCardRef}
+            id="patient-profile-alertas-card"
+            className="overflow-hidden rounded-xl border border-[#fecaca] shadow-sm"
+          >
             <div className="flex items-center gap-2 bg-[#fef2f2] px-4 py-2.5">
               <AlertTriangle className="h-4 w-4 shrink-0 text-[#dc2626]" strokeWidth={2.5} aria-hidden />
               <h5 className="text-[13px] font-bold text-[#dc2626]">Alertas</h5>
             </div>
-            <div className="space-y-2 bg-white p-3">
-              {alertasAnamneseLoading ? (
-                <div className="flex items-center gap-2 text-[13px] font-medium text-[#64748b]">
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
-                  Carregando alertas da anamnese…
+            <div className="space-y-3 bg-white p-3">
+              {/* Alertas manuais (CRUD) — paralelo aos alertas de anamnese */}
+              <div className="space-y-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
+                    Alertas manuais
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!selectedPatient?.id}
+                    onClick={openManualAlertCreate}
+                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[#dc2626] px-2.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                    Novo alerta manual
+                  </button>
                 </div>
-              ) : alertasAnamnese.length === 0 ? (
-                <p className="text-[13px] font-medium leading-snug text-[#64748b]">
-                  Nenhuma pergunta em alerta nas anamneses preenchidas.
-                </p>
-              ) : (
-                <>
-                  {alertasAlergia.length > 0 ? (
-                    <div className="mb-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
-                        Alergias registradas
-                      </span>
-                      {alertasAlergia.map((item) => (
-                        <div
-                          key={item.key}
-                          className="mt-1 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2"
-                        >
-                          <p className="text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
-                          <p className="text-[13px] font-semibold text-[#0f172a]">{item.valor}</p>
+                {!selectedPatient?.id ? (
+                  <p className="text-[12px] leading-snug text-[#64748b]">
+                    Salve o paciente no servidor para gerenciar alertas manuais.
+                  </p>
+                ) : manualAlertsLoading ? (
+                  <div className="flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
+                    Carregando alertas manuais…
+                  </div>
+                ) : manualAlerts.length === 0 ? (
+                  <p className="text-[12px] font-medium leading-snug text-[#64748b]">Nenhum alerta manual.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {manualAlerts.map((ma) => (
+                      <li key={ma.id} className="rounded-lg border border-slate-200 bg-slate-50/90 p-2.5 shadow-sm">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[12px] font-bold text-[#0f172a]">{ma.titulo || 'Alerta manual'}</p>
+                            <p className="mt-0.5 whitespace-pre-wrap break-words text-[12px] text-[#475569]">{ma.descricao}</p>
+                          </div>
+                          <div className="flex shrink-0 gap-0.5">
+                            <button
+                              type="button"
+                              title="Editar"
+                              aria-label="Editar alerta manual"
+                              onClick={() => openManualAlertEdit(ma)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#64748b] hover:border-slate-200 hover:bg-white hover:text-[#0f172a]"
+                            >
+                              <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Excluir"
+                              aria-label="Excluir alerta manual"
+                              onClick={() => setManualAlertConfirm({ type: 'delete', id: ma.id })}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#64748b] hover:border-red-200 hover:bg-[#fef2f2] hover:text-red-600"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.25} />
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {alertasSidebarGeral.slice(0, 3).map((row) => (
-                    <div key={row.key} className="rounded-lg border border-[#fecaca] bg-[#fef2f2]/50 p-2.5">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">{row.titulo}</p>
-                      <p className="mt-0.5 break-words text-[13px] font-semibold text-[#0f172a]">{row.valor}</p>
-                    </div>
-                  ))}
-                  {alertasAnamnese.length > 3 ? (
-                    <button
-                      type="button"
-                      onClick={() => setAlertasModalOpen(true)}
-                      className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-[#fecaca] text-[12px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
-                    >
-                      Ver todos ({alertasAnamnese.length})
-                    </button>
-                  ) : null}
-                </>
-              )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Alertas da anamnese (somente leitura — mesma lógica de merge que antes) */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
+                  Alertas da anamnese
+                </span>
+                {alertasAnamneseLoading ? (
+                  <div className="flex items-center gap-2 text-[13px] font-medium text-[#64748b]">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
+                    Carregando alertas da anamnese…
+                  </div>
+                ) : alertasAnamnese.length === 0 ? (
+                  <p className="text-[13px] font-medium leading-snug text-[#64748b]">
+                    Nenhuma pergunta em alerta nas anamneses preenchidas.
+                  </p>
+                ) : (
+                  <>
+                    {alertasAlergia.length > 0 ? (
+                      <div className="mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
+                          Alergias registradas
+                        </span>
+                        {alertasAlergia.map((item) => (
+                          <div
+                            key={item.key}
+                            className="mt-1 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2"
+                          >
+                            <p className="text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
+                            <p className="text-[13px] font-semibold text-[#0f172a]">{item.valor}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {alertasSidebarGeral.slice(0, 3).map((row) => (
+                      <div key={row.key} className="rounded-lg border border-[#fecaca] bg-[#fef2f2]/50 p-2.5">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">{row.titulo}</p>
+                        <p className="mt-0.5 break-words text-[13px] font-semibold text-[#0f172a]">{row.valor}</p>
+                      </div>
+                    ))}
+                    {alertasAnamnese.length > 3 ? (
+                      <button
+                        type="button"
+                        onClick={() => setAlertasModalOpen(true)}
+                        className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-[#fecaca] text-[12px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
+                      >
+                        Ver todos ({alertasAnamnese.length})
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -2616,6 +2927,179 @@ export function PatientProfileView({
           </div>
         </div>
       </div>
+
+      {manualAlertEditorOpen && selectedPatient?.id ? (
+        <div
+          className="fixed inset-0 z-[232] flex items-center justify-center bg-black/55 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manual-alert-editor-title"
+          onClick={() => {
+            if (!manualAlertSaving) {
+              setManualAlertEditorOpen(false);
+              setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+            }
+          }}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              disabled={manualAlertSaving}
+              onClick={() => {
+                setManualAlertEditorOpen(false);
+                setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+              }}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-[#64748b] transition-colors hover:border-red-200 hover:text-red-600 disabled:opacity-50"
+              aria-label="Fechar"
+            >
+              <X className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+            <h3 id="manual-alert-editor-title" className="pr-10 text-[18px] font-bold text-[#0f172a]">
+              {manualAlertDraft.id ? 'Editar alerta manual' : 'Novo alerta manual'}
+            </h3>
+            <p className="mt-1 text-[12px] font-medium text-[#64748b]">
+              Título e descrição são obrigatórios. Estes alertas são independentes dos alertas da anamnese.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label htmlFor="manual-alert-titulo" className="block text-[12px] font-semibold text-[#334155]">
+                  Título
+                </label>
+                <input
+                  id="manual-alert-titulo"
+                  type="text"
+                  value={manualAlertDraft.titulo}
+                  maxLength={MANUAL_ALERTA_MAX.titulo}
+                  onChange={(e) =>
+                    setManualAlertDraft((d) => ({ ...d, titulo: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
+                  placeholder="Ex.: Atenção na aplicação"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label htmlFor="manual-alert-desc" className="block text-[12px] font-semibold text-[#334155]">
+                  Descrição
+                </label>
+                <textarea
+                  id="manual-alert-desc"
+                  value={manualAlertDraft.descricao}
+                  maxLength={MANUAL_ALERTA_MAX.descricao}
+                  onChange={(e) =>
+                    setManualAlertDraft((d) => ({ ...d, descricao: e.target.value }))
+                  }
+                  rows={4}
+                  className="mt-1 w-full resize-y rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
+                  placeholder="Detalhes do alerta…"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={manualAlertSaving}
+                onClick={() => {
+                  setManualAlertEditorOpen(false);
+                  setManualAlertDraft({ id: null, titulo: '', descricao: '' });
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-[13px] font-semibold text-[#64748b] hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={manualAlertSaving}
+                onClick={handleSubmitManualAlertEditor}
+                className="inline-flex items-center justify-center rounded-xl bg-[#00a88e] px-4 py-2.5 text-[13px] font-bold text-white transition hover:bg-[#00967f] disabled:opacity-60"
+              >
+                {manualAlertSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                    Salvando…
+                  </>
+                ) : manualAlertDraft.id ? (
+                  'Salvar alterações'
+                ) : (
+                  'Criar alerta'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {manualAlertConfirm ? (
+        <div
+          className="fixed inset-0 z-[245] flex items-center justify-center bg-black/55 p-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="manual-alert-confirm-title"
+          onClick={() => {
+            if (!manualAlertSaving) setManualAlertConfirm(null);
+          }}
+        >
+          <div
+            className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="manual-alert-confirm-title" className="text-[17px] font-bold text-[#0f172a]">
+              {manualAlertConfirm.type === 'delete' ? 'Excluir alerta manual?' : 'Confirmar alterações?'}
+            </h3>
+            <p className="mt-2 text-[13px] leading-relaxed text-[#64748b]">
+              {manualAlertConfirm.type === 'delete'
+                ? 'Esta ação não pode ser desfeita. O alerta manual será removido permanentemente.'
+                : 'As alterações serão salvas no servidor para este paciente.'}
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={manualAlertSaving}
+                onClick={() => setManualAlertConfirm(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-[13px] font-semibold text-[#64748b] hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              {manualAlertConfirm.type === 'delete' ? (
+                <button
+                  type="button"
+                  disabled={manualAlertSaving}
+                  onClick={executeManualAlertDelete}
+                  className="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2.5 text-[13px] font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+                >
+                  {manualAlertSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                      Excluindo…
+                    </>
+                  ) : (
+                    'Excluir'
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={manualAlertSaving}
+                  onClick={executeManualAlertSaveEdit}
+                  className="inline-flex items-center justify-center rounded-xl bg-[#00a88e] px-4 py-2.5 text-[13px] font-bold text-white transition hover:bg-[#00967f] disabled:opacity-60"
+                >
+                  {manualAlertSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                      Salvando…
+                    </>
+                  ) : (
+                    'Confirmar'
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {alertasModalOpen ? (
         <div

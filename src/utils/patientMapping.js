@@ -111,23 +111,27 @@ export function patientToPacienteUpdateDTO(patient, editing) {
 /** PUT completo: parte do GET /pacientes/{id} + campos editados na UI. */
 export function mergePacienteDtoWithEditing(dto, editing) {
   if (!dto) return null;
-  const sexoNorm = normalizeSexoForApi(dto.sexo);
+  const sexoMerged = normalizeSexoForApi(editing?.sexo ?? dto.sexo);
+  const rgDigits = String(editing?.rg ?? dto.rg ?? '').replace(/\D/g, '') || '';
   return {
     nomeCompleto: (editing?.nome ?? dto.nomeCompleto ?? '').trim(),
-    dataNascimento: dto.dataNascimento || null,
+    dataNascimento: (editing?.dataNascimentoIso ?? dto.dataNascimento) || null,
     cpf: dto.cpf || null,
-    rg: dto.rg || null,
+    rg: rgDigits || null,
     telefone: (editing?.telefone ?? dto.telefone ?? '').trim() || null,
     email: (editing?.email ?? dto.email ?? '').trim() || null,
-    instagram: dto.instagram || null,
-    tiktok: dto.tiktok || null,
+    instagram: (editing?.instagram ?? dto.instagram ?? '').trim() || null,
+    tiktok: (editing?.tiktok ?? dto.tiktok ?? '').trim() || null,
     nomeMae: (editing?.nomeMae ?? dto.nomeMae ?? '').trim() || null,
     nomePai: (editing?.nomePai ?? dto.nomePai ?? '').trim() || null,
     profissao: (editing?.profissao ?? dto.profissao ?? '').trim() || null,
-    indicacao: dto.indicacao || null,
+    indicacao: (editing?.indicacao ?? dto.indicacao ?? '').trim() || null,
     endereco: (editing?.endereco ?? dto.endereco ?? '').trim() || null,
-    sexo: (sexoNorm ?? dto.sexo) || null,
-    genero: dto.genero || null,
-    estadoCivilId: dto.estadoCivilId || undefined,
+    sexo: (sexoMerged ?? dto.sexo) || null,
+    genero: (editing?.genero ?? dto.genero ?? '').trim() || null,
+    estadoCivilId:
+      editing?.estadoCivilId !== undefined && editing?.estadoCivilId !== ''
+        ? editing.estadoCivilId
+        : dto.estadoCivilId || undefined,
   };
 }

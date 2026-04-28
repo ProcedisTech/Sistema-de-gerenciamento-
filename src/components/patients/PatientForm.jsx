@@ -1,0 +1,733 @@
+import React, { useMemo, useState } from 'react';
+import { Save, Loader2, UserRound, Plus, AlertTriangle, Calendar, ChevronRight } from 'lucide-react';
+import {
+  maskCPF,
+  maskRG,
+  validateBirthDateDigits8,
+  birthDateValidationUserMessage,
+} from '../utils/formatters';
+import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
+import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUtils';
+import { PROFISSOES } from '../../data/profissoes';
+import { ESTADOS_CIVIS } from '../../data/estadosCivis';
+import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
+
+const FieldReq = () => <span className="text-red-500">*</span>;
+
+/**
+ * Formulário compartilhado create/edit de paciente.
+ * `variant`: `page` (telas cheias), `modal`, `profile` (painel no perfil — estilo denso).
+ */
+export function PatientForm({
+  mode,
+  variant = 'page',
+  nome,
+  dataNascimentoDisplay,
+  idade,
+  sexo,
+  estadoCivilId,
+  profissao,
+  genero,
+  cpf,
+  rg,
+  telefoneCountryCode,
+  telefoneNumero,
+  telefoneTouched,
+  email,
+  instagram,
+  tiktok,
+  endereco,
+  nomeMae,
+  nomePai,
+  indicacao,
+  dataNascimentoIso,
+  fotoPerfilPreview,
+  errors = {},
+  cpfErrorText = '',
+  erroBanner = '',
+  onNomeChange,
+  onDataNascimentoDisplayChange,
+  onSexoChange,
+  onEstadoCivilChange,
+  onProfissaoChange,
+  onGeneroChange,
+  onCpfChange,
+  onCpfBlur,
+  onRgChange,
+  onTelefoneCountryChange,
+  onTelefoneNumeroChange,
+  onTelefoneBlur,
+  onEmailChange,
+  onInstagramChange,
+  onTiktokChange,
+  onEnderecoChange,
+  onNomeMaeChange,
+  onNomePaiChange,
+  onIndicacaoChange,
+  clearError,
+  onFotoChange,
+  showPhotoUpload = false,
+  onSubmit,
+  onCancel,
+  salvando = false,
+  submitLabel,
+  cancelLabel = 'Cancelar',
+  cpfInputId = 'patient-form-cpf',
+  onManageAlerts,
+  showFormHeading = false,
+  formHeading = 'Editar Paciente',
+}) {
+  const isModalVariant = variant === 'modal' || variant === 'profile';
+  const showBirthCalendarIcon = variant === 'modal';
+
+  const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
+  const [showProfissoes, setShowProfissoes] = useState(false);
+
+  const cpfDisabled = mode === 'edit';
+
+  const labelCls = (pageColorClass) =>
+    isModalVariant ? 'text-[13px] font-medium text-slate-800' : `text-[13px] font-bold ${pageColorClass}`;
+
+  const sectionHeadingCls = (pageColorClass) =>
+    isModalVariant ? 'text-[18px] font-bold text-slate-900' : pageColorClass;
+
+  const sectionCardCls = (hasError, pageNormalClasses) =>
+    isModalVariant
+      ? `rounded-xl border bg-white p-5 transition-colors ${
+          hasError ? 'border-red-300 bg-red-50/30' : 'border-slate-200'
+        }`
+      : pageNormalClasses;
+
+  const inputClass = (field) => {
+    if (isModalVariant) {
+      const err = field != null && errors[field];
+      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
+        err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
+      }`;
+    }
+    return `w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
+      errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
+    }`;
+  };
+
+  const selectPersonalClass = (field) => {
+    if (isModalVariant) {
+      const err = errors[field];
+      return `w-full appearance-none rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
+        err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
+      }`;
+    }
+    return `w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${
+      errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
+    }`;
+  };
+
+  const docInputClass = (field) => {
+    if (isModalVariant) {
+      const err = field === 'cpf' && (errors.cpf || cpfErrorText);
+      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
+        err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
+      }`;
+    }
+    return `w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${
+      errors.cpf || cpfErrorText ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'
+    }`;
+  };
+
+  const rgInputClass = () => {
+    if (isModalVariant) {
+      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
+    }
+    return 'w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all';
+  };
+
+  const emailInputClass = () => {
+    if (isModalVariant) {
+      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
+        errors.email ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
+      }`;
+    }
+    return `w-full px-4 py-3 bg-[#faf5ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`;
+  };
+
+  const socialInputClass = () => {
+    if (isModalVariant) {
+      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
+    }
+    return 'w-full px-4 py-3 bg-[#faf5ff] border border-[#a855f7]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 focus:border-[#a855f7] transition-all';
+  };
+
+  const complementInputClass = () => {
+    if (isModalVariant) {
+      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
+    }
+    return 'w-full px-4 py-3 bg-[#fffbeb] border border-amber-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all';
+  };
+
+  const phoneWrapClass = () => {
+    const invalid = telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero);
+    if (isModalVariant) {
+      return `flex items-stretch gap-0 rounded-lg border bg-white transition focus-within:border-[#00a88e] focus-within:ring-1 focus-within:ring-[#00a88e]/20 ${
+        errors.telefone || invalid ? 'border-red-300 bg-red-50/60' : 'border-slate-200'
+      }`;
+    }
+    return `flex items-stretch gap-1 rounded-xl border bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${
+      errors.telefone || invalid ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'
+    }`;
+  };
+
+  const idadeInputClass = () => {
+    if (isModalVariant) {
+      return 'w-full cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 text-[14px] font-medium text-slate-500';
+    }
+    return 'w-full px-4 py-3 bg-[#e2e8f0]/40 border border-app-border rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed';
+  };
+
+  const hasPersonalSectionError =
+    Boolean(errors.nome) ||
+    Boolean(errors.dataNascimento) ||
+    Boolean(errors.sexo) ||
+    Boolean(errors.estadoCivil) ||
+    Boolean(errors.profissao);
+
+  const birthDigitsForUi = String(dataNascimentoDisplay ?? '').replace(/\D/g, '');
+  const dataNascimentoFieldMessage = useMemo(() => {
+    if (birthDigitsForUi.length === 8 && !dataNascimentoIso) {
+      const br = validateBirthDateDigits8(birthDigitsForUi);
+      if (!br.ok) return birthDateValidationUserMessage(br.reason);
+    }
+    return null;
+  }, [birthDigitsForUi, dataNascimentoIso]);
+
+  const handleProfissaoChange = (value) => {
+    const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
+    onProfissaoChange(v);
+    clearError?.('profissao');
+    if (v.trim().length > 1) {
+      const filtradas = PROFISSOES.filter((p) => p.toLowerCase().includes(v.toLowerCase())).slice(0, 8);
+      setProfissoesFiltradas(filtradas);
+      setShowProfissoes(filtradas.length > 0);
+    } else {
+      setProfissoesFiltradas([]);
+      setShowProfissoes(false);
+    }
+  };
+
+  const defaultSubmitLabel = mode === 'create' ? 'Cadastrar Paciente' : (submitLabel ?? 'Salvar Alterações');
+
+  const gridGapClass = isModalVariant ? 'gap-x-5 gap-y-4' : 'gap-x-6 gap-y-5';
+
+  const sectionMb = isModalVariant ? 'mb-5' : 'mb-6';
+
+  const idadeInputValue =
+    idade !== '' && idade != null
+      ? String(idade).includes('anos')
+        ? String(idade)
+        : `${idade} anos`
+      : '';
+
+  return (
+    <form onSubmit={onSubmit} className={isModalVariant ? 'space-y-5' : 'space-y-6'} aria-busy={salvando || undefined}>
+      {showFormHeading ? (
+        <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+          <h4 className="text-[17px] font-bold text-[#0f172a]">{formHeading}</h4>
+          {mode === 'edit' && typeof onManageAlerts === 'function' ? (
+            <button
+              type="button"
+              onClick={onManageAlerts}
+              className="inline-flex items-center gap-1 rounded-lg bg-[#dc2626] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#b91c1c]"
+            >
+              Gerenciar Alertas do Paciente
+              <ChevronRight className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showPhotoUpload && mode === 'create' ? (
+        <>
+          <div className={`flex justify-center ${isModalVariant ? '-mt-1 mb-1' : 'mb-2'}`}>
+            <label className="group relative cursor-pointer" title="Adicionar foto de perfil">
+              <div
+                className={
+                  isModalVariant
+                    ? 'flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 shadow-sm transition-all hover:border-[#00a88e]/40'
+                    : 'flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] shadow-sm transition-all group-hover:border-[#00a88e]'
+                }
+              >
+                {fotoPerfilPreview ? (
+                  <img src={fotoPerfilPreview} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <UserRound
+                    className={isModalVariant ? 'h-9 w-9 text-slate-300' : 'h-10 w-10 text-[#00a88e]/50'}
+                    strokeWidth={1.5}
+                  />
+                )}
+              </div>
+              <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#00a88e] shadow">
+                <Plus className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
+              </div>
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onFotoChange} />
+            </label>
+          </div>
+          <p
+            className={
+              isModalVariant
+                ? '-mt-2 mb-1 text-center text-[12px] font-medium text-slate-500'
+                : '-mt-2 mb-2 text-center text-[12px] font-medium text-[#94a3b8]'
+            }
+          >
+            Foto de perfil (opcional)
+          </p>
+        </>
+      ) : null}
+
+      {(Object.keys(errors).length > 0 || erroBanner) && (
+        <div
+          className={
+            isModalVariant
+              ? 'flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/80 px-3 py-2.5 text-[13px] font-semibold text-red-700'
+              : 'flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-bold text-red-600'
+          }
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.5} />
+          <span>
+            {erroBanner ||
+              (Object.keys(errors).length > 0 ? 'Por favor, preencha todos os campos obrigatórios (*).' : '')}
+          </span>
+        </div>
+      )}
+
+      <div
+        className={sectionCardCls(
+          hasPersonalSectionError,
+          `rounded-2xl border p-6 transition-colors ${
+            hasPersonalSectionError ? 'border-red-300 bg-red-50/10' : 'border-[#00a88e]/25 bg-white'
+          }`,
+        )}
+      >
+        <div className={`flex items-center gap-3 ${sectionMb}`}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
+            1
+          </div>
+          <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#0f766e]')}>Dados Pessoais</h4>
+        </div>
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
+          <div className="md:col-span-2 space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>
+              Nome Completo <FieldReq />
+            </label>
+            <input
+              type="text"
+              value={nome}
+              maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
+              onChange={(e) => {
+                const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
+                onNomeChange(value);
+                clearError?.('nome');
+              }}
+              placeholder="Nome completo do paciente"
+              className={inputClass('nome')}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>
+              Data de Nascimento <FieldReq />
+            </label>
+            <div className="flex items-stretch gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="bday"
+                value={dataNascimentoDisplay}
+                onChange={(e) => {
+                  onDataNascimentoDisplayChange(e.target.value);
+                  clearError?.('dataNascimento');
+                }}
+                placeholder={isModalVariant ? 'dd/mm/aaaa' : 'DD/MM/AAAA'}
+                maxLength={10}
+                className={`min-w-0 flex-1 ${inputClass('dataNascimento')}`}
+              />
+              {showBirthCalendarIcon ? (
+                <span className="flex shrink-0 items-center text-slate-300" aria-hidden>
+                  <Calendar className="h-4 w-4" strokeWidth={2} />
+                </span>
+              ) : null}
+            </div>
+            {dataNascimentoFieldMessage ? (
+              <p className="text-[12px] font-bold text-red-600" role="alert">
+                {dataNascimentoFieldMessage}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>Idade</label>
+            <input
+              type="text"
+              value={idadeInputValue}
+              placeholder="Calculada automaticamente"
+              disabled
+              className={idadeInputClass()}
+            />
+            {mode === 'edit' ? (
+              <p className="text-[12px] font-medium text-slate-500">Calculada automaticamente.</p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>
+              Sexo <FieldReq />
+            </label>
+            <select
+              value={sexo}
+              onChange={(e) => {
+                onSexoChange(e.target.value);
+                clearError?.('sexo');
+              }}
+              className={selectPersonalClass('sexo')}
+            >
+              <option value="">Selecione...</option>
+              <option value="F">Feminino</option>
+              <option value="M">Masculino</option>
+              <option value="N">Prefiro não dizer</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>
+              Estado Civil <FieldReq />
+            </label>
+            <select
+              value={estadoCivilId}
+              onChange={(e) => {
+                onEstadoCivilChange(e.target.value);
+                clearError?.('estadoCivil');
+              }}
+              className={selectPersonalClass('estadoCivil')}
+            >
+              <option value="">Selecione...</option>
+              {ESTADOS_CIVIS.map((ec) => (
+                <option key={ec.id} value={ec.id}>
+                  {ec.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="md:col-span-2 space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>
+              Profissão <FieldReq />
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={profissao}
+                maxLength={PACIENTE_FIELD_MAX.profissao}
+                onChange={(e) => handleProfissaoChange(e.target.value)}
+                onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
+                placeholder={isModalVariant ? 'Ex: Advogada, Empresário, Estudante…' : 'Digite sua profissão...'}
+                autoComplete="off"
+                className={inputClass('profissao')}
+              />
+              {showProfissoes ? (
+                <div
+                  className={
+                    isModalVariant
+                      ? 'absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg'
+                      : 'absolute z-50 mt-1 w-full overflow-hidden rounded-xl border-[2px] border-[#00a88e]/30 bg-white shadow-lg'
+                  }
+                >
+                  {profissoesFiltradas.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onMouseDown={() => {
+                        onProfissaoChange(p);
+                        setShowProfissoes(false);
+                        clearError?.('profissao');
+                      }}
+                      className="w-full px-4 py-2 text-left text-[13px] text-[#334155] transition-colors hover:bg-[#e6f7f5] hover:text-[#0f766e]"
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="md:col-span-2 space-y-1.5">
+            <label className={labelCls('text-[#00a88e]')}>Gênero</label>
+            <input
+              type="text"
+              value={genero}
+              maxLength={PACIENTE_FIELD_MAX.genero}
+              onChange={(e) =>
+                onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))
+              }
+              placeholder="Como se identifica"
+              className={inputClass()}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className={sectionCardCls(false, 'rounded-2xl border border-blue-200 bg-white p-6')}>
+        <div className={`flex items-center gap-3 ${sectionMb}`}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
+            2
+          </div>
+          <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#1d4ed8]')}>Documentos</h4>
+        </div>
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#3b82f6]')}>
+              CPF <FieldReq />
+            </label>
+            <input
+              id={cpfInputId}
+              type="text"
+              name="cpf"
+              value={cpf}
+              readOnly={cpfDisabled}
+              aria-readonly={cpfDisabled || undefined}
+              maxLength={PACIENTE_FIELD_MAX.cpfFormatado}
+              onChange={(e) => {
+                if (cpfDisabled) return;
+                onCpfChange(maskCPF(e.target.value));
+                clearError?.('cpf');
+              }}
+              onBlur={cpfDisabled ? undefined : onCpfBlur}
+              placeholder="000.000.000-00"
+              autoComplete="off"
+              aria-invalid={Boolean(errors.cpf || cpfErrorText)}
+              aria-describedby={cpfErrorText ? `${cpfInputId}-error` : undefined}
+              className={cpfDisabled ? idadeInputClass() : docInputClass('cpf')}
+            />
+            {cpfDisabled ? (
+              <p className="text-[12px] font-medium text-slate-500">O CPF não pode ser alterado após o cadastro.</p>
+            ) : null}
+            {cpfErrorText ? (
+              <p id={`${cpfInputId}-error`} className="text-[12px] font-bold text-red-600" role="alert">
+                {cpfErrorText}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#3b82f6]')}>RG</label>
+            <input
+              type="text"
+              value={rg}
+              maxLength={PACIENTE_FIELD_MAX.rgFormatado}
+              onChange={(e) => onRgChange(maskRG(e.target.value))}
+              placeholder="00.000.000-0"
+              className={rgInputClass()}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={sectionCardCls(
+          Boolean(errors.telefone || errors.email),
+          `rounded-2xl border p-6 transition-colors ${
+            errors.telefone || errors.email ? 'border-red-300 bg-red-50/10' : 'border-[#a855f7]/25 bg-white'
+          }`,
+        )}
+      >
+        <div className={`flex items-center gap-3 ${sectionMb}`}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
+            3
+          </div>
+          <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#7e22ce]')}>Contato</h4>
+        </div>
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#a855f7]')}>
+              Telefone <FieldReq />
+            </label>
+            <div className={phoneWrapClass()}>
+              <select
+                value={telefoneCountryCode}
+                title={getCountryByCode(telefoneCountryCode).name}
+                onChange={(e) => {
+                  onTelefoneCountryChange(e.target.value);
+                  clearError?.('telefone');
+                }}
+                className={
+                  isModalVariant
+                    ? 'max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-lg border-0 bg-transparent py-2.5 pl-2 pr-1 text-[12px] font-medium text-slate-600 outline-none'
+                    : 'max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none'
+                }
+                aria-label="País"
+              >
+                {[
+                  COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
+                  ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
+                ]
+                  .filter(Boolean)
+                  .map((c) => (
+                    <option key={c.code} value={c.code} title={c.name}>
+                      {countrySelectDisplayLabel(c)}
+                    </option>
+                  ))}
+              </select>
+              <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                <span
+                  className={
+                    isModalVariant
+                      ? 'flex shrink-0 items-center tabular-nums text-[13px] font-semibold text-slate-500'
+                      : 'flex shrink-0 items-center tabular-nums text-[13px] font-semibold text-[#a855f7]'
+                  }
+                >
+                  {getDdi(telefoneCountryCode)}
+                </span>
+                <input
+                  type="tel"
+                  value={telefoneNumero}
+                  maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
+                  autoComplete="tel-national"
+                  onChange={(e) => {
+                    onTelefoneNumeroChange(formatPhoneAsYouType(telefoneCountryCode, e.target.value));
+                    clearError?.('telefone');
+                  }}
+                  onBlur={onTelefoneBlur}
+                  placeholder={telefoneCountryCode === 'BR' ? '(00) 00000-0000' : 'Número'}
+                  className={
+                    isModalVariant
+                      ? 'min-w-0 flex-1 rounded-r-lg bg-transparent py-2.5 pr-3 text-[14px] font-medium text-slate-900 outline-none'
+                      : 'min-w-0 flex-1 rounded-r-[9px] bg-transparent py-3 pr-3 text-[14px] font-medium outline-none'
+                  }
+                />
+              </div>
+            </div>
+            {telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
+              <p className="text-[12px] font-bold text-red-600">Número inválido para este país</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#a855f7]')}>
+              E-mail <FieldReq />
+            </label>
+            <input
+              type="email"
+              value={email}
+              maxLength={PACIENTE_FIELD_MAX.email}
+              onChange={(e) => {
+                onEmailChange(e.target.value);
+                clearError?.('email');
+              }}
+              placeholder="email@exemplo.com"
+              className={emailInputClass()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#a855f7]')}>Instagram</label>
+            <input
+              type="text"
+              value={instagram}
+              maxLength={PACIENTE_FIELD_MAX.instagram}
+              onChange={(e) => onInstagramChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.instagram))}
+              placeholder="@usuario"
+              className={socialInputClass()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#a855f7]')}>TikTok</label>
+            <input
+              type="text"
+              value={tiktok}
+              maxLength={PACIENTE_FIELD_MAX.tiktok}
+              onChange={(e) => onTiktokChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.tiktok))}
+              placeholder="@usuario"
+              className={socialInputClass()}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className={sectionCardCls(false, 'rounded-2xl border border-amber-200 bg-white p-6')}>
+        <div className={`flex items-center gap-3 ${sectionMb}`}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
+            4
+          </div>
+          <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#b45309]')}>Informações Complementares</h4>
+        </div>
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
+          <div className="md:col-span-2 space-y-1.5">
+            <label className={labelCls('text-[#f59e0b]')}>Endereço</label>
+            <input
+              type="text"
+              value={endereco}
+              maxLength={PACIENTE_FIELD_MAX.endereco}
+              onChange={(e) => onEnderecoChange(e.target.value)}
+              placeholder="Rua, número, bairro, cidade - UF"
+              className={complementInputClass()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#f59e0b]')}>Nome da Mãe</label>
+            <input
+              type="text"
+              value={nomeMae}
+              maxLength={PACIENTE_FIELD_MAX.nomeMae}
+              onChange={(e) => onNomeMaeChange(e.target.value)}
+              placeholder="Nome completo"
+              className={complementInputClass()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls('text-[#f59e0b]')}>Nome do Pai</label>
+            <input
+              type="text"
+              value={nomePai}
+              maxLength={PACIENTE_FIELD_MAX.nomePai}
+              onChange={(e) => onNomePaiChange(e.target.value)}
+              placeholder="Nome completo"
+              className={complementInputClass()}
+            />
+          </div>
+          <div className="md:col-span-2 space-y-1.5">
+            <label className={labelCls('text-[#f59e0b]')}>Indicação</label>
+            <input
+              type="text"
+              value={indicacao}
+              maxLength={PACIENTE_FIELD_MAX.indicacao}
+              onChange={(e) => onIndicacaoChange(e.target.value)}
+              placeholder="Quem indicou o paciente?"
+              className={complementInputClass()}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={
+          isModalVariant
+            ? 'flex flex-col-reverse items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center'
+            : 'flex flex-col-reverse items-stretch justify-between gap-3 border-t-[3px] border-[#00a88e]/15 pt-4 sm:flex-row sm:items-center'
+        }
+      >
+        <button
+          type="button"
+          onClick={onCancel}
+          className={
+            isModalVariant
+              ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-[14px] font-semibold text-slate-700 outline-none transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto'
+              : 'flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto'
+          }
+        >
+          {cancelLabel}
+        </button>
+        <button
+          type="submit"
+          disabled={salvando}
+          className={
+            isModalVariant
+              ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-[#00a88e] px-5 py-2.5 text-[14px] font-semibold text-white outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+              : 'flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+          }
+        >
+          {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
+          {defaultSubmitLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
