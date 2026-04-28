@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
-import { agendasApi, pacientesApi, catalogosApi, agendamentosApi } from '../../services/api';
+import {
+  agendasApi,
+  getPacienteCreateErrorFeedback,
+  pacientesApi,
+  catalogosApi,
+  agendamentosApi,
+} from '../../services/api';
 import { mapAgendaDtoToAppointment, addMinutesToTime } from '../../utils/agendaMapping';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { formatPhoneForApi } from '../../utils/phoneUtils';
+import { isCpfValidCheckDigits } from '../utils/formatters.js';
 
 const normalizeCpf = (v) => String(v || '').replace(/\D/g, '');
 
@@ -278,23 +285,36 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
         const telInput = formatPhoneForApi(agendaNewPatientTelefoneCountry, agendaNewPatientTelefoneNumero);
         if (nome && cpfInput && telInput) {
           const cpfDigits = normalizeCpf(cpfInput);
-          const dto = await pacientesApi.create({
-            nomeCompleto: nome,
-            cpf: cpfDigits || null,
-            telefone: telInput || null,
-            email: cpfDigits ? `paciente.${cpfDigits}@cadastro.procedi` : 'paciente@cadastro.procedi',
-          });
-          const patient = mapBackendPatient(dto);
-          setPatients((prev) => {
-            const cpfKey = (patient.cpf || '').trim();
-            const idx = prev.findIndex((p) => (p.cpf || '').trim() === cpfKey);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = { ...copy[idx], ...patient };
-              return copy;
-            }
-            return [...prev, patient];
-          });
+          if (cpfDigits.length === 11 && !isCpfValidCheckDigits(cpfDigits)) {
+            const msg = 'CPF inválido. Verifique os dígitos verificadores.';
+            setAgendaModalError(msg);
+            toast.error(msg);
+            return;
+          }
+          try {
+            const dto = await pacientesApi.create({
+              nomeCompleto: nome,
+              cpf: cpfDigits || null,
+              telefone: telInput || null,
+              email: cpfDigits ? `paciente.${cpfDigits}@cadastro.procedi` : 'paciente@cadastro.procedi',
+            });
+            const patient = mapBackendPatient(dto);
+            setPatients((prev) => {
+              const cpfKey = (patient.cpf || '').trim();
+              const idx = prev.findIndex((p) => (p.cpf || '').trim() === cpfKey);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = { ...copy[idx], ...patient };
+                return copy;
+              }
+              return [...prev, patient];
+            });
+          } catch (pErr) {
+            const fb = getPacienteCreateErrorFeedback(pErr);
+            setAgendaModalError(fb.banner);
+            toast.error(fb.banner);
+            return;
+          }
         }
       }
 

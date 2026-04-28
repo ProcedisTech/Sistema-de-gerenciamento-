@@ -127,8 +127,52 @@ async function requestDelete(path, { needsOrg = true } = {}) {
   }
 }
 
+/**
+ * Bean Validation (Spring): `errors: [{ defaultMessage, field, ... }]`.
+ * @param {Record<string, unknown> | null | undefined} body
+ * @returns {string}
+ */
+function getValidationErrorMessagesText(body) {
+  if (!body || typeof body !== 'object') return '';
+  const errors = body.errors;
+  if (!Array.isArray(errors) || errors.length === 0) return '';
+  const parts = [];
+  const seen = new Set();
+  for (const item of errors) {
+    if (!item || typeof item !== 'object') continue;
+    const dm = item.defaultMessage != null ? String(item.defaultMessage).trim() : '';
+    if (dm && !seen.has(dm)) {
+      seen.add(dm);
+      parts.push(dm);
+    }
+  }
+  return parts.length ? parts.join('; ') : '';
+}
+
+/** @param {Record<string, unknown> | null | undefined} body @returns {string} */
+function getCpfFieldMessageFromBody(body) {
+  if (!body || typeof body !== 'object') return '';
+  const errors = body.errors;
+  if (!Array.isArray(errors)) return '';
+  for (const item of errors) {
+    if (!item || typeof item !== 'object') continue;
+    const f = item.field != null ? String(item.field) : '';
+    if (!f) continue;
+    if (f.toLowerCase() === 'cpf' || f.toLowerCase().endsWith('.cpf') || /\.cpf/i.test(f)) {
+      const dm = item.defaultMessage != null ? String(item.defaultMessage).trim() : '';
+      if (dm) return dm;
+    }
+  }
+  return '';
+}
+
+const PACIENTE_CPF_DUPLICADO_USUARIO =
+  'Este CPF já está cadastrado nesta clínica.';
+
 /** Texto de erro estável para UI e logs (sempre com código HTTP). */
 function buildApiErrorMessage(status, body, statusText) {
+  const validationText = getValidationErrorMessagesText(body);
+  if (validationText) return `[HTTP ${status}] ${validationText}`;
   const detail =
     (body && typeof body === 'object' && (body.message || body.error || body.detail)) || statusText || '';
   const trimmed = String(detail).trim();
@@ -137,19 +181,50 @@ function buildApiErrorMessage(status, body, statusText) {
 
 /**
  * Mensagem legível a partir do JSON de erro (Spring / ProblemDetail), sem prefixo `[HTTP n]`.
- * Ordem: `message`, `detail`, `error` apenas se for string.
+ * Prioridade: Bean Validation `errors[].defaultMessage`, depois `message`, `detail`, `error` (string).
  * @param {{ body?: Record<string, unknown> } | null | undefined} err
  * @returns {string}
  */
 export function getApiErrorDetail(err) {
   const body = err && typeof err === 'object' && err.body && typeof err.body === 'object' ? err.body : null;
   if (!body) return '';
+  const fromValidation = getValidationErrorMessagesText(body);
+  if (fromValidation) return fromValidation;
   const msg = body.message != null ? String(body.message).trim() : '';
   if (msg) return msg;
   const det = body.detail != null ? String(body.detail).trim() : '';
   if (det) return det;
   if (typeof body.error === 'string' && body.error.trim()) return body.error.trim();
   return '';
+}
+
+/**
+ * Feedback de UI para POST de paciente (400 validação, 409 CPF duplicado).
+ * @param {{ status?: number, body?: Record<string, unknown> } | null | undefined} err
+ * @returns {{ banner: string, cpfField: string, highlightCpf: boolean }}
+ */
+export function getPacienteCreateErrorFeedback(err) {
+  const status = err?.status;
+  const fromBody = err && typeof err === 'object' && err.body && typeof err.body === 'object' ? err.body : null;
+  const detailAll = getApiErrorDetail(err);
+
+  if (status === 409) {
+    const backendHint =
+      detailAll && /cpf|já exist|duplic|organiza|paciente/i.test(detailAll) ? detailAll : '';
+    const banner = backendHint || PACIENTE_CPF_DUPLICADO_USUARIO;
+    return { banner, cpfField: banner, highlightCpf: true };
+  }
+
+  if (status === 400) {
+    const cpfField =
+      getCpfFieldMessageFromBody(fromBody) || (detailAll && /cpf/i.test(detailAll) ? detailAll : '');
+    const banner = detailAll || 'Não foi possível validar os dados enviados.';
+    const highlightCpf = Boolean(cpfField) || (Boolean(detailAll) && /cpf/i.test(detailAll));
+    return { banner, cpfField, highlightCpf };
+  }
+
+  const banner = getApiErrorDetail(err) || 'Erro ao cadastrar paciente.';
+  return { banner, cpfField: '', highlightCpf: false };
 }
 
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
