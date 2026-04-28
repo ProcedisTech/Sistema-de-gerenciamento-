@@ -38,6 +38,12 @@ const STATUS_STYLES = {
     badge: 'bg-[#FCE8E8] text-[#A32D2D]',
     primary: 'bg-slate-200 hover:bg-slate-300 text-slate-700',
   },
+  bloqueio: {
+    border: 'border-l-slate-400',
+    dot: 'bg-slate-400',
+    badge: 'bg-slate-200 text-slate-700',
+    primary: 'bg-slate-400 hover:bg-slate-500 text-white',
+  },
 };
 
 const AVATAR_COLORS = ['#7F77DD', '#1D9E75', '#D4537E', '#378ADD', '#D85A30'];
@@ -65,6 +71,10 @@ function actionLabel(status) {
   if (status === 'pendente') return 'Confirmar';
   if (status === 'cancelado') return 'Reagendar';
   return 'Iniciar Atendimento';
+}
+
+function isAppointmentBloqueio(appointment) {
+  return appointment?.tipo === 'bloqueio' || appointment?.status === 'bloqueio';
 }
 
 function samePatient(a, b) {
@@ -108,8 +118,9 @@ function StatCard({ label, value, icon, tone = 'default' }) {
   );
 }
 
-function AppointmentCard({ appointment, onPrimary, onEdit }) {
-  const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
+function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio }) {
+  const bloqueio = isAppointmentBloqueio(appointment);
+  const styles = STATUS_STYLES[bloqueio ? 'bloqueio' : appointment.status] || STATUS_STYLES.pendente;
 
   return (
     <div className={`rounded-[12px] border border-[#E8E8E8] border-l-[3px] ${styles.border} bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md`}>
@@ -117,7 +128,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit }) {
         <div className="flex min-w-0 items-start gap-3">
           <div
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-black text-white"
-            style={{ backgroundColor: hashColor(appointment.pacienteNome) }}
+            style={{ backgroundColor: bloqueio ? '#94a3b8' : hashColor(appointment.pacienteNome) }}
           >
             {initials(appointment.pacienteNome)}
           </div>
@@ -127,7 +138,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit }) {
           </div>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${styles.badge}`}>
-          {appointment.status}
+          {bloqueio ? 'Bloqueado' : appointment.status}
         </span>
       </div>
 
@@ -140,20 +151,32 @@ function AppointmentCard({ appointment, onPrimary, onEdit }) {
           <UserRound className="h-3.5 w-3.5 text-[#888888]" />
           <span>{appointment.profissionalNome}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Phone className="h-3.5 w-3.5 text-[#888888]" />
-          <span>{appointment.telefone || 'Telefone não informado'}</span>
-        </div>
+        {!bloqueio ? (
+          <div className="flex items-center gap-2">
+            <Phone className="h-3.5 w-3.5 text-[#888888]" />
+            <span>{appointment.telefone || 'Telefone não informado'}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => onPrimary(appointment)}
-          className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
-        >
-          {actionLabel(appointment.status)}
-        </button>
+        {!bloqueio ? (
+          <button
+            type="button"
+            onClick={() => onPrimary(appointment)}
+            className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
+          >
+            {actionLabel(appointment.status)}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onRemoveBloqueio?.(appointment)}
+            className={`${BTN_ACTION} rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-800 transition-colors hover:bg-slate-200`}
+          >
+            Remover bloqueio
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onEdit(appointment)}
@@ -166,7 +189,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit }) {
   );
 }
 
-function DayPanel({ selectedDay, appointments, onPrimary, onEdit }) {
+function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloqueio }) {
   return (
     <div className="h-full rounded-[14px] border border-[#C5EDE1] bg-white">
       <div className="rounded-t-[14px] border-b border-[#C5EDE1] bg-[#E8F9F4] p-4">
@@ -191,6 +214,7 @@ function DayPanel({ selectedDay, appointments, onPrimary, onEdit }) {
               appointment={appointment}
               onPrimary={onPrimary}
               onEdit={onEdit}
+              onRemoveBloqueio={onRemoveBloqueio}
             />
           ))
         )}
@@ -274,7 +298,7 @@ function CalendarGrid({ agenda }) {
                 {dots.map((item) => (
                   <span
                     key={item.id}
-                    className={`h-1.5 w-1.5 rounded-full ${cell.isToday ? 'bg-white' : STATUS_STYLES[item.status]?.dot || 'bg-[#0FA37F]'}`}
+                    className={`h-1.5 w-1.5 rounded-full ${cell.isToday ? 'bg-white' : STATUS_STYLES[isAppointmentBloqueio(item) ? 'bloqueio' : item.status]?.dot || 'bg-[#0FA37F]'}`}
                   />
                 ))}
                 {hasMore ? <span className={`text-[10px] font-black leading-none ${cell.isToday ? 'text-white' : 'text-[#888888]'}`}>...</span> : null}
@@ -341,7 +365,7 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
   );
 }
 
-function DaySummaryModal({ group, onClose, onEdit, onPrimary }) {
+function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio }) {
   if (!group) return null;
 
   return (
@@ -372,6 +396,10 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary }) {
                 onEdit(item);
                 onClose();
               }}
+              onRemoveBloqueio={(item) => {
+                onRemoveBloqueio?.(item);
+                onClose();
+              }}
             />
           ))}
         </div>
@@ -398,6 +426,18 @@ function AgendaFormModal({ agenda }) {
     }
     el.focus();
   };
+  const bloqueio = agenda.form.tipo === 'bloqueio';
+  const modalTitle = (() => {
+    if (bloqueio) return isEdit ? 'Editar bloqueio' : 'Bloquear horário';
+    return isEdit ? 'Editar Agendamento' : 'Novo Agendamento';
+  })();
+  const modalSubtitle = bloqueio
+    ? 'Defina data, horário e motivo. Nenhum paciente será vinculado.'
+    : 'Preencha os dados obrigatorios para atualizar a agenda.';
+  const horarioConflita = Boolean(agenda.horarioConflita);
+  const horarioInputClass = `mt-1 w-full rounded-lg border px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F] ${
+    horarioConflita ? 'border-amber-500 bg-amber-50/40 ring-1 ring-amber-300' : 'border-[#E8E8E8]'
+  }`;
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
@@ -405,8 +445,8 @@ function AgendaFormModal({ agenda }) {
       <div className="relative max-h-[92vh] w-full max-w-[720px] overflow-y-auto rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-[#E8E8E8] p-5">
           <div>
-            <h3 className="text-[18px] font-black text-[#1A1A2E]">{isEdit ? 'Editar Agendamento' : 'Novo Agendamento'}</h3>
-            <p className="text-[12px] font-medium text-[#888888]">Preencha os dados obrigatorios para atualizar a agenda.</p>
+            <h3 className="text-[18px] font-black text-[#1A1A2E]">{modalTitle}</h3>
+            <p className="text-[12px] font-medium text-[#888888]">{modalSubtitle}</p>
           </div>
           <button type="button" onClick={agenda.closeModal} className="rounded-xl p-2 text-[#64748b] hover:bg-[#F5F6FA]">
             <X className="h-5 w-5" />
@@ -419,41 +459,75 @@ function AgendaFormModal({ agenda }) {
               {agenda.formErrors._global}
             </div>
           ) : null}
-          <FieldError error={agenda.formErrors.pacienteId}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Paciente*</label>
-            <select
-              value={agenda.form.pacienteId}
-              onChange={(event) => agenda.updateForm('pacienteId', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
-            >
-              <option value="">Selecione</option>
-              {agenda.patientOptions.map((patient) => (
-                <option key={patient.id} value={patient.id}>{patient.nome}</option>
-              ))}
-            </select>
-            {agenda.patientOptions.length === 0 ? (
-              <p className="mt-1 text-[11px] font-medium text-[#888888]">Cadastre pacientes na aba Pacientes para agendar.</p>
-            ) : null}
-          </FieldError>
 
-          <FieldError error={agenda.formErrors.procedimentoNome}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimento*</label>
-            <div className="mt-1">
-              <ProcedimentoAutocomplete
-                value={agenda.form.procedimentoNome || ''}
-                onChange={(nome, catalogoId) => {
-                  agenda.updateForm('procedimentoNome', nome);
-                  agenda.updateForm('catalogoProcedimentoSaudeId', catalogoId || '');
-                }}
-                placeholder="Ex: Botox, Preenchimento..."
-                catalogoOptions={agenda.procedimentoOptions.map((o) => ({
-                  id: o.id,
-                  nomeProcedimento: o.nome,
-                }))}
-                error={Boolean(agenda.formErrors.procedimentoNome)}
+          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E8E8E8] bg-[#F5F6FA] px-3 py-2.5">
+            <label className="flex cursor-pointer items-center gap-2 text-[13px] font-bold text-[#1A1A2E]">
+              <input
+                type="checkbox"
+                checked={bloqueio}
+                disabled={isEdit}
+                onChange={(event) => agenda.updateForm('tipo', event.target.checked ? 'bloqueio' : 'atendimento')}
+                className="h-4 w-4 rounded border-[#E8E8E8] text-[#0FA37F] focus:ring-[#0FA37F]"
               />
+              Bloquear horário
+            </label>
+            {agenda.slotsOcupadosLoading ? (
+              <span className="text-[11px] font-semibold text-[#888888]">Carregando ocupação do dia…</span>
+            ) : null}
+          </div>
+
+          {!bloqueio ? (
+            <>
+              <FieldError error={agenda.formErrors.pacienteId}>
+                <label className="text-[12px] font-bold text-[#1A1A2E]">Paciente*</label>
+                <select
+                  value={agenda.form.pacienteId}
+                  onChange={(event) => agenda.updateForm('pacienteId', event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
+                >
+                  <option value="">Selecione</option>
+                  {agenda.patientOptions.map((patient) => (
+                    <option key={patient.id} value={patient.id}>{patient.nome}</option>
+                  ))}
+                </select>
+                {agenda.patientOptions.length === 0 ? (
+                  <p className="mt-1 text-[11px] font-medium text-[#888888]">Cadastre pacientes na aba Pacientes para agendar.</p>
+                ) : null}
+              </FieldError>
+
+              <FieldError error={agenda.formErrors.procedimentoNome}>
+                <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimento*</label>
+                <div className="mt-1">
+                  <ProcedimentoAutocomplete
+                    value={agenda.form.procedimentoNome || ''}
+                    onChange={(nome, catalogoId) => {
+                      agenda.updateForm('procedimentoNome', nome);
+                      agenda.updateForm('catalogoProcedimentoSaudeId', catalogoId || '');
+                    }}
+                    placeholder="Ex: Botox, Preenchimento..."
+                    catalogoOptions={agenda.procedimentoOptions.map((o) => ({
+                      id: o.id,
+                      nomeProcedimento: o.nome,
+                    }))}
+                    error={Boolean(agenda.formErrors.procedimentoNome)}
+                  />
+                </div>
+              </FieldError>
+            </>
+          ) : (
+            <div className="md:col-span-2">
+              <FieldError error={agenda.formErrors.motivoBloqueio}>
+                <label className="text-[12px] font-bold text-[#1A1A2E]">Motivo do bloqueio*</label>
+                <textarea
+                  value={agenda.form.motivoBloqueio || ''}
+                  onChange={(event) => agenda.updateForm('motivoBloqueio', event.target.value)}
+                  rows={3}
+                  className="mt-1 w-full resize-none rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
+                  placeholder="Ex.: Treinamento, manutenção, folga…"
+                />
+              </FieldError>
             </div>
-          </FieldError>
+          )}
 
           <FieldError error={agenda.formErrors.data}>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Data*</label>
@@ -469,10 +543,28 @@ function AgendaFormModal({ agenda }) {
               ref={horaInicioInputRef}
               type="time"
               value={agenda.form.horaInicio}
+              title={horarioConflita ? 'Horário ocupado' : undefined}
               onChange={(event) => agenda.updateForm('horaInicio', event.target.value)}
               onClick={openHoraInicioPicker}
-              className="mt-1 w-full cursor-pointer rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
+              className={horarioInputClass}
             />
+            {horarioConflita ? (
+              <p className="mt-1 text-[11px] font-bold text-amber-700">Horário ocupado</p>
+            ) : null}
+            {horarioConflita && agenda.proximoHorarioLivre ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-semibold text-[#64748b]">
+                  Próximo horário livre sugerido: <span className="font-bold text-[#1A1A2E]">{agenda.proximoHorarioLivre}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => agenda.updateForm('horaInicio', agenda.proximoHorarioLivre)}
+                  className="rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-bold text-amber-900 hover:bg-amber-50"
+                >
+                  Aplicar sugestão
+                </button>
+              </div>
+            ) : null}
           </FieldError>
 
           <FieldError error={agenda.formErrors.duracaoMin}>
@@ -493,10 +585,12 @@ function AgendaFormModal({ agenda }) {
             </select>
           </FieldError>
 
-          <div>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Telefone</label>
-            <input value={agenda.form.telefone} onChange={(event) => agenda.updateForm('telefone', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]" />
-          </div>
+          {!bloqueio ? (
+            <div>
+              <label className="text-[12px] font-bold text-[#1A1A2E]">Telefone</label>
+              <input value={agenda.form.telefone} onChange={(event) => agenda.updateForm('telefone', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]" />
+            </div>
+          ) : null}
 
           <div className="md:col-span-2">
             <label className="text-[12px] font-bold text-[#1A1A2E]">Observações</label>
@@ -558,6 +652,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
   }, [agenda.viewMode]);
 
   const handlePrimary = React.useCallback((appointment) => {
+    if (isAppointmentBloqueio(appointment)) return;
     if (appointment.status === 'pendente') {
       agenda.updateStatus(appointment, 'confirmado');
       return;
@@ -679,6 +774,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
             appointments={agenda.selectedDayAppointments}
             onPrimary={handlePrimary}
             onEdit={agenda.openEditModal}
+            onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
           />
         </aside>
       </div>
@@ -693,6 +789,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
               appointments={agenda.selectedDayAppointments}
               onPrimary={handlePrimary}
               onEdit={agenda.openEditModal}
+              onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
             />
           </div>
         </div>
@@ -703,6 +800,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
         onClose={() => setListDaySummary(null)}
         onEdit={agenda.openEditModal}
         onPrimary={handlePrimary}
+        onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
       />
 
       <AgendaFormModal agenda={agenda} />

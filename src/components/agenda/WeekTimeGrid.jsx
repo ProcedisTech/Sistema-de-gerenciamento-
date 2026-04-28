@@ -183,11 +183,25 @@ function eventBlockStyle(appt, layout) {
   };
 }
 
+function isBloqueioAppt(appt) {
+  return appt?.tipo === 'bloqueio' || appt?.status === 'bloqueio';
+}
+
 function statusCardClass(status) {
   if (status === 'pendente') return 'bg-[#FFF4E0] border-l-[3px] border-l-[#F5A623]';
   if (status === 'cancelado') return 'bg-[#FCE8E8] border-l-[3px] border-l-[#E24B4A]';
   return 'bg-[#E1F5EE] border-l-[3px] border-l-[#0FA37F]';
 }
+
+function bloqueioCardClass() {
+  return 'border-l-[3px] border-l-slate-500 bg-gray-200 text-slate-800 shadow-sm';
+}
+
+const BLOQUEIO_BG = {
+  backgroundColor: '#e5e7eb',
+  backgroundImage:
+    'repeating-linear-gradient(-45deg, transparent, transparent 5px, rgba(255,255,255,0.55) 5px, rgba(255,255,255,0.55) 6px)',
+};
 
 function DayColumn({ iso, appointments, todayIso, onEdit }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
@@ -223,26 +237,30 @@ function DayColumn({ iso, appointments, todayIso, onEdit }) {
       ) : null}
       {appointments.map((appt) => {
         const layout = layouts.get(appt.id);
-        const style = eventBlockStyle(appt, layout);
-        const showProc = style.height >= 72;
+        const baseStyle = eventBlockStyle(appt, layout);
+        const bloqueio = isBloqueioAppt(appt);
+        const style = bloqueio ? { ...baseStyle, ...BLOQUEIO_BG } : baseStyle;
+        const showProc = baseStyle.height >= 72;
+        const cardClass = bloqueio ? bloqueioCardClass() : statusCardClass(appt.status);
+        const lineThrough = appt.status === 'cancelado';
         return (
           <button
             key={appt.id}
             type="button"
             onClick={() => onEdit(appt)}
-            className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${statusCardClass(appt.status)}`}
+            className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${cardClass}`}
             style={style}
           >
             <div
-              className={`text-[11px] font-bold leading-tight text-[#0FA37F] ${appt.status === 'cancelado' ? 'line-through' : ''}`}
+              className={`text-[11px] font-bold leading-tight ${bloqueio ? 'text-slate-700' : 'text-[#0FA37F]'} ${lineThrough ? 'line-through' : ''}`}
             >
               {appt.horaInicio}
             </div>
-            <div className={`truncate text-[11px] font-bold text-[#1A1A2E] ${appt.status === 'cancelado' ? 'line-through' : ''}`}>
+            <div className={`truncate text-[11px] font-bold ${bloqueio ? 'text-slate-900' : 'text-[#1A1A2E]'} ${lineThrough ? 'line-through' : ''}`}>
               {appt.pacienteNome}
             </div>
             {showProc ? (
-              <div className={`truncate text-[10px] font-medium text-[#888888] ${appt.status === 'cancelado' ? 'line-through' : ''}`}>
+              <div className={`truncate text-[10px] font-medium ${bloqueio ? 'text-slate-600' : 'text-[#888888]'} ${lineThrough ? 'line-through' : ''}`}>
                 {appt.procedimentoNome}
               </div>
             ) : null}
