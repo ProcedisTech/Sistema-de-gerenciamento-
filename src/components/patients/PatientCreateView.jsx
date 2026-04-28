@@ -5,6 +5,7 @@ import {
   maskRG,
   normalizeCpf,
   isCpfIncomplete,
+  isCpfValidCheckDigits,
   calculateAgeFromISODate,
   sanitizeBirthDateDigits,
   formatBirthDigitsBR,
@@ -13,7 +14,7 @@ import {
 } from '../utils/formatters';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
-import { pacientesApi } from '../../services/api';
+import { getPacienteCreateErrorFeedback, pacientesApi } from '../../services/api';
 import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { useToast } from '../../contexts/useToast.js';
@@ -67,6 +68,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   const [indicacao, setIndicacao] = useState('');
   const [genero, setGenero] = useState('');
   const [errors, setErrors] = useState({});
+  const [cpfErrorText, setCpfErrorText] = useState('');
 
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
   const fotoBlobUrlRef = useRef(null);
@@ -168,13 +170,25 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     const cpfDigits = normalizeCpf(cpf);
     if (cpfDigits.length !== 11) {
       setErrors((prev) => ({ ...prev, cpf: true }));
+      setCpfErrorText('O CPF deve conter 11 dígitos.');
       setErro('Por favor, preencha todos os campos obrigatórios (*).');
       toast.error('O CPF deve conter 11 dígitos.');
       scrollFormTop();
       return;
     }
 
+    if (!isCpfValidCheckDigits(cpfDigits)) {
+      const msg = 'CPF inválido. Verifique os dígitos verificadores.';
+      setErrors((prev) => ({ ...prev, cpf: true }));
+      setCpfErrorText(msg);
+      setErro(msg);
+      toast.error(msg);
+      scrollFormTop();
+      return;
+    }
+
     setErro('');
+    setCpfErrorText('');
     setErrors({});
     setSalvando(true);
 
@@ -212,9 +226,16 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       if (onPatientCreated) onPatientCreated();
       setTimeout(() => setPatientView('list'), 1500);
     } catch (err) {
-      const msg = err?.message || '';
-      const clean = msg.replace(/^\[HTTP \d+\]\s*/, '').trim();
-      setErro(clean || 'Erro ao cadastrar paciente.');
+      const fb = getPacienteCreateErrorFeedback(err);
+      setErro(fb.banner);
+      if (fb.highlightCpf) {
+        setErrors((prev) => ({ ...prev, cpf: true }));
+        setCpfErrorText(fb.cpfField || fb.banner);
+      } else {
+        setCpfErrorText('');
+      }
+      toast.error(fb.banner);
+      scrollFormTop();
     } finally {
       setSalvando(false);
     }
@@ -225,6 +246,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   const handleCpfBlur = () => {
     if (isCpfIncomplete(cpf)) {
       setErrors((prev) => ({ ...prev, cpf: true }));
+      setCpfErrorText('O CPF deve conter 11 dígitos.');
       toast.error('O CPF deve conter 11 dígitos.');
     }
   };
@@ -286,13 +308,13 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
 
   const docInputClass = (field) => {
     if (isModal) {
-      const err = field === 'cpf' && errors.cpf;
+      const err = field === 'cpf' && (errors.cpf || cpfErrorText);
       return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
         err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
       }`;
     }
     return `w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${
-      errors.cpf ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'
+      errors.cpf || cpfErrorText ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'
     }`;
   };
 
@@ -414,7 +436,11 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   }
 
   const formInner = (
-    <form onSubmit={handleSalvar} className={isModal ? 'space-y-5' : 'space-y-6'}>
+    <form
+      onSubmit={handleSalvar}
+      className={isModal ? 'space-y-5' : 'space-y-6'}
+      aria-busy={salvando || undefined}
+    >
         {/* Avatar — foto de perfil opcional */}
         <div className={`flex justify-center ${isModal ? '-mt-1 mb-1' : 'mb-2'}`}>
           <label className="group relative cursor-pointer" title="Adicionar foto de perfil">
@@ -661,17 +687,28 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
                 CPF <FieldReq />
               </label>
               <input
+                id="patient-create-cpf"
                 type="text"
+                name="cpf"
                 value={cpf}
                 maxLength={PACIENTE_FIELD_MAX.cpfFormatado}
                 onChange={(e) => {
                   setCpf(maskCPF(e.target.value));
                   clearError('cpf');
+                  setCpfErrorText('');
                 }}
                 onBlur={handleCpfBlur}
                 placeholder="000.000.000-00"
+                autoComplete="off"
+                aria-invalid={Boolean(errors.cpf || cpfErrorText)}
+                aria-describedby={cpfErrorText ? 'patient-create-cpf-error' : undefined}
                 className={docInputClass('cpf')}
               />
+              {cpfErrorText ? (
+                <p id="patient-create-cpf-error" className="text-[12px] font-bold text-red-600" role="alert">
+                  {cpfErrorText}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className={labelCls('text-[#3b82f6]')}>RG</label>
