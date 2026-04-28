@@ -21,7 +21,6 @@ export function useFinishJourney({
   journeyState,
   patientState,
   cameraState,
-  authUser,
   roleUserId,
   pacienteAtual,
   selectedPatientCpf,
@@ -34,7 +33,6 @@ export function useFinishJourney({
   setPhotoAnnotationIndex,
   askFinishJourneyConfirm,
 }) {
-  void authUser;
   const [ultimoProcedimentoId, setUltimoProcedimentoId] = useState(null);
   const [ultimaAssinaturaId, setUltimaAssinaturaId] = useState(null);
 

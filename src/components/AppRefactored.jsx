@@ -256,7 +256,6 @@ export default function App() {
     journeyState,
     patientState,
     cameraState,
-    authUser,
     roleUserId,
     pacienteAtual,
     selectedPatientCpf,
