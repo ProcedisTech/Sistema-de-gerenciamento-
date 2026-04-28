@@ -6,3 +6,4 @@ export { useAgendaController } from './useAgendaController';
 export { useProcedureCamera } from './useProcedureCamera';
 export { useJourneyController } from './useJourneyController';
 export { useCanvasController } from './useCanvasController';
+export { useFinishJourney } from './useFinishJourney';
