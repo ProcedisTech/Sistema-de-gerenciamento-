@@ -9,6 +9,15 @@ import {
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
+import {
+  AGENDA_DAY_END_MIN,
+  AGENDA_DAY_START_MIN,
+  AGENDA_SLOT_STEP_MIN,
+  findNextFreeSlotStart,
+  occupiedIntervalsFromAgendaDtos,
+  parseHhmmToMinutes,
+  proposalOverlapsOccupied,
+} from '../../utils/agendaAvailability';
 
 const STATUS_LABELS = {
   confirmado: 'confirmado',
@@ -45,10 +54,16 @@ function normalizePatientOption(patient) {
   return { id: String(id || nome), nome, telefone, raw: patient };
 }
 
+function isRowBloqueio(appointment) {
+  return appointment?.tipo === 'bloqueio' || appointment?.status === 'bloqueio';
+}
+
 function defaultForm(selectedDay, patientOptions, firstProcedimentoOption) {
   const firstPatient = patientOptions[0] || {};
   const proc = firstProcedimentoOption || {};
   return {
+    tipo: 'atendimento',
+    motivoBloqueio: '',
     pacienteId: firstPatient.id || '',
     pacienteNome: firstPatient.nome || '',
     telefone: firstPatient.telefone || '',
@@ -154,6 +169,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [hojeCount, setHojeCount] = useState(0);
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
+  const [slotsOcupados, setSlotsOcupados] = useState([]);
+  const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
 
   const procedimentoOptions = useMemo(
     () =>
@@ -229,6 +246,64 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     loadMonth();
   }, [loadMonth]);
 
+  useEffect(() => {
+    if (!authEnabled || !modalMode || !form.data) {
+      setSlotsOcupados([]);
+      setSlotsOcupadosLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSlotsOcupadosLoading(true);
+    agendasApi
+      .byRange(form.data, form.data)
+      .then((raw) => {
+        if (cancelled) return;
+        let dtos = normalizeApiList(raw);
+        const skipId = editingAppointment?.agendaId;
+        if (skipId) {
+          dtos = dtos.filter((d) => d && String(d.id) !== String(skipId));
+        }
+        const role = String(roleUserId || '').trim();
+        const intervals = occupiedIntervalsFromAgendaDtos(dtos, {
+          excludeCancelled: true,
+          roleUserId: role || undefined,
+        });
+        setSlotsOcupados(intervals);
+      })
+      .catch(() => {
+        if (!cancelled) setSlotsOcupados([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSlotsOcupadosLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, modalMode, form.data, roleUserId, editingAppointment?.agendaId]);
+
+  const horarioConflita = useMemo(
+    () => (modalMode ? proposalOverlapsOccupied(form.horaInicio, form.duracaoMin, slotsOcupados) : false),
+    [modalMode, form.horaInicio, form.duracaoMin, slotsOcupados]
+  );
+
+  const proximoHorarioLivre = useMemo(() => {
+    if (!modalMode || !form.data) return null;
+    const from = parseHhmmToMinutes(String(form.horaInicio || '').slice(0, 5));
+    return findNextFreeSlotStart(
+      from,
+      form.duracaoMin,
+      slotsOcupados,
+      AGENDA_DAY_START_MIN,
+      AGENDA_DAY_END_MIN,
+      AGENDA_SLOT_STEP_MIN
+    );
+  }, [modalMode, form.data, form.horaInicio, form.duracaoMin, slotsOcupados]);
+
+  const isHorarioOcupado = useCallback(
+    (horaInicio, duracaoMin) => proposalOverlapsOccupied(horaInicio, duracaoMin, slotsOcupados),
+    [slotsOcupados]
+  );
+
   const weekEndIso = useMemo(() => addDaysIso(weekStartIso, 6), [weekStartIso]);
 
   const weekDayIsos = useMemo(
@@ -294,15 +369,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const appointmentsByDate = useMemo(() => groupByDate(appointments), [appointments]);
 
-  const stats = useMemo(
-    () => ({
+  const stats = useMemo(() => {
+    const naoBloqueio = (item) => !isRowBloqueio(item);
+    return {
       totalMes: appointments.length,
-      confirmados: appointments.filter((item) => item.status === 'confirmado').length,
-      pendentes: appointments.filter((item) => item.status === 'pendente').length,
+      confirmados: appointments.filter((item) => naoBloqueio(item) && item.status === 'confirmado').length,
+      pendentes: appointments.filter((item) => naoBloqueio(item) && item.status === 'pendente').length,
       hoje: hojeCount,
-    }),
-    [appointments, hojeCount]
-  );
+    };
+  }, [appointments, hojeCount]);
 
   const groupedAppointments = useMemo(() => {
     const grouped = groupByDate(appointments);
@@ -345,15 +420,25 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     (appointment) => {
       setEditingAppointment(appointment);
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
+      const rawSlot = appointment?.rawSlot || {};
+      const bloqueio = isRowBloqueio(appointment);
       let catId = appointment?.catalogoProcedimentoSaudeId
         ? String(appointment.catalogoProcedimentoSaudeId)
         : '';
-      if (!catId && appointment?.procedimentoNome) {
+      if (!catId && appointment?.procedimentoNome && !bloqueio) {
         const opt = procedimentoOptions.find((o) => o.nome === appointment.procedimentoNome);
         if (opt) catId = String(opt.id);
       }
+      const motivoFromRaw =
+        rawSlot.motivoBloqueio != null && String(rawSlot.motivoBloqueio).trim()
+          ? String(rawSlot.motivoBloqueio).trim()
+          : '';
       setForm({
         ...base,
+        tipo: bloqueio ? 'bloqueio' : 'atendimento',
+        motivoBloqueio: bloqueio
+          ? motivoFromRaw || String(appointment?.pacienteNome || '').trim() || ''
+          : '',
         pacienteId: appointment?.pacienteId || base.pacienteId,
         pacienteNome: appointment?.pacienteNome || base.pacienteNome,
         telefone: appointment?.telefone || base.telefone,
@@ -378,8 +463,14 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const validateForm = useCallback(() => {
     const nextErrors = {};
-    if (!form.pacienteId && !String(form.pacienteNome || '').trim()) nextErrors.pacienteId = 'Selecione um paciente.';
-    if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Informe o procedimento.';
+    if (form.tipo === 'bloqueio') {
+      if (!String(form.motivoBloqueio || '').trim()) {
+        nextErrors.motivoBloqueio = 'Informe o motivo do bloqueio.';
+      }
+    } else {
+      if (!form.pacienteId && !String(form.pacienteNome || '').trim()) nextErrors.pacienteId = 'Selecione um paciente.';
+      if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Informe o procedimento.';
+    }
     if (!form.data) nextErrors.data = 'Informe a data.';
     if (!form.horaInicio) nextErrors.horaInicio = 'Informe o horário.';
     if (!Number(form.duracaoMin)) nextErrors.duracaoMin = 'Informe a duração.';
@@ -410,6 +501,17 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (modalMode === 'edit' && editingAppointment?.agendaId) {
         const body = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
         await agendasApi.update(editingAppointment.agendaId, body);
+      } else if (form.tipo === 'bloqueio') {
+        const createBody = buildAgendaCreateBody({
+          dataAgendamento: form.data,
+          horaInicio: form.horaInicio,
+          duracaoMin: form.duracaoMin,
+          roleUserId: contextRole,
+          tipo: 'bloqueio',
+          motivoBloqueio: String(form.motivoBloqueio || '').trim(),
+        });
+        const created = await agendasApi.create(createBody);
+        if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
       } else {
         const createBody = buildAgendaCreateBody({
           dataAgendamento: form.data,
@@ -545,6 +647,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     goWeekNext,
     goWeekPrev,
     groupedAppointments,
+    horarioConflita,
+    isHorarioOcupado,
     loading,
     modalMode,
     monthLabel,
@@ -554,12 +658,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     closeModal,
     patientOptions,
     procedimentoOptions,
+    proximoHorarioLivre,
     saveAppointment,
     selectDay,
     selectedDay,
     selectedDayAppointments,
     setDaySheetOpen,
     setViewMode,
+    slotsOcupados,
+    slotsOcupadosLoading,
     stats,
     syncWeekFromSelection,
     statusLabels: STATUS_LABELS,

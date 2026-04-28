@@ -64,6 +64,7 @@ export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
     data: slot.date,
     horaInicio: hi,
     duracaoMin,
+    tipo: slot.tipo || 'atendimento',
     status: slot.status,
     statusNome: slot.statusNome,
     pacienteNome: compromisso.pacienteNome || '',
@@ -97,7 +98,33 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
     const chunk = slots.slice(i, i + batchSize);
     await Promise.all(
       chunk.map(async (slot) => {
-        if (!slot.id || slot.tipo === 'bloqueio') return;
+        if (!slot.id) return;
+        if (slot.tipo === 'bloqueio') {
+          const raw = slot.raw || {};
+          const hi = raw.horaInicio != null ? String(raw.horaInicio).slice(0, 5) : String(slot.time || '').slice(0, 5);
+          const hf = raw.horaFim != null ? String(raw.horaFim).slice(0, 5) : '';
+          const motivo = raw.motivoBloqueio != null ? String(raw.motivoBloqueio).trim() : '';
+          rows.push({
+            id: String(slot.id),
+            agendaId: String(slot.id),
+            data: raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : slot.date || '',
+            horaInicio: hi,
+            duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
+            tipo: 'bloqueio',
+            status: 'bloqueio',
+            statusNome: slot.statusNome,
+            procedimentoNome: 'Bloqueio',
+            pacienteNome: motivo || 'Horário bloqueado',
+            pacienteId: null,
+            profissionalNome: slot.profissionalNome || '',
+            telefone: '',
+            catalogoProcedimentoSaudeId: '',
+            observacao: '',
+            rawSlot: raw,
+            rawAgendamento: null,
+          });
+          return;
+        }
         let items = [];
         try {
           const rawItems = await agendamentosApi.listByAgenda(slot.id);
@@ -117,6 +144,7 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             data: raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : slot.date || '',
             horaInicio: hi,
             duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
+            tipo: raw.tipo || slot.tipo || 'atendimento',
             status: slot.status,
             statusNome: slot.statusNome,
             procedimentoNome: procFromObs || 'Sem procedimento',
@@ -142,16 +170,35 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
   return sortByDateTime(rows);
 }
 
-export function buildAgendaCreateBody({ dataAgendamento, horaInicio, duracaoMin, roleUserId, observacao }) {
+export function buildAgendaCreateBody({
+  dataAgendamento,
+  horaInicio,
+  duracaoMin,
+  roleUserId,
+  observacao,
+  tipo = 'atendimento',
+  motivoBloqueio,
+}) {
   const hi = String(horaInicio || '09:00').slice(0, 5);
   const mins = Number(duracaoMin) || 45;
   const horaFim = addMinutesToTime(hi, mins);
-  return {
+  const base = {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
     roleUserId,
-    tipo: 'atendimento',
+    tipo: tipo === 'bloqueio' ? 'bloqueio' : 'atendimento',
+  };
+  if (tipo === 'bloqueio') {
+    const motivo = String(motivoBloqueio || '').trim().slice(0, 500);
+    return {
+      ...base,
+      motivoBloqueio: motivo,
+      observacao: motivo || undefined,
+    };
+  }
+  return {
+    ...base,
     observacao: observacao != null && String(observacao).trim() ? String(observacao).trim().slice(0, 500) : undefined,
   };
 }
@@ -174,12 +221,32 @@ export function buildAgendaUpdateBody(rawSlot, form, roleUserIdFallback) {
       : raw.observacao != null
         ? String(raw.observacao).trim() || undefined
         : undefined;
+  const isBloqueio = form.tipo === 'bloqueio' || raw.tipo === 'bloqueio';
+  const tipo = isBloqueio ? 'bloqueio' : raw.tipo || 'atendimento';
+  const motivo =
+    form.motivoBloqueio !== undefined
+      ? String(form.motivoBloqueio || '').trim().slice(0, 500)
+      : raw.motivoBloqueio != null
+        ? String(raw.motivoBloqueio).trim().slice(0, 500)
+        : '';
+  if (isBloqueio) {
+    const out = {
+      dataAgendamento,
+      horaInicio: hi.length === 5 ? `${hi}:00` : hi,
+      horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
+      roleUserId: raw.roleUserId || roleUserIdFallback,
+      tipo,
+      motivoBloqueio: motivo || undefined,
+    };
+    if (obs) out.observacao = obs;
+    return out;
+  }
   return {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
     roleUserId: raw.roleUserId || roleUserIdFallback,
-    tipo: raw.tipo || 'atendimento',
+    tipo,
     observacao: obs,
   };
 }
