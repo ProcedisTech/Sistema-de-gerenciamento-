@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Loader2, UserPlus, UserRound, Plus, AlertTriangle, X, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, UserPlus, X } from 'lucide-react';
 import {
-  maskCPF,
-  maskRG,
   normalizeCpf,
   isCpfIncomplete,
   isCpfValidCheckDigits,
@@ -12,14 +10,12 @@ import {
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
-import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
-import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
+import { formatPhoneForApi } from '../../utils/phoneUtils';
 import { getPacienteCreateErrorFeedback, pacientesApi } from '../../services/api';
-import { PROFISSOES } from '../../data/profissoes';
-import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { useToast } from '../../contexts/useToast.js';
 import { convertToWebP } from '../../utils/imageUtils';
-import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
+import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
+import { PatientForm } from './PatientForm.jsx';
 
 export function PatientCreateView({ setPatientView, onPatientCreated, variant = 'page' }) {
   const isModal = variant === 'modal';
@@ -52,8 +48,6 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   const [sexo, setSexo] = useState('');
   const [estadoCivilId, setEstadoCivilId] = useState('');
   const [profissao, setProfissao] = useState('');
-  const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
-  const [showProfissoes, setShowProfissoes] = useState(false);
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
@@ -130,15 +124,17 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   };
 
   const validate = () => {
-    const e = {};
-    if (!nome.trim()) e.nome = true;
-    if (!dataNascimento) e.dataNascimento = true;
-    if (!sexo.trim()) e.sexo = true;
-    if (!estadoCivilId.trim()) e.estadoCivil = true;
-    if (!profissao.trim()) e.profissao = true;
-    if (!cpf.trim()) e.cpf = true;
-    if (!telefoneNumero.trim() || !isPhoneValid(telefoneCountryCode, telefoneNumero)) e.telefone = true;
-    if (!email.trim()) e.email = true;
+    const e = validatePacienteFormBasics({
+      nome,
+      dataNascimentoIso: dataNascimento,
+      sexo,
+      estadoCivilId,
+      profissao,
+      cpf,
+      telefoneCountryCode,
+      telefoneNumero,
+      email,
+    });
     return e;
   };
 
@@ -251,135 +247,12 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     }
   };
 
-  const handleProfissaoChange = (value) => {
-    const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
-    setProfissao(v);
-    clearError('profissao');
-    if (v.trim().length > 1) {
-      const filtradas = PROFISSOES.filter((p) =>
-        p.toLowerCase().includes(v.toLowerCase())
-      ).slice(0, 8);
-      setProfissoesFiltradas(filtradas);
-      setShowProfissoes(filtradas.length > 0);
-    } else {
-      setProfissoesFiltradas([]);
-      setShowProfissoes(false);
-    }
+  const handleTelefoneCountryChange = (code) => {
+    setTelefoneCountryCode(code);
+    setTelefoneNumero('');
+    setTelefoneTouched(false);
+    clearError('telefone');
   };
-
-  const FieldReq = () => <span className="text-red-500">*</span>;
-
-  const labelCls = (pageColorClass) =>
-    isModal ? 'text-[13px] font-medium text-slate-800' : `text-[13px] font-bold ${pageColorClass}`;
-
-  const sectionHeadingCls = (pageColorClass) =>
-    isModal ? 'text-[18px] font-bold text-slate-900' : pageColorClass;
-
-  const sectionCardCls = (hasError, pageNormalClasses) =>
-    isModal
-      ? `rounded-xl border bg-white p-5 transition-colors ${
-          hasError ? 'border-red-300 bg-red-50/30' : 'border-slate-200'
-        }`
-      : pageNormalClasses;
-
-  const inputClass = (field) => {
-    if (isModal) {
-      const err = field != null && errors[field];
-      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
-        err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
-      }`;
-    }
-    return `w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${
-      errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
-    }`;
-  };
-
-  const selectPersonalClass = (field) => {
-    if (isModal) {
-      const err = errors[field];
-      return `w-full appearance-none rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
-        err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
-      }`;
-    }
-    return `w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${
-      errors[field] ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'
-    }`;
-  };
-
-  const docInputClass = (field) => {
-    if (isModal) {
-      const err = field === 'cpf' && (errors.cpf || cpfErrorText);
-      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
-        err ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
-      }`;
-    }
-    return `w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${
-      errors.cpf || cpfErrorText ? 'border-red-400 bg-red-50' : 'border-[#3b82f6]/30 focus:border-[#3b82f6]'
-    }`;
-  };
-
-  const rgInputClass = () => {
-    if (isModal) {
-      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
-    }
-    return 'w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all';
-  };
-
-  const emailInputClass = () => {
-    if (isModal) {
-      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
-        errors.email ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
-      }`;
-    }
-    return `w-full px-4 py-3 bg-[#faf5ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all ${errors.email ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus:border-[#a855f7]'}`;
-  };
-
-  const socialInputClass = () => {
-    if (isModal) {
-      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
-    }
-    return 'w-full px-4 py-3 bg-[#faf5ff] border border-[#a855f7]/30 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 focus:border-[#a855f7] transition-all';
-  };
-
-  const complementInputClass = () => {
-    if (isModal) {
-      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
-    }
-    return 'w-full px-4 py-3 bg-[#fffbeb] border border-amber-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all';
-  };
-
-  const phoneWrapClass = () => {
-    const invalid = telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero);
-    if (isModal) {
-      return `flex items-stretch gap-0 rounded-lg border bg-white transition focus-within:border-[#00a88e] focus-within:ring-1 focus-within:ring-[#00a88e]/20 ${
-        errors.telefone || invalid ? 'border-red-300 bg-red-50/60' : 'border-slate-200'
-      }`;
-    }
-    return `flex items-stretch gap-1 rounded-xl border bg-[#faf5ff] transition-all focus-within:ring-4 focus-within:ring-[#a855f7]/20 ${
-      errors.telefone || invalid ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/30 focus-within:border-[#a855f7]'
-    }`;
-  };
-
-  const idadeInputClass = () => {
-    if (isModal) {
-      return 'w-full cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 text-[14px] font-medium text-slate-500';
-    }
-    return 'w-full px-4 py-3 bg-[#e2e8f0]/40 border border-app-border rounded-xl text-[14px] text-[#0f172a] font-bold cursor-not-allowed';
-  };
-
-  const hasPersonalSectionError =
-    Boolean(errors.nome) ||
-    Boolean(errors.dataNascimento) ||
-    Boolean(errors.sexo) ||
-    Boolean(errors.estadoCivil) ||
-    Boolean(errors.profissao);
-
-  const birthDigitsForUi = dataNascimentoDisplay.replace(/\D/g, '');
-  let dataNascimentoFieldMessage = null;
-  if (birthDigitsForUi.length === 8 && !dataNascimento) {
-    const br = validateBirthDateDigits8(birthDigitsForUi);
-    if (!br.ok) dataNascimentoFieldMessage = birthDateValidationUserMessage(br.reason);
-  }
 
   const successContent = (
     <div className="flex flex-col items-center justify-center py-16">
@@ -407,7 +280,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
             </div>
             <div className="min-w-0">
               <h3 id="patient-create-title" className="text-[18px] font-bold text-slate-900 sm:text-[20px]">
-                Cadastrar Novo Paciente
+                Novo Paciente
               </h3>
               <p className="text-[13px] font-medium text-slate-500">Preencha todos os dados obrigatórios</p>
             </div>
@@ -435,511 +308,63 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
     return successContent;
   }
 
+  const formVariant = isModal ? 'modal' : 'page';
+
   const formInner = (
-    <form
+    <PatientForm
+      mode="create"
+      variant={formVariant}
+      nome={nome}
+      dataNascimentoDisplay={dataNascimentoDisplay}
+      idade={idade}
+      sexo={sexo}
+      estadoCivilId={estadoCivilId}
+      profissao={profissao}
+      genero={genero}
+      cpf={cpf}
+      rg={rg}
+      telefoneCountryCode={telefoneCountryCode}
+      telefoneNumero={telefoneNumero}
+      telefoneTouched={telefoneTouched}
+      email={email}
+      instagram={instagram}
+      tiktok={tiktok}
+      endereco={endereco}
+      nomeMae={nomeMae}
+      nomePai={nomePai}
+      indicacao={indicacao}
+      dataNascimentoIso={dataNascimento}
+      fotoPerfilPreview={fotoPerfilPreview}
+      errors={errors}
+      cpfErrorText={cpfErrorText}
+      erroBanner={erro}
+      onNomeChange={setNome}
+      onDataNascimentoDisplayChange={handleDataNascimentoChange}
+      onSexoChange={setSexo}
+      onEstadoCivilChange={setEstadoCivilId}
+      onProfissaoChange={setProfissao}
+      onGeneroChange={setGenero}
+      onCpfChange={setCpf}
+      onCpfBlur={handleCpfBlur}
+      onRgChange={setRg}
+      onTelefoneCountryChange={handleTelefoneCountryChange}
+      onTelefoneNumeroChange={setTelefoneNumero}
+      onTelefoneBlur={() => setTelefoneTouched(true)}
+      onEmailChange={setEmail}
+      onInstagramChange={setInstagram}
+      onTiktokChange={setTiktok}
+      onEnderecoChange={setEndereco}
+      onNomeMaeChange={setNomeMae}
+      onNomePaiChange={setNomePai}
+      onIndicacaoChange={setIndicacao}
+      clearError={clearError}
+      onFotoChange={handleFotoChange}
+      showPhotoUpload
       onSubmit={handleSalvar}
-      className={isModal ? 'space-y-5' : 'space-y-6'}
-      aria-busy={salvando || undefined}
-    >
-        {/* Avatar — foto de perfil opcional */}
-        <div className={`flex justify-center ${isModal ? '-mt-1 mb-1' : 'mb-2'}`}>
-          <label className="group relative cursor-pointer" title="Adicionar foto de perfil">
-            <div
-              className={
-                isModal
-                  ? 'flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 shadow-sm transition-all hover:border-[#00a88e]/40'
-                  : 'flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] shadow-sm transition-all group-hover:border-[#00a88e]'
-              }
-            >
-              {fotoPerfilPreview ? (
-                <img src={fotoPerfilPreview} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <UserRound
-                  className={isModal ? 'h-9 w-9 text-slate-300' : 'h-10 w-10 text-[#00a88e]/50'}
-                  strokeWidth={1.5}
-                />
-              )}
-            </div>
-            <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#00a88e] shadow">
-              <Plus className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
-            </div>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={handleFotoChange}
-            />
-          </label>
-        </div>
-        <p
-          className={
-            isModal
-              ? '-mt-2 mb-1 text-center text-[12px] font-medium text-slate-500'
-              : '-mt-2 mb-2 text-center text-[12px] font-medium text-[#94a3b8]'
-          }
-        >
-          Foto de perfil (opcional)
-        </p>
-
-        {(Object.keys(errors).length > 0 || erro) && (
-          <div
-            className={
-              isModal
-                ? 'flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/80 px-3 py-2.5 text-[13px] font-semibold text-red-700'
-                : 'flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-bold text-red-600'
-            }
-          >
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.5} />
-            <span>
-              {erro ||
-                (Object.keys(errors).length > 0 ? 'Por favor, preencha todos os campos obrigatórios (*).' : '')}
-            </span>
-          </div>
-        )}
-
-        {/* Dados Pessoais — alinhado ao Step1CheckIn (jornada) */}
-        <div
-          className={sectionCardCls(
-            hasPersonalSectionError,
-            `rounded-2xl border p-6 transition-colors ${
-              hasPersonalSectionError ? 'border-red-300 bg-red-50/10' : 'border-[#00a88e]/25 bg-white'
-            }`
-          )}
-        >
-          <div className={`flex items-center gap-3 ${isModal ? 'mb-5' : 'mb-6'}`}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
-              1
-            </div>
-            <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#0f766e]')}>Dados Pessoais</h4>
-          </div>
-          <div className={`grid grid-cols-1 md:grid-cols-2 ${isModal ? 'gap-x-5 gap-y-4' : 'gap-x-6 gap-y-5'}`}>
-            <div className="md:col-span-2 space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>
-                Nome Completo <FieldReq />
-              </label>
-              <input
-                type="text"
-                value={nome}
-                maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
-                  setNome(value);
-                  clearError('nome');
-                }}
-                placeholder="Nome completo do paciente"
-                className={inputClass('nome')}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>
-                Data de Nascimento <FieldReq />
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="bday"
-                  value={dataNascimentoDisplay}
-                  onChange={(e) => {
-                    handleDataNascimentoChange(e.target.value);
-                    clearError('dataNascimento');
-                  }}
-                  placeholder={isModal ? 'dd/mm/aaaa' : 'DD/MM/AAAA'}
-                  maxLength={10}
-                  className={`min-w-0 flex-1 ${inputClass('dataNascimento')}`}
-                />
-                {isModal ? (
-                  <span
-                    className="flex shrink-0 items-center text-slate-300"
-                    aria-hidden
-                  >
-                    <Calendar className="h-4 w-4" strokeWidth={2} />
-                  </span>
-                ) : null}
-              </div>
-              {dataNascimentoFieldMessage ? (
-                <p className="text-[12px] font-bold text-red-600" role="alert">
-                  {dataNascimentoFieldMessage}
-                </p>
-              ) : null}
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>Idade</label>
-              <input
-                type="text"
-                value={idade !== '' ? `${idade} anos` : ''}
-                placeholder="Calculada automaticamente"
-                disabled
-                className={idadeInputClass()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>
-                Sexo <FieldReq />
-              </label>
-              <select
-                value={sexo}
-                onChange={(e) => {
-                  setSexo(e.target.value);
-                  clearError('sexo');
-                }}
-                className={selectPersonalClass('sexo')}
-              >
-                <option value="">Selecione...</option>
-                <option value="F">Feminino</option>
-                <option value="M">Masculino</option>
-                <option value="N">Prefiro não dizer</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>
-                Estado Civil <FieldReq />
-              </label>
-              <select
-                value={estadoCivilId}
-                onChange={(e) => {
-                  setEstadoCivilId(e.target.value);
-                  clearError('estadoCivil');
-                }}
-                className={selectPersonalClass('estadoCivil')}
-              >
-                <option value="">Selecione...</option>
-                {ESTADOS_CIVIS.map((ec) => (
-                  <option key={ec.id} value={ec.id}>
-                    {ec.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2 space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>
-                Profissão <FieldReq />
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={profissao}
-                  maxLength={PACIENTE_FIELD_MAX.profissao}
-                  onChange={(e) => handleProfissaoChange(e.target.value)}
-                  onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
-                  placeholder={
-                    isModal ? 'Ex: Advogada, Empresário, Estudante…' : 'Digite sua profissão...'
-                  }
-                  autoComplete="off"
-                  className={inputClass('profissao')}
-                />
-                {showProfissoes ? (
-                  <div
-                    className={
-                      isModal
-                        ? 'absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg'
-                        : 'absolute z-50 mt-1 w-full overflow-hidden rounded-xl border-[2px] border-[#00a88e]/30 bg-white shadow-lg'
-                    }
-                  >
-                    {profissoesFiltradas.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onMouseDown={() => {
-                          setProfissao(p);
-                          setShowProfissoes(false);
-                          clearError('profissao');
-                        }}
-                        className="w-full px-4 py-2 text-left text-[13px] text-[#334155] transition-colors hover:bg-[#e6f7f5] hover:text-[#0f766e]"
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <div className="md:col-span-2 space-y-1.5">
-              <label className={labelCls('text-[#00a88e]')}>Gênero</label>
-              <input
-                type="text"
-                value={genero}
-                maxLength={PACIENTE_FIELD_MAX.genero}
-                onChange={(e) => setGenero(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))}
-                placeholder="Como se identifica"
-                className={inputClass()}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Documentos */}
-        <div
-          className={sectionCardCls(
-            false,
-            'rounded-2xl border border-blue-200 bg-white p-6'
-          )}
-        >
-          <div className={`flex items-center gap-3 ${isModal ? 'mb-5' : 'mb-6'}`}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
-              2
-            </div>
-            <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#1d4ed8]')}>Documentos</h4>
-          </div>
-          <div className={`grid grid-cols-1 md:grid-cols-2 ${isModal ? 'gap-x-5 gap-y-4' : 'gap-x-6 gap-y-5'}`}>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#3b82f6]')}>
-                CPF <FieldReq />
-              </label>
-              <input
-                id="patient-create-cpf"
-                type="text"
-                name="cpf"
-                value={cpf}
-                maxLength={PACIENTE_FIELD_MAX.cpfFormatado}
-                onChange={(e) => {
-                  setCpf(maskCPF(e.target.value));
-                  clearError('cpf');
-                  setCpfErrorText('');
-                }}
-                onBlur={handleCpfBlur}
-                placeholder="000.000.000-00"
-                autoComplete="off"
-                aria-invalid={Boolean(errors.cpf || cpfErrorText)}
-                aria-describedby={cpfErrorText ? 'patient-create-cpf-error' : undefined}
-                className={docInputClass('cpf')}
-              />
-              {cpfErrorText ? (
-                <p id="patient-create-cpf-error" className="text-[12px] font-bold text-red-600" role="alert">
-                  {cpfErrorText}
-                </p>
-              ) : null}
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#3b82f6]')}>RG</label>
-              <input
-                type="text"
-                value={rg}
-                maxLength={PACIENTE_FIELD_MAX.rgFormatado}
-                onChange={(e) => setRg(maskRG(e.target.value))}
-                placeholder="00.000.000-0"
-                className={rgInputClass()}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Contato */}
-        <div
-          className={sectionCardCls(
-            Boolean(errors.telefone || errors.email),
-            `rounded-2xl border p-6 transition-colors ${
-              errors.telefone || errors.email ? 'border-red-300 bg-red-50/10' : 'border-[#a855f7]/25 bg-white'
-            }`
-          )}
-        >
-          <div className={`flex items-center gap-3 ${isModal ? 'mb-5' : 'mb-6'}`}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
-              3
-            </div>
-            <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#7e22ce]')}>Contato</h4>
-          </div>
-          <div className={`grid grid-cols-1 md:grid-cols-2 ${isModal ? 'gap-x-5 gap-y-4' : 'gap-x-6 gap-y-5'}`}>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#a855f7]')}>
-                Telefone <FieldReq />
-              </label>
-              <div className={phoneWrapClass()}>
-                <select
-                  value={telefoneCountryCode}
-                  title={getCountryByCode(telefoneCountryCode).name}
-                  onChange={(e) => {
-                    setTelefoneCountryCode(e.target.value);
-                    setTelefoneNumero('');
-                    setTelefoneTouched(false);
-                    clearError('telefone');
-                  }}
-                  className={
-                    isModal
-                      ? 'max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-lg border-0 bg-transparent py-2.5 pl-2 pr-1 text-[12px] font-medium text-slate-600 outline-none'
-                      : 'max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none'
-                  }
-                  aria-label="País"
-                >
-                  {[
-                    COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
-                    ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
-                  ].filter(Boolean).map((c) => (
-                    <option key={c.code} value={c.code} title={c.name}>
-                      {countrySelectDisplayLabel(c)}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
-                  <span
-                    className={
-                      isModal
-                        ? 'flex shrink-0 items-center tabular-nums text-[13px] font-semibold text-slate-500'
-                        : 'flex shrink-0 items-center tabular-nums text-[13px] font-semibold text-[#a855f7]'
-                    }
-                  >
-                    {getDdi(telefoneCountryCode)}
-                  </span>
-                  <input
-                    type="tel"
-                    value={telefoneNumero}
-                    maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
-                    autoComplete="tel-national"
-                    onChange={(e) => {
-                      setTelefoneNumero(formatPhoneAsYouType(telefoneCountryCode, e.target.value));
-                      clearError('telefone');
-                    }}
-                    onBlur={() => setTelefoneTouched(true)}
-                    placeholder={telefoneCountryCode === 'BR' ? '(00) 00000-0000' : 'Número'}
-                    className={
-                      isModal
-                        ? 'min-w-0 flex-1 rounded-r-lg bg-transparent py-2.5 pr-3 text-[14px] font-medium text-slate-900 outline-none'
-                        : 'min-w-0 flex-1 rounded-r-[9px] bg-transparent py-3 pr-3 text-[14px] font-medium outline-none'
-                    }
-                  />
-                </div>
-              </div>
-              {telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
-                <p className="text-[12px] font-bold text-red-600">Número inválido para este país</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#a855f7]')}>
-                E-mail <FieldReq />
-              </label>
-              <input
-                type="email"
-                value={email}
-                maxLength={PACIENTE_FIELD_MAX.email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  clearError('email');
-                }}
-                placeholder="email@exemplo.com"
-                className={emailInputClass()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#a855f7]')}>Instagram</label>
-              <input
-                type="text"
-                value={instagram}
-                maxLength={PACIENTE_FIELD_MAX.instagram}
-                onChange={(e) => setInstagram(e.target.value.slice(0, PACIENTE_FIELD_MAX.instagram))}
-                placeholder="@usuario"
-                className={socialInputClass()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#a855f7]')}>TikTok</label>
-              <input
-                type="text"
-                value={tiktok}
-                maxLength={PACIENTE_FIELD_MAX.tiktok}
-                onChange={(e) => setTiktok(e.target.value.slice(0, PACIENTE_FIELD_MAX.tiktok))}
-                placeholder="@usuario"
-                className={socialInputClass()}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Informações Complementares */}
-        <div
-          className={sectionCardCls(
-            false,
-            'rounded-2xl border border-amber-200 bg-white p-6'
-          )}
-        >
-          <div className={`flex items-center gap-3 ${isModal ? 'mb-5' : 'mb-6'}`}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
-              4
-            </div>
-            <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#b45309]')}>
-              Informações Complementares
-            </h4>
-          </div>
-          <div className={`grid grid-cols-1 md:grid-cols-2 ${isModal ? 'gap-x-5 gap-y-4' : 'gap-x-6 gap-y-5'}`}>
-            <div className="md:col-span-2 space-y-1.5">
-              <label className={labelCls('text-[#f59e0b]')}>Endereço</label>
-              <input
-                type="text"
-                value={endereco}
-                maxLength={PACIENTE_FIELD_MAX.endereco}
-                onChange={(e) => setEndereco(e.target.value)}
-                placeholder="Rua, número, bairro, cidade - UF"
-                className={complementInputClass()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#f59e0b]')}>Nome da Mãe</label>
-              <input
-                type="text"
-                value={nomeMae}
-                maxLength={PACIENTE_FIELD_MAX.nomeMae}
-                onChange={(e) => setNomeMae(e.target.value)}
-                placeholder="Nome completo"
-                className={complementInputClass()}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelCls('text-[#f59e0b]')}>Nome do Pai</label>
-              <input
-                type="text"
-                value={nomePai}
-                maxLength={PACIENTE_FIELD_MAX.nomePai}
-                onChange={(e) => setNomePai(e.target.value)}
-                placeholder="Nome completo"
-                className={complementInputClass()}
-              />
-            </div>
-            <div className="md:col-span-2 space-y-1.5">
-              <label className={labelCls('text-[#f59e0b]')}>Indicação</label>
-              <input
-                type="text"
-                value={indicacao}
-                maxLength={PACIENTE_FIELD_MAX.indicacao}
-                onChange={(e) => setIndicacao(e.target.value)}
-                placeholder="Quem indicou o paciente?"
-                className={complementInputClass()}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Botões */}
-        <div
-          className={
-            isModal
-              ? 'flex flex-col-reverse items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center'
-              : 'flex flex-col-reverse items-stretch justify-between gap-3 border-t-[3px] border-[#00a88e]/15 pt-4 sm:flex-row sm:items-center'
-          }
-        >
-          <button
-            type="button"
-            onClick={() => setPatientView('list')}
-            className={
-              isModal
-                ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-[14px] font-semibold text-slate-700 outline-none transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto'
-                : 'flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto'
-            }
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={salvando}
-            className={
-              isModal
-                ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-[#00a88e] px-5 py-2.5 text-[14px] font-semibold text-white outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-                : 'flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-            }
-          >
-            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
-            Cadastrar Paciente
-          </button>
-        </div>
-      </form>
+      onCancel={() => setPatientView('list')}
+      salvando={salvando}
+      cpfInputId="patient-create-cpf"
+    />
   );
 
   if (isModal) {

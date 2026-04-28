@@ -452,6 +452,40 @@ export const pacientesGaleriaApi = {
     requestDelete(`/api/v1/pacientes/${pacienteId}/galeria/${encodeURIComponent(fotoId)}`),
 };
 
+/**
+ * Alertas manuais do paciente (CRUD próprio ao cadastro manual).
+ * Não confundir com alertas inferidos pela anamnese (somente front + anamneseApi).
+ *
+ * Contrato sugerido: GET/POST/PUT/DELETE em …/pacientes/{id}/alertas-manuais
+ */
+export const pacienteAlertasManuaisApi = {
+  list: (pacienteId) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(String(pacienteId))}/alertas-manuais`),
+  create: (pacienteId, data) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(String(pacienteId))}/alertas-manuais`, {
+      method: 'POST',
+      body: JSON.stringify({
+        titulo: String(data?.titulo ?? '').trim(),
+        descricao: String(data?.descricao ?? '').trim(),
+      }),
+    }),
+  update: (pacienteId, alertaId, data) =>
+    request(
+      `/api/v1/pacientes/${encodeURIComponent(String(pacienteId))}/alertas-manuais/${encodeURIComponent(String(alertaId))}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          titulo: String(data?.titulo ?? '').trim(),
+          descricao: String(data?.descricao ?? '').trim(),
+        }),
+      },
+    ),
+  remove: (pacienteId, alertaId) =>
+    requestDelete(
+      `/api/v1/pacientes/${encodeURIComponent(String(pacienteId))}/alertas-manuais/${encodeURIComponent(String(alertaId))}`,
+    ),
+};
+
 
 // ── Notas do paciente ──────────────────────────────────────
 
