@@ -16,6 +16,7 @@ import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '.
 import { useToast } from '../../contexts/useToast.js';
 import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
+import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 
 export function Step1CheckIn({
   activeTab,
@@ -50,11 +51,12 @@ export function Step1CheckIn({
   const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
 
   const handleProfissaoChange = (value) => {
-    setProfissao(value);
+    const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
+    setProfissao(v);
     setStep1Errors((prev) => ({ ...prev, profissao: false }));
-    if (value.trim().length > 1) {
+    if (v.trim().length > 1) {
       const filtradas = PROFISSOES.filter((p) =>
-        p.toLowerCase().includes(value.toLowerCase())
+        p.toLowerCase().includes(v.toLowerCase())
       ).slice(0, 8);
       setProfissoesFiltradas(filtradas);
       setShowProfissoes(filtradas.length > 0);
@@ -288,8 +290,9 @@ export function Step1CheckIn({
                 <input
                   type="text"
                   value={nome}
+                  maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
                   onChange={(e) => {
-                    const value = e.target.value.replace(/[0-9]/g, '');
+                    const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
                     setNome(value);
                     setStep1Errors({...step1Errors, nome: false});
                   }}
@@ -368,6 +371,7 @@ export function Step1CheckIn({
                   <input
                     type="text"
                     value={profissao}
+                    maxLength={PACIENTE_FIELD_MAX.profissao}
                     onChange={(e) => handleProfissaoChange(e.target.value)}
                     onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
                     placeholder="Digite sua profissão..."
@@ -409,6 +413,7 @@ export function Step1CheckIn({
                 <input
                   type="text"
                   value={cpf}
+                  maxLength={PACIENTE_FIELD_MAX.cpfFormatado}
                   onChange={(e) => {
                     setCpf(maskCPF(e.target.value));
                     setStep1Errors({...step1Errors, cpf: false});
@@ -423,6 +428,7 @@ export function Step1CheckIn({
                 <input
                   type="text"
                   value={rg}
+                  maxLength={PACIENTE_FIELD_MAX.rgFormatado}
                   onChange={(e) => setRg(maskRG(e.target.value))}
                   placeholder="00.000.000-0"
                   className="w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all"
@@ -468,6 +474,7 @@ export function Step1CheckIn({
                     <input
                       type="tel"
                       value={telefoneDisplay}
+                      maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
                       autoComplete="tel-national"
                       onChange={(e) => {
                         const formatted = formatPhoneAsYouType(telefoneCountryCode, e.target.value);
@@ -490,8 +497,9 @@ export function Step1CheckIn({
                 <input
                   type="email"
                   value={email}
+                  maxLength={PACIENTE_FIELD_MAX.email}
                   onChange={(e) => {
-                    setEmail(e.target.value.replace(/\s/g, ''));
+                    setEmail(e.target.value.replace(/\s/g, '').slice(0, PACIENTE_FIELD_MAX.email));
                     setStep1Errors({...step1Errors, email: false});
                   }}
                   onKeyDown={(e) => {
@@ -515,6 +523,7 @@ export function Step1CheckIn({
               <input
                 type="text"
                 value={endereco}
+                maxLength={PACIENTE_FIELD_MAX.endereco}
                 onChange={(e) => setEndereco(e.target.value)}
                 placeholder="Rua, número, bairro, cidade - UF"
                 className="w-full px-4 py-3 bg-[#fffbeb] border border-amber-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 focus:border-[#f59e0b] transition-all"

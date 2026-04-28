@@ -18,6 +18,7 @@ import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { useToast } from '../../contexts/useToast.js';
 import { convertToWebP } from '../../utils/imageUtils';
+import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 
 export function PatientCreateView({ setPatientView, onPatientCreated, variant = 'page' }) {
   const isModal = variant === 'modal';
@@ -229,11 +230,12 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   };
 
   const handleProfissaoChange = (value) => {
-    setProfissao(value);
+    const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
+    setProfissao(v);
     clearError('profissao');
-    if (value.trim().length > 1) {
+    if (v.trim().length > 1) {
       const filtradas = PROFISSOES.filter((p) =>
-        p.toLowerCase().includes(value.toLowerCase())
+        p.toLowerCase().includes(v.toLowerCase())
       ).slice(0, 8);
       setProfissoesFiltradas(filtradas);
       setShowProfissoes(filtradas.length > 0);
@@ -492,8 +494,9 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={nome}
+                maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/[0-9]/g, '');
+                  const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
                   setNome(value);
                   clearError('nome');
                 }}
@@ -590,6 +593,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
                 <input
                   type="text"
                   value={profissao}
+                  maxLength={PACIENTE_FIELD_MAX.profissao}
                   onChange={(e) => handleProfissaoChange(e.target.value)}
                   onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
                   placeholder={
@@ -629,7 +633,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={genero}
-                onChange={(e) => setGenero(e.target.value)}
+                maxLength={PACIENTE_FIELD_MAX.genero}
+                onChange={(e) => setGenero(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))}
                 placeholder="Como se identifica"
                 className={inputClass()}
               />
@@ -658,6 +663,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={cpf}
+                maxLength={PACIENTE_FIELD_MAX.cpfFormatado}
                 onChange={(e) => {
                   setCpf(maskCPF(e.target.value));
                   clearError('cpf');
@@ -672,6 +678,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={rg}
+                maxLength={PACIENTE_FIELD_MAX.rgFormatado}
                 onChange={(e) => setRg(maskRG(e.target.value))}
                 placeholder="00.000.000-0"
                 className={rgInputClass()}
@@ -739,6 +746,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
                   <input
                     type="tel"
                     value={telefoneNumero}
+                    maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
                     autoComplete="tel-national"
                     onChange={(e) => {
                       setTelefoneNumero(formatPhoneAsYouType(telefoneCountryCode, e.target.value));
@@ -765,6 +773,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="email"
                 value={email}
+                maxLength={PACIENTE_FIELD_MAX.email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   clearError('email');
@@ -778,7 +787,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={instagram}
-                onChange={(e) => setInstagram(e.target.value)}
+                maxLength={PACIENTE_FIELD_MAX.instagram}
+                onChange={(e) => setInstagram(e.target.value.slice(0, PACIENTE_FIELD_MAX.instagram))}
                 placeholder="@usuario"
                 className={socialInputClass()}
               />
@@ -788,7 +798,8 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={tiktok}
-                onChange={(e) => setTiktok(e.target.value)}
+                maxLength={PACIENTE_FIELD_MAX.tiktok}
+                onChange={(e) => setTiktok(e.target.value.slice(0, PACIENTE_FIELD_MAX.tiktok))}
                 placeholder="@usuario"
                 className={socialInputClass()}
               />
@@ -817,6 +828,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={endereco}
+                maxLength={PACIENTE_FIELD_MAX.endereco}
                 onChange={(e) => setEndereco(e.target.value)}
                 placeholder="Rua, número, bairro, cidade - UF"
                 className={complementInputClass()}
@@ -827,6 +839,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={nomeMae}
+                maxLength={PACIENTE_FIELD_MAX.nomeMae}
                 onChange={(e) => setNomeMae(e.target.value)}
                 placeholder="Nome completo"
                 className={complementInputClass()}
@@ -837,6 +850,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={nomePai}
+                maxLength={PACIENTE_FIELD_MAX.nomePai}
                 onChange={(e) => setNomePai(e.target.value)}
                 placeholder="Nome completo"
                 className={complementInputClass()}
@@ -847,6 +861,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
               <input
                 type="text"
                 value={indicacao}
+                maxLength={PACIENTE_FIELD_MAX.indicacao}
                 onChange={(e) => setIndicacao(e.target.value)}
                 placeholder="Quem indicou o paciente?"
                 className={complementInputClass()}

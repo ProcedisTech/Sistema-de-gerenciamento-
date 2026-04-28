@@ -36,6 +36,7 @@ import {
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 import {
@@ -61,9 +62,9 @@ import {
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
-  GaleriaArquivoLightbox,
   GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
+import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 
 const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'depois', 'outro'];
@@ -801,6 +802,8 @@ export function PatientProfileView({
       telefoneNumero: formatPhoneAsYouType(countryCode, nationalNumber),
       telefoneTouched: false,
       profissao: patient.profissao || '',
+      nomePai: patient.nomePai || '',
+      nomeMae: patient.nomeMae || '',
       endereco: patient.endereco || '',
       alergias: patient.alergias || '',
       condicoesSaude: patient.condicoesSaude || '',
@@ -1282,6 +1285,8 @@ export function PatientProfileView({
         email: editing?.email || '',
         telefone: formatPhoneForApi(editing?.telefoneCountryCode ?? 'BR', editing?.telefoneNumero ?? '') || '',
         profissao: editing?.profissao || '',
+        nomePai: editing?.nomePai || '',
+        nomeMae: editing?.nomeMae || '',
         endereco: editing?.endereco || '',
         alergias: editing?.alergias || '',
         condicoesSaude: editing?.condicoesSaude || '',
@@ -1418,7 +1423,7 @@ export function PatientProfileView({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="mb-6 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
-            <div className="flex flex-col items-start gap-4 sm:flex-row">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
                 <input
                   ref={profilePhotoInputRef}
@@ -1492,12 +1497,23 @@ export function PatientProfileView({
                     <span className="truncate">{selectedPatient.email || '—'}</span>
                   </span>
                 </div>
-                {selectedPatient.endereco ? (
-                  <div className="mt-2 flex items-start gap-2 text-[13px] font-normal text-[#64748b]">
-                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
-                    <span className="min-w-0 break-words">{selectedPatient.endereco}</span>
-                  </div>
-                ) : null}
+                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-x-4 text-[13px] text-[#64748b]">
+                  <p className="min-w-0 break-words">
+                    <span className="font-semibold text-[#475569]">Pai: </span>
+                    {(selectedPatient.nomePai && String(selectedPatient.nomePai).trim()) || '—'}
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span className="font-semibold text-[#475569]">Mãe: </span>
+                    {(selectedPatient.nomeMae && String(selectedPatient.nomeMae).trim()) || '—'}
+                  </p>
+                </div>
+                <div className="mt-2 flex items-start gap-2 text-[13px] font-normal text-[#64748b]">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
+                  <span className="min-w-0 break-words">
+                    <span className="font-semibold text-[#475569]">Endereço: </span>
+                    {(selectedPatient.endereco && String(selectedPatient.endereco).trim()) || '—'}
+                  </span>
+                </div>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
                 <button
@@ -1527,8 +1543,21 @@ export function PatientProfileView({
             {isEditing && (
               <div className="mt-5 p-4 border border-slate-200 rounded-2xl bg-[#f8fbfb]">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input value={editing?.nome || ''} onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Nome" />
-                  <input value={editing?.email || ''} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="E-mail" />
+                  <input
+                    value={editing?.nome || ''}
+                    maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
+                    onChange={(e) => setEditing((p) => ({ ...p, nome: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
+                    placeholder="Nome"
+                  />
+                  <input
+                    type="email"
+                    value={editing?.email || ''}
+                    maxLength={PACIENTE_FIELD_MAX.email}
+                    onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
+                    placeholder="E-mail"
+                  />
                   <div className="space-y-1">
                     <div className="flex items-stretch gap-1 rounded-xl border-[2px] border-[#00a88e]/20 bg-white overflow-hidden">
                       <select
@@ -1552,6 +1581,7 @@ export function PatientProfileView({
                         <input
                           type="tel"
                           value={editing?.telefoneNumero ?? ''}
+                          maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
                           autoComplete="tel-national"
                           onChange={(e) => {
                             const formatted = formatPhoneAsYouType(editing?.telefoneCountryCode ?? 'BR', e.target.value);
@@ -1567,20 +1597,61 @@ export function PatientProfileView({
                       <p className="text-[11px] font-bold text-red-600">Número inválido para este país</p>
                     )}
                   </div>
-                  <input value={editing?.profissao || ''} onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]" placeholder="Profissao" />
+                  <input
+                    value={editing?.profissao || ''}
+                    maxLength={PACIENTE_FIELD_MAX.profissao}
+                    onChange={(e) => setEditing((p) => ({ ...p, profissao: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
+                    placeholder="Profissao"
+                  />
+                  <input
+                    value={editing?.nomePai || ''}
+                    maxLength={PACIENTE_FIELD_MAX.nomePai}
+                    onChange={(e) => setEditing((p) => ({ ...p, nomePai: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
+                    placeholder="Nome do pai"
+                    aria-label="Nome do pai"
+                  />
+                  <input
+                    value={editing?.nomeMae || ''}
+                    maxLength={PACIENTE_FIELD_MAX.nomeMae}
+                    onChange={(e) => setEditing((p) => ({ ...p, nomeMae: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px]"
+                    placeholder="Nome da mãe"
+                    aria-label="Nome da mãe"
+                  />
                   <div className="md:col-span-2">
                     <label className="text-[12px] font-bold text-[#475569] mb-1 block">Endereço</label>
                     <input
                       type="text"
                       value={editing?.endereco || ''}
+                      maxLength={PACIENTE_FIELD_MAX.endereco}
                       onChange={(e) => setEditing((d) => ({ ...d, endereco: e.target.value }))}
                       placeholder="Rua, número, bairro, cidade - UF"
                       className="w-full rounded-xl border border-slate-200 px-4 py-2 text-[16px] outline-none focus:border-[#00a88e] sm:text-[13px]"
                     />
                   </div>
-                  <input value={editing?.alergias || ''} onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Alergias" />
-                  <input value={editing?.condicoesSaude || ''} onChange={(e) => setEditing((p) => ({ ...p, condicoesSaude: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Condicoes de saude" />
-                  <input value={editing?.medicamentos || ''} onChange={(e) => setEditing((p) => ({ ...p, medicamentos: e.target.value }))} className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2" placeholder="Medicamentos (separe por virgula)" />
+                  <input
+                    value={editing?.alergias || ''}
+                    maxLength={PACIENTE_FIELD_MAX.alergias}
+                    onChange={(e) => setEditing((p) => ({ ...p, alergias: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2"
+                    placeholder="Alergias"
+                  />
+                  <input
+                    value={editing?.condicoesSaude || ''}
+                    maxLength={PACIENTE_FIELD_MAX.condicoesSaude}
+                    onChange={(e) => setEditing((p) => ({ ...p, condicoesSaude: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2"
+                    placeholder="Condicoes de saude"
+                  />
+                  <input
+                    value={editing?.medicamentos || ''}
+                    maxLength={PACIENTE_FIELD_MAX.medicamentos}
+                    onChange={(e) => setEditing((p) => ({ ...p, medicamentos: e.target.value }))}
+                    className="rounded-xl border-[2px] border-[#00a88e]/20 px-3 py-2 text-[16px] sm:text-[14px] md:col-span-2"
+                    placeholder="Medicamentos (separe por virgula)"
+                  />
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <button type="button" onClick={saveEditProfile} className="px-4 py-2 rounded-xl bg-[#00a88e] text-white font-bold text-[13px] border-[2px] border-transparent"><Save className="w-4 h-4 inline mr-1" />Salvar</button>
@@ -2673,15 +2744,11 @@ export function PatientProfileView({
             >
               Fechar
             </button>
-            {galleryPreview.authFetch ? (
-              <GaleriaArquivoLightbox url={galleryPreview.url} alt={galleryPreview.caption || 'Preview da foto'} />
-            ) : (
-              <img
-                src={galleryPreview.url}
-                alt={galleryPreview.caption || 'Preview da foto'}
-                className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30 object-contain"
-              />
-            )}
+            <ZoomableGalleryLightbox
+              url={galleryPreview.url}
+              alt={galleryPreview.caption || 'Preview da foto'}
+              authFetch={Boolean(galleryPreview.authFetch)}
+            />
           </div>
         </div>
       )}
