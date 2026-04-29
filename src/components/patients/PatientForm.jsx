@@ -11,6 +11,7 @@ import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUti
 import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
+import { EnderecoFields } from '../common/EnderecoFields.jsx';
 
 const FieldReq = () => <span className="text-red-500">*</span>;
 
@@ -36,7 +37,13 @@ export function PatientForm({
   email,
   instagram,
   tiktok,
-  endereco,
+  cep,
+  enderecoRua,
+  enderecoNumero,
+  enderecoComplemento,
+  enderecoBairro,
+  enderecoCidade,
+  enderecoEstado,
   nomeMae,
   nomePai,
   indicacao,
@@ -60,7 +67,13 @@ export function PatientForm({
   onEmailChange,
   onInstagramChange,
   onTiktokChange,
-  onEnderecoChange,
+  onCepChange,
+  onEnderecoRuaChange,
+  onEnderecoNumeroChange,
+  onEnderecoComplementoChange,
+  onEnderecoBairroChange,
+  onEnderecoCidadeChange,
+  onEnderecoEstadoChange,
   onNomeMaeChange,
   onNomePaiChange,
   onIndicacaoChange,
@@ -650,15 +663,26 @@ export function PatientForm({
           <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#b45309]')}>Informações Complementares</h4>
         </div>
         <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
-          <div className="md:col-span-2 space-y-1.5">
-            <label className={labelCls('text-[#f59e0b]')}>Endereço</label>
-            <input
-              type="text"
-              value={endereco}
-              maxLength={PACIENTE_FIELD_MAX.endereco}
-              onChange={(e) => onEnderecoChange(e.target.value)}
-              placeholder="Rua, número, bairro, cidade - UF"
-              className={complementInputClass()}
+          <div className="md:col-span-2">
+            <EnderecoFields
+              variant={variant === 'page' ? 'page' : variant === 'profile' ? 'profile' : 'modal'}
+              cep={cep}
+              onCepChange={onCepChange}
+              rua={enderecoRua}
+              onRuaChange={onEnderecoRuaChange}
+              numero={enderecoNumero}
+              onNumeroChange={onEnderecoNumeroChange}
+              complemento={enderecoComplemento}
+              onComplementoChange={onEnderecoComplementoChange}
+              bairro={enderecoBairro}
+              onBairroChange={onEnderecoBairroChange}
+              cidade={enderecoCidade}
+              onCidadeChange={onEnderecoCidadeChange}
+              estado={enderecoEstado}
+              onEstadoChange={onEnderecoEstadoChange}
+              pageColorClass="text-[#f59e0b]"
+              errors={errors}
+              clearError={clearError}
             />
           </div>
           <div className="space-y-1.5">
