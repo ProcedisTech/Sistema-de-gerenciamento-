@@ -18,6 +18,8 @@ import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 // Componentes de Layout
 import { Sidebar, Stepper, MobileNavigation } from './layout';
 
+import { usePapel } from '../hooks/usePapel';
+import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
 import { resolveApiUrl } from '../config/apiEnv.js';
@@ -88,7 +90,8 @@ function revokeBlobUrlIfAny(url) {
 }
 
 export default function App() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
+  const { papel, isAdmin, isProfissional, isRecepcionista } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -135,6 +138,10 @@ export default function App() {
         const roleId = meJson?.roleUserId ?? meJson?.role_user_id ?? null;
         if (roleId && typeof setRoleUserId === 'function') {
           setRoleUserId(String(roleId));
+        }
+        const roleNome = meJson?.role?.nome ?? meJson?.role_nome ?? meJson?.role ?? null;
+        if (typeof setPapel === 'function') {
+          setPapel(resolverPapel(roleNome));
         }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
@@ -1640,6 +1647,7 @@ export default function App() {
 
             {activeView === 'pacientes' && (
               <PatientsView
+                isRecepcionista={isRecepcionista}
                 patients={patients}
                 patientView={patientView}
                 selectedPatientCpf={selectedPatientCpf}
@@ -1664,8 +1672,10 @@ export default function App() {
               />
             )}
 
-            {activeView === 'configuracoes' && (
+            {activeView === 'configuracoes' && (isAdmin || isProfissional) && (
               <ConfiguracoesView
+                isAdmin={isAdmin}
+                isProfissional={isProfissional}
                 configSection={configSection}
                 setConfigSection={setConfigSection}
                 onClinicaAtualizada={(nome, logoUrl) =>

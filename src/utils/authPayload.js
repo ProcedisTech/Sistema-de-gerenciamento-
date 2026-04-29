@@ -47,3 +47,12 @@ export function extractOrganizacaoIdFromAuthResponse(data) {
   }
   return null;
 }
+
+export function resolverPapel(roleNome) {
+  if (!roleNome) return null;
+  const roleLimpo = String(roleNome).trim().toLowerCase();
+  if (roleLimpo === 'administrador' || roleLimpo === 'admin') return 'ADMIN';
+  if (roleLimpo === 'medico' || roleLimpo === 'esteticista' || roleLimpo === 'profissional') return 'PROFISSIONAL';
+  if (roleLimpo === 'recepcionista') return 'RECEPCIONISTA';
+  return null;
+}

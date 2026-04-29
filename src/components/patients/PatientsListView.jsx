@@ -443,6 +443,7 @@ export function PatientsListView({
   onStartAttendance,
   patientsListOrder,
   setPatientsListOrder,
+  isRecepcionista,
 }) {
   const [sortBy, setSortBy] = useState(() =>
     patientsListOrder === 'birthday_asc' ? 'birthday-asc' : 'nome-asc'
@@ -662,13 +663,15 @@ export function PatientsListView({
             Histórico completo e dados protegidos
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onCreatePatient}
-          className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:w-auto sm:min-w-0"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
-        </button>
+        {!isRecepcionista && (
+          <button
+            type="button"
+            onClick={onCreatePatient}
+            className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:w-auto sm:min-w-0"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
+          </button>
+        )}
       </div>
 
       <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">

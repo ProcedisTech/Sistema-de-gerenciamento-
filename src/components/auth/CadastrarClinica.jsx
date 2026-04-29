@@ -44,6 +44,10 @@ export function CadastrarClinica({ onComplete }) {
     setSaving(true);
     setError('');
     try {
+      const { supabase } = await import('../../lib/supabaseClient');
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[DevLog] Token atual do Supabase:', session?.access_token ? 'Presente' : 'Ausente', session?.user?.id);
+      
       const telDigits = telefone.replace(/\D/g, '');
       const res = await fetch(resolveApiUrl('/api/v1/organizacoes'), {
         method: 'POST',

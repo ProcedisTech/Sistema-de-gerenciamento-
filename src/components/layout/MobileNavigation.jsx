@@ -1,7 +1,10 @@
 import React from 'react';
 import { CalendarDays, LogOut, Settings, Users } from 'lucide-react';
+import { usePapel } from '../../hooks/usePapel';
 
 export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoConfiguracoes, onLogout }) {
+  const { isAdmin, isProfissional } = usePapel();
+  const canSeeConfig = isAdmin || isProfissional;
   const tabClass = (isActive) =>
     `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1 transition-all ${
       isActive
@@ -32,15 +35,17 @@ export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoCo
           <span className="text-[10px] font-bold leading-tight">Agenda</span>
         </button>
 
-        <button
-          type="button"
-          onClick={onGoConfiguracoes}
-          className={tabClass(activeView === 'configuracoes')}
-          aria-current={activeView === 'configuracoes' ? 'page' : undefined}
-        >
-          <Settings className="h-5 w-5" strokeWidth={2.5} />
-          <span className="text-[10px] font-bold leading-tight">Configurações</span>
-        </button>
+        {canSeeConfig && (
+          <button
+            type="button"
+            onClick={onGoConfiguracoes}
+            className={tabClass(activeView === 'configuracoes')}
+            aria-current={activeView === 'configuracoes' ? 'page' : undefined}
+          >
+            <Settings className="h-5 w-5" strokeWidth={2.5} />
+            <span className="text-[10px] font-bold leading-tight">Configurações</span>
+          </button>
+        )}
 
         <button
           type="button"

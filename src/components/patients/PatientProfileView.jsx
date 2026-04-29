@@ -651,6 +651,7 @@ export function PatientProfileView({
   mergePatientById,
   refreshPatients,
   roleUserId,
+  isRecepcionista,
 }) {
   const toast = useToast();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
@@ -1858,24 +1859,26 @@ export function PatientProfileView({
                 >
                   <Play className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditing((prev) => {
-                      if (prev) {
+                {!isRecepcionista && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing((prev) => {
+                        if (prev) {
+                          setEditFormErrors({});
+                          setProfileSaveError('');
+                          return null;
+                        }
                         setEditFormErrors({});
                         setProfileSaveError('');
-                        return null;
-                      }
-                      setEditFormErrors({});
-                      setProfileSaveError('');
-                      return createEditDraft();
-                    });
-                  }}
-                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors active:border-[#cbd5e1] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:border-[#cbd5e1]"
-                >
-                  <UserIcon className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Editar Cadastro
-                </button>
+                        return createEditDraft();
+                      });
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors active:border-[#cbd5e1] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:border-[#cbd5e1]"
+                  >
+                    <UserIcon className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Editar Cadastro
+                  </button>
+                )}
                 <button
                   type="button"
                   className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors md:min-h-[44px] md:w-auto md:text-[13px]"
