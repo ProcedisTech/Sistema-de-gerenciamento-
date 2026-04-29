@@ -344,6 +344,29 @@ async function requestBlob(path, { needsOrg = true } = {}) {
   return promise;
 }
 
+/**
+ * Requisição pública: NÃO envia Authorization, NÃO envia X-Org-Id, NÃO envia cookie de sessão.
+ * Usado pelas rotas /c/** (página pública de confirmação WhatsApp do paciente).
+ */
+async function requestPublic(path, fetchOpts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(fetchOpts.headers || {}) };
+  const url = path.startsWith('http') ? path : resolveApiUrl(path);
+  const res = await fetch(url, {
+    ...fetchOpts,
+    headers,
+    credentials: 'omit',
+  });
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  return res.json();
+}
+
 // ── Pacientes ──────────────────────────────────────────────
 
 export const pacientesApi = {
@@ -562,7 +585,38 @@ export const agendasApi = {
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
   create: (data) => request('/api/v1/agendas', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/api/v1/agendas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  cancelar: (id) => request(`/api/v1/agendas/${id}/cancelar`, { method: 'PATCH' }),
+  /**
+   * Cancela um slot da agenda com motivo.
+   * @param {string} id UUID do slot
+   * @param {{ motivoCancelamentoCodigo: 'paciente_desistiu'|'remarcado'|'clinica_fechou'|'outro', motivoCancelamentoTexto?: string }} payload
+   */
+  cancelar: (id, payload) =>
+    request(`/api/v1/agendas/${id}/cancelar`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
+  /**
+   * Atualiza status do slot (confirmado | realizado | falta).
+   * @param {string} id UUID do slot
+   * @param {'confirmado'|'realizado'|'falta'} codigo
+   */
+  atualizarStatus: (id, codigo) =>
+    request(`/api/v1/agendas/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ codigo }),
+    }),
+
+  /**
+   * Reagenda um slot — cancela o original e cria slot novo (atômico no backend).
+   * @param {string} id UUID do slot original
+   * @param {{ dataAgendamento: string, horaInicio: string, horaFim: string, roleUserId: string, tipo: string, motivoCancelamentoTexto?: string }} payload
+   */
+  reagendar: (id, payload) =>
+    request(`/api/v1/agendas/${id}/reagendar`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 /**
@@ -574,6 +628,43 @@ export const agendamentosApi = {
   /** Mesmo `request()` que pacientes/agendas: credentials:'include', cookie jwt, X-Org-Id. URL relativa → :5173/api/v1/agendamentos com proxy. */
   create: (body) => request('/api/v1/agendamentos', { method: 'POST', body: JSON.stringify(body) }),
   remove: (id) => request(`/api/v1/agendamentos/${id}`, { method: 'DELETE' }),
+};
+
+// ── Confirmação WhatsApp ───────────────────────────────────
+export const confirmacaoApi = {
+  /**
+   * Gera link WhatsApp wa.me + mensagem pronta + token mágico para o paciente confirmar.
+   * Endpoint AUTENTICADO (profissional clica no botão).
+   * @param {{ agendamentoId: string, tipoEnvio: 'confirmacao_24h'|'lembrete_1h' }} payload
+   * @returns {Promise<{ confirmacaoId: string, tokenLink: string, mensagemPronta: string, urlWhatsApp: string }>}
+   */
+  gerar: (payload) =>
+    request('/api/v1/confirmacoes/gerar', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ── Confirmação Pública (rotas /c/** — paciente clica link WhatsApp) ─────
+export const confirmacaoPublicaApi = {
+  /**
+   * Busca info da confirmação por token (sem login).
+   * @param {string} token UUID do token mágico
+   */
+  buscar: (token) => requestPublic(`/c/${encodeURIComponent(token)}`),
+
+  /**
+   * Paciente confirma ou recusa.
+   * @param {string} token
+   * @param {'confirmado'|'recusado'} resposta
+   */
+  responder: (token, resposta) =>
+    requestPublic(
+      `/c/${encodeURIComponent(token)}/responder?resposta=${encodeURIComponent(resposta)}`,
+      {
+        method: 'POST',
+      }
+    ),
 };
 
 // ── Procedimentos ──────────────────────────────────────────
@@ -756,4 +847,110 @@ export const termoAssinaturaApi = {
       method: 'PATCH',
       body: JSON.stringify({ procedimentoFeitoId }),
     }),
+};
+
+// ── Configurações da Clínica (tipo + horário semanal) ──────
+export const configuracoesClinicaApi = {
+  /**
+   * Busca configurações: tipo de organização + horário semanal.
+   * @returns {Promise<{ tipoOrg: string, segInicio: string|null, segFim: string|null, ..., domInicio: string|null, domFim: string|null }>}
+   */
+  buscar: () => request('/api/v1/configuracoes/clinica'),
+
+  /**
+   * Atualiza configurações.
+   * @param {object} payload Mesmo formato do buscar()
+   */
+  atualizar: (payload) =>
+    request('/api/v1/configuracoes/clinica', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ── Feriados ───────────────────────────────────────────────
+export const feriadosApi = {
+  /**
+   * Lista feriados ativos no período.
+   * @param {string} inicio YYYY-MM-DD
+   * @param {string} fim YYYY-MM-DD
+   */
+  listar: (inicio, fim) =>
+    request(
+      `/api/v1/feriados?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`
+    ),
+
+  /**
+   * Cria novo feriado.
+   * @param {{ data: string, nome: string }} payload
+   */
+  criar: (payload) =>
+    request('/api/v1/feriados', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /**
+   * Soft delete (marca ativo=false).
+   */
+  desativar: (id) => requestDelete(`/api/v1/feriados/${id}`),
+
+  /**
+   * Sugestões nacionais BR hardcoded (8 datas fixas: Natal, Tiradentes, etc.).
+   * @param {number} ano
+   */
+  sugestoesNacionais: (ano) =>
+    request(`/api/v1/feriados/sugestoes-nacionais?ano=${encodeURIComponent(ano)}`),
+};
+
+// ── Templates de Mensagem WhatsApp ─────────────────────────
+export const templatesMensagemApi = {
+  /**
+   * Lista templates da clínica. Pode estar vazio (frontend usa fallback hardcoded do backend).
+   */
+  listar: () => request('/api/v1/templates-mensagem'),
+
+  /**
+   * Upsert (cria ou atualiza) template por tipo.
+   * @param {'confirmacao'|'lembrete'} tipo
+   * @param {string} texto
+   */
+  salvar: (tipo, texto) =>
+    request(`/api/v1/templates-mensagem/${encodeURIComponent(tipo)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ texto }),
+    }),
+};
+
+// ── Notificações ───────────────────────────────────────────
+export const notificacoesApi = {
+  /**
+   * Lista paginada.
+   * @param {{ lida?: boolean, page?: number, size?: number }} opts
+   */
+  listar: ({ lida, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (lida !== undefined && lida !== null) params.set('lida', String(lida));
+    params.set('page', String(page));
+    params.set('size', String(size));
+    return request(`/api/v1/notificacoes?${params.toString()}`);
+  },
+
+  /**
+   * Contador de não-lidas (pra sino do header).
+   * @returns {Promise<{ count: number }>}
+   */
+  contarNaoLidas: () => request('/api/v1/notificacoes/count-nao-lidas'),
+
+  /**
+   * Marca uma notificação como lida.
+   */
+  marcarLida: (id) => request(`/api/v1/notificacoes/${id}/lida`, { method: 'PATCH' }),
+
+  /**
+   * Bulk: marca todas como lidas.
+   * @returns {Promise<{ marcadas: number }>}
+   */
+  marcarTodasLidas: () =>
+    request('/api/v1/notificacoes/marcar-todas-lidas', { method: 'PATCH' }),
 };
