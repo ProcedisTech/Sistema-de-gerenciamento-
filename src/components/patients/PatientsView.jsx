@@ -39,6 +39,7 @@ export function PatientsView(props) {
         mergePatientById={mergePatientById}
         refreshPatients={refreshPatients}
         roleUserId={roleUserId}
+        isRecepcionista={props.isRecepcionista}
       />
     );
   }

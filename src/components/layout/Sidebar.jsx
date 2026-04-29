@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CalendarDays, ChevronLeft, LogOut, Menu, Settings, Shield, Users } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { usePapel } from '../../hooks/usePapel';
 
 function clinicaLogoDisplaySrc(u) {
   if (u == null || typeof u !== 'string') return '';
@@ -94,6 +95,12 @@ export function Sidebar({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopCollapsed);
+  const { isAdmin, isProfissional } = usePapel();
+  const canSeeConfig = isAdmin || isProfissional;
+  const visibleNavItems = NAV_ITEMS.filter((item) => {
+    if (item.view === 'configuracoes') return canSeeConfig;
+    return true;
+  });
 
   useEffect(() => {
     if (!isTabletSidebar) {
@@ -180,7 +187,7 @@ export function Sidebar({
             </div>
 
             <nav className="flex flex-1 flex-col gap-2 px-1 pt-1">
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const NavIcon = item.icon;
                 return (
                   <button
@@ -265,7 +272,7 @@ export function Sidebar({
             </button>
 
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const NavIcon = item.icon;
                 return (
                   <button
@@ -352,7 +359,7 @@ export function Sidebar({
             </button>
 
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const NavIcon = item.icon;
                 return (
                   <button

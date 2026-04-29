@@ -5,6 +5,7 @@ import { DEFAULT_ORG_ID, ALT_ORG_ID } from '../config/apiEnv';
 const LS_ORG = 'procedi_org_id';
 /** v2: evita reaproveitar roleUserId de demo antigo no localStorage. */
 const LS_ROLE = 'procedi_role_user_id_v2';
+const LS_PAPEL = 'procedi_papel';
 
 const OrgContext = createContext(null);
 
@@ -27,6 +28,13 @@ function readInitialOrgIdSynced() {
 export function OrgProvider({ children }) {
   const [orgId, setOrgIdState] = useState(readInitialOrgIdSynced);
   const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, ''));
+  const [papel, setPapelState] = useState(() => {
+    try {
+      return localStorage.getItem(LS_PAPEL) || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -54,6 +62,16 @@ export function OrgProvider({ children }) {
     }
   }, []);
 
+  const setPapel = useCallback((novoPapel) => {
+    setPapelState(novoPapel);
+    try {
+      if (novoPapel) localStorage.setItem(LS_PAPEL, novoPapel);
+      else localStorage.removeItem(LS_PAPEL);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       orgId,
@@ -62,8 +80,10 @@ export function OrgProvider({ children }) {
       setRoleUserId,
       defaultOrgId: DEFAULT_ORG_ID,
       altOrgId: ALT_ORG_ID,
+      papel,
+      setPapel,
     }),
-    [orgId, setOrgId, roleUserId, setRoleUserId]
+    [orgId, setOrgId, roleUserId, setRoleUserId, papel, setPapel]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -79,6 +99,8 @@ export function useOrg() {
       setRoleUserId: () => {},
       defaultOrgId: DEFAULT_ORG_ID,
       altOrgId: ALT_ORG_ID,
+      papel: null,
+      setPapel: () => {},
     };
   }
   return ctx;

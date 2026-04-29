@@ -9,6 +9,7 @@ export const VALID_SECTIONS = new Set([
   'fichas',
   'perfil',
   'clinica',
+  'usuarios-acessos',
 ]);
 
 export function readStoredSection() {

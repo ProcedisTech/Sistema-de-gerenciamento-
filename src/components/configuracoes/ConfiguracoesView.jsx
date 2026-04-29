@@ -7,12 +7,14 @@ import {
   User,
   Building2,
   Settings,
+  Users,
 } from 'lucide-react';
 import { authHeadersForFetch } from '../../services/api';
 import { AnamneseAdminView } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
+import { GestaoUsuariosView } from './GestaoUsuariosView';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
@@ -21,6 +23,7 @@ const SECTION_SUBTITLE = {
   termos: 'Termos de consentimento',
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
+  'usuarios-acessos': 'Gerencie sua equipe e acessos',
 };
 
 function NavGroupLabel({ children }) {
@@ -77,6 +80,8 @@ export function ConfiguracoesView({
   onPerfilAtualizado,
   configSection,
   setConfigSection,
+  isAdmin = false,
+  isProfissional = false,
 }) {
   const subtitle = SECTION_SUBTITLE[configSection] ?? SECTION_SUBTITLE.fichas;
 
@@ -101,13 +106,14 @@ export function ConfiguracoesView({
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">Seção</p>
         <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] px-1">
           {[
-            ['termos', 'Termos'],
-            ['categorias', 'Categorias'],
-            ['perguntas', 'Perguntas'],
-            ['fichas', 'Fichas'],
-            ['perfil', 'Perfil'],
-            ['clinica', 'Clínica'],
-          ].map(([id, short]) => (
+            isAdmin && ['termos', 'Termos'],
+            (isAdmin || isProfissional) && ['categorias', 'Categorias'],
+            (isAdmin || isProfissional) && ['perguntas', 'Perguntas'],
+            (isAdmin || isProfissional) && ['fichas', 'Fichas'],
+            (isAdmin || isProfissional) && ['perfil', 'Perfil'],
+            isAdmin && ['clinica', 'Clínica'],
+            isAdmin && ['usuarios-acessos', 'Usuários'],
+          ].filter(Boolean).map(([id, short]) => (
             <button
               key={id}
               type="button"
@@ -127,55 +133,81 @@ export function ConfiguracoesView({
       <div className="flex min-h-[min(70dvh,720px)] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#e2e8f0] bg-white md:flex-row">
         {/* Sidebar interna — desktop / tablet */}
         <aside className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden overflow-x-hidden border-b border-[#e2e8f0] bg-[#f8fafc] px-2 py-2 md:flex md:border-b-0 md:border-r">
-          <NavGroupLabel>Clínica</NavGroupLabel>
-          <SidebarNavItem
-            icon={FileText}
-            label={
-              <>
-                Termos de{' '}
-                <wbr />
-                Consentimento
-              </>
-            }
-            active={configSection === 'termos'}
-            onClick={() => setConfigSection('termos')}
-          />
+          {isAdmin && (
+            <>
+              <NavGroupLabel>Clínica</NavGroupLabel>
+              <SidebarNavItem
+                icon={FileText}
+                label={
+                  <>
+                    Termos de{' '}
+                    <wbr />
+                    Consentimento
+                  </>
+                }
+                active={configSection === 'termos'}
+                onClick={() => setConfigSection('termos')}
+              />
+            </>
+          )}
 
-          <NavGroupLabel>Anamnese</NavGroupLabel>
-          <SidebarNavItem
-            icon={Tag}
-            label="Categorias"
-            active={configSection === 'categorias'}
-            onClick={() => setConfigSection('categorias')}
-          />
-          <SidebarNavItem
-            icon={HelpCircle}
-            label="Banco de Perguntas"
-            active={configSection === 'perguntas'}
-            onClick={() => setConfigSection('perguntas')}
-          />
-          <SidebarNavItem
-            icon={ClipboardList}
-            label="Fichas"
-            active={configSection === 'fichas'}
-            onClick={() => setConfigSection('fichas')}
-          />
+          {(isAdmin || isProfissional) && (
+            <>
+              <NavGroupLabel>Anamnese</NavGroupLabel>
+              <SidebarNavItem
+                icon={Tag}
+                label="Categorias"
+                active={configSection === 'categorias'}
+                onClick={() => setConfigSection('categorias')}
+              />
+              <SidebarNavItem
+                icon={HelpCircle}
+                label="Banco de Perguntas"
+                active={configSection === 'perguntas'}
+                onClick={() => setConfigSection('perguntas')}
+              />
+              <SidebarNavItem
+                icon={ClipboardList}
+                label="Fichas"
+                active={configSection === 'fichas'}
+                onClick={() => setConfigSection('fichas')}
+              />
+            </>
+          )}
 
-          <NavGroupLabel>Sistema</NavGroupLabel>
-          <SidebarNavItem
-            icon={User}
-            label="Perfil do Profissional"
-            active={configSection === 'perfil'}
-            onClick={() => setConfigSection('perfil')}
-            badge="soon"
-          />
-          <SidebarNavItem
-            icon={Building2}
-            label="Dados da Clínica"
-            active={configSection === 'clinica'}
-            onClick={() => setConfigSection('clinica')}
-            badge="soon"
-          />
+          {(isAdmin || isProfissional) && (
+            <>
+              <NavGroupLabel>Sistema</NavGroupLabel>
+              <SidebarNavItem
+                icon={User}
+                label="Perfil do Profissional"
+                active={configSection === 'perfil'}
+                onClick={() => setConfigSection('perfil')}
+                badge="soon"
+              />
+            </>
+          )}
+          {isAdmin && (
+            <SidebarNavItem
+              icon={Building2}
+              label="Dados da Clínica"
+              active={configSection === 'clinica'}
+              onClick={() => setConfigSection('clinica')}
+              badge="soon"
+            />
+          )}
+
+          {isAdmin && (
+            <>
+              <NavGroupLabel>Equipe</NavGroupLabel>
+              <SidebarNavItem
+                icon={Users}
+                label="Usuários e Acessos"
+                active={configSection === 'usuarios-acessos'}
+                onClick={() => setConfigSection('usuarios-acessos')}
+              />
+            </>
+          )}
         </aside>
 
         {/* Conteúdo */}
@@ -195,11 +227,15 @@ export function ConfiguracoesView({
             />
           )}
 
-          {configSection === 'clinica' && (
+          {configSection === 'clinica' && isAdmin && (
             <DadosClinicaPanel
               getAuthHeaders={() => authHeadersForFetch({ needsOrg: true })}
               onClinicaAtualizada={onClinicaAtualizada}
             />
+          )}
+          
+          {configSection === 'usuarios-acessos' && isAdmin && (
+            <GestaoUsuariosView />
           )}
         </div>
       </div>
