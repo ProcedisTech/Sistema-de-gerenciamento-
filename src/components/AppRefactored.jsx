@@ -43,6 +43,7 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
 import { AgendaDashboard } from './agenda';
+import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -91,7 +92,7 @@ function revokeBlobUrlIfAny(url) {
 
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
-  const { papel, isAdmin, isProfissional, isRecepcionista } = usePapel();
+  const {  isAdmin, isProfissional, isRecepcionista } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -1152,8 +1153,14 @@ export default function App() {
   );
 
   const isJornadaView = activeView === 'jornada';
+  const isPaginaPublica =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
 
   // ============ RENDERIZAÇÃO ============
+  if (isPaginaPublica) {
+    return <ConfirmacaoPublicaPage />;
+  }
+
   if (!authReady) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb]">

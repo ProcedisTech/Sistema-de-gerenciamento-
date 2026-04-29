@@ -8,6 +8,9 @@ import {
   Building2,
   Settings,
   Users,
+  Clock,
+  CalendarDays,
+  MessageCircle,
 } from 'lucide-react';
 import { authHeadersForFetch } from '../../services/api';
 import { AnamneseAdminView } from '../anamnese';
@@ -15,6 +18,9 @@ import { TermosManager } from '../termos/TermosManager';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
 import { GestaoUsuariosView } from './GestaoUsuariosView';
+import { HorarioClinicaPanel } from './HorarioClinicaPanel';
+import { FeriadosPanel } from './FeriadosPanel';
+import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
@@ -24,6 +30,9 @@ const SECTION_SUBTITLE = {
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
   'usuarios-acessos': 'Gerencie sua equipe e acessos',
+  'agenda-horarios': 'Horário de atendimento da clínica',
+  'agenda-feriados': 'Feriados em que a clínica não atende',
+  'agenda-templates': 'Mensagens automáticas de WhatsApp',
 };
 
 function NavGroupLabel({ children }) {
@@ -113,6 +122,9 @@ export function ConfiguracoesView({
             (isAdmin || isProfissional) && ['perfil', 'Perfil'],
             isAdmin && ['clinica', 'Clínica'],
             isAdmin && ['usuarios-acessos', 'Usuários'],
+            isAdmin && ['agenda-horarios', 'Horário'],
+            isAdmin && ['agenda-feriados', 'Feriados'],
+            isAdmin && ['agenda-templates', 'Templates'],
           ].filter(Boolean).map(([id, short]) => (
             <button
               key={id}
@@ -199,6 +211,30 @@ export function ConfiguracoesView({
 
           {isAdmin && (
             <>
+              <NavGroupLabel>Agenda</NavGroupLabel>
+              <SidebarNavItem
+                icon={Clock}
+                label="Horário de atendimento"
+                active={configSection === 'agenda-horarios'}
+                onClick={() => setConfigSection('agenda-horarios')}
+              />
+              <SidebarNavItem
+                icon={CalendarDays}
+                label="Feriados"
+                active={configSection === 'agenda-feriados'}
+                onClick={() => setConfigSection('agenda-feriados')}
+              />
+              <SidebarNavItem
+                icon={MessageCircle}
+                label="Templates de mensagem"
+                active={configSection === 'agenda-templates'}
+                onClick={() => setConfigSection('agenda-templates')}
+              />
+            </>
+          )}
+
+          {isAdmin && (
+            <>
               <NavGroupLabel>Equipe</NavGroupLabel>
               <SidebarNavItem
                 icon={Users}
@@ -237,6 +273,10 @@ export function ConfiguracoesView({
           {configSection === 'usuarios-acessos' && isAdmin && (
             <GestaoUsuariosView />
           )}
+
+          {configSection === 'agenda-horarios' && isAdmin && <HorarioClinicaPanel />}
+          {configSection === 'agenda-feriados' && isAdmin && <FeriadosPanel />}
+          {configSection === 'agenda-templates' && isAdmin && <TemplatesMensagemPanel />}
         </div>
       </div>
     </div>

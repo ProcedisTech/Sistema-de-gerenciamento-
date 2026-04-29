@@ -10,6 +10,9 @@ export const VALID_SECTIONS = new Set([
   'perfil',
   'clinica',
   'usuarios-acessos',
+  'agenda-horarios',
+  'agenda-feriados',
+  'agenda-templates',
 ]);
 
 export function readStoredSection() {
