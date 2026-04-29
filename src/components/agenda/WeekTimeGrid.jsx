@@ -1,5 +1,7 @@
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
+import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
@@ -206,7 +208,15 @@ const BLOQUEIO_BG = {
     'repeating-linear-gradient(-45deg, transparent, transparent 5px, rgba(255,255,255,0.55) 5px, rgba(255,255,255,0.55) 6px)',
 };
 
-function DayColumn({ iso, appointments, todayIso, onEdit, renderSlotActions }) {
+function DayColumn({
+  iso,
+  appointments,
+  todayIso,
+  onEdit,
+  renderSlotActions,
+  disponibilidades,
+  periodos,
+}) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
   const slots = React.useMemo(() => buildTimeSlots(), []);
   const gridHeight = slots.length * SLOT_HEIGHT;
@@ -243,6 +253,13 @@ function DayColumn({ iso, appointments, todayIso, onEdit, renderSlotActions }) {
         const baseStyle = eventBlockStyle(appt, layout);
         const bloqueio = isBloqueioAppt(appt);
         const style = bloqueio ? { ...baseStyle, ...BLOQUEIO_BG } : baseStyle;
+        const appointment = {
+          dataAgendamento: toDateKey(appt.data),
+          horaInicio: appt.horaInicio,
+          roleUserId: appt.roleUserId,
+        };
+        const disp = disponibilidades?.[appt.roleUserId];
+        const dentro = dentroDaDisponibilidade(appointment, disp, periodos);
         const showProc = baseStyle.height >= 72;
         const cardClass = bloqueio ? bloqueioCardClass() : statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
@@ -252,9 +269,14 @@ function DayColumn({ iso, appointments, todayIso, onEdit, renderSlotActions }) {
             key={appt.id}
             type="button"
             onClick={() => onEdit(appt)}
-            className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${cardClass}`}
+            className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${cardClass} ${!dentro ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
             style={style}
           >
+            {!dentro ? (
+              <span title="Fora do horario do profissional" className="absolute right-1 top-1">
+                <AlertTriangle className="h-3 w-3 text-amber-500" />
+              </span>
+            ) : null}
             <div
               className={`flex items-center gap-1 text-[11px] font-bold leading-tight ${bloqueio ? 'text-slate-700' : 'text-[#0FA37F]'} ${lineThrough ? 'line-through' : ''}`}
             >
@@ -292,7 +314,15 @@ function DayColumn({ iso, appointments, todayIso, onEdit, renderSlotActions }) {
   );
 }
 
-export function WeekTimeGrid({ weekDayIsos, appointments, todayIso, onEdit, renderSlotActions }) {
+export function WeekTimeGrid({
+  weekDayIsos,
+  appointments,
+  todayIso,
+  onEdit,
+  renderSlotActions,
+  disponibilidades,
+  periodos,
+}) {
   const scrollRef = React.useRef(null);
   const slots = React.useMemo(() => buildTimeSlots(), []);
   const gridHeight = slots.length * SLOT_HEIGHT;
@@ -355,6 +385,8 @@ export function WeekTimeGrid({ weekDayIsos, appointments, todayIso, onEdit, rend
             todayIso={todayIso}
             onEdit={onEdit}
             renderSlotActions={renderSlotActions}
+            disponibilidades={disponibilidades}
+            periodos={periodos}
           />
         ))}
       </div>

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
-import { agendasApi, agendamentosApi, catalogosApi, confirmacaoApi } from '../../services/api';
+import {
+  agendasApi,
+  agendamentosApi,
+  catalogosApi,
+  confirmacaoApi,
+  disponibilidadeApi,
+  dimensoesApi,
+} from '../../services/api';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
@@ -190,6 +197,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [hojeCount, setHojeCount] = useState(0);
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
+  const [disponibilidades, setDisponibilidades] = useState({});
+  const [periodos, setPeriodos] = useState([]);
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
@@ -230,6 +239,48 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       cancelled = true;
     };
   }, [authEnabled]);
+
+  useEffect(() => {
+    let alive = true;
+    dimensoesApi
+      .periodosDia()
+      .then((p) => {
+        if (alive) setPeriodos(Array.isArray(p) ? p : []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!Array.isArray(appointments) || appointments.length === 0) return;
+    const idsUnicos = [...new Set(appointments.map((a) => a.roleUserId).filter(Boolean))];
+    const idsNovos = idsUnicos.filter((id) => !disponibilidades[id]);
+    if (idsNovos.length === 0) return;
+
+    let alive = true;
+    Promise.all(
+      idsNovos.map((id) =>
+        disponibilidadeApi
+          .buscar(id)
+          .then((d) => [id, d])
+          .catch(() => [id, null])
+      )
+    ).then((pares) => {
+      if (!alive) return;
+      setDisponibilidades((prev) => {
+        const novo = { ...prev };
+        for (const [id, d] of pares) {
+          if (d) novo[id] = d;
+        }
+        return novo;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [appointments, disponibilidades]);
 
   const currentYm = useMemo(() => monthKey(monthDate), [monthDate]);
 
@@ -735,6 +786,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     calendarCells,
     currentYm,
     daySheetOpen,
+    disponibilidades,
     editingAppointment,
     error,
     form,
@@ -758,6 +810,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openEditModal,
     closeModal,
     patientOptions,
+    periodos,
     procedimentoOptions,
     proximoHorarioLivre,
     saveAppointment,
