@@ -92,7 +92,7 @@ function revokeBlobUrlIfAny(url) {
 
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
-  const {  isAdmin, isProfissional, isRecepcionista } = usePapel();
+  const { isAdmin, isProfissional, isRecepcionista } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -122,6 +122,11 @@ export default function App() {
         if (!meRes.ok) {
           if (meRes.status === 404) {
             setPostLoginGate('profile'); // usuário não completou o perfil ainda
+            return;
+          }
+          if (meRes.status === 403) {
+            toast.error('Sua conta está desativada. Entre em contato com o administrador.');
+            handleLogout();
             return;
           }
           setPostLoginGate('ready'); // outros erros, deixa passar
