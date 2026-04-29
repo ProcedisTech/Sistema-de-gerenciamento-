@@ -1,11 +1,32 @@
 import { calculateAgeFromISODate } from '../components/utils/formatters';
 import { resolveApiUrl } from '../config/apiEnv.js';
+import { maskCep, normalizeCepForApi } from './cepUtils.js';
 
 /** Códigos de sexo aceitos na API (Spring): M, F, N (prefiro não dizer / não declarado). */
 export function normalizeSexoForApi(raw) {
   const u = String(raw ?? '').trim().toUpperCase();
   if (u === 'F' || u === 'M' || u === 'N') return u;
   return null;
+}
+
+function dtoPick(dto, camelKey, snakeKey) {
+  if (!dto) return '';
+  const v = dto[camelKey] ?? dto[snakeKey];
+  if (v == null || v === '') return '';
+  return String(v).trim();
+}
+
+function trimOrNull(v) {
+  const t = String(v ?? '').trim();
+  return t ? t : null;
+}
+
+function normalizeUf(raw) {
+  const u = String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .slice(0, 2);
+  return u || null;
 }
 
 /**
@@ -30,6 +51,9 @@ export function mapBackendPatient(dto) {
     (typeof dto.urlFotoPerfil === 'string' && dto.urlFotoPerfil.trim()) ||
     (typeof dto.fotoUrl === 'string' && dto.fotoUrl.trim()) ||
     '';
+
+  const cepDigits = normalizeCepForApi(dtoPick(dto, 'cep', 'cep'));
+
   return {
     id: dto.id,
     nome: dto.nomeCompleto || '',
@@ -44,6 +68,13 @@ export function mapBackendPatient(dto) {
     rg: dto.rg || '',
     telefone: dto.telefone || '',
     email: dto.email || '',
+    cep: cepDigits ? maskCep(cepDigits) : '',
+    enderecoRua: dtoPick(dto, 'enderecoRua', 'endereco_rua'),
+    enderecoNumero: dtoPick(dto, 'enderecoNumero', 'endereco_numero'),
+    enderecoComplemento: dtoPick(dto, 'enderecoComplemento', 'endereco_complemento'),
+    enderecoBairro: dtoPick(dto, 'enderecoBairro', 'endereco_bairro'),
+    enderecoCidade: dtoPick(dto, 'enderecoCidade', 'endereco_cidade'),
+    enderecoEstado: normalizeUf(dtoPick(dto, 'enderecoEstado', 'endereco_estado')) || '',
     endereco: dto.endereco || '',
     instagram: dto.instagram || '',
     tiktok: dto.tiktok || '',
@@ -82,6 +113,13 @@ export function journeyToPacienteCreateDTO(j) {
     profissao: (j.profissao || '').trim() || null,
     sexo: normalizeSexoForApi(j.sexo),
     estadoCivilId: j.estadoCivilId || undefined,
+    cep: null,
+    enderecoRua: null,
+    enderecoNumero: null,
+    enderecoComplemento: null,
+    enderecoBairro: null,
+    enderecoCidade: null,
+    enderecoEstado: null,
     endereco: (j.endereco || '').trim() || null,
   };
 }
@@ -102,7 +140,14 @@ export function patientToPacienteUpdateDTO(patient, editing) {
     nomeMae: patient.nomeMae || null,
     nomePai: patient.nomePai || null,
     indicacao: patient.indicacao || null,
-    endereco: patient.endereco || null,
+    cep: normalizeCepForApi(editing?.cep ?? patient.cep),
+    enderecoRua: trimOrNull(editing?.enderecoRua ?? patient.enderecoRua),
+    enderecoNumero: trimOrNull(editing?.enderecoNumero ?? patient.enderecoNumero),
+    enderecoComplemento: trimOrNull(editing?.enderecoComplemento ?? patient.enderecoComplemento),
+    enderecoBairro: trimOrNull(editing?.enderecoBairro ?? patient.enderecoBairro),
+    enderecoCidade: trimOrNull(editing?.enderecoCidade ?? patient.enderecoCidade),
+    enderecoEstado: normalizeUf(editing?.enderecoEstado ?? patient.enderecoEstado),
+    endereco: null,
     genero: patient.genero || null,
     estadoCivilId: patient.estadoCivilId || undefined,
   };
@@ -126,7 +171,26 @@ export function mergePacienteDtoWithEditing(dto, editing) {
     nomePai: (editing?.nomePai ?? dto.nomePai ?? '').trim() || null,
     profissao: (editing?.profissao ?? dto.profissao ?? '').trim() || null,
     indicacao: (editing?.indicacao ?? dto.indicacao ?? '').trim() || null,
-    endereco: (editing?.endereco ?? dto.endereco ?? '').trim() || null,
+    cep: normalizeCepForApi(editing?.cep ?? dto.cep),
+    enderecoRua: trimOrNull(
+      editing?.enderecoRua ?? dtoPick(dto, 'enderecoRua', 'endereco_rua'),
+    ),
+    enderecoNumero: trimOrNull(
+      editing?.enderecoNumero ?? dtoPick(dto, 'enderecoNumero', 'endereco_numero'),
+    ),
+    enderecoComplemento: trimOrNull(
+      editing?.enderecoComplemento ?? dtoPick(dto, 'enderecoComplemento', 'endereco_complemento'),
+    ),
+    enderecoBairro: trimOrNull(
+      editing?.enderecoBairro ?? dtoPick(dto, 'enderecoBairro', 'endereco_bairro'),
+    ),
+    enderecoCidade: trimOrNull(
+      editing?.enderecoCidade ?? dtoPick(dto, 'enderecoCidade', 'endereco_cidade'),
+    ),
+    enderecoEstado: normalizeUf(
+      editing?.enderecoEstado ?? dtoPick(dto, 'enderecoEstado', 'endereco_estado'),
+    ),
+    endereco: null,
     sexo: (sexoMerged ?? dto.sexo) || null,
     genero: (editing?.genero ?? dto.genero ?? '').trim() || null,
     estadoCivilId:

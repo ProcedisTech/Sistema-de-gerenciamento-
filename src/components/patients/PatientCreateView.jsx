@@ -15,6 +15,7 @@ import { getPacienteCreateErrorFeedback, pacientesApi } from '../../services/api
 import { useToast } from '../../contexts/useToast.js';
 import { convertToWebP } from '../../utils/imageUtils';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
+import { normalizeCepForApi } from '../../utils/cepUtils.js';
 import { PatientForm } from './PatientForm.jsx';
 
 export function PatientCreateView({ setPatientView, onPatientCreated, variant = 'page' }) {
@@ -54,7 +55,13 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [telefoneTouched, setTelefoneTouched] = useState(false);
   const [email, setEmail] = useState('');
-  const [endereco, setEndereco] = useState('');
+  const [cep, setCep] = useState('');
+  const [enderecoRua, setEnderecoRua] = useState('');
+  const [enderecoNumero, setEnderecoNumero] = useState('');
+  const [enderecoComplemento, setEnderecoComplemento] = useState('');
+  const [enderecoBairro, setEnderecoBairro] = useState('');
+  const [enderecoCidade, setEnderecoCidade] = useState('');
+  const [enderecoEstado, setEnderecoEstado] = useState('');
   const [instagram, setInstagram] = useState('');
   const [tiktok, setTiktok] = useState('');
   const [nomeMae, setNomeMae] = useState('');
@@ -202,7 +209,14 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         nomePai: nomePai || null,
         profissao: profissao || null,
         indicacao: indicacao || null,
-        endereco: endereco || null,
+        cep: normalizeCepForApi(cep),
+        enderecoRua: enderecoRua.trim() || null,
+        enderecoNumero: enderecoNumero.trim() || null,
+        enderecoComplemento: enderecoComplemento.trim() || null,
+        enderecoBairro: enderecoBairro.trim() || null,
+        enderecoCidade: enderecoCidade.trim() || null,
+        enderecoEstado: enderecoEstado.trim().toUpperCase().slice(0, 2) || null,
+        endereco: null,
         sexo: sexo || null,
         genero: genero || null,
         estadoCivilId: estadoCivilId || undefined,
@@ -329,7 +343,13 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       email={email}
       instagram={instagram}
       tiktok={tiktok}
-      endereco={endereco}
+      cep={cep}
+      enderecoRua={enderecoRua}
+      enderecoNumero={enderecoNumero}
+      enderecoComplemento={enderecoComplemento}
+      enderecoBairro={enderecoBairro}
+      enderecoCidade={enderecoCidade}
+      enderecoEstado={enderecoEstado}
       nomeMae={nomeMae}
       nomePai={nomePai}
       indicacao={indicacao}
@@ -353,7 +373,13 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       onEmailChange={setEmail}
       onInstagramChange={setInstagram}
       onTiktokChange={setTiktok}
-      onEnderecoChange={setEndereco}
+      onCepChange={setCep}
+      onEnderecoRuaChange={setEnderecoRua}
+      onEnderecoNumeroChange={setEnderecoNumero}
+      onEnderecoComplementoChange={setEnderecoComplemento}
+      onEnderecoBairroChange={setEnderecoBairro}
+      onEnderecoCidadeChange={setEnderecoCidade}
+      onEnderecoEstadoChange={setEnderecoEstado}
       onNomeMaeChange={setNomeMae}
       onNomePaiChange={setNomePai}
       onIndicacaoChange={setIndicacao}

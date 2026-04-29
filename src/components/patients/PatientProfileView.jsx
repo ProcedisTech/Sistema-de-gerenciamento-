@@ -623,6 +623,21 @@ function formatDataHoraAssinaturaPtBr(iso) {
   });
 }
 
+/** True se houver ao menos um campo do endereço estruturado preenchido. */
+function hasStructuredAddressData(p) {
+  if (!p) return false;
+  const s = (v) => String(v ?? '').trim();
+  return (
+    s(p.cep) ||
+    s(p.enderecoRua) ||
+    s(p.enderecoNumero) ||
+    s(p.enderecoComplemento) ||
+    s(p.enderecoBairro) ||
+    s(p.enderecoCidade) ||
+    s(p.enderecoEstado)
+  );
+}
+
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
@@ -882,7 +897,13 @@ export function PatientProfileView({
       profissao: patient.profissao || '',
       nomePai: patient.nomePai || '',
       nomeMae: patient.nomeMae || '',
-      endereco: patient.endereco || '',
+      cep: patient.cep || '',
+      enderecoRua: patient.enderecoRua || '',
+      enderecoNumero: patient.enderecoNumero || '',
+      enderecoComplemento: patient.enderecoComplemento || '',
+      enderecoBairro: patient.enderecoBairro || '',
+      enderecoCidade: patient.enderecoCidade || '',
+      enderecoEstado: patient.enderecoEstado || '',
       instagram: patient.instagram || '',
       tiktok: patient.tiktok || '',
       indicacao: patient.indicacao || '',
@@ -1555,7 +1576,14 @@ export function PatientProfileView({
         profissao: editing.profissao || '',
         nomePai: editing.nomePai || '',
         nomeMae: editing.nomeMae || '',
-        endereco: editing.endereco || '',
+        cep: editing.cep || '',
+        enderecoRua: editing.enderecoRua || '',
+        enderecoNumero: editing.enderecoNumero || '',
+        enderecoComplemento: editing.enderecoComplemento || '',
+        enderecoBairro: editing.enderecoBairro || '',
+        enderecoCidade: editing.enderecoCidade || '',
+        enderecoEstado: editing.enderecoEstado || '',
+        endereco: '',
         instagram: editing.instagram || '',
         tiktok: editing.tiktok || '',
         indicacao: editing.indicacao || '',
@@ -1780,10 +1808,46 @@ export function PatientProfileView({
                 </div>
                 <div className="mt-2 flex items-start gap-2 text-[13px] font-normal text-[#64748b]">
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
-                  <span className="min-w-0 break-words">
-                    <span className="font-semibold text-[#475569]">Endereço: </span>
-                    {(selectedPatient.endereco && String(selectedPatient.endereco).trim()) || '—'}
-                  </span>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    {hasStructuredAddressData(selectedPatient) ? (
+                      <>
+                        {[
+                          ['CEP', selectedPatient.cep],
+                          ['Logradouro', selectedPatient.enderecoRua],
+                          ['Número', selectedPatient.enderecoNumero],
+                          ['Bairro', selectedPatient.enderecoBairro],
+                          ['Cidade', selectedPatient.enderecoCidade],
+                          ['Estado (UF)', selectedPatient.enderecoEstado],
+                        ].map(([label, val]) => (
+                          <p key={label} className="min-w-0 break-words">
+                            <span className="font-semibold text-[#475569]">{label}: </span>
+                            {(val && String(val).trim()) || '—'}
+                          </p>
+                        ))}
+                        {selectedPatient.enderecoComplemento &&
+                        String(selectedPatient.enderecoComplemento).trim() ? (
+                          <p className="min-w-0 break-words">
+                            <span className="font-semibold text-[#475569]">Complemento: </span>
+                            {String(selectedPatient.enderecoComplemento).trim()}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (selectedPatient.endereco && String(selectedPatient.endereco).trim()) ? (
+                      <>
+                        <p className="min-w-0 break-words">
+                          <span className="font-semibold text-[#475569]">Endereço (formato antigo): </span>
+                          {String(selectedPatient.endereco).trim()}
+                        </p>
+                        <p className="text-[11px] font-medium text-[#94a3b8]">
+                          Ao editar o cadastro, atualize para o novo formato de endereço.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="min-w-0 break-words">
+                        <span className="font-semibold text-[#475569]">Endereço: </span>—
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
@@ -1844,7 +1908,13 @@ export function PatientProfileView({
                   email={editing.email}
                   instagram={editing.instagram}
                   tiktok={editing.tiktok}
-                  endereco={editing.endereco}
+                  cep={editing.cep}
+                  enderecoRua={editing.enderecoRua}
+                  enderecoNumero={editing.enderecoNumero}
+                  enderecoComplemento={editing.enderecoComplemento}
+                  enderecoBairro={editing.enderecoBairro}
+                  enderecoCidade={editing.enderecoCidade}
+                  enderecoEstado={editing.enderecoEstado}
                   nomeMae={editing.nomeMae}
                   nomePai={editing.nomePai}
                   indicacao={editing.indicacao}
@@ -1876,7 +1946,15 @@ export function PatientProfileView({
                   onEmailChange={(value) => setEditing((p) => (p ? { ...p, email: value } : p))}
                   onInstagramChange={(value) => setEditing((p) => (p ? { ...p, instagram: value } : p))}
                   onTiktokChange={(value) => setEditing((p) => (p ? { ...p, tiktok: value } : p))}
-                  onEnderecoChange={(value) => setEditing((p) => (p ? { ...p, endereco: value } : p))}
+                  onCepChange={(value) => setEditing((p) => (p ? { ...p, cep: value } : p))}
+                  onEnderecoRuaChange={(value) => setEditing((p) => (p ? { ...p, enderecoRua: value } : p))}
+                  onEnderecoNumeroChange={(value) => setEditing((p) => (p ? { ...p, enderecoNumero: value } : p))}
+                  onEnderecoComplementoChange={(value) =>
+                    setEditing((p) => (p ? { ...p, enderecoComplemento: value } : p))
+                  }
+                  onEnderecoBairroChange={(value) => setEditing((p) => (p ? { ...p, enderecoBairro: value } : p))}
+                  onEnderecoCidadeChange={(value) => setEditing((p) => (p ? { ...p, enderecoCidade: value } : p))}
+                  onEnderecoEstadoChange={(value) => setEditing((p) => (p ? { ...p, enderecoEstado: value } : p))}
                   onNomeMaeChange={(value) => setEditing((p) => (p ? { ...p, nomeMae: value } : p))}
                   onNomePaiChange={(value) => setEditing((p) => (p ? { ...p, nomePai: value } : p))}
                   onIndicacaoChange={(value) => setEditing((p) => (p ? { ...p, indicacao: value } : p))}
