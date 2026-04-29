@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, CalendarClock } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { authHeadersForFetch } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
+import DisponibilidadeProfissionalModal from './DisponibilidadeProfissionalModal';
 
 export function GestaoUsuariosView() {
   const { isAdmin } = usePapel();
@@ -14,8 +15,8 @@ export function GestaoUsuariosView() {
   const [roles, setRoles] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDispModal, setShowDispModal] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState(null);
-  const [saving, setSaving] = useState(false);
 
   const fetchHeaders = useCallback(() => {
     return authHeadersForFetch({ needsOrg: true });
@@ -43,7 +44,7 @@ export function GestaoUsuariosView() {
       } else {
         toast.error('Erro ao carregar dados da equipe.');
       }
-    } catch (err) {
+    } catch {
       toast.error('Falha de rede ao carregar equipe.');
     } finally {
       setLoading(false);
@@ -144,6 +145,15 @@ export function GestaoUsuariosView() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
+                      {(u.roleName || '').toUpperCase().includes('PROFISSIONAL') && (
+                        <button
+                          onClick={() => { setSelectedUsuario(u); setShowDispModal(true); }}
+                          className="rounded-lg p-2 text-slate-400 hover:bg-teal-50 hover:text-[#00a88e] transition"
+                          title="Configurar disponibilidade"
+                        >
+                          <CalendarClock className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => { setSelectedUsuario(u); setShowEditModal(true); }}
                         className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
@@ -183,6 +193,16 @@ export function GestaoUsuariosView() {
           onClose={() => setShowEditModal(false)}
           onSuccess={() => { setShowEditModal(false); loadData(); }}
           fetchHeaders={fetchHeaders}
+        />
+      )}
+
+      {showDispModal && selectedUsuario && (
+        <DisponibilidadeProfissionalModal
+          roleUserId={selectedUsuario.id}
+          nome={selectedUsuario.nomeCompleto || selectedUsuario.usuarioNome}
+          tipoOrg={null}
+          onClose={() => { setShowDispModal(false); setSelectedUsuario(null); }}
+          onSaved={() => {}}
         />
       )}
     </div>

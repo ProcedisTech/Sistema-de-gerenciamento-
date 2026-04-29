@@ -855,6 +855,8 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
               todayIso={agenda.todayIso}
               onEdit={agenda.openEditModal}
               renderSlotActions={renderSlotActions}
+              disponibilidades={agenda.disponibilidades}
+              periodos={agenda.periodos}
             />
           )}
         </section>

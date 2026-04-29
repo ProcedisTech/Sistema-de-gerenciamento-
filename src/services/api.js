@@ -954,3 +954,35 @@ export const notificacoesApi = {
   marcarTodasLidas: () =>
     request('/api/v1/notificacoes/marcar-todas-lidas', { method: 'PATCH' }),
 };
+
+// ── Disponibilidade do Profissional ───────────────────────
+export const disponibilidadeApi = {
+  /**
+   * Busca disponibilidade. Lazy create no backend: se não existir, cria automaticamente
+   * (deriva da clínica se tipoOrg='clinica', ou vazia se 'autonomo').
+   * @param {string} roleUserId
+   * @returns {Promise<{id, roleUserId, segMan, segTar, segNoi, terMan, terTar, terNoi, quaMan, quaTar, quaNoi, quiMan, quiTar, quiNoi, sexMan, sexTar, sexNoi, sabMan, sabTar, sabNoi, domMan, domTar, domNoi, ativo}>}
+   */
+  buscar: (roleUserId) =>
+    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`),
+
+  /**
+   * Upsert dos 21 booleans.
+   * @param {string} roleUserId
+   * @param {object} payload Mesmo formato do buscar()
+   */
+  atualizar: (roleUserId, payload) =>
+    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  /**
+   * Sincroniza disponibilidade com horário da clínica (só funciona se tipoOrg='clinica').
+   * @param {string} roleUserId
+   */
+  sincronizarComClinica: (roleUserId) =>
+    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade/sincronizar-com-clinica`, {
+      method: 'POST',
+    }),
+};
