@@ -190,6 +190,9 @@ function isBloqueioAppt(appt) {
 function statusCardClass(status) {
   if (status === 'pendente') return 'bg-[#FFF4E0] border-l-[3px] border-l-[#F5A623]';
   if (status === 'cancelado') return 'bg-[#FCE8E8] border-l-[3px] border-l-[#E24B4A]';
+  if (status === 'realizado') return 'bg-blue-50 border-l-[3px] border-l-blue-500';
+  if (status === 'falta') return 'bg-orange-50 border-l-[3px] border-l-orange-500';
+  if (status === 'aguardando_confirmacao') return 'bg-amber-50 border-l-[3px] border-l-amber-500';
   return 'bg-[#E1F5EE] border-l-[3px] border-l-[#0FA37F]';
 }
 
@@ -203,7 +206,7 @@ const BLOQUEIO_BG = {
     'repeating-linear-gradient(-45deg, transparent, transparent 5px, rgba(255,255,255,0.55) 5px, rgba(255,255,255,0.55) 6px)',
 };
 
-function DayColumn({ iso, appointments, todayIso, onEdit }) {
+function DayColumn({ iso, appointments, todayIso, onEdit, renderSlotActions }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
   const slots = React.useMemo(() => buildTimeSlots(), []);
   const gridHeight = slots.length * SLOT_HEIGHT;
@@ -243,6 +246,7 @@ function DayColumn({ iso, appointments, todayIso, onEdit }) {
         const showProc = baseStyle.height >= 72;
         const cardClass = bloqueio ? bloqueioCardClass() : statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
+        const corProc = bloqueio ? undefined : appt.corHex || '#00a88e';
         return (
           <button
             key={appt.id}
@@ -252,8 +256,15 @@ function DayColumn({ iso, appointments, todayIso, onEdit }) {
             style={style}
           >
             <div
-              className={`text-[11px] font-bold leading-tight ${bloqueio ? 'text-slate-700' : 'text-[#0FA37F]'} ${lineThrough ? 'line-through' : ''}`}
+              className={`flex items-center gap-1 text-[11px] font-bold leading-tight ${bloqueio ? 'text-slate-700' : 'text-[#0FA37F]'} ${lineThrough ? 'line-through' : ''}`}
             >
+              {!bloqueio ? (
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: corProc }}
+                  aria-hidden
+                />
+              ) : null}
               {appt.horaInicio}
             </div>
             <div className={`truncate text-[11px] font-bold ${bloqueio ? 'text-slate-900' : 'text-[#1A1A2E]'} ${lineThrough ? 'line-through' : ''}`}>
@@ -264,6 +275,16 @@ function DayColumn({ iso, appointments, todayIso, onEdit }) {
                 {appt.procedimentoNome}
               </div>
             ) : null}
+            {!bloqueio && typeof renderSlotActions === 'function' ? (
+              <div
+                className="mt-1"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                role="presentation"
+              >
+                {renderSlotActions(appt)}
+              </div>
+            ) : null}
           </button>
         );
       })}
@@ -271,7 +292,7 @@ function DayColumn({ iso, appointments, todayIso, onEdit }) {
   );
 }
 
-export function WeekTimeGrid({ weekDayIsos, appointments, todayIso, onEdit }) {
+export function WeekTimeGrid({ weekDayIsos, appointments, todayIso, onEdit, renderSlotActions }) {
   const scrollRef = React.useRef(null);
   const slots = React.useMemo(() => buildTimeSlots(), []);
   const gridHeight = slots.length * SLOT_HEIGHT;
@@ -327,7 +348,14 @@ export function WeekTimeGrid({ weekDayIsos, appointments, todayIso, onEdit }) {
         style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`, minHeight: gridHeight }}
       >
         {days.map((iso) => (
-          <DayColumn key={iso} iso={iso} appointments={byDay[iso] || []} todayIso={todayIso} onEdit={onEdit} />
+          <DayColumn
+            key={iso}
+            iso={iso}
+            appointments={byDay[iso] || []}
+            todayIso={todayIso}
+            onEdit={onEdit}
+            renderSlotActions={renderSlotActions}
+          />
         ))}
       </div>
     </div>

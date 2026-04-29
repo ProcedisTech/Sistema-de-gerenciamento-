@@ -405,7 +405,10 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const cancelAppointment = async (appointmentId) => {
     if (!appointmentId) return;
     try {
-      await agendasApi.cancelar(appointmentId);
+      await agendasApi.cancelar(appointmentId, {
+        motivoCancelamentoCodigo: 'outro',
+        motivoCancelamentoTexto: 'Cancelado via legado',
+      });
       await fetchMonthAgendas();
       toast.info('Horário cancelado.');
     } catch (e) {

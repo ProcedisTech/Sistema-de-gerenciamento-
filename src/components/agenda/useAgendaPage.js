@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
-import { agendasApi, agendamentosApi, catalogosApi } from '../../services/api';
+import { useToast } from '../../contexts/useToast.js';
+import { agendasApi, agendamentosApi, catalogosApi, confirmacaoApi } from '../../services/api';
+import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
 import {
@@ -168,6 +170,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
 
 export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const { roleUserId } = useOrg();
+  const { success: toastSuccess, error: toastError } = useToast();
   const todayIso = toLocalDateIso();
   const [monthDate, setMonthDate] = useState(() => {
     const now = new Date();
@@ -189,6 +192,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
+  const [submittingReagendar, setSubmittingReagendar] = useState(false);
 
   const procedimentoOptions = useMemo(
     () =>
@@ -362,6 +366,98 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setWeekGridAppointments([]);
     }
   }, [authEnabled, viewMode, weekStartIso, weekEndIso]);
+
+  const handleCancelar = useCallback(
+    async (agendaId, payload) => {
+      if (!agendaId || !payload) return false;
+      try {
+        await agendasApi.cancelar(agendaId, payload);
+        toastSuccess('Agendamento cancelado');
+        await loadMonth();
+        await refreshWeekGrid();
+        setError('');
+        return true;
+      } catch (e) {
+        const msg = formatAgendamentoApiError(e);
+        toastError(e?.body?.message || msg || 'Erro ao cancelar');
+        setError(msg);
+        return false;
+      }
+    },
+    [loadMonth, refreshWeekGrid, toastSuccess, toastError]
+  );
+
+  const handleAtualizarStatus = useCallback(
+    async (agendaId, codigo) => {
+      if (!agendaId || !codigo) return false;
+      try {
+        if (codigo === 'confirmado') {
+          setAppointments((prev) =>
+            prev.map((row) => (String(row.agendaId) === String(agendaId) ? { ...row, status: 'confirmado' } : row))
+          );
+          setWeekGridAppointments((prev) =>
+            prev.map((row) => (String(row.agendaId) === String(agendaId) ? { ...row, status: 'confirmado' } : row))
+          );
+          return true;
+        }
+        await agendasApi.atualizarStatus(agendaId, codigo);
+        toastSuccess(`Status atualizado: ${codigo}`);
+        await loadMonth();
+        await refreshWeekGrid();
+        setError('');
+        return true;
+      } catch (e) {
+        const msg = formatAgendamentoApiError(e);
+        toastError(e?.body?.message || msg || 'Erro ao atualizar status');
+        setError(msg);
+        return false;
+      }
+    },
+    [loadMonth, refreshWeekGrid, toastSuccess, toastError]
+  );
+
+  const handleReagendar = useCallback(
+    async (agendaId, payload) => {
+      if (!agendaId || !payload) return false;
+      setSubmittingReagendar(true);
+      try {
+        await agendasApi.reagendar(agendaId, payload);
+        toastSuccess('Agendamento reagendado');
+        await loadMonth();
+        await refreshWeekGrid();
+        setError('');
+        return true;
+      } catch (e) {
+        const msg = formatAgendamentoApiError(e);
+        toastError(e?.body?.message || msg || 'Erro ao reagendar');
+        setError(msg);
+        return false;
+      } finally {
+        setSubmittingReagendar(false);
+      }
+    },
+    [loadMonth, refreshWeekGrid, toastSuccess, toastError]
+  );
+
+  const handleEnviarWhatsApp = useCallback(
+    async (agendamentoId, tipoEnvio = 'confirmacao_24h') => {
+      if (!agendamentoId) return false;
+      try {
+        const res = await confirmacaoApi.gerar({ agendamentoId, tipoEnvio });
+        if (res?.urlWhatsApp) {
+          abrirWhatsApp(res.urlWhatsApp);
+          toastSuccess('Link WhatsApp aberto');
+          return true;
+        }
+        toastError('Resposta sem link do WhatsApp');
+        return false;
+      } catch (e) {
+        toastError(e?.body?.message || formatAgendamentoApiError(e) || 'Erro ao gerar link WhatsApp');
+        return false;
+      }
+    },
+    [toastSuccess, toastError]
+  );
 
   const syncWeekFromSelection = useCallback(() => {
     setWeekStartIso(startOfWeekSundayIso(selectedDay));
@@ -581,22 +677,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     validateForm,
   ]);
 
-  const deleteAppointment = useCallback(async () => {
-    const agendaId = editingAppointment?.agendaId;
-    if (!agendaId) return false;
-    try {
-      await agendasApi.cancelar(agendaId);
-      await loadMonth();
-      await refreshWeekGrid();
-      closeModal();
-      setError('');
-      return true;
-    } catch (e) {
-      setError(formatAgendamentoApiError(e));
-      return false;
-    }
-  }, [closeModal, editingAppointment, loadMonth, refreshWeekGrid]);
-
   const updateStatus = useCallback(
     async (appointment, status) => {
       if (!appointment?.agendaId) return;
@@ -610,17 +690,13 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         return;
       }
       if (status === 'cancelado') {
-        try {
-          await agendasApi.cancelar(appointment.agendaId);
-          await loadMonth();
-          await refreshWeekGrid();
-          setError('');
-        } catch (e) {
-          setError(formatAgendamentoApiError(e));
-        }
+        await handleCancelar(appointment.agendaId, {
+          motivoCancelamentoCodigo: 'outro',
+          motivoCancelamentoTexto: 'Remoção de bloqueio',
+        });
       }
     },
-    [loadMonth, refreshWeekGrid]
+    [handleCancelar]
   );
 
   const selectDay = useCallback((date, openSheet = true) => {
@@ -659,7 +735,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     calendarCells,
     currentYm,
     daySheetOpen,
-    deleteAppointment,
+    editingAppointment,
     error,
     form,
     formErrors,
@@ -668,6 +744,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     goWeekNext,
     goWeekPrev,
     groupedAppointments,
+    handleAtualizarStatus,
+    handleCancelar,
+    handleEnviarWhatsApp,
+    handleReagendar,
     horarioConflita,
     isHorarioOcupado,
     loading,
@@ -689,6 +769,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     slotsOcupados,
     slotsOcupadosLoading,
     stats,
+    submittingReagendar,
     syncWeekFromSelection,
     statusLabels: STATUS_LABELS,
     updateForm,
