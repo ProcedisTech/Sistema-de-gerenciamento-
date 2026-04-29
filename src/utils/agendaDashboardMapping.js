@@ -28,6 +28,33 @@ function sortByDateTime(rows) {
   return [...rows].sort((a, b) => `${a.data} ${a.horaInicio}`.localeCompare(`${b.data} ${b.horaInicio}`));
 }
 
+function normalizeCorHex(src) {
+  if (src == null || src === '') return '#00a88e';
+  const s = String(src).trim();
+  if (!s) return '#00a88e';
+  if (s.startsWith('#')) return s.length >= 4 ? s : '#00a88e';
+  if (/^[0-9a-fA-F]{3,8}$/.test(s)) return `#${s}`;
+  return '#00a88e';
+}
+
+/** Cor do catálogo / agendamento vinda do backend (nomes alternativos tolerados). */
+function corHexFromCompromisso(compromisso) {
+  const c = compromisso || {};
+  const raw =
+    c.corHex ||
+    c.cor_hex ||
+    c.corCatalogo ||
+    c.catalogoCorHex ||
+    c.procedimentoCorHex ||
+    c.cor;
+  return normalizeCorHex(raw);
+}
+
+function roleUserIdFromSlot(slot) {
+  const raw = slot?.raw || {};
+  return slot?.roleUserId || raw.roleUserId || '';
+}
+
 /** Espera padrão gravado no slot: `procedimento - paciente` (opcionalmente seguido de ` — notas`). */
 function procedimentoPacienteFromSlotObservacao(obs) {
   const s = obs != null ? String(obs).trim() : '';
@@ -67,6 +94,8 @@ export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
     tipo: slot.tipo || 'atendimento',
     status: slot.status,
     statusNome: slot.statusNome,
+    roleUserId: roleUserIdFromSlot(slot),
+    corHex: corHexFromCompromisso(compromisso),
     pacienteNome: compromisso.pacienteNome || '',
     pacienteId: compromisso.pacienteId ? String(compromisso.pacienteId) : '',
     telefone:
@@ -113,6 +142,8 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             tipo: 'bloqueio',
             status: 'bloqueio',
             statusNome: slot.statusNome,
+            roleUserId: roleUserIdFromSlot(slot),
+            corHex: '#94a3b8',
             procedimentoNome: 'Bloqueio',
             pacienteNome: motivo || 'Horário bloqueado',
             pacienteId: null,
@@ -147,6 +178,8 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             tipo: raw.tipo || slot.tipo || 'atendimento',
             status: slot.status,
             statusNome: slot.statusNome,
+            roleUserId: roleUserIdFromSlot(slot),
+            corHex: '#00a88e',
             procedimentoNome: procFromObs || 'Sem procedimento',
             pacienteNome: pacFromObs || 'Sem paciente',
             pacienteId: null,

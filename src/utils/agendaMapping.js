@@ -10,6 +10,31 @@ export function addMinutesToTime(hhmm, minutesToAdd) {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
 }
 
+/** Deriva status da UI alinhado a agendaStatusColors (snake / texto livre do backend). */
+export function deriveAgendaSlotStatus(dto) {
+  if (!dto || typeof dto !== 'object') return 'pendente';
+  const tipo = String(dto.tipo || '').toLowerCase();
+  if (tipo === 'bloqueio') return 'bloqueio';
+
+  const codigo = String(dto.statusCodigo || '')
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  const nome = String(dto.statusNome || '').toLowerCase();
+
+  if (codigo.includes('cancel') || nome.includes('cancel')) return 'cancelado';
+  if (codigo.includes('realiz') || nome.includes('realiz')) return 'realizado';
+  if (codigo.includes('falta') || nome.includes('falta')) return 'falta';
+  if (
+    codigo.includes('aguardando') ||
+    codigo.includes('aguardando_confirmacao') ||
+    nome.includes('aguardando')
+  )
+    return 'aguardando_confirmacao';
+  if (codigo.includes('confirm') || nome.includes('confirm')) return 'confirmado';
+  if (codigo.includes('pendent') || nome.includes('pendent')) return 'pendente';
+  return 'pendente';
+}
+
 /**
  * Normaliza AgendaDTO do Spring para o modelo usado pela UI (lista lateral).
  * Não inventa paciente: slot vem sem paciente até API de agendamentos no slot (A3).
@@ -18,17 +43,7 @@ export function mapAgendaDtoToAppointment(dto) {
   if (!dto || !dto.id) return null;
   const date = dto.dataAgendamento || '';
   const time = (dto.horaInicio && String(dto.horaInicio).slice(0, 5)) || '00:00';
-  const codigo = String(dto.statusCodigo || '').toLowerCase();
-  const nomeStatus = String(dto.statusNome || '').toLowerCase();
-  const cancelled = codigo.includes('cancel') || nomeStatus.includes('cancel');
-  const confirmed =
-    codigo.includes('confirm') ||
-    codigo.includes('realiz') ||
-    nomeStatus.includes('confirm');
-
-  let status = 'pendente';
-  if (cancelled) status = 'cancelado';
-  else if (confirmed) status = 'confirmado';
+  const status = deriveAgendaSlotStatus(dto);
 
   const procedure =
     dto.observacao?.trim() ||

@@ -18,6 +18,11 @@ import {
 import { AGENDA_DURACAO_MINUTOS_OPCOES, formatLongDate, useAgendaPage } from './useAgendaPage';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { WeekTimeGrid } from './WeekTimeGrid';
+import AgendaSlotActions from './AgendaSlotActions.jsx';
+import CancelarAgendaModal from './CancelarAgendaModal.jsx';
+import ReagendarAgendaModal from './ReagendarAgendaModal.jsx';
+import NotificationBell from '../layout/NotificationBell.jsx';
+import { getStatusColors } from '../../utils/agendaStatusColors.js';
 
 const STATUS_STYLES = {
   confirmado: {
@@ -118,9 +123,10 @@ function StatCard({ label, value, icon, tone = 'default' }) {
   );
 }
 
-function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio }) {
+function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
   const bloqueio = isAppointmentBloqueio(appointment);
   const styles = STATUS_STYLES[bloqueio ? 'bloqueio' : appointment.status] || STATUS_STYLES.pendente;
+  const statusTone = getStatusColors(appointment.status);
 
   return (
     <div className={`rounded-[12px] border border-[#E8E8E8] border-l-[3px] ${styles.border} bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md`}>
@@ -134,11 +140,24 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio }) {
           </div>
           <div className="min-w-0">
             <div className="truncate text-[13px] font-bold text-[#1A1A2E]">{appointment.pacienteNome}</div>
-            <div className="truncate text-[11px] font-medium text-[#888888]">{appointment.procedimentoNome}</div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {!bloqueio ? (
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: appointment.corHex || '#00a88e' }}
+                  aria-hidden
+                />
+              ) : null}
+              <div className="truncate text-[11px] font-medium text-[#888888]">{appointment.procedimentoNome}</div>
+            </div>
           </div>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${styles.badge}`}>
-          {bloqueio ? 'Bloqueado' : appointment.status}
+        <span
+          className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
+            STATUS_STYLES[bloqueio ? 'bloqueio' : appointment.status] ? styles.badge : `${statusTone.bg} ${statusTone.text}`
+          }`}
+        >
+          {bloqueio ? 'Bloqueado' : statusTone.label || appointment.status}
         </span>
       </div>
 
@@ -185,11 +204,14 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio }) {
           Editar
         </button>
       </div>
+      {!bloqueio && typeof renderSlotActions === 'function' ? (
+        <div className="mt-2 border-t border-[#f1f5f9] pt-2">{renderSlotActions(appointment)}</div>
+      ) : null}
     </div>
   );
 }
 
-function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloqueio }) {
+function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
   return (
     <div className="h-full rounded-[14px] border border-[#C5EDE1] bg-white">
       <div className="rounded-t-[14px] border-b border-[#C5EDE1] bg-[#E8F9F4] p-4">
@@ -215,6 +237,7 @@ function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloque
               onPrimary={onPrimary}
               onEdit={onEdit}
               onRemoveBloqueio={onRemoveBloqueio}
+              renderSlotActions={renderSlotActions}
             />
           ))
         )}
@@ -365,7 +388,7 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
   );
 }
 
-function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio }) {
+function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio, renderSlotActions }) {
   if (!group) return null;
 
   return (
@@ -400,6 +423,7 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio }
                 onRemoveBloqueio?.(item);
                 onClose();
               }}
+              renderSlotActions={renderSlotActions}
             />
           ))}
         </div>
@@ -408,7 +432,7 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio }
   );
 }
 
-function AgendaFormModal({ agenda }) {
+function AgendaFormModal({ agenda, onExcluirClick }) {
   const horaInicioInputRef = React.useRef(null);
   if (!agenda.modalMode) return null;
   const isEdit = agenda.modalMode === 'edit';
@@ -604,7 +628,7 @@ function AgendaFormModal({ agenda }) {
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm('Excluir este agendamento?')) agenda.deleteAppointment();
+                  if (typeof onExcluirClick === 'function') onExcluirClick();
                 }}
                 className={`${BTN_ACTION} items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50`}
               >
@@ -646,10 +670,69 @@ function FieldError({ error, children }) {
 export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled = false }) {
   const agenda = useAgendaPage({ patients, authEnabled });
   const [listDaySummary, setListDaySummary] = React.useState(null);
+  const [modalCancelar, setModalCancelar] = React.useState(null);
+  const [modalReagendar, setModalReagendar] = React.useState(null);
+  const [cancelSubmitting, setCancelSubmitting] = React.useState(false);
 
   React.useEffect(() => {
     if (agenda.viewMode === 'grid' || agenda.viewMode === 'semana') setListDaySummary(null);
   }, [agenda.viewMode]);
+
+  const renderSlotActions = React.useCallback(
+    (appointment) => {
+      if (isAppointmentBloqueio(appointment)) return null;
+      const disabled = Boolean(agenda.loading);
+      return (
+        <AgendaSlotActions
+          agenda={appointment}
+          disabled={disabled}
+          onMarcarRealizado={() => {
+            if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'realizado');
+          }}
+          onMarcarFalta={() => {
+            if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'falta');
+          }}
+          onReagendar={() => setModalReagendar({ agenda: appointment })}
+          onCancelar={() => setModalCancelar({ agenda: appointment })}
+          onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.id, 'confirmacao_24h')}
+        />
+      );
+    },
+    [agenda]
+  );
+
+  const handleConfirmCancelar = React.useCallback(
+    async (payload) => {
+      const row = modalCancelar?.agenda;
+      if (!row?.agendaId || !payload) return;
+      setCancelSubmitting(true);
+      try {
+        const ok = await agenda.handleCancelar(row.agendaId, payload);
+        if (ok) setModalCancelar(null);
+      } finally {
+        setCancelSubmitting(false);
+      }
+    },
+    [agenda, modalCancelar?.agenda]
+  );
+
+  const handleConfirmReagendar = React.useCallback(
+    async (payload) => {
+      const row = modalReagendar?.agenda;
+      if (!row?.agendaId || !payload) return;
+      const ok = await agenda.handleReagendar(row.agendaId, payload);
+      if (ok) setModalReagendar(null);
+    },
+    [agenda, modalReagendar?.agenda]
+  );
+
+  const handleExcluirFromEditModal = React.useCallback(() => {
+    const row = agenda.editingAppointment;
+    if (row?.agendaId) {
+      setModalCancelar({ agenda: row });
+      agenda.closeModal();
+    }
+  }, [agenda]);
 
   const handlePrimary = React.useCallback((appointment) => {
     if (isAppointmentBloqueio(appointment)) return;
@@ -677,9 +760,16 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
   return (
     <div className="w-full min-h-0 font-['Inter',system-ui,sans-serif] text-[#1A1A2E]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-[22px] font-black leading-tight text-[#1A1A2E]">Agenda</h2>
-          <p className="mt-1 text-[12px] font-medium text-[#888888]">Gerenciamento completo de agendamentos</p>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[22px] font-black leading-tight text-[#1A1A2E]">Agenda</h2>
+            <p className="mt-1 text-[12px] font-medium text-[#888888]">Gerenciamento completo de agendamentos</p>
+          </div>
+          {authEnabled ? (
+            <div className="shrink-0 pt-0.5">
+              <NotificationBell />
+            </div>
+          ) : null}
         </div>
         <button
           type="button"
@@ -764,6 +854,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
               appointments={agenda.weekGridAppointments}
               todayIso={agenda.todayIso}
               onEdit={agenda.openEditModal}
+              renderSlotActions={renderSlotActions}
             />
           )}
         </section>
@@ -775,6 +866,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
             onPrimary={handlePrimary}
             onEdit={agenda.openEditModal}
             onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
+            renderSlotActions={renderSlotActions}
           />
         </aside>
       </div>
@@ -790,6 +882,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
               onPrimary={handlePrimary}
               onEdit={agenda.openEditModal}
               onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
+              renderSlotActions={renderSlotActions}
             />
           </div>
         </div>
@@ -801,9 +894,28 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
         onEdit={agenda.openEditModal}
         onPrimary={handlePrimary}
         onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
+        renderSlotActions={renderSlotActions}
       />
 
-      <AgendaFormModal agenda={agenda} />
+      <AgendaFormModal agenda={agenda} onExcluirClick={handleExcluirFromEditModal} />
+
+      {modalCancelar?.agenda ? (
+        <CancelarAgendaModal
+          agenda={modalCancelar.agenda}
+          onClose={() => setModalCancelar(null)}
+          onConfirm={handleConfirmCancelar}
+          isSubmitting={cancelSubmitting}
+        />
+      ) : null}
+
+      {modalReagendar?.agenda ? (
+        <ReagendarAgendaModal
+          agenda={modalReagendar.agenda}
+          onClose={() => setModalReagendar(null)}
+          onConfirm={handleConfirmReagendar}
+          isSubmitting={agenda.submittingReagendar}
+        />
+      ) : null}
     </div>
   );
 }
