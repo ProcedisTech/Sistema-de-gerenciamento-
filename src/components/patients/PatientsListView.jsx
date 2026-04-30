@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Image as ImageIcon,
   Loader2,
@@ -432,6 +434,15 @@ function PatientPreviewPanel({
 
 export function PatientsListView({
   patients,
+  patientListItems = [],
+  patientListPage: _patientListPage,
+  setPatientListPage,
+  patientListLoading = false,
+  patientListMeta,
+  patientListTipoBusca,
+  setPatientListTipoBusca,
+  patientListSortBy,
+  setPatientListSortBy,
   patientSearchQuery,
   setPatientSearchQuery,
   selectedPatientCpf,
@@ -441,16 +452,10 @@ export function PatientsListView({
   getPatientInitials,
   onCreatePatient,
   onStartAttendance,
-  patientsListOrder,
-  setPatientsListOrder,
   isRecepcionista,
 }) {
-  const [sortBy, setSortBy] = useState(() =>
-    patientsListOrder === 'birthday_asc' ? 'birthday-asc' : 'nome-asc'
-  );
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
-  const [tipoBusca, setTipoBusca] = useState('nome');
   const desktopTitleId = 'patient-detail-title';
   const [previewProcedures, setPreviewProcedures] = useState([]);
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
@@ -458,23 +463,15 @@ export function PatientsListView({
   /** Paciente ao qual `previewAnamneseList` corresponde após o último fetch concluído; `null` = nenhum. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
 
-  /* eslint-disable react-hooks/set-state-in-effect -- espelhar ordenação vinda do pai */
-  useEffect(() => {
-    if (patientsListOrder === 'birthday_asc') setSortBy('birthday-asc');
-  }, [patientsListOrder]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
-
   const handleBuscaChange = (value) => {
-    if (tipoBusca === 'cpf') {
+    if (patientListTipoBusca === 'cpf') {
       const digits = value.replace(/\D/g, '').slice(0, 11);
       const masked = digits
         .replace(/(\d{3})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
       setPatientSearchQuery(masked);
-    } else if (tipoBusca === 'telefone') {
+    } else if (patientListTipoBusca === 'telefone') {
       const digits = value.replace(/\D/g, '').slice(0, 11);
       const masked = digits
         .replace(/(\d{2})(\d)/, '($1) $2')
@@ -485,48 +482,20 @@ export function PatientsListView({
     }
   };
 
-  const filteredPatients = useMemo(() => {
-    const list = patients.filter((p) => {
-      const q = patientSearchQuery.trim();
-      if (!q) return true;
-      if (tipoBusca === 'cpf') {
-        return normalizeBuscaDigits(p.cpf).includes(normalizeBuscaDigits(q));
-      }
-      if (tipoBusca === 'telefone') {
-        return normalizeBuscaDigits(p.telefone).includes(normalizeBuscaDigits(q));
-      }
-      if (tipoBusca === 'email') {
-        return (p.email || '').toLowerCase().includes(q.toLowerCase());
-      }
-      return (p.nome || '').toLowerCase().includes(q.toLowerCase());
-    });
-
-    if (sortBy === 'birthday-asc') {
-      return list;
-    }
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      switch (sortBy) {
-        case 'nome-desc':
-          return (b.nome || '').localeCompare(a.nome || '', 'pt-BR', { sensitivity: 'base' });
-        case 'idade-asc':
-          return (a.idade ?? 0) - (b.idade ?? 0);
-        case 'idade-desc':
-          return (b.idade ?? 0) - (a.idade ?? 0);
-        case 'visita-desc':
-          return parseUltimaVisitaMs(b.ultimaVisita) - parseUltimaVisitaMs(a.ultimaVisita);
-        case 'visita-asc':
-          return parseUltimaVisitaMs(a.ultimaVisita) - parseUltimaVisitaMs(b.ultimaVisita);
-        case 'nome-asc':
-        default:
-          return (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' });
-      }
-    });
-    return sorted;
-  }, [patients, patientSearchQuery, sortBy, tipoBusca]);
+  const meta = patientListMeta || {
+    first: true,
+    last: true,
+    totalPages: 0,
+    number: 0,
+  };
+  const totalPagesUi = Math.max(meta.totalPages, 1);
+  const pageLabelNum = meta.number + 1;
 
   const previewPatient =
-    (previewPatientCpf && patients.find((p) => p.cpf === previewPatientCpf)) || null;
+    (previewPatientCpf &&
+      (patientListItems.find((p) => p.cpf === previewPatientCpf) ||
+        patients.find((p) => p.cpf === previewPatientCpf))) ||
+    null;
 
   /* eslint-disable react-hooks/set-state-in-effect -- reset ao fechar / carregar procedimentos do preview */
   useEffect(() => {
@@ -680,9 +649,9 @@ export function PatientsListView({
             <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-app-border bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
               <select
-                value={tipoBusca}
+                value={patientListTipoBusca}
                 onChange={(e) => {
-                  setTipoBusca(e.target.value);
+                  setPatientListTipoBusca(e.target.value);
                   setPatientSearchQuery('');
                 }}
                 className="h-11 min-h-[44px] w-full shrink-0 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[16px] font-medium text-[#475569] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:w-28 sm:text-[14px]"
@@ -704,11 +673,11 @@ export function PatientsListView({
                   value={patientSearchQuery}
                   onChange={(e) => handleBuscaChange(e.target.value)}
                   placeholder={
-                    tipoBusca === 'cpf'
+                    patientListTipoBusca === 'cpf'
                       ? '000.000.000-00'
-                      : tipoBusca === 'telefone'
+                      : patientListTipoBusca === 'telefone'
                         ? '(00) 00000-0000'
-                        : tipoBusca === 'email'
+                        : patientListTipoBusca === 'email'
                           ? 'email@exemplo.com'
                           : 'Buscar paciente...'
                   }
@@ -728,11 +697,9 @@ export function PatientsListView({
                 </label>
                 <select
                   id="patient-sort"
-                  value={sortBy}
+                  value={patientListSortBy}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    setSortBy(v);
-                    setPatientsListOrder?.(v === 'birthday-asc' ? 'birthday_asc' : null);
+                    setPatientListSortBy(e.target.value);
                   }}
                   className="h-11 min-h-[44px] w-full cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white py-2 pl-8 pr-3 text-[16px] font-semibold text-[#0f172a] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[13px]"
                 >
@@ -753,15 +720,21 @@ export function PatientsListView({
             </p>
           ) : null}
 
-          <div className="min-w-0 overflow-x-hidden bg-app-surface [-webkit-overflow-scrolling:touch]">
+          <div className="relative min-w-0 overflow-x-hidden bg-app-surface [-webkit-overflow-scrolling:touch]">
+            {patientListLoading ? (
+              <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-white/55 backdrop-blur-[1px]">
+                <Loader2 className="h-8 w-8 animate-spin text-[#00a88e]" aria-hidden />
+                <span className="sr-only">Carregando lista…</span>
+              </div>
+            ) : null}
             <ul className="flex list-none flex-col gap-2.5 p-2.5 sm:gap-3 sm:p-3" aria-label="Lista de pacientes">
-              {filteredPatients.length === 0 ? (
+              {!patientListLoading && patientListItems.length === 0 ? (
                 <li className="px-2 py-12 text-center text-[14px] font-medium text-[#64748b]">
                   <Search className="mx-auto mb-2 h-8 w-8 opacity-40" />
                   Nenhum paciente encontrado
                 </li>
-              ) : (
-                filteredPatients.map((patient) => {
+              ) : patientListItems.length === 0 ? null : (
+                patientListItems.map((patient) => {
                   const selected = selectedPatientCpf === patient.cpf;
                   return (
                     <li key={patient.id} className="min-w-0">
@@ -779,6 +752,29 @@ export function PatientsListView({
                 })
               )}
             </ul>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-app-border bg-white px-3 py-2.5 sm:px-4">
+            <button
+              type="button"
+              disabled={meta.first || patientListLoading}
+              onClick={() => setPatientListPage((p) => Math.max(0, p - 1))}
+              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] disabled:pointer-events-none disabled:opacity-40"
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </button>
+            <p className="text-[13px] font-semibold text-[#64748b]" aria-live="polite">
+              Página {pageLabelNum} de {totalPagesUi}
+            </p>
+            <button
+              type="button"
+              disabled={meta.last || patientListLoading}
+              onClick={() => setPatientListPage((p) => p + 1)}
+              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] disabled:pointer-events-none disabled:opacity-40"
+              aria-label="Próxima página"
+            >
+              <ChevronRight className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </button>
           </div>
         </div>
       </div>

@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, X, Loader2 } from 'lucide-react';
+import { pacientesApi } from '../../services/api';
+import { mapBackendPatient } from '../../utils/patientMapping';
 
 export function MarcarCompromissoModal({
   isOpen,
@@ -19,6 +21,41 @@ export function MarcarCompromissoModal({
   setObservacao,
   onConfirm,
 }) {
+  const [remotePatients, setRemotePatients] = useState([]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const q = patientSearch.trim();
+    if (q.length < 2) return undefined;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      pacientesApi
+        .search(q)
+        .then((data) => {
+          if (cancelled) return;
+          const mapped = Array.isArray(data) ? data.map(mapBackendPatient).filter(Boolean) : [];
+          setRemotePatients(mapped);
+        })
+        .catch(() => {
+          if (!cancelled) setRemotePatients([]);
+        });
+    }, 320);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [isOpen, patientSearch]);
+
+  const displayedPatients = useMemo(() => {
+    if (!isOpen) return [];
+    const q = patientSearch.trim().toLowerCase();
+    const base = q.length >= 2 ? remotePatients : patients || [];
+    return base.filter((p) => {
+      if (!q) return true;
+      return [p.nome, p.cpf, p.telefone].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [isOpen, patients, remotePatients, patientSearch]);
+
   if (!isOpen) return null;
 
   return (
@@ -63,28 +100,22 @@ export function MarcarCompromissoModal({
               className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
             />
             <div className="max-h-[160px] overflow-y-auto rounded-xl border border-slate-200">
-              {patients
-                .filter((p) => {
-                  const q = patientSearch.trim().toLowerCase();
-                  if (!q) return true;
-                  return [p.nome, p.cpf, p.telefone].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-                })
-                .map((p) => {
-                  const sel = (selectedPatientCpf || '') === String(p.cpf || '').trim();
-                  return (
-                    <button
-                      key={p.id || p.cpf}
-                      type="button"
-                      onClick={() => setSelectedPatientCpf(String(p.cpf || '').trim())}
-                      className={`w-full text-left px-3 py-2.5 text-[13px] border-b border-[#f1f5f9] last:border-0 ${
-                        sel ? 'bg-[#e6f7f5] font-bold text-[#0f766e]' : 'hover:bg-[#f8fbfb]'
-                      }`}
-                    >
-                      {p.nome}
-                      {!p.id && <span className="text-amber-600 text-[11px] ml-1">(sem ID)</span>}
-                    </button>
-                  );
-                })}
+              {displayedPatients.map((p) => {
+                const sel = (selectedPatientCpf || '') === String(p.cpf || '').trim();
+                return (
+                  <button
+                    key={p.id || p.cpf}
+                    type="button"
+                    onClick={() => setSelectedPatientCpf(String(p.cpf || '').trim())}
+                    className={`w-full text-left px-3 py-2.5 text-[13px] border-b border-[#f1f5f9] last:border-0 ${
+                      sel ? 'bg-[#e6f7f5] font-bold text-[#0f766e]' : 'hover:bg-[#f8fbfb]'
+                    }`}
+                  >
+                    {p.nome}
+                    {!p.id && <span className="text-amber-600 text-[11px] ml-1">(sem ID)</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
