@@ -369,15 +369,125 @@ async function requestPublic(path, fetchOpts = {}) {
 
 // ── Pacientes ──────────────────────────────────────────────
 
+/**
+ * Normaliza resposta Spring `Page` ou array legado para UI de listagem.
+ * @param {unknown} raw
+ * @returns {{
+ *   content: unknown[],
+ *   first: boolean,
+ *   last: boolean,
+ *   totalPages: number,
+ *   number: number,
+ *   size: number,
+ *   totalElements: number,
+ * }}
+ */
+export function normalizePacientesPage(raw) {
+  if (Array.isArray(raw)) {
+    const n = raw.length;
+    return {
+      content: raw,
+      first: true,
+      last: true,
+      totalPages: n > 0 ? 1 : 0,
+      number: 0,
+      size: n,
+      totalElements: n,
+    };
+  }
+  if (!raw || typeof raw !== 'object') {
+    return {
+      content: [],
+      first: true,
+      last: true,
+      totalPages: 0,
+      number: 0,
+      size: 0,
+      totalElements: 0,
+    };
+  }
+  const content = Array.isArray(raw.content) ? raw.content : [];
+  const totalPages =
+    typeof raw.totalPages === 'number' && raw.totalPages >= 0 ? raw.totalPages : content.length ? 1 : 0;
+  const number = typeof raw.number === 'number' && raw.number >= 0 ? raw.number : 0;
+  const size = typeof raw.size === 'number' && raw.size >= 0 ? raw.size : content.length;
+  const totalElements =
+    typeof raw.totalElements === 'number' && raw.totalElements >= 0 ? raw.totalElements : content.length;
+  return {
+    content,
+    first: Boolean(raw.first),
+    last: Boolean(raw.last),
+    totalPages,
+    number,
+    size,
+    totalElements,
+  };
+}
+
+/** Mapa ordenação UI → parâmetro `sort` da API (exceto `birthday_asc`, que usa `order`). */
+export function patientListSortToApiParam(sortBy) {
+  const v = sortBy != null ? String(sortBy).trim() : '';
+  switch (v) {
+    case 'nome-desc':
+      return 'nome_desc';
+    case 'idade-asc':
+      return 'idade_asc';
+    case 'idade-desc':
+      return 'idade_desc';
+    case 'visita-desc':
+      return 'visita_desc';
+    case 'visita-asc':
+      return 'visita_asc';
+    case 'nome-asc':
+    default:
+      return 'nome_asc';
+  }
+}
+
+function buildPacientesListQuery(opts = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(opts.page != null ? opts.page : 0));
+  params.set('size', String(opts.size != null ? opts.size : 20));
+  const order = opts.order != null && String(opts.order).trim() !== '' ? String(opts.order).trim() : '';
+  if (order) params.set('order', order);
+  const sort =
+    !order && opts.sort != null && String(opts.sort).trim() !== '' ? String(opts.sort).trim() : '';
+  if (sort) params.set('sort', sort);
+  const qRaw = opts.q != null ? String(opts.q).trim() : '';
+  if (qRaw) {
+    params.set('q', qRaw);
+    const tipo = opts.tipo != null && String(opts.tipo).trim() !== '' ? String(opts.tipo).trim() : 'nome';
+    params.set('tipo', tipo);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const pacientesApi = {
-  /** @param {{ order?: string }} [opts] — ex.: `{ order: 'birthday_asc' }` */
-  list: (opts = {}) => {
-    const order = opts.order != null && String(opts.order).trim() !== '' ? String(opts.order).trim() : '';
-    const q = order ? `?order=${encodeURIComponent(order)}` : '';
-    return request(`/api/v1/pacientes${q}`);
+  /**
+   * Lista paginada (Spring Page). Mantém fallback se o backend ainda devolver array.
+   * @param {{
+   *   page?: number,
+   *   size?: number,
+   *   order?: string,
+   *   sort?: string,
+   *   q?: string,
+   *   tipo?: string,
+   * }} [opts]
+   */
+  list: async (opts = {}) => {
+    const qs = buildPacientesListQuery(opts);
+    const raw = await request(`/api/v1/pacientes${qs}`);
+    return normalizePacientesPage(raw);
   },
   get: (id) => request(`/api/v1/pacientes/${id}`),
-  search: (q) => request(`/api/v1/pacientes/search?q=${encodeURIComponent(q)}`),
+  /** Catálogo / busca — array ou Page (`content`). */
+  search: async (q) => {
+    const raw = await request(`/api/v1/pacientes/search?q=${encodeURIComponent(q ?? '')}`);
+    if (Array.isArray(raw)) return raw;
+    const c = raw?.content;
+    return Array.isArray(c) ? c : [];
+  },
   create: (data) => request('/api/v1/pacientes', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/api/v1/pacientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/pacientes/${id}`, { method: 'DELETE' }),
@@ -405,6 +515,26 @@ export const pacientesApi = {
       path = `/api/v1/pacientes/${pacienteId}/foto-perfil`;
     }
     return requestBlob(path, { needsOrg: true });
+  },
+  /** Body: `{ senha, motivo? }` */
+  inativar: (id, data) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(String(id))}/inativar`, {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    }),
+  /** Body: `{ senha }` */
+  reativar: (id, data) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(String(id))}/reativar`, {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    }),
+  /** Pacientes inativos — mesma forma que `list`. */
+  listInativos: async (opts = {}) => {
+    const params = new URLSearchParams();
+    params.set('page', String(opts.page != null ? opts.page : 0));
+    params.set('size', String(opts.size != null ? opts.size : 20));
+    const raw = await request(`/api/v1/pacientes/inativos?${params.toString()}`);
+    return normalizePacientesPage(raw);
   },
 };
 

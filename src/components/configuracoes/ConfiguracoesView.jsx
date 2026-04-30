@@ -5,6 +5,7 @@ import {
   HelpCircle,
   ClipboardList,
   User,
+  UserX,
   Building2,
   Settings,
   Users,
@@ -15,6 +16,7 @@ import { TermosManager } from '../termos/TermosManager';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
 import { GestaoUsuariosView } from './GestaoUsuariosView';
+import { PacientesInativadosPanel } from './PacientesInativadosPanel';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
@@ -24,6 +26,7 @@ const SECTION_SUBTITLE = {
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
   'usuarios-acessos': 'Gerencie sua equipe e acessos',
+  'pacientes-inativados': 'Pacientes fora da listagem principal',
 };
 
 function NavGroupLabel({ children }) {
@@ -70,6 +73,7 @@ function SidebarNavItem({ icon, label, active, onClick, badge }) {
  * @param {Record<string, unknown>} [props.termosManagerProps] — repassadas a {@link TermosManager}
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada] — repassada a {@link DadosClinicaPanel}
  * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
+ * @param {() => void} [props.onPacientesCatalogRefresh] — após reativar paciente (catálogo + lista paginada)
  * @param {string} props.configSection
  * @param {(s: string) => void} props.setConfigSection
  */
@@ -78,6 +82,7 @@ export function ConfiguracoesView({
   termosManagerProps = {},
   onClinicaAtualizada,
   onPerfilAtualizado,
+  onPacientesCatalogRefresh,
   configSection,
   setConfigSection,
   isAdmin = false,
@@ -113,6 +118,7 @@ export function ConfiguracoesView({
             (isAdmin || isProfissional) && ['perfil', 'Perfil'],
             isAdmin && ['clinica', 'Clínica'],
             isAdmin && ['usuarios-acessos', 'Usuários'],
+            isAdmin && ['pacientes-inativados', 'Inativos'],
           ].filter(Boolean).map(([id, short]) => (
             <button
               key={id}
@@ -206,6 +212,12 @@ export function ConfiguracoesView({
                 active={configSection === 'usuarios-acessos'}
                 onClick={() => setConfigSection('usuarios-acessos')}
               />
+              <SidebarNavItem
+                icon={UserX}
+                label="Pacientes Inativados"
+                active={configSection === 'pacientes-inativados'}
+                onClick={() => setConfigSection('pacientes-inativados')}
+              />
             </>
           )}
         </aside>
@@ -236,6 +248,10 @@ export function ConfiguracoesView({
           
           {configSection === 'usuarios-acessos' && isAdmin && (
             <GestaoUsuariosView />
+          )}
+
+          {configSection === 'pacientes-inativados' && isAdmin && (
+            <PacientesInativadosPanel onPacientesCatalogRefresh={onPacientesCatalogRefresh} />
           )}
         </div>
       </div>

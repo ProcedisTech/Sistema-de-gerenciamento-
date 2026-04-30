@@ -6,8 +6,10 @@ import { PatientCreateView } from './PatientCreateView';
 export function PatientsView(props) {
   const {
     patients,
+    patientListItems,
     patientView,
     selectedPatientCpf,
+    setSelectedPatientCpf,
     patientDetailTab,
     setPatientDetailTab,
     setPatientView,
@@ -22,7 +24,12 @@ export function PatientsView(props) {
     roleUserId,
   } = props;
 
-  const selectedPatient = patients.find((p) => p.cpf === selectedPatientCpf) || null;
+  const selectedPatient =
+    patients.find((p) => p.cpf === selectedPatientCpf) ||
+    (Array.isArray(patientListItems)
+      ? patientListItems.find((p) => p.cpf === selectedPatientCpf)
+      : null) ||
+    null;
 
   if (patientView === 'profile' && selectedPatient) {
     return (
@@ -38,6 +45,7 @@ export function PatientsView(props) {
         onDeleteGalleryPhoto={onDeleteGalleryPhoto}
         mergePatientById={mergePatientById}
         refreshPatients={refreshPatients}
+        setSelectedPatientCpf={setSelectedPatientCpf}
         roleUserId={roleUserId}
         isRecepcionista={props.isRecepcionista}
       />

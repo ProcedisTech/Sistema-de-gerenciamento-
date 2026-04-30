@@ -15,7 +15,6 @@ export function GestaoUsuariosView() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState(null);
-  const [saving, setSaving] = useState(false);
 
   const fetchHeaders = useCallback(() => {
     return authHeadersForFetch({ needsOrg: true });
@@ -43,7 +42,7 @@ export function GestaoUsuariosView() {
       } else {
         toast.error('Erro ao carregar dados da equipe.');
       }
-    } catch (err) {
+    } catch {
       toast.error('Falha de rede ao carregar equipe.');
     } finally {
       setLoading(false);

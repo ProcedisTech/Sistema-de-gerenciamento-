@@ -24,7 +24,8 @@ import {
   Trash2,
   Pencil,
   Plus,
-  User as UserIcon,
+  User as   UserIcon,
+  UserMinus,
   X,
 } from 'lucide-react';
 import {
@@ -35,6 +36,7 @@ import {
   notasApi,
   procedimentosApi,
   termoAssinaturaApi,
+  getApiErrorDetail,
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
@@ -643,6 +645,7 @@ export function PatientProfileView({
   patientDetailTab,
   setPatientDetailTab,
   setPatientView,
+  setSelectedPatientCpf,
   getPatientInitials,
   onStartAttendance,
   onUpdatePatient,
@@ -700,6 +703,11 @@ export function PatientProfileView({
   const [manualAlertSaving, setManualAlertSaving] = useState(false);
   /** `{ type:'delete', id }` | `{ type:'save-edit' }` para confirmação em edit/excluir */
   const [manualAlertConfirm, setManualAlertConfirm] = useState(null);
+  const [inativarModalOpen, setInativarModalOpen] = useState(false);
+  const [inativarMotivo, setInativarMotivo] = useState('');
+  const [inativarSenha, setInativarSenha] = useState('');
+  const [inativarSenhaErro, setInativarSenhaErro] = useState('');
+  const [inativarSubmitting, setInativarSubmitting] = useState(false);
   const [relatoModal, setRelatoModal] = useState({
     open: false,
     procedimentoFeitoId: null,
@@ -1695,6 +1703,46 @@ export function PatientProfileView({
     }
   };
 
+  const isPerfilAtivo = (patient.status || 'ativo') !== 'inativo';
+
+  const handleConfirmInativar = async () => {
+    if (!selectedPatient?.id) return;
+    setInativarSenhaErro('');
+    if (!String(inativarSenha || '').trim()) {
+      setInativarSenhaErro('Informe sua senha para confirmar.');
+      return;
+    }
+    setInativarSubmitting(true);
+    try {
+      await pacientesApi.inativar(selectedPatient.id, {
+        senha: String(inativarSenha).trim(),
+        motivo: String(inativarMotivo || '').trim() || undefined,
+      });
+      toast.success('Paciente inativado com sucesso.');
+      setInativarModalOpen(false);
+      setInativarMotivo('');
+      setInativarSenha('');
+      setPatientView('list');
+      setPatientDetailTab('atendimento');
+      setSelectedPatientCpf?.(null);
+      refreshPatients?.();
+    } catch (e) {
+      const st = e?.status;
+      const detail = getApiErrorDetail(e);
+      const pwdWrong =
+        st === 401 ||
+        st === 403 ||
+        /senha|password|credencial|inválid|invalid/i.test(String(detail || ''));
+      if (pwdWrong) {
+        setInativarSenhaErro(detail || 'Senha incorreta.');
+      } else {
+        toast.error(detail || e.message || 'Não foi possível inativar o paciente.');
+      }
+    } finally {
+      setInativarSubmitting(false);
+    }
+  };
+
   if (!selectedPatient) return null;
 
   return (
@@ -1709,16 +1757,33 @@ export function PatientProfileView({
           {profileSaveError}
         </div>
       ) : null}
-      <button
-        type="button"
-        onClick={() => {
-          setPatientView('list');
-          setPatientDetailTab('atendimento');
-        }}
-        className="mb-3 inline-flex w-fit items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
-      >
-        <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
-      </button>
+      <div className="mb-3 flex flex-wrap items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setPatientView('list');
+            setPatientDetailTab('atendimento');
+          }}
+          className="inline-flex w-fit items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
+        >
+          <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
+        </button>
+        {isPerfilAtivo && !isRecepcionista ? (
+          <button
+            type="button"
+            onClick={() => {
+              setInativarMotivo('');
+              setInativarSenha('');
+              setInativarSenhaErro('');
+              setInativarModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2 text-[13px] font-semibold text-[#64748b] transition-colors hover:border-[#cbd5e1] hover:bg-[#f1f5f9]"
+          >
+            <UserMinus className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+            Inativar Paciente
+          </button>
+        ) : null}
+      </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -1766,9 +1831,15 @@ export function PatientProfileView({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-[17px] font-bold tracking-tight text-[#0f172a] md:text-[20px]">{selectedPatient.nome}</h3>
-                  <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
-                    ATIVO
-                  </span>
+                  {isPerfilAtivo ? (
+                    <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
+                      ATIVO
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
+                      INATIVO
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] font-medium text-[#475569]">
                   <span className="inline-flex items-center gap-1.5">
@@ -3108,6 +3179,103 @@ export function PatientProfileView({
                   'Criar alerta'
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {inativarModalOpen ? (
+        <div
+          className="fixed inset-0 z-[246] flex items-center justify-center bg-black/55 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inativar-paciente-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !inativarSubmitting) setInativarModalOpen(false);
+          }}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-[#f1f5f9] p-4 sm:p-5">
+              <h3 id="inativar-paciente-title" className="text-[17px] font-bold leading-snug text-[#0f172a]">
+                Inativar paciente?
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!inativarSubmitting) setInativarModalOpen(false);
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#cbd5e1]"
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3 p-4 sm:p-5">
+              <p className="text-[13px] leading-relaxed text-[#64748b]">
+                O histórico clínico permanece armazenado. Esta ação pode ser revertida reativando o paciente nas
+                configurações quando necessário.
+              </p>
+              <div>
+                <label htmlFor="inativar-motivo" className="mb-1 block text-[12px] font-semibold text-[#475569]">
+                  Motivo (opcional)
+                </label>
+                <textarea
+                  id="inativar-motivo"
+                  value={inativarMotivo}
+                  onChange={(e) => setInativarMotivo(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  className="w-full resize-none rounded-lg border border-[#e2e8f0] px-3 py-2 text-[14px] text-[#0f172a] outline-none focus:border-[#00a88e]/40"
+                  placeholder="Ex.: solicitado pela paciente…"
+                  disabled={inativarSubmitting}
+                />
+              </div>
+              <div>
+                <label htmlFor="inativar-senha" className="mb-1 block text-[12px] font-semibold text-[#475569]">
+                  Sua senha <span className="text-red-600">*</span>
+                </label>
+                <input
+                  id="inativar-senha"
+                  type="password"
+                  autoComplete="current-password"
+                  value={inativarSenha}
+                  onChange={(e) => {
+                    setInativarSenha(e.target.value);
+                    if (inativarSenhaErro) setInativarSenhaErro('');
+                  }}
+                  className={`w-full rounded-lg border px-3 py-2 text-[14px] text-[#0f172a] outline-none focus:border-[#00a88e]/40 ${
+                    inativarSenhaErro ? 'border-red-400 bg-red-50/40' : 'border-[#e2e8f0]'
+                  }`}
+                  disabled={inativarSubmitting}
+                />
+                {inativarSenhaErro ? (
+                  <p className="mt-1 text-[12px] font-medium text-red-600">{inativarSenhaErro}</p>
+                ) : null}
+              </div>
+              <div className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  disabled={inativarSubmitting}
+                  onClick={() => setInativarModalOpen(false)}
+                  className="rounded-lg border border-[#e2e8f0] bg-white px-4 py-2.5 text-[14px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={inativarSubmitting}
+                  onClick={handleConfirmInativar}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#64748b] px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-[#475569] disabled:opacity-60"
+                >
+                  {inativarSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Confirmar inativação
+                </button>
+              </div>
             </div>
           </div>
         </div>

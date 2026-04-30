@@ -91,7 +91,7 @@ function revokeBlobUrlIfAny(url) {
 
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
-  const { papel, isAdmin, isProfissional, isRecepcionista } = usePapel();
+  const { isAdmin, isProfissional, isRecepcionista } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -256,11 +256,24 @@ export default function App() {
     setPatientDetailTab,
     patientSearchQuery,
     setPatientSearchQuery,
-    refreshPatients,
-    patientsListOrder,
-    setPatientsListOrder,
+    refreshPatients: fetchPatientsCatalog,
     mergePatientById,
+    patientListItems,
+    patientListPage,
+    setPatientListPage,
+    patientListLoading,
+    patientListMeta,
+    patientListTipoBusca,
+    setPatientListTipoBusca,
+    patientListSortBy,
+    setPatientListSortBy,
+    bumpPatientList,
   } = patientState;
+
+  const refreshPatientsAndPagedList = React.useCallback(() => {
+    fetchPatientsCatalog();
+    bumpPatientList();
+  }, [fetchPatientsCatalog, bumpPatientList]);
 
   const pacienteAtual = React.useMemo(() => {
     const sCpf = String(selectedPatientCpf || '').trim();
@@ -1065,7 +1078,7 @@ export default function App() {
         console.warn('Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.');
       }
 
-      refreshPatients();
+      refreshPatientsAndPagedList();
       toast.success('Jornada finalizada com sucesso.');
       const cpfParaPerfil = sCpf;
       setActiveView('pacientes');
@@ -1663,11 +1676,18 @@ export default function App() {
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
                 onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
-                onPatientCreated={patientState.refreshPatients}
+                onPatientCreated={refreshPatientsAndPagedList}
                 mergePatientById={mergePatientById}
-                refreshPatients={refreshPatients}
-                patientsListOrder={patientsListOrder}
-                setPatientsListOrder={setPatientsListOrder}
+                refreshPatients={refreshPatientsAndPagedList}
+                patientListItems={patientListItems}
+                patientListPage={patientListPage}
+                setPatientListPage={setPatientListPage}
+                patientListLoading={patientListLoading}
+                patientListMeta={patientListMeta}
+                patientListTipoBusca={patientListTipoBusca}
+                setPatientListTipoBusca={setPatientListTipoBusca}
+                patientListSortBy={patientListSortBy}
+                setPatientListSortBy={setPatientListSortBy}
                 roleUserId={roleUserId}
               />
             )}
@@ -1682,6 +1702,7 @@ export default function App() {
                   setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
                 }
                 onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
+                onPacientesCatalogRefresh={refreshPatientsAndPagedList}
               />
             )}
 
