@@ -13,6 +13,7 @@ export const VALID_SECTIONS = new Set([
   'agenda-horarios',
   'agenda-feriados',
   'agenda-templates',
+  'pacientes-inativados',
 ]);
 
 export function readStoredSection() {
