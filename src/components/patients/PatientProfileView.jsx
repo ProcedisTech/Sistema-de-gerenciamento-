@@ -1764,25 +1764,10 @@ export function PatientProfileView({
             setPatientView('list');
             setPatientDetailTab('atendimento');
           }}
-          className="inline-flex w-fit items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#00a88e] px-3 py-2 text-[14px] font-bold text-white transition-colors hover:bg-[#00967f]"
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
         </button>
-        {isPerfilAtivo && !isRecepcionista ? (
-          <button
-            type="button"
-            onClick={() => {
-              setInativarMotivo('');
-              setInativarSenha('');
-              setInativarSenhaErro('');
-              setInativarModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2 text-[13px] font-semibold text-[#64748b] transition-colors hover:border-[#cbd5e1] hover:bg-[#f1f5f9]"
-          >
-            <UserMinus className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-            Inativar Paciente
-          </button>
-        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -1957,6 +1942,21 @@ export function PatientProfileView({
                 >
                   <Download className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Gerar PDF
                 </button>
+                {isPerfilAtivo && !isRecepcionista ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInativarMotivo('');
+                      setInativarSenha('');
+                      setInativarSenhaErro('');
+                      setInativarModalOpen(true);
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#dc2626] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#b91c1c] active:bg-[#991b1b] md:min-h-[44px] md:w-auto md:text-[13px]"
+                  >
+                    <UserMinus className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                    Inativar Paciente
+                  </button>
+                ) : null}
               </div>
             </div>
 

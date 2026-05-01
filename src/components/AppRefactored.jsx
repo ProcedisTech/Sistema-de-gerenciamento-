@@ -225,6 +225,8 @@ export default function App() {
   const anamneseRef = useRef(null);
   /** Id do preenchimento retornado por `createPaciente` (PATCH de observações ao finalizar). */
   const anamnesePreenchimentoIdRef = useRef(null);
+  /** Último paciente resolvido na jornada — mantém header quando catálogo/search está temporariamente vazio. */
+  const pacienteAtualRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
@@ -283,9 +285,24 @@ export default function App() {
 
   const pacienteAtual = React.useMemo(() => {
     const sCpf = String(selectedPatientCpf || '').trim();
-    if (!sCpf) return null;
-    return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
-  }, [patients, selectedPatientCpf]);
+    if (!sCpf) {
+      pacienteAtualRef.current = null;
+      return null;
+    }
+    const matchCpf = (p) => p && String(p?.cpf || '').trim() === sCpf;
+    const found =
+      patients.find(matchCpf) ??
+      (Array.isArray(patientListItems) ? patientListItems.find(matchCpf) : null) ??
+      null;
+    if (found) {
+      pacienteAtualRef.current = found;
+      return found;
+    }
+    const pinned = pacienteAtualRef.current;
+    if (pinned && matchCpf(pinned)) return pinned;
+    pacienteAtualRef.current = null;
+    return null;
+  }, [patients, patientListItems, selectedPatientCpf]);
 
   const step5RetornoBloqueiaFinal = React.useMemo(
     () =>
