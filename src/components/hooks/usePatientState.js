@@ -62,7 +62,8 @@ export const usePatientState = (opts = {}) => {
     if (!authEnabled) return;
     try {
       const data = await pacientesApi.search('');
-      setPatients(Array.isArray(data) ? data.map(mapBackendPatient).filter(Boolean) : []);
+      const lista = Array.isArray(data) ? data : (data?.content ?? []);
+      setPatients(lista.map(mapBackendPatient).filter(Boolean));
     } catch (err) {
       if (err.status === 401) {
         console.warn('[usePatientState] Sessão ausente ou expirada; lista de pacientes não carregada.');
