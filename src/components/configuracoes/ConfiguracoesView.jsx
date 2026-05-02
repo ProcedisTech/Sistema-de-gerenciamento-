@@ -12,7 +12,9 @@ import {
   Clock,
   CalendarDays,
   MessageCircle,
+  History,
 } from 'lucide-react';
+import { AuditoriaView } from './AuditoriaView';
 import { authHeadersForFetch } from '../../services/api';
 import { AnamneseAdminView } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
