@@ -9,7 +9,8 @@ function formatarData(iso) {
   return `${d}/${m}/${y}`;
 }
 
-function ModalAdicionar({ data, setData, nome, setNome, onClose, onConfirm, saving }) {
+function ModalAdicionar({ data, setData, nome, setNome, onClose, onConfirm, saving, hojeIso }) {
+  const dataPassada = Boolean(data) && data < hojeIso;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6">
@@ -20,9 +21,15 @@ function ModalAdicionar({ data, setData, nome, setNome, onClose, onConfirm, savi
             <input
               type="date"
               value={data}
+              min={hojeIso}
               onChange={(e) => setData(e.target.value)}
               className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
             />
+            {dataPassada ? (
+              <p className="mt-1 text-xs text-red-500">
+                Feriados devem ser em data atual ou futura
+              </p>
+            ) : null}
           </div>
           <div>
             <label className="mb-1 block text-[13px] font-medium text-[#0f172a]">Nome</label>
@@ -49,7 +56,7 @@ function ModalAdicionar({ data, setData, nome, setNome, onClose, onConfirm, savi
           <button
             type="button"
             onClick={onConfirm}
-            disabled={!data || !nome.trim() || saving}
+            disabled={!data || !nome.trim() || saving || dataPassada}
             className="flex-1 rounded-lg bg-[#00a88e] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             {saving ? 'Salvando...' : 'Adicionar'}
@@ -60,10 +67,15 @@ function ModalAdicionar({ data, setData, nome, setNome, onClose, onConfirm, savi
   );
 }
 
-function ModalSugestoes({ sugestoes, feriados, onAdicionar, onClose }) {
+function ModalSugestoes({ sugestoes, feriados, onAdicionar, onClose, hojeIso }) {
   const datasJaCadastradas = useMemo(
     () => new Set((feriados || []).map((f) => f.data)),
     [feriados],
+  );
+
+  const sugestoesFuturas = useMemo(
+    () => (Array.isArray(sugestoes) ? sugestoes.filter((s) => s?.data && s.data >= hojeIso) : []),
+    [sugestoes, hojeIso],
   );
 
   return (
@@ -71,35 +83,41 @@ function ModalSugestoes({ sugestoes, feriados, onAdicionar, onClose }) {
       <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6">
         <h2 className="mb-2 text-lg font-bold text-[#0f172a]">Feriados nacionais</h2>
         <p className="mb-4 text-[13px] text-[#64748b]">Clique para adicionar individualmente</p>
-        <ul className="space-y-2">
-          {(sugestoes || []).map((s, idx) => {
-            const jaCadastrado = datasJaCadastradas.has(s.data);
-            return (
-              <li key={`${s.data}-${idx}`}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!jaCadastrado) onAdicionar(s);
-                  }}
-                  disabled={jaCadastrado}
-                  className={`flex w-full items-center justify-between rounded-lg border p-3 text-left ${
-                    jaCadastrado
-                      ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] opacity-50'
-                      : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]'
-                  }`}
-                >
-                  <div>
-                    <p className="text-[14px] font-medium text-[#0f172a]">{s.nome}</p>
-                    <p className="text-[12px] text-[#64748b]">{formatarData(s.data)}</p>
-                  </div>
-                  {jaCadastrado && (
-                    <span className="text-[11px] font-bold text-[#00a88e]">JA ADICIONADO</span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {sugestoesFuturas.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-4 text-center text-[13px] text-[#64748b]">
+            Nao ha mais sugestoes nacionais para o restante do ano. Adicione manualmente se precisar.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {sugestoesFuturas.map((s, idx) => {
+              const jaCadastrado = datasJaCadastradas.has(s.data);
+              return (
+                <li key={`${s.data}-${idx}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!jaCadastrado) onAdicionar(s);
+                    }}
+                    disabled={jaCadastrado}
+                    className={`flex w-full items-center justify-between rounded-lg border p-3 text-left ${
+                      jaCadastrado
+                        ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] opacity-50'
+                        : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]'
+                    }`}
+                  >
+                    <div>
+                      <p className="text-[14px] font-medium text-[#0f172a]">{s.nome}</p>
+                      <p className="text-[12px] text-[#64748b]">{formatarData(s.data)}</p>
+                    </div>
+                    {jaCadastrado && (
+                      <span className="text-[11px] font-bold text-[#00a88e]">JA ADICIONADO</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -125,6 +143,12 @@ export function FeriadosPanel() {
   const { success, error: toastError } = useToast();
 
   const ano = new Date().getFullYear();
+  // BUG #8: bloqueia cadastrar feriado em data passada. Calcula no client tz local pra
+  // bater com o que o <input type="date"> exibe.
+  const hojeIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -144,6 +168,10 @@ export function FeriadosPanel() {
 
   const handleAdicionar = async () => {
     if (!novaData || !novoNome.trim()) return;
+    if (novaData < hojeIso) {
+      toastError('Feriados devem ser em data atual ou futura');
+      return;
+    }
     setSaving(true);
     try {
       await feriadosApi.criar({ data: novaData, nome: novoNome.trim() });
@@ -261,6 +289,7 @@ export function FeriadosPanel() {
           }}
           onConfirm={handleAdicionar}
           saving={saving}
+          hojeIso={hojeIso}
         />
       )}
 
@@ -270,6 +299,7 @@ export function FeriadosPanel() {
           feriados={feriados}
           onAdicionar={handleAdicionarSugestao}
           onClose={() => setShowSugestoes(false)}
+          hojeIso={hojeIso}
         />
       )}
 
