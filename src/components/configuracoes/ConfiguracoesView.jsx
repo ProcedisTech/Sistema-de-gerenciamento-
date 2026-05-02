@@ -5,6 +5,7 @@ import {
   HelpCircle,
   ClipboardList,
   User,
+  UserX,
   Building2,
   Settings,
   Users,
@@ -21,6 +22,7 @@ import { GestaoUsuariosView } from './GestaoUsuariosView';
 import { HorarioClinicaPanel } from './HorarioClinicaPanel';
 import { FeriadosPanel } from './FeriadosPanel';
 import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
+import { PacientesInativadosPanel } from './PacientesInativadosPanel';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
@@ -33,6 +35,7 @@ const SECTION_SUBTITLE = {
   'agenda-horarios': 'Horário de atendimento da clínica',
   'agenda-feriados': 'Feriados em que a clínica não atende',
   'agenda-templates': 'Mensagens automáticas de WhatsApp',
+  'pacientes-inativados': 'Pacientes fora da listagem principal',
 };
 
 function NavGroupLabel({ children }) {
@@ -79,6 +82,7 @@ function SidebarNavItem({ icon, label, active, onClick, badge }) {
  * @param {Record<string, unknown>} [props.termosManagerProps] — repassadas a {@link TermosManager}
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada] — repassada a {@link DadosClinicaPanel}
  * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
+ * @param {() => void} [props.onPacientesCatalogRefresh] — após reativar paciente (catálogo + lista paginada)
  * @param {string} props.configSection
  * @param {(s: string) => void} props.setConfigSection
  */
@@ -87,6 +91,7 @@ export function ConfiguracoesView({
   termosManagerProps = {},
   onClinicaAtualizada,
   onPerfilAtualizado,
+  onPacientesCatalogRefresh,
   configSection,
   setConfigSection,
   isAdmin = false,
@@ -125,6 +130,7 @@ export function ConfiguracoesView({
             isAdmin && ['agenda-horarios', 'Horário'],
             isAdmin && ['agenda-feriados', 'Feriados'],
             isAdmin && ['agenda-templates', 'Templates'],
+            isAdmin && ['pacientes-inativados', 'Inativos'],
           ].filter(Boolean).map(([id, short]) => (
             <button
               key={id}
@@ -242,6 +248,12 @@ export function ConfiguracoesView({
                 active={configSection === 'usuarios-acessos'}
                 onClick={() => setConfigSection('usuarios-acessos')}
               />
+              <SidebarNavItem
+                icon={UserX}
+                label="Pacientes Inativados"
+                active={configSection === 'pacientes-inativados'}
+                onClick={() => setConfigSection('pacientes-inativados')}
+              />
             </>
           )}
         </aside>
@@ -277,6 +289,9 @@ export function ConfiguracoesView({
           {configSection === 'agenda-horarios' && isAdmin && <HorarioClinicaPanel />}
           {configSection === 'agenda-feriados' && isAdmin && <FeriadosPanel />}
           {configSection === 'agenda-templates' && isAdmin && <TemplatesMensagemPanel />}
+          {configSection === 'pacientes-inativados' && isAdmin && (
+            <PacientesInativadosPanel onPacientesCatalogRefresh={onPacientesCatalogRefresh} />
+          )}
         </div>
       </div>
     </div>

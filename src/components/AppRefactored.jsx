@@ -92,7 +92,7 @@ function revokeBlobUrlIfAny(url) {
 
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
-  const {  isAdmin, isProfissional, isRecepcionista } = usePapel();
+  const { isAdmin, isProfissional, isRecepcionista } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -122,6 +122,11 @@ export default function App() {
         if (!meRes.ok) {
           if (meRes.status === 404) {
             setPostLoginGate('profile'); // usuário não completou o perfil ainda
+            return;
+          }
+          if (meRes.status === 403) {
+            toast.error('Sua conta está desativada. Entre em contato com o administrador.');
+            handleLogout();
             return;
           }
           setPostLoginGate('ready'); // outros erros, deixa passar
@@ -220,6 +225,8 @@ export default function App() {
   const anamneseRef = useRef(null);
   /** Id do preenchimento retornado por `createPaciente` (PATCH de observações ao finalizar). */
   const anamnesePreenchimentoIdRef = useRef(null);
+  /** Último paciente resolvido na jornada — mantém header quando catálogo/search está temporariamente vazio. */
+  const pacienteAtualRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
@@ -257,17 +264,45 @@ export default function App() {
     setPatientDetailTab,
     patientSearchQuery,
     setPatientSearchQuery,
-    refreshPatients,
-    patientsListOrder,
-    setPatientsListOrder,
+    refreshPatients: fetchPatientsCatalog,
     mergePatientById,
+    patientListItems,
+    patientListPage,
+    setPatientListPage,
+    patientListLoading,
+    patientListMeta,
+    patientListTipoBusca,
+    setPatientListTipoBusca,
+    patientListSortBy,
+    setPatientListSortBy,
+    bumpPatientList,
   } = patientState;
+
+  const refreshPatientsAndPagedList = React.useCallback(() => {
+    fetchPatientsCatalog();
+    bumpPatientList();
+  }, [fetchPatientsCatalog, bumpPatientList]);
 
   const pacienteAtual = React.useMemo(() => {
     const sCpf = String(selectedPatientCpf || '').trim();
-    if (!sCpf) return null;
-    return patients.find((p) => String(p?.cpf || '').trim() === sCpf) ?? null;
-  }, [patients, selectedPatientCpf]);
+    if (!sCpf) {
+      pacienteAtualRef.current = null;
+      return null;
+    }
+    const matchCpf = (p) => p && String(p?.cpf || '').trim() === sCpf;
+    const found =
+      patients.find(matchCpf) ??
+      (Array.isArray(patientListItems) ? patientListItems.find(matchCpf) : null) ??
+      null;
+    if (found) {
+      pacienteAtualRef.current = found;
+      return found;
+    }
+    const pinned = pacienteAtualRef.current;
+    if (pinned && matchCpf(pinned)) return pinned;
+    pacienteAtualRef.current = null;
+    return null;
+  }, [patients, patientListItems, selectedPatientCpf]);
 
   const step5RetornoBloqueiaFinal = React.useMemo(
     () =>
@@ -1066,7 +1101,7 @@ export default function App() {
         console.warn('Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.');
       }
 
-      refreshPatients();
+      refreshPatientsAndPagedList();
       toast.success('Jornada finalizada com sucesso.');
       const cpfParaPerfil = sCpf;
       setActiveView('pacientes');
@@ -1670,11 +1705,18 @@ export default function App() {
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
                 onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
-                onPatientCreated={patientState.refreshPatients}
+                onPatientCreated={refreshPatientsAndPagedList}
                 mergePatientById={mergePatientById}
-                refreshPatients={refreshPatients}
-                patientsListOrder={patientsListOrder}
-                setPatientsListOrder={setPatientsListOrder}
+                refreshPatients={refreshPatientsAndPagedList}
+                patientListItems={patientListItems}
+                patientListPage={patientListPage}
+                setPatientListPage={setPatientListPage}
+                patientListLoading={patientListLoading}
+                patientListMeta={patientListMeta}
+                patientListTipoBusca={patientListTipoBusca}
+                setPatientListTipoBusca={setPatientListTipoBusca}
+                patientListSortBy={patientListSortBy}
+                setPatientListSortBy={setPatientListSortBy}
                 roleUserId={roleUserId}
               />
             )}
@@ -1689,6 +1731,7 @@ export default function App() {
                   setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
                 }
                 onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
+                onPacientesCatalogRefresh={refreshPatientsAndPagedList}
               />
             )}
 

@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { UserCheck, AlertTriangle, Search } from 'lucide-react';
+import { pacientesApi } from '../../services/api';
+import { mapBackendPatient } from '../../utils/patientMapping';
 import {
   maskCPF,
   maskRG,
@@ -47,8 +49,31 @@ export function Step1CheckIn({
   const [telefoneTouched, setTelefoneTouched] = useState(false);
   const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
   const [showProfissoes, setShowProfissoes] = useState(false);
+  const [remotePatients, setRemotePatients] = useState([]);
 
   const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) return undefined;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      pacientesApi
+        .search(q)
+        .then((data) => {
+          if (cancelled) return;
+          const mapped = Array.isArray(data) ? data.map(mapBackendPatient).filter(Boolean) : [];
+          setRemotePatients(mapped);
+        })
+        .catch(() => {
+          if (!cancelled) setRemotePatients([]);
+        });
+    }, 320);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [searchQuery]);
 
   const handleProfissaoChange = (value) => {
     const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
@@ -128,17 +153,21 @@ export function Step1CheckIn({
     }
   };
 
-  const filteredPatients = patients.filter((p) => {
+  const filteredPatients = useMemo(() => {
     const q = searchQuery.trim();
-    if (!q) return true;
-    if (tipoBusca === 'cpf') {
-      return normalizeBuscaDigits(p.cpf).includes(normalizeBuscaDigits(q));
-    }
-    if (tipoBusca === 'telefone') {
-      return normalizeBuscaDigits(p.telefone).includes(normalizeBuscaDigits(q));
-    }
-    return (p.nome || '').toLowerCase().includes(q.toLowerCase());
-  });
+    if (q.length >= 2) return remotePatients;
+    const list = patients.filter((p) => {
+      if (!q) return true;
+      if (tipoBusca === 'cpf') {
+        return normalizeBuscaDigits(p.cpf).includes(normalizeBuscaDigits(q));
+      }
+      if (tipoBusca === 'telefone') {
+        return normalizeBuscaDigits(p.telefone).includes(normalizeBuscaDigits(q));
+      }
+      return (p.nome || '').toLowerCase().includes(q.toLowerCase());
+    });
+    return list;
+  }, [patients, remotePatients, searchQuery, tipoBusca]);
 
   return (
     <div className="animate-in fade-in duration-300">
