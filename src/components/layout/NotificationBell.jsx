@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Bell, BellRing } from 'lucide-react';
 import { notificacoesApi } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
@@ -11,6 +11,7 @@ export default function NotificationBell() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const { error: toastError } = useToast();
+  const containerRef = useRef(null);
 
   const refreshCount = useCallback(async () => {
     try {
@@ -26,6 +27,24 @@ export default function NotificationBell() {
     const id = setInterval(refreshCount, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [refreshCount]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    function handleEscape(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [open]);
 
   const carregarLista = useCallback(async () => {
     setLoading(true);
@@ -69,7 +88,7 @@ export default function NotificationBell() {
   const Icon = count > 0 ? BellRing : Bell;
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={handleToggle}
@@ -126,7 +145,7 @@ export default function NotificationBell() {
                       <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
                     ) : null}
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900">{formatarTipoNotificacao(n.tipo)}</p>
+                      <p className="text-sm font-medium text-gray-900">{formatarMensagemNotificacao(n)}</p>
                       <p className="text-xs text-gray-500">{formatarTempoRelativo(n.criadoEm)}</p>
                     </div>
                   </div>
@@ -140,15 +159,56 @@ export default function NotificationBell() {
   );
 }
 
-function formatarTipoNotificacao(tipo) {
-  const map = {
-    agenda_cancelada: 'Agendamento cancelado',
-    agenda_reagendada: 'Agendamento reagendado',
-    paciente_confirmou: 'Paciente confirmou presença',
-    paciente_recusou: 'Paciente recusou',
-    paciente_sem_resposta: 'Paciente não respondeu',
-  };
-  return map[tipo] || tipo;
+const TIPO_VERBO = {
+  paciente_confirmou: 'confirmou presença',
+  paciente_recusou: 'recusou',
+  paciente_sem_resposta: 'não respondeu',
+  agenda_cancelada: 'Agendamento cancelado',
+  agenda_reagendada: 'Agendamento reagendado',
+};
+
+function formatarQuando(data, hora) {
+  if (!data) return null;
+  let dataBr;
+  if (/^\d{4}-\d{2}-\d{2}/.test(data)) {
+    const [, m, d] = data.split('-');
+    dataBr = `${d}/${m}`;
+  } else if (/^\d{2}\/\d{2}/.test(data)) {
+    dataBr = data.substring(0, 5);
+  } else {
+    return null;
+  }
+  return hora ? `${dataBr} às ${hora}` : dataBr;
+}
+
+function formatarMensagemNotificacao(n) {
+  const payload = n?.payload ?? {};
+  const nome = payload.pacienteNome;
+  const quando = formatarQuando(payload.dataAgendamento, payload.horaInicio);
+  const procStr = payload.procedimentoNome ? ` (${payload.procedimentoNome})` : '';
+
+  switch (n?.tipo) {
+    case 'paciente_confirmou':
+    case 'paciente_recusou':
+    case 'paciente_sem_resposta': {
+      const verbo = TIPO_VERBO[n.tipo];
+      if (nome && quando) return `${nome} ${verbo} em ${quando}${procStr}`;
+      if (nome) return `${nome} ${verbo}`;
+      return `Paciente ${verbo}`;
+    }
+    case 'agenda_cancelada': {
+      if (nome && quando) return `Agendamento de ${nome} em ${quando}${procStr} cancelado`;
+      if (nome) return `Agendamento de ${nome} cancelado`;
+      return 'Agendamento cancelado';
+    }
+    case 'agenda_reagendada': {
+      // TODO: confirmar campos dataAntiga/dataNova quando o PR backend mergear
+      if (nome && quando) return `Agendamento de ${nome} reagendado (era ${quando}${procStr})`;
+      return 'Agendamento reagendado';
+    }
+    default:
+      return TIPO_VERBO[n?.tipo] || n?.tipo || '';
+  }
 }
 
 function formatarTempoRelativo(iso) {
