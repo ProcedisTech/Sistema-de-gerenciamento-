@@ -8,12 +8,21 @@ import {
   User,
   XCircle,
 } from 'lucide-react';
-import { confirmacaoPublicaApi } from '../../services/api.js';
+import { confirmacaoPublicaApi, getApiErrorToastMessage } from '../../services/api.js';
 
-function formatarData(iso) {
-  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return '—';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
+/** Aceita ISO `YYYY-MM-DD` ou `dd/MM/yyyy` (DTO público). */
+function formatarDataAgendamento(val) {
+  if (val == null || val === '') return '—';
+  const s = String(val).trim();
+  if (!s) return '—';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.slice(0, 10).split('-');
+    return `${d}/${m}/${y}`;
+  }
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    return s;
+  }
+  return s;
 }
 
 function InfoRow({ icon, label, value }) {
@@ -43,7 +52,7 @@ export function ConfirmacaoPublicaPage() {
   useEffect(() => {
     if (!token) {
       setEstado('erro');
-      setErroMsg('Link invalido');
+      setErroMsg('Link inválido');
       return;
     }
 
@@ -64,7 +73,11 @@ export function ConfirmacaoPublicaPage() {
       .catch((e) => {
         if (!alive) return;
         setEstado('erro');
-        setErroMsg(e?.status === 404 ? 'Link invalido ou expirado' : 'Erro ao carregar');
+        setErroMsg(
+          e?.status === 404
+            ? 'Link inválido ou expirado'
+            : getApiErrorToastMessage(e, 'Erro ao carregar')
+        );
       });
 
     return () => {
@@ -79,12 +92,15 @@ export function ConfirmacaoPublicaPage() {
       const atualizado = await confirmacaoPublicaApi.responder(token, resposta);
       setInfo(atualizado);
       setEstado('respondido');
-    } catch {
-      setErroMsg('Erro ao registrar resposta. Tente novamente.');
+    } catch (e) {
+      setErroMsg(getApiErrorToastMessage(e, 'Erro ao registrar resposta. Tente novamente.'));
     } finally {
       setRespondendo(false);
     }
   };
+
+  const pacienteExibicao = info?.pacienteNomeCompleto ?? info?.pacienteNome;
+  const profissionalExibicao = info?.profissionalNomeCompleto ?? info?.profissionalNome;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f0fdfa] to-[#f8fbfb] p-4">
@@ -106,15 +122,15 @@ export function ConfirmacaoPublicaPage() {
 
         {estado === 'aguardando' && info && (
           <>
-            <h1 className="mb-2 text-center text-xl font-bold text-[#0f172a]">Confirme sua presenca</h1>
+            <h1 className="mb-2 text-center text-xl font-bold text-[#0f172a]">Confirme sua presença</h1>
             <p className="mb-6 text-center text-sm text-[#64748b]">
-              Ola {info.pacienteNome || 'paciente'}!
+              Olá {pacienteExibicao || 'paciente'}!
             </p>
 
             <div className="mb-6 space-y-3 rounded-xl bg-[#f8fafc] p-4">
-              <InfoRow icon={Calendar} label="Data" value={formatarData(info.dataAgendamento)} />
-              <InfoRow icon={Clock} label="Horario" value={info.horaInicio?.slice(0, 5) || '—'} />
-              <InfoRow icon={User} label="Profissional" value={info.profissionalNome || '—'} />
+              <InfoRow icon={Calendar} label="Data" value={formatarDataAgendamento(info.dataAgendamento)} />
+              <InfoRow icon={Clock} label="Horário" value={info.horaInicio?.slice(0, 5) || '—'} />
+              <InfoRow icon={User} label="Profissional" value={profissionalExibicao || '—'} />
               {info.procedimentoNome ? (
                 <InfoRow icon={CheckCircle2} label="Procedimento" value={info.procedimentoNome} />
               ) : null}
@@ -135,7 +151,7 @@ export function ConfirmacaoPublicaPage() {
                 disabled={respondendo}
                 className="w-full rounded-xl border-2 border-[#e2e8f0] py-3 text-sm font-bold text-[#64748b] hover:bg-[#f8fafc] disabled:opacity-50"
               >
-                Nao vou conseguir
+                Não vou conseguir
               </button>
             </div>
 
@@ -159,7 +175,7 @@ export function ConfirmacaoPublicaPage() {
             <h1 className="text-lg font-bold text-[#0f172a]">Resposta registrada!</h1>
             <p className="text-sm text-[#64748b]">
               {info.status === 'confirmado'
-                ? 'Te esperamos no horario combinado.'
+                ? 'Te esperamos no horário combinado.'
                 : 'Sem problemas. Entraremos em contato para reagendar.'}
             </p>
           </div>
@@ -170,7 +186,7 @@ export function ConfirmacaoPublicaPage() {
             <AlertCircle className="h-12 w-12 text-[#f59e0b]" />
             <h1 className="text-lg font-bold text-[#0f172a]">Esse link expirou</h1>
             <p className="text-sm text-[#64748b]">
-              O prazo para confirmar terminou. Entre em contato com a clinica.
+              O prazo para confirmar terminou. Entre em contato com a clínica.
             </p>
           </div>
         )}

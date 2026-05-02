@@ -46,6 +46,7 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
   };
 
   const minDate = toDateInputValue(new Date());
+  const dataPassada = Boolean(data) && data < minDate;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -71,6 +72,9 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
               min={minDate}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
             />
+            {dataPassada ? (
+              <p className="mt-1 text-sm text-red-500">Data inválida — não é possível agendar para o passado.</p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

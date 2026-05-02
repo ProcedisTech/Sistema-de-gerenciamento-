@@ -9,7 +9,6 @@ import {
   Grid2X2,
   List,
   Loader2,
-  Phone,
   Plus,
   Trash2,
   UserRound,
@@ -73,9 +72,14 @@ function formatDayHeading(iso) {
 }
 
 function actionLabel(status) {
-  if (status === 'pendente') return 'Confirmar';
+  if (status === 'pendente' || status === 'aguardando_confirmacao') return 'Confirmar';
   if (status === 'cancelado') return 'Reagendar';
   return 'Iniciar Atendimento';
+}
+
+function showPrimaryActionButton(status) {
+  if (status === 'falta' || status === 'realizado') return false;
+  return true;
 }
 
 function isAppointmentBloqueio(appointment) {
@@ -170,16 +174,10 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
           <UserRound className="h-3.5 w-3.5 text-[#888888]" />
           <span>{appointment.profissionalNome}</span>
         </div>
-        {!bloqueio ? (
-          <div className="flex items-center gap-2">
-            <Phone className="h-3.5 w-3.5 text-[#888888]" />
-            <span>{appointment.telefone || 'Telefone não informado'}</span>
-          </div>
-        ) : null}
       </div>
 
       <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
-        {!bloqueio ? (
+        {!bloqueio && showPrimaryActionButton(appointment.status) ? (
           <button
             type="button"
             onClick={() => onPrimary(appointment)}
@@ -187,7 +185,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
           >
             {actionLabel(appointment.status)}
           </button>
-        ) : (
+        ) : bloqueio ? (
           <button
             type="button"
             onClick={() => onRemoveBloqueio?.(appointment)}
@@ -195,7 +193,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
           >
             Remover bloqueio
           </button>
-        )}
+        ) : null}
         <button
           type="button"
           onClick={() => onEdit(appointment)}
@@ -553,10 +551,24 @@ function AgendaFormModal({ agenda, onExcluirClick }) {
             </div>
           )}
 
-          <FieldError error={agenda.formErrors.data}>
+          <div>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Data*</label>
-            <input type="date" value={agenda.form.data} onChange={(event) => agenda.updateForm('data', event.target.value)} className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]" />
-          </FieldError>
+            <input
+              type="date"
+              min={agenda.todayIso}
+              value={agenda.form.data}
+              onChange={(event) => agenda.updateForm('data', event.target.value)}
+              className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
+            />
+            {(() => {
+              const past =
+                Boolean(agenda.form.data) && agenda.form.data < agenda.todayIso;
+              const msg =
+                agenda.formErrors.data ||
+                (past ? 'Data inválida — não é possível agendar para o passado.' : '');
+              return msg ? <p className="mt-1 text-sm text-red-500">{msg}</p> : null;
+            })()}
+          </div>
 
           <FieldError error={agenda.formErrors.horaInicio}>
             <label className="text-[12px] font-bold text-[#1A1A2E]" htmlFor="agenda-hora-inicio">
@@ -736,7 +748,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
 
   const handlePrimary = React.useCallback((appointment) => {
     if (isAppointmentBloqueio(appointment)) return;
-    if (appointment.status === 'pendente') {
+    if (appointment.status === 'pendente' || appointment.status === 'aguardando_confirmacao') {
       agenda.updateStatus(appointment, 'confirmado');
       return;
     }

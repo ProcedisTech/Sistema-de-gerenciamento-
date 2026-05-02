@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Building2, Clock, Save, User } from 'lucide-react';
-import { configuracoesClinicaApi } from '../../services/api.js';
+import { configuracoesClinicaApi, getApiErrorToastMessage } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 
 const DIAS = [
   { key: 'seg', label: 'Segunda-feira' },
-  { key: 'ter', label: 'Terca-feira' },
+  { key: 'ter', label: 'Terça-feira' },
   { key: 'qua', label: 'Quarta-feira' },
   { key: 'qui', label: 'Quinta-feira' },
   { key: 'sex', label: 'Sexta-feira' },
-  { key: 'sab', label: 'Sabado' },
+  { key: 'sab', label: 'Sábado' },
   { key: 'dom', label: 'Domingo' },
 ];
 
@@ -46,7 +46,7 @@ export function HorarioClinicaPanel() {
         }
         setHorarios(next);
       })
-      .catch(() => toastError('Erro ao carregar configuracoes'))
+      .catch((e) => toastError(getApiErrorToastMessage(e, 'Erro ao carregar configuracoes')))
       .finally(() => {
         if (alive) setLoading(false);
       });
@@ -82,7 +82,7 @@ export function HorarioClinicaPanel() {
       await configuracoesClinicaApi.atualizar(payload);
       success('Configuracoes salvas');
     } catch (e) {
-      toastError(e?.body?.message || 'Erro ao salvar');
+      toastError(getApiErrorToastMessage(e, 'Erro ao salvar'));
     } finally {
       setSaving(false);
     }
@@ -95,7 +95,7 @@ export function HorarioClinicaPanel() {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="mb-3 text-[15px] font-bold text-[#0f172a]">Tipo de organizacao</h3>
+        <h3 className="mb-3 text-[15px] font-bold text-[#0f172a]">Tipo de organização</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label
             className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-colors ${
@@ -114,7 +114,7 @@ export function HorarioClinicaPanel() {
             />
             <Building2 className="h-5 w-5 text-[#00a88e]" />
             <div>
-              <p className="text-[14px] font-bold text-[#0f172a]">Clinica</p>
+              <p className="text-[14px] font-bold text-[#0f172a]">Clínica</p>
               <p className="text-[12px] text-[#64748b]">Varios profissionais</p>
             </div>
           </label>
@@ -135,7 +135,7 @@ export function HorarioClinicaPanel() {
             />
             <User className="h-5 w-5 text-[#00a88e]" />
             <div>
-              <p className="text-[14px] font-bold text-[#0f172a]">Autonomo</p>
+              <p className="text-[14px] font-bold text-[#0f172a]">Autônomo</p>
               <p className="text-[12px] text-[#64748b]">Profissional sozinho</p>
             </div>
           </label>
@@ -145,7 +145,7 @@ export function HorarioClinicaPanel() {
       <section>
         <h3 className="mb-3 flex items-center gap-2 text-[15px] font-bold text-[#0f172a]">
           <Clock className="h-4 w-4" />
-          Horario de atendimento
+          Horário de atendimento
         </h3>
         <div className="space-y-2">
           {DIAS.map((dia) => (
