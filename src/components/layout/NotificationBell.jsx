@@ -167,6 +167,16 @@ const TIPO_VERBO = {
   agenda_reagendada: 'Agendamento reagendado',
 };
 
+function lerPayload(p) {
+  if (!p) return {};
+  if (typeof p === 'object') return p;
+  if (typeof p === 'string') {
+    try { return JSON.parse(p); }
+    catch { return {}; }
+  }
+  return {};
+}
+
 function formatarQuando(data, hora) {
   if (!data) return null;
   let dataBr;
@@ -182,7 +192,7 @@ function formatarQuando(data, hora) {
 }
 
 function formatarMensagemNotificacao(n) {
-  const payload = n?.payload ?? {};
+  const payload = lerPayload(n?.payload);
   const nome = payload.pacienteNome;
   const quando = formatarQuando(payload.dataAgendamento, payload.horaInicio);
   const procStr = payload.procedimentoNome ? ` (${payload.procedimentoNome})` : '';
