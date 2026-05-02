@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, CalendarClock } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
-import { authHeadersForFetch } from '../../services/api';
+import { authHeadersForFetch, getApiErrorDetail, getApiErrorToastMessage } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
 import DisponibilidadeProfissionalModal from './DisponibilidadeProfissionalModal';
@@ -42,10 +42,14 @@ export function GestaoUsuariosView() {
         setUsuarios(Array.isArray(equipeData) ? equipeData : equipeData.content || []);
         setRoles(Array.isArray(rolesData) ? rolesData : rolesData.content || []);
       } else {
-        toast.error('Erro ao carregar dados da equipe.');
+        const badRes = !equipeRes.ok ? equipeRes : rolesRes;
+        const body = await badRes.json().catch(() => ({}));
+        toast.error(
+          getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao carregar dados da equipe.'
+        );
       }
-    } catch {
-      toast.error('Falha de rede ao carregar equipe.');
+    } catch (e) {
+      toast.error(getApiErrorToastMessage(e, 'Falha de rede ao carregar equipe.'));
     } finally {
       setLoading(false);
     }
@@ -70,10 +74,14 @@ export function GestaoUsuariosView() {
         toast.success('Acesso desativado com sucesso.');
         loadData();
       } else {
-        toast.error('Erro ao desativar acesso.');
+        const body = await res.json().catch(() => ({}));
+        toast.error(
+          getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao desativar acesso.'
+        );
       }
     } catch (error) {
       console.error('Erro ao buscar papéis:', error);
+      toast.error(getApiErrorToastMessage(error, 'Erro ao desativar acesso.'));
     }
   };
 
@@ -504,10 +512,14 @@ function EditRoleModal({ usuario, roles, onClose, onSuccess, fetchHeaders }) {
         toast.success('Papel atualizado com sucesso.');
         onSuccess();
       } else {
-        toast.error('Erro ao atualizar papel.');
+        const body = await res.json().catch(() => ({}));
+        toast.error(
+          getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao atualizar papel.'
+        );
       }
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
+      toast.error(getApiErrorToastMessage(error, 'Erro ao atualizar papel.'));
     } finally {
       setSaving(false);
     }

@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Save, RefreshCw, Loader2 } from 'lucide-react';
-import { disponibilidadeApi, dimensoesApi } from '../../services/api.js';
+import { disponibilidadeApi, dimensoesApi, getApiErrorToastMessage } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 
 const DIAS = [
   { key: 'seg', label: 'Segunda' },
-  { key: 'ter', label: 'Terca' },
+  { key: 'ter', label: 'Terça' },
   { key: 'qua', label: 'Quarta' },
   { key: 'qui', label: 'Quinta' },
   { key: 'sex', label: 'Sexta' },
-  { key: 'sab', label: 'Sabado' },
+  { key: 'sab', label: 'Sábado' },
   { key: 'dom', label: 'Domingo' },
 ];
 
@@ -55,7 +55,7 @@ export default function DisponibilidadeProfissionalModal({
       );
       setPeriodos(ordenados);
     } catch (e) {
-      toastError(e?.body?.message || 'Erro ao carregar disponibilidade');
+      toastError(getApiErrorToastMessage(e, 'Erro ao carregar disponibilidade'));
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export default function DisponibilidadeProfissionalModal({
       success('Disponibilidade salva');
       onSaved?.();
     } catch (e) {
-      toastError(e?.body?.message || 'Erro ao salvar');
+      toastError(getApiErrorToastMessage(e, 'Erro ao salvar'));
     } finally {
       setSaving(false);
     }
@@ -94,7 +94,7 @@ export default function DisponibilidadeProfissionalModal({
       setDisp(resultado);
       success('Sincronizado com horario da clinica');
     } catch (e) {
-      toastError(e?.body?.message || 'Erro ao sincronizar');
+      toastError(getApiErrorToastMessage(e, 'Erro ao sincronizar'));
     } finally {
       setSincronizando(false);
     }

@@ -199,6 +199,27 @@ export function getApiErrorDetail(err) {
 }
 
 /**
+ * Mensagem para toast: prioriza corpo Spring (`getApiErrorDetail`), depois Axios-shape, depois `Error.message`.
+ * @param {unknown} err
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function getApiErrorToastMessage(err, fallback) {
+  const fromApi = err != null && typeof err === 'object' ? getApiErrorDetail(err) : '';
+  if (fromApi) return fromApi;
+  const ax =
+    err != null && typeof err === 'object' && err.response && typeof err.response === 'object'
+      ? err.response.data
+      : null;
+  const axMsg =
+    ax && typeof ax === 'object' && ax.message != null ? String(ax.message).trim() : '';
+  if (axMsg) return axMsg;
+  const m = err != null && typeof err === 'object' && typeof err.message === 'string' ? err.message.trim() : '';
+  if (m) return m;
+  return fallback;
+}
+
+/**
  * Feedback de UI para POST de paciente (400 validação, 409 CPF duplicado).
  * @param {{ status?: number, body?: Record<string, unknown> } | null | undefined} err
  * @returns {{ banner: string, cpfField: string, highlightCpf: boolean }}

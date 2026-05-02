@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { MessageCircle, Save } from 'lucide-react';
-import { templatesMensagemApi } from '../../services/api.js';
+import { getApiErrorToastMessage, templatesMensagemApi } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 
 const PLACEHOLDERS = ['{paciente_nome}', '{data}', '{hora}', '{profissional}', '{link}'];
 
 const DEFAULT_TEMPLATES = {
   confirmacao:
-    'Oi {paciente_nome}! Tudo certo? Te lembrando que amanha ({data}) as {hora} temos seu atendimento. Voce pode confirmar sua presenca aqui: {link}',
+    'Oi {paciente_nome}! Tudo certo? Te lembrando que amanhã ({data}) às {hora} temos seu atendimento. Você pode confirmar sua presença aqui: {link}',
   lembrete:
     'Oi {paciente_nome}! Seu atendimento e HOJE as {hora}. To te esperando! Se precisar reagendar, e so clicar: {link}',
 };
@@ -65,7 +65,7 @@ export function TemplatesMensagemPanel() {
         setTextoConfirmacao(conf?.texto || DEFAULT_TEMPLATES.confirmacao);
         setTextoLembrete(lemb?.texto || DEFAULT_TEMPLATES.lembrete);
       })
-      .catch(() => toastError('Erro ao carregar templates'))
+      .catch((e) => toastError(getApiErrorToastMessage(e, 'Erro ao carregar templates')))
       .finally(() => {
         if (alive) setLoading(false);
       });
@@ -82,7 +82,7 @@ export function TemplatesMensagemPanel() {
       await templatesMensagemApi.salvar(tipo, texto.trim());
       success(`Template "${tipo}" salvo`);
     } catch (e) {
-      toastError(e?.body?.message || 'Erro ao salvar');
+      toastError(getApiErrorToastMessage(e, 'Erro ao salvar'));
     } finally {
       setSaving(false);
     }
@@ -109,8 +109,8 @@ export function TemplatesMensagemPanel() {
       </div>
 
       <TemplateEditor
-        titulo="Confirmacao (24h antes)"
-        descricao="Enviado para confirmar presenca do paciente no dia anterior"
+        titulo="Confirmação (24h antes)"
+        descricao="Enviado para confirmar presença do paciente no dia anterior"
         valor={textoConfirmacao}
         onChange={setTextoConfirmacao}
         onSalvar={() => handleSalvar('confirmacao', textoConfirmacao, setSalvandoConfirmacao)}

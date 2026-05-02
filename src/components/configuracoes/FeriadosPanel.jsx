@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { feriadosApi } from '../../services/api.js';
+import { feriadosApi, getApiErrorToastMessage } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 
 function formatarData(iso) {
@@ -34,6 +34,7 @@ function ModalAdicionar({ data, setData, nome, setNome, onClose, onConfirm, savi
               placeholder="Ex.: Natal - clinica fechada"
               className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
             />
+            <span className="mt-1 block text-xs text-gray-400">{nome.length}/100</span>
           </div>
         </div>
         <div className="mt-4 flex gap-2">
@@ -130,8 +131,8 @@ export function FeriadosPanel() {
     try {
       const lista = await feriadosApi.listar(`${ano}-01-01`, `${ano}-12-31`);
       setFeriados(Array.isArray(lista) ? lista : []);
-    } catch {
-      toastError('Erro ao carregar feriados');
+    } catch (e) {
+      toastError(getApiErrorToastMessage(e, 'Erro ao carregar feriados'));
     } finally {
       setLoading(false);
     }
@@ -152,7 +153,7 @@ export function FeriadosPanel() {
       setNovoNome('');
       await carregar();
     } catch (e) {
-      toastError(e?.body?.message || 'Erro ao adicionar');
+      toastError(getApiErrorToastMessage(e, 'Erro ao adicionar'));
     } finally {
       setSaving(false);
     }
@@ -163,8 +164,8 @@ export function FeriadosPanel() {
       await feriadosApi.desativar(id);
       success('Feriado removido');
       await carregar();
-    } catch {
-      toastError('Erro ao remover');
+    } catch (e) {
+      toastError(getApiErrorToastMessage(e, 'Erro ao remover'));
     }
   };
 
@@ -173,8 +174,8 @@ export function FeriadosPanel() {
     try {
       const lista = await feriadosApi.sugestoesNacionais(ano);
       setSugestoes(Array.isArray(lista) ? lista : []);
-    } catch {
-      toastError('Erro ao carregar sugestoes');
+    } catch (e) {
+      toastError(getApiErrorToastMessage(e, 'Erro ao carregar sugestoes'));
     }
   };
 
@@ -187,7 +188,7 @@ export function FeriadosPanel() {
       if (e?.status === 409) {
         toastError('Esse feriado ja esta cadastrado');
       } else {
-        toastError('Erro ao adicionar');
+        toastError(getApiErrorToastMessage(e, 'Erro ao adicionar'));
       }
     }
   };
@@ -203,7 +204,7 @@ export function FeriadosPanel() {
             className="inline-flex items-center gap-1 rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Sugestoes nacionais
+            Sugestões nacionais
           </button>
           <button
             type="button"
@@ -222,7 +223,7 @@ export function FeriadosPanel() {
         <div className="rounded-xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-6 text-center">
           <CalendarDays className="mx-auto mb-2 h-8 w-8 text-[#94a3b8]" />
           <p className="text-[13px] text-[#64748b]">Nenhum feriado cadastrado</p>
-          <p className="text-[12px] text-[#94a3b8]">Use &quot;Sugestoes nacionais&quot; para comecar</p>
+          <p className="text-[12px] text-[#94a3b8]">Use &quot;Sugestões nacionais&quot; para começar</p>
         </div>
       )}
 

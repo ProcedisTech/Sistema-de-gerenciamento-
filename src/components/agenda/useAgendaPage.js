@@ -481,7 +481,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       } catch (e) {
         const msg = formatAgendamentoApiError(e);
         toastError(e?.body?.message || msg || 'Erro ao reagendar');
-        setError(msg);
         return false;
       } finally {
         setSubmittingReagendar(false);
@@ -637,6 +636,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Informe o procedimento.';
     }
     if (!form.data) nextErrors.data = 'Informe a data.';
+    else if (form.data < todayIso) {
+      nextErrors.data = 'Data inválida — não é possível agendar para o passado.';
+    }
     if (!form.horaInicio) nextErrors.horaInicio = 'Informe o horário.';
     const d = Number(form.duracaoMin);
     if (!Number.isFinite(d) || d < DUR_MIN || d > DUR_MAX || (d - DUR_MIN) % DUR_STEP !== 0) {
@@ -644,7 +646,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [form]);
+  }, [form, todayIso]);
 
   const saveAppointment = useCallback(async () => {
     if (!validateForm()) return false;

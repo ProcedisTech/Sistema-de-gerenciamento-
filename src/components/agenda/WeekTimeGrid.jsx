@@ -357,10 +357,17 @@ export function WeekTimeGrid({
 
   const mobileDays = React.useMemo(() => getMobileDayIsos(weekDayIsos, todayIso), [weekDayIsos, todayIso]);
 
-  const innerGrid = (days) => (
+  const innerGrid = (days) => {
+    const now = new Date();
+    const hm = now.getHours() * 60 + now.getMinutes();
+    const showNowRuler =
+      days.includes(todayIso) && hm >= START_MIN && hm <= END_MIN + SLOT_MIN;
+    const nowTopRuler = ((hm - START_MIN) / SLOT_MIN) * SLOT_HEIGHT;
+
+    return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div
-        className="sticky left-0 z-[3] w-14 shrink-0 border-r border-[#E8E8E8] bg-white"
+        className="sticky left-0 z-[3] w-14 shrink-0 border-r border-[#E8E8E8] bg-white relative"
         style={{ minHeight: gridHeight }}
       >
         {slots.map((m) => (
@@ -372,6 +379,17 @@ export function WeekTimeGrid({
             {formatSlotLabel(m)}
           </div>
         ))}
+        {showNowRuler ? (
+          <div
+            className="pointer-events-none absolute left-0 right-0 z-[8]"
+            style={{ top: nowTopRuler }}
+            title="Hora atual"
+          >
+            <span className="absolute left-0.5 top-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-[#E24B4A]/30 bg-white/95 px-1 py-0.5 text-[9px] font-bold leading-none text-[#E24B4A] shadow-sm">
+              Agora
+            </span>
+          </div>
+        ) : null}
       </div>
       <div
         className="grid min-w-0 flex-1"
@@ -391,7 +409,8 @@ export function WeekTimeGrid({
         ))}
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="w-full min-w-0">

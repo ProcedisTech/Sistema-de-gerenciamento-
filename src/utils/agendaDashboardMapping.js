@@ -85,6 +85,11 @@ export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
     compromisso.catalogoId ||
     '';
 
+  const motivoCancelamentoCodigo =
+    compromisso.motivoCancelamentoCodigo ?? compromisso.motivo_cancelamento_codigo ?? null;
+  const motivoCancelamentoTexto =
+    compromisso.motivoCancelamentoTexto ?? compromisso.motivo_cancelamento_texto ?? null;
+
   return {
     id: String(compromisso.id),
     agendaId: String(slot.id),
@@ -94,6 +99,8 @@ export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
     tipo: slot.tipo || 'atendimento',
     status: slot.status,
     statusNome: slot.statusNome,
+    motivoCancelamentoCodigo,
+    motivoCancelamentoTexto,
     roleUserId: roleUserIdFromSlot(slot),
     corHex: corHexFromCompromisso(compromisso),
     pacienteNome: compromisso.pacienteNome || '',
