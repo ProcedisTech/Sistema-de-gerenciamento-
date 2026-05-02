@@ -33,6 +33,7 @@ export default defineConfig([
     files: [
       '**/PatientProfileView.jsx',
       '**/Step5Finalization.jsx',
+      '**/components/agenda/MarcarCompromissoModal.jsx',
       '**/components/anamnese/AnamneseAdminView.jsx',
       '**/components/journey/Step1CheckIn.jsx',
       '**/components/journey/Step3Evaluation.jsx',

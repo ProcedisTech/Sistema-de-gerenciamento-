@@ -294,7 +294,11 @@ export function Step1CheckIn({
             </div>
           ) : (
             <div className="text-center py-8 text-[#64748b] font-medium">
-              Nenhum paciente encontrado
+              {!(patients?.length) && searchQuery.trim().length < 2
+                ? tipoBusca === 'nome'
+                  ? 'Digite o nome do paciente para buscar'
+                  : 'Digite pelo menos 2 caracteres para buscar'
+                : 'Nenhum paciente encontrado'}
             </div>
           )}
         </div>

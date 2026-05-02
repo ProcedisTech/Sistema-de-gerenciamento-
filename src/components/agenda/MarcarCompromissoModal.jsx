@@ -24,7 +24,10 @@ export function MarcarCompromissoModal({
   const [remotePatients, setRemotePatients] = useState([]);
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen) {
+      setRemotePatients([]);
+      return undefined;
+    }
     const q = patientSearch.trim();
     if (q.length < 2) return undefined;
     let cancelled = false;
@@ -100,22 +103,30 @@ export function MarcarCompromissoModal({
               className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
             />
             <div className="max-h-[160px] overflow-y-auto rounded-xl border border-slate-200">
-              {displayedPatients.map((p) => {
-                const sel = (selectedPatientCpf || '') === String(p.cpf || '').trim();
-                return (
-                  <button
-                    key={p.id || p.cpf}
-                    type="button"
-                    onClick={() => setSelectedPatientCpf(String(p.cpf || '').trim())}
-                    className={`w-full text-left px-3 py-2.5 text-[13px] border-b border-[#f1f5f9] last:border-0 ${
-                      sel ? 'bg-[#e6f7f5] font-bold text-[#0f766e]' : 'hover:bg-[#f8fbfb]'
-                    }`}
-                  >
-                    {p.nome}
-                    {!p.id && <span className="text-amber-600 text-[11px] ml-1">(sem ID)</span>}
-                  </button>
-                );
-              })}
+              {displayedPatients.length > 0 ? (
+                displayedPatients.map((p) => {
+                  const sel = (selectedPatientCpf || '') === String(p.cpf || '').trim();
+                  return (
+                    <button
+                      key={p.id || p.cpf}
+                      type="button"
+                      onClick={() => setSelectedPatientCpf(String(p.cpf || '').trim())}
+                      className={`w-full text-left px-3 py-2.5 text-[13px] border-b border-[#f1f5f9] last:border-0 ${
+                        sel ? 'bg-[#e6f7f5] font-bold text-[#0f766e]' : 'hover:bg-[#f8fbfb]'
+                      }`}
+                    >
+                      {p.nome}
+                      {!p.id && <span className="text-amber-600 text-[11px] ml-1">(sem ID)</span>}
+                    </button>
+                  );
+                })
+              ) : !(patients?.length) && patientSearch.trim().length < 2 ? (
+                <p className="px-3 py-2.5 text-[12px] font-medium text-slate-500">
+                  Digite o nome do paciente para buscar
+                </p>
+              ) : (
+                <p className="px-3 py-2.5 text-[12px] font-medium text-slate-500">Nenhum paciente encontrado</p>
+              )}
             </div>
           </div>
 

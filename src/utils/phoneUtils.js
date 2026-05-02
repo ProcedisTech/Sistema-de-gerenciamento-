@@ -3,7 +3,8 @@ import {
   isValidPhoneNumber,
   parsePhoneNumber,
   getCountryCallingCode,
-} from 'libphonenumber-js';
+  isSupportedCountry,
+} from 'libphonenumber-js/max';
 
 /** Máximo de dígitos nacionais (sem DDI) por país; demais usam 15 (teto prático ITU). */
 const NATIONAL_DIGITS_CAP = {
@@ -61,10 +62,13 @@ export function getDdi(countryCode) {
  * @returns {boolean}
  */
 export function isPhoneValid(countryCode, rawInput) {
-  const digits = nationalDigitsForCountry(countryCode, rawInput);
+  const normalized = String(countryCode ?? '').trim().toUpperCase();
+  const cc = normalized || 'BR';
+  if (!isSupportedCountry(cc)) return false;
+  const digits = nationalDigitsForCountry(cc, rawInput);
   if (digits.length < 4) return false;
   try {
-    return isValidPhoneNumber(digits, countryCode);
+    return isValidPhoneNumber(digits, cc);
   } catch {
     return false;
   }

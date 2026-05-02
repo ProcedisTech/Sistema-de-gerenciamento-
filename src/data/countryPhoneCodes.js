@@ -1,4 +1,4 @@
-import { getCountries, getCountryCallingCode } from 'libphonenumber-js';
+import { getCountries, getCountryCallingCode } from 'libphonenumber-js/max';
 
 const regionNames = new Intl.DisplayNames(['pt-BR'], { type: 'region' });
 
