@@ -22,6 +22,7 @@
  */
 
 import { DEFAULT_ORG_ID, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
+import { supabase } from '../lib/supabaseClient';
 
 let currentOrgId = DEFAULT_ORG_ID;
 
@@ -248,9 +249,22 @@ export function getPacienteCreateErrorFeedback(err) {
   return { banner, cpfField: '', highlightCpf: false };
 }
 
+async function ensureValidToken() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      setAccessToken(session.access_token);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
+  await ensureValidToken();
   const headers = withAuthHeaders({ 'Content-Type': 'application/json', ...fetchOpts.headers });
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
+
 
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
@@ -277,6 +291,7 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
 
 /** POST multipart (FormData): não define Content-Type para o browser enviar boundary. */
 async function requestForm(path, { needsOrg = true, method = 'POST', body, ...rest } = {}) {
+  await ensureValidToken();
   const headers = withAuthHeaders({ ...rest.headers });
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
 
@@ -317,6 +332,7 @@ const blobInflight = new Map();
  * URL absoluta em outro host (presigned R2 etc.) — sem auth (assinatura na query string).
  */
 async function requestBlob(path, { needsOrg = true } = {}) {
+  await ensureValidToken();
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
   const attachAuth = shouldAttachApiAuthToFetchUrl(url);
   let headers = {};
@@ -1137,3 +1153,17 @@ export const disponibilidadeApi = {
       method: 'POST',
     }),
 };
+
+// ── Auditoria ──────────────────────────────────────────────
+export const auditoriaApi = {
+  list: (opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.size != null) params.set('size', String(opts.size));
+    if (opts.roleUserId) params.set('roleUserId', opts.roleUserId);
+    if (opts.entidade) params.set('entidade', opts.entidade);
+    const qs = params.toString();
+    return request(`/api/v1/auditoria${qs ? `?${qs}` : ''}`);
+  },
+};
+
