@@ -6,7 +6,7 @@ export function getAgendaSlotActionVisibility(status) {
   const s = String(status || '');
   if (s === 'pendente' || s === 'aguardando_confirmacao' || s === 'confirmado') {
     return {
-      showRealizado: true,
+      showRealizado: false,
       showFalta: true,
       showWhatsApp: true,
       showReagendar: true,
