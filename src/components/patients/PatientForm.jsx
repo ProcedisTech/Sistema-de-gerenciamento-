@@ -178,7 +178,7 @@ export function PatientForm({
   };
 
   const phoneWrapClass = () => {
-    const invalid = telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero);
+    const invalid = telefoneTouched && !isPhoneValid(telefoneCountryCode ?? 'BR', telefoneNumero);
     if (isModalVariant) {
       return `flex items-stretch gap-0 rounded-lg border bg-white transition focus-within:border-[#00a88e] focus-within:ring-1 focus-within:ring-[#00a88e]/20 ${
         errors.telefone || invalid ? 'border-red-300 bg-red-50/60' : 'border-slate-200'
@@ -610,7 +610,7 @@ export function PatientForm({
                 />
               </div>
             </div>
-            {telefoneTouched && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
+            {telefoneTouched && !isPhoneValid(telefoneCountryCode ?? 'BR', telefoneNumero) && (
               <p className="text-[12px] font-bold text-red-600">Número inválido para este país</p>
             )}
           </div>
