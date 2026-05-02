@@ -47,6 +47,9 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
 
   const minDate = toDateInputValue(new Date());
   const dataPassada = Boolean(data) && data < minDate;
+  // BUG #3: feedback inline (a função `valida()` já bloqueia o submit; aqui só mostramos
+  // a mensagem vermelha, espelhando o padrão de `dataPassada`).
+  const horarioInvalido = Boolean(horaInicio && horaFim && horaInicio >= horaFim);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -77,25 +80,36 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Início *</label>
-              <input
-                type="time"
-                value={horaInicio}
-                onChange={(e) => setHoraInicio(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-              />
+          <div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Início *</label>
+                <input
+                  type="time"
+                  value={horaInicio}
+                  onChange={(e) => setHoraInicio(e.target.value)}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 ${
+                    horarioInvalido ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Fim *</label>
+                <input
+                  type="time"
+                  value={horaFim}
+                  onChange={(e) => setHoraFim(e.target.value)}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 ${
+                    horarioInvalido ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Fim *</label>
-              <input
-                type="time"
-                value={horaFim}
-                onChange={(e) => setHoraFim(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-              />
-            </div>
+            {horarioInvalido ? (
+              <p className="mt-1 text-sm text-red-500">
+                Horário final deve ser depois do horário inicial
+              </p>
+            ) : null}
           </div>
 
           <div>

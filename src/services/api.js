@@ -200,12 +200,37 @@ export function getApiErrorDetail(err) {
 }
 
 /**
- * Mensagem para toast: prioriza corpo Spring (`getApiErrorDetail`), depois Axios-shape, depois `Error.message`.
+ * Mensagem para toast.
+ *
+ * Tradução por status (BUG #14): traduzimos status pra texto legível
+ * antes de cair no body do backend, porque "Erro ao carregar X" não diz
+ * ao profissional se é sessão expirada, internet caída ou backend fora.
+ *
+ * Ordem:
+ *   1. status conhecido → frase amigável fixa (401/5xx/network).
+ *   2. corpo Spring (`getApiErrorDetail`) — validação Bean / ProblemDetail.
+ *   3. Axios-shape (`err.response.data.message`).
+ *   4. `Error.message` cru.
+ *   5. fallback do caller (ou genérico).
+ *
  * @param {unknown} err
- * @param {string} fallback
+ * @param {string} [fallback]
  * @returns {string}
  */
 export function getApiErrorToastMessage(err, fallback) {
+  const status = err != null && typeof err === 'object' ? err.status : undefined;
+
+  if (status === 401) return 'Sua sessão expirou. Faça login novamente.';
+  if (status === 500 || status === 502 || status === 503 || status === 504) {
+    return 'Erro do servidor. Tente novamente em alguns minutos.';
+  }
+
+  const rawMessage =
+    err != null && typeof err === 'object' && typeof err.message === 'string' ? err.message.trim() : '';
+  if (status == null && /failed to fetch|network ?error|load failed/i.test(rawMessage)) {
+    return 'Sem conexão com a internet. Verifique e tente novamente.';
+  }
+
   const fromApi = err != null && typeof err === 'object' ? getApiErrorDetail(err) : '';
   if (fromApi) return fromApi;
   const ax =
@@ -215,9 +240,8 @@ export function getApiErrorToastMessage(err, fallback) {
   const axMsg =
     ax && typeof ax === 'object' && ax.message != null ? String(ax.message).trim() : '';
   if (axMsg) return axMsg;
-  const m = err != null && typeof err === 'object' && typeof err.message === 'string' ? err.message.trim() : '';
-  if (m) return m;
-  return fallback;
+  if (rawMessage) return rawMessage;
+  return fallback || 'Não foi possível carregar. Tente recarregar a página.';
 }
 
 /**
