@@ -13,7 +13,7 @@ export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoCo
     }`;
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-[130] h-16 min-h-[4rem] border-t border-app-border bg-white shadow-app-card pb-[env(safe-area-inset-bottom)]">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[130] h-16 min-h-[4rem] border-t border-app-border bg-white shadow-app-card pb-[env(safe-area-inset-bottom)]">
       <div className="flex h-full min-h-[4rem] items-stretch justify-between gap-1 px-1.5 py-1 sm:px-2">
         <button
           type="button"
