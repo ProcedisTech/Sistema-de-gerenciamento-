@@ -43,6 +43,10 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { PatientsView } from './patients';
 import { ConfiguracoesView } from './configuracoes';
 import { AgendaDashboard } from './agenda';
+import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
+import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
+import ReagendarAgendaModal from './agenda/ReagendarAgendaModal.jsx';
+import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
@@ -277,6 +281,44 @@ export default function App() {
     setPatientListSortBy,
     bumpPatientList,
   } = patientState;
+
+  const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
+  const [scheduleCancelRow, setScheduleCancelRow] = React.useState(null);
+  const [scheduleReagendarRow, setScheduleReagendarRow] = React.useState(null);
+  const [scheduleCancelSubmitting, setScheduleCancelSubmitting] = React.useState(false);
+
+  const handleScheduleExcluirFromEdit = React.useCallback(() => {
+    const row = agendaSchedule.editingAppointment;
+    if (row?.agendaId) {
+      setScheduleCancelRow({ agenda: row });
+      agendaSchedule.closeModal();
+    }
+  }, [agendaSchedule]);
+
+  const handleScheduleConfirmCancelar = React.useCallback(
+    async (payload) => {
+      const row = scheduleCancelRow?.agenda;
+      if (!row?.agendaId || !payload) return;
+      setScheduleCancelSubmitting(true);
+      try {
+        const ok = await agendaSchedule.handleCancelar(row.agendaId, payload);
+        if (ok) setScheduleCancelRow(null);
+      } finally {
+        setScheduleCancelSubmitting(false);
+      }
+    },
+    [agendaSchedule, scheduleCancelRow?.agenda],
+  );
+
+  const handleScheduleConfirmReagendar = React.useCallback(
+    async (payload) => {
+      const row = scheduleReagendarRow?.agenda;
+      if (!row?.agendaId || !payload) return;
+      const ok = await agendaSchedule.handleReagendar(row.agendaId, payload);
+      if (ok) setScheduleReagendarRow(null);
+    },
+    [agendaSchedule, scheduleReagendarRow?.agenda],
+  );
 
   const refreshPatientsAndPagedList = React.useCallback(() => {
     fetchPatientsCatalog();
@@ -1702,6 +1744,7 @@ export default function App() {
                 getPatientInitials={getPatientInitials}
                 onCreatePatient={handleCreatePatientFromPatients}
                 onStartAttendance={handleStartAttendance}
+                onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
                 onUpdatePatient={handleUpdatePatientProfile}
                 onAddGalleryFiles={handleAddGalleryFiles}
                 onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
@@ -1737,9 +1780,12 @@ export default function App() {
 
             {activeView === 'agenda' && (
               <AgendaDashboard
+                agenda={agendaSchedule}
                 patients={patients}
                 authEnabled={authSessionReady}
                 onStartAttendance={handleStartAttendance}
+                onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
+                onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
               />
             )}
 
@@ -1825,6 +1871,28 @@ export default function App() {
         cameraFacing={cameraState.preferredFacing}
         onToggleCameraFacing={cameraState.toggleCameraFacing}
       />
+
+      {authSessionReady ? (
+        <>
+          <AgendaFormModal agenda={agendaSchedule} onExcluirClick={handleScheduleExcluirFromEdit} />
+          {scheduleCancelRow?.agenda ? (
+            <CancelarAgendaModal
+              agenda={scheduleCancelRow.agenda}
+              onClose={() => setScheduleCancelRow(null)}
+              onConfirm={handleScheduleConfirmCancelar}
+              isSubmitting={scheduleCancelSubmitting}
+            />
+          ) : null}
+          {scheduleReagendarRow?.agenda ? (
+            <ReagendarAgendaModal
+              agenda={scheduleReagendarRow.agenda}
+              onClose={() => setScheduleReagendarRow(null)}
+              onConfirm={handleScheduleConfirmReagendar}
+              isSubmitting={agendaSchedule.submittingReagendar}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

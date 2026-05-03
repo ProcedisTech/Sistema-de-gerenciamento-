@@ -40,6 +40,10 @@ import {
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import {
+  fetchNextAppointmentIsoForPaciente,
+  latestProcedureOccurredInstantIso,
+} from '../../utils/patientProfileDerivedDates.js';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import {
@@ -625,6 +629,58 @@ function formatDataHoraAssinaturaPtBr(iso) {
   });
 }
 
+/** Cartões resumo (Última visita / Próximo retorno): só dia em America/Sao_Paulo. */
+function formatCartaoDiaPtBr(iso) {
+  if (!iso) return '-';
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return '-';
+  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+/** ISO instant em string legada → somente data para o cartão. */
+function formatCartaoIfIsoString(raw) {
+  const leg = String(raw ?? '').trim();
+  if (!leg || leg === '-' || leg === '—') return null;
+  if (!/^\d{4}-\d{2}-\d{2}/.test(leg) && !leg.includes('T')) return null;
+  const t = new Date(leg);
+  if (Number.isNaN(t.getTime())) return null;
+  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+/** Perfil: backend manda ISO em ultimaVinda; seeds/lista legada podem ter só ultimaVisita (dd/mm/aaaa). */
+function profileUltimaVindaCard(p) {
+  if (!p) return '-';
+  if (p.ultimaVinda != null && String(p.ultimaVinda).trim() !== '') {
+    return formatCartaoDiaPtBr(p.ultimaVinda);
+  }
+  const leg = String(p.ultimaVisita || '').trim();
+  const isoFmt = formatCartaoIfIsoString(leg);
+  if (isoFmt) return isoFmt;
+  return leg && leg !== '-' && leg !== '—' ? leg : '-';
+}
+
+function profileProximoAgendamentoCard(p) {
+  if (!p) return '-';
+  if (p.proximoAgendamento != null && String(p.proximoAgendamento).trim() !== '') {
+    return formatCartaoDiaPtBr(p.proximoAgendamento);
+  }
+  const leg = String(p.proximoRetorno || '').trim();
+  const isoFmt = formatCartaoIfIsoString(leg);
+  if (isoFmt) return isoFmt;
+  return leg && leg !== '-' && leg !== '—' ? leg : '-';
+}
+
+function profileProximoAgendamentoResumo(p) {
+  if (!p) return 'Nenhum agendamento';
+  if (p.proximoAgendamento != null && String(p.proximoAgendamento).trim() !== '') {
+    return formatCartaoDiaPtBr(p.proximoAgendamento);
+  }
+  const leg = String(p.proximoRetorno || '').trim();
+  const isoFmt = formatCartaoIfIsoString(leg);
+  if (isoFmt) return isoFmt;
+  return leg && leg !== '-' && leg !== '—' ? leg : 'Nenhum agendamento';
+}
+
 /** True se houver ao menos um campo do endereço estruturado preenchido. */
 function hasStructuredAddressData(p) {
   if (!p) return false;
@@ -648,6 +704,7 @@ export function PatientProfileView({
   setSelectedPatientCpf,
   getPatientInitials,
   onStartAttendance,
+  onAgendarPaciente,
   onUpdatePatient,
   onAddGalleryFiles: _onAddGalleryFiles,
   onDeleteGalleryPhoto,
@@ -666,6 +723,8 @@ export function PatientProfileView({
   const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
+  /** Fallback ao DTO: próximo compromisso futuro (pipeline da agenda). */
+  const [proximoAgendaIso, setProximoAgendaIso] = useState(null);
   const [assinaturas, setAssinaturas] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState('');
@@ -716,6 +775,25 @@ export function PatientProfileView({
   const profilePhotoInputRef = useRef(null);
   const alertasCardRef = useRef(null);
 
+  const ultimaVisitaCardDisplay = useMemo(() => {
+    const primary = profileUltimaVindaCard(selectedPatient);
+    if (primary !== '-') return primary;
+    const iso = latestProcedureOccurredInstantIso(apiProcedures);
+    return iso ? formatCartaoDiaPtBr(iso) : '-';
+  }, [selectedPatient, apiProcedures]);
+
+  const proximoRetornoCardDisplay = useMemo(() => {
+    const primary = profileProximoAgendamentoCard(selectedPatient);
+    if (primary !== '-') return primary;
+    return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : '-';
+  }, [selectedPatient, proximoAgendaIso]);
+
+  const proximoRetornoResumoDisplay = useMemo(() => {
+    const primary = profileProximoAgendamentoResumo(selectedPatient);
+    if (primary !== 'Nenhum agendamento') return primary;
+    return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : 'Nenhum agendamento';
+  }, [selectedPatient, proximoAgendaIso]);
+
   const toggleSessao = (key) => {
     setSessoesExpandidas((prev) => ({
       ...prev,
@@ -754,6 +832,7 @@ export function PatientProfileView({
     setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
     setApiProcedures([]);
+    setProximoAgendaIso(null);
     setApiNotes([]);
     setManualAlerts([]);
     setManualAlertsLoading(false);
@@ -766,6 +845,14 @@ export function PatientProfileView({
   const closeRelatoModal = useCallback(() => {
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
   }, []);
+
+  const handleAgendarPacienteClick = useCallback(() => {
+    if (!selectedPatient?.id) {
+      toast.error('Paciente sem cadastro no servidor (UUID).');
+      return;
+    }
+    onAgendarPaciente?.(selectedPatient);
+  }, [selectedPatient, onAgendarPaciente, toast]);
 
   useEffect(() => {
     if (patientDetailTab === 'timeline') {
@@ -1245,6 +1332,23 @@ export function PatientProfileView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recarregar só ao trocar paciente
   }, [selectedPatient?.id]);
+
+  useEffect(() => {
+    const id = selectedPatient?.id;
+    if (!id) {
+      setProximoAgendaIso(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchNextAppointmentIsoForPaciente(id, {
+      pacienteNome: selectedPatient?.nome,
+    }).then((iso) => {
+      if (!cancelled) setProximoAgendaIso(iso);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatient?.id, selectedPatient?.nome]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -1915,6 +2019,15 @@ export function PatientProfileView({
                 >
                   <Play className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                 </button>
+                <button
+                  type="button"
+                  onClick={handleAgendarPacienteClick}
+                  disabled={!isPerfilAtivo || !selectedPatient?.id}
+                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#00a88e] bg-white px-5 text-[14px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f8fbfb] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[44px] md:w-auto md:text-[13px]"
+                >
+                  <Calendar className="inline h-4 w-4" strokeWidth={2.5} aria-hidden />
+                  Agendar Paciente
+                </button>
                 {!isRecepcionista && (
                   <button
                     type="button"
@@ -2053,11 +2166,11 @@ export function PatientProfileView({
             <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#f1f5f9] pt-4 max-sm:p-0">
               <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Ultima Visita</div>
-                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{selectedPatient.ultimaVisita || '-'}</div>
+                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{ultimaVisitaCardDisplay}</div>
               </div>
               <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Proximo Retorno</div>
-                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{selectedPatient.proximoRetorno || '-'}</div>
+                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{proximoRetornoCardDisplay}</div>
               </div>
               <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Saldo Devedor</div>
@@ -2234,7 +2347,9 @@ export function PatientProfileView({
                       </div>
                       <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-[#94a3b8]">Próximo retorno</div>
-                        <div className="mt-0.5 text-[14px] font-semibold text-[#0f172a]">{selectedPatient.proximoRetorno || '—'}</div>
+                        <div className="mt-0.5 text-[14px] font-semibold text-[#0f172a]">
+                          {proximoRetornoResumoDisplay}
+                        </div>
                       </div>
                     </div>
                   </div>

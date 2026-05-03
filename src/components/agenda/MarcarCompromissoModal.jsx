@@ -20,11 +20,17 @@ export function MarcarCompromissoModal({
   observacao,
   setObservacao,
   onConfirm,
+  patientPickerLocked = false,
+  lockedPatientLabel = '',
 }) {
   const [remotePatients, setRemotePatients] = useState([]);
 
   useEffect(() => {
     if (!isOpen) {
+      setRemotePatients([]);
+      return undefined;
+    }
+    if (patientPickerLocked) {
       setRemotePatients([]);
       return undefined;
     }
@@ -47,17 +53,18 @@ export function MarcarCompromissoModal({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [isOpen, patientSearch]);
+  }, [isOpen, patientPickerLocked, patientSearch]);
 
   const displayedPatients = useMemo(() => {
     if (!isOpen) return [];
     const q = patientSearch.trim().toLowerCase();
-    const base = q.length >= 2 ? remotePatients : patients || [];
+    const base =
+      patientPickerLocked && patients?.length ? patients : q.length >= 2 ? remotePatients : patients || [];
     return base.filter((p) => {
       if (!q) return true;
       return [p.nome, p.cpf, p.telefone].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
     });
-  }, [isOpen, patients, remotePatients, patientSearch]);
+  }, [isOpen, patients, patientPickerLocked, remotePatients, patientSearch]);
 
   if (!isOpen) return null;
 
@@ -96,38 +103,46 @@ export function MarcarCompromissoModal({
 
           <div className="space-y-1.5">
             <label className="text-[13px] font-bold text-[#00a88e]">Paciente (cadastro no servidor)</label>
-            <input
-              value={patientSearch}
-              onChange={(e) => setPatientSearch(e.target.value)}
-              placeholder="Buscar nome, CPF ou telefone..."
-              className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
-            />
-            <div className="max-h-[160px] overflow-y-auto rounded-xl border border-slate-200">
-              {displayedPatients.length > 0 ? (
-                displayedPatients.map((p) => {
-                  const sel = (selectedPatientCpf || '') === String(p.cpf || '').trim();
-                  return (
-                    <button
-                      key={p.id || p.cpf}
-                      type="button"
-                      onClick={() => setSelectedPatientCpf(String(p.cpf || '').trim())}
-                      className={`w-full text-left px-3 py-2.5 text-[13px] border-b border-[#f1f5f9] last:border-0 ${
-                        sel ? 'bg-[#e6f7f5] font-bold text-[#0f766e]' : 'hover:bg-[#f8fbfb]'
-                      }`}
-                    >
-                      {p.nome}
-                      {!p.id && <span className="text-amber-600 text-[11px] ml-1">(sem ID)</span>}
-                    </button>
-                  );
-                })
-              ) : !(patients?.length) && patientSearch.trim().length < 2 ? (
-                <p className="px-3 py-2.5 text-[12px] font-medium text-slate-500">
-                  Digite o nome do paciente para buscar
-                </p>
-              ) : (
-                <p className="px-3 py-2.5 text-[12px] font-medium text-slate-500">Nenhum paciente encontrado</p>
-              )}
-            </div>
+            {patientPickerLocked ? (
+              <div className="w-full px-4 py-3 bg-[#f1f5f9] border border-slate-200 rounded-xl text-[14px] font-semibold text-[#0f172a]">
+                {lockedPatientLabel || 'Paciente atual'}
+              </div>
+            ) : (
+              <>
+                <input
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                  placeholder="Buscar nome, CPF ou telefone..."
+                  className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium outline-none focus:border-[#00a88e]"
+                />
+                <div className="max-h-[160px] overflow-y-auto rounded-xl border border-slate-200">
+                  {displayedPatients.length > 0 ? (
+                    displayedPatients.map((p) => {
+                      const sel = (selectedPatientCpf || '') === String(p.cpf || '').trim();
+                      return (
+                        <button
+                          key={p.id || p.cpf}
+                          type="button"
+                          onClick={() => setSelectedPatientCpf(String(p.cpf || '').trim())}
+                          className={`w-full text-left px-3 py-2.5 text-[13px] border-b border-[#f1f5f9] last:border-0 ${
+                            sel ? 'bg-[#e6f7f5] font-bold text-[#0f766e]' : 'hover:bg-[#f8fbfb]'
+                          }`}
+                        >
+                          {p.nome}
+                          {!p.id && <span className="text-amber-600 text-[11px] ml-1">(sem ID)</span>}
+                        </button>
+                      );
+                    })
+                  ) : !(patients?.length) && patientSearch.trim().length < 2 ? (
+                    <p className="px-3 py-2.5 text-[12px] font-medium text-slate-500">
+                      Digite o nome do paciente para buscar
+                    </p>
+                  ) : (
+                    <p className="px-3 py-2.5 text-[12px] font-medium text-slate-500">Nenhum paciente encontrado</p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-1.5">

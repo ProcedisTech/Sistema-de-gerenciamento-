@@ -79,16 +79,17 @@ export const usePatientState = (opts = {}) => {
 
   const mergePatientById = useCallback((id, updater) => {
     if (!id) return;
+    const idStr = String(id);
     setPatients((prev) =>
       prev.map((p) => {
-        if (p.id !== id) return p;
+        if (String(p.id) !== idStr) return p;
         const patch = typeof updater === 'function' ? updater(p) : updater;
         return { ...p, ...patch };
       }),
     );
     setPatientListItems((prev) =>
       prev.map((p) => {
-        if (p.id !== id) return p;
+        if (String(p.id) !== idStr) return p;
         const patch = typeof updater === 'function' ? updater(p) : updater;
         return { ...p, ...patch };
       }),

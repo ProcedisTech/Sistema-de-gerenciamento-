@@ -15,6 +15,7 @@ export function PatientsView(props) {
     setPatientView,
     getPatientInitials,
     onStartAttendance,
+    onAgendarPaciente,
     onUpdatePatient,
     onAddGalleryFiles,
     onDeleteGalleryPhoto,
@@ -40,6 +41,7 @@ export function PatientsView(props) {
         setPatientView={setPatientView}
         getPatientInitials={getPatientInitials}
         onStartAttendance={onStartAttendance}
+        onAgendarPaciente={onAgendarPaciente}
         onUpdatePatient={onUpdatePatient}
         onAddGalleryFiles={onAddGalleryFiles}
         onDeleteGalleryPhoto={onDeleteGalleryPhoto}

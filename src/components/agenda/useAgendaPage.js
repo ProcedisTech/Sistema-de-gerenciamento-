@@ -202,6 +202,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
+  /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
+  const [patientSelectLocked, setPatientSelectLocked] = useState(false);
 
   const procedimentoOptions = useMemo(
     () =>
@@ -573,11 +575,34 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const openCreateModal = useCallback(
     (date = selectedDay) => {
       setEditingAppointment(null);
+      setPatientSelectLocked(false);
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
       setModalMode('create');
     },
     [patientOptions, selectedDay]
+  );
+
+  /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
+  const openCreateModalForPatient = useCallback(
+    (patient) => {
+      if (!patient?.id) return;
+      setEditingAppointment(null);
+      const date = todayIso;
+      const base = defaultForm(date, patientOptions, null);
+      setForm({
+        ...base,
+        pacienteId: String(patient.id),
+        pacienteNome: patient.nome || '',
+        telefone: patient.telefone || '',
+        procedimentoNome: '',
+        catalogoProcedimentoSaudeId: '',
+      });
+      setPatientSelectLocked(true);
+      setFormErrors({});
+      setModalMode('create');
+    },
+    [patientOptions, todayIso]
   );
 
   const openEditModal = useCallback(
@@ -614,6 +639,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
       });
       setFormErrors({});
+      setPatientSelectLocked(false);
       setModalMode('edit');
     },
     [patientOptions, procedimentoOptions, selectedDay]
@@ -622,6 +648,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const closeModal = useCallback(() => {
     setModalMode(null);
     setEditingAppointment(null);
+    setPatientSelectLocked(false);
     setFormErrors({});
   }, []);
 
@@ -713,6 +740,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       await refreshWeekGrid();
       closeModal();
       setError('');
+      toastSuccess('Agendamento salvo.');
       return true;
     } catch (e) {
       setError(formatAgendamentoApiError(e));
@@ -727,6 +755,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     patientOptions,
     refreshWeekGrid,
     roleUserId,
+    toastSuccess,
     validateForm,
   ]);
 
@@ -809,8 +838,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     monthLabel,
     moveSelectedDay,
     openCreateModal,
+    openCreateModalForPatient,
     openEditModal,
     closeModal,
+    patientSelectLocked,
     patientOptions,
     periodos,
     procedimentoOptions,

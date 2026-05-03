@@ -42,6 +42,45 @@ function normalizeFotoPerfilUrl(raw) {
   return t;
 }
 
+/** Instant/data do backend → string preservada ou null. */
+function pickDateTimeIso(dto, camelKey, snakeKey) {
+  if (!dto || typeof dto !== 'object') return null;
+  const v = dto[camelKey] ?? dto[snakeKey];
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
+/** True se a string parece ISO instant (evita tratar dd/mm legado como Instant em proximoRetorno). */
+function looksIsoLikeInstantString(s) {
+  const t = String(s ?? '').trim();
+  if (!t) return false;
+  return /^\d{4}-\d{2}-\d{2}/.test(t) || t.includes('T') || /Z$/i.test(t);
+}
+
+/**
+ * Primeiro valor entre vários pares camel/snake que `new Date` parseia sem NaN.
+ * Usado para ultima visita / próximo agendamento com aliases do DTO Spring.
+ */
+function pickFirstParsableInstant(dto, pairs) {
+  if (!dto || typeof dto !== 'object' || !Array.isArray(pairs)) return null;
+  for (const [camelKey, snakeKey] of pairs) {
+    const s = pickDateTimeIso(dto, camelKey, snakeKey);
+    if (!s) continue;
+    const time = new Date(s).getTime();
+    if (!Number.isNaN(time)) return s;
+  }
+  return null;
+}
+
+/** Data apenas dd/mm/aaaa (America/Sao_Paulo) para lista/seeds que usam ultimaVisita. */
+function toPtBrDateOnly(isoOrStr) {
+  if (!isoOrStr) return '';
+  const t = new Date(isoOrStr);
+  if (Number.isNaN(t.getTime())) return '';
+  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
 /** Shape usada nas telas (lista, jornada, perfil). */
 export function mapBackendPatient(dto) {
   if (!dto) return null;
@@ -53,6 +92,32 @@ export function mapBackendPatient(dto) {
     '';
 
   const cepDigits = normalizeCepForApi(dtoPick(dto, 'cep', 'cep'));
+
+  const ultimaVinda = pickFirstParsableInstant(dto, [
+    ['ultimaVinda', 'ultima_vinda'],
+    ['ultimaVisita', 'ultima_visita'],
+  ]);
+
+  let proximoAgendamento = pickFirstParsableInstant(dto, [
+    ['proximoAgendamento', 'proximo_agendamento'],
+  ]);
+  if (proximoAgendamento == null) {
+    const rawProx = dto.proximoRetorno ?? dto.proximo_retorno;
+    if (rawProx != null && rawProx !== '') {
+      const s = String(rawProx).trim();
+      if (s && looksIsoLikeInstantString(s)) {
+        const time = new Date(s).getTime();
+        if (!Number.isNaN(time)) proximoAgendamento = s;
+      }
+    }
+  }
+
+  const ultimaVisitaLegacy =
+    ultimaVinda != null ? toPtBrDateOnly(ultimaVinda) : String(dto.ultimaVisita || '').trim();
+  const proximoRetornoLegacy =
+    proximoAgendamento != null
+      ? toPtBrDateOnly(proximoAgendamento)
+      : String(dto.proximoRetorno || '').trim();
 
   return {
     id: dto.id,
@@ -85,8 +150,10 @@ export function mapBackendPatient(dto) {
     status: dto.ativo !== false ? 'ativo' : 'inativo',
     /** Canônico no Spring: só fotoPerfilUrl; aliases no front são opcionais. */
     fotoPerfilUrl: rawFoto ? normalizeFotoPerfilUrl(rawFoto) : '',
-    ultimaVisita: '',
-    proximoRetorno: '',
+    ultimaVinda,
+    proximoAgendamento,
+    ultimaVisita: ultimaVisitaLegacy,
+    proximoRetorno: proximoRetornoLegacy,
     saldoDevedor: 0,
     lgpdAssinado: false,
     lgpdRenovacao: '',
