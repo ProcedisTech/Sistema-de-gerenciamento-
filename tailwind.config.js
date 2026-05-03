@@ -30,6 +30,12 @@ export default {
             primarySubtle: '#CCFBF1',
             primaryGhost: '#F0FDFA',
           },
+          /** Célula “hoje” não selecionada (calendário mensal) */
+          today: {
+            bg: '#F3E8FF',
+            text: '#7E22CE',
+            border: '#D8B4FE',
+          },
           stats: {
             totalBg: '#F3E8FF',
             totalIcon: '#A855F7',

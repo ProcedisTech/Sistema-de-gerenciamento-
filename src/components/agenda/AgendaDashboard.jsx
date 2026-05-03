@@ -47,23 +47,7 @@ const STATUS_STYLES = {
   },
 };
 
-const AVATAR_GRADIENTS = [
-  { from: '#7F77DD', to: '#5B53C4' },
-  { from: '#1D9E75', to: '#127A57' },
-  { from: '#D4537E', to: '#A93C61' },
-  { from: '#378ADD', to: '#2566B0' },
-  { from: '#D85A30', to: '#A93D1B' },
-];
-
-const STATUS_BADGE_CLASSES = {
-  confirmado: 'text-green-600 bg-green-100',
-  pendente: 'text-amber-600 bg-amber-100',
-  realizado: 'text-slate-600 bg-slate-100',
-  cancelado: 'text-red-600 bg-red-100',
-  falta: 'text-red-700 bg-red-50',
-  aguardando_confirmacao: 'text-amber-700 bg-amber-50',
-  bloqueio: 'text-slate-600 bg-slate-100',
-};
+const AVATAR_COLORS = ['#7F77DD', '#1D9E75', '#D4537E', '#378ADD', '#D85A30'];
 
 function initials(name) {
   const parts = String(name || 'Paciente').trim().split(/\s+/).filter(Boolean);
@@ -72,11 +56,11 @@ function initials(name) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-function hashGradient(name) {
+function hashColor(name) {
   const value = String(name || 'Paciente');
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) hash = (hash + value.charCodeAt(i) * (i + 1)) % 997;
-  return AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
 function formatDayHeading(iso) {
@@ -170,91 +154,80 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
         }
       : STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
-  const grad = hashGradient(appointment.pacienteNome);
-  const avatarStyle = bloqueio
-    ? { background: '#94a3b8' }
-    : { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
-  const badgeClass =
-    STATUS_BADGE_CLASSES[bloqueio ? 'bloqueio' : appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   return (
-    <div className="rounded-xl border-2 border-slate-200 bg-white shadow-sm transition-all overflow-hidden hover:border-teal-300 hover:shadow-lg">
-      {!bloqueio ? (
-        <div className="h-1.5" style={{ backgroundColor: appointment.corHex || '#14B8A6' }} />
-      ) : null}
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-black text-white"
-              style={avatarStyle}
-            >
-              {initials(appointment.pacienteNome)}
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-bold text-[#1A1A2E]">{appointment.pacienteNome}</div>
-              <div className="flex min-w-0 items-center gap-1.5">
-                {!bloqueio ? (
-                  <span
-                    className="inline-block h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: appointment.corHex || '#14B8A6' }}
-                    aria-hidden
-                  />
-                ) : null}
-                <div className="truncate text-[11px] font-medium text-[#888888]">{appointment.procedimentoNome}</div>
-              </div>
-            </div>
-          </div>
-          <span
-            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
-              isReagendado ? 'text-orange-600 bg-orange-100' : badgeClass
-            }`}
+    <div className={`rounded-[12px] border border-[#E8E8E8] border-l-[3px] ${styles.border} bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-black text-white"
+            style={{ backgroundColor: bloqueio ? '#94a3b8' : hashColor(appointment.pacienteNome) }}
           >
-            {bloqueio ? 'Bloqueado' : isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
-          </span>
-        </div>
-
-        <div className="mt-3 space-y-1.5 text-[11px] font-medium text-[#555]">
-          <div className="flex items-center gap-2">
-            <Clock3 className="h-3.5 w-3.5 text-[#888888]" />
-            <span>{appointment.horaInicio} ({appointment.duracaoMin} min)</span>
+            {initials(appointment.pacienteNome)}
           </div>
-          <div className="flex items-center gap-2">
-            <UserRound className="h-3.5 w-3.5 text-[#888888]" />
-            <span>{appointment.profissionalNome}</span>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-bold text-[#1A1A2E]">{appointment.pacienteNome}</div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {!bloqueio ? (
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: appointment.corHex || '#00a88e' }}
+                  aria-hidden
+                />
+              ) : null}
+              <div className="truncate text-[11px] font-medium text-[#888888]">{appointment.procedimentoNome}</div>
+            </div>
           </div>
         </div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
+            STATUS_STYLES[bloqueio ? 'bloqueio' : appointment.status] ? styles.badge : `${statusTone.bg} ${statusTone.text}`
+          }`}
+        >
+          {bloqueio ? 'Bloqueado' : isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
+        </span>
+      </div>
 
-        <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
-          {!bloqueio && showPrimaryActionButton(appointment.status) ? (
-            <button
-              type="button"
-              onClick={() => onPrimary(appointment)}
-              className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
-            >
-              {actionLabel(appointment.status)}
-            </button>
-          ) : bloqueio ? (
-            <button
-              type="button"
-              onClick={() => onRemoveBloqueio?.(appointment)}
-              className={`${BTN_ACTION} rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-800 transition-colors hover:bg-slate-200`}
-            >
-              Remover bloqueio
-            </button>
-          ) : null}
+      <div className="mt-3 space-y-1.5 text-[11px] font-medium text-[#555]">
+        <div className="flex items-center gap-2">
+          <Clock3 className="h-3.5 w-3.5 text-[#888888]" />
+          <span>{appointment.horaInicio} ({appointment.duracaoMin} min)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <UserRound className="h-3.5 w-3.5 text-[#888888]" />
+          <span>{appointment.profissionalNome}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
+        {!bloqueio && showPrimaryActionButton(appointment.status) ? (
           <button
             type="button"
-            onClick={() => onEdit(appointment)}
-            className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-[11px] font-bold text-[#64748b] transition-colors hover:bg-[#F5F6FA]`}
+            onClick={() => onPrimary(appointment)}
+            className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
           >
-            Editar
+            {actionLabel(appointment.status)}
           </button>
-        </div>
-        {!bloqueio && typeof renderSlotActions === 'function' ? (
-          <div className="mt-2 border-t border-[#f1f5f9] pt-2">{renderSlotActions(appointment)}</div>
+        ) : bloqueio ? (
+          <button
+            type="button"
+            onClick={() => onRemoveBloqueio?.(appointment)}
+            className={`${BTN_ACTION} rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-800 transition-colors hover:bg-slate-200`}
+          >
+            Remover bloqueio
+          </button>
         ) : null}
+        <button
+          type="button"
+          onClick={() => onEdit(appointment)}
+          className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-[11px] font-bold text-[#64748b] transition-colors hover:bg-[#F5F6FA]`}
+        >
+          Editar
+        </button>
       </div>
+      {!bloqueio && typeof renderSlotActions === 'function' ? (
+        <div className="mt-2 border-t border-[#f1f5f9] pt-2">{renderSlotActions(appointment)}</div>
+      ) : null}
     </div>
   );
 }
@@ -357,9 +330,11 @@ function CalendarGrid({ agenda }) {
               className={`relative flex aspect-square w-[92%] max-w-full min-w-0 shrink-0 items-center justify-center rounded-[10px] border p-1 sm:w-[65.2%] sm:p-0 transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 ${
                 isSelected
                   ? 'border-brand-primary bg-brand-primary text-white shadow-sm hover:bg-brand-primaryDark'
-                  : hasEvents
-                    ? 'border-calendar-border bg-calendar-cellWithEvents text-[#1A1A2E] hover:bg-calendar-cellHover'
-                    : 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'
+                  : cell.isToday
+                    ? 'border-2 border-today-border bg-today-bg text-today-text hover:bg-calendar-cellHover'
+                    : hasEvents
+                      ? 'border-calendar-border bg-calendar-cellWithEvents text-[#1A1A2E] hover:bg-calendar-cellHover'
+                      : 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'
               }`}
             >
               <span className="text-[15px] font-bold leading-none sm:text-[14px]">{cell.day}</span>
@@ -373,17 +348,12 @@ function CalendarGrid({ agenda }) {
                 </span>
               ) : null}
               <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 items-center gap-1 sm:bottom-1.5 sm:gap-1">
-                {dots.map((item) => {
-                  const isBloqueio = isAppointmentBloqueio(item);
-                  const dotColor = isSelected ? '#FFFFFF' : isBloqueio ? '#94a3b8' : item.corHex || '#14B8A6';
-                  return (
-                    <span
-                      key={item.id}
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: dotColor }}
-                    />
-                  );
-                })}
+                {dots.map((item) => (
+                  <span
+                    key={item.id}
+                    className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : STATUS_STYLES[isAppointmentBloqueio(item) ? 'bloqueio' : item.status]?.dot || 'bg-brand-primary'}`}
+                  />
+                ))}
                 {hasMore ? <span className={`text-[10px] font-black leading-none ${isSelected ? 'text-white' : 'text-[#888888]'}`}>...</span> : null}
               </span>
             </button>
