@@ -420,6 +420,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     }
   }, [authEnabled, viewMode, weekStartIso, weekEndIso]);
 
+  /** Recarrega lista do mês e grade semanal (no-op na semana se viewMode !== 'semana'). */
+  const refreshDashboard = useCallback(async () => {
+    await loadMonth();
+    await refreshWeekGrid();
+  }, [loadMonth, refreshWeekGrid]);
+
   const handleCancelar = useCallback(
     async (agendaId, payload) => {
       if (!agendaId || !payload) return false;
@@ -846,6 +852,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     periodos,
     procedimentoOptions,
     proximoHorarioLivre,
+    refreshDashboard,
     saveAppointment,
     selectDay,
     selectedDay,

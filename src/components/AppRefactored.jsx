@@ -1144,6 +1144,7 @@ export default function App() {
       }
 
       refreshPatientsAndPagedList();
+      await agendaSchedule.refreshDashboard();
       toast.success('Jornada finalizada com sucesso.');
       const cpfParaPerfil = sCpf;
       setActiveView('pacientes');
