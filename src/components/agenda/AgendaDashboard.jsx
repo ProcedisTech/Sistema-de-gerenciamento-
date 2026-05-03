@@ -359,7 +359,7 @@ function CalendarGrid({ agenda }) {
                   ? 'border-brand-primary bg-brand-primary text-white shadow-sm hover:bg-brand-primaryDark'
                   : hasEvents
                     ? 'border-calendar-border bg-calendar-cellWithEvents text-[#1A1A2E] hover:bg-calendar-cellHover'
-                    : 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'
+                    : 'border-transparent bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'
               }`}
             >
               <span className="text-[15px] font-bold leading-none sm:text-[14px]">{cell.day}</span>
