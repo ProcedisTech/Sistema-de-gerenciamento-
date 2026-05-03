@@ -310,7 +310,7 @@ function CalendarGrid({ agenda }) {
       <div
         role="grid"
         aria-label={`Calendario de ${agenda.monthLabel}`}
-        className="grid grid-cols-7 justify-items-center gap-px sm:gap-0.5"
+        className="grid grid-cols-7 gap-1.5 sm:gap-2"
       >
         {agenda.calendarCells.map((cell) => {
           if (!cell.inCurrentMonth) {
@@ -318,7 +318,7 @@ function CalendarGrid({ agenda }) {
               <div
                 key={cell.iso}
                 aria-hidden="true"
-                className="aspect-square w-[92%] max-w-full sm:w-[65.2%]"
+                className="aspect-square w-full"
               />
             );
           }
@@ -354,7 +354,7 @@ function CalendarGrid({ agenda }) {
                   agenda.selectDay(cell.iso);
                 }
               }}
-              className={`relative flex aspect-square w-[92%] max-w-full min-w-0 shrink-0 items-center justify-center rounded-[10px] border p-1 sm:w-[65.2%] sm:p-0 transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 ${
+              className={`relative flex aspect-square w-full min-w-0 items-center justify-center rounded-[10px] border p-1 transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 ${
                 isSelected
                   ? 'border-brand-primary bg-brand-primary text-white shadow-sm hover:bg-brand-primaryDark'
                   : hasEvents
