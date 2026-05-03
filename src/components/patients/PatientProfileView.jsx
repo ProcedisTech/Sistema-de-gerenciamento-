@@ -1835,7 +1835,7 @@ export function PatientProfileView({
     if (!selectedPatient?.id) return;
     setInativarSenhaErro('');
     if (!String(inativarSenha || '').trim()) {
-      setInativarSenhaErro('Informe sua senha para confirmar.');
+      setInativarSenhaErro('Senha obrigatória.');
       return;
     }
     setInativarSubmitting(true);
@@ -1848,6 +1848,7 @@ export function PatientProfileView({
       setInativarModalOpen(false);
       setInativarMotivo('');
       setInativarSenha('');
+      setInativarSenhaErro('');
       setPatientView('list');
       setPatientDetailTab('atendimento');
       setSelectedPatientCpf?.(null);

@@ -1326,8 +1326,8 @@ export default function App() {
       <main
         className={`flex flex-1 flex-col h-full ${
           isJornadaView
-            ? 'min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0'
-            : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0`
+            ? 'min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
+            : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
         }`}
       >
         {isJornadaView && (

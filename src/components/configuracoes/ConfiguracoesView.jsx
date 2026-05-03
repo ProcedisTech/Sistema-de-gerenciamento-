@@ -203,7 +203,6 @@ export function ConfiguracoesView({
                 label="Perfil do Profissional"
                 active={configSection === 'perfil'}
                 onClick={() => setConfigSection('perfil')}
-                badge="soon"
               />
             </>
           )}
@@ -213,7 +212,6 @@ export function ConfiguracoesView({
               label="Dados da Clínica"
               active={configSection === 'clinica'}
               onClick={() => setConfigSection('clinica')}
-              badge="soon"
             />
           )}
 
