@@ -249,9 +249,9 @@ function CalendarGrid({ agenda }) {
 
   return (
     <div>
-      <div role="row" className="grid grid-cols-7 text-center text-[10px] font-bold text-[#888888] sm:text-[11px]">
+      <div role="row" className="grid grid-cols-7 text-center text-[12px] font-bold text-[#888888] sm:text-[11px]">
         {weekDays.map((day) => (
-          <div key={day} role="columnheader" className="py-1.5 sm:py-2">
+          <div key={day} role="columnheader" className="py-2 sm:py-2">
             {day}
           </div>
         ))}
@@ -263,6 +263,15 @@ function CalendarGrid({ agenda }) {
         className="grid grid-cols-7 justify-items-center gap-px sm:gap-0.5"
       >
         {agenda.calendarCells.map((cell) => {
+          if (!cell.inCurrentMonth) {
+            return (
+              <div
+                key={cell.iso}
+                aria-hidden="true"
+                className="aspect-square w-[92%] max-w-full sm:w-[65.2%]"
+              />
+            );
+          }
           const dayAppointments = agenda.appointmentsByDate[cell.iso] || [];
           const isSelected = cell.iso === agenda.selectedDay;
           const dots = dayAppointments.slice(0, 3);
@@ -295,7 +304,7 @@ function CalendarGrid({ agenda }) {
                   agenda.selectDay(cell.iso);
                 }
               }}
-              className={`relative flex aspect-square w-[65.2%] max-w-full min-w-0 shrink-0 items-center justify-center rounded-[10px] border p-0 transition-all focus:outline-none focus:ring-2 focus:ring-[#0FA37F]/30 ${
+              className={`relative flex aspect-square w-[92%] max-w-full min-w-0 shrink-0 items-center justify-center rounded-[10px] border p-1 sm:w-[65.2%] sm:p-0 transition-all focus:outline-none focus:ring-2 focus:ring-[#0FA37F]/30 ${
                 cell.isToday
                   ? 'border-[#0FA37F] bg-[#0FA37F] text-white shadow-sm hover:bg-[#0d8f6f]'
                   : isSelected
@@ -303,19 +312,19 @@ function CalendarGrid({ agenda }) {
                     : hasEvents
                       ? 'border-[#C5EDE1]/80 bg-[#E8F0ED] text-[#1A1A2E] hover:bg-[#dfece8]'
                       : 'border-transparent bg-white text-[#1A1A2E] hover:bg-[#F5F6FA]'
-              } ${cell.inCurrentMonth ? '' : 'opacity-35'}`}
+              }`}
             >
-              <span className="text-[13px] font-bold leading-none sm:text-[14px]">{cell.day}</span>
+              <span className="text-[15px] font-bold leading-none sm:text-[14px]">{cell.day}</span>
               {dayAppointments.length > 0 ? (
                 <span
-                  className={`absolute right-0.5 top-0.5 flex h-[15px] w-[15px] items-center justify-center rounded-full text-[8px] font-black sm:right-1 sm:top-1 sm:h-[17px] sm:w-[17px] sm:text-[9px] ${
+                  className={`absolute right-0.5 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-black sm:right-1 sm:top-1 sm:h-[17px] sm:w-[17px] sm:text-[9px] ${
                     cell.isToday ? 'bg-white text-[#0FA37F]' : 'bg-[#0FA37F] text-white'
                   }`}
                 >
                   {dayAppointments.length}
                 </span>
               ) : null}
-              <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-0.5 sm:bottom-1.5 sm:gap-1">
+              <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 items-center gap-1 sm:bottom-1.5 sm:gap-1">
                 {dots.map((item) => (
                   <span
                     key={item.id}
@@ -753,7 +762,7 @@ export function AgendaDashboard({ patients = [], onStartAttendance, authEnabled 
       return;
     }
     if (appointment.status === 'cancelado') {
-      agenda.openCreateModal(appointment.data);
+      setModalReagendar({ agenda: appointment });
       return;
     }
 
