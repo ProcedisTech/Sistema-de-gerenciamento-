@@ -37,6 +37,22 @@ function normalizeCorHex(src) {
   return '#00a88e';
 }
 
+/** Campos do DTO de agenda (reagendamento) repassados na linha do dashboard. */
+function agendaNovaCamposFromRaw(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { agendaNovaId: null, agendaNovaDataAgendamento: null, agendaNovaHoraInicio: null };
+  }
+  const id = raw.agendaNovaId ?? raw.agenda_nova_id;
+  const data = raw.agendaNovaDataAgendamento ?? raw.agenda_nova_data_agendamento;
+  const hora = raw.agendaNovaHoraInicio ?? raw.agenda_nova_hora_inicio;
+  return {
+    agendaNovaId: id != null && String(id).trim() !== '' ? String(id) : null,
+    agendaNovaDataAgendamento:
+      data != null && String(data).trim() !== '' ? String(data).slice(0, 10) : null,
+    agendaNovaHoraInicio: hora != null && String(hora).trim() !== '' ? String(hora) : null,
+  };
+}
+
 /** Cor do catálogo / agendamento vinda do backend (nomes alternativos tolerados). */
 function corHexFromCompromisso(compromisso) {
   const c = compromisso || {};
@@ -114,6 +130,7 @@ export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
     catalogoProcedimentoSaudeId: catId ? String(catId) : '',
     profissionalNome: slot.profissionalNome || '',
     observacao: compromisso.observacao || '',
+    ...agendaNovaCamposFromRaw(raw),
     rawSlot: raw,
     rawAgendamento: compromisso,
   };
@@ -158,6 +175,7 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             telefone: '',
             catalogoProcedimentoSaudeId: '',
             observacao: '',
+            ...agendaNovaCamposFromRaw(raw),
             rawSlot: raw,
             rawAgendamento: null,
           });
@@ -194,6 +212,7 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             telefone: '',
             catalogoProcedimentoSaudeId: '',
             observacao: '',
+            ...agendaNovaCamposFromRaw(raw),
             rawSlot: raw,
             rawAgendamento: null,
           });
