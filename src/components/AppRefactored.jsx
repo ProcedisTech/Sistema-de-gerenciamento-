@@ -1720,13 +1720,13 @@ export default function App() {
           }`}
         >
           <div
-            className={`bg-white rounded-[20px] border border-app-border shadow-app-card ${
-              activeView === 'configuracoes'
-                ? 'px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
-                : activeView === 'pacientes' || activeView === 'agenda'
-                  ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
-                  : 'p-4 sm:p-8 pb-5 sm:pb-6'
-            }`}
+            className={
+              activeView === 'pacientes' || activeView === 'agenda'
+                ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
+                : activeView === 'configuracoes'
+                  ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
+                  : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
+            }
           >
 
             {activeView === 'pacientes' && (

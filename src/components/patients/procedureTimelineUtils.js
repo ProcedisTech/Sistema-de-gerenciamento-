@@ -1,0 +1,36 @@
+import { procedureOccurredInstantIso } from '../../utils/patientProfileDerivedDates.js';
+
+/** DD/MM/AAAA (label pt-BR) → ms UTC local; ignora linhas inválidas. */
+export function ddMmYyyyLabelToMs(s) {
+  if (!s || s === '-') return 0;
+  const parts = String(s).trim().split('/');
+  if (parts.length !== 3) return 0;
+  const [d, m, y] = parts.map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return 0;
+  const t = new Date(y, m - 1, d).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/**
+ * Ordem para timeline: mais recente primeiro (API usa `criadoEm`/`procedureOccurredInstantIso`;
+ * previews legadas podem só ter campo `data` DD/MM).
+ */
+export function procedureSortInstantMs(proc) {
+  if (!proc || typeof proc !== 'object') return 0;
+  const iso = procedureOccurredInstantIso(proc);
+  if (iso) {
+    const ms = new Date(iso).getTime();
+    if (!Number.isNaN(ms)) return ms;
+  }
+  const rawData = proc.data != null ? String(proc.data).trim() : '';
+  if (rawData && rawData !== '—' && rawData !== '-') {
+    return ddMmYyyyLabelToMs(rawData);
+  }
+  return 0;
+}
+
+export function sortProcedimentosPorCriadoEmDesc(items) {
+  const arr = Array.isArray(items) ? [...items] : [];
+  arr.sort((a, b) => procedureSortInstantMs(b) - procedureSortInstantMs(a));
+  return arr;
+}

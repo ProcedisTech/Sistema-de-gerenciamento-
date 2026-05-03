@@ -14,6 +14,14 @@ import {
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
 import { anamneseApi, procedimentosApi } from '../../services/api';
+import {
+  ProcedureTimelineHeading,
+  ProcedureTimelineLoading,
+  ProcedureTimelineRail,
+  ProcedureTimelineEntry,
+  ProcedureTimelinePreviewCard,
+} from './ProcedureTimelineBlock.jsx';
+import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -225,23 +233,44 @@ function PatientPreviewPanel({
 }) {
   const [attendanceChoiceModalOpen, setAttendanceChoiceModalOpen] = useState(false);
 
-  const timelineProcedures =
-    previewProcedures.length > 0
-      ? previewProcedures.map((proc) => ({
+  /** Origem ordenada mais recentes primeiro — API ou legado `{ data, nome, … }`. */
+  const procedureSourceSorted = useMemo(() => {
+    const raw =
+      previewProcedures.length > 0 ? previewProcedures : (selectedPatient.procedures || []);
+    return sortProcedimentosPorCriadoEmDesc(raw);
+  }, [previewProcedures, selectedPatient.procedures]);
+
+  /** Linhas já formatadas pt-BR; mesma ordem que `procedureSourceSorted`. */
+  const timelineRows = useMemo(
+    () =>
+      procedureSourceSorted.map((proc) => ({
         data: proc.criadoEm
           ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-          : '-',
+          : proc.data != null
+            ? String(proc.data).trim() || '-'
+            : '-',
         hora: proc.criadoEm
           ? new Date(proc.criadoEm).toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'America/Sao_Paulo',
-          })
-          : '',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Sao_Paulo',
+            })
+          : proc.hora != null
+            ? String(proc.hora).trim()
+            : '',
         nome: proc.procedimentoNome || proc.nome || 'Procedimento',
         profissional: proc.profissionalNome || proc.profissional || '—',
-      }))
-      : (selectedPatient.procedures || []);
+      })),
+    [procedureSourceSorted],
+  );
+
+  const PREVIEW_TIMELINE_MAX = 3;
+  const previewTimelineTruncated = timelineRows.length > PREVIEW_TIMELINE_MAX;
+
+  const goToPacienteProntuario = () => {
+    setPatientDetailTab('prontuario');
+    setPatientView('profile');
+  };
 
   const handleIniciarAtendimentoClick = () => {
     if (previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
@@ -359,27 +388,33 @@ function PatientPreviewPanel({
         </div>
       </div>
 
-      <div>
-        <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-          Linha do Tempo de Procedimentos
-        </h4>
+      <div className="min-w-0">
+        <ProcedureTimelineHeading title="Linha do Tempo de Procedimentos" />
         {loadingPreviewProcedures ? (
-          <div className="py-6 text-center text-[13px] font-normal text-[#64748b]">Carregando procedimentos...</div>
-        ) : timelineProcedures.length > 0 ? (
-          <ul className="flex flex-col gap-2">
-            {timelineProcedures.map((proc, idx) => (
-              <li key={idx}>
-                <div className="rounded-lg border border-app-border p-3 transition-colors duration-100 shadow-sm hover:bg-app-nav-hover">
-                  <p className="text-[11px] font-normal text-[#94a3b8]">
-                    {proc.data}
-                    {proc.hora ? ` · ${proc.hora}` : ''}
-                  </p>
-                  <p className="mt-0.5 text-[13px] font-semibold text-[#0f766e]">{proc.nome}</p>
-                  <p className="mt-0.5 text-[12px] font-normal text-[#64748b]">Realizado por {proc.profissional || '—'}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <ProcedureTimelineLoading message="Carregando procedimentos…" />
+        ) : timelineRows.length > 0 ? (
+          <ProcedureTimelineRail>
+            {(previewTimelineTruncated ? timelineRows.slice(0, PREVIEW_TIMELINE_MAX) : timelineRows).map(
+              (proc, idx, arr) => {
+                const fusedTail = previewTimelineTruncated && idx === arr.length - 1;
+                const key =
+                  fusedTail ? `preview-proc-tail-${idx}` : `${idx}-${proc.data}-${proc.nome}-${proc.profissional}`;
+                return (
+                  <ProcedureTimelineEntry key={key}>
+                    <ProcedureTimelinePreviewCard
+                      dateLabel={proc.data}
+                      timeLabel={proc.hora}
+                      procedureName={proc.nome}
+                      professionalName={proc.profissional || '—'}
+                      fusedVerMais={fusedTail}
+                      verMaisLabel="Ver mais"
+                      onPress={goToPacienteProntuario}
+                    />
+                  </ProcedureTimelineEntry>
+                );
+              },
+            )}
+          </ProcedureTimelineRail>
         ) : (
           <p className="py-6 text-center text-[13px] font-normal text-[#64748b]">Nenhum procedimento registrado</p>
         )}

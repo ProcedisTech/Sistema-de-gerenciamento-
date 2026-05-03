@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Clock,
   ClipboardList,
+  DollarSign,
   Download,
   FileText,
   Filter,
@@ -69,6 +70,13 @@ import {
   setStoredProfilePhotoDataUrl,
 } from '../../utils/patientProfilePhoto.js';
 import { PatientAvatar } from './PatientAvatar.jsx';
+import {
+  ProcedureTimelineHeading,
+  ProcedureTimelineRail,
+  ProcedureTimelineEntry,
+  ProcedureTimelineProfileVerMaisStrip,
+} from './ProcedureTimelineBlock.jsx';
+import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
 import {
   formatPacienteGaleriaError,
   normalizePacienteGaleriaResponse,
@@ -754,6 +762,7 @@ export function PatientProfileView({
   /** Lista leve de anamneses (mesmo endpoint que AnamneseTab) para decisão na aba Atendimento. */
   const [anamneseListSummary, setAnamneseListSummary] = useState([]);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
+  const [showAllProntuario, setShowAllProntuario] = useState(false);
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
   const [manualAlerts, setManualAlerts] = useState([]);
   const [manualAlertsLoading, setManualAlertsLoading] = useState(false);
@@ -831,6 +840,7 @@ export function PatientProfileView({
     setCategoriasExpandidas({});
     setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
+    setShowAllProntuario(false);
     setApiProcedures([]);
     setProximoAgendaIso(null);
     setApiNotes([]);
@@ -1520,12 +1530,24 @@ export function PatientProfileView({
     return [...fromApi, ...local];
   }, [apiNotes, selectedPatient?.notas]);
 
-  /* Agregação (procedimentos + galeria); mantida — Prontuário usa apiProcedures na UI. */
+  const sortedApiProcedures = useMemo(
+    () => sortProcedimentosPorCriadoEmDesc(apiProcedures || []),
+    [apiProcedures],
+  );
+
+  const prontuarioListMax = 3;
+  const prontuarioListTruncated =
+    sortedApiProcedures.length > prontuarioListMax && !showAllProntuario;
+  const prontuarioProceduresVisible = prontuarioListTruncated
+    ? sortedApiProcedures.slice(0, prontuarioListMax)
+    : sortedApiProcedures;
+
+  /* Agregação (procedimentos + galeria); mantida — Prontuário usa sortedApiProcedures na UI. */
   // eslint-disable-next-line no-unused-vars -- valor agregado intencionalmente preservado
   const timelineEvents = useMemo(() => {
     const events = [];
 
-    (apiProcedures || []).forEach((proc, pIdx) => {
+    sortedApiProcedures.forEach((proc, pIdx) => {
       events.push({
         id: proc.id || `api_proc_${pIdx}`,
         type: 'procedimento',
@@ -1568,7 +1590,7 @@ export function PatientProfileView({
     }
 
     return events;
-  }, [patient, capturedPhotos, apiProcedures, galeriaBackend, apiGaleriaItems]);
+  }, [patient, capturedPhotos, sortedApiProcedures, galeriaBackend, apiGaleriaItems]);
 
   const anamneseAtendimentoInfo = useMemo(() => {
     const rows = (Array.isArray(anamneseListSummary) ? [...anamneseListSummary] : []).filter((r) => r?.dataHora);
@@ -1868,7 +1890,7 @@ export function PatientProfileView({
             setPatientView('list');
             setPatientDetailTab('atendimento');
           }}
-          className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#00a88e] px-3 py-2 text-[14px] font-bold text-white transition-colors hover:bg-[#00967f]"
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#1db8a2] px-3 py-2 text-[14px] font-bold text-white transition-colors hover:bg-[#00a88e]"
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
         </button>
@@ -1876,8 +1898,8 @@ export function PatientProfileView({
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="mb-6 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
-            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start">
+          <div className="mb-6 rounded-[18px] border border-[#e2e8f0] bg-white p-5 shadow-md sm:p-6">
+            <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
                 <input
                   ref={profilePhotoInputRef}
@@ -1894,8 +1916,8 @@ export function PatientProfileView({
                 <PatientAvatar
                   patient={patient}
                   getPatientInitials={getPatientInitials}
-                  className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5] shadow-sm md:h-16 md:w-16"
-                  initialsClassName="text-base font-bold text-[#0f766e] md:text-lg"
+                  className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5] shadow-sm md:h-20 md:w-20"
+                  initialsClassName="text-lg font-bold text-[#0f766e] md:text-xl"
                   spinnerClassName="h-5 w-5"
                 />
                 <button
@@ -1919,7 +1941,7 @@ export function PatientProfileView({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-[17px] font-bold tracking-tight text-[#0f172a] md:text-[20px]">{selectedPatient.nome}</h3>
+                  <h3 className="text-[18px] font-bold tracking-tight text-[#0f172a] md:text-[22px]">{selectedPatient.nome}</h3>
                   {isPerfilAtivo ? (
                     <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
                       ATIVO
@@ -1930,34 +1952,25 @@ export function PatientProfileView({
                     </span>
                   )}
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] font-medium text-[#475569]">
-                  <span className="inline-flex items-center gap-1.5">
+                <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 text-[13px] font-medium text-[#475569] sm:grid-cols-2">
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
                     {selectedPatient.idade != null ? `${selectedPatient.idade} anos` : '—'}
-                  </span>
-                  <span className="text-[#cbd5e1]" aria-hidden>
-                    ·
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                    {selectedPatient.cpf || '—'}
-                  </span>
-                  <span className="text-[#cbd5e1]" aria-hidden>
-                    ·
                   </span>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
                     <Phone className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
                     <span className="truncate">{selectedPatient.telefone || '—'}</span>
                   </span>
-                  <span className="text-[#cbd5e1]" aria-hidden>
-                    ·
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                    <span className="truncate">{selectedPatient.cpf || '—'}</span>
                   </span>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
                     <Mail className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
                     <span className="truncate">{selectedPatient.email || '—'}</span>
                   </span>
                 </div>
-                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-x-4 text-[13px] text-[#64748b]">
+                <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-x-4 text-[13px] text-[#64748b]">
                   <p className="min-w-0 break-words">
                     <span className="font-semibold text-[#475569]">Pai: </span>
                     {(selectedPatient.nomePai && String(selectedPatient.nomePai).trim()) || '—'}
@@ -2015,7 +2028,7 @@ export function PatientProfileView({
                 <button
                   type="button"
                   onClick={() => onStartAttendance?.(selectedPatient)}
-                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:bg-[#00967f]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors active:bg-[#00967f] md:w-auto md:hover:bg-[#00967f]"
                 >
                   <Play className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                 </button>
@@ -2023,7 +2036,7 @@ export function PatientProfileView({
                   type="button"
                   onClick={handleAgendarPacienteClick}
                   disabled={!isPerfilAtivo || !selectedPatient?.id}
-                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#00a88e] bg-white px-5 text-[14px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f8fbfb] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[44px] md:w-auto md:text-[13px]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#00a88e] bg-white px-5 text-[13px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f8fbfb] disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
                 >
                   <Calendar className="inline h-4 w-4" strokeWidth={2.5} aria-hidden />
                   Agendar Paciente
@@ -2043,14 +2056,14 @@ export function PatientProfileView({
                         return createEditDraft();
                       });
                     }}
-                    className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors active:border-[#cbd5e1] md:min-h-[44px] md:w-auto md:text-[13px] md:hover:border-[#cbd5e1]"
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#cbd5e1] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-slate-300 md:w-auto"
                   >
                     <UserIcon className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Editar Cadastro
                   </button>
                 )}
                 <button
                   type="button"
-                  className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors md:min-h-[44px] md:w-auto md:text-[13px]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#cbd5e1] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-slate-300 md:w-auto"
                   disabled
                 >
                   <Download className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Gerar PDF
@@ -2064,7 +2077,7 @@ export function PatientProfileView({
                       setInativarSenhaErro('');
                       setInativarModalOpen(true);
                     }}
-                    className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#dc2626] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#b91c1c] active:bg-[#991b1b] md:min-h-[44px] md:w-auto md:text-[13px]"
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#dc2626] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#b91c1c] active:bg-[#991b1b] md:w-auto"
                   >
                     <UserMinus className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                     Inativar Paciente
@@ -2163,29 +2176,54 @@ export function PatientProfileView({
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#f1f5f9] pt-4 max-sm:p-0">
-              <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Ultima Visita</div>
-                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{ultimaVisitaCardDisplay}</div>
+            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-[#f1f5f9] pt-5 sm:grid-cols-3">
+              <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/90 p-3">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" strokeWidth={2.25} aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-sky-800/80">Última visita</div>
+                  <div className="mt-0.5 text-[15px] font-bold text-[#0f172a]">{ultimaVisitaCardDisplay}</div>
+                </div>
               </div>
-              <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Proximo Retorno</div>
-                <div className="mt-1 text-[15px] font-bold text-[#0f172a]">{proximoRetornoCardDisplay}</div>
+              <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/90 p-3">
+                <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" strokeWidth={2.25} aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-sky-800/80">Próximo retorno</div>
+                  <div className="mt-0.5 text-[15px] font-bold text-[#0f172a]">{proximoRetornoCardDisplay}</div>
+                </div>
               </div>
-              <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2 sm:p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">Saldo Devedor</div>
-                <div
-                  className={`mt-1 text-[15px] font-bold ${selectedPatient.saldoDevedor > 0 ? 'text-[#dc2626]' : 'text-[#0f172a]'}`}
-                >
-                  {selectedPatient.saldoDevedor > 0
-                    ? `R$ ${selectedPatient.saldoDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                    : '-'}
+              <div
+                className={`flex items-start gap-2.5 rounded-xl border p-3 ${
+                  selectedPatient.saldoDevedor > 0
+                    ? 'border-red-100 bg-red-50/90'
+                    : 'border-slate-100 bg-slate-50/90'
+                }`}
+              >
+                <DollarSign
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${selectedPatient.saldoDevedor > 0 ? 'text-red-600' : 'text-slate-500'}`}
+                  strokeWidth={2.25}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={`text-[11px] font-semibold uppercase tracking-[0.05em] ${
+                      selectedPatient.saldoDevedor > 0 ? 'text-red-800/85' : 'text-slate-600'
+                    }`}
+                  >
+                    Saldo devedor
+                  </div>
+                  <div
+                    className={`mt-0.5 text-[15px] font-bold ${selectedPatient.saldoDevedor > 0 ? 'text-[#dc2626]' : 'text-[#0f172a]'}`}
+                  >
+                    {selectedPatient.saldoDevedor > 0
+                      ? `R$ ${selectedPatient.saldoDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                      : '-'}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm">
+          <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
             <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
                 { key: 'atendimento', label: 'Atendimento', title: 'Atendimento', icon: Play },
@@ -2215,7 +2253,7 @@ export function PatientProfileView({
               })}
             </div>
 
-            <div className="p-5">
+            <div className="p-5 sm:p-6">
               {patientDetailTab === 'atendimento' && (
                 <div className="space-y-5">
                   {!alertasAnamneseLoading && anamneseAtendimentoInfo.status === 'nova' ? (
@@ -2340,9 +2378,9 @@ export function PatientProfileView({
                         </div>
                         <div
                           className="mt-0.5 truncate text-[14px] font-semibold text-[#0f172a]"
-                          title={(apiProcedures || [])[0]?.procedimentoNome || (apiProcedures || [])[0]?.nome}
+                          title={sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome}
                         >
-                          {(apiProcedures || [])[0]?.procedimentoNome || (apiProcedures || [])[0]?.nome || '—'}
+                          {sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome || '—'}
                         </div>
                       </div>
                       <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
@@ -2358,8 +2396,8 @@ export function PatientProfileView({
 
               {patientDetailTab === 'prontuario' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <h4 className="text-[16px] font-bold text-[#0f172a]">Prontuário eletrônico</h4>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <ProcedureTimelineHeading title="Prontuário eletrônico" />
                     {detailLoading ? (
                       <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
                         <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
@@ -2367,12 +2405,16 @@ export function PatientProfileView({
                       </span>
                     ) : null}
                   </div>
-                  {!(apiProcedures || []).length ? (
+                  {!sortedApiProcedures.length ? (
                     <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
                   ) : (
-                    <div className="space-y-3">
-                      {(apiProcedures || []).map((proc, idx) => {
-                        const rowKey = proc.id != null && proc.id !== '' ? String(proc.id) : `proc-${idx}`;
+                    <ProcedureTimelineRail>
+                      {prontuarioProceduresVisible.map((proc, idx) => {
+                        const procOrderKey = sortedApiProcedures.indexOf(proc);
+                        const rowKey =
+                          proc.id != null && proc.id !== ''
+                            ? String(proc.id)
+                            : `proc-${procOrderKey >= 0 ? procOrderKey : idx}`;
                         const open = Boolean(prontuarioExpanded[rowKey]);
                         const dataLabel = proc.criadoEm
                           ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
@@ -2380,6 +2422,7 @@ export function PatientProfileView({
                         const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                         const fotosProc = galeriaItemsForProcedure(proc);
                         const procId = proc.id ?? proc.procedimentoId;
+                        const showVerMaisHere = prontuarioListTruncated && idx === prontuarioProceduresVisible.length - 1;
                         const assinaturaVinculada = (assinaturas || []).find(
                           (a) =>
                             a &&
@@ -2405,136 +2448,150 @@ export function PatientProfileView({
                           assinaturaVinculada?.pacienteAssinouEm ??
                           assinaturaVinculada?.paciente_assinou_em;
                         return (
-                          <div key={rowKey} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-                            <button
-                              type="button"
-                              onClick={() => toggleProntuarioRow(rowKey)}
-                              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#f8fafc]"
-                              aria-expanded={open}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                                  <span className="text-[13px] font-bold text-[#0f172a]">{dataLabel}</span>
-                                  <span className="text-[13px] font-bold text-[#0f766e] truncate">{nomeProc}</span>
-                                  {proc.profissionalNome ? (
-                                    <span className="text-[12px] text-[#64748b] font-medium truncate">· {proc.profissionalNome}</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                              {proc.statusNome ? (
-                                <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
-                                  {proc.statusNome}
-                                </span>
-                              ) : (
-                                <span className="shrink-0 rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
-                                  —
-                                </span>
-                              )}
-                              <ChevronDown
-                                className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform ${open ? 'rotate-180' : ''}`}
-                                strokeWidth={2.5}
-                                aria-hidden
-                              />
-                            </button>
-                            {open ? (
-                              <div className="space-y-4 border-t border-[#e2e8f0] bg-[#fafafa] px-4 py-4">
-                                <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                                    Observações do profissional
+                          <ProcedureTimelineEntry key={rowKey}>
+                            <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8fafc] shadow-sm">
+                              <button
+                                type="button"
+                                onClick={() => toggleProntuarioRow(rowKey)}
+                                className="flex w-full min-h-[44px] items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#f1f5f9] sm:gap-3 sm:px-4 sm:py-3"
+                                aria-expanded={open}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-[#64748b] sm:text-[13px]">
+                                    <Calendar className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                                    <span className="truncate">{dataLabel}</span>
                                   </div>
-                                  <p className="mt-1.5 whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#334155]">
-                                    {proc.observacao && String(proc.observacao).trim() ? String(proc.observacao).trim() : '—'}
+                                  <p className="mt-1 truncate text-[13px] font-bold leading-snug text-[#0f172a] sm:text-[14px]" title={nomeProc}>
+                                    {nomeProc}
+                                  </p>
+                                  <p
+                                    className="mt-0.5 truncate text-[12px] font-medium text-[#64748b]"
+                                    title={proc.profissionalNome || undefined}
+                                  >
+                                    Realizado por {proc.profissionalNome || '—'}
                                   </p>
                                 </div>
-                                {assinaturaVinculada ? (
-                                  <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm">
-                                    <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
-                                      <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                                      Termo Assinado
-                                    </div>
-                                    <p className="mb-4 text-[13px] font-medium text-[#64748b]">
-                                      <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
-                                      {' · '}
-                                      {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
-                                    </p>
-                                    <div className="space-y-4">
-                                      <div>
-                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                                          Assinatura do Profissional
-                                        </div>
-                                        {imgAssinProf ? (
-                                          <img
-                                            src={imgAssinProf}
-                                            alt=""
-                                            className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
-                                          />
-                                        ) : (
-                                          <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
-                                        )}
-                                        <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
-                                          Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf)}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                                          Assinatura do Paciente
-                                        </div>
-                                        {imgAssinPac ? (
-                                          <img
-                                            src={imgAssinPac}
-                                            alt=""
-                                            className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
-                                          />
-                                        ) : (
-                                          <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
-                                        )}
-                                        <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
-                                          Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : null}
-                                <div className="flex flex-wrap gap-2">
-                                  <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
-                                  <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
-                                </div>
-                                <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
-                                  {fotosProc.length ? (
-                                    <div className="mt-2 grid grid-cols-4 gap-2">
-                                      {fotosProc.map((foto) => (
-                                        <button
-                                          key={foto.serverId}
-                                          type="button"
-                                          onClick={() =>
-                                            setGalleryPreview({
-                                              url: foto.url,
-                                              authFetch: true,
-                                              caption: foto.legenda || foto.fileName,
-                                            })
-                                          }
-                                          className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
-                                        >
-                                          <GaleriaArquivoImage
-                                            url={foto.url}
-                                            alt=""
-                                            className="h-full w-full"
-                                            imgClassName="h-full w-full object-cover"
-                                          />
-                                        </button>
-                                      ))}
-                                    </div>
+                                <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
+                                  {proc.statusNome ? (
+                                    <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
+                                      {proc.statusNome}
+                                    </span>
                                   ) : (
-                                    <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
+                                    <span className="shrink-0 rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
+                                      —
+                                    </span>
                                   )}
+                                  <ChevronDown
+                                    className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform ${open ? 'rotate-180' : ''}`}
+                                    strokeWidth={2.5}
+                                    aria-hidden
+                                  />
                                 </div>
-                              </div>
-                            ) : null}
-                          </div>
+                              </button>
+                              {open ? (
+                                <div className="space-y-4 border-t border-[#e2e8f0] bg-[#fafafa] px-3 py-4 sm:px-4">
+                                  <div>
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                      Observações do profissional
+                                    </div>
+                                    <p className="mt-1.5 whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#334155]">
+                                      {proc.observacao && String(proc.observacao).trim() ? String(proc.observacao).trim() : '—'}
+                                    </p>
+                                  </div>
+                                  {assinaturaVinculada ? (
+                                    <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm">
+                                      <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
+                                        <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                                        Termo Assinado
+                                      </div>
+                                      <p className="mb-4 text-[13px] font-medium text-[#64748b]">
+                                        <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
+                                        {' · '}
+                                        {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
+                                      </p>
+                                      <div className="space-y-4">
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                            Assinatura do Profissional
+                                          </div>
+                                          {imgAssinProf ? (
+                                            <img
+                                              src={imgAssinProf}
+                                              alt=""
+                                              className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                                            />
+                                          ) : (
+                                            <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
+                                          )}
+                                          <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
+                                            Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf)}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                            Assinatura do Paciente
+                                          </div>
+                                          {imgAssinPac ? (
+                                            <img
+                                              src={imgAssinPac}
+                                              alt=""
+                                              className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                                            />
+                                          ) : (
+                                            <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
+                                          )}
+                                          <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
+                                            Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  <div className="flex flex-wrap gap-2">
+                                    <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
+                                    <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
+                                  </div>
+                                  <div>
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
+                                    {fotosProc.length ? (
+                                      <div className="mt-2 grid grid-cols-4 gap-2">
+                                        {fotosProc.map((foto) => (
+                                          <button
+                                            key={foto.serverId}
+                                            type="button"
+                                            onClick={() =>
+                                              setGalleryPreview({
+                                                url: foto.url,
+                                                authFetch: true,
+                                                caption: foto.legenda || foto.fileName,
+                                              })
+                                            }
+                                            className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
+                                          >
+                                            <GaleriaArquivoImage
+                                              url={foto.url}
+                                              alt=""
+                                              className="h-full w-full"
+                                              imgClassName="h-full w-full object-cover"
+                                            />
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <ProcedureTimelineProfileVerMaisStrip
+                                hidden={!showVerMaisHere}
+                                onExpand={() => setShowAllProntuario(true)}
+                              />
+                            </div>
+                          </ProcedureTimelineEntry>
                         );
                       })}
-                    </div>
+                    </ProcedureTimelineRail>
                   )}
                 </div>
               )}
@@ -2986,19 +3043,19 @@ export function PatientProfileView({
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 lg:col-span-1">
+        <div className="flex flex-col gap-3 lg:col-span-1">
           <div
             ref={alertasCardRef}
             id="patient-profile-alertas-card"
-            className="overflow-hidden rounded-xl border border-[#fecaca] shadow-sm"
+            className="overflow-hidden rounded-[14px] border border-[#fecaca] shadow-md"
           >
-            <div className="flex items-center gap-2 bg-[#fef2f2] px-4 py-2.5">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-[#dc2626]" strokeWidth={2.5} aria-hidden />
-              <h5 className="text-[13px] font-bold text-[#dc2626]">Alertas</h5>
+            <div className="flex items-center gap-2 bg-[#fef2f2] px-3 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#dc2626]" strokeWidth={2.5} aria-hidden />
+              <h5 className="text-[12px] font-bold text-[#dc2626]">Alertas</h5>
             </div>
-            <div className="space-y-3 bg-white p-3">
+            <div className="space-y-2 bg-white p-2.5">
               {/* Alertas manuais (CRUD) — paralelo aos alertas de anamnese */}
-              <div className="space-y-2 border-b border-slate-100 pb-3">
+              <div className="space-y-1.5 border-b border-slate-100 pb-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
                     Alertas manuais
@@ -3007,31 +3064,38 @@ export function PatientProfileView({
                     type="button"
                     disabled={!selectedPatient?.id}
                     onClick={openManualAlertCreate}
-                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[#dc2626] px-2.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-45"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-dashed border-[#f87171] bg-white px-2 text-[10px] font-semibold text-[#dc2626] transition hover:border-[#dc2626] hover:bg-[#fef2f2] disabled:cursor-not-allowed disabled:opacity-45"
                   >
-                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                    <Plus className="h-3 w-3" strokeWidth={2.5} aria-hidden />
                     Novo alerta manual
                   </button>
                 </div>
                 {!selectedPatient?.id ? (
-                  <p className="text-[12px] leading-snug text-[#64748b]">
+                  <p className="text-[11px] leading-snug text-[#64748b]">
                     Salve o paciente no servidor para gerenciar alertas manuais.
                   </p>
                 ) : manualAlertsLoading ? (
-                  <div className="flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
+                  <div className="flex items-center gap-2 text-[11px] font-medium text-[#64748b]">
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
                     Carregando alertas manuais…
                   </div>
                 ) : manualAlerts.length === 0 ? (
-                  <p className="text-[12px] font-medium leading-snug text-[#64748b]">Nenhum alerta manual.</p>
+                  <p className="text-[11px] font-medium leading-snug text-[#64748b]">Nenhum alerta manual.</p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {manualAlerts.map((ma) => (
-                      <li key={ma.id} className="rounded-lg border border-slate-200 bg-slate-50/90 p-2.5 shadow-sm">
-                        <div className="flex items-start justify-between gap-2">
+                      <li
+                        key={ma.id}
+                        className="rounded-lg border border-red-100/90 bg-[#fef2f2]/70 py-1.5 pl-2 pr-1"
+                      >
+                        <div className="flex items-start justify-between gap-1.5">
                           <div className="min-w-0 flex-1">
-                            <p className="text-[12px] font-bold text-[#0f172a]">{ma.titulo || 'Alerta manual'}</p>
-                            <p className="mt-0.5 whitespace-pre-wrap break-words text-[12px] text-[#475569]">{ma.descricao}</p>
+                            <p className="line-clamp-2 text-[11px] font-bold text-[#0f172a]">
+                              {ma.titulo || 'Alerta manual'}
+                            </p>
+                            <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words text-[11px] text-[#475569]">
+                              {ma.descricao}
+                            </p>
                           </div>
                           <div className="flex shrink-0 gap-0.5">
                             <button
@@ -3039,18 +3103,18 @@ export function PatientProfileView({
                               title="Editar"
                               aria-label="Editar alerta manual"
                               onClick={() => openManualAlertEdit(ma)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#64748b] hover:border-slate-200 hover:bg-white hover:text-[#0f172a]"
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#64748b] hover:border-slate-200 hover:bg-white hover:text-[#0f172a]"
                             >
-                              <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
+                              <Pencil className="h-3 w-3" strokeWidth={2.25} />
                             </button>
                             <button
                               type="button"
                               title="Excluir"
                               aria-label="Excluir alerta manual"
                               onClick={() => setManualAlertConfirm({ type: 'delete', id: ma.id })}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#64748b] hover:border-red-200 hover:bg-[#fef2f2] hover:text-red-600"
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#64748b] hover:border-red-200 hover:bg-[#fef2f2] hover:text-red-600"
                             >
-                              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.25} />
+                              <Trash2 className="h-3 w-3" strokeWidth={2.25} />
                             </button>
                           </div>
                         </div>
@@ -3061,48 +3125,52 @@ export function PatientProfileView({
               </div>
 
               {/* Alertas da anamnese (somente leitura — mesma lógica de merge que antes) */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
                   Alertas da anamnese
                 </span>
                 {alertasAnamneseLoading ? (
-                  <div className="flex items-center gap-2 text-[13px] font-medium text-[#64748b]">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
+                  <div className="flex items-center gap-2 text-[11px] font-medium text-[#64748b]">
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
                     Carregando alertas da anamnese…
                   </div>
                 ) : alertasAnamnese.length === 0 ? (
-                  <p className="text-[13px] font-medium leading-snug text-[#64748b]">
+                  <p className="text-[11px] font-medium leading-snug text-[#64748b]">
                     Nenhuma pergunta em alerta nas anamneses preenchidas.
                   </p>
                 ) : (
                   <>
                     {alertasAlergia.length > 0 ? (
-                      <div className="mb-2">
+                      <div className="mb-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
                           Alergias registradas
                         </span>
                         {alertasAlergia.map((item) => (
                           <div
                             key={item.key}
-                            className="mt-1 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2"
+                            className="mt-1 rounded-md border border-[#fecaca] bg-[#fef2f2] px-2 py-1.5"
                           >
-                            <p className="text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
-                            <p className="text-[13px] font-semibold text-[#0f172a]">{item.valor}</p>
+                            <p className="line-clamp-2 text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
+                            <p className="line-clamp-3 text-[12px] font-semibold text-[#0f172a]">{item.valor}</p>
                           </div>
                         ))}
                       </div>
                     ) : null}
                     {alertasSidebarGeral.slice(0, 3).map((row) => (
-                      <div key={row.key} className="rounded-lg border border-[#fecaca] bg-[#fef2f2]/50 p-2.5">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">{row.titulo}</p>
-                        <p className="mt-0.5 break-words text-[13px] font-semibold text-[#0f172a]">{row.valor}</p>
+                      <div key={row.key} className="rounded-md border border-[#fecaca] bg-[#fef2f2]/80 px-2 py-1.5">
+                        <p className="line-clamp-2 text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">
+                          {row.titulo}
+                        </p>
+                        <p className="mt-0.5 line-clamp-3 break-words text-[12px] font-semibold text-[#0f172a]">
+                          {row.valor}
+                        </p>
                       </div>
                     ))}
                     {alertasAnamnese.length > 3 ? (
                       <button
                         type="button"
                         onClick={() => setAlertasModalOpen(true)}
-                        className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-[#fecaca] text-[12px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
+                        className="mt-1 flex h-7 w-full items-center justify-center rounded-md border border-[#fecaca] text-[11px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
                       >
                         Ver todos ({alertasAnamnese.length})
                       </button>
@@ -3113,15 +3181,15 @@ export function PatientProfileView({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[#fed7aa] shadow-sm">
-            <div className="bg-[#fff7ed] px-4 py-2.5">
-              <h5 className="text-[13px] font-bold text-[#ea580c]">Avisos</h5>
+          <div className="overflow-hidden rounded-[14px] border border-amber-200/90 shadow-md">
+            <div className="bg-amber-50 px-3 py-2">
+              <h5 className="text-[12px] font-bold text-[#b45309]">Avisos</h5>
             </div>
-            <div className="space-y-2 bg-white p-3">
-              <div className="rounded-lg border border-[#fed7aa] bg-[#fffbeb] p-2.5 text-[13px] font-medium text-[#92400e]">
+            <div className="space-y-1.5 bg-white p-2.5">
+              <div className="rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-[12px] font-medium text-[#92400e]">
                 {birthAlert ? (
                   <p className="flex items-center gap-1.5">
-                    <Bell className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                    <Bell className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
                     {birthdayAlertSidebarCopy(birthAlert)}
                   </p>
                 ) : (
@@ -3129,9 +3197,9 @@ export function PatientProfileView({
                 )}
               </div>
               {selectedPatient.saldoDevedor > 0 ? (
-                <div className="rounded-lg border border-[#fed7aa] bg-[#fffbeb] p-2.5 text-[13px] font-medium text-[#92400e]">
+                <div className="rounded-md border border-red-200/90 bg-red-50/90 px-2.5 py-1.5 text-[12px] font-medium text-[#991b1b]">
                   <p className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
                     Parcela vence em 7 dias
                   </p>
                 </div>
@@ -3139,31 +3207,38 @@ export function PatientProfileView({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-[#e2e8f0] shadow-sm">
-            <div className="flex items-center gap-2 bg-[#f8fafc] px-4 py-2.5">
-              <StickyNote className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.25} aria-hidden />
-              <h5 className="text-[13px] font-bold text-[#0f172a]">Notas Rápidas</h5>
+          <div className="overflow-hidden rounded-[14px] border border-[#e2e8f0] shadow-md">
+            <div className="flex items-center gap-2 bg-[#f8fafc] px-3 py-2">
+              <StickyNote className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2.25} aria-hidden />
+              <h5 className="text-[12px] font-bold text-[#0f172a]">Notas Rápidas</h5>
             </div>
-            <div className="space-y-2 bg-white p-3">
+            <div className="space-y-2 bg-white p-2.5">
               <textarea
                 value={quickNoteText}
                 onChange={(e) => setQuickNoteText(e.target.value)}
-                rows={3}
+                rows={2}
                 placeholder="Escreva uma nota rápida..."
-                className="w-full resize-none rounded-lg border border-[#e2e8f0] p-3 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
+                className="w-full resize-none rounded-lg border border-[#e2e8f0] p-2.5 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
               />
               <button
                 type="button"
                 onClick={handleAddQuickNote}
                 disabled={!quickNoteText.trim()}
-                className="mt-2 flex h-9 w-full items-center justify-center rounded-lg bg-[#00a88e] text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-8 w-full items-center justify-center rounded-lg bg-[#00a88e] text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Adicionar nota rápida
               </button>
-              <div className="space-y-2 pt-1">
+              <div className="space-y-1.5 pt-0.5">
                 {displayNotes.length ? (
                   displayNotes.map((nota, i) => (
-                    <div key={nota.id || i} className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-2.5">
+                    <div
+                      key={nota.id || i}
+                      className={`rounded-lg border p-2 ${
+                        i % 2 === 0
+                          ? 'border-amber-100/90 bg-amber-50/70'
+                          : 'border-emerald-100/90 bg-emerald-50/70'
+                      }`}
+                    >
                       <p className="text-[13px] text-[#0f172a]">{nota.texto}</p>
                       <div className="mt-1 flex items-center justify-between gap-2">
                         <span className="text-[11px] text-[#94a3b8]">
@@ -3187,7 +3262,7 @@ export function PatientProfileView({
                     </div>
                   ))
                 ) : (
-                  <p className="text-[13px] text-[#94a3b8]">Nenhuma nota registrada</p>
+                  <p className="text-[12px] text-[#94a3b8]">Nenhuma nota registrada</p>
                 )}
               </div>
             </div>
@@ -3606,7 +3681,7 @@ export function PatientProfileView({
         onClose={closeRelatoModal}
         procedimentoFeitoId={relatoModal.procedimentoFeitoId}
         pacienteId={relatoModal.pacienteId}
-        procedures={apiProcedures}
+        procedures={sortedApiProcedures}
         onConfirmProsseguir={() => {
           closeRelatoModal();
           onStartAttendance?.(selectedPatient);
