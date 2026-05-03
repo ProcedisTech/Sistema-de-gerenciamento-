@@ -307,7 +307,7 @@ export default function App() {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow?.agenda],
+    [agendaSchedule, scheduleCancelRow],
   );
 
   const handleScheduleConfirmReagendar = React.useCallback(
@@ -317,7 +317,7 @@ export default function App() {
       const ok = await agendaSchedule.handleReagendar(row.agendaId, payload);
       if (ok) setScheduleReagendarRow(null);
     },
-    [agendaSchedule, scheduleReagendarRow?.agenda],
+    [agendaSchedule, scheduleReagendarRow],
   );
 
   const refreshPatientsAndPagedList = React.useCallback(() => {
