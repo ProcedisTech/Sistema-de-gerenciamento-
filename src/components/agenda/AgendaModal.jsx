@@ -48,6 +48,10 @@ export function AgendaModal({
 
   const catalogOptions = Array.isArray(catalogosList) ? catalogosList : [];
 
+  // BUG #3: bloqueia "Criar horário" quando o intervalo é invertido. Strings 'HH:MM' são
+  // lexicograficamente comparáveis, então <= equivale a fim <= início temporalmente.
+  const horarioInvalido = Boolean(agendaTime && agendaHoraFim && agendaHoraFim <= agendaTime);
+
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center p-4"
@@ -277,8 +281,15 @@ export function AgendaModal({
                 type="time"
                 value={agendaHoraFim}
                 onChange={(e) => setAgendaHoraFim(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
+                className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e] ${
+                  horarioInvalido ? 'border-red-500' : 'border-slate-200'
+                }`}
               />
+              {horarioInvalido ? (
+                <p className="text-xs text-red-500">
+                  Horário final deve ser depois do horário inicial
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Observação do horário</label>
@@ -304,7 +315,7 @@ export function AgendaModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={agendaSaving}
+            disabled={agendaSaving || horarioInvalido}
             className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold text-[14px] transition-all bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {agendaSaving && <Loader2 className="w-4 h-4 animate-spin" />}

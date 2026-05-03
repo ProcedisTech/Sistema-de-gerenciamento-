@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageCircle, Save } from 'lucide-react';
 import { getApiErrorToastMessage, templatesMensagemApi } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
+
+// BUG #19: emoji no template estava virando "diamante interrogação" (U+FFFD) no WhatsApp
+// do paciente. Decisão de produto (clínica médica): emoji não cabe nesse contexto e
+// também elimina a categoria de bug. Bloqueamos no editor e sanitizamos ao carregar.
+//
+// Usamos duas regex: uma sem /g para `.test()` (regex global tem `lastIndex` stateful
+// que vira bug entre chamadas), outra com /gu para `.replace()`. `\p{Extended_Pictographic}`
+// cobre emojis (😊 🎉 etc.) sem afetar acentos latinos (á é ç ã) nem placeholders {x}.
+const EMOJI_REGEX = /\p{Extended_Pictographic}/u;
+const EMOJI_REGEX_GLOBAL = /\p{Extended_Pictographic}/gu;
+const removerEmojis = (s) => String(s ?? '').replace(EMOJI_REGEX_GLOBAL, '');
+const temEmoji = (s) => EMOJI_REGEX.test(String(s ?? ''));
 
 const PLACEHOLDERS = ['{paciente_nome}', '{data}', '{hora}', '{profissional}', '{link}'];
 
@@ -13,6 +25,56 @@ const DEFAULT_TEMPLATES = {
 };
 
 function TemplateEditor({ titulo, descricao, valor, onChange, onSalvar, salvando }) {
+  // BUG #19: aviso some sozinho 3s apos a ultima tentativa de inserir emoji,
+  // ou imediatamente se o proximo onChange chegar com texto valido.
+  const [emojiAvisoVisivel, setEmojiAvisoVisivel] = useState(false);
+  const timerRef = useRef(null);
+
+  const sinalizarEmoji = useCallback(() => {
+    setEmojiAvisoVisivel(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setEmojiAvisoVisivel(false), 3000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const handleChange = (e) => {
+    const bruto = e.target.value.slice(0, 1000);
+    if (temEmoji(bruto)) {
+      sinalizarEmoji();
+      onChange(removerEmojis(bruto));
+      return;
+    }
+    setEmojiAvisoVisivel(false);
+    onChange(bruto);
+  };
+
+  const handlePaste = (e) => {
+    const colado = e.clipboardData?.getData('text') ?? '';
+    if (!temEmoji(colado)) return;
+    e.preventDefault();
+    sinalizarEmoji();
+    const limpo = removerEmojis(colado);
+    const ta = e.currentTarget;
+    const ini = ta.selectionStart ?? valor.length;
+    const fim = ta.selectionEnd ?? valor.length;
+    const novo = (valor.slice(0, ini) + limpo + valor.slice(fim)).slice(0, 1000);
+    onChange(novo);
+    queueMicrotask(() => {
+      const pos = Math.min(ini + limpo.length, novo.length);
+      try {
+        ta.setSelectionRange(pos, pos);
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+
   return (
     <section>
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -35,11 +97,17 @@ function TemplateEditor({ titulo, descricao, valor, onChange, onSalvar, salvando
       </div>
       <textarea
         value={valor}
-        onChange={(e) => onChange(e.target.value.slice(0, 1000))}
+        onChange={handleChange}
+        onPaste={handlePaste}
         maxLength={1000}
         rows={4}
         className="w-full rounded-lg border border-[#e2e8f0] bg-white p-3 text-[13px] focus:border-[#00a88e] focus:outline-none focus:ring-2 focus:ring-[#00a88e]/20"
       />
+      {emojiAvisoVisivel ? (
+        <p className="mt-1 text-[11px] text-red-500">
+          Emojis nao sao permitidos no template de mensagem
+        </p>
+      ) : null}
       <p className="mt-1 text-[11px] text-[#94a3b8]">{valor.length}/1000</p>
     </section>
   );
@@ -62,8 +130,10 @@ export function TemplatesMensagemPanel() {
         const arr = Array.isArray(lista) ? lista : [];
         const conf = arr.find((t) => t.tipo === 'confirmacao');
         const lemb = arr.find((t) => t.tipo === 'lembrete');
-        setTextoConfirmacao(conf?.texto || DEFAULT_TEMPLATES.confirmacao);
-        setTextoLembrete(lemb?.texto || DEFAULT_TEMPLATES.lembrete);
+        // BUG #19: templates antigos no banco podem ter emoji. Limpamos no load
+        // pra que o profissional veja o texto ja saneado; salvar depois sobrescreve.
+        setTextoConfirmacao(removerEmojis(conf?.texto || DEFAULT_TEMPLATES.confirmacao));
+        setTextoLembrete(removerEmojis(lemb?.texto || DEFAULT_TEMPLATES.lembrete));
       })
       .catch((e) => toastError(getApiErrorToastMessage(e, 'Erro ao carregar templates')))
       .finally(() => {
