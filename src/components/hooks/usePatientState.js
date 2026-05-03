@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   pacientesApi,
   patientListSortToApiParam,
+  procedimentosApi,
 } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
+import { patientUltimaVisitaDayFromDto } from '../../utils/patientProfileDerivedDates.js';
 
 const ACTIVE_PATIENT_CPF_KEY = 'selectedPatientCpf';
 const ACTIVE_PATIENT_CPF_LEGACY_KEY = 'activePatientCpf';
@@ -142,6 +144,34 @@ export const usePatientState = (opts = {}) => {
             typeof pageData.totalPages === 'number' ? pageData.totalPages : 0,
           number: typeof pageData.number === 'number' ? pageData.number : 0,
         });
+
+        const targets = mapped.filter(
+          (p) => p?.id && patientUltimaVisitaDayFromDto(p) === '-',
+        );
+        if (!targets.length) return;
+
+        const chunk = 5;
+        (async () => {
+          for (let i = 0; i < targets.length; i += chunk) {
+            if (cancelled) break;
+            const batch = targets.slice(i, i + chunk);
+            await Promise.all(
+              batch.map(async (p) => {
+                if (cancelled) return;
+                try {
+                  const data = await procedimentosApi.byPaciente(p.id);
+                  if (cancelled) return;
+                  mergePatientById(p.id, {
+                    procedures: Array.isArray(data) ? data : [],
+                  });
+                } catch {
+                  if (cancelled) return;
+                  mergePatientById(p.id, { procedures: [] });
+                }
+              }),
+            );
+          }
+        })();
       })
       .catch((err) => {
         if (cancelled) return;
@@ -172,6 +202,7 @@ export const usePatientState = (opts = {}) => {
     patientListTipoBusca,
     patientListSortBy,
     patientListBump,
+    mergePatientById,
   ]);
 
   useEffect(() => {

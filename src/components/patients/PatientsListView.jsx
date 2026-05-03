@@ -22,6 +22,11 @@ import {
   ProcedureTimelinePreviewCard,
 } from './ProcedureTimelineBlock.jsx';
 import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
+import {
+  formatCartaoDiaPtBr,
+  latestProcedureOccurredInstantIso,
+  patientUltimaVisitaDayFromDto,
+} from '../../utils/patientProfileDerivedDates.js';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -56,23 +61,12 @@ function lastProcedureLabel(p) {
   return n ? String(n) : '—';
 }
 
-/** Data a exibir no rodapé: último procedimento (criadoEm / data) ou fallback ultimaVisita. */
+/** Data no rodapé: mesma prioridade do cartão Última visita do perfil; fallback ao procedimento mais recente. */
 function lastProcedureDateForCard(p) {
-  const procs = Array.isArray(p?.procedures) ? p.procedures : [];
-  if (procs.length) {
-    const last = procs[procs.length - 1];
-    if (last?.criadoEm) {
-      const t = new Date(last.criadoEm);
-      if (!Number.isNaN(t.getTime())) {
-        return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-      }
-    }
-    const rawData = last?.data != null ? String(last.data).trim() : '';
-    if (rawData && rawData !== '—' && rawData !== '-') return rawData;
-  }
-  const uv = String(p?.ultimaVisita || '').trim();
-  if (uv && uv !== '—' && uv !== '-') return uv;
-  return '—';
+  const primary = patientUltimaVisitaDayFromDto(p);
+  if (primary !== '-') return primary;
+  const iso = latestProcedureOccurredInstantIso(p?.procedures || []);
+  return iso ? formatCartaoDiaPtBr(iso) : '—';
 }
 
 /** Heurística visual: sem visita nem procedimento na lista local. */
@@ -156,7 +150,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
         <div className="mt-1.5 border-t border-slate-100 pt-1.5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">
-              Último procedimento
+              Última visita
             </span>
             <span
               className={
@@ -219,8 +213,6 @@ function PatientPreviewPanel({
   selectedPatient,
   detailTitleId,
   closeDetail,
-  galleryPhotoCount,
-  galleryPreviewSlots,
   getPatientInitials,
   setPatientDetailTab,
   setPatientView,
@@ -420,36 +412,6 @@ function PatientPreviewPanel({
         )}
       </div>
 
-      <div>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">Galeria de Evolução</h4>
-          <span className="text-[12px] font-medium text-[#64748b]">
-            {galleryPhotoCount} {galleryPhotoCount === 1 ? 'foto' : 'fotos'}
-          </span>
-        </div>
-        <div className="grid min-h-0 grid-cols-6 gap-1.5">
-          {galleryPreviewSlots.map((slot) => (
-            <div
-              key={slot.key}
-              className={`relative flex h-10 min-h-0 flex-col items-center justify-center overflow-hidden rounded-md border border-[#f1f5f9] sm:h-12 ${
-                slot.highlight ? 'bg-[#e2e8f0]/80' : 'bg-[#f8fafc]'
-              }`}
-            >
-              <span className="absolute left-1 top-1 rounded bg-white/95 px-1 py-0.5 text-[8px] font-semibold text-[#64748b] shadow-sm sm:text-[9px]">
-                {slot.label}
-              </span>
-              {slot.highlight && selectedPatient.galeria?.length ? (
-                <span className="text-[10px] font-semibold text-[#475569] drop-shadow-sm sm:text-[11px]">
-                  {selectedPatient.procedures?.[0]?.data || '—'}
-                </span>
-              ) : (
-                <ImageIcon className="h-4 w-4 text-[#94a3b8]/90 sm:h-5 sm:w-5" strokeWidth={1.75} aria-hidden />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="max-lg:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
@@ -592,35 +554,6 @@ export function PatientsListView({
     if (!previewPatient?.id || previewAnamneseListOwnerId !== previewPatient.id) return false;
     return previewHasExistingAnamneseFromList(previewAnamneseList);
   }, [previewPatient?.id, previewAnamneseListOwnerId, previewAnamneseList]);
-
-  const galleryPhotoCount = useMemo(() => {
-    if (!previewPatient?.galeria?.length) return 0;
-    return previewPatient.galeria.reduce((acc, s) => acc + (s.fotos?.length || 0), 0);
-  }, [previewPatient]);
-
-  const galleryPreviewSlots = useMemo(() => {
-    const slots = [];
-    if (previewPatient?.galeria?.length) {
-      previewPatient.galeria.forEach((sessao, si) => {
-        (sessao.fotos || []).forEach((_, fi) => {
-          if (slots.length >= 6) return;
-          slots.push({
-            key: `${si}-${fi}`,
-            label: `Foto ${slots.length + 1}`,
-            highlight: slots.length === 0,
-          });
-        });
-      });
-    }
-    while (slots.length < 6) {
-      slots.push({
-        key: `empty-${slots.length}`,
-        label: `Foto ${slots.length + 1}`,
-        highlight: false,
-      });
-    }
-    return slots.slice(0, 6);
-  }, [previewPatient]);
 
   const closeDetail = () => {
     setPreviewPatientCpf(null);
@@ -838,8 +771,6 @@ export function PatientsListView({
                 selectedPatient={previewPatient}
                 detailTitleId={undefined}
                 closeDetail={closeDetail}
-                galleryPhotoCount={galleryPhotoCount}
-                galleryPreviewSlots={galleryPreviewSlots}
                 getPatientInitials={getPatientInitials}
                 setPatientDetailTab={setPatientDetailTab}
                 setPatientView={setPatientView}
@@ -867,8 +798,6 @@ export function PatientsListView({
                 selectedPatient={previewPatient}
                 detailTitleId={undefined}
                 closeDetail={closeDetail}
-                galleryPhotoCount={galleryPhotoCount}
-                galleryPreviewSlots={galleryPreviewSlots}
                 getPatientInitials={getPatientInitials}
                 setPatientDetailTab={setPatientDetailTab}
                 setPatientView={setPatientView}
@@ -893,8 +822,6 @@ export function PatientsListView({
               selectedPatient={previewPatient}
               detailTitleId={desktopTitleId}
               closeDetail={closeDetail}
-              galleryPhotoCount={galleryPhotoCount}
-              galleryPreviewSlots={galleryPreviewSlots}
               getPatientInitials={getPatientInitials}
               setPatientDetailTab={setPatientDetailTab}
               setPatientView={setPatientView}

@@ -96,6 +96,10 @@ export function mapBackendPatient(dto) {
   const ultimaVinda = pickFirstParsableInstant(dto, [
     ['ultimaVinda', 'ultima_vinda'],
     ['ultimaVisita', 'ultima_visita'],
+    ['dataUltimaVisita', 'data_ultima_visita'],
+    ['ultimaVisitaEm', 'ultima_visita_em'],
+    ['dataUltimoProcedimento', 'data_ultimo_procedimento'],
+    ['ultimoAtendimentoEm', 'ultimo_atendimento_em'],
   ]);
 
   let proximoAgendamento = pickFirstParsableInstant(dto, [
@@ -112,8 +116,15 @@ export function mapBackendPatient(dto) {
     }
   }
 
+  /** Texto legado (ex. dd/mm): pickFirst ignora quando `new Date` não parseia — precisa camel e snake. */
   const ultimaVisitaLegacy =
-    ultimaVinda != null ? toPtBrDateOnly(ultimaVinda) : String(dto.ultimaVisita || '').trim();
+    ultimaVinda != null
+      ? toPtBrDateOnly(ultimaVinda)
+      : String(
+          dtoPick(dto, 'ultimaVisita', 'ultima_visita') ||
+            dtoPick(dto, 'ultimaVisitaFormatada', 'ultima_visita_formatada') ||
+            '',
+        ).trim();
   const proximoRetornoLegacy =
     proximoAgendamento != null
       ? toPtBrDateOnly(proximoAgendamento)

@@ -2177,18 +2177,28 @@ export function PatientProfileView({
             ) : null}
 
             <div className="mt-5 grid grid-cols-1 gap-3 border-t border-[#f1f5f9] pt-5 sm:grid-cols-3">
-              <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/90 p-3">
-                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" strokeWidth={2.25} aria-hidden />
+              <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50"
+                  aria-hidden
+                >
+                  <Clock className="h-5 w-5 text-teal-700" strokeWidth={2} />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-sky-800/80">Última visita</div>
-                  <div className="mt-0.5 text-[15px] font-bold text-[#0f172a]">{ultimaVisitaCardDisplay}</div>
+                  <div className="text-xs font-medium text-slate-500">Última Visita</div>
+                  <div className="mt-1 text-base font-semibold text-slate-900">{ultimaVisitaCardDisplay}</div>
                 </div>
               </div>
-              <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/90 p-3">
-                <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" strokeWidth={2.25} aria-hidden />
+              <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50"
+                  aria-hidden
+                >
+                  <Calendar className="h-5 w-5 text-blue-600" strokeWidth={2} />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-sky-800/80">Próximo retorno</div>
-                  <div className="mt-0.5 text-[15px] font-bold text-[#0f172a]">{proximoRetornoCardDisplay}</div>
+                  <div className="text-xs font-medium text-slate-500">Próximo Retorno</div>
+                  <div className="mt-1 text-base font-semibold text-slate-900">{proximoRetornoCardDisplay}</div>
                 </div>
               </div>
               <div

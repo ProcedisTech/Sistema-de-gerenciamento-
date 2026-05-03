@@ -119,6 +119,39 @@ export function latestProcedureOccurredInstantIso(procedures) {
   return best;
 }
 
+/** Cartões resumo (Última visita / Próximo retorno): só dia em America/Sao_Paulo. */
+export function formatCartaoDiaPtBr(iso) {
+  if (!iso) return '-';
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return '-';
+  return t.toLocaleDateString('pt-BR', { timeZone: TZ_BR });
+}
+
+/** ISO instant em string legada → somente data para o cartão. */
+export function formatCartaoIfIsoString(raw) {
+  const leg = String(raw ?? '').trim();
+  if (!leg || leg === '-' || leg === '—') return null;
+  if (!/^\d{4}-\d{2}-\d{2}/.test(leg) && !leg.includes('T')) return null;
+  const t = new Date(leg);
+  if (Number.isNaN(t.getTime())) return null;
+  return t.toLocaleDateString('pt-BR', { timeZone: TZ_BR });
+}
+
+/**
+ * Data do último atendimento a partir do DTO (lista/perfil): ultimaVinda (ISO) → ultimaVisita (dd/mm ou ISO legado).
+ * Retorna '-' quando ausente.
+ */
+export function patientUltimaVisitaDayFromDto(p) {
+  if (!p) return '-';
+  if (p.ultimaVinda != null && String(p.ultimaVinda).trim() !== '') {
+    return formatCartaoDiaPtBr(p.ultimaVinda);
+  }
+  const leg = String(p.ultimaVisita || '').trim();
+  const isoFmt = formatCartaoIfIsoString(leg);
+  if (isoFmt) return isoFmt;
+  return leg && leg !== '-' && leg !== '—' ? leg : '-';
+}
+
 function uuidDigits(value) {
   return String(value ?? '')
     .replace(/-/g, '')
