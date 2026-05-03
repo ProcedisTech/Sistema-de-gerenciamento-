@@ -97,26 +97,42 @@ const BTN_ACTION =
 
 function StatCard({ label, value, icon, tone = 'default' }) {
   const isToday = tone === 'today';
-  const renderedIcon = React.createElement(icon, { className: 'h-4 w-4', strokeWidth: 2.4 });
+  const renderedIcon = React.createElement(icon, { className: 'h-5 w-5', strokeWidth: 2.4 });
   const iconClass =
     tone === 'success'
-      ? 'bg-[#E1F5EE] text-[#0FA37F]'
+      ? 'bg-stats-confirmedBg text-stats-confirmedIcon'
       : tone === 'warning'
-        ? 'bg-[#FFF4E0] text-[#F5A623]'
+        ? 'bg-stats-pendingBg text-stats-pendingIcon'
         : tone === 'purple'
-          ? 'bg-[#F0EAFF] text-[#8B5CF6]'
-          : 'bg-white/20 text-white';
+          ? 'bg-stats-totalBg text-stats-totalIcon'
+          : 'bg-white/20 text-stats-todayIcon';
 
   return (
-    <div className={`rounded-[12px] border p-4 shadow-sm ${isToday ? 'border-[#0FA37F] bg-[#0FA37F] text-white' : 'border-[#E8E8E8] bg-white'}`}>
+    <div
+      className={`rounded-[12px] border p-4 shadow-sm transition-shadow ${
+        isToday
+          ? 'border-brand-primary bg-brand-primary text-white hover:bg-brand-primaryDark'
+          : 'border-calendar-border bg-white hover:border-gray-300 hover:shadow-md'
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`text-[11px] font-semibold ${isToday ? 'text-white/85' : 'text-[#888888]'}`}>{label}</div>
-          <div className={`mt-1 text-[24px] font-bold leading-none ${isToday ? 'text-white' : tone === 'success' ? 'text-[#0FA37F]' : tone === 'warning' ? 'text-[#F5A623]' : 'text-[#1A1A2E]'}`}>
+          <div
+            className={`mt-1 text-3xl font-bold leading-none ${
+              isToday
+                ? 'text-white'
+                : tone === 'success'
+                  ? 'text-brand-primary'
+                  : tone === 'warning'
+                    ? 'text-stats-pendingIcon'
+                    : 'text-[#1A1A2E]'
+            }`}
+          >
             {value}
           </div>
         </div>
-        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${iconClass}`}>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-full ${iconClass}`}>
           {renderedIcon}
         </div>
       </div>
@@ -218,13 +234,13 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
 
 function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
   return (
-    <div className="h-full rounded-[14px] border border-[#C5EDE1] bg-white">
-      <div className="rounded-t-[14px] border-b border-[#C5EDE1] bg-[#E8F9F4] p-4">
-        <div className="flex items-center gap-2 text-[12px] font-bold text-[#0A7A5E]">
+    <div className="h-full rounded-[14px] border border-calendar-border bg-white">
+      <div className="rounded-t-[14px] border-b-2 border-brand-primaryLight bg-brand-primaryGhost p-4">
+        <div className="flex items-center gap-2 text-[12px] font-bold text-brand-primaryDark">
           <CalendarDays className="h-4 w-4" />
           <span>{formatDayHeading(selectedDay)}</span>
         </div>
-        <div className="mt-1 text-[18px] font-black text-[#0A7A5E]">
+        <div className="mt-1 text-[18px] font-black text-brand-primaryDark">
           {appointments.length} agendamento{appointments.length === 1 ? '' : 's'}
         </div>
       </div>
@@ -311,21 +327,21 @@ function CalendarGrid({ agenda }) {
                   agenda.selectDay(cell.iso);
                 }
               }}
-              className={`relative flex aspect-square w-[92%] max-w-full min-w-0 shrink-0 items-center justify-center rounded-[10px] border p-1 sm:w-[65.2%] sm:p-0 transition-all focus:outline-none focus:ring-2 focus:ring-[#0FA37F]/30 ${
-                cell.isToday
-                  ? 'border-[#0FA37F] bg-[#0FA37F] text-white shadow-sm hover:bg-[#0d8f6f]'
-                  : isSelected
-                    ? 'border-[#0FA37F] bg-[#E8F9F4] text-[#1A1A2E] hover:bg-[#dcf5ec]'
+              className={`relative flex aspect-square w-[92%] max-w-full min-w-0 shrink-0 items-center justify-center rounded-[10px] border p-1 sm:w-[65.2%] sm:p-0 transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 ${
+                isSelected
+                  ? 'border-brand-primary bg-brand-primary text-white shadow-sm hover:bg-brand-primaryDark'
+                  : cell.isToday
+                    ? 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] ring-2 ring-brand-primary hover:bg-calendar-cellHover'
                     : hasEvents
-                      ? 'border-[#C5EDE1]/80 bg-[#E8F0ED] text-[#1A1A2E] hover:bg-[#dfece8]'
-                      : 'border-transparent bg-white text-[#1A1A2E] hover:bg-[#F5F6FA]'
+                      ? 'border-calendar-border bg-calendar-cellWithEvents text-[#1A1A2E] hover:bg-calendar-cellHover'
+                      : 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'
               }`}
             >
               <span className="text-[15px] font-bold leading-none sm:text-[14px]">{cell.day}</span>
               {dayAppointments.length > 0 ? (
                 <span
                   className={`absolute right-0.5 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-black sm:right-1 sm:top-1 sm:h-[17px] sm:w-[17px] sm:text-[9px] ${
-                    cell.isToday ? 'bg-white text-[#0FA37F]' : 'bg-[#0FA37F] text-white'
+                    isSelected ? 'bg-white text-brand-primary' : 'bg-brand-primary text-white'
                   }`}
                 >
                   {dayAppointments.length}
@@ -335,10 +351,10 @@ function CalendarGrid({ agenda }) {
                 {dots.map((item) => (
                   <span
                     key={item.id}
-                    className={`h-1.5 w-1.5 rounded-full ${cell.isToday ? 'bg-white' : STATUS_STYLES[isAppointmentBloqueio(item) ? 'bloqueio' : item.status]?.dot || 'bg-[#0FA37F]'}`}
+                    className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : STATUS_STYLES[isAppointmentBloqueio(item) ? 'bloqueio' : item.status]?.dot || 'bg-brand-primary'}`}
                   />
                 ))}
-                {hasMore ? <span className={`text-[10px] font-black leading-none ${cell.isToday ? 'text-white' : 'text-[#888888]'}`}>...</span> : null}
+                {hasMore ? <span className={`text-[10px] font-black leading-none ${isSelected ? 'text-white' : 'text-[#888888]'}`}>...</span> : null}
               </span>
             </button>
           );
