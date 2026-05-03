@@ -18,6 +18,7 @@ import { WeekTimeGrid } from './WeekTimeGrid';
 import AgendaSlotActions from './AgendaSlotActions.jsx';
 import NotificationBell from '../layout/NotificationBell.jsx';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
+import { isSlotCanceladoPorReagendamento } from '../../utils/agendaReagendamentoUi.js';
 
 const STATUS_STYLES = {
   confirmado: {
@@ -125,7 +126,17 @@ function StatCard({ label, value, icon, tone = 'default' }) {
 
 function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
   const bloqueio = isAppointmentBloqueio(appointment);
-  const styles = STATUS_STYLES[bloqueio ? 'bloqueio' : appointment.status] || STATUS_STYLES.pendente;
+  const isReagendado = !bloqueio && isSlotCanceladoPorReagendamento(appointment);
+  const styles = bloqueio
+    ? STATUS_STYLES.bloqueio
+    : isReagendado
+      ? {
+          border: 'border-l-orange-500',
+          dot: 'bg-orange-500',
+          badge: 'bg-orange-100 text-orange-800',
+          primary: STATUS_STYLES.cancelado.primary,
+        }
+      : STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
 
   return (
@@ -157,7 +168,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
             STATUS_STYLES[bloqueio ? 'bloqueio' : appointment.status] ? styles.badge : `${statusTone.bg} ${statusTone.text}`
           }`}
         >
-          {bloqueio ? 'Bloqueado' : statusTone.label || appointment.status}
+          {bloqueio ? 'Bloqueado' : isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
         </span>
       </div>
 
@@ -479,7 +490,7 @@ export function AgendaDashboard({
       return;
     }
     if (appointment.status === 'cancelado') {
-      setModalReagendar({ agenda: appointment });
+      onSlotReagendar?.(appointment);
       return;
     }
 
@@ -493,7 +504,7 @@ export function AgendaDashboard({
       return;
     }
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
-  }, [agenda, onStartAttendance, patients]);
+  }, [agenda, onSlotReagendar, onStartAttendance, patients]);
 
   return (
     <div className="w-full min-h-0 font-['Inter',system-ui,sans-serif] text-[#1A1A2E]">
