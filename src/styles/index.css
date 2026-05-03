@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,7 +12,13 @@
   }
 
   body {
-    @apply font-sans text-app-ink;
+    @apply text-app-ink;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
   }
 
   #root {
@@ -18,10 +26,21 @@
   }
 }
 
-.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #00a88e; border-radius: 10px; opacity: 0.5; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00967f; }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #00a88e;
+  border-radius: 10px;
+  opacity: 0.5;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #00967f;
+}
 
 @keyframes toast-pop-in {
   from {
@@ -131,7 +150,8 @@
 }
 
 .patient-preview-sheet {
-  animation: patient-preview-sheet-mobile 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: patient-preview-sheet-mobile 0.4s cubic-bezier(0.22, 1, 0.36, 1)
+    both;
 }
 
 @media (min-width: 640px) {
@@ -139,4 +159,3 @@
     animation-name: patient-preview-sheet-desktop;
   }
 }
-

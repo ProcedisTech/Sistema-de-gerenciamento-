@@ -111,7 +111,7 @@ function StatCard({ label, value, icon, tone = 'default' }) {
     <div
       className={`rounded-[12px] border p-4 shadow-sm transition-shadow ${
         isToday
-          ? 'border-brand-primary bg-brand-primary text-white hover:bg-brand-primaryDark'
+          ? 'border-transparent bg-gradient-to-br from-teal-500 to-teal-600 text-white hover:from-teal-600 hover:to-teal-700'
           : 'border-calendar-border bg-white hover:border-gray-300 hover:shadow-md'
       }`}
     >
@@ -235,7 +235,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
 function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
   return (
     <div className="h-full rounded-[14px] border border-calendar-border bg-white">
-      <div className="rounded-t-[14px] border-b-2 border-brand-primaryLight bg-brand-primaryGhost p-4">
+      <div className="rounded-t-[14px] border-2 border-teal-200 bg-gradient-to-br from-teal-50 to-blue-50 p-4">
         <div className="flex items-center gap-2 text-[12px] font-bold text-brand-primaryDark">
           <CalendarDays className="h-4 w-4" />
           <span>{formatDayHeading(selectedDay)}</span>
@@ -331,7 +331,7 @@ function CalendarGrid({ agenda }) {
                 isSelected
                   ? 'border-brand-primary bg-brand-primary text-white shadow-sm hover:bg-brand-primaryDark'
                   : cell.isToday
-                    ? 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] ring-2 ring-brand-primary hover:bg-calendar-cellHover'
+                    ? 'border-2 border-today-border bg-today-bg text-today-text hover:bg-calendar-cellHover'
                     : hasEvents
                       ? 'border-calendar-border bg-calendar-cellWithEvents text-[#1A1A2E] hover:bg-calendar-cellHover'
                       : 'border-calendar-border bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'

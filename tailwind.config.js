@@ -24,11 +24,17 @@ export default {
            * TODO: alinhar app.accent, agendaStatusColors.js e demais telas numa sprint futura.
            */
           brand: {
-            primary: '#0FA37F',
-            primaryDark: '#0B7A5F',
-            primaryLight: '#34D399',
-            primarySubtle: '#D1FAE5',
-            primaryGhost: '#ECFDF5',
+            primary: '#14B8A6',
+            primaryDark: '#0D9488',
+            primaryLight: '#5EEAD4',
+            primarySubtle: '#CCFBF1',
+            primaryGhost: '#F0FDFA',
+          },
+          /** Célula “hoje” não selecionada (calendário mensal) */
+          today: {
+            bg: '#F3E8FF',
+            text: '#7E22CE',
+            border: '#D8B4FE',
           },
           stats: {
             totalBg: '#F3E8FF',
@@ -44,9 +50,12 @@ export default {
             cellEmpty: '#FFFFFF',
             cellWithEvents: '#F9FAFB',
             cellHover: '#F3F4F6',
-            cellSelected: '#0FA37F',
+            cellSelected: '#14B8A6',
             border: '#E5E7EB',
           },
+        },
+        fontFamily: {
+          sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
         },
         boxShadow: {
           'app-card':
