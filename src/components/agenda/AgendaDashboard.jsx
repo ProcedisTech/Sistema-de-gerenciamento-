@@ -22,21 +22,21 @@ import { isSlotCanceladoPorReagendamento } from '../../utils/agendaReagendamento
 
 const STATUS_STYLES = {
   confirmado: {
-    border: 'border-l-[#0FA37F]',
-    dot: 'bg-[#0FA37F]',
-    badge: 'bg-[#E1F5EE] text-[#0A7A5E]',
-    primary: 'bg-[#0FA37F] hover:bg-[#0d8f6f] text-white',
+    border: 'border-l-brand-primary',
+    dot: 'bg-brand-primary',
+    badge: 'bg-brand-primarySubtle text-brand-primaryDark',
+    primary: 'bg-brand-primary hover:bg-brand-primaryDark text-white',
   },
   pendente: {
-    border: 'border-l-[#F5A623]',
-    dot: 'bg-[#F5A623]',
-    badge: 'bg-[#FFF4E0] text-[#B07D00]',
-    primary: 'bg-[#F5A623] hover:bg-[#df941c] text-white',
+    border: 'border-l-amber-500',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-50 text-amber-800',
+    primary: 'bg-amber-500 hover:bg-amber-600 text-white',
   },
   cancelado: {
-    border: 'border-l-[#E24B4A]',
-    dot: 'bg-[#E24B4A]',
-    badge: 'bg-[#FCE8E8] text-[#A32D2D]',
+    border: 'border-l-red-500',
+    dot: 'bg-red-500',
+    badge: 'bg-red-100 text-red-800',
     primary: 'bg-slate-200 hover:bg-slate-300 text-slate-700',
   },
   bloqueio: {
@@ -148,7 +148,7 @@ function StatCard({ label, value, icon, tone = 'default' }) {
             {value}
           </div>
         </div>
-        <div className={`flex h-11 w-11 items-center justify-center rounded-full ${iconClass}`}>
+        <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${iconClass}`}>
           {renderedIcon}
         </div>
       </div>
@@ -186,7 +186,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-black text-white"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[12px] font-black text-white"
               style={avatarStyle}
             >
               {initials(appointment.pacienteNome)}
@@ -310,7 +310,7 @@ function CalendarGrid({ agenda }) {
       <div
         role="grid"
         aria-label={`Calendario de ${agenda.monthLabel}`}
-        className="grid grid-cols-7 gap-1.5 sm:gap-2"
+        className="grid grid-cols-7 gap-2 sm:gap-3"
       >
         {agenda.calendarCells.map((cell) => {
           if (!cell.inCurrentMonth) {
@@ -354,7 +354,7 @@ function CalendarGrid({ agenda }) {
                   agenda.selectDay(cell.iso);
                 }
               }}
-              className={`relative flex aspect-square w-full min-w-0 items-center justify-center rounded-[10px] border p-1 transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 ${
+              className={`relative flex aspect-square w-full min-w-0 items-center justify-center rounded-xl border p-2 transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/30 ${
                 isSelected
                   ? 'border-brand-primary bg-brand-primary text-white shadow-sm hover:bg-brand-primaryDark'
                   : hasEvents
@@ -362,24 +362,24 @@ function CalendarGrid({ agenda }) {
                     : 'border-transparent bg-calendar-cellEmpty text-[#1A1A2E] hover:bg-calendar-cellHover'
               }`}
             >
-              <span className="text-[15px] font-bold leading-none sm:text-[14px]">{cell.day}</span>
+              <span className="text-base font-bold leading-none sm:text-[15px]">{cell.day}</span>
               {dayAppointments.length > 0 ? (
                 <span
-                  className={`absolute right-0.5 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-black sm:right-1 sm:top-1 sm:h-[17px] sm:w-[17px] sm:text-[9px] ${
+                  className={`absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black sm:right-1.5 sm:top-1.5 sm:h-[22px] sm:w-[22px] sm:text-[11px] ${
                     isSelected ? 'bg-white text-brand-primary' : 'bg-brand-primary text-white'
                   }`}
                 >
                   {dayAppointments.length}
                 </span>
               ) : null}
-              <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 items-center gap-1 sm:bottom-1.5 sm:gap-1">
+              <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-2 sm:gap-1.5">
                 {dots.map((item) => {
                   const isBloqueio = isAppointmentBloqueio(item);
                   const dotColor = isSelected ? '#FFFFFF' : isBloqueio ? '#94a3b8' : item.corHex || '#14B8A6';
                   return (
                     <span
                       key={item.id}
-                      className="h-1.5 w-1.5 rounded-full"
+                      className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: dotColor }}
                     />
                   );
@@ -416,24 +416,24 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
               agenda.selectDay(group.date, false);
               onOpenDaySummary(group);
             }}
-            className="flex w-full flex-col rounded-xl border border-[#00a88e]/15 bg-white p-4 text-left shadow-sm transition-all hover:border-[#00a88e]/30"
+            className="flex w-full flex-col rounded-xl border border-brand-primary/15 bg-white p-4 text-left shadow-sm transition-all hover:border-brand-primary/30"
           >
             <p className="break-words text-[14px] font-bold leading-snug text-[#0f172a] [overflow-wrap:anywhere]">
               {formatLongDate(group.date)}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-md border border-app-border bg-[#e6f7f5] px-2 py-0.5 text-[11px] font-bold text-[#0f766e]">
+              <span className="rounded-md border border-app-border bg-brand-primarySubtle px-2 py-0.5 text-[11px] font-bold text-brand-primaryDark">
                 {group.items.length} agendamento{group.items.length === 1 ? '' : 's'}
               </span>
               {isToday ? (
-                <span className="rounded-md border border-[#00a88e]/25 bg-[#00a88e]/10 px-2 py-0.5 text-[11px] font-bold text-[#0f766e]">
+                <span className="rounded-md border border-brand-primary/25 bg-brand-primary/10 px-2 py-0.5 text-[11px] font-bold text-brand-primaryDark">
                   Hoje
                 </span>
               ) : null}
             </div>
             {first ? (
               <p className="mt-3 line-clamp-2 text-[12px] font-medium text-[#64748b]">
-                <span className="font-bold text-[#00a88e]">{first.horaInicio}</span>
+                <span className="font-bold text-brand-primary">{first.horaInicio}</span>
                 <span className="mx-1.5 text-[#CBD5E1]">·</span>
                 {first.pacienteNome}
                 {group.items.length > 1 ? (
@@ -569,7 +569,7 @@ export function AgendaDashboard({
         <button
           type="button"
           onClick={() => agenda.openCreateModal(agenda.selectedDay)}
-          className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 self-start rounded-[10px] bg-[#0FA37F] px-4 py-3 text-center text-[12px] font-bold leading-tight text-white shadow-sm transition-colors hover:bg-[#0d8f6f] lg:self-auto"
+          className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-brand-primary px-5 py-3 text-center text-[13px] font-bold leading-tight text-white shadow-sm transition-colors hover:bg-brand-primaryDark lg:self-auto"
         >
           <Plus className="h-4 w-4" />
           Novo Agendamento
@@ -591,7 +591,7 @@ export function AgendaDashboard({
         <section className="relative rounded-[14px] border border-[#E8E8E8] bg-white p-4 shadow-sm">
           {agenda.loading ? (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[14px] bg-white/70">
-              <Loader2 className="h-8 w-8 animate-spin text-[#0FA37F]" />
+              <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
             </div>
           ) : null}
 
@@ -619,10 +619,10 @@ export function AgendaDashboard({
             )}
 
             <div className="inline-flex w-fit rounded-lg bg-[#F5F6FA] p-1">
-              <button type="button" aria-label="Visualizacao em grade" onClick={() => agenda.setViewMode('grid')} className={`rounded-md p-2 ${agenda.viewMode === 'grid' ? 'bg-[#E8F9F4] text-[#0FA37F]' : 'text-[#888888]'}`}>
+              <button type="button" aria-label="Visualizacao em grade" onClick={() => agenda.setViewMode('grid')} className={`rounded-md p-2 ${agenda.viewMode === 'grid' ? 'bg-brand-primarySubtle text-brand-primaryDark' : 'text-[#888888]'}`}>
                 <Grid2X2 className="h-4 w-4" />
               </button>
-              <button type="button" aria-label="Visualizacao em lista" onClick={() => agenda.setViewMode('list')} className={`rounded-md p-2 ${agenda.viewMode === 'list' ? 'bg-[#E8F9F4] text-[#0FA37F]' : 'text-[#888888]'}`}>
+              <button type="button" aria-label="Visualizacao em lista" onClick={() => agenda.setViewMode('list')} className={`rounded-md p-2 ${agenda.viewMode === 'list' ? 'bg-brand-primarySubtle text-brand-primaryDark' : 'text-[#888888]'}`}>
                 <List className="h-4 w-4" />
               </button>
               <button
@@ -632,7 +632,7 @@ export function AgendaDashboard({
                   agenda.syncWeekFromSelection();
                   agenda.setViewMode('semana');
                 }}
-                className={`rounded-md p-2 ${agenda.viewMode === 'semana' ? 'bg-[#E8F9F4] text-[#0FA37F]' : 'text-[#888888]'}`}
+                className={`rounded-md p-2 ${agenda.viewMode === 'semana' ? 'bg-brand-primarySubtle text-brand-primaryDark' : 'text-[#888888]'}`}
               >
                 <CalendarRange className="h-4 w-4" />
               </button>
