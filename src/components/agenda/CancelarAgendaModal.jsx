@@ -8,7 +8,6 @@ import { X } from 'lucide-react';
 
 const MOTIVOS = [
   { codigo: 'paciente_desistiu', label: 'Paciente desistiu' },
-  { codigo: 'remarcado', label: 'Remarcado' },
   { codigo: 'clinica_fechou', label: 'Clínica fechou' },
   { codigo: 'outro', label: 'Outro' },
 ];

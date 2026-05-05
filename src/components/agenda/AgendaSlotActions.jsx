@@ -1,7 +1,6 @@
 import { Check, UserX, Calendar, XCircle, MessageCircle } from 'lucide-react';
 import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
 import { labelMotivoCancelamentoCodigo, resolveMotivoCancelamentoFromRow } from '../../utils/agendaCancelamentoMotivo.js';
-import { formatDestinoReagendamentoLabel, isSlotCanceladoPorReagendamento } from '../../utils/agendaReagendamentoUi.js';
 
 /**
  * Ações disponíveis pra um slot da agenda.
@@ -24,8 +23,6 @@ export default function AgendaSlotActions({
   disabled = false,
 }) {
   const status = agenda?.status;
-  const isReagendado = status === 'cancelado' && isSlotCanceladoPorReagendamento(agenda);
-  const destinoReagendamentoLabel = isReagendado ? formatDestinoReagendamentoLabel(agenda) : null;
   const v = getAgendaSlotActionVisibility(status);
   const anyChip =
     v.showRealizado || v.showFalta || v.showWhatsApp || v.showReagendar || v.showCancelar;
@@ -41,10 +38,10 @@ export default function AgendaSlotActions({
       {status === 'realizado' ? (
         <span className="text-xs italic text-gray-500">Atendimento finalizado</span>
       ) : null}
-      {status === 'cancelado' && destinoReagendamentoLabel ? (
-        <span className="text-xs italic text-orange-800">{destinoReagendamentoLabel}</span>
-      ) : status === 'cancelado' ? (
+      {status === 'cancelado' ? (
         <span className="text-xs italic text-gray-500">Cancelado</span>
+      ) : status === 'reagendado' ? (
+        <span className="text-xs italic text-purple-800">Reagendado</span>
       ) : null}
       {showMotivoLine ? (
         <p className="text-sm text-gray-500">

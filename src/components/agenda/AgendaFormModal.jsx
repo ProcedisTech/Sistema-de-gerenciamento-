@@ -38,20 +38,35 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     }
     el.focus();
   };
-  const bloqueio = agenda.form.tipo === 'bloqueio';
-  const modalTitle = (() => {
-    if (bloqueio) return isEdit ? 'Editar bloqueio' : 'Bloquear horário';
-    return isEdit ? 'Editar Agendamento' : 'Novo Agendamento';
-  })();
-  const modalSubtitle = bloqueio
-    ? 'Defina data, horário e motivo. Nenhum paciente será vinculado.'
-    : 'Preencha os dados obrigatorios para atualizar a agenda.';
+  const modalTitle = isEdit ? 'Editar Agendamento' : 'Novo Agendamento';
+  const modalSubtitle = 'Preencha os dados obrigatorios para atualizar a agenda.';
   const horarioConflita = Boolean(agenda.horarioConflita);
   const horarioInputClass = `mt-1 w-full rounded-lg border px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F] ${
     horarioConflita ? 'border-amber-500 bg-amber-50/40 ring-1 ring-amber-300' : 'border-[#E8E8E8]'
   }`;
 
-  const bloqueioCheckboxDisabled = isEdit || lockPatient;
+  const selectedProcedimentos = Array.isArray(agenda.form.catalogoProcedimentoSaudeIds)
+    ? agenda.form.catalogoProcedimentoSaudeIds
+    : [];
+
+  const addProcedimentoChip = (catalogoId, nome) => {
+    const id = String(catalogoId || '').trim();
+    if (!id) return;
+    const merged = [...selectedProcedimentos, id].filter((v, i, arr) => arr.indexOf(v) === i);
+    agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
+    if (nome) agenda.updateForm('procedimentoNome', nome);
+  };
+
+  const removeProcedimentoChip = (catalogoId) => {
+    const id = String(catalogoId || '').trim();
+    agenda.updateForm(
+      'catalogoProcedimentoSaudeIds',
+      selectedProcedimentos.filter((v) => v !== id)
+    );
+  };
+
+  const procedimentoChipLabel = (id) =>
+    agenda.procedimentoOptions.find((o) => String(o.id) === String(id))?.nome || id;
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
@@ -74,91 +89,80 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             </div>
           ) : null}
 
-          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E8E8E8] bg-[#F5F6FA] px-3 py-2.5">
-            <label
-              className={`flex items-center gap-2 text-[13px] font-bold text-[#1A1A2E] ${bloqueioCheckboxDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-            >
-              <input
-                type="checkbox"
-                checked={bloqueio}
-                disabled={bloqueioCheckboxDisabled}
-                onChange={(event) => agenda.updateForm('tipo', event.target.checked ? 'bloqueio' : 'atendimento')}
-                className="h-4 w-4 rounded border-[#E8E8E8] text-[#0FA37F] focus:ring-[#0FA37F]"
+          {agenda.slotsOcupadosLoading ? (
+            <div className="md:col-span-2 text-[11px] font-semibold text-[#888888]">Carregando ocupação do dia…</div>
+          ) : null}
+
+          <FieldError error={agenda.formErrors.pacienteId}>
+            <label className="text-[12px] font-bold text-[#1A1A2E]">Paciente*</label>
+            {lockPatient ? (
+              <div className="mt-1 rounded-lg border border-[#E8E8E8] bg-[#F5F6FA] px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E]">
+                <span className="block">{agenda.form.pacienteNome || '—'}</span>
+                {agenda.form.telefone ? (
+                  <span className="mt-1 block text-[12px] font-medium text-[#64748b]">{agenda.form.telefone}</span>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <select
+                  value={agenda.form.pacienteId}
+                  onChange={(event) => agenda.updateForm('pacienteId', event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
+                >
+                  <option value="">Selecione</option>
+                  {agenda.patientOptions.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.nome}
+                    </option>
+                  ))}
+                </select>
+                {agenda.patientOptions.length === 0 ? (
+                  <p className="mt-1 text-[11px] font-medium text-[#888888]">
+                    Cadastre pacientes na aba Pacientes para agendar.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </FieldError>
+
+          <FieldError error={agenda.formErrors.catalogoProcedimentoSaudeIds}>
+            <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimentos*</label>
+            <div className="mt-1">
+              <ProcedimentoAutocomplete
+                value={agenda.form.procedimentoNome || ''}
+                onChange={(nome, catalogoId) => {
+                  agenda.updateForm('procedimentoNome', nome);
+                  addProcedimentoChip(catalogoId, nome);
+                }}
+                placeholder="Ex: Botox, Preenchimento..."
+                catalogoOptions={agenda.procedimentoOptions.map((o) => ({
+                  id: o.id,
+                  nomeProcedimento: o.nome,
+                }))}
+                error={Boolean(agenda.formErrors.catalogoProcedimentoSaudeIds)}
               />
-              Bloquear horário
-            </label>
-            {agenda.slotsOcupadosLoading ? (
-              <span className="text-[11px] font-semibold text-[#888888]">Carregando ocupação do dia…</span>
-            ) : null}
-          </div>
-
-          {!bloqueio ? (
-            <>
-              <FieldError error={agenda.formErrors.pacienteId}>
-                <label className="text-[12px] font-bold text-[#1A1A2E]">Paciente*</label>
-                {lockPatient ? (
-                  <div className="mt-1 rounded-lg border border-[#E8E8E8] bg-[#F5F6FA] px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E]">
-                    <span className="block">{agenda.form.pacienteNome || '—'}</span>
-                    {agenda.form.telefone ? (
-                      <span className="mt-1 block text-[12px] font-medium text-[#64748b]">{agenda.form.telefone}</span>
-                    ) : null}
-                  </div>
-                ) : (
-                  <>
-                    <select
-                      value={agenda.form.pacienteId}
-                      onChange={(event) => agenda.updateForm('pacienteId', event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
+              {selectedProcedimentos.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedProcedimentos.map((id) => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 rounded-full bg-[#e6f7f3] px-2.5 py-1 text-[11px] font-semibold text-[#0f766e]"
                     >
-                      <option value="">Selecione</option>
-                      {agenda.patientOptions.map((patient) => (
-                        <option key={patient.id} value={patient.id}>
-                          {patient.nome}
-                        </option>
-                      ))}
-                    </select>
-                    {agenda.patientOptions.length === 0 ? (
-                      <p className="mt-1 text-[11px] font-medium text-[#888888]">
-                        Cadastre pacientes na aba Pacientes para agendar.
-                      </p>
-                    ) : null}
-                  </>
-                )}
-              </FieldError>
-
-              <FieldError error={agenda.formErrors.procedimentoNome}>
-                <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimento*</label>
-                <div className="mt-1">
-                  <ProcedimentoAutocomplete
-                    value={agenda.form.procedimentoNome || ''}
-                    onChange={(nome, catalogoId) => {
-                      agenda.updateForm('procedimentoNome', nome);
-                      agenda.updateForm('catalogoProcedimentoSaudeId', catalogoId || '');
-                    }}
-                    placeholder="Ex: Botox, Preenchimento..."
-                    catalogoOptions={agenda.procedimentoOptions.map((o) => ({
-                      id: o.id,
-                      nomeProcedimento: o.nome,
-                    }))}
-                    error={Boolean(agenda.formErrors.procedimentoNome)}
-                  />
+                      {procedimentoChipLabel(id)}
+                      <button
+                        type="button"
+                        onClick={() => removeProcedimentoChip(id)}
+                        className="rounded-full p-0.5 hover:bg-[#ccf0e6]"
+                        aria-label="Remover procedimento"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
-              </FieldError>
-            </>
-          ) : (
-            <div className="md:col-span-2">
-              <FieldError error={agenda.formErrors.motivoBloqueio}>
-                <label className="text-[12px] font-bold text-[#1A1A2E]">Motivo do bloqueio*</label>
-                <textarea
-                  value={agenda.form.motivoBloqueio || ''}
-                  onChange={(event) => agenda.updateForm('motivoBloqueio', event.target.value)}
-                  rows={3}
-                  className="mt-1 w-full resize-none rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
-                  placeholder="Ex.: Treinamento, manutenção, folga…"
-                />
-              </FieldError>
+              ) : null}
             </div>
-          )}
+          </FieldError>
 
           <div>
             <label className="text-[12px] font-bold text-[#1A1A2E]">Data*</label>
@@ -230,17 +234,15 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             </select>
           </FieldError>
 
-          {!bloqueio ? (
-            <div>
-              <label className="text-[12px] font-bold text-[#1A1A2E]">Telefone</label>
-              <input
-                value={agenda.form.telefone}
-                onChange={(event) => agenda.updateForm('telefone', event.target.value)}
-                disabled={lockPatient}
-                className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F] disabled:cursor-not-allowed disabled:bg-[#f1f5f9]"
-              />
-            </div>
-          ) : null}
+          <div>
+            <label className="text-[12px] font-bold text-[#1A1A2E]">Telefone</label>
+            <input
+              value={agenda.form.telefone}
+              onChange={(event) => agenda.updateForm('telefone', event.target.value)}
+              disabled={lockPatient}
+              className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F] disabled:cursor-not-allowed disabled:bg-[#f1f5f9]"
+            />
+          </div>
 
           <div className="md:col-span-2">
             <label className="text-[12px] font-bold text-[#1A1A2E]">Observações</label>
