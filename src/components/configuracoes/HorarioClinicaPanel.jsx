@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Clock, Save, User } from 'lucide-react';
+import { Building2, Clock, Info, Save, User } from 'lucide-react';
 import {
   configuracoesClinicaApi,
   getApiErrorToastMessage,
@@ -82,6 +82,18 @@ export function HorarioClinicaPanel() {
 
   return (
     <div className="space-y-6">
+      {tipoOrg === 'autonomo' ? (
+        <div
+          role="note"
+          className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-[13px] text-blue-800"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
+          <p>
+            Como você é Autônomo, este horário também é o seu horário de atendimento.
+          </p>
+        </div>
+      ) : null}
+
       <section>
         <h3 className="mb-3 text-[15px] font-bold text-[#0f172a]">Tipo de organização</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
