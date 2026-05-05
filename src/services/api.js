@@ -729,10 +729,13 @@ export const usuariosApi = {
 // ── Catálogo de procedimentos ───────────────────────────────
 
 export const catalogosApi = {
-  list: () => request('/api/v1/catalogos'),
+  list: (incluirInativos = false) =>
+    request(`/api/v1/catalogos?incluirInativos=${incluirInativos}`),
   get: (id) => request(`/api/v1/catalogos/${id}`),
   /** Body alinhado ao Spring (ajustar chaves se o DTO divergir). */
   criar: (data) => request('/api/v1/catalogos', { method: 'POST', body: JSON.stringify(data) }),
+  inativar: (id) => request(`/api/v1/catalogos/${id}/inativar`, { method: 'PATCH' }),
+  ativar: (id) => request(`/api/v1/catalogos/${id}/ativar`, { method: 'PATCH' }),
 };
 
 /**

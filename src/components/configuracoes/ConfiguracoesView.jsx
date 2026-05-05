@@ -13,6 +13,7 @@ import {
   CalendarDays,
   MessageCircle,
   History,
+  Stethoscope,
 } from 'lucide-react';
 import { AuditoriaView } from './AuditoriaView';
 import { authHeadersForFetch } from '../../services/api';
@@ -25,12 +26,14 @@ import { HorarioClinicaPanel } from './HorarioClinicaPanel';
 import { FeriadosPanel } from './FeriadosPanel';
 import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
 import { PacientesInativadosPanel } from './PacientesInativadosPanel';
+import { ProcedimentosManager } from './ProcedimentosManager';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
   categorias: 'Organize categorias de perguntas',
   perguntas: 'Banco de perguntas reutilizáveis',
   termos: 'Termos de consentimento',
+  procedimentos: 'Catálogo de procedimentos da clínica',
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
   'usuarios-acessos': 'Gerencie sua equipe e acessos',
@@ -122,6 +125,7 @@ export function ConfiguracoesView({
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">Seção</p>
         <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] px-1">
           {[
+            isAdmin && ['procedimentos', 'Procedimentos'],
             isAdmin && ['termos', 'Termos'],
             (isAdmin || isProfissional) && ['categorias', 'Categorias'],
             (isAdmin || isProfissional) && ['perguntas', 'Perguntas'],
@@ -156,6 +160,12 @@ export function ConfiguracoesView({
           {isAdmin && (
             <>
               <NavGroupLabel>Clínica</NavGroupLabel>
+              <SidebarNavItem
+                icon={Stethoscope}
+                label="Procedimentos"
+                active={configSection === 'procedimentos'}
+                onClick={() => setConfigSection('procedimentos')}
+              />
               <SidebarNavItem
                 icon={FileText}
                 label={
@@ -260,6 +270,8 @@ export function ConfiguracoesView({
 
         {/* Conteúdo */}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] px-3 py-4 sm:px-5 sm:py-6 md:px-6 md:py-8">
+          {configSection === 'procedimentos' && isAdmin && <ProcedimentosManager />}
+
           {configSection === 'termos' && <TermosManager {...termosManagerProps} />}
 
           {(configSection === 'categorias' ||

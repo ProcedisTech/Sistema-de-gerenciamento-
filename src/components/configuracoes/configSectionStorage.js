@@ -4,6 +4,7 @@ const LEGACY_TAB_KEY = 'procedi_config_tab';
 
 export const VALID_SECTIONS = new Set([
   'termos',
+  'procedimentos',
   'categorias',
   'perguntas',
   'fichas',
