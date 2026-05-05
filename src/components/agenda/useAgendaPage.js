@@ -3,7 +3,6 @@ import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
 import {
   agendasApi,
-  agendamentosApi,
   catalogosApi,
   confirmacaoApi,
   disponibilidadeApi,
@@ -688,14 +687,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
         const agendaId = created?.id != null ? String(created.id) : null;
         if (!agendaId) throw new Error('Resposta da API sem id da agenda.');
-        const firstCatalogoId = procIds[0];
-        if (firstCatalogoId) {
-          await agendamentosApi.create({
-            agendaId,
-            catalogoProcedimentoSaudeId: firstCatalogoId,
-            observacao: form.observacao?.trim() || undefined,
-          });
-        }
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
