@@ -34,7 +34,7 @@ const SECTION_SUBTITLE = {
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
   'usuarios-acessos': 'Gerencie sua equipe e acessos',
-  'agenda-horarios': 'Horário de atendimento da clínica',
+  'horarios-funcionamento': 'Horários de funcionamento da clínica',
   'agenda-feriados': 'Feriados em que a clínica não atende',
   'agenda-templates': 'Mensagens automáticas de WhatsApp',
   'pacientes-inativados': 'Pacientes fora da listagem principal',
@@ -129,7 +129,7 @@ export function ConfiguracoesView({
             (isAdmin || isProfissional) && ['perfil', 'Perfil'],
             isAdmin && ['clinica', 'Clínica'],
             isAdmin && ['usuarios-acessos', 'Usuários'],
-            isAdmin && ['agenda-horarios', 'Horário'],
+            isAdmin && ['horarios-funcionamento', 'Horários'],
             isAdmin && ['agenda-feriados', 'Feriados'],
             isAdmin && ['agenda-templates', 'Templates'],
             isAdmin && ['pacientes-inativados', 'Inativos'],
@@ -221,8 +221,8 @@ export function ConfiguracoesView({
               <SidebarNavItem
                 icon={Clock}
                 label="Horário de atendimento"
-                active={configSection === 'agenda-horarios'}
-                onClick={() => setConfigSection('agenda-horarios')}
+                active={configSection === 'horarios-funcionamento'}
+                onClick={() => setConfigSection('horarios-funcionamento')}
               />
               <SidebarNavItem
                 icon={CalendarDays}
@@ -286,7 +286,7 @@ export function ConfiguracoesView({
             <GestaoUsuariosView />
           )}
 
-          {configSection === 'agenda-horarios' && isAdmin && <HorarioClinicaPanel />}
+          {configSection === 'horarios-funcionamento' && isAdmin && <HorarioClinicaPanel />}
           {configSection === 'agenda-feriados' && isAdmin && <FeriadosPanel />}
           {configSection === 'agenda-templates' && isAdmin && <TemplatesMensagemPanel />}
           {configSection === 'pacientes-inativados' && isAdmin && (

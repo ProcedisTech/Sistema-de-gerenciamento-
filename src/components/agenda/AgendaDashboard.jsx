@@ -18,7 +18,6 @@ import { WeekTimeGrid } from './WeekTimeGrid';
 import AgendaSlotActions from './AgendaSlotActions.jsx';
 import NotificationBell from '../layout/NotificationBell.jsx';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
-import { isSlotCanceladoPorReagendamento } from '../../utils/agendaReagendamentoUi.js';
 
 const STATUS_STYLES = {
   confirmado: {
@@ -39,11 +38,11 @@ const STATUS_STYLES = {
     badge: 'bg-red-100 text-red-800',
     primary: 'bg-slate-200 hover:bg-slate-300 text-slate-700',
   },
-  bloqueio: {
-    border: 'border-l-slate-400',
-    dot: 'bg-slate-400',
-    badge: 'bg-slate-200 text-slate-700',
-    primary: 'bg-slate-400 hover:bg-slate-500 text-white',
+  reagendado: {
+    border: 'border-purple-300',
+    dot: 'bg-purple-400',
+    badge: 'bg-purple-100 text-purple-800',
+    primary: 'bg-purple-50 text-purple-700 hover:bg-purple-100',
   },
 };
 
@@ -62,7 +61,7 @@ const STATUS_BADGE_CLASSES = {
   cancelado: 'text-red-600 bg-red-100',
   falta: 'text-red-700 bg-red-50',
   aguardando_confirmacao: 'text-amber-700 bg-amber-50',
-  bloqueio: 'text-slate-600 bg-slate-100',
+  reagendado: 'bg-purple-100 text-purple-800',
 };
 
 function initials(name) {
@@ -91,12 +90,8 @@ function actionLabel(status) {
 }
 
 function showPrimaryActionButton(status) {
-  if (status === 'falta' || status === 'realizado') return false;
+  if (status === 'falta' || status === 'realizado' || status === 'reagendado') return false;
   return true;
-}
-
-function isAppointmentBloqueio(appointment) {
-  return appointment?.tipo === 'bloqueio' || appointment?.status === 'bloqueio';
 }
 
 function samePatient(a, b) {
@@ -156,32 +151,17 @@ function StatCard({ label, value, icon, tone = 'default' }) {
   );
 }
 
-function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
-  const bloqueio = isAppointmentBloqueio(appointment);
-  const isReagendado = !bloqueio && isSlotCanceladoPorReagendamento(appointment);
-  const styles = bloqueio
-    ? STATUS_STYLES.bloqueio
-    : isReagendado
-      ? {
-          border: 'border-l-orange-500',
-          dot: 'bg-orange-500',
-          badge: 'bg-orange-100 text-orange-800',
-          primary: STATUS_STYLES.cancelado.primary,
-        }
-      : STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
+function AppointmentCard({ appointment, onPrimary, onEdit, renderSlotActions }) {
+  const isReagendado = appointment.status === 'reagendado';
+  const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
   const grad = hashGradient(appointment.pacienteNome);
-  const avatarStyle = bloqueio
-    ? { background: '#94a3b8' }
-    : { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
-  const badgeClass =
-    STATUS_BADGE_CLASSES[bloqueio ? 'bloqueio' : appointment.status] || STATUS_BADGE_CLASSES.pendente;
+  const avatarStyle = { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
+  const badgeClass = STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   return (
     <div className="rounded-xl border-2 border-slate-200 bg-white shadow-sm transition-all overflow-hidden hover:border-teal-300 hover:shadow-lg">
-      {!bloqueio ? (
-        <div className="h-1.5" style={{ backgroundColor: appointment.corHex || '#14B8A6' }} />
-      ) : null}
+      <div className="h-1.5" style={{ backgroundColor: appointment.corHex || '#14B8A6' }} />
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -194,23 +174,23 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
             <div className="min-w-0">
               <div className="truncate text-[13px] font-bold text-[#1A1A2E]">{appointment.pacienteNome}</div>
               <div className="flex min-w-0 items-center gap-1.5">
-                {!bloqueio ? (
-                  <span
-                    className="inline-block h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: appointment.corHex || '#14B8A6' }}
-                    aria-hidden
-                  />
-                ) : null}
-                <div className="truncate text-[11px] font-medium text-[#888888]">{appointment.procedimentoNome}</div>
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: appointment.corHex || '#14B8A6' }}
+                  aria-hidden
+                />
+                <div className={`truncate text-[11px] font-medium ${appointment.procedimentoNome ? 'text-[#888888]' : 'text-amber-700'}`}>
+                  {appointment.procedimentoNome || 'Sem procedimento informado'}
+                </div>
               </div>
             </div>
           </div>
           <span
             className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
-              isReagendado ? 'text-orange-600 bg-orange-100' : badgeClass
+              isReagendado ? 'bg-purple-100 text-purple-800' : badgeClass
             }`}
           >
-            {bloqueio ? 'Bloqueado' : isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
+            {isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
           </span>
         </div>
 
@@ -226,21 +206,13 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
         </div>
 
         <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
-          {!bloqueio && showPrimaryActionButton(appointment.status) ? (
+          {showPrimaryActionButton(appointment.status) ? (
             <button
               type="button"
               onClick={() => onPrimary(appointment)}
               className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
             >
               {actionLabel(appointment.status)}
-            </button>
-          ) : bloqueio ? (
-            <button
-              type="button"
-              onClick={() => onRemoveBloqueio?.(appointment)}
-              className={`${BTN_ACTION} rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-800 transition-colors hover:bg-slate-200`}
-            >
-              Remover bloqueio
             </button>
           ) : null}
           <button
@@ -251,7 +223,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
             Editar
           </button>
         </div>
-        {!bloqueio && typeof renderSlotActions === 'function' ? (
+        {typeof renderSlotActions === 'function' ? (
           <div className="mt-2 border-t border-[#f1f5f9] pt-2">{renderSlotActions(appointment)}</div>
         ) : null}
       </div>
@@ -259,7 +231,7 @@ function AppointmentCard({ appointment, onPrimary, onEdit, onRemoveBloqueio, ren
   );
 }
 
-function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloqueio, renderSlotActions }) {
+function DayPanel({ selectedDay, appointments, onPrimary, onEdit, renderSlotActions }) {
   return (
     <div className="h-full rounded-[14px] border border-calendar-border bg-white">
       <div className="rounded-t-[14px] border-2 border-teal-200 bg-gradient-to-br from-teal-50 to-blue-50 p-4">
@@ -284,7 +256,6 @@ function DayPanel({ selectedDay, appointments, onPrimary, onEdit, onRemoveBloque
               appointment={appointment}
               onPrimary={onPrimary}
               onEdit={onEdit}
-              onRemoveBloqueio={onRemoveBloqueio}
               renderSlotActions={renderSlotActions}
             />
           ))
@@ -374,8 +345,7 @@ function CalendarGrid({ agenda }) {
               ) : null}
               <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-2 sm:gap-1.5">
                 {dots.map((item) => {
-                  const isBloqueio = isAppointmentBloqueio(item);
-                  const dotColor = isSelected ? '#FFFFFF' : isBloqueio ? '#94a3b8' : item.corHex || '#14B8A6';
+                  const dotColor = isSelected ? '#FFFFFF' : item.corHex || '#14B8A6';
                   return (
                     <span
                       key={item.id}
@@ -448,7 +418,7 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
   );
 }
 
-function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio, renderSlotActions }) {
+function DaySummaryModal({ group, onClose, onEdit, onPrimary, renderSlotActions }) {
   if (!group) return null;
 
   return (
@@ -479,10 +449,6 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary, onRemoveBloqueio, 
                 onEdit(item);
                 onClose();
               }}
-              onRemoveBloqueio={(item) => {
-                onRemoveBloqueio?.(item);
-                onClose();
-              }}
               renderSlotActions={renderSlotActions}
             />
           ))}
@@ -508,7 +474,6 @@ export function AgendaDashboard({
 
   const renderSlotActions = React.useCallback(
     (appointment) => {
-      if (isAppointmentBloqueio(appointment)) return null;
       const disabled = Boolean(agenda.loading);
       return (
         <AgendaSlotActions
@@ -530,7 +495,6 @@ export function AgendaDashboard({
   );
 
   const handlePrimary = React.useCallback((appointment) => {
-    if (isAppointmentBloqueio(appointment)) return;
     if (appointment.status === 'pendente' || appointment.status === 'aguardando_confirmacao') {
       agenda.updateStatus(appointment, 'confirmado');
       return;
@@ -651,7 +615,6 @@ export function AgendaDashboard({
               onEdit={agenda.openEditModal}
               renderSlotActions={renderSlotActions}
               disponibilidades={agenda.disponibilidades}
-              periodos={agenda.periodos}
             />
           )}
         </section>
@@ -662,7 +625,6 @@ export function AgendaDashboard({
             appointments={agenda.selectedDayAppointments}
             onPrimary={handlePrimary}
             onEdit={agenda.openEditModal}
-            onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
             renderSlotActions={renderSlotActions}
           />
         </aside>
@@ -678,7 +640,6 @@ export function AgendaDashboard({
               appointments={agenda.selectedDayAppointments}
               onPrimary={handlePrimary}
               onEdit={agenda.openEditModal}
-              onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
               renderSlotActions={renderSlotActions}
             />
           </div>
@@ -690,7 +651,6 @@ export function AgendaDashboard({
         onClose={() => setListDaySummary(null)}
         onEdit={agenda.openEditModal}
         onPrimary={handlePrimary}
-        onRemoveBloqueio={(item) => agenda.updateStatus(item, 'cancelado')}
         renderSlotActions={renderSlotActions}
       />
     </div>

@@ -14,7 +14,7 @@ function mapInativoRow(raw) {
     cpfDigits: String(raw.cpf ?? '').replace(/\D/g, ''),
     dataInativacao: raw.dataInativacao ?? raw.inativadoEm ?? raw.updatedAt ?? null,
     motivo: String(raw.motivoInativacao ?? raw.motivo ?? '').trim(),
-    quem: String(raw.inativadoPorNome ?? raw.inativadoPor ?? raw.usuarioNome ?? '').trim(),
+    quem: String(raw.inativadoPorNome ?? '').trim(),
   };
 }
 

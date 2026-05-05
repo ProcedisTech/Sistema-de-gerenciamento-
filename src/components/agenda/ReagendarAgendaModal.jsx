@@ -10,46 +10,44 @@ function toDateInputValue(d) {
 }
 
 function initialFromAgenda(agenda) {
-  if (!agenda) return { data: '', horaInicio: '', horaFim: '' };
+  if (!agenda) return { novaData: '', novaHoraInicio: '', novaHoraFim: '' };
   const raw = agenda.rawSlot || {};
   const d = agenda.data || (raw.dataAgendamento && String(raw.dataAgendamento).slice(0, 10)) || '';
   const hi = (agenda.horaInicio && String(agenda.horaInicio).slice(0, 5)) || '';
   const hfRaw = raw.horaFim && String(raw.horaFim).slice(0, 5);
-  return { data: d, horaInicio: hi, horaFim: hfRaw || '' };
+  return { novaData: d, novaHoraInicio: hi, novaHoraFim: hfRaw || '' };
 }
 
 export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSubmitting = false }) {
   const init = initialFromAgenda(agenda);
-  const [data, setData] = useState(init.data);
-  const [horaInicio, setHoraInicio] = useState(init.horaInicio);
-  const [horaFim, setHoraFim] = useState(init.horaFim);
-  const [motivo, setMotivo] = useState('');
+  const [novaData, setNovaData] = useState(init.novaData);
+  const [novaHoraInicio, setNovaHoraInicio] = useState(init.novaHoraInicio);
+  const [novaHoraFim, setNovaHoraFim] = useState(init.novaHoraFim);
+  const [observacao, setObservacao] = useState('');
 
   const valida = () => {
-    if (!data || !horaInicio || !horaFim) return false;
-    if (horaInicio >= horaFim) return false;
+    if (!novaData || !novaHoraInicio || !novaHoraFim) return false;
+    if (novaHoraInicio >= novaHoraFim) return false;
     const hoje = toDateInputValue(new Date());
-    if (data < hoje) return false;
+    if (novaData < hoje) return false;
     return true;
   };
 
   const handleConfirm = () => {
-    if (!valida() || !agenda?.roleUserId) return;
+    if (!valida()) return;
     onConfirm({
-      dataAgendamento: data,
-      horaInicio: `${horaInicio}:00`,
-      horaFim: `${horaFim}:00`,
-      roleUserId: agenda.roleUserId,
-      tipo: agenda.tipo || 'atendimento',
-      motivoCancelamentoTexto: motivo.trim() || null,
+      novaData,
+      novaHoraInicio: `${novaHoraInicio}:00`,
+      novaHoraFim: `${novaHoraFim}:00`,
+      observacao: observacao.trim() || null,
     });
   };
 
   const minDate = toDateInputValue(new Date());
-  const dataPassada = Boolean(data) && data < minDate;
+  const dataPassada = Boolean(novaData) && novaData < minDate;
   // BUG #3: feedback inline (a função `valida()` já bloqueia o submit; aqui só mostramos
   // a mensagem vermelha, espelhando o padrão de `dataPassada`).
-  const horarioInvalido = Boolean(horaInicio && horaFim && horaInicio >= horaFim);
+  const horarioInvalido = Boolean(novaHoraInicio && novaHoraFim && novaHoraInicio >= novaHoraFim);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -70,8 +68,8 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
             <label className="mb-1 block text-sm font-medium text-gray-700">Data *</label>
             <input
               type="date"
-              value={data}
-              onChange={(e) => setData(e.target.value)}
+              value={novaData}
+              onChange={(e) => setNovaData(e.target.value)}
               min={minDate}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
             />
@@ -86,8 +84,8 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
                 <label className="mb-1 block text-sm font-medium text-gray-700">Início *</label>
                 <input
                   type="time"
-                  value={horaInicio}
-                  onChange={(e) => setHoraInicio(e.target.value)}
+                  value={novaHoraInicio}
+                  onChange={(e) => setNovaHoraInicio(e.target.value)}
                   className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 ${
                     horarioInvalido ? 'border-red-500' : 'border-gray-300'
                   }`}
@@ -97,8 +95,8 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
                 <label className="mb-1 block text-sm font-medium text-gray-700">Fim *</label>
                 <input
                   type="time"
-                  value={horaFim}
-                  onChange={(e) => setHoraFim(e.target.value)}
+                  value={novaHoraFim}
+                  onChange={(e) => setNovaHoraFim(e.target.value)}
                   className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 ${
                     horarioInvalido ? 'border-red-500' : 'border-gray-300'
                   }`}
@@ -115,8 +113,8 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Observação (opcional)</label>
             <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value.slice(0, 500))}
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value.slice(0, 500))}
               maxLength={500}
               rows={2}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
@@ -137,7 +135,7 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!valida() || isSubmitting || !agenda?.roleUserId}
+            disabled={!valida() || isSubmitting}
             className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             {isSubmitting ? 'Reagendando...' : 'Confirmar reagendamento'}

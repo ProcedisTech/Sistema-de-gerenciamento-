@@ -185,28 +185,15 @@ function eventBlockStyle(appt, layout) {
   };
 }
 
-function isBloqueioAppt(appt) {
-  return appt?.tipo === 'bloqueio' || appt?.status === 'bloqueio';
-}
-
 function statusCardClass(status) {
   if (status === 'pendente') return 'bg-[#FFF4E0] border-l-[3px] border-l-[#F5A623]';
   if (status === 'cancelado') return 'bg-[#FCE8E8] border-l-[3px] border-l-[#E24B4A]';
+  if (status === 'reagendado') return 'text-purple-700 bg-purple-50 border-l-[3px] border-l-purple-300';
   if (status === 'realizado') return 'bg-blue-50 border-l-[3px] border-l-blue-500';
   if (status === 'falta') return 'bg-orange-50 border-l-[3px] border-l-orange-500';
   if (status === 'aguardando_confirmacao') return 'bg-amber-50 border-l-[3px] border-l-amber-500';
   return 'bg-[#E1F5EE] border-l-[3px] border-l-[#0FA37F]';
 }
-
-function bloqueioCardClass() {
-  return 'border-l-[3px] border-l-slate-500 bg-gray-200 text-slate-800 shadow-sm';
-}
-
-const BLOQUEIO_BG = {
-  backgroundColor: '#e5e7eb',
-  backgroundImage:
-    'repeating-linear-gradient(-45deg, transparent, transparent 5px, rgba(255,255,255,0.55) 5px, rgba(255,255,255,0.55) 6px)',
-};
 
 function DayColumn({
   iso,
@@ -215,7 +202,6 @@ function DayColumn({
   onEdit,
   renderSlotActions,
   disponibilidades,
-  periodos,
 }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -251,19 +237,18 @@ function DayColumn({
       {appointments.map((appt) => {
         const layout = layouts.get(appt.id);
         const baseStyle = eventBlockStyle(appt, layout);
-        const bloqueio = isBloqueioAppt(appt);
-        const style = bloqueio ? { ...baseStyle, ...BLOQUEIO_BG } : baseStyle;
+        const style = baseStyle;
         const appointment = {
           dataAgendamento: toDateKey(appt.data),
           horaInicio: appt.horaInicio,
           roleUserId: appt.roleUserId,
         };
         const disp = disponibilidades?.[appt.roleUserId];
-        const dentro = dentroDaDisponibilidade(appointment, disp, periodos);
+        const dentro = dentroDaDisponibilidade(appointment, disp);
         const showProc = baseStyle.height >= 72;
-        const cardClass = bloqueio ? bloqueioCardClass() : statusCardClass(appt.status);
+        const cardClass = statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
-        const corProc = bloqueio ? undefined : appt.corHex || '#00a88e';
+        const corProc = appt.corHex || '#00a88e';
         return (
           <button
             key={appt.id}
@@ -278,26 +263,24 @@ function DayColumn({
               </span>
             ) : null}
             <div
-              className={`flex items-center gap-1 text-[11px] font-bold leading-tight ${bloqueio ? 'text-slate-700' : 'text-[#0FA37F]'} ${lineThrough ? 'line-through' : ''}`}
+              className={`flex items-center gap-1 text-[11px] font-bold leading-tight text-[#0FA37F] ${lineThrough ? 'line-through' : ''}`}
             >
-              {!bloqueio ? (
-                <span
-                  className="inline-block h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: corProc }}
-                  aria-hidden
-                />
-              ) : null}
+              <span
+                className="inline-block h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: corProc }}
+                aria-hidden
+              />
               {appt.horaInicio}
             </div>
-            <div className={`truncate text-[11px] font-bold ${bloqueio ? 'text-slate-900' : 'text-[#1A1A2E]'} ${lineThrough ? 'line-through' : ''}`}>
+            <div className={`truncate text-[11px] font-bold text-[#1A1A2E] ${lineThrough ? 'line-through' : ''}`}>
               {appt.pacienteNome}
             </div>
             {showProc ? (
-              <div className={`truncate text-[10px] font-medium ${bloqueio ? 'text-slate-600' : 'text-[#888888]'} ${lineThrough ? 'line-through' : ''}`}>
-                {appt.procedimentoNome}
+              <div className={`truncate text-[10px] font-medium ${appt.procedimentoNome ? 'text-[#888888]' : 'text-amber-700'} ${lineThrough ? 'line-through' : ''}`}>
+                {appt.procedimentoNome || 'Sem procedimento informado'}
               </div>
             ) : null}
-            {!bloqueio && typeof renderSlotActions === 'function' ? (
+            {typeof renderSlotActions === 'function' ? (
               <div
                 className="mt-1"
                 onClick={(e) => e.stopPropagation()}
@@ -321,7 +304,6 @@ export function WeekTimeGrid({
   onEdit,
   renderSlotActions,
   disponibilidades,
-  periodos,
 }) {
   const scrollRef = React.useRef(null);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -404,7 +386,6 @@ export function WeekTimeGrid({
             onEdit={onEdit}
             renderSlotActions={renderSlotActions}
             disponibilidades={disponibilidades}
-            periodos={periodos}
           />
         ))}
       </div>

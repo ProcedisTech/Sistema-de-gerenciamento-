@@ -7,7 +7,6 @@ import {
   catalogosApi,
   confirmacaoApi,
   disponibilidadeApi,
-  dimensoesApi,
 } from '../../services/api';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
@@ -81,21 +80,15 @@ function normalizePatientOption(patient) {
   return { id: String(id || nome), nome, telefone, raw: patient };
 }
 
-function isRowBloqueio(appointment) {
-  return appointment?.tipo === 'bloqueio' || appointment?.status === 'bloqueio';
-}
-
 function defaultForm(selectedDay, patientOptions, firstProcedimentoOption) {
   const firstPatient = patientOptions[0] || {};
   const proc = firstProcedimentoOption || {};
   return {
-    tipo: 'atendimento',
-    motivoBloqueio: '',
     pacienteId: firstPatient.id || '',
     pacienteNome: firstPatient.nome || '',
     telefone: firstPatient.telefone || '',
-    procedimentoNome: proc.nome || '',
-    catalogoProcedimentoSaudeId: proc.id ? String(proc.id) : '',
+    procedimentoNome: '',
+    catalogoProcedimentoSaudeIds: proc.id ? [String(proc.id)] : [],
     data: selectedDay || toLocalDateIso(),
     horaInicio: '09:00',
     duracaoMin: 60,
@@ -198,7 +191,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
   const [disponibilidades, setDisponibilidades] = useState({});
-  const [periodos, setPeriodos] = useState([]);
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
@@ -241,19 +233,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       cancelled = true;
     };
   }, [authEnabled]);
-
-  useEffect(() => {
-    let alive = true;
-    dimensoesApi
-      .periodosDia()
-      .then((p) => {
-        if (alive) setPeriodos(Array.isArray(p) ? p : []);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!Array.isArray(appointments) || appointments.length === 0) return;
@@ -542,11 +521,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const appointmentsByDate = useMemo(() => groupByDate(appointments), [appointments]);
 
   const stats = useMemo(() => {
-    const naoBloqueio = (item) => !isRowBloqueio(item);
     return {
       totalMes: appointments.length,
-      confirmados: appointments.filter((item) => naoBloqueio(item) && item.status === 'confirmado').length,
-      pendentes: appointments.filter((item) => naoBloqueio(item) && item.status === 'pendente').length,
+      confirmados: appointments.filter((item) => item.status === 'confirmado').length,
+      pendentes: appointments.filter((item) => item.status === 'pendente').length,
       hoje: hojeCount,
     };
   }, [appointments, hojeCount]);
@@ -602,7 +580,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         pacienteNome: patient.nome || '',
         telefone: patient.telefone || '',
         procedimentoNome: '',
-        catalogoProcedimentoSaudeId: '',
+        catalogoProcedimentoSaudeIds: [],
       });
       setPatientSelectLocked(true);
       setFormErrors({});
@@ -615,30 +593,18 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     (appointment) => {
       setEditingAppointment(appointment);
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
-      const rawSlot = appointment?.rawSlot || {};
-      const bloqueio = isRowBloqueio(appointment);
-      let catId = appointment?.catalogoProcedimentoSaudeId
-        ? String(appointment.catalogoProcedimentoSaudeId)
-        : '';
-      if (!catId && appointment?.procedimentoNome && !bloqueio) {
-        const opt = procedimentoOptions.find((o) => o.nome === appointment.procedimentoNome);
-        if (opt) catId = String(opt.id);
-      }
-      const motivoFromRaw =
-        rawSlot.motivoBloqueio != null && String(rawSlot.motivoBloqueio).trim()
-          ? String(rawSlot.motivoBloqueio).trim()
-          : '';
+      const currentIds = Array.isArray(appointment?.catalogoProcedimentoSaudeIds)
+        ? appointment.catalogoProcedimentoSaudeIds.map((id) => String(id))
+        : appointment?.catalogoProcedimentoSaudeId
+          ? [String(appointment.catalogoProcedimentoSaudeId)]
+          : [];
       setForm({
         ...base,
-        tipo: bloqueio ? 'bloqueio' : 'atendimento',
-        motivoBloqueio: bloqueio
-          ? motivoFromRaw || String(appointment?.pacienteNome || '').trim() || ''
-          : '',
         pacienteId: appointment?.pacienteId || base.pacienteId,
         pacienteNome: appointment?.pacienteNome || base.pacienteNome,
         telefone: appointment?.telefone || base.telefone,
         procedimentoNome: appointment?.procedimentoNome || base.procedimentoNome,
-        catalogoProcedimentoSaudeId: catId || base.catalogoProcedimentoSaudeId,
+        catalogoProcedimentoSaudeIds: currentIds,
         data: appointment?.data || base.data,
         horaInicio: appointment?.horaInicio || base.horaInicio,
         duracaoMin: snapAgendaDuracaoMin(appointment?.duracaoMin ?? base.duracaoMin),
@@ -648,7 +614,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setPatientSelectLocked(false);
       setModalMode('edit');
     },
-    [patientOptions, procedimentoOptions, selectedDay]
+    [patientOptions, selectedDay]
   );
 
   const closeModal = useCallback(() => {
@@ -660,13 +626,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const validateForm = useCallback(() => {
     const nextErrors = {};
-    if (form.tipo === 'bloqueio') {
-      if (!String(form.motivoBloqueio || '').trim()) {
-        nextErrors.motivoBloqueio = 'Informe o motivo do bloqueio.';
-      }
-    } else {
-      if (!form.pacienteId && !String(form.pacienteNome || '').trim()) nextErrors.pacienteId = 'Selecione um paciente.';
-      if (!String(form.procedimentoNome || '').trim()) nextErrors.procedimentoNome = 'Informe o procedimento.';
+    if (!form.pacienteId && !String(form.pacienteNome || '').trim()) nextErrors.pacienteId = 'Selecione um paciente.';
+    if (!Array.isArray(form.catalogoProcedimentoSaudeIds) || form.catalogoProcedimentoSaudeIds.length === 0) {
+      nextErrors.catalogoProcedimentoSaudeIds = 'Selecione ao menos um procedimento.';
     }
     if (!form.data) nextErrors.data = 'Informe a data.';
     else if (form.data < todayIso) {
@@ -694,46 +656,43 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     }
 
     const patient = patientOptions.find((p) => p.id === form.pacienteId);
-
-    const pairObs = `${String(form.procedimentoNome || '').trim()} - ${String(form.pacienteNome || '').trim()}`.trim();
-    const observacaoForCreate = (
-      form.observacao?.trim() ? `${pairObs} — ${form.observacao.trim()}` : pairObs || 'Atendimento'
-    ).slice(0, 500);
-
+    const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
+      .map((id) => String(id).trim())
+      .filter(Boolean);
     try {
       if (modalMode === 'edit' && editingAppointment?.agendaId) {
-        const body = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
+        const rawSlot = editingAppointment.rawSlot || {};
+        const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
+        const body = {
+          ...baseBody,
+          pacienteId: String(form.pacienteId || patient?.id || '').trim(),
+          catalogoProcedimentoSaudeIds: procIds,
+          observacao: String(form.observacao || rawSlot.observacao || '').trim() || undefined,
+        };
         await agendasApi.update(editingAppointment.agendaId, body);
-      } else if (form.tipo === 'bloqueio') {
-        const createBody = buildAgendaCreateBody({
+      } else {
+        const createBase = buildAgendaCreateBody({
           dataAgendamento: form.data,
           horaInicio: form.horaInicio,
           duracaoMin: form.duracaoMin,
           roleUserId: contextRole,
-          tipo: 'bloqueio',
-          motivoBloqueio: String(form.motivoBloqueio || '').trim(),
+          observacao: String(form.observacao || '').trim(),
         });
+        const createBody = {
+          ...createBase,
+          pacienteId: String(form.pacienteId || patient?.id || '').trim(),
+          catalogoProcedimentoSaudeIds: procIds,
+        };
         const created = await agendasApi.create(createBody);
         if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-      } else {
-        const createBody = buildAgendaCreateBody({
-          dataAgendamento: form.data,
-          horaInicio: form.horaInicio,
-          duracaoMin: form.duracaoMin,
-          roleUserId: contextRole,
-          observacao: observacaoForCreate,
-        });
-        const created = await agendasApi.create(createBody);
+
         const agendaId = created?.id != null ? String(created.id) : null;
         if (!agendaId) throw new Error('Resposta da API sem id da agenda.');
-
-        const pid = form.pacienteId || patient?.id || '';
-        const catId = String(form.catalogoProcedimentoSaudeId || '').trim();
-        if (catId && pid) {
+        const firstCatalogoId = procIds[0];
+        if (firstCatalogoId) {
           await agendamentosApi.create({
             agendaId,
-            pacienteId: pid,
-            catalogoProcedimentoSaudeId: catId,
+            catalogoProcedimentoSaudeId: firstCatalogoId,
             observacao: form.observacao?.trim() || undefined,
           });
         }
@@ -780,7 +739,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (status === 'cancelado') {
         await handleCancelar(appointment.agendaId, {
           motivoCancelamentoCodigo: 'outro',
-          motivoCancelamentoTexto: 'Remoção de bloqueio',
+          motivoCancelamentoTexto: 'Cancelamento manual',
         });
       }
     },
@@ -849,7 +808,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     closeModal,
     patientSelectLocked,
     patientOptions,
-    periodos,
     procedimentoOptions,
     proximoHorarioLivre,
     refreshDashboard,

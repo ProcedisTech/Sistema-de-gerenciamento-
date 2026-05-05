@@ -13,8 +13,6 @@ export function addMinutesToTime(hhmm, minutesToAdd) {
 /** Deriva status da UI alinhado a agendaStatusColors (snake / texto livre do backend). */
 export function deriveAgendaSlotStatus(dto) {
   if (!dto || typeof dto !== 'object') return 'pendente';
-  const tipo = String(dto.tipo || '').toLowerCase();
-  if (tipo === 'bloqueio') return 'bloqueio';
 
   const codigo = String(dto.statusCodigo || '')
     .toLowerCase()
@@ -22,6 +20,7 @@ export function deriveAgendaSlotStatus(dto) {
   const nome = String(dto.statusNome || '').toLowerCase();
 
   if (codigo.includes('cancel') || nome.includes('cancel')) return 'cancelado';
+  if (codigo.includes('reagend') || nome.includes('reagend')) return 'reagendado';
   if (codigo.includes('realiz') || nome.includes('realiz')) return 'realizado';
   if (codigo.includes('falta') || nome.includes('falta')) return 'falta';
   if (
@@ -45,10 +44,7 @@ export function mapAgendaDtoToAppointment(dto) {
   const time = (dto.horaInicio && String(dto.horaInicio).slice(0, 5)) || '00:00';
   const status = deriveAgendaSlotStatus(dto);
 
-  const procedure =
-    dto.observacao?.trim() ||
-    dto.motivoBloqueio?.trim() ||
-    (dto.tipo === 'bloqueio' ? 'Bloqueio de agenda' : 'Atendimento');
+  const procedure = dto.observacao?.trim() || 'Atendimento';
 
   return {
     id: dto.id,
@@ -61,7 +57,7 @@ export function mapAgendaDtoToAppointment(dto) {
     compromissos: [],
     profissionalNome: dto.profissionalNome || '',
     roleUserId: dto.roleUserId,
-    tipo: dto.tipo || 'atendimento',
+    tipo: 'atendimento',
     statusCodigo: dto.statusCodigo,
     statusNome: dto.statusNome,
     raw: dto,

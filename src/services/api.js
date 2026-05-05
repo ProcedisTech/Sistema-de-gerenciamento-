@@ -779,7 +779,7 @@ export const agendasApi = {
   /**
    * Cancela um slot da agenda com motivo.
    * @param {string} id UUID do slot
-   * @param {{ motivoCancelamentoCodigo: 'paciente_desistiu'|'remarcado'|'clinica_fechou'|'outro', motivoCancelamentoTexto?: string }} payload
+   * @param {{ motivoCancelamentoCodigo: 'paciente_desistiu'|'clinica_fechou'|'outro', motivoCancelamentoTexto?: string }} payload
    */
   cancelar: (id, payload) =>
     request(`/api/v1/agendas/${id}/cancelar`, {
@@ -799,9 +799,9 @@ export const agendasApi = {
     }),
 
   /**
-   * Reagenda um slot — cancela o original e cria slot novo (atômico no backend).
+   * Reagenda um slot (V30): move o agendamento e marca o original como reagendado.
    * @param {string} id UUID do slot original
-   * @param {{ dataAgendamento: string, horaInicio: string, horaFim: string, roleUserId: string, tipo: string, motivoCancelamentoTexto?: string }} payload
+   * @param {{ novaData: string, novaHoraInicio: string, novaHoraFim: string, observacao?: string }} payload
    */
   reagendar: (id, payload) =>
     request(`/api/v1/agendas/${id}/reagendar`, {
@@ -816,7 +816,7 @@ export const agendasApi = {
  */
 export const agendamentosApi = {
   listByAgenda: (agendaId) => request(`/api/v1/agendas/${agendaId}/agendamentos`),
-  /** Mesmo `request()` que pacientes/agendas: credentials:'include', cookie jwt, X-Org-Id. URL relativa → :5173/api/v1/agendamentos com proxy. */
+  /** V30 body: { agendaId, catalogoProcedimentoSaudeId, observacao? }. */
   create: (body) => request('/api/v1/agendamentos', { method: 'POST', body: JSON.stringify(body) }),
   remove: (id) => request(`/api/v1/agendamentos/${id}`, { method: 'DELETE' }),
 };
@@ -932,7 +932,6 @@ export const dimensoesApi = {
   statusProcedimento: () => request('/api/v1/dimensoes/status-procedimento', { needsOrg: false }),
   statusAgenda: () => request('/api/v1/dimensoes/status-agenda', { needsOrg: false }),
   statusAnamnese: () => request('/api/v1/dimensoes/status-anamnese', { needsOrg: false }),
-  periodosDia: () => request('/api/v1/dimensoes/periodos-dia', { needsOrg: false }),
 };
 
 // ── Anamnese ───────────────────────────────────────────────
@@ -1040,22 +1039,41 @@ export const termoAssinaturaApi = {
     }),
 };
 
-// ── Configurações da Clínica (tipo + horário semanal) ──────
+// ── Configurações da Clínica ──────
 export const configuracoesClinicaApi = {
   /**
-   * Busca configurações: tipo de organização + horário semanal.
-   * @returns {Promise<{ tipoOrg: string, segInicio: string|null, segFim: string|null, ..., domInicio: string|null, domFim: string|null }>}
+   * Busca configurações da clínica (V30: somente tipoOrg).
+   * @returns {Promise<{ tipoOrg: string }>}
    */
   buscar: () => request('/api/v1/configuracoes/clinica'),
 
   /**
    * Atualiza configurações.
-   * @param {object} payload Mesmo formato do buscar()
+   * @param {{ tipoOrg: string }} payload
    */
   atualizar: (payload) =>
     request('/api/v1/configuracoes/clinica', {
       method: 'PUT',
       body: JSON.stringify(payload),
+    }),
+};
+
+// ── Horários de funcionamento por organização (V30) ─────────
+export const organizacoesHorariosApi = {
+  /**
+   * @returns {Promise<Array<{id?: string, diaSemana: number, horaInicio: string, horaFim: string, ativo: boolean}>>}
+   */
+  buscar: (orgId) =>
+    request(`/api/v1/organizacoes/${encodeURIComponent(String(orgId))}/horarios`),
+  /**
+   * Replace-all
+   * @param {string} orgId
+   * @param {Array<{id?: string, diaSemana: number, horaInicio: string, horaFim: string, ativo: boolean}>} payload
+   */
+  atualizar: (orgId, payload) =>
+    request(`/api/v1/organizacoes/${encodeURIComponent(String(orgId))}/horarios`, {
+      method: 'PUT',
+      body: JSON.stringify(Array.isArray(payload) ? payload : []),
     }),
 };
 
@@ -1149,33 +1167,48 @@ export const notificacoesApi = {
 // ── Disponibilidade do Profissional ───────────────────────
 export const disponibilidadeApi = {
   /**
-   * Busca disponibilidade. Lazy create no backend: se não existir, cria automaticamente
-   * (deriva da clínica se tipoOrg='clinica', ou vazia se 'autonomo').
    * @param {string} roleUserId
-   * @returns {Promise<{id, roleUserId, segMan, segTar, segNoi, terMan, terTar, terNoi, quaMan, quaTar, quaNoi, quiMan, quiTar, quiNoi, sexMan, sexTar, sexNoi, sabMan, sabTar, sabNoi, domMan, domTar, domNoi, ativo}>}
+   * @returns {Promise<Array<{id?: string, diaSemana: number, horaInicio: string, horaFim: string, ativo: boolean}>>}
    */
   buscar: (roleUserId) =>
     request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`),
 
   /**
-   * Upsert dos 21 booleans.
+   * Replace-all de intervalos por profissional.
    * @param {string} roleUserId
-   * @param {object} payload Mesmo formato do buscar()
+   * @param {Array<{id?: string, diaSemana: number, horaInicio: string, horaFim: string, ativo: boolean}>} payload
    */
   atualizar: (roleUserId, payload) =>
     request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(Array.isArray(payload) ? payload : []),
     }),
+};
 
+// ── Indisponibilidades do Profissional (V30) ───────────────
+export const indisponibilidadesApi = {
   /**
-   * Sincroniza disponibilidade com horário da clínica (só funciona se tipoOrg='clinica').
-   * @param {string} roleUserId
+   * Lista em array puro (sem paginação).
+   * @param {{ roleUserId?: string }} [params]
    */
-  sincronizarComClinica: (roleUserId) =>
-    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade/sincronizar-com-clinica`, {
+  listar: (params = {}) => {
+    const sp = new URLSearchParams();
+    if (params.roleUserId) sp.set('roleUserId', String(params.roleUserId));
+    const qs = sp.toString();
+    return request(`/api/v1/indisponibilidades${qs ? `?${qs}` : ''}`);
+  },
+  criar: (payload) =>
+    request('/api/v1/indisponibilidades', {
       method: 'POST',
+      body: JSON.stringify(payload ?? {}),
     }),
+  atualizar: (id, payload) =>
+    request(`/api/v1/indisponibilidades/${encodeURIComponent(String(id))}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload ?? {}),
+    }),
+  remover: (id) =>
+    requestDelete(`/api/v1/indisponibilidades/${encodeURIComponent(String(id))}`),
 };
 
 // ── Auditoria ──────────────────────────────────────────────

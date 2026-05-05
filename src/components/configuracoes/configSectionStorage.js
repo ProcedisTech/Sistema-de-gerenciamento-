@@ -10,7 +10,7 @@ export const VALID_SECTIONS = new Set([
   'perfil',
   'clinica',
   'usuarios-acessos',
-  'agenda-horarios',
+  'horarios-funcionamento',
   'agenda-feriados',
   'agenda-templates',
   'pacientes-inativados',
@@ -19,6 +19,7 @@ export const VALID_SECTIONS = new Set([
 export function readStoredSection() {
   try {
     const v = sessionStorage.getItem(CONFIG_SECTION_KEY);
+    if (v === 'agenda-horarios') return 'horarios-funcionamento';
     if (v && VALID_SECTIONS.has(v)) return v;
     const legacy = sessionStorage.getItem(LEGACY_TAB_KEY);
     if (legacy === 'termos') return 'termos';

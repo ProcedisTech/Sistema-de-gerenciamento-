@@ -37,22 +37,6 @@ function normalizeCorHex(src) {
   return '#00a88e';
 }
 
-/** Campos do DTO de agenda (reagendamento) repassados na linha do dashboard. */
-function agendaNovaCamposFromRaw(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return { agendaNovaId: null, agendaNovaDataAgendamento: null, agendaNovaHoraInicio: null };
-  }
-  const id = raw.agendaNovaId ?? raw.agenda_nova_id;
-  const data = raw.agendaNovaDataAgendamento ?? raw.agenda_nova_data_agendamento;
-  const hora = raw.agendaNovaHoraInicio ?? raw.agenda_nova_hora_inicio;
-  return {
-    agendaNovaId: id != null && String(id).trim() !== '' ? String(id) : null,
-    agendaNovaDataAgendamento:
-      data != null && String(data).trim() !== '' ? String(data).slice(0, 10) : null,
-    agendaNovaHoraInicio: hora != null && String(hora).trim() !== '' ? String(hora) : null,
-  };
-}
-
 /** Cor do catálogo / agendamento vinda do backend (nomes alternativos tolerados). */
 function corHexFromCompromisso(compromisso) {
   const c = compromisso || {};
@@ -112,25 +96,29 @@ export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
     data: slot.date,
     horaInicio: hi,
     duracaoMin,
-    tipo: slot.tipo || 'atendimento',
+    tipo: 'atendimento',
     status: slot.status,
     statusNome: slot.statusNome,
     motivoCancelamentoCodigo,
     motivoCancelamentoTexto,
     roleUserId: roleUserIdFromSlot(slot),
     corHex: corHexFromCompromisso(compromisso),
-    pacienteNome: compromisso.pacienteNome || '',
-    pacienteId: compromisso.pacienteId ? String(compromisso.pacienteId) : '',
+    pacienteNome: raw.pacienteNome || compromisso.pacienteNome || '',
+    pacienteId: raw.pacienteId ? String(raw.pacienteId) : '',
     telefone:
       compromisso.telefone ||
       compromisso.telefonePrincipal ||
       compromisso.telefoneNumero ||
       '',
-    procedimentoNome: compromisso.procedimentoNome || compromisso.nomeProcedimento || '',
+    procedimentoNome: compromisso.procedimentoNome || compromisso.nomeProcedimento || 'Sem procedimento informado',
     catalogoProcedimentoSaudeId: catId ? String(catId) : '',
+    catalogoProcedimentoSaudeIds: Array.isArray(raw.catalogoProcedimentoSaudeIds)
+      ? raw.catalogoProcedimentoSaudeIds.map((id) => String(id))
+      : catId
+        ? [String(catId)]
+        : [],
     profissionalNome: slot.profissionalNome || '',
     observacao: compromisso.observacao || '',
-    ...agendaNovaCamposFromRaw(raw),
     rawSlot: raw,
     rawAgendamento: compromisso,
   };
@@ -152,35 +140,6 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
     await Promise.all(
       chunk.map(async (slot) => {
         if (!slot.id) return;
-        if (slot.tipo === 'bloqueio') {
-          const raw = slot.raw || {};
-          const hi = raw.horaInicio != null ? String(raw.horaInicio).slice(0, 5) : String(slot.time || '').slice(0, 5);
-          const hf = raw.horaFim != null ? String(raw.horaFim).slice(0, 5) : '';
-          const motivo = raw.motivoBloqueio != null ? String(raw.motivoBloqueio).trim() : '';
-          rows.push({
-            id: String(slot.id),
-            agendaId: String(slot.id),
-            data: raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : slot.date || '',
-            horaInicio: hi,
-            duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
-            tipo: 'bloqueio',
-            status: 'bloqueio',
-            statusNome: slot.statusNome,
-            roleUserId: roleUserIdFromSlot(slot),
-            corHex: '#94a3b8',
-            procedimentoNome: 'Bloqueio',
-            pacienteNome: motivo || 'Horário bloqueado',
-            pacienteId: null,
-            profissionalNome: slot.profissionalNome || '',
-            telefone: '',
-            catalogoProcedimentoSaudeId: '',
-            observacao: '',
-            ...agendaNovaCamposFromRaw(raw),
-            rawSlot: raw,
-            rawAgendamento: null,
-          });
-          return;
-        }
         let items = [];
         try {
           const rawItems = await agendamentosApi.listByAgenda(slot.id);
@@ -200,19 +159,21 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso, batch
             data: raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : slot.date || '',
             horaInicio: hi,
             duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
-            tipo: raw.tipo || slot.tipo || 'atendimento',
+            tipo: 'atendimento',
             status: slot.status,
             statusNome: slot.statusNome,
             roleUserId: roleUserIdFromSlot(slot),
             corHex: '#00a88e',
-            procedimentoNome: procFromObs || 'Sem procedimento',
-            pacienteNome: pacFromObs || 'Sem paciente',
-            pacienteId: null,
+            procedimentoNome: procFromObs || 'Sem procedimento informado',
+            pacienteNome: raw.pacienteNome || pacFromObs || 'Sem paciente',
+            pacienteId: raw.pacienteId ? String(raw.pacienteId) : null,
             profissionalNome: slot.profissionalNome || '',
             telefone: '',
             catalogoProcedimentoSaudeId: '',
+            catalogoProcedimentoSaudeIds: Array.isArray(raw.catalogoProcedimentoSaudeIds)
+              ? raw.catalogoProcedimentoSaudeIds.map((id) => String(id))
+              : [],
             observacao: '',
-            ...agendaNovaCamposFromRaw(raw),
             rawSlot: raw,
             rawAgendamento: null,
           });
@@ -235,8 +196,8 @@ export function buildAgendaCreateBody({
   duracaoMin,
   roleUserId,
   observacao,
-  tipo = 'atendimento',
-  motivoBloqueio,
+  pacienteId,
+  catalogoProcedimentoSaudeIds = [],
 }) {
   const hi = String(horaInicio || '09:00').slice(0, 5);
   const mins = Number(duracaoMin) || 45;
@@ -246,16 +207,11 @@ export function buildAgendaCreateBody({
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
     roleUserId,
-    tipo: tipo === 'bloqueio' ? 'bloqueio' : 'atendimento',
+    pacienteId: String(pacienteId || '').trim(),
+    catalogoProcedimentoSaudeIds: Array.isArray(catalogoProcedimentoSaudeIds)
+      ? catalogoProcedimentoSaudeIds.map((id) => String(id)).filter(Boolean)
+      : [],
   };
-  if (tipo === 'bloqueio') {
-    const motivo = String(motivoBloqueio || '').trim().slice(0, 500);
-    return {
-      ...base,
-      motivoBloqueio: motivo,
-      observacao: motivo || undefined,
-    };
-  }
   return {
     ...base,
     observacao: observacao != null && String(observacao).trim() ? String(observacao).trim().slice(0, 500) : undefined,
@@ -280,32 +236,17 @@ export function buildAgendaUpdateBody(rawSlot, form, roleUserIdFallback) {
       : raw.observacao != null
         ? String(raw.observacao).trim() || undefined
         : undefined;
-  const isBloqueio = form.tipo === 'bloqueio' || raw.tipo === 'bloqueio';
-  const tipo = isBloqueio ? 'bloqueio' : raw.tipo || 'atendimento';
-  const motivo =
-    form.motivoBloqueio !== undefined
-      ? String(form.motivoBloqueio || '').trim().slice(0, 500)
-      : raw.motivoBloqueio != null
-        ? String(raw.motivoBloqueio).trim().slice(0, 500)
-        : '';
-  if (isBloqueio) {
-    const out = {
-      dataAgendamento,
-      horaInicio: hi.length === 5 ? `${hi}:00` : hi,
-      horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
-      roleUserId: raw.roleUserId || roleUserIdFallback,
-      tipo,
-      motivoBloqueio: motivo || undefined,
-    };
-    if (obs) out.observacao = obs;
-    return out;
-  }
   return {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
     roleUserId: raw.roleUserId || roleUserIdFallback,
-    tipo,
+    pacienteId: String(form.pacienteId || raw.pacienteId || '').trim(),
+    catalogoProcedimentoSaudeIds: Array.isArray(form.catalogoProcedimentoSaudeIds)
+      ? form.catalogoProcedimentoSaudeIds.map((id) => String(id)).filter(Boolean)
+      : Array.isArray(raw.catalogoProcedimentoSaudeIds)
+        ? raw.catalogoProcedimentoSaudeIds.map((id) => String(id)).filter(Boolean)
+        : [],
     observacao: obs,
   };
 }

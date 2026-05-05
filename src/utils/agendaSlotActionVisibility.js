@@ -40,6 +40,15 @@ export function getAgendaSlotActionVisibility(status) {
       showCancelar: false,
     };
   }
+  if (s === 'reagendado') {
+    return {
+      showRealizado: false,
+      showFalta: false,
+      showWhatsApp: false,
+      showReagendar: false,
+      showCancelar: false,
+    };
+  }
   return {
     showRealizado: false,
     showFalta: false,
