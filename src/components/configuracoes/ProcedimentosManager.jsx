@@ -93,6 +93,7 @@ export function ProcedimentosManager() {
       await catalogosApi.criar({ nomeProcedimento: nome });
       setNovoNome('');
       await fetchProcedimentos();
+      window.dispatchEvent(new CustomEvent('catalogo:changed'));
     } catch (err) {
       if (err.status === 409) {
         setErro(getApiErrorDetail(err) || 'Já existe um procedimento com esse nome.');
@@ -121,6 +122,7 @@ export function ProcedimentosManager() {
       await catalogosApi.inativar(id);
       setTogglingId(null);
       await fetchProcedimentos();
+      window.dispatchEvent(new CustomEvent('catalogo:changed'));
     } catch (err) {
       setErroInline({
         id,
@@ -137,6 +139,7 @@ export function ProcedimentosManager() {
     try {
       await catalogosApi.ativar(id);
       await fetchProcedimentos();
+      window.dispatchEvent(new CustomEvent('catalogo:changed'));
     } catch (err) {
       setErroInline({
         id,

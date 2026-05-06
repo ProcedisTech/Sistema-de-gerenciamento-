@@ -214,10 +214,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [patients]
   );
 
-  useEffect(() => {
+  const fetchCatalogRows = useCallback(() => {
     if (!authEnabled) {
       setCatalogRows([]);
-      return;
+      return () => {};
     }
     let cancelled = false;
     catalogosApi
@@ -233,6 +233,16 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       cancelled = true;
     };
   }, [authEnabled]);
+
+  useEffect(() => {
+    return fetchCatalogRows();
+  }, [fetchCatalogRows]);
+
+  useEffect(() => {
+    const handler = () => fetchCatalogRows();
+    window.addEventListener('catalogo:changed', handler);
+    return () => window.removeEventListener('catalogo:changed', handler);
+  }, [fetchCatalogRows]);
 
   useEffect(() => {
     if (!Array.isArray(appointments) || appointments.length === 0) return;
