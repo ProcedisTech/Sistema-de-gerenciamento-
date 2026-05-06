@@ -15,6 +15,7 @@ server/.env
 dist-ssr
 *.local
 # Secrets locais (Vite / Supabase etc.)
+.env
 .env.local
 
 # Editor directories and files
