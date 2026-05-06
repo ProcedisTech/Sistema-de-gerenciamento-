@@ -136,6 +136,12 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
       .catch(() => setCatalogosList([]));
   }, []);
 
+  useEffect(() => {
+    const handler = () => loadModalCatalogs();
+    window.addEventListener('catalogo:changed', handler);
+    return () => window.removeEventListener('catalogo:changed', handler);
+  }, [loadModalCatalogs]);
+
   const calendarCells = useMemo(
     () =>
       Array.from({ length: 42 }).map((_, idx) => {
