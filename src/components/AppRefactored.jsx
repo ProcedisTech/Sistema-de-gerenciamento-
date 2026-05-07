@@ -1876,6 +1876,7 @@ export default function App() {
       {authSessionReady ? (
         <>
           <AgendaFormModal agenda={agendaSchedule} onExcluirClick={handleScheduleExcluirFromEdit} />
+          {agendaSchedule.foraDispModal}
           {scheduleCancelRow?.agenda ? (
             <CancelarAgendaModal
               agenda={scheduleCancelRow.agenda}

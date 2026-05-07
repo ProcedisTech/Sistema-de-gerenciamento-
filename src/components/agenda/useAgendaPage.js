@@ -25,6 +25,8 @@ import {
   parseHhmmToMinutes,
   proposalOverlapsOccupied,
 } from '../../utils/agendaAvailability';
+import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
+import { executarComBypassDisp } from '../../services/agendasHelpers';
 
 const STATUS_LABELS = {
   confirmado: 'confirmado',
@@ -195,6 +197,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
   /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
+
+  const { modal: foraDispModal, abrirConfirmacao: abrirConfirmacaoForaDisp } =
+    useConfirmacaoForaDisp();
 
   const procedimentoOptions = useMemo(
     () =>
@@ -468,7 +473,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (!agendaId || !payload) return false;
       setSubmittingReagendar(true);
       try {
-        await agendasApi.reagendar(agendaId, payload);
+        const resultado = await executarComBypassDisp(
+          () => agendasApi.reagendar(agendaId, payload),
+          () => agendasApi.reagendar(agendaId, payload, { forcar: true }),
+          abrirConfirmacaoForaDisp
+        );
+        if (resultado === null) return false;
         toastSuccess('Agendamento reagendado');
         await loadMonth();
         await refreshWeekGrid();
@@ -482,7 +492,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         setSubmittingReagendar(false);
       }
     },
-    [loadMonth, refreshWeekGrid, toastSuccess, toastError]
+    [loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp]
   );
 
   const handleEnviarWhatsApp = useCallback(
@@ -678,7 +688,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           catalogoProcedimentoSaudeIds: procIds,
           observacao: String(form.observacao || rawSlot.observacao || '').trim() || undefined,
         };
-        await agendasApi.update(editingAppointment.agendaId, body);
+        const resultadoUpdate = await executarComBypassDisp(
+          () => agendasApi.update(editingAppointment.agendaId, body),
+          () => agendasApi.update(editingAppointment.agendaId, body, { forcar: true }),
+          abrirConfirmacaoForaDisp
+        );
+        if (resultadoUpdate === null) return false;
       } else {
         const createBase = buildAgendaCreateBody({
           dataAgendamento: form.data,
@@ -692,7 +707,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           pacienteId: String(form.pacienteId || patient?.id || '').trim(),
           catalogoProcedimentoSaudeIds: procIds,
         };
-        const created = await agendasApi.create(createBody);
+        const created = await executarComBypassDisp(
+          () => agendasApi.create(createBody),
+          () => agendasApi.create(createBody, { forcar: true }),
+          abrirConfirmacaoForaDisp
+        );
+        if (created === null) return false;
         if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
 
         const agendaId = created?.id != null ? String(created.id) : null;
@@ -713,6 +733,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       return false;
     }
   }, [
+    abrirConfirmacaoForaDisp,
     closeModal,
     editingAppointment,
     form,
@@ -785,6 +806,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     daySheetOpen,
     disponibilidades,
     editingAppointment,
+    foraDispModal,
     error,
     form,
     formErrors,

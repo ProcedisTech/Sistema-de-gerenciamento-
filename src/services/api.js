@@ -777,8 +777,14 @@ export const agendasApi = {
   byRange: (start, end) => request(`/api/v1/agendas/by-range?start=${start}&end=${end}`),
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
-  create: (data) => request('/api/v1/agendas', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => request(`/api/v1/agendas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  create: (data, opts = {}) => {
+    const qs = opts.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas${qs}`, { method: 'POST', body: JSON.stringify(data) });
+  },
+  update: (id, data, opts = {}) => {
+    const qs = opts.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas/${id}${qs}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
   /**
    * Cancela um slot da agenda com motivo.
    * @param {string} id UUID do slot
@@ -806,11 +812,13 @@ export const agendasApi = {
    * @param {string} id UUID do slot original
    * @param {{ novaData: string, novaHoraInicio: string, novaHoraFim: string, observacao?: string }} payload
    */
-  reagendar: (id, payload) =>
-    request(`/api/v1/agendas/${id}/reagendar`, {
+  reagendar: (id, payload, opts = {}) => {
+    const qs = opts.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas/${id}/reagendar${qs}`, {
       method: 'POST',
       body: JSON.stringify(payload),
-    }),
+    });
+  },
 };
 
 /**
