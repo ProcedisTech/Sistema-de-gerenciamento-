@@ -1,7 +1,8 @@
 import React from 'react';
-import { Calendar, Loader2, UserPlus, Trash2 } from 'lucide-react';
+import { Calendar, Loader2, UserPlus } from 'lucide-react';
 import { AgendaModal } from './AgendaModal';
 import { MarcarCompromissoModal } from './MarcarCompromissoModal';
+import CancelarAgendaModal from './CancelarAgendaModal.jsx';
 
 export function AgendaView({
   openAgendaModal,
@@ -18,8 +19,11 @@ export function AgendaView({
   selectedDay,
   setSelectedDay,
   appointmentsForSelectedDay,
-  cancelAppointment,
-  removeCompromisso,
+  openCancelAppointmentModal = () => {},
+  closeCancelAppointmentModal = () => {},
+  confirmCancelAppointment = async () => false,
+  cancelModalSlotId = null,
+  cancelAppointmentSubmitting = false,
   openMarcarCompromisso,
   agendaModalProps,
   compromissoModalProps,
@@ -185,7 +189,9 @@ export function AgendaView({
                         : 'bg-[#fef9c3] text-[#b45309] border-[#f59e0b]/20';
 
                   const comps = Array.isArray(a.compromissos) ? a.compromissos : [];
-                  const podeMarcar = a.tipo !== 'bloqueio' && status !== 'cancelado';
+                  const raw = a.raw || {};
+                  const podeMarcar =
+                    a.tipo !== 'bloqueio' && status !== 'cancelado' && comps.length === 0 && !raw.pacienteId;
 
                   return (
                     <div key={a.id} className="p-4 rounded-xl border border-app-border bg-[#f8fbfb]">
@@ -213,14 +219,6 @@ export function AgendaView({
                                   <div className="text-[11px] text-[#94a3b8] mt-0.5">{c.observacao}</div>
                                 ) : null}
                               </div>
-                              <button
-                                type="button"
-                                title="Remover compromisso"
-                                onClick={() => removeCompromisso?.(c.id)}
-                                className="flex-shrink-0 p-2 rounded-lg border-[2px] border-red-100 text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
                             </div>
                           ))}
                         </div>
@@ -242,7 +240,7 @@ export function AgendaView({
                         {status !== 'cancelado' && (
                           <button
                             type="button"
-                            onClick={() => cancelAppointment?.(a.id)}
+                            onClick={() => openCancelAppointmentModal(a.id)}
                             className="text-[12px] font-bold px-3 py-2 rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50"
                           >
                             Cancelar horário
@@ -260,6 +258,14 @@ export function AgendaView({
 
       <AgendaModal {...agendaModalProps} />
       <MarcarCompromissoModal {...compromissoModalProps} />
+      {cancelModalSlotId ? (
+        <CancelarAgendaModal
+          agenda={null}
+          onClose={closeCancelAppointmentModal}
+          onConfirm={confirmCancelAppointment}
+          isSubmitting={cancelAppointmentSubmitting}
+        />
+      ) : null}
     </div>
   );
 }

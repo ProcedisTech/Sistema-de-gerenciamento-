@@ -1,29 +1,53 @@
 /**
- * Modal de cancelamento de slot da agenda.
- * Recebe agenda + onClose + onConfirm callback.
- * onConfirm recebe { motivoCancelamentoCodigo, motivoCancelamentoTexto }
+ * Modal de cancelamento de slot da agenda (Onda 4).
+ * Carrega motivos em GET /api/v1/motivos-cancelamento ao montar.
+ * onConfirm → { motivoCancelamentoId, motivoCancelamentoTexto? }
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-
-const MOTIVOS = [
-  { codigo: 'paciente_desistiu', label: 'Paciente desistiu' },
-  { codigo: 'clinica_fechou', label: 'Clínica fechou' },
-  { codigo: 'outro', label: 'Outro' },
-];
+import { motivosCancelamentoApi, getApiErrorToastMessage } from '../../services/api.js';
+import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
 
 export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfirm, isSubmitting = false }) {
-  const [codigo, setCodigo] = useState('');
+  const [motivos, setMotivos] = useState([]);
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [motivoId, setMotivoId] = useState('');
   const [texto, setTexto] = useState('');
 
-  const exigeTexto = codigo === 'outro';
-  const podeConfirmar = codigo && (!exigeTexto || texto.trim().length > 0);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError('');
+    motivosCancelamentoApi
+      .listar()
+      .then((list) => {
+        if (cancelled) return;
+        const arr = normalizeApiList(list).filter((m) => m && (m.ativo !== false));
+        setMotivos(arr);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setLoadError(getApiErrorToastMessage(e, 'Não foi possível carregar os motivos de cancelamento.'));
+        setMotivos([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const handleConfirm = () => {
+  const selected = motivos.find((m) => String(m.id) === String(motivoId));
+  const exigeTexto = Boolean(selected?.codigo && String(selected.codigo).toLowerCase() === 'outro');
+  const podeConfirmar = Boolean(motivoId) && (!exigeTexto || texto.trim().length > 0);
+
+  const handleConfirm = async () => {
     if (!podeConfirmar) return;
-    onConfirm({
-      motivoCancelamentoCodigo: codigo,
-      motivoCancelamentoTexto: texto.trim() || null,
+    await onConfirm({
+      motivoCancelamentoId: motivoId,
+      motivoCancelamentoTexto: texto.trim() ? texto.trim().slice(0, 500) : undefined,
     });
   };
 
@@ -39,23 +63,31 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
 
         <p className="mb-4 text-sm text-gray-600">Por favor, informe o motivo do cancelamento.</p>
 
-        <div className="mb-4 space-y-2">
-          {MOTIVOS.map((m) => (
-            <label
-              key={m.codigo}
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
-            >
-              <input
-                type="radio"
-                name="motivo"
-                value={m.codigo}
-                checked={codigo === m.codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                className="h-4 w-4 text-emerald-600"
-              />
-              <span className="text-sm text-gray-900">{m.label}</span>
-            </label>
-          ))}
+        {loading ? (
+          <p className="mb-4 text-sm text-gray-500">Carregando motivos…</p>
+        ) : null}
+        {loadError ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{loadError}</div>
+        ) : null}
+
+        <div className="mb-4 max-h-[240px] space-y-2 overflow-y-auto">
+          {!loading &&
+            motivos.map((m) => (
+              <label
+                key={m.id}
+                className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+              >
+                <input
+                  type="radio"
+                  name="motivo"
+                  value={m.id}
+                  checked={String(motivoId) === String(m.id)}
+                  onChange={() => setMotivoId(String(m.id))}
+                  className="h-4 w-4 text-emerald-600"
+                />
+                <span className="text-sm text-gray-900">{m.nome || m.codigo || m.id}</span>
+              </label>
+            ))}
         </div>
 
         {exigeTexto ? (
@@ -71,7 +103,19 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
             />
             <p className="mt-1 text-xs text-gray-500">{texto.length}/500</p>
           </div>
-        ) : null}
+        ) : (
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-gray-700">Comentário (opcional)</label>
+            <textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value.slice(0, 500))}
+              maxLength={500}
+              rows={2}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              placeholder="Detalhes adicionais para a clínica"
+            />
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
@@ -85,7 +129,7 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!podeConfirmar || isSubmitting}
+            disabled={!podeConfirmar || isSubmitting || loading}
             className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
           >
             {isSubmitting ? 'Cancelando...' : 'Confirmar cancelamento'}

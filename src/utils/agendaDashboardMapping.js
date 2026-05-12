@@ -1,5 +1,5 @@
-import { agendasApi, agendamentosApi } from '../services/api';
-import { mapAgendaDtoToAppointment, addMinutesToTime } from './agendaMapping';
+import { agendasApi } from '../services/api';
+import { addMinutesToTime, deriveAgendaSlotStatus } from './agendaMapping';
 
 export function normalizeApiList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -28,165 +28,64 @@ function sortByDateTime(rows) {
   return [...rows].sort((a, b) => `${a.data} ${a.horaInicio}`.localeCompare(`${b.data} ${b.horaInicio}`));
 }
 
-function normalizeCorHex(src) {
-  if (src == null || src === '') return '#00a88e';
-  const s = String(src).trim();
-  if (!s) return '#00a88e';
-  if (s.startsWith('#')) return s.length >= 4 ? s : '#00a88e';
-  if (/^[0-9a-fA-F]{3,8}$/.test(s)) return `#${s}`;
-  return '#00a88e';
-}
-
-/** Cor do catálogo / agendamento vinda do backend (nomes alternativos tolerados). */
-function corHexFromCompromisso(compromisso) {
-  const c = compromisso || {};
-  const raw =
-    c.corHex ||
-    c.cor_hex ||
-    c.corCatalogo ||
-    c.catalogoCorHex ||
-    c.procedimentoCorHex ||
-    c.cor;
-  return normalizeCorHex(raw);
-}
-
-function roleUserIdFromSlot(slot) {
-  const raw = slot?.raw || {};
-  return slot?.roleUserId || raw.roleUserId || '';
-}
-
-/** Espera padrão gravado no slot: `procedimento - paciente` (opcionalmente seguido de ` — notas`). */
-function procedimentoPacienteFromSlotObservacao(obs) {
-  const s = obs != null ? String(obs).trim() : '';
-  if (!s) return { procedimentoNome: '', pacienteNome: '' };
-  const sep = ' - ';
-  const i = s.indexOf(sep);
-  if (i === -1) return { procedimentoNome: s, pacienteNome: '' };
-  return {
-    procedimentoNome: s.slice(0, i).trim() || '',
-    pacienteNome: s.slice(i + sep.length).trim() || '',
-  };
+function roleUserIdFromDto(dto) {
+  return dto?.roleUserId != null ? String(dto.roleUserId) : '';
 }
 
 /**
- * Uma linha do dashboard = um compromisso (tb_agendamento).
- * `id` = agendamento.id (chave React); `agendaId` = slot (tb_agenda).
+ * Uma linha do dashboard = uma agenda (Onda 4: paciente + catálogo no próprio AgendaDTO).
  */
-export function mapSlotAndCompromissoToDashboardRow(slot, compromisso) {
-  if (!slot?.id || !compromisso?.id) return null;
-  const raw = slot.raw || {};
-  const hi = (raw.horaInicio && String(raw.horaInicio).slice(0, 5)) || slot.time || '09:00';
-  const hfRaw = raw.horaFim && String(raw.horaFim).slice(0, 5);
-  const duracaoMin = hfRaw ? minutesBetweenHhmm(hi, hfRaw) : 45;
-
-  const catId =
-    compromisso.catalogoProcedimentoSaudeId ||
-    compromisso.catalogoProcedimentoId ||
-    compromisso.catalogoId ||
-    '';
-
-  const motivoCancelamentoCodigo =
-    compromisso.motivoCancelamentoCodigo ?? compromisso.motivo_cancelamento_codigo ?? null;
-  const motivoCancelamentoTexto =
-    compromisso.motivoCancelamentoTexto ?? compromisso.motivo_cancelamento_texto ?? null;
+export function mapAgendaDtoToDashboardRow(dto) {
+  if (!dto?.id) return null;
+  const date = dto.dataAgendamento ? String(dto.dataAgendamento).slice(0, 10) : '';
+  const hi = dto.horaInicio != null ? String(dto.horaInicio).slice(0, 5) : '09:00';
+  const hf = dto.horaFim != null ? String(dto.horaFim).slice(0, 5) : '';
+  const duracaoMin = hf ? minutesBetweenHhmm(hi, hf) : 45;
+  const tipoCodigo = String(dto.tipoProcedimentoCodigo || '').toLowerCase();
+  const tipo = tipoCodigo === 'bloqueio' ? 'bloqueio' : 'atendimento';
+  const catId = dto.catalogoProcedimentoSaudeId != null ? String(dto.catalogoProcedimentoSaudeId).trim() : '';
+  const status = deriveAgendaSlotStatus(dto);
+  const pacienteId = dto.pacienteId != null ? String(dto.pacienteId) : '';
 
   return {
-    id: String(compromisso.id),
-    agendaId: String(slot.id),
-    data: slot.date,
+    id: String(dto.id),
+    agendaId: String(dto.id),
+    data: date,
     horaInicio: hi,
     duracaoMin,
-    tipo: 'atendimento',
-    status: slot.status,
-    statusNome: slot.statusNome,
-    motivoCancelamentoCodigo,
-    motivoCancelamentoTexto,
-    roleUserId: roleUserIdFromSlot(slot),
-    corHex: corHexFromCompromisso(compromisso),
-    pacienteNome: raw.pacienteNome || compromisso.pacienteNome || '',
-    pacienteId: raw.pacienteId ? String(raw.pacienteId) : '',
-    telefone:
-      compromisso.telefone ||
-      compromisso.telefonePrincipal ||
-      compromisso.telefoneNumero ||
-      '',
-    procedimentoNome: compromisso.procedimentoNome || compromisso.nomeProcedimento || 'Sem procedimento informado',
-    catalogoProcedimentoSaudeId: catId ? String(catId) : '',
-    catalogoProcedimentoSaudeIds: Array.isArray(raw.catalogoProcedimentoSaudeIds)
-      ? raw.catalogoProcedimentoSaudeIds.map((id) => String(id))
-      : catId
-        ? [String(catId)]
-        : [],
-    profissionalNome: slot.profissionalNome || '',
-    observacao: compromisso.observacao || '',
-    rawSlot: raw,
-    rawAgendamento: compromisso,
+    tipo,
+    status,
+    statusNome: dto.statusNome,
+    motivoCancelamentoId: dto.motivoCancelamentoId != null ? String(dto.motivoCancelamentoId) : null,
+    motivoCancelamentoCodigo: dto.motivoCancelamentoCodigo ?? null,
+    motivoCancelamentoNome: dto.motivoCancelamentoNome ?? null,
+    roleUserId: roleUserIdFromDto(dto),
+    corHex: '#00a88e',
+    pacienteNome: dto.pacienteNome || (tipo === 'bloqueio' ? '' : 'Sem paciente'),
+    pacienteId,
+    telefone: '',
+    procedimentoNome:
+      dto.catalogoProcedimentoNome?.trim() ||
+      (dto.observacao != null && String(dto.observacao).trim()) ||
+      'Sem procedimento informado',
+    catalogoProcedimentoSaudeId: catId,
+    catalogoProcedimentoSaudeIds: catId ? [catId] : [],
+    tipoProcedimentoId: dto.tipoProcedimentoId != null ? String(dto.tipoProcedimentoId) : '',
+    tipoProcedimentoNome: dto.tipoProcedimentoNome || '',
+    profissionalNome: dto.profissionalNome || '',
+    observacao: dto.observacao != null ? String(dto.observacao) : '',
+    rawSlot: dto,
+    rawAgendamento: null,
   };
 }
 
-const DEFAULT_BATCH = 8;
-
 /**
- * Slots no intervalo + listByAgenda por slot (em lotes paralelos).
+ * Agendas no intervalo (1 linha por AgendaDTO — sem GET aninhado de agendamentos).
  */
-export async function fetchDashboardAppointmentsForRange(startIso, endIso, batchSize = DEFAULT_BATCH) {
+export async function fetchDashboardAppointmentsForRange(startIso, endIso) {
   const raw = await agendasApi.byRange(startIso, endIso);
   const dtos = normalizeApiList(raw);
-  const slots = dtos.map(mapAgendaDtoToAppointment).filter(Boolean);
-  const rows = [];
-
-  for (let i = 0; i < slots.length; i += batchSize) {
-    const chunk = slots.slice(i, i + batchSize);
-    await Promise.all(
-      chunk.map(async (slot) => {
-        if (!slot.id) return;
-        let items = [];
-        try {
-          const rawItems = await agendamentosApi.listByAgenda(slot.id);
-          items = normalizeApiList(rawItems);
-        } catch {
-          items = [];
-        }
-        if (items.length === 0) {
-          const raw = slot.raw || {};
-          const hi = raw.horaInicio != null ? String(raw.horaInicio).slice(0, 5) : String(slot.time || '').slice(0, 5);
-          const hf = raw.horaFim != null ? String(raw.horaFim).slice(0, 5) : '';
-          const obs = raw.observacao != null ? String(raw.observacao).trim() : '';
-          const { procedimentoNome: procFromObs, pacienteNome: pacFromObs } = procedimentoPacienteFromSlotObservacao(obs);
-          rows.push({
-            id: String(slot.id),
-            agendaId: String(slot.id),
-            data: raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : slot.date || '',
-            horaInicio: hi,
-            duracaoMin: hf ? minutesBetweenHhmm(hi, hf) : 45,
-            tipo: 'atendimento',
-            status: slot.status,
-            statusNome: slot.statusNome,
-            roleUserId: roleUserIdFromSlot(slot),
-            corHex: '#00a88e',
-            procedimentoNome: procFromObs || 'Sem procedimento informado',
-            pacienteNome: raw.pacienteNome || pacFromObs || 'Sem paciente',
-            pacienteId: raw.pacienteId ? String(raw.pacienteId) : null,
-            profissionalNome: slot.profissionalNome || '',
-            telefone: '',
-            catalogoProcedimentoSaudeId: '',
-            catalogoProcedimentoSaudeIds: Array.isArray(raw.catalogoProcedimentoSaudeIds)
-              ? raw.catalogoProcedimentoSaudeIds.map((id) => String(id))
-              : [],
-            observacao: '',
-            rawSlot: raw,
-            rawAgendamento: null,
-          });
-        } else {
-          for (const c of items) {
-            const row = mapSlotAndCompromissoToDashboardRow(slot, c);
-            if (row) rows.push(row);
-          }
-        }
-      })
-    );
-  }
-
+  const rows = dtos.map(mapAgendaDtoToDashboardRow).filter(Boolean);
   return sortByDateTime(rows);
 }
 
@@ -197,20 +96,19 @@ export function buildAgendaCreateBody({
   roleUserId,
   observacao,
   pacienteId,
-  catalogoProcedimentoSaudeIds = [],
+  catalogoProcedimentoSaudeId,
 }) {
   const hi = String(horaInicio || '09:00').slice(0, 5);
   const mins = Number(duracaoMin) || 45;
   const horaFim = addMinutesToTime(hi, mins);
+  const cat = catalogoProcedimentoSaudeId != null ? String(catalogoProcedimentoSaudeId).trim() : '';
   const base = {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
     roleUserId,
     pacienteId: String(pacienteId || '').trim(),
-    catalogoProcedimentoSaudeIds: Array.isArray(catalogoProcedimentoSaudeIds)
-      ? catalogoProcedimentoSaudeIds.map((id) => String(id)).filter(Boolean)
-      : [],
+    ...(cat ? { catalogoProcedimentoSaudeId: cat } : {}),
   };
   return {
     ...base,
@@ -218,7 +116,7 @@ export function buildAgendaCreateBody({
   };
 }
 
-/** `form` = campos do modal (`data`, `horaInicio`, `duracaoMin`, `observacao`). */
+/** `form` = campos do modal (`data`, `horaInicio`, `duracaoMin`, `observacao`, catálogo). */
 export function buildAgendaUpdateBody(rawSlot, form, roleUserIdFallback) {
   const raw = rawSlot && typeof rawSlot === 'object' ? rawSlot : {};
   const dataAgendamento =
@@ -236,17 +134,22 @@ export function buildAgendaUpdateBody(rawSlot, form, roleUserIdFallback) {
       : raw.observacao != null
         ? String(raw.observacao).trim() || undefined
         : undefined;
+
+  const catFromForm =
+    (form.catalogoProcedimentoSaudeId != null && String(form.catalogoProcedimentoSaudeId).trim()) ||
+    (Array.isArray(form.catalogoProcedimentoSaudeIds) && form.catalogoProcedimentoSaudeIds[0]
+      ? String(form.catalogoProcedimentoSaudeIds[0]).trim()
+      : '');
+  const catFromRaw = raw.catalogoProcedimentoSaudeId != null ? String(raw.catalogoProcedimentoSaudeId).trim() : '';
+  const catalogoProcedimentoSaudeId = catFromForm || catFromRaw || '';
+
   return {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
     roleUserId: raw.roleUserId || roleUserIdFallback,
     pacienteId: String(form.pacienteId || raw.pacienteId || '').trim(),
-    catalogoProcedimentoSaudeIds: Array.isArray(form.catalogoProcedimentoSaudeIds)
-      ? form.catalogoProcedimentoSaudeIds.map((id) => String(id)).filter(Boolean)
-      : Array.isArray(raw.catalogoProcedimentoSaudeIds)
-        ? raw.catalogoProcedimentoSaudeIds.map((id) => String(id)).filter(Boolean)
-        : [],
+    ...(catalogoProcedimentoSaudeId ? { catalogoProcedimentoSaudeId } : {}),
     observacao: obs,
   };
 }

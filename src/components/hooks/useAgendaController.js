@@ -6,7 +6,6 @@ import {
   getPacienteCreateErrorFeedback,
   pacientesApi,
   catalogosApi,
-  agendamentosApi,
 } from '../../services/api';
 import { mapAgendaDtoToAppointment, addMinutesToTime } from '../../utils/agendaMapping';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
@@ -92,18 +91,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
       const raw = await agendasApi.byRange(monthRange.start, monthRange.end);
       const list = Array.isArray(raw) ? raw : [];
       const mapped = list.map(mapAgendaDtoToAppointment).filter(Boolean);
-      const withCompromissos = await Promise.all(
-        mapped.map(async (slot) => {
-          try {
-            const items = await agendamentosApi.listByAgenda(slot.id);
-            const arr = Array.isArray(items) ? items : [];
-            return { ...slot, compromissos: arr };
-          } catch {
-            return { ...slot, compromissos: [] };
-          }
-        })
-      );
-      setAppointments(withCompromissos);
+      setAppointments(mapped);
     } catch (e) {
       if (e.status === 401) {
         console.warn('[agenda] Sessão ausente ou expirada; agenda não carregada.');
@@ -170,8 +158,10 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const monthPatientCpfs = useMemo(() => {
     const ids = new Set();
     monthAppointments.forEach((slot) => {
+      const raw = slot.raw || {};
+      if (raw.pacienteId) ids.add(String(raw.pacienteId));
       (slot.compromissos || []).forEach((c) => {
-        if (c.pacienteId) ids.add(c.pacienteId);
+        if (c.pacienteId) ids.add(String(c.pacienteId));
       });
     });
     return ids;
@@ -203,8 +193,10 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const todayPatientCpfs = useMemo(() => {
     const ids = new Set();
     todayAppointments.forEach((slot) => {
+      const raw = slot.raw || {};
+      if (raw.pacienteId) ids.add(String(raw.pacienteId));
       (slot.compromissos || []).forEach((c) => {
-        if (c.pacienteId) ids.add(c.pacienteId);
+        if (c.pacienteId) ids.add(String(c.pacienteId));
       });
     });
     return ids;
@@ -330,7 +322,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
         horaInicio: agendaTime.length === 5 ? `${agendaTime}:00` : agendaTime,
         horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
         roleUserId: contextRole,
-        tipo: 'atendimento',
         observacao,
       });
 
@@ -349,6 +340,8 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
 
   const openMarcarCompromisso = (slot) => {
     if (!slot?.id || slot.tipo === 'bloqueio' || slot.status === 'cancelado') return;
+    const raw = slot.raw || {};
+    if (raw.pacienteId || (slot.compromissos && slot.compromissos.length > 0)) return;
     setSlotParaCompromisso(slot);
     setCompromissoModalError('');
     setCompromissoPatientSearch('');
@@ -365,7 +358,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     setCompromissoModalError('');
   };
 
-  /** Modal MarcarCompromissoModal → agendamentosApi.create → api.js request (credentials + X-Org-Id). URL: /api/v1/agendamentos na mesma origem do Vite (ex. http://localhost:5173/api/...). */
+  /** Onda 4: atualiza o slot existente com paciente + catálogo (PUT /api/v1/agendas/{id}). */
   const confirmMarcarCompromisso = async () => {
     if (!slotParaCompromisso?.id) return;
     setCompromissoModalError('');
@@ -380,47 +373,70 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     }
     setCompromissoSaving(true);
     try {
-      await agendamentosApi.create({
-        agendaId: slotParaCompromisso.id,
-        pacienteId: p.id,
-        catalogoProcedimentoSaudeId: compromissoCatalogoId,
-        observacao: compromissoObservacao?.trim() || undefined,
+      const slot = slotParaCompromisso;
+      const raw = slot.raw || {};
+      const hi = String(
+        (raw.horaInicio && String(raw.horaInicio).slice(0, 5)) || slot.time || '09:00'
+      ).slice(0, 5);
+      const hfRaw = raw.horaFim != null ? String(raw.horaFim).slice(0, 5) : '';
+      const hf = hfRaw || addMinutesToTime(hi, 45);
+      const dataAg =
+        slot.date || (raw.dataAgendamento != null ? String(raw.dataAgendamento).slice(0, 10) : '');
+      const obsMerged = compromissoObservacao?.trim() || (raw.observacao != null ? String(raw.observacao).trim() : '');
+      await agendasApi.update(String(slot.id), {
+        dataAgendamento: dataAg,
+        horaInicio: hi.length === 5 ? `${hi}:00` : hi,
+        horaFim: hf.length === 5 ? `${hf}:00` : hf,
+        roleUserId: raw.roleUserId || slot.roleUserId,
+        pacienteId: String(p.id),
+        catalogoProcedimentoSaudeId: String(compromissoCatalogoId),
+        ...(obsMerged ? { observacao: obsMerged.slice(0, 500) } : {}),
       });
       await fetchMonthAgendas();
       closeCompromissoModal();
       toast.success('Compromisso marcado com sucesso.');
     } catch (e) {
-      console.warn('[agendamentos] POST /api/v1/agendamentos falhou:', e.status, e.message);
+      console.warn('[agenda] PUT /api/v1/agendas/{id} (marcar compromisso) falhou:', e.status, e.message);
       setCompromissoModalError(formatAgendamentoApiError(e));
     } finally {
       setCompromissoSaving(false);
     }
   };
 
-  const removeCompromisso = async (compromissoRowId) => {
-    if (!compromissoRowId) return;
-    try {
-      await agendamentosApi.remove(compromissoRowId);
-      await fetchMonthAgendas();
-      toast.info('Compromisso removido.');
-    } catch (e) {
-      toast.error(formatAgendamentoApiError(e));
-    }
-  };
+  const [cancelSlotId, setCancelSlotId] = useState(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
-  const cancelAppointment = async (appointmentId) => {
+  const openCancelAppointmentModal = useCallback((appointmentId) => {
     if (!appointmentId) return;
-    try {
-      await agendasApi.cancelar(appointmentId, {
-        motivoCancelamentoCodigo: 'outro',
-        motivoCancelamentoTexto: 'Cancelado via legado',
-      });
-      await fetchMonthAgendas();
-      toast.info('Horário cancelado.');
-    } catch (e) {
-      toast.error(e.message || 'Não foi possível cancelar o horário.');
-    }
-  };
+    setCancelSlotId(String(appointmentId));
+  }, []);
+
+  const closeCancelAppointmentModal = useCallback(() => {
+    setCancelSlotId(null);
+  }, []);
+
+  const confirmCancelAppointment = useCallback(
+    async (payload) => {
+      if (!cancelSlotId || !payload?.motivoCancelamentoId) return false;
+      setCancelSubmitting(true);
+      try {
+        await agendasApi.cancelar(cancelSlotId, {
+          motivoCancelamentoId: payload.motivoCancelamentoId,
+          motivoCancelamentoTexto: payload.motivoCancelamentoTexto || undefined,
+        });
+        await fetchMonthAgendas();
+        setCancelSlotId(null);
+        toast.info('Horário cancelado.');
+        return true;
+      } catch (e) {
+        toast.error(e.message || 'Não foi possível cancelar o horário.');
+        return false;
+      } finally {
+        setCancelSubmitting(false);
+      }
+    },
+    [cancelSlotId, fetchMonthAgendas, toast]
+  );
 
   const goPrevCalendarMonth = () => {
     if (calendarMonthIndex === 0) {
@@ -520,8 +536,11 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     openAgendaModal,
     goPrevCalendarMonth,
     goNextCalendarMonth,
-    cancelAppointment,
-    removeCompromisso,
+    openCancelAppointmentModal,
+    closeCancelAppointmentModal,
+    confirmCancelAppointment,
+    cancelModalSlotId: cancelSlotId,
+    cancelAppointmentSubmitting: cancelSubmitting,
     openMarcarCompromisso,
     agendaModalProps,
     compromissoModalProps,

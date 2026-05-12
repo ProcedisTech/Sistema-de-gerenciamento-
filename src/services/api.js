@@ -786,9 +786,9 @@ export const agendasApi = {
     return request(`/api/v1/agendas/${id}${qs}`, { method: 'PUT', body: JSON.stringify(data) });
   },
   /**
-   * Cancela um slot da agenda com motivo.
-   * @param {string} id UUID do slot
-   * @param {{ motivoCancelamentoCodigo: 'paciente_desistiu'|'clinica_fechou'|'outro', motivoCancelamentoTexto?: string }} payload
+   * Cancela um slot da agenda com motivo (Onda 4).
+   * @param {string} id UUID da agenda
+   * @param {{ motivoCancelamentoId: string, motivoCancelamentoTexto?: string }} payload
    */
   cancelar: (id, payload) =>
     request(`/api/v1/agendas/${id}/cancelar`, {
@@ -821,15 +821,10 @@ export const agendasApi = {
   },
 };
 
-/**
- * Compromissos no slot (tb_agendamento): paciente + catálogo sem ProcedimentoFeito.
- * GET …/agendas/{agendaId}/agendamentos · POST /agendamentos · DELETE /agendamentos/{id}
- */
-export const agendamentosApi = {
-  listByAgenda: (agendaId) => request(`/api/v1/agendas/${agendaId}/agendamentos`),
-  /** V30 body: { agendaId, catalogoProcedimentoSaudeId, observacao? }. */
-  create: (body) => request('/api/v1/agendamentos', { method: 'POST', body: JSON.stringify(body) }),
-  remove: (id) => request(`/api/v1/agendamentos/${id}`, { method: 'DELETE' }),
+/** Motivos de cancelamento de agenda (Onda 4; UUID para PATCH /agendas/{id}/cancelar). */
+export const motivosCancelamentoApi = {
+  /** @returns {Promise<Array<{ id: string, codigo: string, nome: string, ordem?: number, ativo?: boolean }>>} */
+  listar: () => request('/api/v1/motivos-cancelamento'),
 };
 
 // ── Confirmação WhatsApp ───────────────────────────────────
@@ -837,7 +832,7 @@ export const confirmacaoApi = {
   /**
    * Gera link WhatsApp wa.me + mensagem pronta + token mágico para o paciente confirmar.
    * Endpoint AUTENTICADO (profissional clica no botão).
-   * @param {{ agendamentoId: string, tipoEnvio: 'confirmacao_24h'|'lembrete_1h' }} payload
+   * @param {{ agendaId: string, tipoEnvio: 'confirmacao_24h'|'lembrete_1h' }} payload
    * @returns {Promise<{ confirmacaoId: string, tokenLink: string, mensagemPronta: string, urlWhatsApp: string }>}
    */
   gerar: (payload) =>
@@ -1194,32 +1189,6 @@ export const disponibilidadeApi = {
       method: 'PUT',
       body: JSON.stringify(Array.isArray(payload) ? payload : []),
     }),
-};
-
-// ── Indisponibilidades do Profissional (V30) ───────────────
-export const indisponibilidadesApi = {
-  /**
-   * Lista em array puro (sem paginação).
-   * @param {{ roleUserId?: string }} [params]
-   */
-  listar: (params = {}) => {
-    const sp = new URLSearchParams();
-    if (params.roleUserId) sp.set('roleUserId', String(params.roleUserId));
-    const qs = sp.toString();
-    return request(`/api/v1/indisponibilidades${qs ? `?${qs}` : ''}`);
-  },
-  criar: (payload) =>
-    request('/api/v1/indisponibilidades', {
-      method: 'POST',
-      body: JSON.stringify(payload ?? {}),
-    }),
-  atualizar: (id, payload) =>
-    request(`/api/v1/indisponibilidades/${encodeURIComponent(String(id))}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload ?? {}),
-    }),
-  remover: (id) =>
-    requestDelete(`/api/v1/indisponibilidades/${encodeURIComponent(String(id))}`),
 };
 
 // ── Auditoria ──────────────────────────────────────────────
