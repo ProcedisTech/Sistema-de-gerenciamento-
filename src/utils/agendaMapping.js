@@ -35,16 +35,38 @@ export function deriveAgendaSlotStatus(dto) {
 }
 
 /**
- * Normaliza AgendaDTO do Spring para o modelo usado pela UI (lista lateral).
- * Não inventa paciente: slot vem sem paciente até API de agendamentos no slot (A3).
+ * Normaliza AgendaDTO do Spring para o modelo usado pela UI (calendário recepção).
+ * Onda 4: paciente e catálogo vêm no próprio DTO; compromisso sintético quando há paciente.
  */
 export function mapAgendaDtoToAppointment(dto) {
   if (!dto || !dto.id) return null;
   const date = dto.dataAgendamento || '';
   const time = (dto.horaInicio && String(dto.horaInicio).slice(0, 5)) || '00:00';
   const status = deriveAgendaSlotStatus(dto);
+  const tipoCodigo = String(dto.tipoProcedimentoCodigo || '').toLowerCase();
+  const tipo = tipoCodigo === 'bloqueio' ? 'bloqueio' : 'atendimento';
 
-  const procedure = dto.observacao?.trim() || 'Atendimento';
+  const procedure =
+    (dto.catalogoProcedimentoNome && String(dto.catalogoProcedimentoNome).trim()) ||
+    dto.observacao?.trim() ||
+    'Atendimento';
+
+  const compromissos = [];
+  if (dto.pacienteId && tipo !== 'bloqueio') {
+    compromissos.push({
+      id: dto.id,
+      pacienteId: String(dto.pacienteId),
+      pacienteNome: dto.pacienteNome || '',
+      procedimentoNome: dto.catalogoProcedimentoNome || procedure,
+      catalogoProcedimentoSaudeId:
+        dto.catalogoProcedimentoSaudeId != null ? String(dto.catalogoProcedimentoSaudeId) : '',
+      observacao: dto.observacao || '',
+      removable: false,
+    });
+  }
+
+  const patient =
+    dto.pacienteNome || dto.pacienteId ? { id: dto.pacienteId, nome: dto.pacienteNome || '' } : null;
 
   return {
     id: dto.id,
@@ -52,12 +74,11 @@ export function mapAgendaDtoToAppointment(dto) {
     time,
     procedure,
     status,
-    patient: null,
-    /** Itens de GET /agendas/{id}/agendamentos (preenchido após byRange). */
-    compromissos: [],
+    patient,
+    compromissos,
     profissionalNome: dto.profissionalNome || '',
     roleUserId: dto.roleUserId,
-    tipo: 'atendimento',
+    tipo,
     statusCodigo: dto.statusCodigo,
     statusNome: dto.statusNome,
     raw: dto,

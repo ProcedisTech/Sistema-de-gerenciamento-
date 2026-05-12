@@ -487,7 +487,7 @@ export function AgendaDashboard({
           }}
           onReagendar={() => onSlotReagendar?.(appointment)}
           onCancelar={() => onSlotCancelar?.(appointment)}
-          onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.id, 'confirmacao_24h')}
+          onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h')}
         />
       );
     },

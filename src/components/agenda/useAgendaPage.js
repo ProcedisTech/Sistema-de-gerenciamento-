@@ -27,6 +27,7 @@ import {
 } from '../../utils/agendaAvailability';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
+import { addMinutesToTime } from '../../utils/agendaMapping';
 
 const STATUS_LABELS = {
   confirmado: 'confirmado',
@@ -496,10 +497,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const handleEnviarWhatsApp = useCallback(
-    async (agendamentoId, tipoEnvio = 'confirmacao_24h') => {
-      if (!agendamentoId) return false;
+    async (agendaId, tipoEnvio = 'confirmacao_24h') => {
+      if (!agendaId) return false;
       try {
-        const res = await confirmacaoApi.gerar({ agendamentoId, tipoEnvio });
+        const res = await confirmacaoApi.gerar({ agendaId, tipoEnvio });
         if (res?.urlWhatsApp) {
           abrirWhatsApp(res.urlWhatsApp);
           toastSuccess('Link WhatsApp aberto');
@@ -646,7 +647,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const validateForm = useCallback(() => {
     const nextErrors = {};
     if (!form.pacienteId && !String(form.pacienteNome || '').trim()) nextErrors.pacienteId = 'Selecione um paciente.';
-    if (!Array.isArray(form.catalogoProcedimentoSaudeIds) || form.catalogoProcedimentoSaudeIds.length === 0) {
+    const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
+      .map((id) => String(id).trim())
+      .filter(Boolean);
+    if (modalMode === 'edit') {
+      if (procIds.length !== 1) nextErrors.catalogoProcedimentoSaudeIds = 'Selecione exatamente um procedimento.';
+    } else if (procIds.length === 0) {
       nextErrors.catalogoProcedimentoSaudeIds = 'Selecione ao menos um procedimento.';
     }
     if (!form.data) nextErrors.data = 'Informe a data.';
@@ -660,7 +666,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [form, todayIso]);
+  }, [form, todayIso, modalMode]);
 
   const saveAppointment = useCallback(async () => {
     if (!validateForm()) return false;
@@ -681,11 +687,16 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     try {
       if (modalMode === 'edit' && editingAppointment?.agendaId) {
         const rawSlot = editingAppointment.rawSlot || {};
+        const catId = procIds[0];
+        if (!catId) {
+          setError('Selecione o procedimento.');
+          return false;
+        }
         const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
         const body = {
           ...baseBody,
           pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-          catalogoProcedimentoSaudeIds: procIds,
+          catalogoProcedimentoSaudeId: catId,
           observacao: String(form.observacao || rawSlot.observacao || '').trim() || undefined,
         };
         const resultadoUpdate = await executarComBypassDisp(
@@ -695,28 +706,28 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         );
         if (resultadoUpdate === null) return false;
       } else {
-        const createBase = buildAgendaCreateBody({
-          dataAgendamento: form.data,
-          horaInicio: form.horaInicio,
-          duracaoMin: form.duracaoMin,
-          roleUserId: contextRole,
-          observacao: String(form.observacao || '').trim(),
-        });
-        const createBody = {
-          ...createBase,
-          pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-          catalogoProcedimentoSaudeIds: procIds,
-        };
-        const created = await executarComBypassDisp(
-          () => agendasApi.create(createBody),
-          () => agendasApi.create(createBody, { forcar: true }),
-          abrirConfirmacaoForaDisp
-        );
-        if (created === null) return false;
-        if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-
-        const agendaId = created?.id != null ? String(created.id) : null;
-        if (!agendaId) throw new Error('Resposta da API sem id da agenda.');
+        const dMin = Number(form.duracaoMin) || 45;
+        let startHh = String(form.horaInicio || '09:00').slice(0, 5);
+        for (let i = 0; i < procIds.length; i += 1) {
+          const catalogoProcedimentoSaudeId = procIds[i];
+          const createBody = buildAgendaCreateBody({
+            dataAgendamento: form.data,
+            horaInicio: startHh,
+            duracaoMin: dMin,
+            roleUserId: contextRole,
+            observacao: String(form.observacao || '').trim(),
+            pacienteId: String(form.pacienteId || patient?.id || '').trim(),
+            catalogoProcedimentoSaudeId,
+          });
+          const created = await executarComBypassDisp(
+            () => agendasApi.create(createBody),
+            () => agendasApi.create(createBody, { forcar: true }),
+            abrirConfirmacaoForaDisp
+          );
+          if (created === null) return false;
+          if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+          startHh = addMinutesToTime(startHh, dMin);
+        }
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
@@ -756,16 +767,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         setWeekGridAppointments((prev) =>
           prev.map((row) => (row.id === appointment.id ? { ...row, status: 'confirmado' } : row))
         );
-        return;
-      }
-      if (status === 'cancelado') {
-        await handleCancelar(appointment.agendaId, {
-          motivoCancelamentoCodigo: 'outro',
-          motivoCancelamentoTexto: 'Cancelamento manual',
-        });
       }
     },
-    [handleCancelar]
+    []
   );
 
   const selectDay = useCallback((date, openSheet = true) => {

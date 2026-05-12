@@ -1,6 +1,6 @@
 import { Check, UserX, Calendar, XCircle, MessageCircle } from 'lucide-react';
 import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
-import { labelMotivoCancelamentoCodigo, resolveMotivoCancelamentoFromRow } from '../../utils/agendaCancelamentoMotivo.js';
+import { resolveMotivoCancelamentoFromRow, labelMotivoCancelamentoFallback } from '../../utils/agendaCancelamentoMotivo.js';
 
 /**
  * Ações disponíveis pra um slot da agenda.
@@ -27,11 +27,12 @@ export default function AgendaSlotActions({
   const anyChip =
     v.showRealizado || v.showFalta || v.showWhatsApp || v.showReagendar || v.showCancelar;
 
-  const { codigo: motivoCodigo, texto: motivoTexto } =
-    status === 'cancelado' ? resolveMotivoCancelamentoFromRow(agenda) : { codigo: null, texto: '' };
+  const { codigo: motivoCodigo, nome: motivoNome } =
+    status === 'cancelado' ? resolveMotivoCancelamentoFromRow(agenda) : { codigo: null, nome: '' };
   const codigoTrim = motivoCodigo != null && String(motivoCodigo).trim() !== '' ? String(motivoCodigo).trim() : '';
-  const showMotivoLine = status === 'cancelado' && codigoTrim !== '';
-  const labelMotivo = showMotivoLine ? labelMotivoCancelamentoCodigo(codigoTrim) : '';
+  const showMotivoLine = status === 'cancelado' && (motivoNome || codigoTrim);
+  const labelMotivo =
+    motivoNome || (codigoTrim ? labelMotivoCancelamentoFallback(codigoTrim) : '');
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -46,12 +47,6 @@ export default function AgendaSlotActions({
       {showMotivoLine ? (
         <p className="text-sm text-gray-500">
           Motivo: {labelMotivo}
-          {motivoTexto ? (
-            <>
-              {' '}
-              — &quot;{motivoTexto}&quot;
-            </>
-          ) : null}
         </p>
       ) : null}
 
@@ -87,7 +82,7 @@ export default function AgendaSlotActions({
               onClick={onEnviarWhatsApp}
               disabled={disabled}
               title="Enviar confirmação via WhatsApp"
-              className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-800 hover:bg-green-100 disabled:opacity-50"
             >
               <MessageCircle className="h-3.5 w-3.5" />
               WhatsApp
@@ -99,7 +94,7 @@ export default function AgendaSlotActions({
               onClick={onReagendar}
               disabled={disabled}
               title="Reagendar"
-              className="inline-flex items-center gap-1 rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-800 hover:bg-purple-100 disabled:opacity-50"
             >
               <Calendar className="h-3.5 w-3.5" />
               Reagendar
@@ -110,7 +105,7 @@ export default function AgendaSlotActions({
               type="button"
               onClick={onCancelar}
               disabled={disabled}
-              title="Cancelar"
+              title="Cancelar agendamento"
               className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
             >
               <XCircle className="h-3.5 w-3.5" />

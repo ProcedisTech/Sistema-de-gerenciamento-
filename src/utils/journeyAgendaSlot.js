@@ -28,7 +28,6 @@ export async function createJourneyAgendaSlotWithBackoff({
         horaInicio: `${hi}:00`,
         horaFim: `${hf}:00`,
         roleUserId,
-        tipo: 'atendimento',
         observacao,
       });
       return {

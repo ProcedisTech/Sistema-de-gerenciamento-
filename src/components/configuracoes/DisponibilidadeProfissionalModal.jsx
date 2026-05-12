@@ -3,7 +3,6 @@ import { X, Save, Loader2 } from 'lucide-react';
 import { disponibilidadeApi, getApiErrorToastMessage } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 import { HorarioIntervalosEditor } from './HorarioIntervalosEditor.jsx';
-import IndisponibilidadesProfissionalPanel from './IndisponibilidadesProfissionalPanel.jsx';
 
 export default function DisponibilidadeProfissionalModal({
   roleUserId,
@@ -14,7 +13,6 @@ export default function DisponibilidadeProfissionalModal({
   const [disp, setDisp] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState('fixos');
   const { success, error: toastError } = useToast();
 
   const carregar = useCallback(async () => {
@@ -60,7 +58,7 @@ export default function DisponibilidadeProfissionalModal({
             <h2 className="text-lg font-bold text-slate-900">Disponibilidade do profissional</h2>
             {nome ? <p className="text-sm text-slate-500">{nome}</p> : null}
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -73,52 +71,33 @@ export default function DisponibilidadeProfissionalModal({
 
         {!loading && disp ? (
           <>
-            <div className="mb-4 inline-flex rounded-lg bg-[#f1f5f9] p-1">
+            <p className="mb-4 text-sm text-slate-600">
+              Configure os intervalos fixos de atendimento da semana.
+            </p>
+            <HorarioIntervalosEditor
+              value={disp}
+              onChange={setDisp}
+              addButtonLabel="Adicionar intervalo"
+              emptyStateLabel="Nenhum horário fixo cadastrado."
+            />
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
               <button
                 type="button"
-                onClick={() => setTab('fixos')}
-                className={`rounded-md px-3 py-1.5 text-xs font-bold ${tab === 'fixos' ? 'bg-white text-[#0f172a]' : 'text-[#64748b]'}`}
+                onClick={onClose}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
-                Horários fixos
+                Fechar
               </button>
               <button
                 type="button"
-                onClick={() => setTab('excecoes')}
-                className={`rounded-md px-3 py-1.5 text-xs font-bold ${tab === 'excecoes' ? 'bg-white text-[#0f172a]' : 'text-[#64748b]'}`}
+                onClick={handleSalvar}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#00a88e] px-4 py-2 text-sm font-bold text-white hover:bg-[#008f78] disabled:opacity-50"
               >
-                Bloqueios e exceções
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Salvando...' : 'Salvar'}
               </button>
-            </div>
-            {tab === 'fixos' ? (
-              <HorarioIntervalosEditor
-                value={disp}
-                onChange={setDisp}
-                addButtonLabel="Adicionar intervalo"
-                emptyStateLabel="Nenhum horário fixo cadastrado."
-              />
-            ) : (
-              <IndisponibilidadesProfissionalPanel roleUserId={roleUserId} />
-            )}
-
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-              <div />
-
-              <div className="flex gap-2">
-                <button
-                  onClick={onClose}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                >
-                  Fechar
-                </button>
-                <button
-                  onClick={handleSalvar}
-                  disabled={saving || tab !== 'fixos'}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#00a88e] px-4 py-2 text-sm font-bold text-white hover:bg-[#008f78] disabled:opacity-50"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
             </div>
           </>
         ) : null}

@@ -52,7 +52,9 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   const addProcedimentoChip = (catalogoId, nome) => {
     const id = String(catalogoId || '').trim();
     if (!id) return;
-    const merged = [...selectedProcedimentos, id].filter((v, i, arr) => arr.indexOf(v) === i);
+    const merged = isEdit
+      ? [id]
+      : [...selectedProcedimentos, id].filter((v, i, arr) => arr.indexOf(v) === i);
     agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
     if (nome) agenda.updateForm('procedimentoNome', nome);
   };
@@ -126,7 +128,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           </FieldError>
 
           <FieldError error={agenda.formErrors.catalogoProcedimentoSaudeIds}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Procedimentos*</label>
+            <label className="text-[12px] font-bold text-[#1A1A2E]">{isEdit ? 'Procedimento*' : 'Procedimentos*'}</label>
             <div className="mt-1">
               <ProcedimentoAutocomplete
                 value={agenda.form.procedimentoNome || ''}
