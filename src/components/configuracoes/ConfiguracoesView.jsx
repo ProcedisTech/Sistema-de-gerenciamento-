@@ -131,7 +131,7 @@ export function ConfiguracoesView({
             (isAdmin || isProfissional) && ['perguntas', 'Perguntas'],
             (isAdmin || isProfissional) && ['fichas', 'Fichas'],
             (isAdmin || isProfissional) && ['perfil', 'Perfil'],
-            isAdmin && ['clinica', 'Clínica'],
+            (isAdmin || isProfissional) && ['clinica', 'Clínica'],
             isAdmin && ['usuarios-acessos', 'Usuários'],
             isAdmin && ['horarios-funcionamento', 'Horários'],
             isAdmin && ['agenda-feriados', 'Feriados'],
@@ -214,17 +214,14 @@ export function ConfiguracoesView({
                 active={configSection === 'perfil'}
                 onClick={() => setConfigSection('perfil')}
               />
+              <SidebarNavItem
+                icon={Building2}
+                label="Dados da Clínica"
+                active={configSection === 'clinica'}
+                onClick={() => setConfigSection('clinica')}
+              />
             </>
           )}
-          {isAdmin && (
-            <SidebarNavItem
-              icon={Building2}
-              label="Dados da Clínica"
-              active={configSection === 'clinica'}
-              onClick={() => setConfigSection('clinica')}
-            />
-          )}
-
           {isAdmin && (
             <>
               <NavGroupLabel>Agenda</NavGroupLabel>
@@ -287,7 +284,7 @@ export function ConfiguracoesView({
             />
           )}
 
-          {configSection === 'clinica' && isAdmin && (
+          {configSection === 'clinica' && (isAdmin || isProfissional) && (
             <DadosClinicaPanel
               getAuthHeaders={() => authHeadersForFetch({ needsOrg: true })}
               onClinicaAtualizada={onClinicaAtualizada}

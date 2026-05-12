@@ -1045,6 +1045,29 @@ export const termoAssinaturaApi = {
     }),
 };
 
+/** Normaliza corpo de GET /api/v1/organizacoes/minhas para lista. */
+export function normalizeMinhasOrganizacoesResponse(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object') {
+    const list = raw.content ?? raw.organizacoes ?? raw.data;
+    if (Array.isArray(list)) return list;
+  }
+  return [];
+}
+
+// ── Organizações (minhas / cadastro Onda 3) ────────────────────
+export const organizacaoApi = {
+  getMinhas: async () => {
+    const raw = await request('/api/v1/organizacoes/minhas');
+    return normalizeMinhasOrganizacoesResponse(raw);
+  },
+  atualizar: (id, patchDto) =>
+    request(`/api/v1/organizacoes/${encodeURIComponent(String(id))}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patchDto != null && typeof patchDto === 'object' ? patchDto : {}),
+    }),
+};
+
 // ── Configurações da Clínica ──────
 export const configuracoesClinicaApi = {
   /**
