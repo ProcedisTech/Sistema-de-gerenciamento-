@@ -1,11 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
-import { fetchAddressByCep, onlyDigitsCep } from '../../utils/cepUtils.js';
+import { fetchAddressByCepBackend, onlyDigitsCep } from '../../utils/cepUtils.js';
 
-/** @type {Map<string, { rua: string, bairro: string, cidade: string, estado: string } | null>} */
+/** @type {Map<string, { rua: string, bairro: string, cidade: string, estado: string, complemento?: string } | null>} */
 const cepSessionCache = new Map();
 
 /**
- * Busca CEP na BrasilAPI com cache em sessão, cancelamento por chamada e estado de UI.
+ * Busca CEP no backend (/api/viacep) com cache em sessão, cancelamento por chamada e estado de UI.
  *
  * `status`: `idle` | `loading` | `success` | `not_found` | `error`
  *
@@ -52,7 +52,7 @@ export function useCepLookup() {
     setLastResult(null);
 
     try {
-      const result = await fetchAddressByCep(cep8, { signal: ac.signal });
+      const result = await fetchAddressByCepBackend(cep8, { signal: ac.signal });
       cepSessionCache.set(cep8, result);
       if (myRequest !== requestIdRef.current) return { ok: false };
       setLastResult(result);
