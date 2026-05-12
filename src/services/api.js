@@ -823,7 +823,7 @@ export const agendasApi = {
 
 /** Motivos de cancelamento de agenda (Onda 4; UUID para PATCH /agendas/{id}/cancelar). */
 export const motivosCancelamentoApi = {
-  /** @returns {Promise<Array<{ id: string, codigo: string, nome: string, ordem?: number, ativo?: boolean }>>} */
+  /** @returns {Promise<Array<{ motivoCancelamentoId: string, codigo: string, nome: string, ordem: number }>>} */
   listar: () => request('/api/v1/motivos-cancelamento'),
 };
 

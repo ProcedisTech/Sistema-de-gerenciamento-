@@ -39,7 +39,7 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
     };
   }, []);
 
-  const selected = motivos.find((m) => String(m.id) === String(motivoId));
+  const selected = motivos.find((m) => String(m.motivoCancelamentoId) === String(motivoId));
   const exigeTexto = Boolean(selected?.codigo && String(selected.codigo).toLowerCase() === 'outro');
   const podeConfirmar = Boolean(motivoId) && (!exigeTexto || texto.trim().length > 0);
 
@@ -74,18 +74,18 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
           {!loading &&
             motivos.map((m) => (
               <label
-                key={m.id}
+                key={m.motivoCancelamentoId}
                 className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
               >
                 <input
                   type="radio"
                   name="motivo"
-                  value={m.id}
-                  checked={String(motivoId) === String(m.id)}
-                  onChange={() => setMotivoId(String(m.id))}
+                  value={m.motivoCancelamentoId}
+                  checked={motivoId === m.motivoCancelamentoId}
+                  onChange={() => setMotivoId(m.motivoCancelamentoId)}
                   className="h-4 w-4 text-emerald-600"
                 />
-                <span className="text-sm text-gray-900">{m.nome || m.codigo || m.id}</span>
+                <span className="text-sm text-gray-900">{m.nome || m.codigo || m.motivoCancelamentoId}</span>
               </label>
             ))}
         </div>
