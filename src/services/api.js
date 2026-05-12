@@ -1061,6 +1061,12 @@ export const organizacaoApi = {
     const raw = await request('/api/v1/organizacoes/minhas');
     return normalizeMinhasOrganizacoesResponse(raw);
   },
+  criar: (dto) =>
+    request('/api/v1/organizacoes', {
+      method: 'POST',
+      needsOrg: false,
+      body: JSON.stringify(dto != null && typeof dto === 'object' ? dto : {}),
+    }),
   atualizar: (id, patchDto) =>
     request(`/api/v1/organizacoes/${encodeURIComponent(String(id))}`, {
       method: 'PATCH',
