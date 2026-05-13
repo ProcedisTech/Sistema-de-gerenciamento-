@@ -5,8 +5,8 @@ import {
   agendasApi,
   getPacienteCreateErrorFeedback,
   pacientesApi,
-  catalogosApi,
 } from '../../services/api';
+import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { mapAgendaDtoToAppointment, addMinutesToTime } from '../../utils/agendaMapping';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { mapBackendPatient } from '../../utils/patientMapping';
@@ -27,7 +27,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarMonthIndex, setCalendarMonthIndex] = useState(new Date().getMonth());
 
-  const [catalogosList, setCatalogosList] = useState([]);
+  const { options: catalogosList } = useProcedimentosOptions({ enabled: authEnabled });
 
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
   const [agendaModePatient, setAgendaModePatient] = useState('novo');
@@ -115,20 +115,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     fetchMonthAgendas();
   }, [authEnabled, fetchMonthAgendas]);
 
-  const loadModalCatalogs = useCallback(() => {
-    catalogosApi
-      .list()
-      .then((data) => {
-        if (Array.isArray(data)) setCatalogosList(data.filter((c) => c.ativo !== false));
-      })
-      .catch(() => setCatalogosList([]));
-  }, []);
-
-  useEffect(() => {
-    const handler = () => loadModalCatalogs();
-    window.addEventListener('catalogo:changed', handler);
-    return () => window.removeEventListener('catalogo:changed', handler);
-  }, [loadModalCatalogs]);
 
   const calendarCells = useMemo(
     () =>
@@ -236,7 +222,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     setAgendaNewPatientTelefoneCountry('BR');
     setAgendaNewPatientTelefoneNumero('');
     setAgendaNewPatientTelefoneTouched(false);
-    loadModalCatalogs();
   };
 
   const closeAgendaModal = () => {
@@ -269,9 +254,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
 
     const nomeCat =
       agendaCatalogoId &&
-      catalogosList.find(
-        (c) => String(c.id) === String(agendaCatalogoId) || String(c.catalogoProcedimentoId) === String(agendaCatalogoId)
-      )?.nomeProcedimento;
+      catalogosList.find((c) => String(c.id) === String(agendaCatalogoId))?.nomeProcedimento;
     const observacao = (agendaProcedure.trim() || nomeCat || 'Atendimento').slice(0, 500);
 
     setAgendaSaving(true);
@@ -349,7 +332,6 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     setCompromissoCatalogoId('');
     setCompromissoObservacao('');
     setCompromissoModalOpen(true);
-    loadModalCatalogs();
   };
 
   const closeCompromissoModal = () => {

@@ -18,11 +18,11 @@ import {
 } from 'lucide-react';
 import {
   authHeadersForFetch,
-  catalogosApi,
   termoAssinaturaApi,
   termosApi,
 } from '../../services/api';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
+import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 
@@ -921,7 +921,7 @@ export function Step4Procedimento({
   onProcedureAnnotatePhoto,
 }) {
   const uploadInputRef = React.useRef(null);
-  const [catalogoOptions, setCatalogoOptions] = React.useState([]);
+  const { options: catalogoOptions } = useProcedimentosOptions();
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState('antes');
@@ -956,28 +956,6 @@ export function Step4Procedimento({
     });
   }, [procedureCapturedPhotos]);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    catalogosApi
-      .list()
-      .then((raw) => {
-        if (cancelled) return;
-        const arr = Array.isArray(raw) ? raw : raw?.content || [];
-        const rows = (Array.isArray(arr) ? arr : [])
-          .map((c) => ({
-            id: String(c.catalogoProcedimentoId || c.catalogoProcedimentoSaudeId || c.id || '').trim(),
-            nomeProcedimento: String(c.nomeProcedimento || c.nome || '').trim(),
-          }))
-          .filter((c) => c.id && c.nomeProcedimento);
-        setCatalogoOptions(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setCatalogoOptions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));

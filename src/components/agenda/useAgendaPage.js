@@ -7,6 +7,7 @@ import {
   confirmacaoApi,
   disponibilidadeApi,
 } from '../../services/api';
+import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
@@ -185,7 +186,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [error, setError] = useState('');
   const [modalMode, setModalMode] = useState(null);
   const [editingAppointment, setEditingAppointment] = useState(null);
-  const [catalogRows, setCatalogRows] = useState([]);
+  const { options: procedimentosClinica } = useProcedimentosOptions({ enabled: authEnabled });
   const [form, setForm] = useState(() => defaultForm(todayIso, [], null));
   const [formErrors, setFormErrors] = useState({});
   const [daySheetOpen, setDaySheetOpen] = useState(false);
@@ -204,14 +205,13 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const procedimentoOptions = useMemo(
     () =>
-      (Array.isArray(catalogRows) ? catalogRows : [])
-        .filter((c) => c && c.ativo !== false)
+      (Array.isArray(procedimentosClinica) ? procedimentosClinica : [])
         .map((c) => ({
-          id: String(c.id || c.catalogoProcedimentoSaudeId || ''),
-          nome: c.nomeProcedimento || String(c.id || ''),
+          id: c.id,
+          nome: c.nomeProcedimento,
         }))
-        .filter((o) => o.id),
-    [catalogRows]
+        .filter((o) => o.id && o.nome),
+    [procedimentosClinica]
   );
 
   const patientOptions = useMemo(
@@ -219,35 +219,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [patients]
   );
 
-  const fetchCatalogRows = useCallback(() => {
-    if (!authEnabled) {
-      setCatalogRows([]);
-      return () => {};
-    }
-    let cancelled = false;
-    catalogosApi
-      .list()
-      .then((data) => {
-        if (cancelled) return;
-        setCatalogRows(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!cancelled) setCatalogRows([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authEnabled]);
-
-  useEffect(() => {
-    return fetchCatalogRows();
-  }, [fetchCatalogRows]);
-
-  useEffect(() => {
-    const handler = () => fetchCatalogRows();
-    window.addEventListener('catalogo:changed', handler);
-    return () => window.removeEventListener('catalogo:changed', handler);
-  }, [fetchCatalogRows]);
 
   useEffect(() => {
     if (!Array.isArray(appointments) || appointments.length === 0) return;

@@ -154,8 +154,8 @@ export function MarcarCompromissoModal({
             >
               <option value="">Selecione...</option>
               {(catalogosList || []).map((c) => (
-                <option key={c.id} value={c.catalogoProcedimentoId || c.id}>
-                  {c.nomeProcedimento || c.id}
+                <option key={c.id} value={c.id}>
+                  {c.nomeProcedimento}
                 </option>
               ))}
             </select>
