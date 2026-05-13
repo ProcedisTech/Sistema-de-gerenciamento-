@@ -22,8 +22,26 @@ export function useBancoProcedimentos() {
         catalogoApi.listar(),
         clinicaProcedimentoApi.listar(),
       ]);
-      setCatalogo(catalogoRes);
-      setVinculos(vinculosRes);
+
+      // Mapeia catálogo para ter 'nome' consistente (backend retorna nomeProcedimento)
+      const mappedCatalogo = catalogoRes.map(p => ({
+        id: p.id,
+        nome: p.nomeProcedimento || p.nome, // Fallback caso mude
+        tipoCodigo: p.tipoCodigo,
+        descricao: p.descricao
+      }));
+
+      // Mapeia vínculos desestruturando o objeto 'procedimento' aninhado
+      const mappedVinculos = vinculosRes.map(v => ({
+        id: v.id,
+        catalogoProcedimentoId: v.procedimento?.id,
+        nome: v.procedimento?.nomeProcedimento || v.procedimento?.nome,
+        tipoCodigo: v.procedimento?.tipoCodigo,
+        descricao: v.procedimento?.descricao
+      }));
+
+      setCatalogo(mappedCatalogo);
+      setVinculos(mappedVinculos);
     } catch (e) {
       setError(getApiErrorToastMessage(e, 'Erro ao carregar dados do banco de procedimentos.'));
     } finally {
@@ -53,8 +71,18 @@ export function useBancoProcedimentos() {
 
     try {
       const res = await clinicaProcedimentoApi.vincular(catalogoProcedimentoId);
-      // Substitui o mock pelo dado real retornado (que contém o ID real do vínculo)
-      setVinculos(prev => prev.map(v => v.id === mockVinculo.id ? res : v));
+      
+      // Mapeia o resultado real do backend
+      const mappedRes = {
+        id: res.id,
+        catalogoProcedimentoId: res.procedimento?.id,
+        nome: res.procedimento?.nomeProcedimento || res.procedimento?.nome,
+        tipoCodigo: res.procedimento?.tipoCodigo,
+        descricao: res.procedimento?.descricao
+      };
+
+      // Substitui o mock pelo dado real retornado
+      setVinculos(prev => prev.map(v => v.id === mockVinculo.id ? mappedRes : v));
       toast.success('Procedimento vinculado com sucesso.');
     } catch (e) {
       // Rollback em caso de erro
