@@ -684,6 +684,23 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
       .map((id) => String(id).trim())
       .filter(Boolean);
+
+    try {
+      for (let i = 0; i < procIds.length; i++) {
+        const id = procIds[i];
+        if (id.startsWith('new:')) {
+          const nome = id.substring(4);
+          const novoProcedimento = await catalogosApi.criar({ nomeProcedimento: nome });
+          const novoId = String(novoProcedimento.catalogoProcedimentoId || novoProcedimento.id || '').trim();
+          procIds[i] = novoId;
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao cadastrar procedimento no catálogo:', err);
+      setError('Erro ao cadastrar novo procedimento no catálogo.');
+      return false;
+    }
+
     try {
       if (modalMode === 'edit' && editingAppointment?.agendaId) {
         const rawSlot = editingAppointment.rawSlot || {};

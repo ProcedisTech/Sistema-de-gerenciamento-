@@ -51,6 +51,14 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
   const addProcedimentoChip = (catalogoId, nome) => {
     const id = String(catalogoId || '').trim();
+    if (!id && nome) {
+      const newId = `new:${nome}`;
+      const merged = isEdit
+        ? [newId]
+        : [...selectedProcedimentos, newId].filter((v, i, arr) => arr.indexOf(v) === i);
+      agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
+      return;
+    }
     if (!id) return;
     const merged = isEdit
       ? [id]
@@ -68,7 +76,9 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   };
 
   const procedimentoChipLabel = (id) =>
-    agenda.procedimentoOptions.find((o) => String(o.id) === String(id))?.nome || id;
+    id.startsWith('new:')
+      ? id.substring(4) + ' (Novo)'
+      : agenda.procedimentoOptions.find((o) => String(o.id) === String(id))?.nome || id;
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">

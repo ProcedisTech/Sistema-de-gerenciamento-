@@ -966,6 +966,12 @@ export default function App() {
         ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
         : null;
       let procedimentoFeitoIdParaVinculo = null;
+      const snapshotCatalogoId =
+        journeyState.nomeProcedimentoCatalogoId != null &&
+        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+          : null;
+
       if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
         const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const agendaIdValido =
@@ -977,6 +983,7 @@ export default function App() {
           roleUserId,
           observacao: String(journeyState.observacoesExecucao || '').trim() || null,
           agendaId: agendaIdValido,
+          catalogoProcedimentoSaudeId: snapshotCatalogoId,
         });
         const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
         if (pid != null && pid !== '') {
@@ -993,11 +1000,6 @@ export default function App() {
       }
 
       const snapshotNome = String(journeyState.nomeProcedimento || '').trim();
-      const snapshotCatalogoId =
-        journeyState.nomeProcedimentoCatalogoId != null &&
-        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
-          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
-          : null;
       const snapshotItens = Array.isArray(journeyState.orientacoesItens)
         ? journeyState.orientacoesItens.map((i) => ({ ...i }))
         : [];

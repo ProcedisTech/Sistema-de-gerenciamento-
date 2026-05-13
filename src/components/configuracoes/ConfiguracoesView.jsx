@@ -26,7 +26,7 @@ import { HorarioClinicaPanel } from './HorarioClinicaPanel';
 import { FeriadosPanel } from './FeriadosPanel';
 import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
 import { PacientesInativadosPanel } from './PacientesInativadosPanel';
-import { ProcedimentosManager } from './ProcedimentosManager';
+import { BancoProcedimentosPanel } from './BancoProcedimentosPanel';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
@@ -267,7 +267,7 @@ export function ConfiguracoesView({
 
         {/* Conteúdo */}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] px-3 py-4 sm:px-5 sm:py-6 md:px-6 md:py-8">
-          {configSection === 'procedimentos' && isAdmin && <ProcedimentosManager />}
+          {configSection === 'procedimentos' && isAdmin && <BancoProcedimentosPanel />}
 
           {configSection === 'termos' && <TermosManager {...termosManagerProps} />}
 
