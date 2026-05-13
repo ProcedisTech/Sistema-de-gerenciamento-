@@ -738,6 +738,24 @@ export const catalogosApi = {
   ativar: (id) => request(`/api/v1/catalogos/${id}/ativar`, { method: 'PATCH' }),
 };
 
+export const catalogoApi = {
+  listar: (tipoCodigo) => {
+    const qs = tipoCodigo ? `?tipoCodigo=${encodeURIComponent(tipoCodigo)}` : '';
+    return request(`/api/v1/catalogos/procedimentos${qs}`);
+  },
+};
+
+export const clinicaProcedimentoApi = {
+  listar: () => request('/api/v1/clinica/procedimentos'),
+  vincular: (catalogoProcedimentoId) =>
+    request('/api/v1/clinica/procedimentos', {
+      method: 'POST',
+      body: JSON.stringify({ catalogoProcedimentoId }),
+    }),
+  desvincular: (vinculoId) =>
+    request(`/api/v1/clinica/procedimentos/${vinculoId}`, { method: 'DELETE' }),
+};
+
 /**
  * Orientações pós-procedimento + template por nome (contrato alinhar com `plataforma-procedimentos`).
  * Esperado: POST body `[{ descricao, checado, ordem }]`, GET template JSON com `itens` ou array,
