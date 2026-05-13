@@ -1,0 +1,68 @@
+import { useState, useEffect, useCallback } from 'react';
+import { clinicaProcedimentoApi } from '../services/api';
+
+/**
+ * Carrega os procedimentos vinculados à clínica ("Meus Procedimentos") e os
+ * normaliza para o formato esperado por ProcedimentoAutocomplete e selects.
+ *
+ * Retorna:
+ *   options  — { id: string (catalogoProcedimentoSaudeId), nomeProcedimento: string }[]
+ *   loading  — boolean
+ *   refetch  — () => void
+ */
+export function useProcedimentosOptions({ enabled = true } = {}) {
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchOptions = useCallback(() => {
+    if (!enabled) {
+      setOptions([]);
+      return () => {};
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    clinicaProcedimentoApi
+      .listar()
+      .then((data) => {
+        if (cancelled) return;
+        const arr = Array.isArray(data) ? data : [];
+        const normalized = arr
+          .map((v) => ({
+            id: String(v.id || v.catalogoProcedimentoSaudeId || '').trim(),
+            nomeProcedimento: String(
+              v.procedimento?.nomeProcedimento ||
+              v.procedimento?.nome ||
+              v.nomeProcedimento ||
+              v.nome ||
+              ''
+            ).trim(),
+          }))
+          .filter((o) => o.id && o.nomeProcedimento);
+        setOptions(normalized);
+      })
+      .catch(() => {
+        if (!cancelled) setOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  useEffect(() => {
+    return fetchOptions();
+  }, [fetchOptions]);
+
+  useEffect(() => {
+    const handler = () => fetchOptions();
+    window.addEventListener('catalogo:changed', handler);
+    return () => window.removeEventListener('catalogo:changed', handler);
+  }, [fetchOptions]);
+
+  return { options, loading, refetch: fetchOptions };
+}
