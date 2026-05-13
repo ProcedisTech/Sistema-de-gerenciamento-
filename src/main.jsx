@@ -24,6 +24,11 @@ function renderFatalBootError(error) {
 }
 
 window.addEventListener('error', (event) => {
+  const message = event?.message || event?.error?.message || '';
+  if (message.includes('ResizeObserver loop completed with undelivered notifications') || 
+      message.includes('ResizeObserver loop limit exceeded')) {
+    return; // Ignora erros benignos de ResizeObserver
+  }
   renderFatalBootError(event?.error || event?.message)
 })
 
