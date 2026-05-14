@@ -989,7 +989,12 @@ export function Step4Procedimento({
           </label>
           <ProcedimentoAutocomplete
             value={nomeProcedimento}
-            onChange={(nome, catalogoId) => {
+            onInputChange={(nome) => {
+              setNomeProcedimento(nome);
+              setNomeProcedimentoCatalogoId(null);
+              setStep4Errors((prev) => ({ ...prev, nomeProcedimento: false }));
+            }}
+            onCommit={(nome, catalogoId) => {
               setNomeProcedimento(nome);
               setNomeProcedimentoCatalogoId(catalogoId);
               setStep4Errors((prev) => ({ ...prev, nomeProcedimento: false }));
