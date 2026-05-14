@@ -138,7 +138,9 @@ export function mapBackendPatient(dto) {
     sexo: (dto.sexo || '').toLowerCase(),
     estadoCivil: dto.estadoCivilNome || '',
     estadoCivilId: dto.estadoCivilId || '',
-    profissao: dto.profissao || '',
+    profissaoId: dto.profissaoId ?? dto.profissao_id ?? null,
+    profissaoNome: dto.profissaoNome ?? dto.profissao_nome ?? null,
+    profissaoCategoria: dto.profissaoCategoria ?? dto.profissao_categoria ?? null,
     alergias: '',
     cpf: dto.cpf || '',
     rg: dto.rg || '',
@@ -188,7 +190,7 @@ export function journeyToPacienteCreateDTO(j) {
     rg: String(j.rg || '').replace(/\D/g, '') || null,
     telefone: (j.telefone || '').trim() || null,
     email: (j.email || '').trim() || null,
-    profissao: (j.profissao || '').trim() || null,
+    profissaoId: String(j.profissaoId ?? '').trim() || null,
     sexo: normalizeSexoForApi(j.sexo),
     estadoCivilId: j.estadoCivilId || undefined,
     cep: null,
@@ -211,7 +213,12 @@ export function patientToPacienteUpdateDTO(patient, editing) {
     rg: String(patient.rg || '').replace(/\D/g, '') || null,
     telefone: (editing?.telefone ?? patient.telefone ?? '').trim() || null,
     email: (editing?.email ?? patient.email ?? '').trim() || null,
-    profissao: (editing?.profissao ?? patient.profissao ?? '').trim() || null,
+    profissaoId:
+      editing?.profissaoId !== undefined
+        ? String(editing.profissaoId ?? '').trim() || null
+        : (patient.profissaoId != null && String(patient.profissaoId).trim() !== ''
+            ? String(patient.profissaoId).trim()
+            : null),
     sexo: normalizeSexoForApi(editing?.sexo ?? patient.sexo),
     instagram: patient.instagram || null,
     tiktok: patient.tiktok || null,
@@ -247,7 +254,10 @@ export function mergePacienteDtoWithEditing(dto, editing) {
     tiktok: (editing?.tiktok ?? dto.tiktok ?? '').trim() || null,
     nomeMae: (editing?.nomeMae ?? dto.nomeMae ?? '').trim() || null,
     nomePai: (editing?.nomePai ?? dto.nomePai ?? '').trim() || null,
-    profissao: (editing?.profissao ?? dto.profissao ?? '').trim() || null,
+    profissaoId:
+      editing?.profissaoId !== undefined
+        ? String(editing.profissaoId ?? '').trim() || null
+        : (dto.profissaoId ?? dto.profissao_id ?? null),
     indicacao: (editing?.indicacao ?? dto.indicacao ?? '').trim() || null,
     cep: normalizeCepForApi(editing?.cep ?? dto.cep),
     enderecoRua: trimOrNull(

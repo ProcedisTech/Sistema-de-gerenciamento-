@@ -49,7 +49,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   const [idade, setIdade] = useState('');
   const [sexo, setSexo] = useState('');
   const [estadoCivilId, setEstadoCivilId] = useState('');
-  const [profissao, setProfissao] = useState('');
+  const [profissaoId, setProfissaoId] = useState(null);
   const [cpf, setCpf] = useState('');
   const [rg, setRg] = useState('');
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
@@ -137,7 +137,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       dataNascimentoIso: dataNascimento,
       sexo,
       estadoCivilId,
-      profissao,
+      profissaoId,
       cpf,
       telefoneCountryCode,
       telefoneNumero,
@@ -208,7 +208,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         tiktok: tiktok || null,
         nomeMae: nomeMae || null,
         nomePai: nomePai || null,
-        profissao: profissao || null,
+        profissaoId: profissaoId || null,
         indicacao: indicacao || null,
         cep: normalizeCepForApi(cep),
         enderecoRua: enderecoRua.trim() || null,
@@ -343,7 +343,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       idade={idade}
       sexo={sexo}
       estadoCivilId={estadoCivilId}
-      profissao={profissao}
+      profissaoId={profissaoId}
       genero={genero}
       cpf={cpf}
       rg={rg}
@@ -372,7 +372,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       onDataNascimentoDisplayChange={handleDataNascimentoChange}
       onSexoChange={setSexo}
       onEstadoCivilChange={setEstadoCivilId}
-      onProfissaoChange={setProfissao}
+      onProfissaoIdChange={setProfissaoId}
       onGeneroChange={setGenero}
       onCpfChange={setCpf}
       onCpfBlur={handleCpfBlur}

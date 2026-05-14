@@ -956,6 +956,7 @@ export const dimensoesApi = {
   statusProcedimento: () => request('/api/v1/dimensoes/status-procedimento', { needsOrg: false }),
   statusAgenda: () => request('/api/v1/dimensoes/status-agenda', { needsOrg: false }),
   statusAnamnese: () => request('/api/v1/dimensoes/status-anamnese', { needsOrg: false }),
+  profissoes: () => request('/api/v1/dimensoes/profissoes', { needsOrg: false }),
 };
 
 // ── Anamnese ───────────────────────────────────────────────
