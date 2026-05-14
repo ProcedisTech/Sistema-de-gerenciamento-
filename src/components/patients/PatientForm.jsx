@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Save, Loader2, UserRound, Plus, AlertTriangle, Calendar, ChevronRight } from 'lucide-react';
 import {
   maskCPF,
@@ -8,10 +8,10 @@ import {
 } from '../utils/formatters';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUtils';
-import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
+import ProfissaoSelect from './ProfissaoSelect';
 
 const FieldReq = () => <span className="text-red-500">*</span>;
 
@@ -27,7 +27,7 @@ export function PatientForm({
   idade,
   sexo,
   estadoCivilId,
-  profissao,
+  profissaoId,
   genero,
   cpf,
   rg,
@@ -56,7 +56,7 @@ export function PatientForm({
   onDataNascimentoDisplayChange,
   onSexoChange,
   onEstadoCivilChange,
-  onProfissaoChange,
+  onProfissaoIdChange,
   onGeneroChange,
   onCpfChange,
   onCpfBlur,
@@ -92,9 +92,6 @@ export function PatientForm({
 }) {
   const isModalVariant = variant === 'modal' || variant === 'profile';
   const showBirthCalendarIcon = variant === 'modal';
-
-  const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
-  const [showProfissoes, setShowProfissoes] = useState(false);
 
   const cpfDisabled = mode === 'edit';
 
@@ -211,20 +208,6 @@ export function PatientForm({
     }
     return null;
   }, [birthDigitsForUi, dataNascimentoIso]);
-
-  const handleProfissaoChange = (value) => {
-    const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
-    onProfissaoChange(v);
-    clearError?.('profissao');
-    if (v.trim().length > 1) {
-      const filtradas = PROFISSOES.filter((p) => p.toLowerCase().includes(v.toLowerCase())).slice(0, 8);
-      setProfissoesFiltradas(filtradas);
-      setShowProfissoes(filtradas.length > 0);
-    } else {
-      setProfissoesFiltradas([]);
-      setShowProfissoes(false);
-    }
-  };
 
   const defaultSubmitLabel = mode === 'create' ? 'Cadastrar Paciente' : (submitLabel ?? 'Salvar Alterações');
 
@@ -428,42 +411,15 @@ export function PatientForm({
             <label className={labelCls('text-[#00a88e]')}>
               Profissão <FieldReq />
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={profissao}
-                maxLength={PACIENTE_FIELD_MAX.profissao}
-                onChange={(e) => handleProfissaoChange(e.target.value)}
-                onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
-                placeholder={isModalVariant ? 'Ex: Advogada, Empresário, Estudante…' : 'Digite sua profissão...'}
-                autoComplete="off"
-                className={inputClass('profissao')}
-              />
-              {showProfissoes ? (
-                <div
-                  className={
-                    isModalVariant
-                      ? 'absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg'
-                      : 'absolute z-50 mt-1 w-full overflow-hidden rounded-xl border-[2px] border-[#00a88e]/30 bg-white shadow-lg'
-                  }
-                >
-                  {profissoesFiltradas.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onMouseDown={() => {
-                        onProfissaoChange(p);
-                        setShowProfissoes(false);
-                        clearError?.('profissao');
-                      }}
-                      className="w-full px-4 py-2 text-left text-[13px] text-[#334155] transition-colors hover:bg-[#e6f7f5] hover:text-[#0f766e]"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <ProfissaoSelect
+              value={profissaoId ?? null}
+              onChange={(uuid) => {
+                onProfissaoIdChange(uuid);
+                clearError?.('profissao');
+              }}
+              error={Boolean(errors?.profissao)}
+              variant={isModalVariant ? 'modal' : 'default'}
+            />
           </div>
           <div className="md:col-span-2 space-y-1.5">
             <label className={labelCls('text-[#00a88e]')}>Gênero</label>

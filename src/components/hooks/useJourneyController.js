@@ -30,7 +30,7 @@ export function useJourneyController({
     setIdade,
     setSexo,
     setEstadoCivilId,
-    setProfissao,
+    setProfissaoId,
     setCpf,
     setRg,
     setTelefone,
@@ -77,7 +77,7 @@ export function useJourneyController({
         ? String(patient.estadoCivilId)
         : ''
     );
-    setProfissao(patient.profissao || '');
+    setProfissaoId(patient.profissaoId ?? null);
     setEndereco(patient.endereco || '');
     setCpf(patient.cpf || '');
     setRg(patient.rg || '');
@@ -188,7 +188,7 @@ export function useJourneyController({
     setNome('');
     setSexo('');
     setEstadoCivilId('');
-    setProfissao('');
+    setProfissaoId(null);
     setEndereco('');
     setStep1Errors({});
     setCpf('');

@@ -16,8 +16,8 @@ import {
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
 import { useToast } from '../../contexts/useToast.js';
-import { PROFISSOES } from '../../data/profissoes';
 import { ESTADOS_CIVIS } from '../../data/estadosCivis';
+import ProfissaoSelect from '../patients/ProfissaoSelect';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 
 export function Step1CheckIn({
@@ -32,7 +32,7 @@ export function Step1CheckIn({
   idade, setIdade,
   sexo, setSexo,
   estadoCivilId, setEstadoCivilId,
-  profissao, setProfissao,
+  profissaoId, setProfissaoId,
   endereco, setEndereco,
   cpf, setCpf,
   rg, setRg,
@@ -47,8 +47,6 @@ export function Step1CheckIn({
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
   const [telefoneDisplay, setTelefoneDisplay] = useState('');
   const [telefoneTouched, setTelefoneTouched] = useState(false);
-  const [profissoesFiltradas, setProfissoesFiltradas] = useState([]);
-  const [showProfissoes, setShowProfissoes] = useState(false);
   const [remotePatients, setRemotePatients] = useState([]);
 
   const normalizeBuscaDigits = (v) => String(v || '').replace(/\D/g, '').toLowerCase();
@@ -74,22 +72,6 @@ export function Step1CheckIn({
       window.clearTimeout(t);
     };
   }, [searchQuery]);
-
-  const handleProfissaoChange = (value) => {
-    const v = value.slice(0, PACIENTE_FIELD_MAX.profissao);
-    setProfissao(v);
-    setStep1Errors((prev) => ({ ...prev, profissao: false }));
-    if (v.trim().length > 1) {
-      const filtradas = PROFISSOES.filter((p) =>
-        p.toLowerCase().includes(v.toLowerCase())
-      ).slice(0, 8);
-      setProfissoesFiltradas(filtradas);
-      setShowProfissoes(filtradas.length > 0);
-    } else {
-      setProfissoesFiltradas([]);
-      setShowProfissoes(false);
-    }
-  };
 
   const handleBuscaChange = (value) => {
     if (tipoBusca === 'cpf') {
@@ -203,7 +185,7 @@ export function Step1CheckIn({
             setIdade('');
             setSexo('');
             setEstadoCivilId('');
-            setProfissao('');
+            setProfissaoId(null);
             setEndereco('');
             setCpf('');
             setRg('');
@@ -400,36 +382,15 @@ export function Step1CheckIn({
               </div>
               <div className="md:col-span-2 space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Profissão <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={profissao}
-                    maxLength={PACIENTE_FIELD_MAX.profissao}
-                    onChange={(e) => handleProfissaoChange(e.target.value)}
-                    onBlur={() => setTimeout(() => setShowProfissoes(false), 150)}
-                    placeholder="Digite sua profissão..."
-                    autoComplete="off"
-                    className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all ${step1Errors.profissao ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
-                  />
-                  {showProfissoes ? (
-                    <div className="absolute z-50 w-full bg-white border-[2px] border-[#00a88e]/30 rounded-xl shadow-lg mt-1 overflow-hidden">
-                      {profissoesFiltradas.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onMouseDown={() => {
-                            setProfissao(p);
-                            setShowProfissoes(false);
-                            setStep1Errors((prev) => ({ ...prev, profissao: false }));
-                          }}
-                          className="w-full text-left px-4 py-2 text-[13px] text-[#334155] hover:bg-[#e6f7f5] hover:text-[#0f766e] transition-colors"
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+                <ProfissaoSelect
+                  value={profissaoId}
+                  onChange={(uuid) => {
+                    setProfissaoId(uuid);
+                    setStep1Errors((prev) => ({ ...prev, profissao: false }));
+                  }}
+                  error={Boolean(step1Errors.profissao)}
+                  variant="default"
+                />
               </div>
             </div>
           </div>

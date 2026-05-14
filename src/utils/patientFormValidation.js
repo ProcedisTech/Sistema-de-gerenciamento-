@@ -7,6 +7,7 @@ import { isPhoneValid } from './phoneUtils';
 
 /**
  * Campos esperados em `v` (valor cru do formulário, antes do payload da API).
+ * Inclui `profissaoId` (UUID) para profissão obrigatória.
  * @param {object} opts
  * @param {boolean} [opts.skipCpf] — true em modo edição (CPF só leitura e já válido).
  * @returns {Record<string, boolean>}
@@ -17,7 +18,7 @@ export function validatePacienteFormBasics(v, opts = {}) {
   if (!String(v.dataNascimentoIso ?? '').trim()) e.dataNascimento = true;
   if (!String(v.sexo ?? '').trim()) e.sexo = true;
   if (!String(v.estadoCivilId ?? '').trim()) e.estadoCivil = true;
-  if (!String(v.profissao ?? '').trim()) e.profissao = true;
+  if (!v.profissaoId) e.profissao = true;
 
   if (!opts.skipCpf) {
     const cpfDigits = normalizeCpf(String(v.cpf ?? ''));

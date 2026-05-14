@@ -1000,7 +1000,7 @@ export function PatientProfileView({
       telefoneCountryCode: countryCode,
       telefoneNumero: formatPhoneAsYouType(countryCode, nationalNumber),
       telefoneTouched: false,
-      profissao: patient.profissao || '',
+      profissaoId: patient.profissaoId ?? null,
       nomePai: patient.nomePai || '',
       nomeMae: patient.nomeMae || '',
       cep: patient.cep || '',
@@ -1673,7 +1673,7 @@ export function PatientProfileView({
       dataNascimentoIso: editing.dataNascimentoIso,
       sexo: editing.sexo,
       estadoCivilId: editing.estadoCivilId,
-      profissao: editing.profissao,
+      profissaoId: editing.profissaoId,
       cpf: editing.cpfDisplay,
       telefoneCountryCode: editing.telefoneCountryCode,
       telefoneNumero: editing.telefoneNumero,
@@ -1708,7 +1708,7 @@ export function PatientProfileView({
         nome: editing.nome || '',
         email: editing.email || '',
         telefone: formatPhoneForApi(editing.telefoneCountryCode ?? 'BR', editing.telefoneNumero ?? '') || '',
-        profissao: editing.profissao || '',
+        profissaoId: editing.profissaoId ?? null,
         nomePai: editing.nomePai || '',
         nomeMae: editing.nomeMae || '',
         cep: editing.cep || '',
@@ -2099,7 +2099,7 @@ export function PatientProfileView({
                   idade={editing.idade}
                   sexo={editing.sexo}
                   estadoCivilId={editing.estadoCivilId}
-                  profissao={editing.profissao}
+                  profissaoId={editing.profissaoId}
                   genero={editing.genero}
                   cpf={editing.cpfDisplay}
                   rg={editing.rg}
@@ -2128,7 +2128,7 @@ export function PatientProfileView({
                   onDataNascimentoDisplayChange={handleEditingBirthDisplayChange}
                   onSexoChange={(value) => setEditing((p) => (p ? { ...p, sexo: value } : p))}
                   onEstadoCivilChange={(value) => setEditing((p) => (p ? { ...p, estadoCivilId: value } : p))}
-                  onProfissaoChange={(value) => setEditing((p) => (p ? { ...p, profissao: value } : p))}
+                  onProfissaoIdChange={(value) => setEditing((p) => (p ? { ...p, profissaoId: value } : p))}
                   onGeneroChange={(value) => setEditing((p) => (p ? { ...p, genero: value } : p))}
                   onCpfChange={() => {}}
                   onCpfBlur={undefined}
