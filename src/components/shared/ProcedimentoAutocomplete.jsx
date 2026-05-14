@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, AlertTriangle, X } from 'lucide-react';
 import { filterCatalogos } from '../../utils/fuzzyMatch.js';
 
+const CREATE_ROW_DEBOUNCE_MS = 300;
+
 function exactCatalogHit(trimmedLower, catalogoOptions) {
   const t = String(trimmedLower || '').trim().toLowerCase();
   if (!t) return false;
@@ -14,7 +16,8 @@ function exactCatalogHit(trimmedLower, catalogoOptions) {
  * Autocomplete de procedimento com fuzzy match no catálogo.
  * @param {{
  *   value: string,
- *   onChange: (nome: string, catalogoId: string | null) => void,
+ *   onInputChange: (nome: string) => void,
+ *   onCommit: (nome: string, catalogoId: string | null) => void,
  *   placeholder?: string,
  *   catalogoOptions: { id: string, nomeProcedimento: string }[],
  *   error?: boolean,
@@ -23,7 +26,8 @@ function exactCatalogHit(trimmedLower, catalogoOptions) {
  */
 export function ProcedimentoAutocomplete({
   value,
-  onChange,
+  onInputChange,
+  onCommit,
   placeholder = '',
   catalogoOptions = [],
   error = false,
@@ -38,6 +42,8 @@ export function ProcedimentoAutocomplete({
   const [lockedCatalog, setLockedCatalog] = useState(null);
   const lockedCatalogRef = useRef(null);
 
+  const [debouncedCreateTerm, setDebouncedCreateTerm] = useState('');
+
   const containerRef = useRef(null);
   const inputRef = useRef(null);
   const listRef = useRef(null);
@@ -50,6 +56,12 @@ export function ProcedimentoAutocomplete({
     const rect = el.getBoundingClientRect();
     setDropdownDirection(rect.bottom + 300 > window.innerHeight ? 'up' : 'down');
   }, []);
+
+  useEffect(() => {
+    const t = String(draft || '').trim();
+    const id = window.setTimeout(() => setDebouncedCreateTerm(t), CREATE_ROW_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [draft]);
 
   useEffect(() => {
     const v = String(value ?? '');
@@ -72,9 +84,17 @@ export function ProcedimentoAutocomplete({
   );
 
   const draftTrim = String(draft || '').trim();
-  const showCreateRow = Boolean(draftTrim);
+  const showCreateRow =
+    Boolean(debouncedCreateTerm) && !exactCatalogHit(debouncedCreateTerm, catalogoOptions);
   const totalListItems = filtered.length + (showCreateRow ? 1 : 0);
   const showCatalogDropdown = filtered.length > 0;
+
+  useEffect(() => {
+    setHighlightIndex((i) => {
+      if (totalListItems <= 0) return 0;
+      return Math.min(i, totalListItems - 1);
+    });
+  }, [totalListItems]);
 
   const closeList = useCallback(() => {
     setOpen(false);
@@ -86,32 +106,33 @@ export function ProcedimentoAutocomplete({
       const pick = { id: row.id, nome: row.nomeProcedimento };
       lockedCatalogRef.current = pick;
       setLockedCatalog(pick);
-      onChange(row.nomeProcedimento, row.id);
+      onCommit(row.nomeProcedimento, row.id);
       setDraft(row.nomeProcedimento);
       setShowCommitBadges(true);
       closeList();
       inputRef.current?.blur();
     },
-    [onChange, closeList],
+    [onCommit, closeList],
   );
 
   const selectCreateRow = useCallback(() => {
     const nome = String(draft || '').trim();
     lockedCatalogRef.current = null;
     setLockedCatalog(null);
-    onChange(nome, null);
+    onCommit(nome, null);
     setShowCommitBadges(true);
     closeList();
-  }, [draft, onChange, closeList]);
+  }, [draft, onCommit, closeList]);
 
   const clearAll = useCallback(() => {
     lockedCatalogRef.current = null;
     setLockedCatalog(null);
     setDraft('');
     setShowCommitBadges(false);
-    onChange('', null);
+    onInputChange('');
+    onCommit('', null);
     closeList();
-  }, [onChange, closeList]);
+  }, [onInputChange, onCommit, closeList]);
 
   const applyBlurCommit = useCallback(() => {
     const nome = String(draft || '').trim();
@@ -123,14 +144,14 @@ export function ProcedimentoAutocomplete({
     }
     const lock = lockedCatalogRef.current;
     if (lock && nome === String(lock.nome || '').trim()) {
-      onChange(nome, lock.id);
+      onCommit(nome, lock.id);
     } else {
       lockedCatalogRef.current = null;
       setLockedCatalog(null);
-      onChange(nome, null);
+      onInputChange(nome);
     }
     setTimeout(() => setOpen(false), 0);
-  }, [draft, onChange]);
+  }, [draft, onInputChange, onCommit]);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -209,7 +230,7 @@ export function ProcedimentoAutocomplete({
             lockedCatalogRef.current = null;
             setLockedCatalog(null);
             setShowCommitBadges(false);
-            onChange(next, null);
+            onInputChange(next);
             setOpen(true);
             setHighlightIndex(0);
             requestAnimationFrame(() => updateDropdownDirection());
@@ -298,7 +319,7 @@ export function ProcedimentoAutocomplete({
                   }}
                   onClick={selectCreateRow}
                 >
-                  + Cadastrar &quot;{String(draft).trim()}&quot; como novo
+                  + Cadastrar &quot;{debouncedCreateTerm}&quot; como novo
                 </button>
               </li>
             ) : null}

@@ -142,7 +142,8 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             <div className="mt-1">
               <ProcedimentoAutocomplete
                 value={agenda.form.procedimentoNome || ''}
-                onChange={(nome, catalogoId) => {
+                onInputChange={(nome) => agenda.updateForm('procedimentoNome', nome)}
+                onCommit={(nome, catalogoId) => {
                   agenda.updateForm('procedimentoNome', nome);
                   addProcedimentoChip(catalogoId, nome);
                 }}
