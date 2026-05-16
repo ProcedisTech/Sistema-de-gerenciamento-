@@ -25,9 +25,11 @@ import { useToast } from '../contexts/useToast.js';
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { authHeadersForFetch } from '../services/api.js';
 import {
+  agendasApi,
   anamneseApi,
   catalogosApi,
   getApiErrorDetail,
+  getApiErrorToastMessage,
   orientacoesApi,
   pacientesGaleriaApi,
   perfilApi,
@@ -46,6 +48,7 @@ import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
 import ReagendarAgendaModal from './agenda/ReagendarAgendaModal.jsx';
+import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
@@ -68,6 +71,16 @@ import {
 
 // Utilitarios
 import { getPatientInitials } from './utils';
+import { toDateKey } from '../utils/agendaDateUtils';
+import {
+  MARGEM_TECNICA_MIN,
+  parseSlotLocalDateTime,
+  diffScheduledMinusNowMinutes,
+  formatClockHHMM,
+  formatAntecedenciaText,
+  formatAtrasoText,
+  formatNowHHMM,
+} from '../utils/agendaStartTolerance.js';
 
 function normalizeTermosList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -286,6 +299,8 @@ export default function App() {
   const [scheduleCancelRow, setScheduleCancelRow] = React.useState(null);
   const [scheduleReagendarRow, setScheduleReagendarRow] = React.useState(null);
   const [scheduleCancelSubmitting, setScheduleCancelSubmitting] = React.useState(false);
+  const [iniciarTolModal, setIniciarTolModal] = React.useState(null);
+  const [iniciarTolAdiantarSubmitting, setIniciarTolAdiantarSubmitting] = React.useState(false);
 
   const handleScheduleExcluirFromEdit = React.useCallback(() => {
     const row = agendaSchedule.editingAppointment;
@@ -676,6 +691,108 @@ export default function App() {
     setCurrentStep(options.initialStep ?? 1);
     setActiveView('jornada');
     setPatientView('list');
+  };
+
+  const closeIniciarTolModal = React.useCallback(() => {
+    setIniciarTolModal(null);
+    setIniciarTolAdiantarSubmitting(false);
+  }, []);
+
+  const handleAgendaStartAttendance = (patient, options = {}) => {
+    if (!patient) return;
+    const opt = options || {};
+    const agendaId = opt.agendaId;
+    const fromSlot = opt.fromAgendaSlot === true;
+    const dataRaw = opt.data;
+    const horaRaw = opt.horaInicio;
+
+    const proceedDirect = () => {
+      handleStartAttendance(patient, opt);
+    };
+
+    if (
+      !fromSlot ||
+      !agendaId ||
+      dataRaw == null ||
+      String(dataRaw).trim() === '' ||
+      horaRaw == null ||
+      String(horaRaw).trim() === ''
+    ) {
+      proceedDirect();
+      return;
+    }
+
+    if (toDateKey(dataRaw) !== toDateKey(agendaSchedule.todayIso)) {
+      proceedDirect();
+      return;
+    }
+
+    const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw);
+    if (!scheduledAt) {
+      toast.error('Horário do agendamento inválido.');
+      return;
+    }
+
+    const diffMin = diffScheduledMinusNowMinutes(scheduledAt);
+    if (Math.abs(diffMin) <= MARGEM_TECNICA_MIN) {
+      proceedDirect();
+      return;
+    }
+
+    const scheduledTimeLabel = formatClockHHMM(scheduledAt);
+    const now = new Date();
+    const nowTimeLabel = formatClockHHMM(now);
+
+    if (diffMin > MARGEM_TECNICA_MIN) {
+      setIniciarTolModal({
+        variant: 'early',
+        patient,
+        options: opt,
+        scheduledTimeLabel,
+        nowTimeLabel,
+        antecedenciaTexto: formatAntecedenciaText(diffMin),
+      });
+      return;
+    }
+
+    setIniciarTolModal({
+      variant: 'late',
+      patient,
+      options: opt,
+      scheduledTimeLabel,
+      nowTimeLabel,
+      atrasoTexto: formatAtrasoText(-diffMin),
+    });
+  };
+
+  const handleIniciarTolAdvanceNow = async () => {
+    const m = iniciarTolModal;
+    if (!m || m.variant !== 'early' || !m.options?.agendaId) return;
+    setIniciarTolAdiantarSubmitting(true);
+    try {
+      await agendasApi.adiantar(m.options.agendaId, formatNowHHMM());
+      await agendaSchedule.refreshDashboard();
+      closeIniciarTolModal();
+      handleStartAttendance(m.patient, m.options);
+    } catch (e) {
+      const status = e?.status;
+      if (status === 409) {
+        setIniciarTolModal((prev) =>
+          prev ? { ...prev, variant: 'conflict', detailMessage: getApiErrorDetail(e) } : null,
+        );
+      } else if (status === 404) {
+        toast.error(getApiErrorToastMessage(e, 'Agendamento não encontrado.'));
+        closeIniciarTolModal();
+      } else if (status === 400) {
+        toast.error(getApiErrorToastMessage(e, 'Não foi possível validar o horário.'));
+        closeIniciarTolModal();
+      } else {
+        toast.error(getApiErrorToastMessage(e, 'Não foi possível adiantar o horário.'));
+        closeIniciarTolModal();
+      }
+    } finally {
+      setIniciarTolAdiantarSubmitting(false);
+    }
   };
 
   const onCancelJourney = React.useCallback(() => {
@@ -1786,7 +1903,7 @@ export default function App() {
                 agenda={agendaSchedule}
                 patients={patients}
                 authEnabled={authSessionReady}
-                onStartAttendance={handleStartAttendance}
+                onStartAttendance={handleAgendaStartAttendance}
                 onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
                 onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
               />
@@ -1893,6 +2010,38 @@ export default function App() {
               onClose={() => setScheduleReagendarRow(null)}
               onConfirm={handleScheduleConfirmReagendar}
               isSubmitting={agendaSchedule.submittingReagendar}
+            />
+          ) : null}
+          {iniciarTolModal ? (
+            <IniciarAtendimentoToleranciaModal
+              variant={iniciarTolModal.variant}
+              scheduledTimeLabel={iniciarTolModal.scheduledTimeLabel}
+              nowTimeLabel={iniciarTolModal.nowTimeLabel}
+              antecedenciaTexto={iniciarTolModal.antecedenciaTexto}
+              atrasoTexto={iniciarTolModal.atrasoTexto}
+              detailMessage={iniciarTolModal.detailMessage}
+              adiantarSubmitting={iniciarTolAdiantarSubmitting}
+              onCancel={closeIniciarTolModal}
+              onKeepSchedule={() => {
+                const snap = iniciarTolModal;
+                if (!snap || snap.variant !== 'early') return;
+                closeIniciarTolModal();
+                handleStartAttendance(snap.patient, snap.options);
+              }}
+              onAdvanceNow={handleIniciarTolAdvanceNow}
+              onStartAnyway={() => {
+                const snap = iniciarTolModal;
+                if (!snap || snap.variant !== 'late') return;
+                closeIniciarTolModal();
+                handleStartAttendance(snap.patient, snap.options);
+              }}
+              onBack={() =>
+                setIniciarTolModal((prev) =>
+                  prev && prev.variant === 'conflict'
+                    ? { ...prev, variant: 'early', detailMessage: undefined }
+                    : prev,
+                )
+              }
             />
           ) : null}
         </>
