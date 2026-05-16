@@ -22,7 +22,9 @@ export function PatientAvatar({
       ) : src ? (
         <img src={src} alt="" className="w-full h-full object-cover" />
       ) : (
-        <span className={`w-full h-full flex items-center justify-center bg-[#00a88e] ${initialsClassName}`}>
+        <span
+          className={`flex h-full w-full items-center justify-center bg-[#00a88e] text-white ${initialsClassName}`}
+        >
           {getPatientInitials(patient?.nome)}
         </span>
       )}
