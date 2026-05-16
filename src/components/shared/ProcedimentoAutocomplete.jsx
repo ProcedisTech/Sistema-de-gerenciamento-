@@ -22,6 +22,7 @@ function exactCatalogHit(trimmedLower, catalogoOptions) {
  *   catalogoOptions: { id: string, nomeProcedimento: string }[],
  *   error?: boolean,
  *   disabled?: boolean,
+ *   showCatalogCommitBadge?: boolean — quando false, não exibe o banner verde "Do catálogo" após commit (default true).
  * }} props
  */
 export function ProcedimentoAutocomplete({
@@ -32,6 +33,7 @@ export function ProcedimentoAutocomplete({
   catalogoOptions = [],
   error = false,
   disabled = false,
+  showCatalogCommitBadge = true,
 }) {
   const [draft, setDraft] = useState(String(value ?? ''));
   const [open, setOpen] = useState(false);
@@ -327,7 +329,7 @@ export function ProcedimentoAutocomplete({
         ) : null}
       </div>
 
-      {greenBadge ? (
+      {showCatalogCommitBadge && greenBadge ? (
         <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-[12px] font-semibold text-green-800">
           <Check className="h-4 w-4 shrink-0 text-green-600" strokeWidth={2.5} aria-hidden />
           Do catálogo
