@@ -837,6 +837,17 @@ export const agendasApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  /**
+   * Adianta início do slot para nova hora no mesmo dia (PATCH).
+   * @param {string} id UUID da agenda
+   * @param {string} novaHoraInicio HH:MM (local)
+   */
+  adiantar: (id, novaHoraInicio) =>
+    request(
+      `/api/v1/agendas/${encodeURIComponent(String(id))}/adiantar?novaHoraInicio=${encodeURIComponent(String(novaHoraInicio || '').trim())}`,
+      { method: 'PATCH' },
+    ),
 };
 
 /** Motivos de cancelamento de agenda (Onda 4; UUID para PATCH /agendas/{id}/cancelar). */

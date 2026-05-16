@@ -510,6 +510,9 @@ export function AgendaDashboard({
         procedimentoNome: appointment.procedimentoNome,
         agendaId: appointment.agendaId,
         catalogoProcedimentoSaudeId: appointment.catalogoProcedimentoSaudeId || '',
+        data: appointment.data,
+        horaInicio: appointment.horaInicio,
+        fromAgendaSlot: true,
       });
       return;
     }
