@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
+import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
 
 const SLOT_HEIGHT = 48;
@@ -200,6 +201,7 @@ function DayColumn({
   appointments,
   todayIso,
   onEdit,
+  onClickEmptySlot,
   renderSlotActions,
   disponibilidades,
 }) {
@@ -222,6 +224,22 @@ function DayColumn({
           style={{ height: SLOT_HEIGHT, borderBottomWidth: 0.5 }}
         />
       ))}
+      {typeof onClickEmptySlot === 'function' ? (
+        <div className="pointer-events-none absolute inset-0 z-[2]">
+          {slots.map((m, i) =>
+            isSlotOccupied(appointments, m, SLOT_MIN) ? null : (
+              <button
+                key={m}
+                type="button"
+                className="pointer-events-auto absolute left-0 right-0 cursor-pointer border-0 bg-transparent outline-none hover:bg-black/[0.04] focus-visible:bg-black/[0.06] focus-visible:ring-2 focus-visible:ring-[#0FA37F]/40"
+                style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}
+                aria-label={`Novo agendamento às ${formatSlotLabel(m)}`}
+                onClick={() => onClickEmptySlot(iso, formatSlotLabel(m))}
+              />
+            )
+          )}
+        </div>
+      ) : null}
       {showNow ? (
         <div
           className="pointer-events-none absolute left-0 right-0 z-[5]"
@@ -302,6 +320,7 @@ export function WeekTimeGrid({
   appointments,
   todayIso,
   onEdit,
+  onClickEmptySlot,
   renderSlotActions,
   disponibilidades,
 }) {
@@ -384,6 +403,7 @@ export function WeekTimeGrid({
             appointments={byDay[iso] || []}
             todayIso={todayIso}
             onEdit={onEdit}
+            onClickEmptySlot={onClickEmptySlot}
             renderSlotActions={renderSlotActions}
             disponibilidades={disponibilidades}
           />

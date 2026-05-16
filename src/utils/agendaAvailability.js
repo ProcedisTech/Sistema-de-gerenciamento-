@@ -32,6 +32,24 @@ export function intervalsOverlap(aStart, aEnd, bStart, bEnd) {
 }
 
 /**
+ * Um slot de agenda (ex.: grade semanal 30 min) está ocupado se intersecta
+ * [horaInicio, horaInicio + duracaoMin) de algum item cujo status !== 'cancelado'.
+ * @param {Array} dayAppointments linhas do dashboard (status, horaInicio, duracaoMin)
+ * @param {number} slotStartMin minuto do dia no início do slot
+ * @param {number} [slotDurationMin=30]
+ */
+export function isSlotOccupied(dayAppointments, slotStartMin, slotDurationMin = 30) {
+  const slotEnd = slotStartMin + slotDurationMin;
+  for (const appt of dayAppointments || []) {
+    if (appt?.status === 'cancelado') continue;
+    const start = parseHhmmToMinutes(appt?.horaInicio);
+    const dur = Number(appt?.duracaoMin) || 45;
+    if (intervalsOverlap(slotStartMin, slotEnd, start, start + dur)) return true;
+  }
+  return false;
+}
+
+/**
  * Extrai intervalos ocupados de DTOs crus do by-range.
  * @param {Array} dtos
  * @param {{ excludeCancelled?: boolean, roleUserId?: string }} opts

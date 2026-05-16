@@ -558,6 +558,24 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [patientOptions, selectedDay]
   );
 
+  const openCreateModalAtSlot = useCallback(
+    (iso, horaHm) => {
+      const date = toDateKey(iso) || iso;
+      const hi = String(horaHm || '').trim().slice(0, 5);
+      setEditingAppointment(null);
+      setPatientSelectLocked(false);
+      setSelectedDay(date);
+      const base = defaultForm(date, patientOptions, null);
+      setForm({
+        ...base,
+        horaInicio: hi || base.horaInicio,
+      });
+      setFormErrors({});
+      setModalMode('create');
+    },
+    [patientOptions]
+  );
+
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
   const openCreateModalForPatient = useCallback(
     (patient) => {
@@ -818,6 +836,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     monthLabel,
     moveSelectedDay,
     openCreateModal,
+    openCreateModalAtSlot,
     openCreateModalForPatient,
     openEditModal,
     closeModal,

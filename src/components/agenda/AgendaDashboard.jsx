@@ -613,6 +613,7 @@ export function AgendaDashboard({
               appointments={agenda.weekGridAppointments}
               todayIso={agenda.todayIso}
               onEdit={agenda.openEditModal}
+              onClickEmptySlot={agenda.openCreateModalAtSlot}
               renderSlotActions={renderSlotActions}
               disponibilidades={agenda.disponibilidades}
             />
