@@ -1900,190 +1900,247 @@ export function PatientProfileView({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="mb-6 rounded-[18px] border border-[#e2e8f0] bg-white p-5 shadow-md sm:p-6">
-            <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-start">
-              <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
-                <input
-                  ref={profilePhotoInputRef}
-                  type="file"
-                  accept={
-                    selectedPatient?.id
-                      ? 'image/jpeg,image/jpg,image/png,image/webp'
-                      : 'image/*'
-                  }
-                  className="hidden"
-                  disabled={profilePhotoBusy}
-                  onChange={handleProfilePhotoFile}
-                />
-                <PatientAvatar
-                  patient={patient}
-                  getPatientInitials={getPatientInitials}
-                  className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5] shadow-sm md:h-20 md:w-20"
-                  initialsClassName="text-lg font-bold text-[#0f766e] md:text-xl"
-                  spinnerClassName="h-5 w-5"
-                />
-                <button
-                  type="button"
-                  onClick={() => profilePhotoInputRef.current?.click()}
-                  disabled={profilePhotoBusy}
-                  className="text-[12px] font-medium text-[#00a88e] underline decoration-[#00a88e]/40 underline-offset-2 transition-colors hover:text-[#00967f] disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {profilePhotoBusy ? 'Enviando…' : 'Trocar foto'}
-                </button>
-                {profilePhotoDisplayUrl ? (
-                  <button
-                    type="button"
-                    onClick={handleRemoveProfilePhoto}
-                    disabled={profilePhotoBusy}
-                    className="text-[12px] font-medium text-[#94a3b8] transition-colors hover:text-red-600 disabled:opacity-50"
-                  >
-                    Remover foto
-                  </button>
-                ) : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-[18px] font-bold tracking-tight text-[#0f172a] md:text-[22px]">{selectedPatient.nome}</h3>
-                  {isPerfilAtivo ? (
-                    <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
-                      ATIVO
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+              <div className="min-w-0 flex-1 space-y-4">
+                <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-5">
+                  <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
+                    <input
+                      ref={profilePhotoInputRef}
+                      type="file"
+                      accept={
+                        selectedPatient?.id
+                          ? 'image/jpeg,image/jpg,image/png,image/webp'
+                          : 'image/*'
+                      }
+                      className="hidden"
+                      disabled={profilePhotoBusy}
+                      onChange={handleProfilePhotoFile}
+                    />
+                    <PatientAvatar
+                      patient={patient}
+                      getPatientInitials={getPatientInitials}
+                      className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-[#e2e8f0] bg-[#e6f7f5] shadow-sm md:h-20 md:w-20"
+                      initialsClassName="text-lg font-bold md:text-xl"
+                      spinnerClassName="h-5 w-5"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => profilePhotoInputRef.current?.click()}
+                      disabled={profilePhotoBusy}
+                      className="text-[12px] font-medium text-[#00a88e] underline decoration-[#00a88e]/40 underline-offset-2 transition-colors hover:text-[#00967f] disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {profilePhotoBusy ? 'Enviando…' : 'Trocar foto'}
+                    </button>
+                    {profilePhotoDisplayUrl ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveProfilePhoto}
+                        disabled={profilePhotoBusy}
+                        className="text-[12px] font-medium text-[#94a3b8] transition-colors hover:text-red-600 disabled:opacity-50"
+                      >
+                        Remover foto
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[18px] font-bold tracking-tight text-[#0f172a] md:text-[22px]">{selectedPatient.nome}</h3>
+                      {isPerfilAtivo ? (
+                        <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
+                          ATIVO
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
+                          INATIVO
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-x-8 gap-y-2 text-left text-[15px] sm:grid-cols-2">
+                  <div className="min-w-0 space-y-2">
+                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
+                      <Calendar className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                      {selectedPatient.idade != null ? `${selectedPatient.idade} anos` : '—'}
                     </span>
-                  ) : (
-                    <span className="rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
-                      INATIVO
+                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
+                      <FileText className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                      <span className="min-w-0 break-words">{selectedPatient.cpf || '—'}</span>
                     </span>
-                  )}
-                </div>
-                <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 text-[13px] font-medium text-[#475569] sm:grid-cols-2">
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                    {selectedPatient.idade != null ? `${selectedPatient.idade} anos` : '—'}
-                  </span>
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                    <span className="truncate">{selectedPatient.telefone || '—'}</span>
-                  </span>
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                    <span className="truncate">{selectedPatient.cpf || '—'}</span>
-                  </span>
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                    <span className="truncate">{selectedPatient.email || '—'}</span>
-                  </span>
-                </div>
-                <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-x-4 text-[13px] text-[#64748b]">
-                  <p className="min-w-0 break-words">
-                    <span className="font-semibold text-[#475569]">Pai: </span>
-                    {(selectedPatient.nomePai && String(selectedPatient.nomePai).trim()) || '—'}
-                  </p>
-                  <p className="min-w-0 break-words">
-                    <span className="font-semibold text-[#475569]">Mãe: </span>
-                    {(selectedPatient.nomeMae && String(selectedPatient.nomeMae).trim()) || '—'}
-                  </p>
-                </div>
-                <div className="mt-2 flex items-start gap-2 text-[13px] font-normal text-[#64748b]">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
-                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="min-w-0 break-words">
+                      <span className="font-semibold text-gray-700">Pai: </span>
+                      <span className="font-normal text-gray-700">
+                        {(selectedPatient.nomePai && String(selectedPatient.nomePai).trim()) || '—'}
+                      </span>
+                    </p>
+                    <div className="pt-1 font-normal text-gray-700">
+                      <div className="flex items-start gap-2 text-left">
+                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
+                        <div className="min-w-0 flex-1 text-left">
+                          {hasStructuredAddressData(selectedPatient) ? (
+                            <>
+                              <div className="min-w-0 space-y-1">
+                                <p className="min-w-0 break-words">
+                                  <span className="font-semibold text-gray-700">CEP: </span>
+                                  <span className="font-normal text-gray-700">
+                                    {(selectedPatient.cep && String(selectedPatient.cep).trim()) || '—'}
+                                  </span>
+                                </p>
+                                <p className="min-w-0 break-words">
+                                  <span className="font-semibold text-gray-700">Logradouro: </span>
+                                  <span className="font-normal text-gray-700">
+                                    {(selectedPatient.enderecoRua && String(selectedPatient.enderecoRua).trim()) ||
+                                      '—'}
+                                  </span>
+                                </p>
+                                <p className="min-w-0 break-words">
+                                  <span className="font-semibold text-gray-700">Bairro: </span>
+                                  <span className="font-normal text-gray-700">
+                                    {(selectedPatient.enderecoBairro &&
+                                      String(selectedPatient.enderecoBairro).trim()) ||
+                                      '—'}
+                                  </span>
+                                </p>
+                              </div>
+                              {selectedPatient.enderecoComplemento &&
+                              String(selectedPatient.enderecoComplemento).trim() ? (
+                                <p className="mt-1 min-w-0 break-words">
+                                  <span className="font-semibold text-gray-700">Complemento: </span>
+                                  <span className="font-normal text-gray-700">
+                                    {String(selectedPatient.enderecoComplemento).trim()}
+                                  </span>
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (selectedPatient.endereco && String(selectedPatient.endereco).trim()) ? (
+                            <>
+                              <p className="min-w-0 break-words">
+                                <span className="font-semibold text-gray-700">Endereço (formato antigo): </span>
+                                <span className="font-normal text-gray-700">
+                                  {String(selectedPatient.endereco).trim()}
+                                </span>
+                              </p>
+                              <p className="text-left text-[11px] font-medium text-[#94a3b8]">
+                                Ao editar o cadastro, atualize para o novo formato de endereço.
+                              </p>
+                            </>
+                          ) : (
+                            <p className="min-w-0 break-words">
+                              <span className="font-semibold text-gray-700">Endereço: </span>
+                              <span className="font-normal text-gray-700">—</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="min-w-0 space-y-2">
+                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
+                      <Phone className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                      <span className="min-w-0 break-words">{selectedPatient.telefone || '—'}</span>
+                    </span>
+                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
+                      <Mail className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                      <span className="min-w-0 break-words">{selectedPatient.email || '—'}</span>
+                    </span>
+                    <p className="min-w-0 break-words">
+                      <span className="font-semibold text-gray-700">Mãe: </span>
+                      <span className="font-normal text-gray-700">
+                        {(selectedPatient.nomeMae && String(selectedPatient.nomeMae).trim()) || '—'}
+                      </span>
+                    </p>
                     {hasStructuredAddressData(selectedPatient) ? (
-                      <>
-                        {[
-                          ['CEP', selectedPatient.cep],
-                          ['Logradouro', selectedPatient.enderecoRua],
-                          ['Número', selectedPatient.enderecoNumero],
-                          ['Bairro', selectedPatient.enderecoBairro],
-                          ['Cidade', selectedPatient.enderecoCidade],
-                          ['Estado (UF)', selectedPatient.enderecoEstado],
-                        ].map(([label, val]) => (
-                          <p key={label} className="min-w-0 break-words">
-                            <span className="font-semibold text-[#475569]">{label}: </span>
-                            {(val && String(val).trim()) || '—'}
-                          </p>
-                        ))}
-                        {selectedPatient.enderecoComplemento &&
-                        String(selectedPatient.enderecoComplemento).trim() ? (
-                          <p className="min-w-0 break-words">
-                            <span className="font-semibold text-[#475569]">Complemento: </span>
-                            {String(selectedPatient.enderecoComplemento).trim()}
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (selectedPatient.endereco && String(selectedPatient.endereco).trim()) ? (
-                      <>
+                      <div className="mt-3 min-w-0 space-y-1 border-t border-slate-100 pt-3 pl-2 sm:pl-3">
                         <p className="min-w-0 break-words">
-                          <span className="font-semibold text-[#475569]">Endereço (formato antigo): </span>
-                          {String(selectedPatient.endereco).trim()}
+                          <span className="font-semibold text-gray-700">Número: </span>
+                          <span className="font-normal text-gray-700">
+                            {(selectedPatient.enderecoNumero &&
+                              String(selectedPatient.enderecoNumero).trim()) ||
+                              '—'}
+                          </span>
                         </p>
-                        <p className="text-[11px] font-medium text-[#94a3b8]">
-                          Ao editar o cadastro, atualize para o novo formato de endereço.
+                        <p className="min-w-0 break-words">
+                          <span className="font-semibold text-gray-700">Cidade: </span>
+                          <span className="font-normal text-gray-700">
+                            {(selectedPatient.enderecoCidade &&
+                              String(selectedPatient.enderecoCidade).trim()) ||
+                              '—'}
+                          </span>
                         </p>
-                      </>
-                    ) : (
-                      <p className="min-w-0 break-words">
-                        <span className="font-semibold text-[#475569]">Endereço: </span>—
-                      </p>
-                    )}
+                        <p className="min-w-0 break-words">
+                          <span className="font-semibold text-gray-700">Estado (UF): </span>
+                          <span className="font-normal text-gray-700">
+                            {(selectedPatient.enderecoEstado &&
+                              String(selectedPatient.enderecoEstado).trim()) ||
+                              '—'}
+                          </span>
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
-              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:min-w-[220px] sm:max-w-[280px]">
                 <button
                   type="button"
                   onClick={() => onStartAttendance?.(selectedPatient)}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors active:bg-[#00967f] md:w-auto md:hover:bg-[#00967f]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f] active:bg-[#00967f]"
                 >
-                  <Play className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
+                  <Play className="inline h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                 </button>
-                <button
-                  type="button"
-                  onClick={handleAgendarPacienteClick}
-                  disabled={!isPerfilAtivo || !selectedPatient?.id}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#00a88e] bg-white px-5 text-[13px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f8fbfb] disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
-                >
-                  <Calendar className="inline h-4 w-4" strokeWidth={2.5} aria-hidden />
-                  Agendar Paciente
-                </button>
-                {!isRecepcionista && (
+                <div className="flex flex-col gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditing((prev) => {
-                        if (prev) {
+                    onClick={handleAgendarPacienteClick}
+                    disabled={!isPerfilAtivo || !selectedPatient?.id}
+                    className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                    Agendar Paciente
+                  </button>
+                  {!isRecepcionista && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing((prev) => {
+                          if (prev) {
+                            setEditFormErrors({});
+                            setProfileSaveError('');
+                            return null;
+                          }
                           setEditFormErrors({});
                           setProfileSaveError('');
-                          return null;
-                        }
-                        setEditFormErrors({});
-                        setProfileSaveError('');
-                        return createEditDraft();
-                      });
-                    }}
-                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#cbd5e1] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-slate-300 md:w-auto"
-                  >
-                    <UserIcon className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Editar Cadastro
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#cbd5e1] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-slate-300 md:w-auto"
-                  disabled
-                >
-                  <Download className="inline h-4 w-4" strokeWidth={2.5} aria-hidden /> Gerar PDF
-                </button>
-                {isPerfilAtivo && !isRecepcionista ? (
+                          return createEditDraft();
+                        });
+                      }}
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50"
+                    >
+                      <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Editar Cadastro
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => {
-                      setInativarMotivo('');
-                      setInativarSenha('');
-                      setInativarSenhaErro('');
-                      setInativarModalOpen(true);
-                    }}
-                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#dc2626] px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#b91c1c] active:bg-[#991b1b] md:w-auto"
+                    className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled
                   >
-                    <UserMinus className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                    Inativar Paciente
+                    <Download className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Gerar PDF
                   </button>
-                ) : null}
+                  {isPerfilAtivo && !isRecepcionista ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInativarMotivo('');
+                        setInativarSenha('');
+                        setInativarSenhaErro('');
+                        setInativarModalOpen(true);
+                      }}
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600 px-4 text-sm font-normal text-white transition-colors hover:border-red-700 hover:bg-red-700"
+                    >
+                      <UserMinus className="h-4 w-4 shrink-0 text-white" strokeWidth={2} aria-hidden />
+                      Inativar Paciente
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
 

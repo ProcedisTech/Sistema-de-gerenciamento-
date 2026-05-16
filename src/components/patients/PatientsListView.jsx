@@ -98,7 +98,7 @@ const SORT_OPTIONS = [
 ];
 
 const patientListAvatarClass =
-  'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] sm:h-11 sm:w-11';
+  'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-app-border bg-[#e6f7f5] sm:h-11 sm:w-11';
 
 /**
  * Cartão de paciente na coluna esquerda (estilo protótipo: branco, sombra, sobre fundo suave).
@@ -127,7 +127,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
         patient={patient}
         getPatientInitials={getPatientInitials}
         className={patientListAvatarClass}
-        initialsClassName="text-xs font-bold text-app-accent-deep sm:text-[13px]"
+        initialsClassName="text-xs font-bold sm:text-[13px]"
         spinnerClassName="h-4 w-4"
       />
       <div className="min-w-0 flex-1">
@@ -348,8 +348,8 @@ function PatientPreviewPanel({
         <PatientAvatar
           patient={selectedPatient}
           getPatientInitials={getPatientInitials}
-          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e2e8f0] bg-[#e6f7f5]"
-          initialsClassName="text-[11px] font-bold text-[#0f766e]"
+          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e2e8f0] bg-[#e6f7f5]"
+          initialsClassName="text-[11px] font-bold"
           spinnerClassName="h-4 w-4"
         />
         <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
