@@ -571,12 +571,12 @@ export function AgendaDashboard({
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <h3 className="text-[16px] font-black text-[#1A1A2E]">{agenda.monthLabel}</h3>
-                <button type="button" onClick={agenda.goPrevMonth} aria-label="Mês anterior" className="rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <button type="button" onClick={agenda.goPrevMonth} aria-label="Mês anterior" className="shrink-0 rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={agenda.goNextMonth} aria-label="Próximo mês" className="rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
+                <h3 className="min-w-0 flex-1 truncate text-center text-[16px] font-black text-[#1A1A2E]">{agenda.monthLabel}</h3>
+                <button type="button" onClick={agenda.goNextMonth} aria-label="Próximo mês" className="shrink-0 rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>

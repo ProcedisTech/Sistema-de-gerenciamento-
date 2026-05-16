@@ -153,6 +153,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                   nomeProcedimento: o.nome,
                 }))}
                 error={Boolean(agenda.formErrors.catalogoProcedimentoSaudeIds)}
+                showCatalogCommitBadge={false}
               />
               {selectedProcedimentos.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
