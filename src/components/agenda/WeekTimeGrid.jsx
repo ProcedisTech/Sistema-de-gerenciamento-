@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
 import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
+import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
@@ -200,9 +201,8 @@ function DayColumn({
   iso,
   appointments,
   todayIso,
-  onEdit,
+  onOpenSlotDetail,
   onClickEmptySlot,
-  renderSlotActions,
   disponibilidades,
 }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
@@ -267,11 +267,19 @@ function DayColumn({
         const cardClass = statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
         const corProc = appt.corHex || '#00a88e';
+        const slotVis = getAgendaSlotActionVisibility(appt.status);
+        const showBadges = baseStyle.height >= 56;
+        const labelParts = [
+          appt.horaInicio,
+          appt.pacienteNome,
+          appt.procedimentoNome || 'Sem procedimento',
+        ].filter(Boolean);
         return (
           <button
             key={appt.id}
             type="button"
-            onClick={() => onEdit(appt)}
+            onClick={() => onOpenSlotDetail?.(appt)}
+            aria-label={`Detalhes: ${labelParts.join(', ')}`}
             className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${cardClass} ${!dentro ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
             style={style}
           >
@@ -298,14 +306,18 @@ function DayColumn({
                 {appt.procedimentoNome || 'Sem procedimento informado'}
               </div>
             ) : null}
-            {typeof renderSlotActions === 'function' ? (
-              <div
-                className="mt-1"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-                role="presentation"
-              >
-                {renderSlotActions(appt)}
+            {showBadges && (slotVis.showFalta || slotVis.showWhatsApp) ? (
+              <div className="mt-0.5 flex max-w-full flex-wrap gap-0.5" aria-hidden>
+                {slotVis.showFalta ? (
+                  <span className="rounded bg-orange-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-orange-800">
+                    Falta
+                  </span>
+                ) : null}
+                {slotVis.showWhatsApp ? (
+                  <span className="rounded bg-green-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-green-800">
+                    Zap
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </button>
@@ -319,9 +331,8 @@ export function WeekTimeGrid({
   weekDayIsos,
   appointments,
   todayIso,
-  onEdit,
+  onOpenSlotDetail,
   onClickEmptySlot,
-  renderSlotActions,
   disponibilidades,
 }) {
   const scrollRef = React.useRef(null);
@@ -402,9 +413,8 @@ export function WeekTimeGrid({
             iso={iso}
             appointments={byDay[iso] || []}
             todayIso={todayIso}
-            onEdit={onEdit}
+            onOpenSlotDetail={onOpenSlotDetail}
             onClickEmptySlot={onClickEmptySlot}
-            renderSlotActions={renderSlotActions}
             disponibilidades={disponibilidades}
           />
         ))}
