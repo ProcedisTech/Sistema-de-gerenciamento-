@@ -654,9 +654,9 @@ export function PatientsListView({
                 />
               </div>
             </div>
-            <div className="relative w-full min-w-0 sm:w-44 sm:shrink-0">
+            <div className="relative w-full min-w-0 sm:w-36 sm:shrink-0 sm:flex-none">
                 <ArrowUpDown
-                  className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                  className="pointer-events-none absolute left-2 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#94a3b8]"
                   strokeWidth={2.25}
                   aria-hidden
                 />
@@ -669,7 +669,7 @@ export function PatientsListView({
                   onChange={(e) => {
                     setPatientListSortBy(e.target.value);
                   }}
-                  className="h-11 min-h-[44px] w-full cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white py-2 pl-8 pr-3 text-[16px] font-semibold text-[#0f172a] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[13px]"
+                  className="h-11 min-h-[44px] w-full max-w-full cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white px-2 py-2 pl-7 text-[16px] font-medium leading-snug text-[#0f172a] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:max-w-full sm:py-1 sm:pl-6 sm:pr-2 sm:text-[11px] sm:font-semibold sm:leading-tight sm:text-[#475569]"
                 >
                   {SORT_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
