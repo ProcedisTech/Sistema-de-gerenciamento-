@@ -97,7 +97,7 @@ export function IniciarAtendimentoToleranciaModal({
                 disabled={adiantarSubmitting}
                 className="h-10 rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:opacity-50"
               >
-                Manter horário
+                Manter e iniciar
               </button>
               <button
                 type="button"
