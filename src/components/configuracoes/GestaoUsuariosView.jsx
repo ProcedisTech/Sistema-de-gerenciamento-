@@ -3,6 +3,7 @@ import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, Calenda
 import { resolveApiUrl } from '../../config/apiEnv';
 import { authHeadersForFetch, configuracoesClinicaApi, getApiErrorDetail, getApiErrorToastMessage } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
+import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import DisponibilidadeProfissionalModal from './DisponibilidadeProfissionalModal';
 import { AuditoriaView } from './AuditoriaView';
@@ -14,6 +15,7 @@ export function GestaoUsuariosView() {
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [perfisAcesso, setPerfisAcesso] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDispModal, setShowDispModal] = useState(false);
@@ -28,7 +30,7 @@ export function GestaoUsuariosView() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [equipeRes, rolesRes] = await Promise.all([
+      const [equipeRes, rolesRes, perfisRes] = await Promise.all([
         fetch(resolveApiUrl('/api/v1/equipe'), {
           headers: fetchHeaders(),
           credentials: 'include'
@@ -36,16 +38,22 @@ export function GestaoUsuariosView() {
         fetch(resolveApiUrl('/api/v1/dimensoes/roles'), {
           headers: fetchHeaders(),
           credentials: 'include'
+        }),
+        fetch(resolveApiUrl('/api/v1/dimensoes/perfis-acesso'), {
+          headers: fetchHeaders(),
+          credentials: 'include'
         })
       ]);
 
-      if (equipeRes.ok && rolesRes.ok) {
+      if (equipeRes.ok && rolesRes.ok && perfisRes.ok) {
         const equipeData = await equipeRes.json();
         const rolesData = await rolesRes.json();
+        const perfisData = await perfisRes.json();
         setUsuarios(Array.isArray(equipeData) ? equipeData : equipeData.content || []);
         setRoles(Array.isArray(rolesData) ? rolesData : rolesData.content || []);
+        setPerfisAcesso(Array.isArray(perfisData) ? perfisData : perfisData.content || []);
       } else {
-        const badRes = !equipeRes.ok ? equipeRes : rolesRes;
+        const badRes = !equipeRes.ok ? equipeRes : (!rolesRes.ok ? rolesRes : perfisRes);
         const body = await badRes.json().catch(() => ({}));
         toast.error(
           getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao carregar dados da equipe.'
@@ -297,6 +305,7 @@ export function GestaoUsuariosView() {
           {showInviteModal && (
             <InviteModal 
               roles={roles} 
+              perfisAcesso={perfisAcesso}
               onClose={() => setShowInviteModal(false)} 
               onSuccess={() => { setShowInviteModal(false); loadData(); }}
               fetchHeaders={fetchHeaders}
@@ -307,6 +316,7 @@ export function GestaoUsuariosView() {
             <EditRoleModal 
               usuario={selectedUsuario}
               roles={roles}
+              perfisAcesso={perfisAcesso}
               onClose={() => setShowEditModal(false)}
               onSuccess={() => { setShowEditModal(false); loadData(); }}
               fetchHeaders={fetchHeaders}
@@ -330,9 +340,9 @@ export function GestaoUsuariosView() {
   );
 }
 
-function InviteModal({ roles, onClose, onSuccess, fetchHeaders }) {
+function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
   const toast = useToast();
-  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '' });
+  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '' });
   const [saving, setSaving] = useState(false);
 
   const maskCPF = (value) => {
@@ -369,6 +379,7 @@ function InviteModal({ roles, onClose, onSuccess, fetchHeaders }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.roleId) return toast.error('Selecione um papel.');
+    if (!form.perfilAcessoId) return toast.error('Selecione um nível de permissão.');
     if (form.senha.length < 8) return toast.error('A senha deve ter no mínimo 8 caracteres.');
     if (!validateCPF(form.cpf)) return toast.error('CPF inválido. Verifique os números digitados.');
     
@@ -431,7 +442,8 @@ function InviteModal({ roles, onClose, onSuccess, fetchHeaders }) {
         credentials: 'include',
         body: JSON.stringify({
           usuarioId,
-          roleId: form.roleId
+          roleId: form.roleId,
+          perfilAcessoId: form.perfilAcessoId
         })
       });
       
@@ -507,19 +519,35 @@ function InviteModal({ roles, onClose, onSuccess, fetchHeaders }) {
               className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Papel / Acesso</label>
-            <select 
-              required
-              value={form.roleId}
-              onChange={e => setForm({...form, roleId: e.target.value})}
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-            >
-              <option value="">Selecione...</option>
-              {roles.filter(r => r.nome !== 'ADMIN').map(r => (
-                <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Cargo</label>
+              <select 
+                required
+                value={form.roleId}
+                onChange={e => setForm({...form, roleId: e.target.value})}
+                className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
+              >
+                <option value="">Selecione...</option>
+                {roles.filter(r => r.nome !== 'ADMIN').map(r => (
+                  <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Nível de Permissão</label>
+              <select 
+                required
+                value={form.perfilAcessoId}
+                onChange={e => setForm({...form, perfilAcessoId: e.target.value})}
+                className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
+              >
+                <option value="">Selecione...</option>
+                {perfisAcesso.map(p => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
           </div>
           
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -545,12 +573,18 @@ function InviteModal({ roles, onClose, onSuccess, fetchHeaders }) {
   );
 }
 
-function EditRoleModal({ usuario, roles, onClose, onSuccess, fetchHeaders }) {
+function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
+  const { roleUserId: currentRoleUserId, papel } = useOrg();
   const toast = useToast();
   const [roleId, setRoleId] = useState(usuario.roleId || usuario.role?.id || '');
+  const [perfilAcessoId, setPerfilAcessoId] = useState(usuario.perfilAcessoId || '');
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
   const [email, setEmail] = useState(usuario.email || '');
   const [saving, setSaving] = useState(false);
+
+  const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
+  const isDono = papel === 'DONO';
+  const lockSensitiveFields = isSelfEdit && isDono;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -567,7 +601,8 @@ function EditRoleModal({ usuario, roles, onClose, onSuccess, fetchHeaders }) {
           usuarioId: usuario.usuarioId || usuario.usuario?.id,
           nomeCompleto: nome,
           email: email,
-          roleId 
+          roleId,
+          perfilAcessoId
         })
       });
       if (res.ok) {
@@ -605,13 +640,16 @@ function EditRoleModal({ usuario, roles, onClose, onSuccess, fetchHeaders }) {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">E-mail</label>
+            <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
+              E-mail {lockSensitiveFields && '(Não editável para o Dono)'}
+            </label>
             <input 
               required
               type="email"
+              disabled={lockSensitiveFields}
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
+              className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
             />
           </div>
           <div>
@@ -622,19 +660,41 @@ function EditRoleModal({ usuario, roles, onClose, onSuccess, fetchHeaders }) {
               className="w-full rounded-xl border-2 border-slate-100 bg-slate-50/50 px-4 py-3 text-base outline-none text-slate-500 cursor-not-allowed sm:py-2.5 sm:text-sm"
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Novo Papel</label>
-            <select 
-              required
-              value={roleId}
-              onChange={e => setRoleId(e.target.value)}
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-            >
-              <option value="">Selecione...</option>
-              {roles.map(r => (
-                <option key={r.id} value={r.id}>{r.nome}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
+                Novo Cargo
+              </label>
+              <select 
+                required
+                disabled={lockSensitiveFields}
+                value={roleId}
+                onChange={e => setRoleId(e.target.value)}
+                className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+              >
+                <option value="">Selecione...</option>
+                {roles.map(r => (
+                  <option key={r.id} value={r.id}>{r.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
+                Novo Nível
+              </label>
+              <select 
+                required
+                disabled={lockSensitiveFields}
+                value={perfilAcessoId}
+                onChange={e => setPerfilAcessoId(e.target.value)}
+                className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+              >
+                <option value="">Selecione...</option>
+                {perfisAcesso.map(p => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
           </div>
           
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">

@@ -16,6 +16,7 @@ import { CadastrarClinica } from './auth/CadastrarClinica.jsx';
 import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
+import { RoleGuard } from './auth/RoleGuard.jsx';
 import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { usePapel } from '../hooks/usePapel';
@@ -109,7 +110,7 @@ function revokeBlobUrlIfAny(url) {
 
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
-  const { isAdmin, isProfissional, isRecepcionista } = usePapel();
+  const { isAdmin, isProfissional, isRecepcionista, isAtLeast } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -520,6 +521,11 @@ export default function App() {
     });
   }, []);
   const goToView = (view) => {
+    // Verificacao básica de segurança na troca de view
+    if (view === 'configuracoes' && !isAtLeast('NIVEL_3')) {
+      toast.error('Você não tem permissão para acessar as configurações.');
+      return;
+    }
     setActiveView(view);
   };
 
@@ -1850,63 +1856,69 @@ export default function App() {
           >
 
             {activeView === 'pacientes' && (
-              <PatientsView
-                isRecepcionista={isRecepcionista}
-                patients={patients}
-                patientView={patientView}
-                selectedPatientCpf={selectedPatientCpf}
-                setSelectedPatientCpf={setSelectedPatientCpf}
-                patientDetailTab={patientDetailTab}
-                setPatientDetailTab={setPatientDetailTab}
-                setPatientView={setPatientView}
-                patientSearchQuery={patientSearchQuery}
-                setPatientSearchQuery={setPatientSearchQuery}
-                getPatientInitials={getPatientInitials}
-                onCreatePatient={handleCreatePatientFromPatients}
-                onStartAttendance={handleStartAttendance}
-                onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
-                onUpdatePatient={handleUpdatePatientProfile}
-                onAddGalleryFiles={handleAddGalleryFiles}
-                onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
-                onPatientCreated={refreshPatientsAndPagedList}
-                mergePatientById={mergePatientById}
-                refreshPatients={refreshPatientsAndPagedList}
-                patientListItems={patientListItems}
-                patientListPage={patientListPage}
-                setPatientListPage={setPatientListPage}
-                patientListLoading={patientListLoading}
-                patientListMeta={patientListMeta}
-                patientListTipoBusca={patientListTipoBusca}
-                setPatientListTipoBusca={setPatientListTipoBusca}
-                patientListSortBy={patientListSortBy}
-                setPatientListSortBy={setPatientListSortBy}
-                roleUserId={roleUserId}
-              />
+              <RoleGuard minLevel="NIVEL_1" showError>
+                <PatientsView
+                  isRecepcionista={isRecepcionista}
+                  patients={patients}
+                  patientView={patientView}
+                  selectedPatientCpf={selectedPatientCpf}
+                  setSelectedPatientCpf={setSelectedPatientCpf}
+                  patientDetailTab={patientDetailTab}
+                  setPatientDetailTab={setPatientDetailTab}
+                  setPatientView={setPatientView}
+                  patientSearchQuery={patientSearchQuery}
+                  setPatientSearchQuery={setPatientSearchQuery}
+                  getPatientInitials={getPatientInitials}
+                  onCreatePatient={handleCreatePatientFromPatients}
+                  onStartAttendance={handleStartAttendance}
+                  onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
+                  onUpdatePatient={handleUpdatePatientProfile}
+                  onAddGalleryFiles={handleAddGalleryFiles}
+                  onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
+                  onPatientCreated={refreshPatientsAndPagedList}
+                  mergePatientById={mergePatientById}
+                  refreshPatients={refreshPatientsAndPagedList}
+                  patientListItems={patientListItems}
+                  patientListPage={patientListPage}
+                  setPatientListPage={setPatientListPage}
+                  patientListLoading={patientListLoading}
+                  patientListMeta={patientListMeta}
+                  patientListTipoBusca={patientListTipoBusca}
+                  setPatientListTipoBusca={setPatientListTipoBusca}
+                  patientListSortBy={patientListSortBy}
+                  setPatientListSortBy={setPatientListSortBy}
+                  roleUserId={roleUserId}
+                />
+              </RoleGuard>
             )}
 
-            {activeView === 'configuracoes' && (isAdmin || isProfissional) && (
-              <ConfiguracoesView
-                isAdmin={isAdmin}
-                isProfissional={isProfissional}
-                configSection={configSection}
-                setConfigSection={setConfigSection}
-                onClinicaAtualizada={(nome, logoUrl) =>
-                  setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
-                }
-                onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
-                onPacientesCatalogRefresh={refreshPatientsAndPagedList}
-              />
+            {activeView === 'configuracoes' && (
+              <RoleGuard minLevel="NIVEL_3" showError>
+                <ConfiguracoesView
+                  isAdmin={isAdmin}
+                  isProfissional={isProfissional}
+                  configSection={configSection}
+                  setConfigSection={setConfigSection}
+                  onClinicaAtualizada={(nome, logoUrl) =>
+                    setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
+                  }
+                  onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
+                  onPacientesCatalogRefresh={refreshPatientsAndPagedList}
+                />
+              </RoleGuard>
             )}
 
             {activeView === 'agenda' && (
-              <AgendaDashboard
-                agenda={agendaSchedule}
-                patients={patients}
-                authEnabled={authSessionReady}
-                onStartAttendance={handleAgendaStartAttendance}
-                onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
-                onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
-              />
+              <RoleGuard minLevel="NIVEL_1" showError>
+                <AgendaDashboard
+                  agenda={agendaSchedule}
+                  patients={patients}
+                  authEnabled={authSessionReady}
+                  onStartAttendance={handleAgendaStartAttendance}
+                  onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
+                  onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
+                />
+              </RoleGuard>
             )}
 
             {!['jornada', 'pacientes', 'agenda', 'configuracoes'].includes(activeView) && (

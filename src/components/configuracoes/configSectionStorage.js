@@ -28,7 +28,7 @@ export function readStoredSection() {
   } catch {
     /* ignore */
   }
-  return 'fichas';
+  return 'perfil';
 }
 
 export function persistSection(s) {

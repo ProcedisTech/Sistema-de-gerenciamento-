@@ -50,9 +50,16 @@ export function extractOrganizacaoIdFromAuthResponse(data) {
 
 export function resolverPapel(roleNome) {
   if (!roleNome) return null;
-  const roleLimpo = String(roleNome).trim().toLowerCase();
-  if (roleLimpo === 'administrador' || roleLimpo === 'admin') return 'ADMIN';
-  if (roleLimpo === 'medico' || roleLimpo === 'esteticista' || roleLimpo === 'profissional') return 'PROFISSIONAL';
-  if (roleLimpo === 'recepcionista') return 'RECEPCIONISTA';
-  return null;
+  const roleLimpo = String(roleNome).trim().toUpperCase();
+
+  // Mapeamento direto dos novos códigos cirúrgicos
+  const codigosCirurgicos = ['DONO', 'NIVEL_5', 'NIVEL_4', 'NIVEL_3', 'NIVEL_2', 'NIVEL_1'];
+  if (codigosCirurgicos.includes(roleLimpo)) return roleLimpo;
+
+  // Legado / Mapeamento Amigável
+  if (roleLimpo === 'ADMINISTRADOR' || roleLimpo === 'ADMIN') return 'ADMIN';
+  if (roleLimpo === 'MEDICO' || roleLimpo === 'ESTETICISTA' || roleLimpo === 'PROFISSIONAL') return 'PROFISSIONAL';
+  if (roleLimpo === 'RECEPCIONISTA') return 'RECEPCIONISTA';
+
+  return roleLimpo; // Retorna o código bruto se não mapeado, para flexibilidade
 }

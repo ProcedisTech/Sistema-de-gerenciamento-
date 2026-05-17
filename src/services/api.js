@@ -89,18 +89,8 @@ export function authHeadersForFetch({ needsOrg = true } = {}) {
  * a sessão realmente expirou. Se /me responder 200, o 401 é de negócio/org e não desloga.
  * Usa dynamic import para evitar dependência circular estática com authMeProbe.js.
  */
-async function dispatchAuthExpiredIfSessionReallyGone() {
-  try {
-    const { invalidateAuthMeCache, fetchAuthMeSnapshot } = await import('../utils/authMeProbe.js');
-    invalidateAuthMeCache();
-    const snap = await fetchAuthMeSnapshot();
-    if (snap.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-    }
-  } catch {
-    // Falha ao verificar /me: disparar logout por segurança
-    window.dispatchEvent(new CustomEvent('auth:expired'));
-  }
+async function dispatchAuthExpiredIfSessionReallyGone(failedUrl) {
+  console.warn(`[api] A requisição para ${failedUrl} retornou 401. Como a sessão é controlada pelo Supabase, ignorando logout forçado.`);
 }
 
 async function requestDelete(path, { needsOrg = true } = {}) {
@@ -111,7 +101,8 @@ async function requestDelete(path, { needsOrg = true } = {}) {
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      await dispatchAuthExpiredIfSessionReallyGone();
+      console.warn(`[api] DELETE ${url} retornou 401.`);
+      await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const body = await res.json().catch(() => ({}));
     const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
@@ -292,6 +283,8 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
 
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
+  console.log(`[api] about to fetch ${url}. Headers:`, headers);
+
   // Sempre enviar cookie HttpOnly `jwt` (same-origin :5173 + proxy /api). Nunca use 'omit' aqui.
   const res = await fetch(url, {
     ...fetchOpts,
@@ -302,7 +295,8 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      await dispatchAuthExpiredIfSessionReallyGone();
+      console.warn(`[api] ${fetchOpts.method || 'GET'} ${url} retornou 401.`);
+      await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const body = await res.json().catch(() => ({}));
     const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
@@ -333,7 +327,8 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      await dispatchAuthExpiredIfSessionReallyGone();
+      console.warn(`[api] POST/form ${url} retornou 401.`);
+      await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const resBody = await res.json().catch(() => ({}));
     const err = new Error(buildApiErrorMessage(res.status, resBody, res.statusText));

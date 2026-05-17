@@ -127,11 +127,11 @@ export function ConfiguracoesView({
           {[
             isAdmin && ['procedimentos', 'Procedimentos'],
             isAdmin && ['termos', 'Termos'],
-            (isAdmin || isProfissional) && ['categorias', 'Categorias'],
-            (isAdmin || isProfissional) && ['perguntas', 'Perguntas'],
-            (isAdmin || isProfissional) && ['fichas', 'Fichas'],
+            isAdmin && ['categorias', 'Categorias'],
+            isAdmin && ['perguntas', 'Perguntas'],
+            isAdmin && ['fichas', 'Fichas'],
             (isAdmin || isProfissional) && ['perfil', 'Perfil'],
-            (isAdmin || isProfissional) && ['clinica', 'Clínica'],
+            isAdmin && ['clinica', 'Clínica'],
             isAdmin && ['usuarios-acessos', 'Usuários'],
             isAdmin && ['horarios-funcionamento', 'Horários'],
             isAdmin && ['agenda-feriados', 'Feriados'],
@@ -181,7 +181,7 @@ export function ConfiguracoesView({
             </>
           )}
 
-          {(isAdmin || isProfissional) && (
+          {isAdmin && (
             <>
               <NavGroupLabel>Anamnese</NavGroupLabel>
               <SidebarNavItem
@@ -214,6 +214,11 @@ export function ConfiguracoesView({
                 active={configSection === 'perfil'}
                 onClick={() => setConfigSection('perfil')}
               />
+            </>
+          )}
+
+          {isAdmin && (
+            <>
               <SidebarNavItem
                 icon={Building2}
                 label="Dados da Clínica"
@@ -269,11 +274,11 @@ export function ConfiguracoesView({
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] px-3 py-4 sm:px-5 sm:py-6 md:px-6 md:py-8">
           {configSection === 'procedimentos' && isAdmin && <BancoProcedimentosPanel />}
 
-          {configSection === 'termos' && <TermosManager {...termosManagerProps} />}
+          {configSection === 'termos' && isAdmin && <TermosManager {...termosManagerProps} />}
 
           {(configSection === 'categorias' ||
             configSection === 'perguntas' ||
-            configSection === 'fichas') && (
+            configSection === 'fichas') && isAdmin && (
             <AnamneseAdminView {...anamneseAdminProps} embeddedSection={configSection} />
           )}
 
@@ -284,7 +289,7 @@ export function ConfiguracoesView({
             />
           )}
 
-          {configSection === 'clinica' && (isAdmin || isProfissional) && (
+          {configSection === 'clinica' && isAdmin && (
             <DadosClinicaPanel
               getAuthHeaders={() => authHeadersForFetch({ needsOrg: true })}
               onClinicaAtualizada={onClinicaAtualizada}

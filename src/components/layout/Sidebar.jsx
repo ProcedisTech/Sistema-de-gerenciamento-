@@ -95,8 +95,8 @@ export function Sidebar({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopCollapsed);
-  const { isAdmin, isProfissional } = usePapel();
-  const canSeeConfig = isAdmin || isProfissional;
+  const { isAtLeast } = usePapel();
+  const canSeeConfig = isAtLeast('NIVEL_3');
   const visibleNavItems = NAV_ITEMS.filter((item) => {
     if (item.view === 'configuracoes') return canSeeConfig;
     return true;

@@ -3,8 +3,8 @@ import { CalendarDays, LogOut, Settings, Users } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel';
 
 export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoConfiguracoes, onLogout }) {
-  const { isAdmin, isProfissional } = usePapel();
-  const canSeeConfig = isAdmin || isProfissional;
+  const { isAtLeast } = usePapel();
+  const canSeeConfig = isAtLeast('NIVEL_3');
   const tabClass = (isActive) =>
     `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1 transition-all ${
       isActive
