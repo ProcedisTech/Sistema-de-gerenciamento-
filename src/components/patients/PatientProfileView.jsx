@@ -40,6 +40,7 @@ import {
   getApiErrorDetail,
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
 import {
   fetchNextAppointmentIsoForPaciente,
@@ -744,6 +745,8 @@ export function PatientProfileView({
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [sessoesExpandidas, setSessoesExpandidas] = useState({});
   const [categoriasExpandidas, setCategoriasExpandidas] = useState({});
+  /** Por categoria na galeria por sessão (api): mostrar todas as fotos após "Ver mais". */
+  const [galeriaCategoriaShowAll, setGaleriaCategoriaShowAll] = useState({});
   const [categoriasEmEdicao, setCategoriasEmEdicao] = useState({});
   const [modoComparar, setModoComparar] = useState(false);
   const [compararSelecionadas, setCompararSelecionadas] = useState({ antes: null, depois: null });
@@ -803,16 +806,51 @@ export function PatientProfileView({
     return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : 'Nenhum agendamento';
   }, [selectedPatient, proximoAgendaIso]);
 
-  const toggleSessao = (key) => {
-    setSessoesExpandidas((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+  const galeriaSmUp = useMediaQuery('(min-width: 640px)');
+  const galeriaMdUp = useMediaQuery('(min-width: 768px)');
+  const galeriaColsPerRow = galeriaMdUp ? 6 : galeriaSmUp ? 5 : 4;
+
+  const toggleSessao = (sess) => {
+    const key = sess.key;
+    const willOpen = !sessoesExpandidas[key];
+    setSessoesExpandidas((prev) => ({ ...prev, [key]: !prev[key] }));
+    if (willOpen) {
+      const byCat = {};
+      sess.fotos.forEach((foto) => {
+        const c = foto.categoria || 'outro';
+        if (!byCat[c]) byCat[c] = [];
+        byCat[c].push(foto);
+      });
+      setCategoriasExpandidas((cPrev) => {
+        const next = { ...cPrev };
+        ORDEM_CATEGORIAS.forEach((cat) => {
+          if (byCat[cat]?.length) next[`${key}_${cat}`] = true;
+        });
+        return next;
+      });
+    } else {
+      setGaleriaCategoriaShowAll((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next)) {
+          if (k.startsWith(`${key}_`)) delete next[k];
+        }
+        return next;
+      });
+    }
   };
 
   const toggleCategoria = (sessKey, cat) => {
     const key = `${sessKey}_${cat}`;
+    const wasOpen = categoriasExpandidas[key];
     setCategoriasExpandidas((prev) => ({ ...prev, [key]: !prev[key] }));
+    if (wasOpen) {
+      setGaleriaCategoriaShowAll((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   const handleCompararFotoClick = (foto) => {
@@ -838,6 +876,7 @@ export function PatientProfileView({
     setProntuarioExpanded({});
     setSessoesExpandidas({});
     setCategoriasExpandidas({});
+    setGaleriaCategoriaShowAll({});
     setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
     setShowAllProntuario(false);
@@ -2798,7 +2837,7 @@ export function PatientProfileView({
                           >
                             <div
                               className="flex items-center justify-between cursor-pointer select-none p-4 hover:bg-[#f8fafc] transition-colors rounded-xl"
-                              onClick={() => toggleSessao(sess.key)}
+                              onClick={() => toggleSessao(sess)}
                             >
                               <div>
                                 <div className="text-[14px] font-bold text-[#0f172a]">
@@ -2859,6 +2898,13 @@ export function PatientProfileView({
                                         GALERIA_SESSAO_CATEGORIA_LABEL_CLASS[cat] || 'text-[#94a3b8]';
                                       const catKey = `${sess.key}_${cat}`;
                                       const catExpandida = categoriasExpandidas[catKey] ?? false;
+                                      const mostrarTodasFotosCat = Boolean(galeriaCategoriaShowAll[catKey]);
+                                      const limiteLinhaGaleria = galeriaColsPerRow;
+                                      const fotosCatVisiveis =
+                                        mostrarTodasFotosCat || fotosCat.length <= limiteLinhaGaleria
+                                          ? fotosCat
+                                          : fotosCat.slice(0, limiteLinhaGaleria);
+                                      const temMaisFotosCat = fotosCat.length > limiteLinhaGaleria;
                                       return (
                                         <div
                                           key={cat}
@@ -2915,7 +2961,7 @@ export function PatientProfileView({
                                           {catExpandida && (
                                             <div className="p-3">
                                               <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
-                                                {fotosCat.map((foto) => {
+                                                {fotosCatVisiveis.map((foto) => {
                                                   const gridItem = {
                                                     id: `api_${foto.serverId}`,
                                                     url: foto.url,
@@ -2964,6 +3010,38 @@ export function PatientProfileView({
                                                   );
                                                 })}
                                               </div>
+                                              {temMaisFotosCat ? (
+                                                <div className="mt-2 flex justify-center">
+                                                  {mostrarTodasFotosCat ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() =>
+                                                        setGaleriaCategoriaShowAll((prev) => {
+                                                          const next = { ...prev };
+                                                          delete next[catKey];
+                                                          return next;
+                                                        })
+                                                      }
+                                                      className="text-[12px] font-semibold text-[#00a88e] hover:underline"
+                                                    >
+                                                      Mostrar menos
+                                                    </button>
+                                                  ) : (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() =>
+                                                        setGaleriaCategoriaShowAll((prev) => ({
+                                                          ...prev,
+                                                          [catKey]: true,
+                                                        }))
+                                                      }
+                                                      className="text-[12px] font-semibold text-[#00a88e] hover:underline"
+                                                    >
+                                                      Ver mais (+{fotosCat.length - limiteLinhaGaleria})
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ) : null}
                                             </div>
                                           )}
                                         </div>
