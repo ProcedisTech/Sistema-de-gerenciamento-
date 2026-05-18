@@ -85,6 +85,19 @@ export function proposalOverlapsOccupied(horaInicio, duracaoMin, occupied) {
   return false;
 }
 
+/** Hora (HH:mm) do primeiro intervalo ocupado que intersecta a proposta. */
+export function findFirstConflictHhmm(horaInicio, duracaoMin, occupied) {
+  const start = parseHhmmToMinutes(String(horaInicio || '').slice(0, 5));
+  const dur = Number(duracaoMin) || 45;
+  const end = start + dur;
+  for (const o of occupied || []) {
+    if (intervalsOverlap(start, end, o.startMin, o.endMin)) {
+      return minutesToHhmm(o.startMin);
+    }
+  }
+  return null;
+}
+
 /**
  * Próximo início (HH:mm) sem sobreposição com occupied, a partir de `fromMin` inclusive, em passos de stepMin.
  */
