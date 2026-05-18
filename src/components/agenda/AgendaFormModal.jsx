@@ -1,10 +1,26 @@
 import React from 'react';
-import { Trash2, X } from 'lucide-react';
-import { AGENDA_DURACAO_MINUTOS_OPCOES } from './useAgendaPage';
+import { CalendarDays, CornerDownLeft, Trash2, X } from 'lucide-react';
+import { formatLongDate } from './useAgendaPage';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
+import { PacienteSearchInput } from './PacienteSearchInput.jsx';
+import { ProfissionalPills } from './ProfissionalPills.jsx';
+import { DuracaoPills } from './DuracaoPills.jsx';
+import { AgendaFormStatusBar } from './AgendaFormStatusBar.jsx';
 
 const BTN_ACTION =
   'inline-flex max-w-[min(100%,14rem)] shrink-0 justify-center whitespace-normal text-center leading-tight';
+
+const DATE_TIME_INPUT_CLASS = [
+  'relative w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-[13px] font-medium text-gray-900',
+  'outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20',
+  '[appearance:none] [-webkit-appearance:none]',
+  '[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0',
+  '[&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full',
+  '[&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0',
+].join(' ');
+
+const KBD_CLASS =
+  'rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-700';
 
 function FieldError({ error, children }) {
   return (
@@ -15,9 +31,62 @@ function FieldError({ error, children }) {
   );
 }
 
+function FieldLabel({ children, required, optional }) {
+  return (
+    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+      {children}
+      {required ? <span className="text-red-500"> *</span> : null}
+      {optional ? <span className="font-normal normal-case text-gray-400"> (opcional)</span> : null}
+    </label>
+  );
+}
+
+function capitalizeFirst(s) {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatSubtitleDateTime(iso, horaHm) {
+  if (!iso || !horaHm) return '';
+  const long = formatLongDate(iso, { weekday: 'long' });
+  const [, m, d] = iso.split('-').map(Number);
+  const ddmm = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  const hi = String(horaHm).slice(0, 5);
+  return `${capitalizeFirst(long.split(',')[0] || long)}, ${ddmm} às ${hi}`;
+}
+
+function resolveProfissionalNome(agenda) {
+  const id = String(agenda.roleUserIdAgenda || '').trim();
+  if (!id) return '';
+  const fromEquipe = (agenda.equipeList || []).find((p) => String(p.roleUserId) === id);
+  if (fromEquipe?.nome) return fromEquipe.nome;
+  return agenda.editingAppointment?.profissionalNome || '';
+}
+
+function HeaderChip({ label, active }) {
+  return (
+    <span
+      className={`rounded px-3 py-1 font-mono text-xs ${
+        active ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ShortcutSubtitle() {
+  return (
+    <p className="mt-1 text-[12px] font-medium text-gray-500">
+      <kbd className={KBD_CLASS}>Tab</kbd> navega ·{' '}
+      <kbd className={KBD_CLASS}>Ctrl</kbd>+<kbd className={KBD_CLASS}>Enter</kbd> salva
+    </p>
+  );
+}
+
 /**
  * Modal "Novo Agendamento" / edição — mesmo UI usado na agenda.
- * `agenda.patientSelectLocked`: quando true (abrir do perfil), paciente somente leitura e sem bloqueio.
+ * `agenda.patientSelectLocked`: quando true (abrir do perfil), paciente somente leitura.
  */
 export function AgendaFormModal({ agenda, onExcluirClick }) {
   const horaInicioInputRef = React.useRef(null);
@@ -38,11 +107,23 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     }
     el.focus();
   };
-  const modalTitle = isEdit ? 'Editar Agendamento' : 'Novo Agendamento';
-  const modalSubtitle = 'Preencha os dados obrigatorios para atualizar a agenda.';
+
+  const modalTitle = isEdit ? 'Editar agendamento' : 'Novo agendamento';
+  const profNome = resolveProfissionalNome(agenda);
+  const hasProfDataHora =
+    Boolean(profNome) && Boolean(agenda.form.data) && Boolean(agenda.form.horaInicio);
+  const subtitleDynamic = hasProfDataHora
+    ? `${formatSubtitleDateTime(agenda.form.data, agenda.form.horaInicio)} · ${profNome.startsWith('Dr') ? profNome : `Dr. ${profNome}`}`
+    : null;
+
+  const chipPacienteActive = Boolean(
+    String(agenda.form.pacienteId || '').trim() || String(agenda.form.pacienteNome || '').trim()
+  );
+  const chipDataHoraActive = Boolean(agenda.form.data && agenda.form.horaInicio);
+
   const horarioConflita = Boolean(agenda.horarioConflita);
-  const horarioInputClass = `mt-1 w-full rounded-lg border px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F] ${
-    horarioConflita ? 'border-amber-500 bg-amber-50/40 ring-1 ring-amber-300' : 'border-[#E8E8E8]'
+  const horarioInputClass = `${DATE_TIME_INPUT_CLASS} ${
+    horarioConflita ? 'border-amber-500 bg-amber-50/40 ring-1 ring-amber-300' : ''
   }`;
 
   const selectedProcedimentos = Array.isArray(agenda.form.catalogoProcedimentoSaudeIds)
@@ -83,221 +164,202 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={agenda.closeModal} aria-label="Fechar modal" />
-      <div className="relative max-h-[92vh] w-full max-w-[720px] overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#E8E8E8] p-5">
-          <div>
-            <h3 className="text-[18px] font-black text-[#1A1A2E]">{modalTitle}</h3>
-            <p className="text-[12px] font-medium text-[#888888]">{modalSubtitle}</p>
+      <div className="relative flex max-h-[92vh] w-full max-w-[960px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 p-5">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[18px] font-black text-gray-900">{modalTitle}</h3>
+            {subtitleDynamic ? (
+              <p className="mt-1 text-[12px] font-medium text-gray-500">{subtitleDynamic}</p>
+            ) : (
+              <ShortcutSubtitle />
+            )}
           </div>
-          <button type="button" onClick={agenda.closeModal} className="rounded-xl p-2 text-[#64748b] hover:bg-[#F5F6FA]">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <HeaderChip label="paciente" active={chipPacienteActive} />
+            <HeaderChip label="data · hora" active={chipDataHoraActive} />
+            <button
+              type="button"
+              onClick={agenda.closeModal}
+              className="rounded-xl p-2 text-gray-500 hover:bg-gray-50"
+              aria-label="Fechar"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        <div className="grid gap-4 p-5 md:grid-cols-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-24 lg:pb-5">
           {agenda.formErrors._global ? (
-            <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] font-bold text-amber-900">
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] font-bold text-amber-900">
               {agenda.formErrors._global}
             </div>
           ) : null}
 
-          {agenda.slotsOcupadosLoading ? (
-            <div className="md:col-span-2 text-[11px] font-semibold text-[#888888]">Carregando ocupação do dia…</div>
-          ) : null}
-
-          <FieldError error={agenda.formErrors.pacienteId}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Paciente*</label>
-            {lockPatient ? (
-              <div className="mt-1 rounded-lg border border-[#E8E8E8] bg-[#F5F6FA] px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E]">
-                <span className="block">{agenda.form.pacienteNome || '—'}</span>
-                {agenda.form.telefone ? (
-                  <span className="mt-1 block text-[12px] font-medium text-[#64748b]">{agenda.form.telefone}</span>
-                ) : null}
-              </div>
-            ) : (
-              <>
-                <select
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-6">
+              <FieldError error={agenda.formErrors.pacienteId}>
+                <FieldLabel required>Paciente</FieldLabel>
+                <PacienteSearchInput
                   value={agenda.form.pacienteId}
-                  onChange={(event) => agenda.updateForm('pacienteId', event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#1A1A2E] outline-none focus:border-[#0FA37F]"
-                >
-                  <option value="">Selecione</option>
-                  {agenda.patientOptions.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.nome}
-                    </option>
-                  ))}
-                </select>
-                {agenda.patientOptions.length === 0 ? (
-                  <p className="mt-1 text-[11px] font-medium text-[#888888]">
-                    Cadastre pacientes na aba Pacientes para agendar.
-                  </p>
-                ) : null}
-              </>
-            )}
-          </FieldError>
+                  displayNome={agenda.form.pacienteNome}
+                  locked={lockPatient}
+                  onChange={agenda.selectPaciente}
+                />
+              </FieldError>
 
-          <FieldError error={agenda.formErrors.catalogoProcedimentoSaudeIds}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">{isEdit ? 'Procedimento*' : 'Procedimentos*'}</label>
-            <div className="mt-1">
-              <ProcedimentoAutocomplete
-                value={agenda.form.procedimentoNome || ''}
-                onInputChange={(nome) => agenda.updateForm('procedimentoNome', nome)}
-                onCommit={(nome, catalogoId) => {
-                  agenda.updateForm('procedimentoNome', nome);
-                  addProcedimentoChip(catalogoId, nome);
-                }}
-                placeholder="Ex: Botox, Preenchimento..."
-                catalogoOptions={agenda.procedimentoOptions.map((o) => ({
-                  id: o.id,
-                  nomeProcedimento: o.nome,
-                }))}
-                error={Boolean(agenda.formErrors.catalogoProcedimentoSaudeIds)}
-                showCatalogCommitBadge={false}
-              />
-              {selectedProcedimentos.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {selectedProcedimentos.map((id) => (
-                    <span
-                      key={id}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#e6f7f3] px-2.5 py-1 text-[11px] font-semibold text-[#0f766e]"
-                    >
-                      {procedimentoChipLabel(id)}
-                      <button
-                        type="button"
-                        onClick={() => removeProcedimentoChip(id)}
-                        className="rounded-full p-0.5 hover:bg-[#ccf0e6]"
-                        aria-label="Remover procedimento"
+              <FieldError error={agenda.formErrors.catalogoProcedimentoSaudeIds}>
+                <FieldLabel required>{isEdit ? 'Procedimento' : 'Procedimentos'}</FieldLabel>
+                <ProcedimentoAutocomplete
+                  value={agenda.form.procedimentoNome || ''}
+                  onInputChange={(nome) => agenda.updateForm('procedimentoNome', nome)}
+                  onCommit={(nome, catalogoId) => {
+                    agenda.updateForm('procedimentoNome', nome);
+                    addProcedimentoChip(catalogoId, nome);
+                  }}
+                  placeholder="Ex: Botox, Preenchimento..."
+                  catalogoOptions={agenda.procedimentoOptions.map((o) => ({
+                    id: o.id,
+                    nomeProcedimento: o.nome,
+                  }))}
+                  error={Boolean(agenda.formErrors.catalogoProcedimentoSaudeIds)}
+                  showCatalogCommitBadge={false}
+                />
+                {selectedProcedimentos.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedProcedimentos.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-700"
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
+                        {procedimentoChipLabel(id)}
+                        <button
+                          type="button"
+                          onClick={() => removeProcedimentoChip(id)}
+                          className="rounded-full p-0.5 hover:bg-teal-100"
+                          aria-label="Remover procedimento"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </FieldError>
+
+              <FieldError error={agenda.formErrors.profissional}>
+                <FieldLabel>Profissional</FieldLabel>
+                <ProfissionalPills
+                  profissionais={agenda.equipeList}
+                  value={agenda.roleUserIdAgenda}
+                  onChange={agenda.setRoleUserIdAgenda}
+                  loading={agenda.equipeLoading}
+                  error={agenda.equipeError}
+                  orphanLabel={agenda.editingAppointment?.profissionalNome}
+                />
+              </FieldError>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <FieldLabel required>Data</FieldLabel>
+                  <input
+                    type="date"
+                    min={agenda.todayIso}
+                    value={agenda.form.data}
+                    onChange={(event) => agenda.updateForm('data', event.target.value)}
+                    className={DATE_TIME_INPUT_CLASS}
+                  />
+                  {(() => {
+                    const past = Boolean(agenda.form.data) && agenda.form.data < agenda.todayIso;
+                    const msg =
+                      agenda.formErrors.data ||
+                      (past ? 'Data inválida — não é possível agendar para o passado.' : '');
+                    return msg ? <p className="mt-1 text-sm text-red-500">{msg}</p> : null;
+                  })()}
                 </div>
-              ) : null}
-            </div>
-          </FieldError>
 
-          <div>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Data*</label>
-            <input
-              type="date"
-              min={agenda.todayIso}
-              value={agenda.form.data}
-              onChange={(event) => agenda.updateForm('data', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
-            />
-            {(() => {
-              const past = Boolean(agenda.form.data) && agenda.form.data < agenda.todayIso;
-              const msg =
-                agenda.formErrors.data ||
-                (past ? 'Data inválida — não é possível agendar para o passado.' : '');
-              return msg ? <p className="mt-1 text-sm text-red-500">{msg}</p> : null;
-            })()}
-          </div>
-
-          <FieldError error={agenda.formErrors.horaInicio}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]" htmlFor="agenda-hora-inicio">
-              Horário*
-            </label>
-            <input
-              id="agenda-hora-inicio"
-              ref={horaInicioInputRef}
-              type="time"
-              value={agenda.form.horaInicio}
-              title={horarioConflita ? 'Horário ocupado' : undefined}
-              onChange={(event) => agenda.updateForm('horaInicio', event.target.value)}
-              onClick={openHoraInicioPicker}
-              className={horarioInputClass}
-            />
-            {horarioConflita ? (
-              <p className="mt-1 text-[11px] font-bold text-amber-700">Horário ocupado</p>
-            ) : null}
-            {horarioConflita && agenda.proximoHorarioLivre ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p className="text-[11px] font-semibold text-[#64748b]">
-                  Próximo horário livre sugerido:{' '}
-                  <span className="font-bold text-[#1A1A2E]">{agenda.proximoHorarioLivre}</span>
-                </p>
-                <button
-                  type="button"
-                  onClick={() => agenda.updateForm('horaInicio', agenda.proximoHorarioLivre)}
-                  className="rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-bold text-amber-900 hover:bg-amber-50"
-                >
-                  Aplicar sugestão
-                </button>
+                <FieldError error={agenda.formErrors.horaInicio}>
+                  <FieldLabel required>Horário</FieldLabel>
+                  <input
+                    id="agenda-hora-inicio"
+                    ref={horaInicioInputRef}
+                    type="time"
+                    value={agenda.form.horaInicio}
+                    title={horarioConflita ? 'Horário ocupado' : undefined}
+                    onChange={(event) => agenda.updateForm('horaInicio', event.target.value)}
+                    onClick={openHoraInicioPicker}
+                    className={horarioInputClass}
+                  />
+                </FieldError>
               </div>
-            ) : null}
-          </FieldError>
 
-          <FieldError error={agenda.formErrors.duracaoMin}>
-            <label className="text-[12px] font-bold text-[#1A1A2E]" htmlFor="agenda-duracao-min">
-              Duração (min)*
-            </label>
-            <select
-              id="agenda-duracao-min"
-              value={String(agenda.form.duracaoMin ?? '')}
-              onChange={(event) => agenda.updateForm('duracaoMin', event.target.value)}
-              className="mt-1 w-full cursor-pointer rounded-lg border border-[#E8E8E8] bg-white px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
-            >
-              {AGENDA_DURACAO_MINUTOS_OPCOES.map((m) => (
-                <option key={m} value={m}>
-                  {m} min
-                </option>
-              ))}
-            </select>
-          </FieldError>
+              <FieldError error={agenda.formErrors.duracaoMin}>
+                <FieldLabel required>Duração</FieldLabel>
+                <DuracaoPills
+                  value={agenda.form.duracaoMin}
+                  onChange={(min) => agenda.updateForm('duracaoMin', min)}
+                />
+              </FieldError>
+            </div>
 
-          <div>
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Telefone</label>
-            <input
-              value={agenda.form.telefone}
-              onChange={(event) => agenda.updateForm('telefone', event.target.value)}
-              disabled={lockPatient}
-              className="mt-1 w-full rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F] disabled:cursor-not-allowed disabled:bg-[#f1f5f9]"
-            />
+            <div className="hidden min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 lg:flex">
+              <CalendarDays className="mb-4 h-8 w-8 text-gray-400" strokeWidth={1.5} aria-hidden />
+              <p className="max-w-[220px] text-center text-[13px] leading-snug text-gray-500">
+                <span className="block font-medium">Disponibilidade</span>
+                <span className="block">aparecerá aqui em breve</span>
+              </p>
+            </div>
           </div>
 
-          <div className="md:col-span-2">
-            <label className="text-[12px] font-bold text-[#1A1A2E]">Observações</label>
+          <div className="mt-6">
+            <FieldLabel optional>Observações</FieldLabel>
             <textarea
               value={agenda.form.observacao}
               onChange={(event) => agenda.updateForm('observacao', event.target.value)}
               rows={3}
-              className="mt-1 w-full resize-none rounded-lg border border-[#E8E8E8] px-3 py-2.5 text-[13px] font-semibold outline-none focus:border-[#0FA37F]"
+              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
             />
           </div>
         </div>
 
-        <div className="flex flex-col-reverse flex-wrap gap-2 border-t border-[#E8E8E8] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-1 flex-wrap gap-2 sm:flex-none">
-            {isEdit ? (
+        <div className="sticky bottom-0 z-[2] shrink-0 border-t border-gray-200 bg-white p-4 lg:static lg:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              {isEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof onExcluirClick === 'function') onExcluirClick();
+                  }}
+                  className={`${BTN_ACTION} items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50`}
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" /> Excluir agendamento
+                </button>
+              ) : null}
+              <AgendaFormStatusBar
+                form={agenda.form}
+                roleUserIdAgenda={agenda.roleUserIdAgenda}
+                horarioConflita={agenda.horarioConflita}
+                slotsOcupadosLoading={agenda.slotsOcupadosLoading}
+                horarioConflitoCom={agenda.horarioConflitoCom}
+              />
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  if (typeof onExcluirClick === 'function') onExcluirClick();
-                }}
-                className={`${BTN_ACTION} items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50`}
+                onClick={agenda.closeModal}
+                className={`${BTN_ACTION} rounded-lg border border-gray-200 px-4 py-2.5 text-[13px] font-bold text-gray-500 hover:bg-gray-50`}
               >
-                <Trash2 className="h-4 w-4 shrink-0" /> Excluir agendamento
+                Cancelar
               </button>
-            ) : null}
-          </div>
-          <div className="flex w-full min-w-0 flex-wrap justify-end gap-2 sm:w-auto sm:max-w-full">
-            <button
-              type="button"
-              onClick={agenda.closeModal}
-              className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] px-4 py-2.5 text-[13px] font-bold text-[#64748b] hover:bg-[#F5F6FA]`}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={agenda.saveAppointment}
-              className={`${BTN_ACTION} rounded-lg bg-[#0FA37F] px-4 py-2.5 text-[13px] font-bold text-white hover:bg-[#0d8f6f]`}
-            >
-              {isEdit ? 'Salvar alterações' : 'Salvar'}
-            </button>
+              <button
+                type="button"
+                onClick={agenda.saveAppointment}
+                className={`${BTN_ACTION} items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-[13px] font-bold text-white hover:bg-teal-700`}
+              >
+                Salvar
+                <CornerDownLeft className="h-4 w-4 shrink-0" aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
       </div>
