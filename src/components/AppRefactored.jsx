@@ -288,8 +288,6 @@ export default function App() {
     setPatientListPage,
     patientListLoading,
     patientListMeta,
-    patientListTipoBusca,
-    setPatientListTipoBusca,
     patientListSortBy,
     setPatientListSortBy,
     bumpPatientList,
@@ -1876,8 +1874,6 @@ export default function App() {
                 setPatientListPage={setPatientListPage}
                 patientListLoading={patientListLoading}
                 patientListMeta={patientListMeta}
-                patientListTipoBusca={patientListTipoBusca}
-                setPatientListTipoBusca={setPatientListTipoBusca}
                 patientListSortBy={patientListSortBy}
                 setPatientListSortBy={setPatientListSortBy}
                 roleUserId={roleUserId}

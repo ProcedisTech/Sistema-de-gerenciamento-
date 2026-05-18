@@ -57,6 +57,7 @@ export default defineConfig([
       '**/components/hooks/usePatientState.js',
       '**/hooks/usePacienteGaleriaArquivoBlobUrl.js',
       '**/hooks/usePatientProfilePhotoSrc.js',
+      '**/hooks/useProcedimentosOptions.js',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',
