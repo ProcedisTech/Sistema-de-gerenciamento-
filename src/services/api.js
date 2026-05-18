@@ -783,7 +783,13 @@ export const perfilApi = {
 export const agendasApi = {
   get: (id) => request(`/api/v1/agendas/${id}`),
   byDate: (date) => request(`/api/v1/agendas/by-date?date=${date}`),
-  byRange: (start, end) => request(`/api/v1/agendas/by-range?start=${start}&end=${end}`),
+  byRange: (start, end, opts = {}) => {
+    let url = `/api/v1/agendas/by-range?start=${start}&end=${end}`;
+    if (opts?.profissionalRoleUserId) {
+      url += `&profissionalRoleUserId=${encodeURIComponent(String(opts.profissionalRoleUserId).trim())}`;
+    }
+    return request(url);
+  },
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
   create: (data, opts = {}) => {

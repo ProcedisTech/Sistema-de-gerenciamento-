@@ -199,6 +199,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
   /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
+  /** Profissional do modal (create = sessão; edit = do agendamento). */
+  const [roleUserIdAgenda, setRoleUserIdAgenda] = useState('');
 
   const { modal: foraDispModal, abrirConfirmacao: abrirConfirmacaoForaDisp } =
     useConfirmacaoForaDisp();
@@ -218,6 +220,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     () => (Array.isArray(patients) ? patients : []).map(normalizePatientOption),
     [patients]
   );
+
+  useEffect(() => {
+    if (modalMode) return;
+    setRoleUserIdAgenda(String(roleUserId || '').trim());
+  }, [roleUserId, modalMode]);
 
 
   useEffect(() => {
@@ -303,10 +310,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (skipId) {
           dtos = dtos.filter((d) => d && String(d.id) !== String(skipId));
         }
-        const role = String(roleUserId || '').trim();
+        const role = String(roleUserIdAgenda || '').trim();
         const intervals = occupiedIntervalsFromAgendaDtos(dtos, {
           excludeCancelled: true,
-          roleUserId: role || undefined,
+          profissionalRoleUserId: role || undefined,
         });
         setSlotsOcupados(intervals);
       })
@@ -319,7 +326,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [authEnabled, modalMode, form.data, roleUserId, editingAppointment?.agendaId]);
+  }, [authEnabled, modalMode, form.data, roleUserIdAgenda, editingAppointment?.agendaId]);
 
   const horarioConflita = useMemo(
     () => (modalMode ? proposalOverlapsOccupied(form.horaInicio, form.duracaoMin, slotsOcupados) : false),
@@ -553,9 +560,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setPatientSelectLocked(false);
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
+      setRoleUserIdAgenda(String(roleUserId || '').trim());
       setModalMode('create');
     },
-    [patientOptions, selectedDay]
+    [patientOptions, selectedDay, roleUserId]
   );
 
   const openCreateModalAtSlot = useCallback(
@@ -571,9 +579,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         horaInicio: hi || base.horaInicio,
       });
       setFormErrors({});
+      setRoleUserIdAgenda(String(roleUserId || '').trim());
       setModalMode('create');
     },
-    [patientOptions]
+    [patientOptions, roleUserId]
   );
 
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
@@ -593,9 +602,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       });
       setPatientSelectLocked(true);
       setFormErrors({});
+      setRoleUserIdAgenda(String(roleUserId || '').trim());
       setModalMode('create');
     },
-    [patientOptions, todayIso]
+    [patientOptions, todayIso, roleUserId]
   );
 
   const openEditModal = useCallback(
@@ -621,9 +631,14 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       });
       setFormErrors({});
       setPatientSelectLocked(false);
+      setRoleUserIdAgenda(
+        String(
+          appointment?.profissionalRoleUserId ?? appointment?.roleUserId ?? roleUserId ?? ''
+        ).trim()
+      );
       setModalMode('edit');
     },
-    [patientOptions, selectedDay]
+    [patientOptions, selectedDay, roleUserId]
   );
 
   const closeModal = useCallback(() => {
@@ -659,8 +674,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const saveAppointment = useCallback(async () => {
     if (!validateForm()) return false;
-    const contextRole = String(roleUserId || '').trim();
-    if (!contextRole) {
+    const agendaRole = String(roleUserIdAgenda || '').trim();
+    if (!agendaRole) {
       setFormErrors((prev) => ({
         ...prev,
         _global: 'Sessão sem vínculo de profissional (role). Faça login novamente ou complete o perfil na clínica.',
@@ -698,7 +713,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           setError('Selecione o procedimento.');
           return false;
         }
-        const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
+        const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, agendaRole);
         const body = {
           ...baseBody,
           pacienteId: String(form.pacienteId || patient?.id || '').trim(),
@@ -720,7 +735,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             dataAgendamento: form.data,
             horaInicio: startHh,
             duracaoMin: dMin,
-            roleUserId: contextRole,
+            profissionalRoleUserId: agendaRole,
             observacao: String(form.observacao || '').trim(),
             pacienteId: String(form.pacienteId || patient?.id || '').trim(),
             catalogoProcedimentoSaudeId,
@@ -758,7 +773,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     modalMode,
     patientOptions,
     refreshWeekGrid,
-    roleUserId,
+    roleUserIdAgenda,
     toastSuccess,
     validateForm,
   ]);
