@@ -1938,10 +1938,25 @@ export function PatientProfileView({
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="mb-6 rounded-[18px] border border-[#e2e8f0] bg-white p-5 shadow-md sm:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <div className="relative mb-6 rounded-[18px] border border-[#e2e8f0] bg-white p-5 shadow-md sm:p-6">
+            {isPerfilAtivo && !isRecepcionista ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setInativarMotivo('');
+                  setInativarSenha('');
+                  setInativarSenhaErro('');
+                  setInativarModalOpen(true);
+                }}
+                className="absolute right-5 top-5 z-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-600 bg-red-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-colors hover:border-red-700 hover:bg-red-700 sm:right-6 sm:top-6 sm:text-[13px]"
+              >
+                <UserMinus className="h-3.5 w-3.5 shrink-0 text-white sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
+                Inativar Paciente
+              </button>
+            ) : null}
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1 space-y-4">
-                <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-5">
+                <div className="flex w-full flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-5">
                   <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
                     <input
                       ref={profilePhotoInputRef}
@@ -1958,7 +1973,7 @@ export function PatientProfileView({
                     <PatientAvatar
                       patient={patient}
                       getPatientInitials={getPatientInitials}
-                      className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-[#e2e8f0] bg-[#e6f7f5] shadow-sm md:h-20 md:w-20"
+                      className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] shadow-sm md:h-20 md:w-20"
                       initialsClassName="text-lg font-bold md:text-xl"
                       spinnerClassName="h-5 w-5"
                     />
@@ -1981,8 +1996,10 @@ export function PatientProfileView({
                       </button>
                     ) : null}
                   </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className={`min-w-0 w-full flex-1 text-left ${isPerfilAtivo && !isRecepcionista ? 'pr-[168px]' : ''}`}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <h3 className="text-[18px] font-bold tracking-tight text-[#0f172a] md:text-[22px]">{selectedPatient.nome}</h3>
                       {isPerfilAtivo ? (
                         <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
@@ -2127,58 +2144,47 @@ export function PatientProfileView({
                 >
                   <Play className="inline h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                 </button>
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAgendarPacienteClick}
-                    disabled={!isPerfilAtivo || !selectedPatient?.id}
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                    Agendar Paciente
-                  </button>
-                  {!isRecepcionista && (
+                <div className="flex w-full flex-col">
+                  <div className="flex w-full flex-row gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditing((prev) => {
-                          if (prev) {
+                      onClick={handleAgendarPacienteClick}
+                      disabled={!isPerfilAtivo || !selectedPatient?.id}
+                      className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2 text-[13px] font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                      <span className="min-w-0 truncate">Agendar Paciente</span>
+                    </button>
+                    {!isRecepcionista && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing((prev) => {
+                            if (prev) {
+                              setEditFormErrors({});
+                              setProfileSaveError('');
+                              return null;
+                            }
                             setEditFormErrors({});
                             setProfileSaveError('');
-                            return null;
-                          }
-                          setEditFormErrors({});
-                          setProfileSaveError('');
-                          return createEditDraft();
-                        });
-                      }}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50"
-                    >
-                      <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Editar Cadastro
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled
-                  >
-                    <Download className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Gerar PDF
-                  </button>
-                  {isPerfilAtivo && !isRecepcionista ? (
+                            return createEditDraft();
+                          });
+                        }}
+                        className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2 text-[13px] font-normal text-gray-700 transition-colors hover:bg-slate-50"
+                      >
+                        <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                        <span className="min-w-0 truncate">Editar Cadastro</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setInativarMotivo('');
-                        setInativarSenha('');
-                        setInativarSenhaErro('');
-                        setInativarModalOpen(true);
-                      }}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600 px-4 text-sm font-normal text-white transition-colors hover:border-red-700 hover:bg-red-700"
+                      className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2 text-[13px] font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled
                     >
-                      <UserMinus className="h-4 w-4 shrink-0 text-white" strokeWidth={2} aria-hidden />
-                      Inativar Paciente
+                      <Download className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                      <span className="min-w-0 truncate">Gerar PDF</span>
                     </button>
-                  ) : null}
+                  </div>
                 </div>
               </div>
             </div>

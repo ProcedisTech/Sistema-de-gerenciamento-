@@ -133,7 +133,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`flex w-full min-w-0 items-center gap-3 rounded-none border-0 px-4 py-3 text-left shadow-none transition-colors duration-100 sm:min-h-[72px] sm:gap-4 sm:px-5 sm:py-3.5 md:gap-5 md:min-h-[76px] lg:min-h-[80px] lg:px-6 lg:py-4 ${
+      className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-0 px-4 py-3 text-left shadow-none transition-colors duration-100 sm:min-h-[72px] sm:gap-4 sm:px-5 sm:py-3.5 md:gap-5 md:min-h-[76px] lg:min-h-[80px] lg:px-6 lg:py-4 ${
         selected
           ? 'bg-emerald-50/70 ring-2 ring-inset ring-[#00a88e]/35 hover:bg-emerald-50/70'
           : 'bg-white hover:bg-slate-50'
@@ -192,7 +192,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
           ) : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
         {clinical ? (
           <AlertTriangle
             className="h-4 w-4 text-orange-400 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5"
@@ -200,11 +200,20 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
             aria-hidden
           />
         ) : null}
-        <ChevronRight
-          className="h-4 w-4 text-[#cbd5e1] sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5"
-          strokeWidth={2}
-          aria-hidden
-        />
+        <span
+          className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] lg:text-[13px] md:inline-flex ${
+            selected
+              ? 'border-[#6ee7c8] bg-emerald-50 text-[#047857]'
+              : 'border-[#99f6e4] bg-[#f0fdfa] text-[#0f766e]'
+          }`}
+        >
+          Ver mais
+          <ChevronRight
+            className={`h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4 lg:h-[18px] lg:w-[18px] ${selected ? 'text-[#00a88e]' : 'text-[#14b8a6]'}`}
+            strokeWidth={2}
+            aria-hidden
+          />
+        </span>
       </div>
     </button>
   );
@@ -450,8 +459,6 @@ export function PatientsListView({
   setPatientListPage,
   patientListLoading = false,
   patientListMeta,
-  patientListTipoBusca,
-  setPatientListTipoBusca,
   patientListSortBy,
   setPatientListSortBy,
   patientSearchQuery,
@@ -475,25 +482,6 @@ export function PatientsListView({
   /** Paciente ao qual `previewAnamneseList` corresponde após o último fetch concluído; `null` = nenhum. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
 
-  const handleBuscaChange = (value) => {
-    if (patientListTipoBusca === 'cpf') {
-      const digits = value.replace(/\D/g, '').slice(0, 11);
-      const masked = digits
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-      setPatientSearchQuery(masked);
-    } else if (patientListTipoBusca === 'telefone') {
-      const digits = value.replace(/\D/g, '').slice(0, 11);
-      const masked = digits
-        .replace(/(\d{2})(\d)/, '($1) $2')
-        .replace(/(\d{5})(\d)/, '$1-$2');
-      setPatientSearchQuery(masked);
-    } else {
-      setPatientSearchQuery(value);
-    }
-  };
-
   const meta = patientListMeta || {
     first: true,
     last: true,
@@ -508,10 +496,11 @@ export function PatientsListView({
       (patientListItems.find((p) => p.cpf === previewPatientCpf) ||
         patients.find((p) => p.cpf === previewPatientCpf))) ||
     null;
+  const previewPatientId = previewPatient?.id ?? null;
 
   /* eslint-disable react-hooks/set-state-in-effect -- reset ao fechar / carregar procedimentos do preview */
   useEffect(() => {
-    if (!previewPatient?.id) {
+    if (!previewPatientId) {
       setPreviewProcedures([]);
       setLoadingPreviewProcedures(false);
       return undefined;
@@ -519,7 +508,7 @@ export function PatientsListView({
     let cancelled = false;
     setLoadingPreviewProcedures(true);
     procedimentosApi
-      .byPaciente(previewPatient.id)
+      .byPaciente(previewPatientId)
       .then((data) => {
         if (!cancelled) setPreviewProcedures(Array.isArray(data) ? data : []);
       })
@@ -532,20 +521,20 @@ export function PatientsListView({
     return () => {
       cancelled = true;
     };
-  }, [previewPatient?.id]);
+  }, [previewPatientId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   /* Reset ao fechar o preview / lista por paciente (mesmo padrão do efeito de procedimentos acima). */
   /* eslint-disable react-hooks/set-state-in-effect -- branch síncrono ao trocar paciente ou fechar */
   useEffect(() => {
-    if (!previewPatient?.id) {
+    if (!previewPatientId) {
       setPreviewAnamneseList([]);
       setPreviewAnamneseListOwnerId(null);
       return undefined;
     }
     let cancelled = false;
     anamneseApi
-      .listPaciente(previewPatient.id)
+      .listPaciente(previewPatientId)
       .then((list) => {
         if (!cancelled) setPreviewAnamneseList(Array.isArray(list) ? list : []);
       })
@@ -553,24 +542,23 @@ export function PatientsListView({
         if (!cancelled) setPreviewAnamneseList([]);
       })
       .finally(() => {
-        if (!cancelled) setPreviewAnamneseListOwnerId(previewPatient.id);
+        if (!cancelled) setPreviewAnamneseListOwnerId(previewPatientId);
       });
     return () => {
       cancelled = true;
     };
-  }, [previewPatient?.id]);
+  }, [previewPatientId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const previewAnamneseLoading = Boolean(
-    previewPatient?.id && previewAnamneseListOwnerId !== previewPatient.id,
+    previewPatientId && previewAnamneseListOwnerId !== previewPatientId,
   );
 
   const filteredPatientListItems = applyQuickFilter(patientListItems, quickFilter);
 
-  const previewHasExistingAnamnese = useMemo(() => {
-    if (!previewPatient?.id || previewAnamneseListOwnerId !== previewPatient.id) return false;
-    return previewHasExistingAnamneseFromList(previewAnamneseList);
-  }, [previewPatient?.id, previewAnamneseListOwnerId, previewAnamneseList]);
+  const previewHasExistingAnamnese =
+    Boolean(previewPatientId && previewAnamneseListOwnerId === previewPatientId) &&
+    previewHasExistingAnamneseFromList(previewAnamneseList);
 
   const closeDetail = () => {
     setPreviewPatientCpf(null);
@@ -632,25 +620,10 @@ export function PatientsListView({
         <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
           <div className="flex min-w-0 flex-col overflow-x-hidden">
             {/* Header: search + chips + sort */}
-            <div className="sticky top-0 z-10 border-b border-[#e2e8f0] bg-white">
-              {/* Linha principal: tipo (esquerda) · pesquisa (centro) · ordenação (direita) */}
+            <div className="sticky top-0 z-10 bg-transparent">
+              {/* Linha principal: pesquisa · ordenação */}
               <div className="flex w-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2 sm:flex-row sm:flex-nowrap sm:items-center md:gap-3">
-                <select
-                  value={patientListTipoBusca}
-                  onChange={(e) => {
-                    setPatientListTipoBusca(e.target.value);
-                    setPatientSearchQuery('');
-                  }}
-                  className="order-1 h-10 w-full min-w-0 shrink-0 cursor-pointer rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-medium text-[#475569] outline-none focus:border-[#00a88e]/40 sm:w-28 sm:flex-none sm:text-[12px]"
-                  aria-label="Tipo de busca"
-                >
-                  <option value="nome">Nome</option>
-                  <option value="cpf">CPF</option>
-                  <option value="telefone">Telefone</option>
-                  <option value="email">E-mail</option>
-                </select>
-
-                <div className="relative order-2 min-h-[44px] min-w-0 flex-1 sm:min-h-0">
+                <div className="relative order-1 min-h-[44px] min-w-0 flex-1 sm:min-h-0">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -659,22 +632,14 @@ export function PatientsListView({
                   <input
                     type="text"
                     value={patientSearchQuery}
-                    onChange={(e) => handleBuscaChange(e.target.value)}
-                    placeholder={
-                      patientListTipoBusca === 'cpf'
-                        ? 'Buscar por CPF...'
-                        : patientListTipoBusca === 'telefone'
-                          ? 'Buscar por telefone...'
-                          : patientListTipoBusca === 'email'
-                            ? 'Buscar por e-mail...'
-                            : 'Buscar por nome, CPF ou telefone...'
-                    }
+                    onChange={(e) => setPatientSearchQuery(e.target.value)}
+                    placeholder="Buscar por nome, CPF ou telefone…"
                     className="h-11 min-h-[44px] w-full min-w-0 rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50 sm:h-10 sm:min-h-0 sm:text-[14px]"
                     autoComplete="off"
                   />
                 </div>
 
-                <div className="relative order-3 flex h-11 min-h-[44px] w-full shrink-0 items-center sm:h-10 sm:min-h-0 sm:w-fit sm:flex-none">
+                <div className="relative order-2 flex h-11 min-h-[44px] w-full shrink-0 items-center sm:h-10 sm:min-h-0 sm:w-fit sm:flex-none">
                   <ArrowUpDown
                     className="pointer-events-none absolute left-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -727,7 +692,8 @@ export function PatientsListView({
             </p>
           ) : null}
 
-          <div className="relative min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
+          <div className="px-4">
+            <div className="relative min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
             {patientListLoading ? (
               <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-slate-50/60 backdrop-blur-[1px]">
                 <Loader2 className="h-8 w-8 animate-spin text-[#00a88e]" aria-hidden />
@@ -735,7 +701,7 @@ export function PatientsListView({
               </div>
             ) : null}
             <ul
-              className="flex list-none flex-col divide-y divide-[#e2e8f0] overflow-hidden rounded-xl border border-[#e2e8f0] bg-white"
+              className="flex list-none flex-col gap-2 sm:gap-2.5 md:gap-3"
               aria-label="Lista de pacientes"
             >
               {!patientListLoading && filteredPatientListItems.length === 0 ? (
@@ -749,7 +715,10 @@ export function PatientsListView({
                 filteredPatientListItems.map((patient) => {
                   const selected = selectedPatientCpf === patient.cpf;
                   return (
-                    <li key={patient.id} className="min-w-0">
+                    <li
+                      key={patient.id}
+                      className="min-w-0 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm"
+                    >
                       <PatientListCard
                         patient={patient}
                         selected={selected}
@@ -764,8 +733,8 @@ export function PatientsListView({
                 })
               )}
             </ul>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e2e8f0] bg-white px-3 py-2.5 sm:px-4">
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e2e8f0] bg-white py-2.5">
             <button
               type="button"
               disabled={meta.first || patientListLoading}
@@ -787,6 +756,7 @@ export function PatientsListView({
             >
               <ChevronRight className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
+            </div>
           </div>
         </div>
 
