@@ -46,6 +46,8 @@ export function mapAgendaDtoToDashboardRow(dto) {
   const catId = dto.catalogoProcedimentoSaudeId != null ? String(dto.catalogoProcedimentoSaudeId).trim() : '';
   const status = deriveAgendaSlotStatus(dto);
   const pacienteId = dto.pacienteId != null ? String(dto.pacienteId) : '';
+  const profissionalRoleUserId =
+    dto.profissionalRoleUserId != null ? String(dto.profissionalRoleUserId) : roleUserIdFromDto(dto);
 
   return {
     id: String(dto.id),
@@ -59,7 +61,8 @@ export function mapAgendaDtoToDashboardRow(dto) {
     motivoCancelamentoId: dto.motivoCancelamentoId != null ? String(dto.motivoCancelamentoId) : null,
     motivoCancelamentoCodigo: dto.motivoCancelamentoCodigo ?? null,
     motivoCancelamentoNome: dto.motivoCancelamentoNome ?? null,
-    roleUserId: roleUserIdFromDto(dto),
+    profissionalRoleUserId,
+    roleUserId: profissionalRoleUserId,
     corHex: '#00a88e',
     pacienteNome: dto.pacienteNome || (tipo === 'bloqueio' ? '' : 'Sem paciente'),
     pacienteId,
@@ -93,7 +96,7 @@ export function buildAgendaCreateBody({
   dataAgendamento,
   horaInicio,
   duracaoMin,
-  roleUserId,
+  profissionalRoleUserId,
   observacao,
   pacienteId,
   catalogoProcedimentoSaudeId,
@@ -106,7 +109,7 @@ export function buildAgendaCreateBody({
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
-    roleUserId,
+    profissionalRoleUserId,
     pacienteId: String(pacienteId || '').trim(),
     ...(cat ? { catalogoProcedimentoSaudeId: cat } : {}),
   };
@@ -117,7 +120,7 @@ export function buildAgendaCreateBody({
 }
 
 /** `form` = campos do modal (`data`, `horaInicio`, `duracaoMin`, `observacao`, catálogo). */
-export function buildAgendaUpdateBody(rawSlot, form, roleUserIdFallback) {
+export function buildAgendaUpdateBody(rawSlot, form, profissionalRoleUserId) {
   const raw = rawSlot && typeof rawSlot === 'object' ? rawSlot : {};
   const dataAgendamento =
     (form.data && String(form.data).slice(0, 10)) ||
@@ -147,7 +150,7 @@ export function buildAgendaUpdateBody(rawSlot, form, roleUserIdFallback) {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
     horaFim: horaFim.length === 5 ? `${horaFim}:00` : horaFim,
-    roleUserId: raw.roleUserId || roleUserIdFallback,
+    profissionalRoleUserId: String(profissionalRoleUserId || '').trim(),
     pacienteId: String(form.pacienteId || raw.pacienteId || '').trim(),
     ...(catalogoProcedimentoSaudeId ? { catalogoProcedimentoSaudeId } : {}),
     observacao: obs,

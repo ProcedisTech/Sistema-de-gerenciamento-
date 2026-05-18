@@ -52,16 +52,19 @@ export function isSlotOccupied(dayAppointments, slotStartMin, slotDurationMin = 
 /**
  * Extrai intervalos ocupados de DTOs crus do by-range.
  * @param {Array} dtos
- * @param {{ excludeCancelled?: boolean, roleUserId?: string }} opts
+ * @param {{ excludeCancelled?: boolean, profissionalRoleUserId?: string }} opts
  */
 export function occupiedIntervalsFromAgendaDtos(dtos, opts = {}) {
-  const { excludeCancelled = true, roleUserId } = opts;
+  const { excludeCancelled = true, profissionalRoleUserId } = opts;
   const list = Array.isArray(dtos) ? dtos : [];
   const intervals = [];
   for (const dto of list) {
     if (!dto) continue;
     if (excludeCancelled && dtoLooksCancelled(dto)) continue;
-    if (roleUserId && dto.roleUserId != null && String(dto.roleUserId) !== String(roleUserId)) continue;
+    if (profissionalRoleUserId) {
+      const dtoProf = dto.profissionalRoleUserId ?? dto.roleUserId;
+      if (dtoProf != null && String(dtoProf) !== String(profissionalRoleUserId)) continue;
+    }
     const hi = dto.horaInicio != null ? String(dto.horaInicio).slice(0, 5) : '';
     const hf = dto.horaFim != null ? String(dto.horaFim).slice(0, 5) : '';
     const start = parseHhmmToMinutes(hi);
