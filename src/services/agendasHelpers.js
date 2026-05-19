@@ -1,3 +1,5 @@
+import { isAgendaForaDisponibilidadeError } from '../utils/agendaErrors';
+
 /**
  * Wrapper para chamadas de agenda que podem disparar warning de disponibilidade.
  *
@@ -14,12 +16,7 @@ export async function executarComBypassDisp(chamadaApi, chamadaApiComForcar, abr
   try {
     return await chamadaApi();
   } catch (err) {
-    const ehForaDaDisp =
-      err?.status === 409 &&
-      typeof err?.body?.detail === 'string' &&
-      err.body.detail.includes('FORA_DA_DISPONIBILIDADE');
-
-    if (!ehForaDaDisp) throw err;
+    if (!isAgendaForaDisponibilidadeError(err)) throw err;
 
     const confirmou = await abrirConfirmacao();
     if (!confirmou) return null;

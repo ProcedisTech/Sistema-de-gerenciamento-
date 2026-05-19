@@ -5,7 +5,8 @@ import { useToast } from '../../contexts/useToast.js';
 
 const POLL_INTERVAL_MS = 60_000;
 
-export default function NotificationBell() {
+export default function NotificationBell({ variant = 'default' }) {
+  const isAgenda = variant === 'agenda';
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
@@ -92,12 +93,23 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={handleToggle}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-app-surface-soft"
+        className={
+          isAgenda
+            ? 'relative flex h-10 w-10 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-700 shadow-agenda-sm transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40'
+            : 'relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-app-surface-soft'
+        }
         title="Notificações"
+        aria-label="Notificações"
       >
-        <Icon className="h-5 w-5 text-gray-700" />
+        <Icon className={`h-5 w-5 ${isAgenda ? 'text-ink-700' : 'text-gray-700'}`} />
         {count > 0 ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+          <span
+            className={
+              isAgenda
+                ? 'absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-status-danger px-1 text-xs font-bold text-white'
+                : 'absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white'
+            }
+          >
             {count > 99 ? '99+' : count}
           </span>
         ) : null}
