@@ -21,11 +21,8 @@ import {
   ProcedureTimelinePreviewCard,
 } from './ProcedureTimelineBlock.jsx';
 import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
-import {
-  formatCartaoDiaPtBr,
-  latestProcedureOccurredInstantIso,
-  patientUltimaVisitaDayFromDto,
-} from '../../utils/patientProfileDerivedDates.js';
+import { anamneseVencidaFromPatient } from '../../utils/patientAnamneseAlerts.js';
+import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -52,38 +49,11 @@ function semRetorno60d(p) {
   return d != null && d > 60;
 }
 
-function lastProcedureLabel(p) {
-  const procs = Array.isArray(p?.procedures) ? p.procedures : [];
-  if (!procs.length) return '—';
-  const last = procs[procs.length - 1];
-  const n = last?.nome || last?.nomeProcedimento;
-  return n ? String(n) : '—';
-}
-
-/** Data no rodapé: mesma prioridade do cartão Última visita do perfil; fallback ao procedimento mais recente. */
-function lastProcedureDateForCard(p) {
-  const primary = patientUltimaVisitaDayFromDto(p);
-  if (primary !== '-') return primary;
-  const iso = latestProcedureOccurredInstantIso(p?.procedures || []);
-  return iso ? formatCartaoDiaPtBr(iso) : '—';
-}
-
 /** Heurística visual: sem visita nem procedimento na lista local. */
 function isPatientLikelyNovo(p) {
   const uv = String(p?.ultimaVisita || '').trim();
   const noVisita = !uv || uv === '-' || uv === '—';
   return noVisita && lastProcedureLabel(p) === '—';
-}
-
-/** Quando o backend enviar ISO da última anamnese no DTO da lista. */
-function anamneseVencidaFromPatient(p) {
-  const raw = p?.ultimaAnamneseDataHora || p?.ultimaAnamneseEm;
-  if (!raw) return false;
-  const t = new Date(raw);
-  if (Number.isNaN(t.getTime())) return false;
-  const lim = new Date();
-  lim.setMonth(lim.getMonth() - 6);
-  return t < lim;
 }
 
 const SORT_OPTIONS = [
