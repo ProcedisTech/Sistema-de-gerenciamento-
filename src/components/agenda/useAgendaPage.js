@@ -18,6 +18,7 @@ import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
+import { fetchKpiDrilldownRows } from '../../utils/agendaKpiDrilldown';
 import {
   buildAgendaCreateBody,
   buildAgendaUpdateBody,
@@ -263,7 +264,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [roleUserId, modalMode]);
 
   useEffect(() => {
-    if (!authEnabled || !modalMode) return;
+    if (!authEnabled) return;
     if (equipeFetchedRef.current) return;
     let cancelled = false;
     equipeFetchedRef.current = true;
@@ -286,7 +287,42 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [authEnabled, modalMode]);
+  }, [authEnabled]);
+
+  const ensureEquipeLoaded = useCallback(async () => {
+    if (!authEnabled) return;
+    if (equipeFetchedRef.current) return;
+    equipeFetchedRef.current = true;
+    setEquipeLoading(true);
+    setEquipeError('');
+    try {
+      const raw = await equipeApi.list();
+      setEquipeList(normalizeEquipeList(raw));
+    } catch (e) {
+      setEquipeList([]);
+      setEquipeError(e?.message || 'Não foi possível carregar a equipe.');
+    } finally {
+      setEquipeLoading(false);
+    }
+  }, [authEnabled]);
+
+  const currentYm = useMemo(() => monthKey(monthDate), [monthDate]);
+
+  const loadKpiDrilldownRows = useCallback(
+    async ({ period, status, profissionalRoleUserId }) => {
+      if (!authEnabled) return [];
+      return fetchKpiDrilldownRows({
+        period,
+        status,
+        profissionalRoleUserId,
+        todayIso,
+        monthDate,
+        monthLoadedAppointments: appointments,
+        currentYm,
+      });
+    },
+    [authEnabled, todayIso, monthDate, appointments, currentYm],
+  );
 
   useEffect(() => {
     if (!Array.isArray(appointments) || appointments.length === 0) return;
@@ -316,8 +352,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       alive = false;
     };
   }, [appointments, disponibilidades]);
-
-  const currentYm = useMemo(() => monthKey(monthDate), [monthDate]);
 
   const loadMonth = useCallback(async () => {
     if (!authEnabled) {
@@ -800,7 +834,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const handleReagendar = useCallback(
-    async (agendaId, payload) => {
+    async (agendaId, payload, opts = {}) => {
       if (isNivel1) return false;
       if (!agendaId || !payload) return false;
       setSubmittingReagendar(true);
@@ -811,7 +845,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           abrirConfirmacaoForaDisp
         );
         if (resultado === null) return false;
-        toastSuccess('Agendamento reagendado');
+        toastSuccess(opts.successToast || 'Agendamento reagendado');
         await loadMonth();
         await refreshWeekGrid();
         setError('');
@@ -1214,6 +1248,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     isNivel1,
     appointments,
     appointmentsByDate,
+    monthDate,
     todayIso,
     calendarCells,
     currentYm,
@@ -1273,9 +1308,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     slotsOcupadosLoading,
     roleUserIdAgenda,
     setRoleUserIdAgenda: setRoleUserIdAgendaPublic,
+    ensureEquipeLoaded,
     equipeList,
     equipeLoading,
     equipeError,
+    loadKpiDrilldownRows,
     stats,
     submittingReagendar,
     syncWeekFromSelection,
