@@ -23,7 +23,13 @@ function slotRowClass(state) {
   }
 }
 
-export function AgendaDisponibilidadeSlots({ dayModel, selectedIso, onSelectSlot, loading }) {
+export function AgendaDisponibilidadeSlots({
+  dayModel,
+  selectedIso,
+  onSelectSlot,
+  loading,
+  maxListHeight,
+}) {
   if (!selectedIso) {
     return (
       <section className="flex h-full flex-1 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-6 text-center">
@@ -54,7 +60,8 @@ export function AgendaDisponibilidadeSlots({ dayModel, selectedIso, onSelectSlot
         <p className="p-4 text-center text-[13px] text-gray-500">Sem expediente neste dia.</p>
       ) : (
         <ul
-          className={`min-h-0 max-h-[380px] flex-1 space-y-1.5 overflow-y-auto p-3 ${loading ? 'opacity-60' : ''}`}
+          className={`min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 ${loading ? 'opacity-60' : ''}`}
+          style={maxListHeight ? { maxHeight: maxListHeight } : { maxHeight: '380px' }}
         >
           {dayModel.slots.map((slot) => {
             const clickable = slot.state === 'livre' || slot.state === 'selecionado';

@@ -4,17 +4,31 @@ import { AgendaDisponibilidadeCalendar } from './AgendaDisponibilidadeCalendar.j
 import { AgendaDisponibilidadeSlots } from './AgendaDisponibilidadeSlots.jsx';
 
 /**
- * Linha 3 do modal: calendário heatmap + lista de slots (lado a lado em lg+).
+ * Corpo compartilhado: calendário heatmap + lista de slots.
+ * @param {'split' | 'stacked'} layout — lado a lado (desktop) ou coluna (mobile sheet)
  */
-export function AgendaDisponibilidadePanel({ agenda, formErrors }) {
+export function AgendaDisponibilidadeBody({
+  agenda,
+  formErrors,
+  layout = 'split',
+  onSelectSlot,
+  slotsMaxListHeight,
+}) {
   const role = String(agenda.roleUserIdAgenda || '').trim();
   const dataHoraError =
     formErrors?.data || formErrors?.horaInicio
       ? [formErrors.data, formErrors.horaInicio].filter(Boolean).join(' · ')
       : '';
 
+  const handleSelectSlot = onSelectSlot || agenda.selectDispSlot;
+
+  const gridClass =
+    layout === 'stacked'
+      ? 'flex flex-col gap-4'
+      : 'grid gap-4 lg:h-[420px] lg:grid-cols-2 lg:gap-6';
+
   return (
-    <section className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+    <>
       {dataHoraError ? (
         <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-800">
           {dataHoraError}
@@ -39,7 +53,7 @@ export function AgendaDisponibilidadePanel({ agenda, formErrors }) {
             </div>
           ) : null}
 
-          <div className="grid gap-4 lg:h-[420px] lg:grid-cols-2 lg:gap-6">
+          <div className={gridClass}>
             <div className="flex min-h-0 min-w-0 flex-col">
               <AgendaDisponibilidadeCalendar
                 heatmap={agenda.dispHeatmap}
@@ -50,17 +64,35 @@ export function AgendaDisponibilidadePanel({ agenda, formErrors }) {
                 onNextFree={agenda.handleProximoHorarioLivre}
               />
             </div>
-            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+            <div
+              className={
+                layout === 'stacked'
+                  ? 'flex min-h-0 min-w-0 flex-col'
+                  : 'flex h-full min-h-0 min-w-0 flex-col overflow-hidden'
+              }
+            >
               <AgendaDisponibilidadeSlots
                 dayModel={agenda.dispDaySlots}
                 selectedIso={agenda.dispCalendarioDia}
-                onSelectSlot={agenda.selectDispSlot}
+                onSelectSlot={handleSelectSlot}
                 loading={agenda.dispMonthLoading}
+                maxListHeight={slotsMaxListHeight}
               />
             </div>
           </div>
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * Linha 3 do modal (desktop lg+): calendário heatmap + lista de slots lado a lado.
+ */
+export function AgendaDisponibilidadePanel({ agenda, formErrors }) {
+  return (
+    <section className="hidden w-full rounded-xl border border-gray-200 bg-gray-50/50 p-4 lg:block">
+      <AgendaDisponibilidadeBody agenda={agenda} formErrors={formErrors} layout="split" />
     </section>
   );
 }
