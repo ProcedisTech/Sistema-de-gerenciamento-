@@ -19,6 +19,7 @@ import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { normalizeCepForApi } from '../../utils/cepUtils.js';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { PatientForm } from './PatientForm.jsx';
+import { usePapel } from '../../hooks/usePapel';
 
 export function PatientCreateView({
   setPatientView,
@@ -33,6 +34,7 @@ export function PatientCreateView({
   const isAgendaHost = hostMode === 'agenda';
   const scrollBodyRef = useRef(null);
   const toast = useToast();
+  const { isNivel1 } = usePapel();
 
   const handleClose = useCallback(() => {
     if (onClose) {
@@ -374,6 +376,45 @@ export function PatientCreateView({
       </div>
     </div>
   );
+
+  if (isNivel1) {
+    const errorContent = (
+      <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-500 border border-rose-100 shadow-sm">
+          <X className="h-8 w-8" strokeWidth={2} />
+        </div>
+        <h3 className="mb-2 text-[20px] font-bold text-slate-900">Acesso Restrito</h3>
+        <p className="text-sm text-slate-500 max-w-sm mb-6">
+          Seu perfil possui permissões apenas de visualização. Não é permitido cadastrar novos pacientes.
+        </p>
+        <button
+          type="button"
+          onClick={() => setPatientView('list')}
+          className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
+        >
+          Voltar para a Lista
+        </button>
+      </div>
+    );
+
+    if (isModal) {
+      return renderModalShell(errorContent);
+    }
+    return (
+      <div className="animate-in fade-in duration-300 flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setPatientView('list')}
+            className="inline-flex items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
+          >
+            <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Voltar para Pacientes
+          </button>
+        </div>
+        {errorContent}
+      </div>
+    );
+  }
 
   if (sucesso) {
     if (isModal) {

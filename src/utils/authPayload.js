@@ -50,9 +50,27 @@ export function extractOrganizacaoIdFromAuthResponse(data) {
 
 export function resolverPapel(roleNome) {
   if (!roleNome) return null;
-  const roleLimpo = String(roleNome).trim().toLowerCase();
-  if (roleLimpo === 'administrador' || roleLimpo === 'admin') return 'ADMIN';
-  if (roleLimpo === 'medico' || roleLimpo === 'esteticista' || roleLimpo === 'profissional') return 'PROFISSIONAL';
-  if (roleLimpo === 'recepcionista') return 'RECEPCIONISTA';
-  return null;
+  const roleLimpo = String(roleNome).trim().toUpperCase();
+
+  if (roleLimpo === 'DONO') {
+    return 'DONO';
+  }
+  if (roleLimpo === 'NIVEL_5' || roleLimpo === 'ADMINISTRADOR' || roleLimpo === 'ADMIN') {
+    return 'NIVEL_5';
+  }
+  if (roleLimpo === 'NIVEL_4') {
+    return 'NIVEL_4';
+  }
+  if (roleLimpo === 'NIVEL_3' || roleLimpo === 'PROFISSIONAL') {
+    return 'NIVEL_3';
+  }
+  if (roleLimpo === 'NIVEL_2' || roleLimpo === 'RECEPCIONISTA') {
+    return 'NIVEL_2';
+  }
+  if (roleLimpo === 'NIVEL_1') {
+    return 'NIVEL_1';
+  }
+
+  return roleLimpo;
 }
+

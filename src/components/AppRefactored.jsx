@@ -16,6 +16,7 @@ import { CadastrarClinica } from './auth/CadastrarClinica.jsx';
 import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
+import { RoleGuard } from './auth/RoleGuard.jsx';
 import { Sidebar, Stepper, MobileNavigation } from './layout';
 
 import { usePapel } from '../hooks/usePapel';
@@ -43,7 +44,7 @@ import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 
 import { PatientsView } from './patients';
-import { ConfiguracoesView } from './configuracoes';
+import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
 import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
@@ -109,7 +110,20 @@ function revokeBlobUrlIfAny(url) {
 
 export default function App() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome } = useOrg();
-  const { isAdmin, isProfissional, isRecepcionista } = usePapel();
+  const {
+    isAdmin: _isAdmin,
+    isProfissional: _isProfissional,
+    isRecepcionista,
+    isAtLeast: _isAtLeast,
+    canSeeConfig,
+    canSeeConfigAnamnese,
+    canSeeConfigProcedimentos,
+    canSeeConfigTermos,
+    canSeeConfigPerfil,
+    canSeeConfigClinica,
+    canSeeConfigAgenda,
+    canSeeConfigEquipe,
+  } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const authState = useAuthState({ setRoleUserId, setOrgId });
@@ -168,7 +182,7 @@ export default function App() {
         if (roleId && typeof setRoleUserId === 'function') {
           setRoleUserId(String(roleId));
         }
-        const roleNome = meJson?.role?.nome ?? meJson?.role_nome ?? meJson?.role ?? null;
+        const roleNome = meJson?.perfilAcessoCodigo ?? meJson?.perfil_acesso_codigo ?? meJson?.role?.nome ?? meJson?.role_nome ?? meJson?.role ?? null;
         if (typeof setRoleNome === 'function') {
           setRoleNome(roleNome != null ? String(roleNome) : '');
         }
@@ -527,8 +541,36 @@ export default function App() {
     });
   }, []);
   const goToView = (view) => {
+    // Verificacao de segurança na troca de view
+    if (view === 'configuracoes' && !canSeeConfig) {
+      toast.error('Você não tem permissão para acessar as configurações.');
+      return;
+    }
+    if (view === 'gestao-equipe' && !canSeeConfigEquipe) {
+      toast.error('Você não tem permissão para acessar a Gestão de Equipe.');
+      return;
+    }
     setActiveView(view);
   };
+
+  React.useEffect(() => {
+    if (activeView === 'configuracoes' && postLoginGate === 'ready' && !canSeeConfig) {
+      setActiveView('pacientes');
+      try {
+        sessionStorage.setItem('activeView', 'pacientes');
+      } catch {
+        // ignore
+      }
+    }
+    if (activeView === 'gestao-equipe' && postLoginGate === 'ready' && !canSeeConfigEquipe) {
+      setActiveView('pacientes');
+      try {
+        sessionStorage.setItem('activeView', 'pacientes');
+      } catch {
+        // ignore
+      }
+    }
+  }, [activeView, postLoginGate, canSeeConfig, canSeeConfigEquipe, setActiveView]);
 
   const setConfigSection = React.useCallback((section) => {
     const next = VALID_SECTIONS.has(section) ? section : 'fichas';
@@ -537,14 +579,16 @@ export default function App() {
   }, []);
 
   const onOpenClinicaSettings = React.useCallback(() => {
+    if (!canSeeConfig) return;
     setActiveView('configuracoes');
     setConfigSection('clinica');
-  }, [setActiveView, setConfigSection]);
+  }, [canSeeConfig, setActiveView, setConfigSection]);
 
   const onOpenPerfilSettings = React.useCallback(() => {
+    if (!canSeeConfig) return;
     setActiveView('configuracoes');
     setConfigSection('perfil');
-  }, [setActiveView, setConfigSection]);
+  }, [canSeeConfig, setActiveView, setConfigSection]);
 
   /** Migração de `activeView` salvo: jornada → pacientes; anamnese/termos → configuracoes. */
   React.useEffect(() => {
@@ -1839,7 +1883,7 @@ export default function App() {
         ) : (
         <div
           className={`w-full mx-auto ${
-            activeView === 'configuracoes'
+            activeView === 'configuracoes' || activeView === 'gestao-equipe'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
               : activeView === 'pacientes' || activeView === 'agenda'
                 ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
@@ -1850,71 +1894,88 @@ export default function App() {
             className={
               activeView === 'pacientes' || activeView === 'agenda'
                 ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
-                : activeView === 'configuracoes'
+                : activeView === 'configuracoes' || activeView === 'gestao-equipe'
                   ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                   : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
             }
           >
 
             {activeView === 'pacientes' && (
-              <PatientsView
-                isRecepcionista={isRecepcionista}
-                patients={patients}
-                patientView={patientView}
-                selectedPatientCpf={selectedPatientCpf}
-                setSelectedPatientCpf={setSelectedPatientCpf}
-                patientDetailTab={patientDetailTab}
-                setPatientDetailTab={setPatientDetailTab}
-                setPatientView={setPatientView}
-                patientSearchQuery={patientSearchQuery}
-                setPatientSearchQuery={setPatientSearchQuery}
-                getPatientInitials={getPatientInitials}
-                onCreatePatient={handleCreatePatientFromPatients}
-                onStartAttendance={handleStartAttendance}
-                onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
-                onUpdatePatient={handleUpdatePatientProfile}
-                onAddGalleryFiles={handleAddGalleryFiles}
-                onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
-                onPatientCreated={refreshPatientsAndPagedList}
-                mergePatientById={mergePatientById}
-                refreshPatients={refreshPatientsAndPagedList}
-                patientListItems={patientListItems}
-                patientListPage={patientListPage}
-                setPatientListPage={setPatientListPage}
-                patientListLoading={patientListLoading}
-                patientListMeta={patientListMeta}
-                patientListSortBy={patientListSortBy}
-                setPatientListSortBy={setPatientListSortBy}
-                roleUserId={roleUserId}
-              />
+              <RoleGuard minLevel="NIVEL_1" showError>
+                <PatientsView
+                  isRecepcionista={isRecepcionista}
+                  patients={patients}
+                  patientView={patientView}
+                  selectedPatientCpf={selectedPatientCpf}
+                  setSelectedPatientCpf={setSelectedPatientCpf}
+                  patientDetailTab={patientDetailTab}
+                  setPatientDetailTab={setPatientDetailTab}
+                  setPatientView={setPatientView}
+                  patientSearchQuery={patientSearchQuery}
+                  setPatientSearchQuery={setPatientSearchQuery}
+                  getPatientInitials={getPatientInitials}
+                  onCreatePatient={handleCreatePatientFromPatients}
+                  onStartAttendance={handleStartAttendance}
+                  onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
+                  onUpdatePatient={handleUpdatePatientProfile}
+                  onAddGalleryFiles={handleAddGalleryFiles}
+                  onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
+                  onPatientCreated={refreshPatientsAndPagedList}
+                  mergePatientById={mergePatientById}
+                  refreshPatients={refreshPatientsAndPagedList}
+                  patientListItems={patientListItems}
+                  patientListPage={patientListPage}
+                  setPatientListPage={setPatientListPage}
+                  patientListLoading={patientListLoading}
+                  patientListMeta={patientListMeta}
+                  patientListSortBy={patientListSortBy}
+                  setPatientListSortBy={setPatientListSortBy}
+                  roleUserId={roleUserId}
+                />
+              </RoleGuard>
             )}
 
-            {activeView === 'configuracoes' && (isAdmin || isProfissional) && (
-              <ConfiguracoesView
-                isAdmin={isAdmin}
-                isProfissional={isProfissional}
-                configSection={configSection}
-                setConfigSection={setConfigSection}
-                onClinicaAtualizada={(nome, logoUrl) =>
-                  setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
-                }
-                onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
-                onPacientesCatalogRefresh={refreshPatientsAndPagedList}
-              />
+            {activeView === 'configuracoes' && (
+              <RoleGuard minLevel="NIVEL_3" showError>
+                <ConfiguracoesView
+                  canSeeAnamnese={canSeeConfigAnamnese}
+                  canSeeProcedimentos={canSeeConfigProcedimentos}
+                  canSeeTermos={canSeeConfigTermos}
+                  canSeePerfil={canSeeConfigPerfil}
+                  canSeeClinica={canSeeConfigClinica}
+                  canSeeAgendaConfig={canSeeConfigAgenda}
+                  canSeeEquipe={canSeeConfigEquipe}
+                  configSection={configSection}
+                  setConfigSection={setConfigSection}
+                  onClinicaAtualizada={(nome, logoUrl) =>
+                    setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
+                  }
+                  onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
+                  onPacientesCatalogRefresh={refreshPatientsAndPagedList}
+                />
+              </RoleGuard>
+            )}
+
+            {activeView === 'gestao-equipe' && (
+              <RoleGuard minLevel="NIVEL_5" showError>
+                <GestaoUsuariosView />
+              </RoleGuard>
             )}
 
             {activeView === 'agenda' && (
-              <AgendaDashboard
-                agenda={agendaSchedule}
-                patients={patients}
-                authEnabled={authSessionReady}
-                onStartAttendance={handleAgendaStartAttendance}
-                onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
-                onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
-              />
+              <RoleGuard minLevel="NIVEL_1" showError>
+                <AgendaDashboard
+                  agenda={agendaSchedule}
+                  patients={patients}
+                  authEnabled={authSessionReady}
+                  onStartAttendance={handleAgendaStartAttendance}
+                  onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
+                  onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
+                />
+              </RoleGuard>
             )}
 
-            {!['jornada', 'pacientes', 'agenda', 'configuracoes'].includes(activeView) && (
+            {!['jornada', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe'].includes(activeView) && (
               <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
@@ -1929,6 +1990,7 @@ export default function App() {
           activeView={activeView}
           onGoPacientes={() => goToView('pacientes')}
           onGoAgenda={() => goToView('agenda')}
+          onGoGestaoEquipe={() => goToView('gestao-equipe')}
           onGoConfiguracoes={() => goToView('configuracoes')}
           onLogout={handleLogout}
         />

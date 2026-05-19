@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
+import { usePapel } from '../../hooks/usePapel';
 import {
   agendasApi,
   anamneseApi,
@@ -189,6 +190,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
 
 export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const { roleUserId, roleNome } = useOrg();
+  const { isNivel1 } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
   const todayIso = toLocalDateIso();
   const [monthDate, setMonthDate] = useState(() => {
@@ -748,6 +750,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const handleCancelar = useCallback(
     async (agendaId, payload) => {
+      if (isNivel1) return false;
       if (!agendaId || !payload) return false;
       try {
         await agendasApi.cancelar(agendaId, payload);
@@ -763,11 +766,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         return false;
       }
     },
-    [loadMonth, refreshWeekGrid, toastSuccess, toastError]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError]
   );
 
   const handleAtualizarStatus = useCallback(
     async (agendaId, codigo) => {
+      if (isNivel1) return false;
       if (!agendaId || !codigo) return false;
       try {
         if (codigo === 'confirmado') {
@@ -792,11 +796,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         return false;
       }
     },
-    [loadMonth, refreshWeekGrid, toastSuccess, toastError]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError]
   );
 
   const handleReagendar = useCallback(
     async (agendaId, payload) => {
+      if (isNivel1) return false;
       if (!agendaId || !payload) return false;
       setSubmittingReagendar(true);
       try {
@@ -819,7 +824,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         setSubmittingReagendar(false);
       }
     },
-    [loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp]
   );
 
   const handleEnviarWhatsApp = useCallback(
@@ -918,6 +923,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const openCreateModal = useCallback(
     (date = selectedDay) => {
+      if (isNivel1) return;
       setEditingAppointment(null);
       setPatientSelectLocked(false);
       setForm(defaultForm(date, patientOptions, null));
@@ -925,11 +931,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       applyProfissionalPreselect();
       setModalMode('create');
     },
-    [patientOptions, selectedDay, applyProfissionalPreselect]
+    [isNivel1, patientOptions, selectedDay, applyProfissionalPreselect]
   );
 
   const openCreateModalAtSlot = useCallback(
     (iso, horaHm) => {
+      if (isNivel1) return;
       const date = toDateKey(iso) || iso;
       const hi = String(horaHm || '').trim().slice(0, 5);
       setEditingAppointment(null);
@@ -944,12 +951,13 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       applyProfissionalPreselect();
       setModalMode('create');
     },
-    [patientOptions, applyProfissionalPreselect]
+    [isNivel1, patientOptions, applyProfissionalPreselect]
   );
 
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
   const openCreateModalForPatient = useCallback(
     (patient) => {
+      if (isNivel1) return;
       if (!patient?.id) return;
       setEditingAppointment(null);
       const date = todayIso;
@@ -967,11 +975,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       applyProfissionalPreselect();
       setModalMode('create');
     },
-    [patientOptions, todayIso, applyProfissionalPreselect]
+    [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
   );
 
   const openEditModal = useCallback(
     (appointment) => {
+      if (isNivel1) return;
       setEditingAppointment(appointment);
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const currentIds = Array.isArray(appointment?.catalogoProcedimentoSaudeIds)
@@ -1000,7 +1009,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       );
       setModalMode('edit');
     },
-    [patientOptions, selectedDay, roleUserId]
+    [isNivel1, patientOptions, selectedDay, roleUserId]
   );
 
   const closeModal = useCallback(() => {
@@ -1045,6 +1054,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [form, todayIso, modalMode, roleUserIdAgenda]);
 
   const saveAppointment = useCallback(async () => {
+    if (isNivel1) return false;
     if (!validateForm()) return false;
     const agendaRole = String(roleUserIdAgenda || '').trim();
     if (!agendaRole) {
@@ -1145,6 +1155,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     closeModal,
     editingAppointment,
     form,
+    isNivel1,
     loadMonth,
     modalMode,
     patientOptions,
@@ -1200,6 +1211,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, []);
 
   return {
+    isNivel1,
     appointments,
     appointmentsByDate,
     todayIso,
