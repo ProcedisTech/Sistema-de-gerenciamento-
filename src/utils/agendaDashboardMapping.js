@@ -84,13 +84,23 @@ export function mapAgendaDtoToDashboardRow(dto) {
   };
 }
 
+/** Bloqueio removido (cancelado) não deve aparecer na grade/painel/calendário. */
+export function isAgendaVisibleOnDashboard(row) {
+  if (!row) return false;
+  if (row.tipo === 'bloqueio' && row.status === 'cancelado') return false;
+  return true;
+}
+
 /**
  * Agendas no intervalo (1 linha por AgendaDTO — sem GET aninhado de agendamentos).
  */
 export async function fetchDashboardAppointmentsForRange(startIso, endIso) {
   const raw = await agendasApi.byRange(startIso, endIso);
   const dtos = normalizeApiList(raw);
-  const rows = dtos.map(mapAgendaDtoToDashboardRow).filter(Boolean);
+  const rows = dtos
+    .map(mapAgendaDtoToDashboardRow)
+    .filter(Boolean)
+    .filter(isAgendaVisibleOnDashboard);
   return sortByDateTime(rows);
 }
 

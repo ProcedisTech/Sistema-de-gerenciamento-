@@ -1,4 +1,4 @@
-import { Clock3, Lock, UserRound } from 'lucide-react';
+import { Clock3, Lock, Pencil, UserRound } from 'lucide-react';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
@@ -72,18 +72,29 @@ function actionLabel(status) {
   return 'Iniciar Atendimento';
 }
 
+function compactActionLabel(status) {
+  if (status === 'pendente' || status === 'aguardando_confirmacao') return 'Confirmar';
+  if (status === 'cancelado') return 'Reagendar';
+  return 'Iniciar';
+}
+
 function showPrimaryActionButton(status) {
   if (status === 'realizado' || status === 'reagendado') return false;
   return true;
 }
 
-/** Evita botões esticando em larguras intermediárias (cards / lista / modal). */
 const BTN_ACTION =
   'inline-flex max-w-[min(100%,14rem)] shrink-0 justify-center whitespace-normal text-center leading-tight';
 
 /**
  * Card de resumo de um slot (painel do dia, resumo de lista, detalhe modo Semana).
  */
+function panelActionLabel(status) {
+  if (status === 'pendente' || status === 'aguardando_confirmacao') return 'Confirmar';
+  if (status === 'cancelado') return 'Reagendar';
+  return 'Iniciar';
+}
+
 export function AgendaAppointmentSummaryCard({
   appointment,
   onPrimary,
@@ -92,6 +103,9 @@ export function AgendaAppointmentSummaryCard({
   isNivel1 = false,
   advanceOffer,
   onAdvanceClick,
+  compact = false,
+  variant = 'default',
+  showProfissional = false,
 }) {
   const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
@@ -100,6 +114,36 @@ export function AgendaAppointmentSummaryCard({
   if (isBloqueio) {
     const motivo = bloqueioMotivoLabel(appointment);
     const hf = bloqueioHoraFimLabel(appointment);
+    if (compact) {
+      return (
+        <div
+          className="overflow-hidden rounded-lg border border-slate-300 shadow-sm"
+          style={BLOQUEIO_HATCH_BG}
+        >
+          <div className="h-1 bg-slate-400" />
+          <div className="p-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-600">
+                <Lock className="h-4 w-4" strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] font-bold text-slate-900">{motivo}</div>
+                <div className="truncate text-[11px] font-medium text-slate-600">
+                  {appointment.horaInicio}–{hf}
+                  {appointment.profissionalNome ? ` · ${appointment.profissionalNome}` : ''}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                Bloqueio
+              </span>
+            </div>
+            {typeof renderSlotActions === 'function' ? (
+              <div className="mt-1.5 border-t border-slate-200/80 pt-1.5">{renderSlotActions(appointment)}</div>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
     return (
       <div
         className="overflow-hidden rounded-xl border-2 border-slate-300 shadow-sm"
@@ -131,6 +175,7 @@ export function AgendaAppointmentSummaryCard({
       </div>
     );
   }
+
   const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
   const grad = hashGradient(appointment.pacienteNome);
@@ -141,6 +186,182 @@ export function AgendaAppointmentSummaryCard({
     : isNoShow
       ? 'No-show'
       : statusTone.label || appointment.status;
+
+  const isPanel = variant === 'panel' || variant === 'highlight';
+  const highlightClass =
+    variant === 'highlight'
+      ? 'border-teal-300 ring-1 ring-teal-200 shadow-md'
+      : 'border-slate-200 shadow-sm hover:shadow-md';
+
+  if (isPanel) {
+    const metaLine = [
+      appointment.horaInicio,
+      appointment.duracaoMin ? `${appointment.duracaoMin} min` : null,
+      appointment.procedimentoNome || 'Sem procedimento',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    return (
+      <div
+        className={`overflow-hidden rounded-xl border bg-white transition-all duration-150 hover:scale-[1.01] motion-reduce:hover:scale-100 ${highlightClass}`}
+      >
+        <div className="h-1" style={{ backgroundColor: appointment.corHex || '#14B8A6' }} />
+        <div className="p-3">
+          <div className="flex items-start gap-3">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[12px] font-black text-white"
+              style={avatarStyle}
+            >
+              {initials(appointment.pacienteNome)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <p className="truncate text-sm font-bold text-[#1A1A2E]">{appointment.pacienteNome}</p>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                    isReagendado
+                      ? 'bg-purple-100 text-purple-800'
+                      : isNoShow
+                        ? 'bg-orange-100 text-orange-800'
+                        : badgeClass
+                  }`}
+                >
+                  {statusBadgeLabel}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-xs font-medium text-slate-600">{metaLine}</p>
+              {showProfissional && appointment.profissionalNome ? (
+                <p className="mt-0.5 truncate text-xs text-slate-500">{appointment.profissionalNome}</p>
+              ) : null}
+            </div>
+          </div>
+          {isValidAdvanceOffer(appointment, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (
+            <button
+              type="button"
+              onClick={() => onAdvanceClick(appointment, advanceOffer)}
+              className="mt-2 text-left text-[11px] font-semibold text-teal-700 underline-offset-2 hover:underline"
+            >
+              Adiantar para {String(advanceOffer.targetHoraInicio).slice(0, 5)}
+            </button>
+          ) : null}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {isNivel1 ? (
+              <div className="w-full rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-center text-[11px] font-bold text-rose-600">
+                Nível 1: Apenas visualização
+              </div>
+            ) : (
+              <>
+                {showPrimaryActionButton(appointment.status) ? (
+                  <button
+                    type="button"
+                    onClick={() => onPrimary(appointment)}
+                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors duration-150 ${styles.primary}`}
+                  >
+                    {panelActionLabel(appointment.status)}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onEdit(appointment)}
+                  className="rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-xs font-bold text-[#64748b] transition-colors duration-150 hover:bg-[#F5F6FA]"
+                >
+                  Editar
+                </button>
+              </>
+            )}
+          </div>
+          {typeof renderSlotActions === 'function' ? (
+            <div className="mt-2 border-t border-slate-100 pt-2">{renderSlotActions(appointment)}</div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (compact) {
+    const metaParts = [
+      appointment.horaInicio,
+      appointment.procedimentoNome || 'Sem procedimento',
+      appointment.profissionalNome,
+    ].filter(Boolean);
+
+    return (
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all hover:border-teal-300 hover:shadow-md">
+        <div className="h-1" style={{ backgroundColor: appointment.corHex || '#14B8A6' }} />
+        <div className="p-2">
+          <div className="flex items-center gap-2">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-white"
+              style={avatarStyle}
+            >
+              {initials(appointment.pacienteNome)}
+            </div>
+            <div className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#1A1A2E]">
+              {appointment.pacienteNome}
+            </div>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                isReagendado
+                  ? 'bg-purple-100 text-purple-800'
+                  : isNoShow
+                    ? 'bg-orange-100 text-orange-800'
+                    : badgeClass
+              }`}
+            >
+              {statusBadgeLabel}
+            </span>
+          </div>
+
+          {isValidAdvanceOffer(appointment, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (
+            <button
+              type="button"
+              onClick={() => onAdvanceClick(appointment, advanceOffer)}
+              className="mt-1 text-left text-[10px] font-semibold text-teal-700 underline-offset-2 hover:underline"
+            >
+              Adiantar para {String(advanceOffer.targetHoraInicio).slice(0, 5)}
+            </button>
+          ) : null}
+
+          <p className="mt-0.5 truncate text-[11px] font-medium text-[#555]">{metaParts.join(' · ')}</p>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {isNivel1 ? (
+              <div className="w-full rounded-md bg-rose-50 border border-rose-100 px-2 py-1 text-center text-[10px] font-bold text-rose-600">
+                Nível 1: Apenas visualização
+              </div>
+            ) : (
+              <>
+                {showPrimaryActionButton(appointment.status) ? (
+                  <button
+                    type="button"
+                    onClick={() => onPrimary(appointment)}
+                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${styles.primary}`}
+                  >
+                    {compactActionLabel(appointment.status)}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onEdit(appointment)}
+                  className="inline-flex items-center justify-center rounded-md border border-[#E8E8E8] bg-white p-1.5 text-[#64748b] transition-colors hover:bg-[#F5F6FA]"
+                  aria-label="Editar agendamento"
+                  title="Editar agendamento"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden />
+                </button>
+                {typeof renderSlotActions === 'function' ? (
+                  <div className="flex flex-1 flex-wrap items-center justify-end gap-1">
+                    {renderSlotActions(appointment)}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border-2 border-slate-200 bg-white shadow-sm transition-all overflow-hidden hover:border-teal-300 hover:shadow-lg">

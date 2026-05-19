@@ -412,6 +412,7 @@ function DayColumn({
 }
 
 export function WeekTimeGrid({
+  className = '',
   weekDayIsos,
   appointments,
   todayIso,
@@ -516,9 +517,9 @@ export function WeekTimeGrid({
   };
 
   return (
-    <div className="w-full min-w-0">
-      <div className="hidden md:block">
-        <div className="flex border-b border-[#E8E8E8]">
+    <div className={`flex h-full min-h-0 w-full min-w-0 flex-col ${className}`.trim()}>
+      <div className="hidden min-h-0 flex-1 flex-col md:flex">
+        <div className="flex shrink-0 border-b border-[#E8E8E8]">
           <div className="w-14 shrink-0" />
           <div
             className="grid min-w-0 flex-1"
@@ -533,19 +534,19 @@ export function WeekTimeGrid({
         </div>
         <div
           ref={scrollRef}
-          className="max-h-[520px] overflow-y-auto scroll-smooth"
+          className="min-h-0 flex-1 overflow-y-auto scroll-smooth"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {innerGrid(weekDayIsos)}
         </div>
       </div>
 
-      <div className="md:hidden">
-        <div className="-mx-1 flex gap-2 overflow-x-auto pb-2 scroll-smooth px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="flex min-h-0 flex-1 flex-col md:hidden">
+        <div className="-mx-1 flex min-h-0 flex-1 gap-2 overflow-x-auto px-1 pb-2 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
           {mobileDays.map((iso) => (
-            <div key={iso} className="w-[min(92vw,360px)] shrink-0 rounded-lg border border-[#E8E8E8] bg-white">
-              <div className="border-b border-[#E8E8E8]">{dayHeader(iso, todayIso)}</div>
-              <div className="max-h-[520px] overflow-y-auto scroll-smooth">
+            <div key={iso} className="flex w-[min(92vw,360px)] shrink-0 flex-col rounded-lg border border-[#E8E8E8] bg-white">
+              <div className="shrink-0 border-b border-[#E8E8E8]">{dayHeader(iso, todayIso)}</div>
+              <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
                 {innerGrid([iso])}
               </div>
             </div>

@@ -110,7 +110,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 export default function App() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -1402,6 +1402,7 @@ export default function App() {
   );
 
   const isJornadaView = activeView === 'jornada';
+  const isAgendaView = activeView === 'agenda';
   const isPaginaPublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
 
@@ -1495,10 +1496,12 @@ export default function App() {
 
       {/* Main Content */}
       <main
-        className={`flex flex-1 flex-col h-full ${
+        className={`flex flex-1 flex-col h-full min-h-0 ${
           isJornadaView
-            ? 'min-h-0 overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
-            : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
+            ? 'overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
+            : isAgendaView
+              ? 'overflow-hidden max-lg:overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
+              : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
         }`}
       >
         {isJornadaView && (
@@ -1886,16 +1889,20 @@ export default function App() {
           className={`w-full mx-auto ${
             activeView === 'configuracoes' || activeView === 'gestao-equipe'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
-              : activeView === 'pacientes' || activeView === 'agenda'
-                ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
-                : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
+              : isAgendaView
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)]'
+                : activeView === 'pacientes'
+                  ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
+                  : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
           }`}
         >
           <div
             className={
-              activeView === 'pacientes' || activeView === 'agenda'
-                ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
-                : activeView === 'configuracoes' || activeView === 'gestao-equipe'
+              isAgendaView
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5'
+                : activeView === 'pacientes'
+                  ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
+                  : activeView === 'configuracoes' || activeView === 'gestao-equipe'
                   ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                   : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
             }
@@ -1965,14 +1972,19 @@ export default function App() {
 
             {activeView === 'agenda' && (
               <RoleGuard minLevel="NIVEL_1" showError>
+                <div className="flex min-h-0 flex-1 flex-col">
                 <AgendaDashboard
                   agenda={agendaSchedule}
                   patients={patients}
                   authEnabled={authSessionReady}
+                  clinicaNome={clinicaInfo.nome}
+                  profissionalNome={perfilInfo.nomeCompleto || roleNome}
                   onStartAttendance={handleAgendaStartAttendance}
                   onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
                   onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
+                  shortcutsBlocked={Boolean(scheduleCancelRow?.agenda || scheduleReagendarRow?.agenda)}
                 />
+                </div>
               </RoleGuard>
             )}
 

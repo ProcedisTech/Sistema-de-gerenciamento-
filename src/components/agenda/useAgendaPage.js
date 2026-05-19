@@ -51,6 +51,11 @@ import {
   BLOQUEIO_TIPO_CODIGO,
   resolveTipoProcedimentoIdByCodigo,
 } from '../../utils/agendaTipoProcedimento.js';
+import {
+  ALL_STATUS_FILTERS,
+  countAppointmentsByStatusBucket,
+  filterAppointmentsByStatusFilters,
+} from '../../utils/agendaDayInsights.js';
 
 const BLOQUEIO_REMOVER_MOTIVO_TEXTO = 'Bloqueio removido';
 const CANCEL_MOTIVO_OUTRO_CODIGO = 'outro';
@@ -237,6 +242,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   });
   const [selectedDay, setSelectedDay] = useState(todayIso);
   const [viewMode, setViewMode] = useState('grid');
+  const [statusFilters, setStatusFilters] = useState(() => new Set(ALL_STATUS_FILTERS));
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -359,11 +365,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         profissionalRoleUserId,
         todayIso,
         monthDate,
-        monthLoadedAppointments: appointments,
+        monthLoadedAppointments: filterAppointmentsByStatusFilters(appointments, statusFilters),
         currentYm,
       });
     },
-    [authEnabled, todayIso, monthDate, appointments, currentYm],
+    [authEnabled, todayIso, monthDate, appointments, statusFilters, currentYm],
   );
 
   useEffect(() => {
@@ -977,7 +983,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       return true;
     } catch (e) {
       const msg = formatAgendamentoApiError(e, { context: 'bloqueio' });
-      toastError(e?.body?.message || msg || 'Erro ao bloquear horário');
+      toastError(msg || 'Erro ao bloquear horário');
       setError(msg);
       return false;
     } finally {
@@ -1030,30 +1036,46 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     async (agendaId, codigo) => {
       if (isNivel1) return false;
       if (!agendaId || !codigo) return false;
+
+      let appointmentsSnapshot = null;
+      let weekGridSnapshot = null;
+
+      if (codigo === 'confirmado') {
+        setAppointments((prev) => {
+          appointmentsSnapshot = prev;
+          return prev.map((row) =>
+            String(row.agendaId) === String(agendaId) ? { ...row, status: 'confirmado' } : row,
+          );
+        });
+        setWeekGridAppointments((prev) => {
+          weekGridSnapshot = prev;
+          return prev.map((row) =>
+            String(row.agendaId) === String(agendaId) ? { ...row, status: 'confirmado' } : row,
+          );
+        });
+      }
+
       try {
-        if (codigo === 'confirmado') {
-          setAppointments((prev) =>
-            prev.map((row) => (String(row.agendaId) === String(agendaId) ? { ...row, status: 'confirmado' } : row))
-          );
-          setWeekGridAppointments((prev) =>
-            prev.map((row) => (String(row.agendaId) === String(agendaId) ? { ...row, status: 'confirmado' } : row))
-          );
-          return true;
-        }
         await agendasApi.atualizarStatus(agendaId, codigo);
-        toastSuccess(`Status atualizado: ${codigo}`);
+        toastSuccess(
+          codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`,
+        );
         await loadMonth();
         await refreshWeekGrid();
         setError('');
         return true;
       } catch (e) {
+        if (codigo === 'confirmado') {
+          if (appointmentsSnapshot) setAppointments(appointmentsSnapshot);
+          if (weekGridSnapshot) setWeekGridAppointments(weekGridSnapshot);
+        }
         const msg = formatAgendamentoApiError(e);
         toastError(e?.body?.message || msg || 'Erro ao atualizar status');
         setError(msg);
         return false;
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError],
   );
 
   const handleReagendar = useCallback(
@@ -1075,7 +1097,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         return true;
       } catch (e) {
         const msg = formatAgendamentoApiError(e);
-        toastError(e?.body?.message || msg || 'Erro ao reagendar');
+        toastError(msg || 'Erro ao reagendar');
         return false;
       } finally {
         setSubmittingReagendar(false);
@@ -1121,12 +1143,55 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     return capitalize(label);
   }, [monthDate]);
 
-  const selectedDayAppointments = useMemo(
-    () => appointments.filter((item) => toDateKey(item.data) === toDateKey(selectedDay)),
-    [appointments, selectedDay]
+  const filteredAppointments = useMemo(
+    () => filterAppointmentsByStatusFilters(appointments, statusFilters),
+    [appointments, statusFilters],
   );
 
-  const appointmentsByDate = useMemo(() => groupByDate(appointments), [appointments]);
+  const filteredWeekGridAppointments = useMemo(
+    () => filterAppointmentsByStatusFilters(weekGridAppointments, statusFilters),
+    [weekGridAppointments, statusFilters],
+  );
+
+  const statusFilterCounts = useMemo(
+    () => countAppointmentsByStatusBucket(filterKpiCountableAppointments(appointments)),
+    [appointments],
+  );
+
+  const allStatusFiltersActive = statusFilters.size === ALL_STATUS_FILTERS.size;
+
+  const toggleStatusFilter = useCallback((key) => {
+    setStatusFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleAllStatusFilters = useCallback(() => {
+    setStatusFilters((prev) => {
+      if (prev.size === ALL_STATUS_FILTERS.size) return new Set();
+      return new Set(ALL_STATUS_FILTERS);
+    });
+  }, []);
+
+  const selectedDayAppointments = useMemo(
+    () => filteredAppointments.filter((item) => toDateKey(item.data) === toDateKey(selectedDay)),
+    [filteredAppointments, selectedDay],
+  );
+
+  const appointmentsByDate = useMemo(() => groupByDate(filteredAppointments), [filteredAppointments]);
+
+  const appointmentsByDateRaw = useMemo(() => groupByDate(appointments), [appointments]);
+
+  const monthVisibleCount = useMemo(() => {
+    const { start, end } = monthRangeIso(monthDate);
+    return filterKpiCountableAppointments(filteredAppointments).filter((row) => {
+      const d = toDateKey(row.data);
+      return d >= start && d <= end;
+    }).length;
+  }, [filteredAppointments, monthDate]);
 
   const stats = useMemo(() => {
     const kpiRows = filterKpiCountableAppointments(appointments);
@@ -1139,11 +1204,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [appointments, hojeCount]);
 
   const groupedAppointments = useMemo(() => {
-    const grouped = groupByDate(appointments);
+    const grouped = groupByDate(filteredAppointments);
     return Object.keys(grouped)
       .sort()
       .map((date) => ({ date, items: grouped[date] }));
-  }, [appointments]);
+  }, [filteredAppointments]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
 
@@ -1426,24 +1491,20 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   ]);
 
   const updateStatus = useCallback(
-    async (appointment, status) => {
-      if (!appointment?.agendaId) return;
-      if (status === 'confirmado') {
-        setAppointments((prev) =>
-          prev.map((row) => (row.id === appointment.id ? { ...row, status: 'confirmado' } : row))
-        );
-        setWeekGridAppointments((prev) =>
-          prev.map((row) => (row.id === appointment.id ? { ...row, status: 'confirmado' } : row))
-        );
-      }
+    (appointment, status) => {
+      if (!appointment?.agendaId || !status) return Promise.resolve(false);
+      return handleAtualizarStatus(appointment.agendaId, status);
     },
-    []
+    [handleAtualizarStatus],
   );
 
   const selectDay = useCallback((date, openSheet = true) => {
     setSelectedDay(date);
     setDaySheetOpen(openSheet);
   }, []);
+
+  const openDaySheet = useCallback(() => setDaySheetOpen(true), []);
+  const closeDaySheet = useCallback(() => setDaySheetOpen(false), []);
 
   const moveSelectedDay = useCallback((days) => {
     const [year, month, day] = selectedDay.split('-').map(Number);
@@ -1469,15 +1530,25 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     });
   }, []);
 
+  const goToToday = useCallback(() => {
+    const now = new Date();
+    setMonthDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    setSelectedDay(toLocalDateIso(now));
+  }, []);
+
   return {
     isNivel1,
     appointments,
     appointmentsByDate,
+    appointmentsByDateRaw,
+    monthVisibleCount,
     monthDate,
     todayIso,
     calendarCells,
     currentYm,
     daySheetOpen,
+    openDaySheet,
+    closeDaySheet,
     disponibilidades,
     editingAppointment,
     foraDispModal,
@@ -1486,6 +1557,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     formErrors,
     goNextMonth,
     goPrevMonth,
+    goToToday,
     goWeekNext,
     goWeekPrev,
     groupedAppointments,
@@ -1558,7 +1630,13 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     viewMode,
     weekDayIsos,
     weekGridAppointments,
+    filteredWeekGridAppointments,
     weekRangeLabel,
     weekStartIso,
+    statusFilters,
+    toggleStatusFilter,
+    toggleAllStatusFilters,
+    statusFilterCounts,
+    allStatusFiltersActive,
   };
 }

@@ -34,6 +34,94 @@
   }
 }
 
+@layer utilities {
+  @keyframes agenda-live-pulse {
+    0% {
+      box-shadow: 0 0 0 0 oklch(0.72 0.16 172 / 0.6);
+    }
+    70% {
+      box-shadow: 0 0 0 8px oklch(0.72 0.16 172 / 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 oklch(0.72 0.16 172 / 0);
+    }
+  }
+
+  .animate-agenda-live-pulse {
+    animation: agenda-live-pulse 1.8s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-agenda-live-pulse {
+      animation: none;
+    }
+  }
+
+  @keyframes agenda-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-agenda-rise {
+    animation: agenda-rise 500ms ease-out both;
+  }
+
+  .animate-agenda-rise-cells {
+    animation: agenda-rise 350ms ease-out both;
+    animation-delay: calc(var(--cell-index, 0) * 8ms + 220ms);
+  }
+
+  .agenda-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .agenda-delay-150 {
+    animation-delay: 150ms;
+  }
+
+  .agenda-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .agenda-delay-250 {
+    animation-delay: 250ms;
+  }
+
+  .agenda-delay-1000 {
+    animation-delay: 1000ms;
+  }
+
+  .agenda-duration-600 {
+    animation-duration: 600ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-agenda-rise,
+    .animate-agenda-rise-cells {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
