@@ -40,9 +40,10 @@ export function MarcarCompromissoModal({
     const t = window.setTimeout(() => {
       pacientesApi
         .search(q)
-        .then((data) => {
+        .then((pageData) => {
           if (cancelled) return;
-          const mapped = Array.isArray(data) ? data.map(mapBackendPatient).filter(Boolean) : [];
+          const rows = pageData?.content ?? [];
+          const mapped = Array.isArray(rows) ? rows.map(mapBackendPatient).filter(Boolean) : [];
           setRemotePatients(mapped);
         })
         .catch(() => {

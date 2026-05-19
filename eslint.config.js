@@ -34,6 +34,8 @@ export default defineConfig([
       '**/PatientProfileView.jsx',
       '**/Step5Finalization.jsx',
       '**/components/agenda/MarcarCompromissoModal.jsx',
+      '**/components/agenda/PacienteSearchInput.jsx',
+      '**/components/agenda/useAgendaPage.js',
       '**/components/agenda/CancelarAgendaModal.jsx',
       '**/components/anamnese/AnamneseAdminView.jsx',
       '**/components/journey/Step1CheckIn.jsx',
@@ -57,6 +59,7 @@ export default defineConfig([
       '**/components/hooks/usePatientState.js',
       '**/hooks/usePacienteGaleriaArquivoBlobUrl.js',
       '**/hooks/usePatientProfilePhotoSrc.js',
+      '**/hooks/useProcedimentosOptions.js',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',

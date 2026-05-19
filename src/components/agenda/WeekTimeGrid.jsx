@@ -256,12 +256,13 @@ function DayColumn({
         const layout = layouts.get(appt.id);
         const baseStyle = eventBlockStyle(appt, layout);
         const style = baseStyle;
+        const pid = appt.profissionalRoleUserId ?? appt.roleUserId;
         const appointment = {
           dataAgendamento: toDateKey(appt.data),
           horaInicio: appt.horaInicio,
-          roleUserId: appt.roleUserId,
+          roleUserId: pid,
         };
-        const disp = disponibilidades?.[appt.roleUserId];
+        const disp = disponibilidades?.[pid];
         const dentro = dentroDaDisponibilidade(appointment, disp);
         const showProc = baseStyle.height >= 72;
         const cardClass = statusCardClass(appt.status);

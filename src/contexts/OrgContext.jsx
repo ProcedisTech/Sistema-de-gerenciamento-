@@ -36,6 +36,8 @@ export function OrgProvider({ children }) {
       return null;
     }
   });
+  /** Nome da role vindo do /me (antes de resolverPapel). */
+  const [roleNome, setRoleNomeState] = useState('');
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -84,6 +86,10 @@ export function OrgProvider({ children }) {
     }
   }, []);
 
+  const setRoleNome = useCallback((nome) => {
+    setRoleNomeState(nome == null ? '' : String(nome).trim());
+  }, []);
+
   const value = useMemo(
     () => ({
       orgId,
@@ -94,8 +100,10 @@ export function OrgProvider({ children }) {
       altOrgId: ALT_ORG_ID,
       papel,
       setPapel,
+      roleNome,
+      setRoleNome,
     }),
-    [orgId, setOrgId, roleUserId, setRoleUserId, papel, setPapel]
+    [orgId, setOrgId, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -113,6 +121,8 @@ export function useOrg() {
       altOrgId: ALT_ORG_ID,
       papel: null,
       setPapel: () => {},
+      roleNome: '',
+      setRoleNome: () => {},
     };
   }
   return ctx;

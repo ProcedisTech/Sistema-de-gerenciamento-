@@ -109,7 +109,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 export default function App() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -130,6 +130,12 @@ export default function App() {
   /** null = deslogado ou pendente; checking = carregando gates; profile | cadastrar-clinica | clinic | ready = pós-login */
   const [postLoginGate, setPostLoginGate] = React.useState(null);
   const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
+
+  React.useEffect(() => {
+    if (!authState.isLoggedIn) {
+      if (typeof setRoleNome === 'function') setRoleNome('');
+    }
+  }, [authState.isLoggedIn, setRoleNome]);
 
   React.useEffect(() => {
     if (!authState.isLoggedIn || !authState.authUser) {
@@ -177,6 +183,9 @@ export default function App() {
           setRoleUserId(String(roleId));
         }
         const roleNome = meJson?.perfilAcessoCodigo ?? meJson?.perfil_acesso_codigo ?? meJson?.role?.nome ?? meJson?.role_nome ?? meJson?.role ?? null;
+        if (typeof setRoleNome === 'function') {
+          setRoleNome(roleNome != null ? String(roleNome) : '');
+        }
         if (typeof setPapel === 'function') {
           setPapel(resolverPapel(roleNome));
         }
@@ -302,8 +311,6 @@ export default function App() {
     setPatientListPage,
     patientListLoading,
     patientListMeta,
-    patientListTipoBusca,
-    setPatientListTipoBusca,
     patientListSortBy,
     setPatientListSortBy,
     bumpPatientList,
@@ -1921,8 +1928,6 @@ export default function App() {
                   setPatientListPage={setPatientListPage}
                   patientListLoading={patientListLoading}
                   patientListMeta={patientListMeta}
-                  patientListTipoBusca={patientListTipoBusca}
-                  setPatientListTipoBusca={setPatientListTipoBusca}
                   patientListSortBy={patientListSortBy}
                   setPatientListSortBy={setPatientListSortBy}
                   roleUserId={roleUserId}

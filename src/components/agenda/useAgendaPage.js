@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
 import {
   agendasApi,
+  anamneseApi,
   catalogosApi,
   confirmacaoApi,
   disponibilidadeApi,
+  equipeApi,
+  pacientesApi,
+  procedimentosApi,
 } from '../../services/api';
+import { mapBackendPatient } from '../../utils/patientMapping';
+import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
@@ -18,18 +24,18 @@ import {
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
+import { buildDaySlotList, buildMonthHeatmap } from '../../utils/agendaDisponibilidadeBuilder.js';
 import {
-  AGENDA_DAY_END_MIN,
-  AGENDA_DAY_START_MIN,
-  AGENDA_SLOT_STEP_MIN,
-  findNextFreeSlotStart,
+  findFirstConflictHhmm,
+  findNextFreeSlotAcrossDays,
   occupiedIntervalsFromAgendaDtos,
-  parseHhmmToMinutes,
   proposalOverlapsOccupied,
 } from '../../utils/agendaAvailability';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
+import { isRoleAgendaPreselect } from './agendaRoleConstants.js';
+import { DURACOES_PILL, snapDuracaoToPill } from '../../utils/agendaDuracaoPills.js';
 
 const STATUS_LABELS = {
   confirmado: 'confirmado',
@@ -72,6 +78,17 @@ function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function normalizeEquipeList(raw) {
+  const rows = Array.isArray(raw) ? raw : raw?.content && Array.isArray(raw.content) ? raw.content : [];
+  return rows
+    .map((p) => {
+      const roleUserId = String(p?.roleUserId || p?.role_user_id || p?.id || '').trim();
+      const nome = p?.nomeCompleto || p?.nome || p?.name || p?.username || 'Profissional';
+      return roleUserId ? { roleUserId, nome: String(nome).trim() || 'Profissional' } : null;
+    })
+    .filter(Boolean);
+}
+
 function normalizePatientOption(patient) {
   const id = patient?.id || patient?.cpf || patient?.nome || patient?.nomeCompleto;
   const nome = patient?.nome || patient?.nomeCompleto || patient?.name || 'Paciente';
@@ -84,17 +101,16 @@ function normalizePatientOption(patient) {
   return { id: String(id || nome), nome, telefone, raw: patient };
 }
 
-function defaultForm(selectedDay, patientOptions, firstProcedimentoOption) {
-  const firstPatient = patientOptions[0] || {};
+function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
   const proc = firstProcedimentoOption || {};
   return {
-    pacienteId: firstPatient.id || '',
-    pacienteNome: firstPatient.nome || '',
-    telefone: firstPatient.telefone || '',
+    pacienteId: '',
+    pacienteNome: '',
+    telefone: '',
     procedimentoNome: '',
     catalogoProcedimentoSaudeIds: proc.id ? [String(proc.id)] : [],
     data: selectedDay || toLocalDateIso(),
-    horaInicio: '09:00',
+    horaInicio: '',
     duracaoMin: 60,
     observacao: '',
   };
@@ -173,7 +189,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
 }
 
 export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
-  const { roleUserId } = useOrg();
+  const { roleUserId, roleNome } = useOrg();
   const { isNivel1 } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
   const todayIso = toLocalDateIso();
@@ -201,6 +217,26 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
   /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
+  const [pacienteContext, setPacienteContext] = useState(null);
+  const [pacienteContextLoading, setPacienteContextLoading] = useState(false);
+  /** Profissional do modal (create = sessão; edit = do agendamento). */
+  const [roleUserIdAgenda, setRoleUserIdAgenda] = useState('');
+  const [equipeList, setEquipeList] = useState([]);
+  const [equipeLoading, setEquipeLoading] = useState(false);
+  const [equipeError, setEquipeError] = useState('');
+  const equipeFetchedRef = useRef(false);
+  const dispMonthCacheRef = useRef({});
+  const disponibilidadesRef = useRef(disponibilidades);
+  disponibilidadesRef.current = disponibilidades;
+
+  const [dispMonthDate, setDispMonthDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [dispCalendarioDia, setDispCalendarioDia] = useState('');
+  const [dispMonthDtos, setDispMonthDtos] = useState([]);
+  const [dispMonthLoading, setDispMonthLoading] = useState(false);
+  const [dispMonthError, setDispMonthError] = useState('');
 
   const { modal: foraDispModal, abrirConfirmacao: abrirConfirmacaoForaDisp } =
     useConfirmacaoForaDisp();
@@ -221,6 +257,36 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [patients]
   );
 
+  useEffect(() => {
+    if (modalMode) return;
+    setRoleUserIdAgenda(String(roleUserId || '').trim());
+  }, [roleUserId, modalMode]);
+
+  useEffect(() => {
+    if (!authEnabled || !modalMode) return;
+    if (equipeFetchedRef.current) return;
+    let cancelled = false;
+    equipeFetchedRef.current = true;
+    setEquipeLoading(true);
+    setEquipeError('');
+    equipeApi
+      .list()
+      .then((raw) => {
+        if (cancelled) return;
+        setEquipeList(normalizeEquipeList(raw));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setEquipeList([]);
+        setEquipeError(e?.message || 'Não foi possível carregar a equipe.');
+      })
+      .finally(() => {
+        if (!cancelled) setEquipeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, modalMode]);
 
   useEffect(() => {
     if (!Array.isArray(appointments) || appointments.length === 0) return;
@@ -288,27 +354,113 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     loadMonth();
   }, [loadMonth]);
 
+  const dispCacheKey = useCallback((roleId, md) => {
+    return `${String(roleId || '').trim()}:${monthKey(md)}`;
+  }, []);
+
+  const ensureDispMonthLoaded = useCallback(
+    async (monthDateTarget) => {
+      const role = String(roleUserIdAgenda || '').trim();
+      if (!role || !authEnabled) {
+        setDispMonthDtos([]);
+        return [];
+      }
+      const key = dispCacheKey(role, monthDateTarget);
+      const hit = dispMonthCacheRef.current[key];
+      if (hit?.dtos) {
+        setDispMonthDtos(hit.dtos);
+        return hit.dtos;
+      }
+
+      setDispMonthLoading(true);
+      setDispMonthError('');
+      try {
+        const { start, end } = monthRangeIso(monthDateTarget);
+        const dispCached = disponibilidadesRef.current[role];
+        const [raw, dispRaw] = await Promise.all([
+          agendasApi.byRange(start, end, { profissionalRoleUserId: role }),
+          dispCached ? Promise.resolve(dispCached) : disponibilidadeApi.buscar(role),
+        ]);
+        const dtos = normalizeApiList(raw);
+        dispMonthCacheRef.current[key] = { dtos };
+        if (!dispCached && Array.isArray(dispRaw)) {
+          setDisponibilidades((prev) => ({ ...prev, [role]: dispRaw }));
+        }
+        setDispMonthDtos(dtos);
+        return dtos;
+      } catch (e) {
+        setDispMonthError(e?.message || 'Não foi possível carregar a disponibilidade.');
+        setDispMonthDtos([]);
+        return [];
+      } finally {
+        setDispMonthLoading(false);
+      }
+    },
+    [authEnabled, dispCacheKey, roleUserIdAgenda]
+  );
+
+  useEffect(() => {
+    if (!modalMode) return undefined;
+    const iso = toDateKey(form.data) || todayIso;
+    setDispCalendarioDia(iso);
+    const [y, m] = iso.split('-').map(Number);
+    setDispMonthDate(new Date(y, m - 1, 1));
+    return undefined;
+    // Só ao abrir/fechar modal — não seguir form.data (coluna esquerda).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form.data intencionalmente omitido
+  }, [modalMode, todayIso]);
+
+  useEffect(() => {
+    if (!authEnabled || !modalMode || !String(roleUserIdAgenda || '').trim()) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      await ensureDispMonthLoaded(dispMonthDate);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
+
   useEffect(() => {
     if (!authEnabled || !modalMode || !form.data) {
       setSlotsOcupados([]);
       setSlotsOcupadosLoading(false);
-      return;
+      return undefined;
     }
+    const role = String(roleUserIdAgenda || '').trim();
+    const skipId = editingAppointment?.agendaId;
+    const formDay = toDateKey(form.data);
+    const cacheKey = dispCacheKey(role, dispMonthDate);
+    const cached = dispMonthCacheRef.current[cacheKey];
+    const ym = monthKey(dispMonthDate);
+    if (cached?.dtos && formDay.startsWith(ym)) {
+      const dayDtos = cached.dtos.filter(
+        (d) => d?.dataAgendamento && String(d.dataAgendamento).slice(0, 10) === formDay
+      );
+      const intervals = occupiedIntervalsFromAgendaDtos(dayDtos, {
+        activeOnly: true,
+        profissionalRoleUserId: role || undefined,
+        excludeAgendaId: skipId,
+      });
+      setSlotsOcupados(intervals);
+      setSlotsOcupadosLoading(false);
+      return undefined;
+    }
+
     let cancelled = false;
     setSlotsOcupadosLoading(true);
     agendasApi
-      .byRange(form.data, form.data)
+      .byRange(formDay, formDay, role ? { profissionalRoleUserId: role } : {})
       .then((raw) => {
         if (cancelled) return;
-        let dtos = normalizeApiList(raw);
-        const skipId = editingAppointment?.agendaId;
-        if (skipId) {
-          dtos = dtos.filter((d) => d && String(d.id) !== String(skipId));
-        }
-        const role = String(roleUserId || '').trim();
+        const dtos = normalizeApiList(raw);
         const intervals = occupiedIntervalsFromAgendaDtos(dtos, {
-          excludeCancelled: true,
-          roleUserId: role || undefined,
+          activeOnly: true,
+          profissionalRoleUserId: role || undefined,
+          excludeAgendaId: skipId,
         });
         setSlotsOcupados(intervals);
       })
@@ -321,25 +473,228 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [authEnabled, modalMode, form.data, roleUserId, editingAppointment?.agendaId]);
+  }, [
+    authEnabled,
+    modalMode,
+    form.data,
+    roleUserIdAgenda,
+    editingAppointment?.agendaId,
+    dispMonthDate,
+    dispCacheKey,
+  ]);
 
   const horarioConflita = useMemo(
     () => (modalMode ? proposalOverlapsOccupied(form.horaInicio, form.duracaoMin, slotsOcupados) : false),
     [modalMode, form.horaInicio, form.duracaoMin, slotsOcupados]
   );
 
-  const proximoHorarioLivre = useMemo(() => {
-    if (!modalMode || !form.data) return null;
-    const from = parseHhmmToMinutes(String(form.horaInicio || '').slice(0, 5));
-    return findNextFreeSlotStart(
-      from,
-      form.duracaoMin,
-      slotsOcupados,
-      AGENDA_DAY_START_MIN,
-      AGENDA_DAY_END_MIN,
-      AGENDA_SLOT_STEP_MIN
-    );
-  }, [modalMode, form.data, form.horaInicio, form.duracaoMin, slotsOcupados]);
+  const horarioConflitoCom = useMemo(
+    () =>
+      modalMode && horarioConflita
+        ? findFirstConflictHhmm(form.horaInicio, form.duracaoMin, slotsOcupados)
+        : null,
+    [modalMode, horarioConflita, form.horaInicio, form.duracaoMin, slotsOcupados]
+  );
+
+  const selectPaciente = useCallback((pacienteId, paciente) => {
+    const id = String(pacienteId || '').trim();
+    const nome = paciente?.nome || paciente?.nomeCompleto || paciente?.name || '';
+    const telefone =
+      paciente?.telefone ||
+      paciente?.phone ||
+      paciente?.telefoneNumero ||
+      paciente?.telefonePrincipal ||
+      '';
+    setForm((prev) => ({
+      ...prev,
+      pacienteId: id,
+      pacienteNome: nome,
+      telefone,
+    }));
+    setFormErrors((prev) => ({ ...prev, pacienteId: undefined }));
+  }, []);
+
+  const clearPacienteSelection = useCallback(() => {
+    setForm((prev) => ({
+      ...prev,
+      pacienteId: '',
+      pacienteNome: '',
+      telefone: '',
+    }));
+    setPacienteContext(null);
+    setPacienteContextLoading(false);
+    setFormErrors((prev) => ({ ...prev, pacienteId: undefined }));
+  }, []);
+
+  useEffect(() => {
+    const id = String(form.pacienteId || '').trim();
+    if (!modalMode || !id) {
+      setPacienteContext(null);
+      setPacienteContextLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setPacienteContextLoading(true);
+    (async () => {
+      try {
+        const [dto, procs, anamList] = await Promise.all([
+          pacientesApi.get(id),
+          procedimentosApi.byPaciente(id).catch(() => []),
+          anamneseApi.listPaciente(id).catch(() => []),
+        ]);
+        if (cancelled) return;
+        const base = mapBackendPatient(dto);
+        const procedures = Array.isArray(procs) ? procs : [];
+        const anamneseList = Array.isArray(anamList) ? anamList : [];
+        setPacienteContext({
+          ...base,
+          procedures,
+          anamneseList,
+          anamneseDesatualizada: resolveAnamneseDesatualizada(base, anamneseList),
+        });
+      } catch {
+        if (!cancelled) setPacienteContext(null);
+      } finally {
+        if (!cancelled) setPacienteContextLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalMode, form.pacienteId]);
+
+  const dispProfissionalDisponibilidade = useMemo(() => {
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return [];
+    return Array.isArray(disponibilidades[role]) ? disponibilidades[role] : [];
+  }, [disponibilidades, roleUserIdAgenda]);
+
+  const dispHeatmap = useMemo(() => {
+    if (!modalMode) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return null;
+    return buildMonthHeatmap({
+      monthDate: dispMonthDate,
+      disponibilidade: dispProfissionalDisponibilidade,
+      dtos: dispMonthDtos,
+      todayIso,
+      excludeAgendaId: editingAppointment?.agendaId,
+      profissionalRoleUserId: role,
+      selectedIso: dispCalendarioDia,
+    });
+  }, [
+    modalMode,
+    dispMonthDate,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
+    todayIso,
+    editingAppointment?.agendaId,
+    roleUserIdAgenda,
+    dispCalendarioDia,
+  ]);
+
+  const dispDaySlots = useMemo(() => {
+    if (!modalMode) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    return buildDaySlotList({
+      iso: dispCalendarioDia,
+      disponibilidade: dispProfissionalDisponibilidade,
+      dtos: dispMonthDtos,
+      duracaoMin: form.duracaoMin,
+      excludeAgendaId: editingAppointment?.agendaId,
+      profissionalRoleUserId: role,
+      selectedFormIso: form.data,
+      selectedFormHora: form.horaInicio,
+    });
+  }, [
+    modalMode,
+    dispCalendarioDia,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
+    form.duracaoMin,
+    form.data,
+    form.horaInicio,
+    editingAppointment?.agendaId,
+    roleUserIdAgenda,
+  ]);
+
+  const selectDispCalendarioDia = useCallback((iso) => {
+    setDispCalendarioDia(toDateKey(iso) || '');
+  }, []);
+
+  const selectDispSlot = useCallback((iso, hhmm) => {
+    const day = toDateKey(iso) || '';
+    const hi = String(hhmm || '').slice(0, 5);
+    setDispCalendarioDia(day);
+    setForm((prev) => ({ ...prev, data: day, horaInicio: hi }));
+    setFormErrors((prev) => ({ ...prev, data: undefined, horaInicio: undefined }));
+  }, []);
+
+  const goDispPrevMonth = useCallback(() => {
+    setDispMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  }, []);
+
+  const goDispNextMonth = useCallback(() => {
+    setDispMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  }, []);
+
+  const handleProximoHorarioLivre = useCallback(async () => {
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return;
+
+    let monthCursor = dispMonthDate;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const dtos = await ensureDispMonthLoaded(monthCursor);
+      const disp =
+        disponibilidadesRef.current[role] ||
+        dispProfissionalDisponibilidade ||
+        [];
+
+      const result = findNextFreeSlotAcrossDays({
+        startIso: dispCalendarioDia || form.data || todayIso,
+        startHora: form.horaInicio,
+        duracaoMin: form.duracaoMin,
+        dtos,
+        disponibilidade: disp,
+        todayIso,
+        excludeAgendaId: editingAppointment?.agendaId,
+        profissionalRoleUserId: role,
+        monthDates: [monthCursor],
+      });
+
+      if (result) {
+        setDispCalendarioDia(result.iso);
+        setDispMonthDate(
+          new Date(
+            Number(result.iso.slice(0, 4)),
+            Number(result.iso.slice(5, 7)) - 1,
+            1
+          )
+        );
+        setForm((prev) => ({
+          ...prev,
+          data: result.iso,
+          horaInicio: result.hhmm,
+        }));
+        setFormErrors((prev) => ({ ...prev, data: undefined, horaInicio: undefined }));
+        return;
+      }
+
+      monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1);
+      setDispMonthDate(monthCursor);
+    }
+  }, [
+    dispMonthDate,
+    dispCalendarioDia,
+    form.data,
+    form.horaInicio,
+    form.duracaoMin,
+    todayIso,
+    editingAppointment?.agendaId,
+    roleUserIdAgenda,
+    ensureDispMonthLoaded,
+    dispProfissionalDisponibilidade,
+  ]);
 
   const isHorarioOcupado = useCallback(
     (horaInicio, duracaoMin) => proposalOverlapsOccupied(horaInicio, duracaoMin, slotsOcupados),
@@ -534,6 +889,20 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
 
+  const setRoleUserIdAgendaPublic = useCallback((id) => {
+    setRoleUserIdAgenda(String(id ?? '').trim());
+    setFormErrors((prev) => ({ ...prev, profissional: undefined }));
+  }, []);
+
+  const applyProfissionalPreselect = useCallback(() => {
+    const sessionRole = String(roleUserId || '').trim();
+    if (isRoleAgendaPreselect(roleNome) && sessionRole) {
+      setRoleUserIdAgenda(sessionRole);
+    } else {
+      setRoleUserIdAgenda('');
+    }
+  }, [roleUserId, roleNome]);
+
   const updateForm = useCallback(
     (field, value) => {
       setForm((prev) => {
@@ -559,9 +928,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setPatientSelectLocked(false);
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
+      applyProfissionalPreselect();
       setModalMode('create');
     },
-    [isNivel1, patientOptions, selectedDay]
+    [isNivel1, patientOptions, selectedDay, applyProfissionalPreselect]
   );
 
   const openCreateModalAtSlot = useCallback(
@@ -578,9 +948,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         horaInicio: hi || base.horaInicio,
       });
       setFormErrors({});
+      applyProfissionalPreselect();
       setModalMode('create');
     },
-    [isNivel1, patientOptions]
+    [isNivel1, patientOptions, applyProfissionalPreselect]
   );
 
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
@@ -601,9 +972,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       });
       setPatientSelectLocked(true);
       setFormErrors({});
+      applyProfissionalPreselect();
       setModalMode('create');
     },
-    [isNivel1, patientOptions, todayIso]
+    [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
   );
 
   const openEditModal = useCallback(
@@ -625,21 +997,33 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         catalogoProcedimentoSaudeIds: currentIds,
         data: appointment?.data || base.data,
         horaInicio: appointment?.horaInicio || base.horaInicio,
-        duracaoMin: snapAgendaDuracaoMin(appointment?.duracaoMin ?? base.duracaoMin),
+        duracaoMin: snapDuracaoToPill(appointment?.duracaoMin ?? base.duracaoMin),
         observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
       });
       setFormErrors({});
       setPatientSelectLocked(false);
+      setRoleUserIdAgenda(
+        String(
+          appointment?.profissionalRoleUserId ?? appointment?.roleUserId ?? roleUserId ?? ''
+        ).trim()
+      );
       setModalMode('edit');
     },
-    [isNivel1, patientOptions, selectedDay]
+    [isNivel1, patientOptions, selectedDay, roleUserId]
   );
 
   const closeModal = useCallback(() => {
     setModalMode(null);
     setEditingAppointment(null);
     setPatientSelectLocked(false);
+    setPacienteContext(null);
+    setPacienteContextLoading(false);
     setFormErrors({});
+    equipeFetchedRef.current = false;
+    dispMonthCacheRef.current = {};
+    setDispMonthDtos([]);
+    setDispCalendarioDia('');
+    setDispMonthError('');
   }, []);
 
   const validateForm = useCallback(() => {
@@ -653,29 +1037,32 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     } else if (procIds.length === 0) {
       nextErrors.catalogoProcedimentoSaudeIds = 'Selecione ao menos um procedimento.';
     }
-    if (!form.data) nextErrors.data = 'Informe a data.';
+    if (!form.data) nextErrors.data = 'Selecione um dia no calendário.';
     else if (form.data < todayIso) {
       nextErrors.data = 'Data inválida — não é possível agendar para o passado.';
     }
-    if (!form.horaInicio) nextErrors.horaInicio = 'Informe o horário.';
+    if (!form.horaInicio) nextErrors.horaInicio = 'Selecione um horário na lista.';
     const d = Number(form.duracaoMin);
-    if (!Number.isFinite(d) || d < DUR_MIN || d > DUR_MAX || (d - DUR_MIN) % DUR_STEP !== 0) {
-      nextErrors.duracaoMin = 'Duração entre 15 e 150 min, múltiplos de 5.';
+    if (!DURACOES_PILL.includes(d)) {
+      nextErrors.duracaoMin = 'Selecione a duração.';
+    }
+    if (!String(roleUserIdAgenda || '').trim()) {
+      nextErrors.profissional = 'Selecione um profissional.';
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [form, todayIso, modalMode]);
+  }, [form, todayIso, modalMode, roleUserIdAgenda]);
 
   const saveAppointment = useCallback(async () => {
     if (isNivel1) return false;
     if (!validateForm()) return false;
-    const contextRole = String(roleUserId || '').trim();
-    if (!contextRole) {
+    const agendaRole = String(roleUserIdAgenda || '').trim();
+    if (!agendaRole) {
       setFormErrors((prev) => ({
         ...prev,
-        _global: 'Sessão sem vínculo de profissional (role). Faça login novamente ou complete o perfil na clínica.',
+        profissional: 'Selecione um profissional.',
       }));
-      setError('Sessão sem vínculo de profissional (role).');
+      setError('Selecione um profissional.');
       return false;
     }
 
@@ -708,7 +1095,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           setError('Selecione o procedimento.');
           return false;
         }
-        const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, contextRole);
+        const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, agendaRole);
         const body = {
           ...baseBody,
           pacienteId: String(form.pacienteId || patient?.id || '').trim(),
@@ -730,7 +1117,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             dataAgendamento: form.data,
             horaInicio: startHh,
             duracaoMin: dMin,
-            roleUserId: contextRole,
+            profissionalRoleUserId: agendaRole,
             observacao: String(form.observacao || '').trim(),
             pacienteId: String(form.pacienteId || patient?.id || '').trim(),
             catalogoProcedimentoSaudeId,
@@ -747,6 +1134,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
+      const savedRole = String(roleUserIdAgenda || '').trim();
+      if (savedRole) {
+        delete dispMonthCacheRef.current[dispCacheKey(savedRole, nextMonthDate)];
+      }
       setSelectedDay(form.data);
       setMonthDate(nextMonthDate);
       await loadMonth();
@@ -769,7 +1160,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     modalMode,
     patientOptions,
     refreshWeekGrid,
-    roleUserId,
+    roleUserIdAgenda,
+    dispCacheKey,
     toastSuccess,
     validateForm,
   ]);
@@ -842,7 +1234,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     handleEnviarWhatsApp,
     handleReagendar,
     horarioConflita,
+    horarioConflitoCom,
     isHorarioOcupado,
+    selectPaciente,
+    clearPacienteSelection,
+    pacienteContext,
+    pacienteContextLoading,
     loading,
     modalMode,
     monthLabel,
@@ -855,8 +1252,17 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     patientSelectLocked,
     patientOptions,
     procedimentoOptions,
-    proximoHorarioLivre,
+    dispCalendarioDia,
+    dispDaySlots,
+    dispHeatmap,
+    dispMonthError,
+    dispMonthLoading,
+    goDispNextMonth,
+    goDispPrevMonth,
+    handleProximoHorarioLivre,
     refreshDashboard,
+    selectDispCalendarioDia,
+    selectDispSlot,
     saveAppointment,
     selectDay,
     selectedDay,
@@ -865,6 +1271,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setViewMode,
     slotsOcupados,
     slotsOcupadosLoading,
+    roleUserIdAgenda,
+    setRoleUserIdAgenda: setRoleUserIdAgendaPublic,
+    equipeList,
+    equipeLoading,
+    equipeError,
     stats,
     submittingReagendar,
     syncWeekFromSelection,

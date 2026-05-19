@@ -509,12 +509,6 @@ function buildPacientesListQuery(opts = {}) {
   const sort =
     !order && opts.sort != null && String(opts.sort).trim() !== '' ? String(opts.sort).trim() : '';
   if (sort) params.set('sort', sort);
-  const qRaw = opts.q != null ? String(opts.q).trim() : '';
-  if (qRaw) {
-    params.set('q', qRaw);
-    const tipo = opts.tipo != null && String(opts.tipo).trim() !== '' ? String(opts.tipo).trim() : 'nome';
-    params.set('tipo', tipo);
-  }
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
@@ -522,13 +516,12 @@ function buildPacientesListQuery(opts = {}) {
 export const pacientesApi = {
   /**
    * Lista paginada (Spring Page). Mantém fallback se o backend ainda devolver array.
+   * Texto de busca: usar `search()` — esta rota não filtra por `q` no servidor atual.
    * @param {{
    *   page?: number,
    *   size?: number,
    *   order?: string,
    *   sort?: string,
-   *   q?: string,
-   *   tipo?: string,
    * }} [opts]
    */
   list: async (opts = {}) => {
@@ -537,12 +530,10 @@ export const pacientesApi = {
     return normalizePacientesPage(raw);
   },
   get: (id) => request(`/api/v1/pacientes/${id}`),
-  /** Catálogo / busca — array ou Page (`content`). */
+  /** Busca textual (nome | CPF | telefone). Normaliza como `list` — array ou Page. */
   search: async (q) => {
     const raw = await request(`/api/v1/pacientes/search?q=${encodeURIComponent(q ?? '')}`);
-    if (Array.isArray(raw)) return raw;
-    const c = raw?.content;
-    return Array.isArray(c) ? c : [];
+    return normalizePacientesPage(raw);
   },
   create: (data) => request('/api/v1/pacientes', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/api/v1/pacientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -787,7 +778,13 @@ export const perfilApi = {
 export const agendasApi = {
   get: (id) => request(`/api/v1/agendas/${id}`),
   byDate: (date) => request(`/api/v1/agendas/by-date?date=${date}`),
-  byRange: (start, end) => request(`/api/v1/agendas/by-range?start=${start}&end=${end}`),
+  byRange: (start, end, opts = {}) => {
+    let url = `/api/v1/agendas/by-range?start=${start}&end=${end}`;
+    if (opts?.profissionalRoleUserId) {
+      url += `&profissionalRoleUserId=${encodeURIComponent(String(opts.profissionalRoleUserId).trim())}`;
+    }
+    return request(url);
+  },
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
   create: (data, opts = {}) => {

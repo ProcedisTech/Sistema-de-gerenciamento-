@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Image as ImageIcon,
   Loader2,
   Play,
   Plus,
   Search,
-  Shield,
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
@@ -23,11 +22,8 @@ import {
   ProcedureTimelinePreviewCard,
 } from './ProcedureTimelineBlock.jsx';
 import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
-import {
-  formatCartaoDiaPtBr,
-  latestProcedureOccurredInstantIso,
-  patientUltimaVisitaDayFromDto,
-} from '../../utils/patientProfileDerivedDates.js';
+import { anamneseVencidaFromPatient } from '../../utils/patientAnamneseAlerts.js';
+import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
 
 function parseUltimaVisitaMs(s) {
   if (!s || s === '-') return 0;
@@ -54,38 +50,11 @@ function semRetorno60d(p) {
   return d != null && d > 60;
 }
 
-function lastProcedureLabel(p) {
-  const procs = Array.isArray(p?.procedures) ? p.procedures : [];
-  if (!procs.length) return '—';
-  const last = procs[procs.length - 1];
-  const n = last?.nome || last?.nomeProcedimento;
-  return n ? String(n) : '—';
-}
-
-/** Data no rodapé: mesma prioridade do cartão Última visita do perfil; fallback ao procedimento mais recente. */
-function lastProcedureDateForCard(p) {
-  const primary = patientUltimaVisitaDayFromDto(p);
-  if (primary !== '-') return primary;
-  const iso = latestProcedureOccurredInstantIso(p?.procedures || []);
-  return iso ? formatCartaoDiaPtBr(iso) : '—';
-}
-
 /** Heurística visual: sem visita nem procedimento na lista local. */
 function isPatientLikelyNovo(p) {
   const uv = String(p?.ultimaVisita || '').trim();
   const noVisita = !uv || uv === '-' || uv === '—';
   return noVisita && lastProcedureLabel(p) === '—';
-}
-
-/** Quando o backend enviar ISO da última anamnese no DTO da lista. */
-function anamneseVencidaFromPatient(p) {
-  const raw = p?.ultimaAnamneseDataHora || p?.ultimaAnamneseEm;
-  if (!raw) return false;
-  const t = new Date(raw);
-  if (Number.isNaN(t.getTime())) return false;
-  const lim = new Date();
-  lim.setMonth(lim.getMonth() - 6);
-  return t < lim;
 }
 
 const SORT_OPTIONS = [
@@ -98,100 +67,124 @@ const SORT_OPTIONS = [
   { value: 'birthday-asc', label: 'Aniversário (mais próximo)' },
 ];
 
-const patientListAvatarClass =
-  'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-app-border bg-[#e6f7f5] sm:h-11 sm:w-11';
+const QUICK_FILTERS = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'comAlerta', label: 'Com alerta' },
+  { value: 'semRetorno', label: 'Sem retorno 60d+' },
+  { value: 'anamneseVencida', label: 'Anamnese vencida' },
+  { value: 'menor', label: 'Menor' },
+];
 
-/**
- * Cartão de paciente na coluna esquerda (estilo protótipo: branco, sombra, sobre fundo suave).
- */
+function applyQuickFilter(items, filter) {
+  if (filter === 'comAlerta') return items.filter(hasClinicalAlert);
+  if (filter === 'semRetorno') return items.filter(semRetorno60d);
+  if (filter === 'anamneseVencida') return items.filter(anamneseVencidaFromPatient);
+  if (filter === 'menor') return items.filter((p) => p.idade != null && Number(p.idade) < 18);
+  return items;
+}
+
 function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
   const clinical = hasClinicalAlert(patient);
   const semRet = semRetorno60d(patient);
   const anamVenc = anamneseVencidaFromPatient(patient);
   const menor = patient.idade != null && Number(patient.idade) < 18;
   const novo = isPatientLikelyNovo(patient);
+  const lastProc = lastProcedureLabel(patient);
   const lastProcDate = lastProcedureDateForCard(patient);
-  const lastProcDateMuted = lastProcDate === '—' || lastProcDate === '-';
+
+  const mutedInfoParts = [
+    patient.idade != null ? `${patient.idade} anos` : null,
+    lastProc !== '—' ? lastProc : null,
+  ].filter(Boolean);
+
+  const hasLastVisitDate = lastProcDate !== '—' && lastProcDate !== '-';
 
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`flex w-full min-w-0 items-start gap-2.5 rounded-lg border-2 p-2.5 text-left shadow-app-card transition-all duration-150 active:bg-emerald-100/50 sm:gap-3 sm:p-3 ${
+      className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-0 px-4 py-3 text-left shadow-none transition-colors duration-100 sm:min-h-[72px] sm:gap-4 sm:px-5 sm:py-3.5 md:gap-5 md:min-h-[76px] lg:min-h-[80px] lg:px-6 lg:py-4 ${
         selected
-          ? 'border-[#0d9488] bg-white shadow-sm ring-1 ring-[#0d9488]/20'
-          : 'border-app-border bg-white hover:border-[#2dd4bf] hover:bg-emerald-50/40 hover:shadow-sm'
+          ? 'bg-emerald-50/70 ring-2 ring-inset ring-[#00a88e]/35 hover:bg-emerald-50/70'
+          : 'bg-white hover:bg-slate-50'
       }`}
     >
       <PatientAvatar
         patient={patient}
         getPatientInitials={getPatientInitials}
-        className={patientListAvatarClass}
-        initialsClassName="text-xs font-bold sm:text-[13px]"
-        spinnerClassName="h-4 w-4"
+        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] sm:h-11 sm:w-11 lg:h-12 lg:w-12"
+        initialsClassName="text-[12px] font-bold sm:text-[13px] lg:text-sm"
+        spinnerClassName="h-4 w-4 lg:h-[18px] lg:w-[18px]"
       />
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-1.5">
-          <p className="min-w-0 flex-1 truncate text-[14px] font-bold leading-snug text-[#0f172a] sm:text-[15px]">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2">
+          <p className="truncate text-[14px] font-semibold leading-snug text-[#0f172a] sm:text-[15px] md:text-[16px]">
             {patient.nome}
           </p>
-          <Shield
-            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-accent"
-            strokeWidth={1.5}
-            aria-hidden
-          />
-        </div>
-        <div className="mt-0.5 space-y-0.5 text-[12px] text-[#64748b] sm:text-[13px]">
-          <p>{patient.idade != null ? `${patient.idade} anos` : '—'}</p>
-          <p className="truncate" title={patient.telefone || undefined}>
-            {patient.telefone || '—'}
-          </p>
-        </div>
-        <div className="mt-1.5 border-t border-slate-100 pt-1.5">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">
-              Última visita
-            </span>
-            <span
-              className={
-                lastProcDateMuted
-                  ? 'shrink-0 text-[13px] font-semibold text-[#cbd5e1]'
-                  : 'shrink-0 text-[13px] font-semibold text-app-accent'
-              }
-              title={String(lastProcDate)}
-            >
-              {lastProcDate}
-            </span>
-          </div>
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-0.5">
-          {clinical ? (
-            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-1.5 py-px text-[10px] font-semibold text-[#dc2626]">
-              Alerta
-            </span>
-          ) : null}
-          {semRet ? (
-            <span className="inline-flex items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-1.5 py-px text-[10px] font-semibold text-[#ea580c]">
-              Sem retorno
-            </span>
-          ) : null}
-          {anamVenc ? (
-            <span className="inline-flex items-center rounded-full border border-[#fecaca] bg-[#fef2f2] px-1.5 py-px text-[10px] font-semibold text-[#dc2626]">
-              Anamnese vencida
-            </span>
-          ) : null}
-          {menor ? (
-            <span className="inline-flex items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-1.5 py-px text-[10px] font-semibold text-[#2563eb]">
-              Menor
-            </span>
-          ) : null}
           {novo ? (
-            <span className="inline-flex items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-1.5 py-px text-[10px] font-semibold text-[#0f766e]">
+            <span className="inline-flex shrink-0 items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-1.5 py-0.5 text-[11px] font-semibold text-[#0f766e] sm:px-2 sm:text-[12px]">
               Novo
             </span>
           ) : null}
+          {menor ? (
+            <span className="inline-flex shrink-0 items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-1.5 py-0.5 text-[11px] font-semibold text-[#2563eb] sm:px-2 sm:text-[12px]">
+              Menor
+            </span>
+          ) : null}
         </div>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2 md:mt-1.5">
+          {mutedInfoParts.length > 0 || hasLastVisitDate ? (
+            <p className="text-[13px] text-[#64748b] sm:text-[14px] md:text-[15px]">
+              {mutedInfoParts.map((part, idx) => (
+                <React.Fragment key={`muted-${patient.id}-${idx}`}>
+                  {idx > 0 ? ' · ' : ''}
+                  {part}
+                </React.Fragment>
+              ))}
+              {hasLastVisitDate ? (
+                <>
+                  {(mutedInfoParts.length > 0 ? ' · ' : '')}
+                  Última visita ·{' '}
+                  <span className="font-semibold text-[#00a88e]">{lastProcDate}</span>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          {anamVenc ? (
+            <span className="inline-flex shrink-0 items-center rounded-full border border-[#fef08a] bg-[#fefce8] px-1.5 py-0.5 text-[11px] font-semibold text-[#854d0e] sm:px-2 sm:text-[12px]">
+              Anamnese vencida
+            </span>
+          ) : null}
+          {semRet ? (
+            <span className="inline-flex shrink-0 items-center rounded-full border border-[#fed7aa] bg-[#fff7ed] px-1.5 py-0.5 text-[11px] font-semibold text-[#ea580c] sm:px-2 sm:text-[12px]">
+              Sem retorno
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+        {clinical ? (
+          <AlertTriangle
+            className="h-4 w-4 text-orange-400 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5"
+            strokeWidth={2}
+            aria-hidden
+          />
+        ) : null}
+        <span
+          className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] lg:text-[13px] md:inline-flex ${
+            selected
+              ? 'border-[#6ee7c8] bg-emerald-50 text-[#047857]'
+              : 'border-[#99f6e4] bg-[#f0fdfa] text-[#0f766e]'
+          }`}
+        >
+          Ver mais
+          <ChevronRight
+            className={`h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4 lg:h-[18px] lg:w-[18px] ${selected ? 'text-[#00a88e]' : 'text-[#14b8a6]'}`}
+            strokeWidth={2}
+            aria-hidden
+          />
+        </span>
       </div>
     </button>
   );
@@ -451,8 +444,6 @@ export function PatientsListView({
   setPatientListPage,
   patientListLoading = false,
   patientListMeta,
-  patientListTipoBusca,
-  setPatientListTipoBusca,
   patientListSortBy,
   setPatientListSortBy,
   patientSearchQuery,
@@ -469,31 +460,13 @@ export function PatientsListView({
   const { isNivel1: _isNivel1, canWritePacientes } = usePapel();
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
+  const [quickFilter, setQuickFilter] = useState('todos');
   const desktopTitleId = 'patient-detail-title';
   const [previewProcedures, setPreviewProcedures] = useState([]);
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
   const [previewAnamneseList, setPreviewAnamneseList] = useState([]);
   /** Paciente ao qual `previewAnamneseList` corresponde após o último fetch concluído; `null` = nenhum. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
-
-  const handleBuscaChange = (value) => {
-    if (patientListTipoBusca === 'cpf') {
-      const digits = value.replace(/\D/g, '').slice(0, 11);
-      const masked = digits
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-      setPatientSearchQuery(masked);
-    } else if (patientListTipoBusca === 'telefone') {
-      const digits = value.replace(/\D/g, '').slice(0, 11);
-      const masked = digits
-        .replace(/(\d{2})(\d)/, '($1) $2')
-        .replace(/(\d{5})(\d)/, '$1-$2');
-      setPatientSearchQuery(masked);
-    } else {
-      setPatientSearchQuery(value);
-    }
-  };
 
   const meta = patientListMeta || {
     first: true,
@@ -509,10 +482,11 @@ export function PatientsListView({
       (patientListItems.find((p) => p.cpf === previewPatientCpf) ||
         patients.find((p) => p.cpf === previewPatientCpf))) ||
     null;
+  const previewPatientId = previewPatient?.id ?? null;
 
   /* eslint-disable react-hooks/set-state-in-effect -- reset ao fechar / carregar procedimentos do preview */
   useEffect(() => {
-    if (!previewPatient?.id) {
+    if (!previewPatientId) {
       setPreviewProcedures([]);
       setLoadingPreviewProcedures(false);
       return undefined;
@@ -520,7 +494,7 @@ export function PatientsListView({
     let cancelled = false;
     setLoadingPreviewProcedures(true);
     procedimentosApi
-      .byPaciente(previewPatient.id)
+      .byPaciente(previewPatientId)
       .then((data) => {
         if (!cancelled) setPreviewProcedures(Array.isArray(data) ? data : []);
       })
@@ -533,20 +507,20 @@ export function PatientsListView({
     return () => {
       cancelled = true;
     };
-  }, [previewPatient?.id]);
+  }, [previewPatientId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   /* Reset ao fechar o preview / lista por paciente (mesmo padrão do efeito de procedimentos acima). */
   /* eslint-disable react-hooks/set-state-in-effect -- branch síncrono ao trocar paciente ou fechar */
   useEffect(() => {
-    if (!previewPatient?.id) {
+    if (!previewPatientId) {
       setPreviewAnamneseList([]);
       setPreviewAnamneseListOwnerId(null);
       return undefined;
     }
     let cancelled = false;
     anamneseApi
-      .listPaciente(previewPatient.id)
+      .listPaciente(previewPatientId)
       .then((list) => {
         if (!cancelled) setPreviewAnamneseList(Array.isArray(list) ? list : []);
       })
@@ -554,22 +528,23 @@ export function PatientsListView({
         if (!cancelled) setPreviewAnamneseList([]);
       })
       .finally(() => {
-        if (!cancelled) setPreviewAnamneseListOwnerId(previewPatient.id);
+        if (!cancelled) setPreviewAnamneseListOwnerId(previewPatientId);
       });
     return () => {
       cancelled = true;
     };
-  }, [previewPatient?.id]);
+  }, [previewPatientId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const previewAnamneseLoading = Boolean(
-    previewPatient?.id && previewAnamneseListOwnerId !== previewPatient.id,
+    previewPatientId && previewAnamneseListOwnerId !== previewPatientId,
   );
 
-  const previewHasExistingAnamnese = useMemo(() => {
-    if (!previewPatient?.id || previewAnamneseListOwnerId !== previewPatient.id) return false;
-    return previewHasExistingAnamneseFromList(previewAnamneseList);
-  }, [previewPatient?.id, previewAnamneseListOwnerId, previewAnamneseList]);
+  const filteredPatientListItems = applyQuickFilter(patientListItems, quickFilter);
+
+  const previewHasExistingAnamnese =
+    Boolean(previewPatientId && previewAnamneseListOwnerId === previewPatientId) &&
+    previewHasExistingAnamneseFromList(previewAnamneseList);
 
   const closeDetail = () => {
     setPreviewPatientCpf(null);
@@ -629,72 +604,71 @@ export function PatientsListView({
 
       <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
         <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
-          <div className="overflow-hidden rounded-xl border border-app-border bg-white shadow-sm">
-            <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-app-border bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-            <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
-              <select
-                value={patientListTipoBusca}
-                onChange={(e) => {
-                  setPatientListTipoBusca(e.target.value);
-                  setPatientSearchQuery('');
-                }}
-                className="h-11 min-h-[44px] w-full shrink-0 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[16px] font-medium text-[#475569] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:w-28 sm:text-[14px]"
-                aria-label="Tipo de busca"
-              >
-                <option value="nome">Nome</option>
-                <option value="cpf">CPF</option>
-                <option value="telefone">Telefone</option>
-                <option value="email">E-mail</option>
-              </select>
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                <input
-                  type="text"
-                  value={patientSearchQuery}
-                  onChange={(e) => handleBuscaChange(e.target.value)}
-                  placeholder={
-                    patientListTipoBusca === 'cpf'
-                      ? '000.000.000-00'
-                      : patientListTipoBusca === 'telefone'
-                        ? '(00) 00000-0000'
-                        : patientListTipoBusca === 'email'
-                          ? 'email@exemplo.com'
-                          : 'Buscar paciente...'
-                  }
-                  className="h-11 min-h-[44px] w-full min-w-0 rounded-lg border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] font-medium text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[14px]"
-                  autoComplete="off"
-                />
+          <div className="flex min-w-0 flex-col overflow-x-hidden">
+            {/* Header: search + chips + sort */}
+            <div className="sticky top-0 z-10 bg-transparent">
+              {/* Linha principal: pesquisa · ordenação */}
+              <div className="flex w-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2 sm:flex-row sm:flex-nowrap sm:items-center md:gap-3">
+                <div className="relative order-1 min-h-[44px] min-w-0 flex-1 sm:min-h-0">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <input
+                    type="text"
+                    value={patientSearchQuery}
+                    onChange={(e) => setPatientSearchQuery(e.target.value)}
+                    placeholder="Buscar por nome, CPF ou telefone…"
+                    className="h-11 min-h-[44px] w-full min-w-0 rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50 sm:h-10 sm:min-h-0 sm:text-[14px]"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="relative order-2 flex h-11 min-h-[44px] w-full shrink-0 items-center sm:h-10 sm:min-h-0 sm:w-fit sm:flex-none">
+                  <ArrowUpDown
+                    className="pointer-events-none absolute left-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 text-[#94a3b8]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <label className="sr-only" htmlFor="patient-sort">
+                    Ordenar lista
+                  </label>
+                  <select
+                    id="patient-sort"
+                    value={patientListSortBy}
+                    onChange={(e) => setPatientListSortBy(e.target.value)}
+                    className="h-full w-full min-w-[8rem] max-w-none cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white px-2 py-1.5 pl-7 text-[13px] font-medium leading-snug text-[#475569] outline-none focus:border-[#00a88e]/40 sm:h-10 sm:min-h-0 sm:w-fit sm:min-w-[6.75rem] sm:max-w-[10.75rem] sm:px-1.5 sm:py-1 sm:pl-6 sm:pr-2 sm:text-[11px] sm:leading-tight"
+                  >
+                    {SORT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Chips de filtro rápido */}
+              <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                {QUICK_FILTERS.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setQuickFilter(f.value)}
+                    className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                      quickFilter === f.value
+                        ? 'bg-[#00a88e] text-white'
+                        : 'border border-[#e2e8f0] bg-white text-[#475569] hover:border-[#cbd5e1] hover:bg-slate-50'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="relative w-full min-w-0 sm:w-44 sm:shrink-0">
-                <ArrowUpDown
-                  className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                <label className="sr-only" htmlFor="patient-sort">
-                  Ordenar lista
-                </label>
-                <select
-                  id="patient-sort"
-                  value={patientListSortBy}
-                  onChange={(e) => {
-                    setPatientListSortBy(e.target.value);
-                  }}
-                  className="h-11 min-h-[44px] w-full cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white py-2 pl-8 pr-3 text-[16px] font-semibold text-[#0f172a] outline-none focus:border-[#00a88e]/40 sm:h-9 sm:min-h-0 sm:text-[13px]"
-                >
-                  {SORT_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
           </div>
+
           {!previewPatient ? (
             <p
               className="lg:hidden border-b border-app-border/80 bg-app-surface px-4 py-2.5 text-center text-[13px] font-medium text-[#64748b]"
@@ -704,24 +678,33 @@ export function PatientsListView({
             </p>
           ) : null}
 
-          <div className="relative min-w-0 overflow-x-hidden bg-app-surface [-webkit-overflow-scrolling:touch]">
+          <div className="px-4">
+            <div className="relative min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
             {patientListLoading ? (
-              <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-white/55 backdrop-blur-[1px]">
+              <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-slate-50/60 backdrop-blur-[1px]">
                 <Loader2 className="h-8 w-8 animate-spin text-[#00a88e]" aria-hidden />
                 <span className="sr-only">Carregando lista…</span>
               </div>
             ) : null}
-            <ul className="flex list-none flex-col gap-2.5 p-2.5 sm:gap-3 sm:p-3" aria-label="Lista de pacientes">
-              {!patientListLoading && patientListItems.length === 0 ? (
-                <li className="px-2 py-12 text-center text-[14px] font-medium text-[#64748b]">
+            <ul
+              className="flex list-none flex-col gap-2 sm:gap-2.5 md:gap-3"
+              aria-label="Lista de pacientes"
+            >
+              {!patientListLoading && filteredPatientListItems.length === 0 ? (
+                <li className="rounded-lg border border-[#e2e8f0] bg-white px-4 py-12 text-center text-[14px] font-medium text-[#64748b] shadow-sm">
                   <Search className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                  Nenhum paciente encontrado
+                  {patientListItems.length === 0
+                    ? 'Nenhum paciente encontrado'
+                    : 'Nenhum paciente neste filtro'}
                 </li>
               ) : patientListItems.length === 0 ? null : (
-                patientListItems.map((patient) => {
+                filteredPatientListItems.map((patient) => {
                   const selected = selectedPatientCpf === patient.cpf;
                   return (
-                    <li key={patient.id} className="min-w-0">
+                    <li
+                      key={patient.id}
+                      className="min-w-0 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm"
+                    >
                       <PatientListCard
                         patient={patient}
                         selected={selected}
@@ -736,8 +719,8 @@ export function PatientsListView({
                 })
               )}
             </ul>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-app-border bg-white px-3 py-2.5 sm:px-4">
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e2e8f0] bg-white py-2.5">
             <button
               type="button"
               disabled={meta.first || patientListLoading}
@@ -759,9 +742,9 @@ export function PatientsListView({
             >
               <ChevronRight className="h-5 w-5" strokeWidth={2} aria-hidden />
             </button>
+            </div>
           </div>
         </div>
-      </div>
 
       {previewPatient ? (
         <>
@@ -850,23 +833,9 @@ export function PatientsListView({
             />
           </aside>
         </>
-      ) : (
-        <aside
-          className="patient-preview-sheet relative z-10 mt-0 hidden w-full shrink-0 flex-col gap-0 lg:flex lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0 custom-scrollbar"
-          aria-label="Detalhes do paciente"
-        >
-          <div
-            className="relative flex min-h-[min(280px,calc((100dvh-5rem-2rem)/2))] w-full min-w-0 flex-col items-center justify-center gap-3 rounded-xl border border-[#e2e8f0] bg-white p-5 text-center shadow-lg"
-            role="status"
-          >
-            <ImageIcon className="h-9 w-9 text-[#cbd5e1]" strokeWidth={1.25} aria-hidden />
-            <p className="px-1 text-[16px] font-semibold leading-snug text-[#334155] sm:text-[17px]">
-              Selecione um paciente para ver os detalhes
-            </p>
-          </div>
-        </aside>
-      )}
-    </div>
+      ) : null}
+      </div>
+
     </div>
   );
 }
