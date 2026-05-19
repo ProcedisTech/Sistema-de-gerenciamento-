@@ -1,10 +1,16 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
 import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
+import {
+  BLOQUEIO_CARD_CLASS,
+  BLOQUEIO_HATCH_BG,
+  bloqueioHoraFimLabel,
+  bloqueioMotivoLabel,
+} from './agendaBloqueioStyles.js';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
@@ -206,6 +212,8 @@ function DayColumn({
   disponibilidades,
   advanceOfferByAgendaId,
   onAdvanceClick,
+  onRemoverBloqueio,
+  submittingRemoverBloqueioId,
 }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -257,7 +265,7 @@ function DayColumn({
       {appointments.map((appt) => {
         const layout = layouts.get(appt.id);
         const baseStyle = eventBlockStyle(appt, layout);
-        const style = baseStyle;
+        const blockStyle = { ...baseStyle, ...BLOQUEIO_HATCH_BG };
         const pid = appt.profissionalRoleUserId ?? appt.roleUserId;
         const appointment = {
           dataAgendamento: toDateKey(appt.data),
@@ -266,6 +274,52 @@ function DayColumn({
         };
         const disp = disponibilidades?.[pid];
         const dentro = dentroDaDisponibilidade(appointment, disp);
+        const isBloqueioAtivo = appt.tipo === 'bloqueio' && appt.status !== 'cancelado';
+        const removing =
+          String(submittingRemoverBloqueioId || '') === String(appt.id || appt.agendaId || '');
+
+        if (isBloqueioAtivo) {
+          const motivo = bloqueioMotivoLabel(appt);
+          const hf = bloqueioHoraFimLabel(appt);
+          return (
+            <div
+              key={appt.id}
+              className={`absolute z-[4] overflow-hidden rounded-md shadow-sm ${BLOQUEIO_CARD_CLASS}`}
+              style={blockStyle}
+            >
+              {typeof onRemoverBloqueio === 'function' ? (
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoverBloqueio(appt);
+                  }}
+                  className="absolute right-0.5 top-0.5 z-[6] rounded p-0.5 text-slate-600 hover:bg-slate-200/80 disabled:opacity-40"
+                  aria-label="Remover bloqueio"
+                  title="Remover bloqueio"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onOpenSlotDetail?.(appt)}
+                className="h-full w-full px-1.5 py-1 pr-6 text-left transition-opacity hover:opacity-95"
+                aria-label={`Bloqueio: ${motivo}, ${appt.horaInicio}–${hf}`}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  Bloqueio
+                </div>
+                <div className="truncate text-[11px] font-bold leading-tight text-slate-800">
+                  {appt.horaInicio}–{hf}
+                </div>
+                <div className="truncate text-[11px] font-semibold text-slate-700">{motivo}</div>
+              </button>
+            </div>
+          );
+        }
+
         const showProc = baseStyle.height >= 72;
         const noShow = appt.status === 'cancelado' && isAgendaNoShow(appt);
         const cardClass = statusCardClass(appt.status);
@@ -291,7 +345,7 @@ function DayColumn({
             onClick={() => onOpenSlotDetail?.(appt)}
             aria-label={`Detalhes: ${labelParts.join(', ')}`}
             className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${cardClass} ${!dentro ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
-            style={style}
+            style={baseStyle}
           >
             {!dentro ? (
               <span title="Fora do horario do profissional" className="absolute right-1 top-1">
@@ -366,6 +420,8 @@ export function WeekTimeGrid({
   disponibilidades,
   advanceOfferByAgendaId,
   onAdvanceClick,
+  onRemoverBloqueio,
+  submittingRemoverBloqueioId,
 }) {
   const scrollRef = React.useRef(null);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -450,6 +506,8 @@ export function WeekTimeGrid({
             disponibilidades={disponibilidades}
             advanceOfferByAgendaId={advanceOfferByAgendaId}
             onAdvanceClick={onAdvanceClick}
+            onRemoverBloqueio={onRemoverBloqueio}
+            submittingRemoverBloqueioId={submittingRemoverBloqueioId}
           />
         ))}
       </div>

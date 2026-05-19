@@ -6,6 +6,20 @@ import {
   normalizeApiList,
 } from './agendaDashboardMapping';
 
+/** Linha do dashboard que entra em KPI / drill-down (exclui bloqueio de horário). */
+export function isKpiCountableAppointment(row) {
+  return row?.tipo !== 'bloqueio';
+}
+
+export function filterKpiCountableAppointments(rows) {
+  return (Array.isArray(rows) ? rows : []).filter(isKpiCountableAppointment);
+}
+
+/** DTO bruto da API — antes do map para contagem "Hoje". */
+export function isKpiCountableAgendaDto(dto) {
+  return String(dto?.tipoProcedimentoCodigo || '').toLowerCase() !== 'bloqueio';
+}
+
 function parseIsoLocal(iso) {
   const k = toDateKey(iso);
   const [y, m, d] = k.split('-').map(Number);
@@ -129,6 +143,7 @@ export async function fetchKpiDrilldownRows({
     rows = filterByProfissional(rows, profissionalRoleUserId);
   }
 
+  rows = filterKpiCountableAppointments(rows);
   return sortDrilldownRows(rows);
 }
 

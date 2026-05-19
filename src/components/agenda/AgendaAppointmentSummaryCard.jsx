@@ -1,7 +1,12 @@
-import { Clock3, UserRound } from 'lucide-react';
+import { Clock3, Lock, UserRound } from 'lucide-react';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
+import {
+  BLOQUEIO_HATCH_BG,
+  bloqueioHoraFimLabel,
+  bloqueioMotivoLabel,
+} from './agendaBloqueioStyles.js';
 
 const STATUS_STYLES = {
   confirmado: {
@@ -88,8 +93,44 @@ export function AgendaAppointmentSummaryCard({
   advanceOffer,
   onAdvanceClick,
 }) {
+  const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
   const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
+
+  if (isBloqueio) {
+    const motivo = bloqueioMotivoLabel(appointment);
+    const hf = bloqueioHoraFimLabel(appointment);
+    return (
+      <div
+        className="overflow-hidden rounded-xl border-2 border-slate-300 shadow-sm"
+        style={BLOQUEIO_HATCH_BG}
+      >
+        <div className="h-1.5 bg-slate-400" />
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-600">
+                <Lock className="h-5 w-5" strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-bold text-slate-900">{motivo}</div>
+                <div className="mt-0.5 text-[11px] font-medium text-slate-600">
+                  {appointment.horaInicio}–{hf}
+                  {appointment.profissionalNome ? ` · ${appointment.profissionalNome}` : ''}
+                </div>
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
+              Bloqueio
+            </span>
+          </div>
+          {typeof renderSlotActions === 'function' ? (
+            <div className="mt-2 border-t border-slate-200/80 pt-2">{renderSlotActions(appointment)}</div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
   const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
   const grad = hashGradient(appointment.pacienteNome);
