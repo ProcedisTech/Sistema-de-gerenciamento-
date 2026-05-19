@@ -18,8 +18,13 @@ import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
 import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
-import { fetchKpiDrilldownRows } from '../../utils/agendaKpiDrilldown';
 import {
+  fetchKpiDrilldownRows,
+  filterKpiCountableAppointments,
+  isKpiCountableAgendaDto,
+} from '../../utils/agendaKpiDrilldown';
+import {
+  buildAgendaBloqueioCreateBody,
   buildAgendaCreateBody,
   buildAgendaUpdateBody,
   fetchDashboardAppointmentsForRange,
@@ -42,6 +47,13 @@ import {
 } from '../../utils/agendaCancelamentoMotivo.js';
 import { isRoleAgendaPreselect } from './agendaRoleConstants.js';
 import { DURACOES_PILL, snapDuracaoToPill } from '../../utils/agendaDuracaoPills.js';
+import {
+  BLOQUEIO_TIPO_CODIGO,
+  resolveTipoProcedimentoIdByCodigo,
+} from '../../utils/agendaTipoProcedimento.js';
+
+const BLOQUEIO_REMOVER_MOTIVO_TEXTO = 'Bloqueio removido';
+const CANCEL_MOTIVO_OUTRO_CODIGO = 'outro';
 
 const STATUS_LABELS = {
   confirmado: 'confirmado',
@@ -105,6 +117,26 @@ function normalizePatientOption(patient) {
     patient?.telefonePrincipal ||
     '';
   return { id: String(id || nome), nome, telefone, raw: patient };
+}
+
+function defaultBloqueioForm(selectedDay) {
+  return {
+    data: selectedDay || toLocalDateIso(),
+    horaInicio: '09:00',
+    horaFim: '10:00',
+    duracaoMin: 60,
+    useCustomEnd: false,
+    motivo: '',
+  };
+}
+
+function bloqueioTimeToMinutes(t) {
+  if (t == null || t === '') return 0;
+  const parts = String(t).trim().split(':');
+  const h = Number(parts[0]);
+  const m = Number(parts[1] ?? 0);
+  if (Number.isNaN(h)) return 0;
+  return h * 60 + (Number.isNaN(m) ? 0 : m);
 }
 
 function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
@@ -221,6 +253,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
+  const [bloqueioModalOpen, setBloqueioModalOpen] = useState(false);
+  const [bloqueioForm, setBloqueioForm] = useState(() => defaultBloqueioForm(todayIso));
+  const [bloqueioFormErrors, setBloqueioFormErrors] = useState({});
+  const [submittingBloqueio, setSubmittingBloqueio] = useState(false);
+  const [submittingRemoverBloqueioId, setSubmittingRemoverBloqueioId] = useState('');
   /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
   const [pacienteContext, setPacienteContext] = useState(null);
@@ -376,7 +413,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const hoje = toLocalDateIso();
       try {
         const rawSlots = await agendasApi.byRange(hoje, hoje);
-        setHojeCount(normalizeApiList(rawSlots).length);
+        const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
+        setHojeCount(dtos.length);
       } catch {
         setHojeCount(0);
       }
@@ -836,6 +874,158 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [isNivel1, handleCancelar, toastError],
   );
 
+  const closeBloqueioModal = useCallback(() => {
+    setBloqueioModalOpen(false);
+    setBloqueioFormErrors({});
+  }, []);
+
+  const openBloqueioModal = useCallback(
+    (date = selectedDay, horaHm = '') => {
+      if (isNivel1) return;
+      const d = toDateKey(date) || date || selectedDay || todayIso;
+      const hi = String(horaHm || '').trim().slice(0, 5) || '09:00';
+      setBloqueioForm({
+        ...defaultBloqueioForm(d),
+        horaInicio: hi,
+        horaFim: addMinutesToTime(hi, 60),
+      });
+      setBloqueioFormErrors({});
+      const sessionRole = String(roleUserId || '').trim();
+      if (isRoleAgendaPreselect(roleNome) && sessionRole) {
+        setRoleUserIdAgenda(sessionRole);
+      } else {
+        setRoleUserIdAgenda('');
+      }
+      setBloqueioModalOpen(true);
+    },
+    [isNivel1, selectedDay, todayIso, roleUserId, roleNome]
+  );
+
+  const updateBloqueioForm = useCallback((field, value) => {
+    setBloqueioForm((prev) => ({ ...prev, [field]: value }));
+    setBloqueioFormErrors((prev) => ({ ...prev, [field]: undefined }));
+  }, []);
+
+  const validateBloqueioForm = useCallback(() => {
+    const nextErrors = {};
+    const prof = String(roleUserIdAgenda || '').trim();
+    if (!prof) nextErrors.profissional = 'Selecione um profissional.';
+    if (!bloqueioForm.data) nextErrors.data = 'Selecione a data.';
+    else if (bloqueioForm.data < todayIso) {
+      nextErrors.data = 'Não é possível bloquear no passado.';
+    }
+    const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
+    if (!hi) nextErrors.horaInicio = 'Informe o horário de início.';
+    let hfMin;
+    if (bloqueioForm.useCustomEnd) {
+      const hf = String(bloqueioForm.horaFim || '').trim().slice(0, 5);
+      if (!hf) nextErrors.horaFim = 'Informe o horário de fim.';
+      hfMin = bloqueioTimeToMinutes(hf);
+    } else {
+      const d = Number(bloqueioForm.duracaoMin);
+      if (!DURACOES_PILL.includes(d)) nextErrors.duracaoMin = 'Selecione a duração.';
+      hfMin = bloqueioTimeToMinutes(hi) + (Number(bloqueioForm.duracaoMin) || 60);
+    }
+    const hiMin = bloqueioTimeToMinutes(hi);
+    if (hi && hfMin <= hiMin) {
+      nextErrors.horaFim = 'O horário de fim deve ser após o início.';
+    }
+    if (!String(bloqueioForm.motivo || '').trim()) {
+      nextErrors.motivo = 'Descreva o motivo do bloqueio.';
+    }
+    setBloqueioFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }, [bloqueioForm, roleUserIdAgenda, todayIso]);
+
+  const saveBloqueio = useCallback(async () => {
+    if (isNivel1) return false;
+    if (!validateBloqueioForm()) return false;
+    const prof = String(roleUserIdAgenda || '').trim();
+    if (!prof) return false;
+
+    setSubmittingBloqueio(true);
+    try {
+      const tipoId = await resolveTipoProcedimentoIdByCodigo(BLOQUEIO_TIPO_CODIGO);
+      if (!tipoId) {
+        toastError('Tipo "bloqueio" não encontrado. Verifique se o backend está atualizado.');
+        return false;
+      }
+      const hi = String(bloqueioForm.horaInicio || '').slice(0, 5);
+      const horaFim = bloqueioForm.useCustomEnd
+        ? String(bloqueioForm.horaFim || '').slice(0, 5)
+        : addMinutesToTime(hi, Number(bloqueioForm.duracaoMin) || 60);
+      const body = buildAgendaBloqueioCreateBody({
+        dataAgendamento: bloqueioForm.data,
+        horaInicio: hi,
+        horaFim,
+        profissionalRoleUserId: prof,
+        tipoProcedimentoId: tipoId,
+        observacao: String(bloqueioForm.motivo || '').trim(),
+      });
+      await agendasApi.create(body);
+      setSelectedDay(bloqueioForm.data);
+      const nextMonthDate = new Date(
+        Number(bloqueioForm.data.slice(0, 4)),
+        Number(bloqueioForm.data.slice(5, 7)) - 1,
+        1
+      );
+      setMonthDate(nextMonthDate);
+      await refreshDashboard();
+      closeBloqueioModal();
+      setError('');
+      toastSuccess('Horário bloqueado');
+      return true;
+    } catch (e) {
+      const msg = formatAgendamentoApiError(e, { context: 'bloqueio' });
+      toastError(e?.body?.message || msg || 'Erro ao bloquear horário');
+      setError(msg);
+      return false;
+    } finally {
+      setSubmittingBloqueio(false);
+    }
+  }, [
+    bloqueioForm,
+    closeBloqueioModal,
+    isNivel1,
+    refreshDashboard,
+    roleUserIdAgenda,
+    toastError,
+    toastSuccess,
+    validateBloqueioForm,
+  ]);
+
+  const handleRemoverBloqueio = useCallback(
+    async (appointment) => {
+      if (isNivel1) return false;
+      const agendaId = appointment?.agendaId || appointment?.id;
+      if (!agendaId) return false;
+      if (submittingRemoverBloqueioId) return false;
+
+      setSubmittingRemoverBloqueioId(String(agendaId));
+      try {
+        const motivoId = await resolveMotivoCancelamentoIdByCodigo(CANCEL_MOTIVO_OUTRO_CODIGO);
+        if (!motivoId) {
+          toastError('Motivo de cancelamento "outro" não encontrado. Verifique o backend.');
+          return false;
+        }
+        return handleCancelar(
+          agendaId,
+          {
+            motivoCancelamentoId: motivoId,
+            motivoCancelamentoTexto: BLOQUEIO_REMOVER_MOTIVO_TEXTO,
+          },
+          { successToast: 'Bloqueio removido' }
+        );
+      } catch (e) {
+        toastError(e?.body?.message || formatAgendamentoApiError(e) || 'Erro ao remover bloqueio');
+        return false;
+      } finally {
+        setSubmittingRemoverBloqueioId('');
+      }
+    },
+    [handleCancelar, isNivel1, submittingRemoverBloqueioId, toastError]
+  );
+
   const handleAtualizarStatus = useCallback(
     async (agendaId, codigo) => {
       if (isNivel1) return false;
@@ -939,10 +1129,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const appointmentsByDate = useMemo(() => groupByDate(appointments), [appointments]);
 
   const stats = useMemo(() => {
+    const kpiRows = filterKpiCountableAppointments(appointments);
     return {
-      totalMes: appointments.length,
-      confirmados: appointments.filter((item) => item.status === 'confirmado').length,
-      pendentes: appointments.filter((item) => item.status === 'pendente').length,
+      totalMes: kpiRows.length,
+      confirmados: kpiRows.filter((item) => item.status === 'confirmado').length,
+      pendentes: kpiRows.filter((item) => item.status === 'pendente').length,
       hoje: hojeCount,
     };
   }, [appointments, hojeCount]);
@@ -959,6 +1150,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const setRoleUserIdAgendaPublic = useCallback((id) => {
     setRoleUserIdAgenda(String(id ?? '').trim());
     setFormErrors((prev) => ({ ...prev, profissional: undefined }));
+    setBloqueioFormErrors((prev) => ({ ...prev, profissional: undefined }));
   }, []);
 
   const applyProfissionalPreselect = useCallback(() => {
@@ -1299,7 +1491,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     groupedAppointments,
     handleAtualizarStatus,
     handleMarcarNaoCompareceu,
+    bloqueioForm,
+    bloqueioFormErrors,
+    bloqueioModalOpen,
+    closeBloqueioModal,
     handleCancelar,
+    handleRemoverBloqueio,
     handleEnviarWhatsApp,
     handleReagendar,
     horarioConflita,
@@ -1313,6 +1510,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     modalMode,
     monthLabel,
     moveSelectedDay,
+    openBloqueioModal,
     openCreateModal,
     openCreateModalAtSlot,
     openCreateModalForPatient,
@@ -1333,7 +1531,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     selectDispCalendarioDia,
     selectDispSlot,
     saveAppointment,
+    saveBloqueio,
     selectDay,
+    submittingBloqueio,
+    submittingRemoverBloqueioId,
+    updateBloqueioForm,
     selectedDay,
     selectedDayAppointments,
     setDaySheetOpen,

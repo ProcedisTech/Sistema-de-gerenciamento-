@@ -24,16 +24,19 @@ export default function AgendaSlotActions({
   onReagendar,
   onCancelar,
   onEnviarWhatsApp,
+  onRemoverBloqueio,
   disabled = false,
 }) {
   const status = agenda?.status;
-  const v = getAgendaSlotActionVisibility(status);
+  const tipo = agenda?.tipo;
+  const v = getAgendaSlotActionVisibility(status, { tipo });
   const anyChip =
     v.showRealizado ||
     v.showNaoCompareceu ||
     v.showWhatsApp ||
     v.showReagendar ||
-    v.showCancelar;
+    v.showCancelar ||
+    v.showRemoverBloqueio;
 
   const { codigo: motivoCodigo, nome: motivoNome } =
     status === 'cancelado' ? resolveMotivoCancelamentoFromRow(agenda) : { codigo: null, nome: '' };
@@ -46,6 +49,9 @@ export default function AgendaSlotActions({
 
   return (
     <div className="flex flex-col gap-1.5">
+      {tipo === 'bloqueio' && status !== 'cancelado' ? (
+        <span className="text-xs font-medium text-slate-600">Horário bloqueado</span>
+      ) : null}
       {status === 'realizado' ? (
         <span className="text-xs italic text-gray-500">Atendimento finalizado</span>
       ) : null}
@@ -120,6 +126,18 @@ export default function AgendaSlotActions({
             >
               <XCircle className="h-3.5 w-3.5" />
               Cancelar
+            </button>
+          ) : null}
+          {v.showRemoverBloqueio ? (
+            <button
+              type="button"
+              onClick={onRemoverBloqueio}
+              disabled={disabled}
+              title="Remover bloqueio"
+              className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Remover bloqueio
             </button>
           ) : null}
         </div>

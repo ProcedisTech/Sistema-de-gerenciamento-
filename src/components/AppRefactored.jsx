@@ -47,6 +47,7 @@ import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
 import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
+import { AgendaBloqueioModal } from './agenda/AgendaBloqueioModal.jsx';
 import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
 import ReagendarAgendaModal from './agenda/ReagendarAgendaModal.jsx';
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
@@ -2062,6 +2063,7 @@ export default function App() {
       {authSessionReady ? (
         <>
           <AgendaFormModal agenda={agendaSchedule} onExcluirClick={handleScheduleExcluirFromEdit} />
+          <AgendaBloqueioModal agenda={agendaSchedule} />
           {agendaSchedule.foraDispModal}
           {scheduleCancelRow?.agenda ? (
             <CancelarAgendaModal

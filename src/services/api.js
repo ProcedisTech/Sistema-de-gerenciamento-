@@ -960,6 +960,8 @@ export const dimensoesApi = {
   statusAgenda: () => request('/api/v1/dimensoes/status-agenda', { needsOrg: false }),
   statusAnamnese: () => request('/api/v1/dimensoes/status-anamnese', { needsOrg: false }),
   profissoes: () => request('/api/v1/dimensoes/profissoes', { needsOrg: false }),
+  /** Tipos de procedimento da agenda (avaliacao, bloqueio, retorno, …). */
+  tiposProcedimento: () => request('/api/v1/dimensoes/tipos-procedimento', { needsOrg: false }),
 };
 
 // ── Anamnese ───────────────────────────────────────────────

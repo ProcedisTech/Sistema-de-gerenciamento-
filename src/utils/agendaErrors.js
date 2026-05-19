@@ -51,8 +51,10 @@ export function formatJourneyFinishError(err) {
 
 /**
  * Mensagens amigáveis para conflitos da API de compromissos no slot (409).
+ * @param {object} err
+ * @param {{ context?: 'bloqueio'|'default' }} [opts]
  */
-export function formatAgendamentoApiError(err) {
+export function formatAgendamentoApiError(err, opts = {}) {
   const status = err?.status;
   const msg = String(err?.message || '').toLowerCase();
   const raw = err?.message || '';
@@ -64,9 +66,12 @@ export function formatAgendamentoApiError(err) {
     return `${raw || '[HTTP 403]'} — Sem permissão para esta operação na organização atual (X-Org-Id).`;
   }
 
-  if (status === 409) {
+  if (status === 409 || isAgendaSlotOverlapError(err)) {
     if (msg.includes('delete') || msg.includes('apag') || msg.includes('procedimento')) {
       return 'Não é possível remover: já existe procedimento feito ligado a este agendamento.';
+    }
+    if (opts.context === 'bloqueio' || isAgendaSlotOverlapError(err)) {
+      return 'Já existe agendamento ou bloqueio neste horário para este profissional. Escolha outro intervalo.';
     }
     return 'Já existe o mesmo paciente e procedimento neste horário. Escolha outro paciente, outro procedimento ou outro horário.';
   }

@@ -9,6 +9,7 @@ import {
   Grid2X2,
   List,
   Loader2,
+  Lock,
   Plus,
   X,
 } from 'lucide-react';
@@ -464,6 +465,7 @@ export function AgendaDashboard({
           onReagendar={() => onSlotReagendar?.(appointment)}
           onCancelar={() => onSlotCancelar?.(appointment)}
           onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h')}
+          onRemoverBloqueio={() => agenda.handleRemoverBloqueio(appointment)}
         />
       );
     },
@@ -471,6 +473,7 @@ export function AgendaDashboard({
   );
 
   const handlePrimary = React.useCallback((appointment) => {
+    if (appointment.tipo === 'bloqueio') return;
     if (appointment.status === 'pendente' || appointment.status === 'aguardando_confirmacao') {
       agenda.updateStatus(appointment, 'confirmado');
       return;
@@ -495,12 +498,20 @@ export function AgendaDashboard({
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
   }, [agenda, onSlotReagendar, onStartAttendance, patients]);
 
-  const handleEditFromWeekDetail = React.useCallback(
+  const handleEditAppointment = React.useCallback(
     (appointment) => {
-      setWeekSlotDetail(null);
+      if (appointment?.tipo === 'bloqueio') return;
       agenda.openEditModal(appointment);
     },
     [agenda]
+  );
+
+  const handleEditFromWeekDetail = React.useCallback(
+    (appointment) => {
+      setWeekSlotDetail(null);
+      handleEditAppointment(appointment);
+    },
+    [handleEditAppointment]
   );
 
   const renderSlotActionsWeekDetail = React.useCallback(
@@ -525,6 +536,7 @@ export function AgendaDashboard({
             onSlotCancelar?.(appointment);
           }}
           onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h')}
+          onRemoverBloqueio={() => agenda.handleRemoverBloqueio(appointment)}
         />
       );
     },
@@ -565,16 +577,26 @@ export function AgendaDashboard({
             </div>
           ) : null}
         </div>
-        {!agenda.isNivel1 && (
-          <button
-            type="button"
-            onClick={() => agenda.openCreateModal(agenda.selectedDay)}
-            className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-brand-primary px-5 py-3 text-center text-[13px] font-bold leading-tight text-white shadow-sm transition-colors hover:bg-brand-primaryDark lg:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Agendamento
-          </button>
-        )}
+        {!agenda.isNivel1 ? (
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+            <button
+              type="button"
+              onClick={() => agenda.openBloqueioModal(agenda.selectedDay)}
+              className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-[13px] font-bold leading-tight text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            >
+              <Lock className="h-4 w-4" />
+              Bloquear horário
+            </button>
+            <button
+              type="button"
+              onClick={() => agenda.openCreateModal(agenda.selectedDay)}
+              className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 rounded-xl bg-brand-primary px-5 py-3 text-center text-[13px] font-bold leading-tight text-white shadow-sm transition-colors hover:bg-brand-primaryDark"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Agendamento
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {agenda.error ? (
@@ -668,6 +690,8 @@ export function AgendaDashboard({
               disponibilidades={agenda.disponibilidades}
               advanceOfferByAgendaId={advanceOfferByAgendaId}
               onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
+              onRemoverBloqueio={agenda.isNivel1 ? null : agenda.handleRemoverBloqueio}
+              submittingRemoverBloqueioId={agenda.submittingRemoverBloqueioId}
             />
           )}
         </section>
@@ -677,7 +701,7 @@ export function AgendaDashboard({
             selectedDay={agenda.selectedDay}
             appointments={agenda.selectedDayAppointments}
             onPrimary={handlePrimary}
-            onEdit={agenda.openEditModal}
+            onEdit={handleEditAppointment}
             renderSlotActions={renderSlotActions}
             isNivel1={agenda.isNivel1}
             advanceOfferByAgendaId={advanceOfferByAgendaId}
@@ -695,7 +719,7 @@ export function AgendaDashboard({
               selectedDay={agenda.selectedDay}
               appointments={agenda.selectedDayAppointments}
               onPrimary={handlePrimary}
-              onEdit={agenda.openEditModal}
+              onEdit={handleEditAppointment}
               renderSlotActions={renderSlotActions}
               isNivel1={agenda.isNivel1}
               advanceOfferByAgendaId={advanceOfferByAgendaId}
