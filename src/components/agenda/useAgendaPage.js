@@ -8,14 +8,11 @@ import {
   confirmacaoApi,
   disponibilidadeApi,
   equipeApi,
-  getPacienteCreateErrorFeedback,
   pacientesApi,
   procedimentosApi,
 } from '../../services/api';
-import { normalizeCpf, isCpfValidCheckDigits } from '../utils/formatters';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.js';
-import { formatPhoneForApi } from '../../utils/phoneUtils';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError } from '../../utils/agendaErrors';
@@ -223,7 +220,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
   const [pacienteContext, setPacienteContext] = useState(null);
   const [pacienteContextLoading, setPacienteContextLoading] = useState(false);
-  const [pacienteCreateSubmitting, setPacienteCreateSubmitting] = useState(false);
   /** Profissional do modal (create = sessão; edit = do agendamento). */
   const [roleUserIdAgenda, setRoleUserIdAgenda] = useState('');
   const [equipeList, setEquipeList] = useState([]);
@@ -461,37 +457,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       cancelled = true;
     };
   }, [modalMode, form.pacienteId]);
-
-  const createPacienteInline = useCallback(
-    async ({ nome, telefoneCountryCode, telefoneNumero, cpf }) => {
-      const nomeTrim = String(nome ?? '').trim();
-      const telInput = formatPhoneForApi(telefoneCountryCode ?? 'BR', telefoneNumero ?? '');
-      const cpfDigits = normalizeCpf(String(cpf ?? ''));
-      if (cpfDigits.length === 11 && !isCpfValidCheckDigits(cpfDigits)) {
-        return { ok: false, banner: 'CPF inválido. Verifique os dígitos verificadores.', highlightCpf: true };
-      }
-      setPacienteCreateSubmitting(true);
-      try {
-        const dto = await pacientesApi.create({
-          nomeCompleto: nomeTrim,
-          cpf: cpfDigits || null,
-          telefone: telInput || null,
-          email: cpfDigits
-            ? `paciente.${cpfDigits}@cadastro.procedi`
-            : 'paciente@cadastro.procedi',
-        });
-        const patient = mapBackendPatient(dto);
-        selectPaciente(patient.id, patient);
-        return { ok: true };
-      } catch (err) {
-        const fb = getPacienteCreateErrorFeedback(err);
-        return { ok: false, banner: fb.banner, highlightCpf: fb.highlightCpf, cpfField: fb.cpfField };
-      } finally {
-        setPacienteCreateSubmitting(false);
-      }
-    },
-    [selectPaciente]
-  );
 
   const proximoHorarioLivre = useMemo(() => {
     if (!modalMode || !form.data) return null;
@@ -821,7 +786,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setPatientSelectLocked(false);
     setPacienteContext(null);
     setPacienteContextLoading(false);
-    setPacienteCreateSubmitting(false);
     setFormErrors({});
     equipeFetchedRef.current = false;
   }, []);
@@ -1030,10 +994,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     isHorarioOcupado,
     selectPaciente,
     clearPacienteSelection,
-    createPacienteInline,
     pacienteContext,
     pacienteContextLoading,
-    pacienteCreateSubmitting,
     loading,
     modalMode,
     monthLabel,

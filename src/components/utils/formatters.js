@@ -25,6 +25,13 @@ export const normalizeCpf = (cpf) => {
   return (cpf || '').replace(/\D/g, '');
 };
 
+/** CPF parcial para exibição em listas: 123.***.***-12 */
+export function maskCpfPartial(cpf) {
+  const d = normalizeCpf(cpf);
+  if (d.length < 5) return d.length >= 3 ? `${d.slice(0, 3)}.***.***-**` : d;
+  return `${d.slice(0, 3)}.***.***-${d.slice(-2)}`;
+}
+
 /** Quantidade esperada de dígitos numéricos do CPF. */
 export const CPF_DIGIT_COUNT = 11;
 

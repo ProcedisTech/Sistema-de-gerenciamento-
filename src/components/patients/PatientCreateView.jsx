@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Save, Loader2, UserPlus, X } from 'lucide-react';
 import {
   normalizeCpf,
@@ -17,12 +17,30 @@ import { useToast } from '../../contexts/useToast.js';
 import { convertToWebP } from '../../utils/imageUtils';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { normalizeCepForApi } from '../../utils/cepUtils.js';
+import { mapBackendPatient } from '../../utils/patientMapping';
 import { PatientForm } from './PatientForm.jsx';
 
-export function PatientCreateView({ setPatientView, onPatientCreated, variant = 'page' }) {
+export function PatientCreateView({
+  setPatientView,
+  onPatientCreated,
+  onSuccess,
+  onClose,
+  variant = 'page',
+  hostMode = 'patients',
+  zIndex = 210,
+}) {
   const isModal = variant === 'modal';
+  const isAgendaHost = hostMode === 'agenda';
   const scrollBodyRef = useRef(null);
   const toast = useToast();
+
+  const handleClose = useCallback(() => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+    setPatientView('list');
+  }, [onClose, setPatientView]);
 
   const scrollFormTop = () => {
     if (isModal && scrollBodyRef.current) {
@@ -33,13 +51,25 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
   };
 
   useEffect(() => {
-    if (!isModal) return;
+    if (!isModal) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = prev;
     };
   }, [isModal]);
+
+  useEffect(() => {
+    if (!isModal) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        handleClose();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isModal, handleClose]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState(false);
@@ -244,7 +274,15 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       }
 
       if (onPatientCreated) onPatientCreated();
-      setTimeout(() => setPatientView('list'), 1500);
+
+      const patient = mapBackendPatient(created);
+      if (isAgendaHost) {
+        if (onSuccess && patient) onSuccess(patient);
+        handleClose();
+      } else {
+        setSucesso(true);
+        setTimeout(() => setPatientView('list'), 1500);
+      }
     } catch (err) {
       const fb = getPacienteCreateErrorFeedback(err);
       setErro(fb.banner);
@@ -284,15 +322,27 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
         <Save className="h-8 w-8 text-[#16a34a]" strokeWidth={2} />
       </div>
       <h3 className="mb-2 text-[20px] font-bold text-[#0f172a]">Paciente cadastrado</h3>
-      <p className="text-[14px] text-[#64748b]">Redirecionando para a lista...</p>
+      <p className="text-[14px] text-[#64748b]">
+        {isAgendaHost ? 'Paciente selecionado no agendamento.' : 'Redirecionando para a lista...'}
+      </p>
     </div>
   );
 
   const renderModalShell = (body) => (
-    <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" role="presentation">
-      <div className="absolute inset-0 bg-black/60" aria-hidden />
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4"
+      style={{ zIndex }}
+      role="presentation"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/60"
+        onClick={handleClose}
+        aria-label="Fechar"
+      />
       <div
         role="dialog"
+        aria-modal="true"
         aria-labelledby="patient-create-title"
         className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
         onMouseDown={(e) => e.stopPropagation()}
@@ -311,7 +361,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
           </div>
           <button
             type="button"
-            onClick={() => setPatientView('list')}
+            onClick={handleClose}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             aria-label="Fechar"
           >
@@ -397,7 +447,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       onFotoChange={handleFotoChange}
       showPhotoUpload
       onSubmit={handleSalvar}
-      onCancel={() => setPatientView('list')}
+      onCancel={handleClose}
       salvando={salvando}
       cpfInputId="patient-create-cpf"
     />
@@ -412,7 +462,7 @@ export function PatientCreateView({ setPatientView, onPatientCreated, variant = 
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setPatientView('list')}
+          onClick={handleClose}
           className="inline-flex items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Voltar para Pacientes
