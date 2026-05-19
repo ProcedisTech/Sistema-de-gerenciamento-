@@ -3,9 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --bg: oklch(0.97 0.008 175);
+  }
+
   html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
@@ -16,7 +18,15 @@
       -apple-system,
       BlinkMacSystemFont,
       "Segoe UI",
+      system-ui,
       sans-serif;
+    background-color: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    @apply bg-vivid-teal-200 text-vivid-teal-900;
   }
 
   #root {
