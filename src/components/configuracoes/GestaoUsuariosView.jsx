@@ -134,8 +134,8 @@ export function GestaoUsuariosView() {
       {/* Header Responsivo */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1 min-w-0">
-          <h3 className="text-xl font-bold text-[#0f172a] sm:text-lg truncate">Gestão de Usuários</h3>
-          <p className="text-sm text-slate-500 truncate">Gerencie quem tem acesso à sua clínica.</p>
+          <h3 className="text-xl font-bold text-[#0f172a] sm:text-lg truncate">Gestão de Equipe</h3>
+          <p className="text-sm text-slate-500 truncate">Gerencie os membros da equipe e níveis de acesso da sua clínica.</p>
         </div>
         {activeTab === 'membros' && (
           <button
@@ -203,7 +203,7 @@ export function GestaoUsuariosView() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-bold text-teal-700">
-                          {u.roleName}
+                          {(u.perfilAcessoCodigo || '').toUpperCase() === 'DONO' ? 'Dono' : u.roleName}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -267,7 +267,7 @@ export function GestaoUsuariosView() {
                         {u.ativo ? 'Ativo' : 'Desativado'}
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[9px] font-bold text-teal-700 uppercase">
-                        {u.roleName}
+                        {(u.perfilAcessoCodigo || '').toUpperCase() === 'DONO' ? 'Dono' : u.roleName}
                       </span>
                     </div>
                   </div>
@@ -340,10 +340,68 @@ export function GestaoUsuariosView() {
   );
 }
 
+const getPresetProfileId = (roleName, perfis) => {
+  if (!roleName) return null;
+  const nameLower = roleName.toLowerCase();
+  
+  if (nameLower.includes('administrador') || nameLower === 'adm') {
+    // Nível 5 - Administrador
+    const match = perfis.find(p => 
+      (p.nome || '').toLowerCase().includes('administrador') || 
+      (p.codigo || '').toLowerCase().includes('nivel_5')
+    );
+    return match ? match.id : null;
+  }
+  
+  if (nameLower.includes('medico') || nameLower.includes('esteticista')) {
+    // Nível 4 - Profissional Sênior
+    const match = perfis.find(p => 
+      (p.nome || '').toLowerCase().includes('sênior') || 
+      (p.nome || '').toLowerCase().includes('senior') || 
+      (p.codigo || '').toLowerCase().includes('nivel_4')
+    );
+    return match ? match.id : null;
+  }
+  
+  if (nameLower.includes('profissional')) {
+    // Nível 3 - Profissional Padrão
+    const match = perfis.find(p => 
+      (p.nome || '').toLowerCase().includes('padrão') || 
+      (p.nome || '').toLowerCase().includes('padrao') || 
+      (p.codigo || '').toLowerCase().includes('nivel_3')
+    );
+    return match ? match.id : null;
+  }
+  
+  if (nameLower.includes('recepcionista') || nameLower.includes('recepcao')) {
+    // Nível 2 - Recepção
+    const match = perfis.find(p => 
+      (p.nome || '').toLowerCase().includes('recepção') || 
+      (p.nome || '').toLowerCase().includes('recepcao') || 
+      (p.codigo || '').toLowerCase().includes('nivel_2')
+    );
+    return match ? match.id : null;
+  }
+  
+  return null;
+};
+
 function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
   const toast = useToast();
   const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '' });
   const [saving, setSaving] = useState(false);
+
+  const handleRoleChangeInvite = (selectedRoleId) => {
+    let nextPerfilAcessoId = form.perfilAcessoId;
+    const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
+    if (selectedRole) {
+      const presetId = getPresetProfileId(selectedRole.nome, perfisAcesso);
+      if (presetId) {
+        nextPerfilAcessoId = presetId;
+      }
+    }
+    setForm({ ...form, roleId: selectedRoleId, perfilAcessoId: nextPerfilAcessoId });
+  };
 
   const maskCPF = (value) => {
     return value
@@ -525,7 +583,7 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
               <select 
                 required
                 value={form.roleId}
-                onChange={e => setForm({...form, roleId: e.target.value})}
+                onChange={e => handleRoleChangeInvite(e.target.value)}
                 className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
               >
                 <option value="">Selecione...</option>
@@ -543,9 +601,13 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                 className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
               >
                 <option value="">Selecione...</option>
-                {perfisAcesso.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome}</option>
-                ))}
+                {[...perfisAcesso]
+                  .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                  .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                  .map(p => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))
+                }
               </select>
             </div>
           </div>
@@ -582,9 +644,21 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   const [email, setEmail] = useState(usuario.email || '');
   const [saving, setSaving] = useState(false);
 
+  const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
   const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
   const isDono = papel === 'DONO';
-  const lockSensitiveFields = isSelfEdit && isDono;
+  const lockSensitiveFields = isUserOwner || (isSelfEdit && isDono);
+
+  const handleRoleChangeEdit = (selectedRoleId) => {
+    setRoleId(selectedRoleId);
+    const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
+    if (selectedRole) {
+      const presetId = getPresetProfileId(selectedRole.nome, perfisAcesso);
+      if (presetId) {
+        setPerfilAcessoId(presetId);
+      }
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -665,35 +739,55 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
               <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
                 Novo Cargo
               </label>
-              <select 
-                required
-                disabled={lockSensitiveFields}
-                value={roleId}
-                onChange={e => setRoleId(e.target.value)}
-                className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
-              >
-                <option value="">Selecione...</option>
-                {roles.map(r => (
-                  <option key={r.id} value={r.id}>{r.nome}</option>
-                ))}
-              </select>
+              {isUserOwner ? (
+                <input 
+                  disabled
+                  value="Dono"
+                  className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none text-slate-500 cursor-not-allowed sm:py-2.5 sm:text-sm"
+                />
+              ) : (
+                <select 
+                  required
+                  disabled={lockSensitiveFields}
+                  value={roleId}
+                  onChange={e => handleRoleChangeEdit(e.target.value)}
+                  className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                >
+                  <option value="">Selecione...</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={r.id}>{r.nome}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
                 Novo Nível
               </label>
-              <select 
-                required
-                disabled={lockSensitiveFields}
-                value={perfilAcessoId}
-                onChange={e => setPerfilAcessoId(e.target.value)}
-                className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
-              >
-                <option value="">Selecione...</option>
-                {perfisAcesso.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome}</option>
-                ))}
-              </select>
+              {isUserOwner ? (
+                <input 
+                  disabled
+                  value="Dono"
+                  className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none text-slate-500 cursor-not-allowed sm:py-2.5 sm:text-sm"
+                />
+              ) : (
+                <select 
+                  required
+                  disabled={lockSensitiveFields}
+                  value={perfilAcessoId}
+                  onChange={e => setPerfilAcessoId(e.target.value)}
+                  className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                >
+                  <option value="">Selecione...</option>
+                  {[...perfisAcesso]
+                    .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                    .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                    .map(p => (
+                      <option key={p.id} value={p.id}>{p.nome}</option>
+                    ))
+                  }
+                </select>
+              )}
             </div>
           </div>
           

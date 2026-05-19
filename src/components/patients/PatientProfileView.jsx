@@ -40,6 +40,7 @@ import {
   getApiErrorDetail,
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
+import { usePapel } from '../../hooks/usePapel';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
 import {
   fetchNextAppointmentIsoForPaciente,
@@ -722,6 +723,7 @@ export function PatientProfileView({
   isRecepcionista,
 }) {
   const toast = useToast();
+  const { isNivel1 } = usePapel();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const birthParts = useMemo(
     () => parsePatientBirthDate(patient.dataNascimento),
@@ -1923,24 +1925,28 @@ export function PatientProfileView({
                       initialsClassName="text-lg font-bold md:text-xl"
                       spinnerClassName="h-5 w-5"
                     />
-                    <button
-                      type="button"
-                      onClick={() => profilePhotoInputRef.current?.click()}
-                      disabled={profilePhotoBusy}
-                      className="text-[12px] font-medium text-[#00a88e] underline decoration-[#00a88e]/40 underline-offset-2 transition-colors hover:text-[#00967f] disabled:pointer-events-none disabled:opacity-50"
-                    >
-                      {profilePhotoBusy ? 'Enviando…' : 'Trocar foto'}
-                    </button>
-                    {profilePhotoDisplayUrl ? (
-                      <button
-                        type="button"
-                        onClick={handleRemoveProfilePhoto}
-                        disabled={profilePhotoBusy}
-                        className="text-[12px] font-medium text-[#94a3b8] transition-colors hover:text-red-600 disabled:opacity-50"
-                      >
-                        Remover foto
-                      </button>
-                    ) : null}
+                    {!isNivel1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => profilePhotoInputRef.current?.click()}
+                          disabled={profilePhotoBusy}
+                          className="text-[12px] font-medium text-[#00a88e] underline decoration-[#00a88e]/40 underline-offset-2 transition-colors hover:text-[#00967f] disabled:pointer-events-none disabled:opacity-50"
+                        >
+                          {profilePhotoBusy ? 'Enviando…' : 'Trocar foto'}
+                        </button>
+                        {profilePhotoDisplayUrl ? (
+                          <button
+                            type="button"
+                            onClick={handleRemoveProfilePhoto}
+                            disabled={profilePhotoBusy}
+                            className="text-[12px] font-medium text-[#94a3b8] transition-colors hover:text-red-600 disabled:opacity-50"
+                          >
+                            Remover foto
+                          </button>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   <div className="min-w-0 flex-1 text-left">
                     <div className="flex flex-wrap items-center gap-2">
@@ -2080,68 +2086,80 @@ export function PatientProfileView({
                   </div>
                 </div>
               </div>
-              <div className="flex w-full shrink-0 flex-col gap-2 sm:min-w-[220px] sm:max-w-[280px]">
-                <button
-                  type="button"
-                  onClick={() => onStartAttendance?.(selectedPatient)}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f] active:bg-[#00967f]"
-                >
-                  <Play className="inline h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
-                </button>
-                <div className="flex flex-col gap-2">
+              {!isNivel1 ? (
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:min-w-[220px] sm:max-w-[280px]">
                   <button
                     type="button"
-                    onClick={handleAgendarPacienteClick}
-                    disabled={!isPerfilAtivo || !selectedPatient?.id}
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => onStartAttendance?.(selectedPatient)}
+                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f] active:bg-[#00967f]"
                   >
-                    <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                    Agendar Paciente
+                    <Play className="inline h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
                   </button>
-                  {!isRecepcionista && (
+                  <div className="flex flex-col gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditing((prev) => {
-                          if (prev) {
+                      onClick={handleAgendarPacienteClick}
+                      disabled={!isPerfilAtivo || !selectedPatient?.id}
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                      Agendar Paciente
+                    </button>
+                    {!isRecepcionista && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing((prev) => {
+                            if (prev) {
+                              setEditFormErrors({});
+                              setProfileSaveError('');
+                              return null;
+                            }
                             setEditFormErrors({});
                             setProfileSaveError('');
-                            return null;
-                          }
-                          setEditFormErrors({});
-                          setProfileSaveError('');
-                          return createEditDraft();
-                        });
-                      }}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50"
-                    >
-                      <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Editar Cadastro
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled
-                  >
-                    <Download className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Gerar PDF
-                  </button>
-                  {isPerfilAtivo && !isRecepcionista ? (
+                            return createEditDraft();
+                          });
+                        }}
+                        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50"
+                      >
+                        <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Editar Cadastro
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setInativarMotivo('');
-                        setInativarSenha('');
-                        setInativarSenhaErro('');
-                        setInativarModalOpen(true);
-                      }}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600 px-4 text-sm font-normal text-white transition-colors hover:border-red-700 hover:bg-red-700"
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-transparent px-4 text-sm font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled
                     >
-                      <UserMinus className="h-4 w-4 shrink-0 text-white" strokeWidth={2} aria-hidden />
-                      Inativar Paciente
+                      <Download className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Gerar PDF
                     </button>
-                  ) : null}
+                    {isPerfilAtivo && !isRecepcionista ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInativarMotivo('');
+                          setInativarSenha('');
+                          setInativarSenhaErro('');
+                          setInativarModalOpen(true);
+                        }}
+                        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-red-600 bg-red-600 px-4 text-sm font-normal text-white transition-colors hover:border-red-700 hover:bg-red-700"
+                      >
+                        <UserMinus className="h-4 w-4 shrink-0 text-white" strokeWidth={2} aria-hidden />
+                        Inativar Paciente
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex w-full shrink-0 flex-col gap-3 rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-center sm:min-w-[220px] sm:max-w-[280px]">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                    <Shield className="h-5 w-5" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800">Acesso Limitado</h4>
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    Seu nível de permissão (Nível 1) permite apenas visualizar os dados cadastrais básicos deste paciente.
+                  </p>
+                </div>
+              )}
             </div>
 
             {isEditing && editing ? (
@@ -2292,7 +2310,7 @@ export function PatientProfileView({
           </div>
 
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
-            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
+                <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
                 { key: 'atendimento', label: 'Atendimento', title: 'Atendimento', icon: Play },
                 { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
@@ -2324,116 +2342,130 @@ export function PatientProfileView({
             <div className="p-5 sm:p-6">
               {patientDetailTab === 'atendimento' && (
                 <div className="space-y-5">
-                  {!alertasAnamneseLoading && anamneseAtendimentoInfo.status === 'nova' ? (
-                    <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#6366f1] bg-[#eef2ff] p-4">
-                      <div className="flex items-start gap-3">
-                        <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#6366f1]" strokeWidth={2.25} aria-hidden />
-                        <div className="min-w-0">
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">Primeira consulta detectada</h4>
-                          <p className="mt-1 text-[13px] font-normal leading-snug text-[#64748b]">
-                            Recomendamos iniciar com anamnese
-                          </p>
-                        </div>
+                  {isNivel1 ? (
+                    <div className="rounded-xl border border-rose-100/60 bg-rose-50/30 p-4 text-center">
+                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-500 border border-rose-100/60 shadow-sm">
+                        <Shield className="h-5 w-5" />
                       </div>
-                      <div
-                        className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient)}
-                          className={`flex h-10 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
-                            hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
-                          }`}
-                        >
-                          Iniciar com Anamnese
-                        </button>
-                        {hasConsultasAnteriores ? (
-                          <button
-                            type="button"
-                            onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                            className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                      <p className="mt-2 text-xs font-semibold text-rose-700">Acesso Limitado</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Seu perfil (Nível 1) não possui permissão para iniciar ou gerenciar atendimentos.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {!alertasAnamneseLoading && anamneseAtendimentoInfo.status === 'nova' ? (
+                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#6366f1] bg-[#eef2ff] p-4">
+                          <div className="flex items-start gap-3">
+                            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#6366f1]" strokeWidth={2.25} aria-hidden />
+                            <div className="min-w-0">
+                              <h4 className="text-[14px] font-bold text-[#0f172a]">Primeira consulta detectada</h4>
+                              <p className="mt-1 text-[13px] font-normal leading-snug text-[#64748b]">
+                                Recomendamos iniciar com anamnese
+                              </p>
+                            </div>
+                          </div>
+                          <div
+                            className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
                           >
-                            Pular para avaliação
-                          </button>
-                        ) : null}
-                      </div>
-                      {hasConsultasAnteriores ? (
-                        <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
+                            <button
+                              type="button"
+                              onClick={() => onStartAttendance?.(selectedPatient)}
+                              className={`flex h-10 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
+                                hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
+                              }`}
+                            >
+                              Iniciar com Anamnese
+                            </button>
+                            {hasConsultasAnteriores ? (
+                              <button
+                                type="button"
+                                onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
+                                className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                              >
+                                Pular para avaliação
+                              </button>
+                            ) : null}
+                          </div>
+                          {hasConsultasAnteriores ? (
+                            <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
+                          ) : null}
+                        </div>
                       ) : null}
-                    </div>
-                  ) : null}
 
-                  {anamneseAtendimentoInfo.status === 'recente' ? (
-                    <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#22c55e] bg-[#f0fdf4] p-4">
-                      <div className="flex items-start gap-3">
-                        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" strokeWidth={2.25} aria-hidden />
-                        <div className="min-w-0">
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">Anamnese em dia</h4>
-                          <p className="mt-1 text-[13px] font-normal text-[#64748b]">
-                            Última: {formatDataHoraPtBr(anamneseAtendimentoInfo.latest?.dataHora)} ·{' '}
-                            {anamneseAtendimentoInfo.latest?.anamneseNome || 'Ficha'}
-                          </p>
-                        </div>
-                      </div>
-                      <div
-                        className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient)}
-                          className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
-                            hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
-                          }`}
-                        >
-                          <Play className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                          Iniciar Atendimento
-                        </button>
-                        {hasConsultasAnteriores ? (
-                          <button
-                            type="button"
-                            onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                            className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                      {anamneseAtendimentoInfo.status === 'recente' ? (
+                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#22c55e] bg-[#f0fdf4] p-4">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" strokeWidth={2.25} aria-hidden />
+                            <div className="min-w-0">
+                              <h4 className="text-[14px] font-bold text-[#0f172a]">Anamnese em dia</h4>
+                              <p className="mt-1 text-[13px] font-normal text-[#64748b]">
+                                Última: {formatDataHoraPtBr(anamneseAtendimentoInfo.latest?.dataHora)} ·{' '}
+                                {anamneseAtendimentoInfo.latest?.anamneseNome || 'Ficha'}
+                              </p>
+                            </div>
+                          </div>
+                          <div
+                            className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
                           >
-                            Pular para avaliação
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {anamneseAtendimentoInfo.status === 'vencida' ? (
-                    <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#f59e0b] bg-[#fffbeb] p-4">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f59e0b]" strokeWidth={2.25} aria-hidden />
-                        <div className="min-w-0">
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">
-                            Anamnese vencida (
-                            {(() => {
-                              const m = monthsSinceDate(anamneseAtendimentoInfo.latest?.dataHora);
-                              return m != null ? `${m} meses atrás` : 'há mais de 6 meses';
-                            })()}
-                            )
-                          </h4>
+                            <button
+                              type="button"
+                              onClick={() => onStartAttendance?.(selectedPatient)}
+                              className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
+                                hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
+                              }`}
+                            >
+                              <Play className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                              Iniciar Atendimento
+                            </button>
+                            {hasConsultasAnteriores ? (
+                              <button
+                                type="button"
+                                onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
+                                className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                              >
+                                Pular para avaliação
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                        <button
-                          type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient)}
-                          className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                        >
-                          Atualizar Anamnese
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onStartAttendance?.(selectedPatient)}
-                          className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                        >
-                          Iniciar sem atualizar
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
+                      ) : null}
+
+                      {anamneseAtendimentoInfo.status === 'vencida' ? (
+                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#f59e0b] bg-[#fffbeb] p-4">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f59e0b]" strokeWidth={2.25} aria-hidden />
+                            <div className="min-w-0">
+                              <h4 className="text-[14px] font-bold text-[#0f172a]">
+                                Anamnese vencida (
+                                {(() => {
+                                  const m = monthsSinceDate(anamneseAtendimentoInfo.latest?.dataHora);
+                                  return m != null ? `${m} meses atrás` : 'há mais de 6 meses';
+                                })()}
+                                )
+                              </h4>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => onStartAttendance?.(selectedPatient)}
+                              className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                            >
+                              Atualizar Anamnese
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onStartAttendance?.(selectedPatient)}
+                              className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
+                            >
+                              Iniciar sem atualizar
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
 
                   <div>
                     <h5 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
@@ -2446,9 +2478,9 @@ export function PatientProfileView({
                         </div>
                         <div
                           className="mt-0.5 truncate text-[14px] font-semibold text-[#0f172a]"
-                          title={sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome}
+                          title={isNivel1 ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome)}
                         >
-                          {sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome || '—'}
+                          {isNivel1 ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome || '—')}
                         </div>
                       </div>
                       <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
@@ -2466,14 +2498,26 @@ export function PatientProfileView({
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <ProcedureTimelineHeading title="Prontuário eletrônico" />
-                    {detailLoading ? (
+                    {!isNivel1 && detailLoading ? (
                       <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
                         <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
                         Carregando procedimentos…
                       </span>
                     ) : null}
                   </div>
-                  {!sortedApiProcedures.length ? (
+                  {isNivel1 ? (
+                    <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-[#e2e8f0] rounded-[18px]">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 mb-4 border border-rose-100/60 shadow-inner">
+                        <Shield className="h-6 w-6" />
+                      </div>
+                      <h3 className="text-base font-bold text-slate-800">Procedimentos Ocultos</h3>
+                      <p className="mt-2 text-xs text-slate-500 max-w-sm leading-relaxed">
+                        Os procedimentos clínicos e históricos de sessões deste paciente estão ocultos para o seu nível de acesso (Nível 1).
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {!sortedApiProcedures.length ? (
                     <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
                   ) : (
                     <ProcedureTimelineRail>
@@ -2661,6 +2705,8 @@ export function PatientProfileView({
                       })}
                     </ProcedureTimelineRail>
                   )}
+                  </>
+                  )}
                 </div>
               )}
 
@@ -2673,7 +2719,7 @@ export function PatientProfileView({
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de evolução</h4>
-                      {galeriaBackend === 'api' && galeriaSessionsForView.length > 0 && (
+                      {!isNivel1 && galeriaBackend === 'api' && galeriaSessionsForView.length > 0 && (
                         <button
                           type="button"
                           onClick={() => {
@@ -2695,21 +2741,34 @@ export function PatientProfileView({
                         </button>
                       )}
                     </div>
-                    {galeriaBackend === 'loading' && selectedPatient?.id ? (
+                    {!isNivel1 && galeriaBackend === 'loading' && selectedPatient?.id ? (
                       <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
                         <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
                         Sincronizando galeria…
                       </span>
-                    ) : galeriaBackend === 'api' ? (
+                    ) : !isNivel1 && galeriaBackend === 'api' ? (
                       <span className="text-[11px] font-bold uppercase tracking-wide text-[#0f766e] bg-[#e6f7f5] border border-[#00a88e]/25 px-2 py-1 rounded-lg w-fit">
                         Galeria no servidor
                       </span>
-                    ) : selectedPatient?.id ? (
+                    ) : !isNivel1 && selectedPatient?.id ? (
                       <span className="text-[11px] font-medium text-[#94a3b8] w-fit max-w-md leading-snug">
                         Galeria do servidor indisponível — exibindo fotos locais da jornada, se houver.
                       </span>
                     ) : null}
                   </div>
+
+                  {isNivel1 ? (
+                    <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-[#e2e8f0] rounded-[18px]">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 mb-4 border border-rose-100/60 shadow-inner">
+                        <Shield className="h-6 w-6" />
+                      </div>
+                      <h3 className="text-base font-bold text-slate-800">Fotos Ocultas</h3>
+                      <p className="mt-2 text-xs text-slate-500 max-w-sm leading-relaxed">
+                        Por motivos de privacidade e conformidade médica, a visualização de fotos clínicas de evolução deste paciente está bloqueada para o seu nível de acesso (Nível 1).
+                      </p>
+                    </div>
+                  ) : (
+                    <>
 
                   {galeriaBackend === 'api' && selectedPatient?.id && galeriaBackend !== 'loading' ? (
                     <>
@@ -3104,6 +3163,8 @@ export function PatientProfileView({
                       </button>
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -3128,15 +3189,17 @@ export function PatientProfileView({
                   <span className="text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
                     Alertas manuais
                   </span>
-                  <button
-                    type="button"
-                    disabled={!selectedPatient?.id}
-                    onClick={openManualAlertCreate}
-                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-dashed border-[#f87171] bg-white px-2 text-[10px] font-semibold text-[#dc2626] transition hover:border-[#dc2626] hover:bg-[#fef2f2] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <Plus className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-                    Novo alerta manual
-                  </button>
+                  {!isNivel1 && (
+                    <button
+                      type="button"
+                      disabled={!selectedPatient?.id}
+                      onClick={openManualAlertCreate}
+                      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-dashed border-[#f87171] bg-white px-2 text-[10px] font-semibold text-[#dc2626] transition hover:border-[#dc2626] hover:bg-[#fef2f2] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Plus className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                      Novo alerta manual
+                    </button>
+                  )}
                 </div>
                 {!selectedPatient?.id ? (
                   <p className="text-[11px] leading-snug text-[#64748b]">
@@ -3165,26 +3228,28 @@ export function PatientProfileView({
                               {ma.descricao}
                             </p>
                           </div>
-                          <div className="flex shrink-0 gap-0.5">
-                            <button
-                              type="button"
-                              title="Editar"
-                              aria-label="Editar alerta manual"
-                              onClick={() => openManualAlertEdit(ma)}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#64748b] hover:border-slate-200 hover:bg-white hover:text-[#0f172a]"
-                            >
-                              <Pencil className="h-3 w-3" strokeWidth={2.25} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Excluir"
-                              aria-label="Excluir alerta manual"
-                              onClick={() => setManualAlertConfirm({ type: 'delete', id: ma.id })}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#64748b] hover:border-red-200 hover:bg-[#fef2f2] hover:text-red-600"
-                            >
-                              <Trash2 className="h-3 w-3" strokeWidth={2.25} />
-                            </button>
-                          </div>
+                          {!isNivel1 && (
+                            <div className="flex shrink-0 gap-0.5">
+                              <button
+                                type="button"
+                                title="Editar"
+                                aria-label="Editar alerta manual"
+                                onClick={() => openManualAlertEdit(ma)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#64748b] hover:border-slate-200 hover:bg-white hover:text-[#0f172a]"
+                              >
+                                <Pencil className="h-3 w-3" strokeWidth={2.25} />
+                              </button>
+                              <button
+                                type="button"
+                                title="Excluir"
+                                aria-label="Excluir alerta manual"
+                                onClick={() => setManualAlertConfirm({ type: 'delete', id: ma.id })}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#64748b] hover:border-red-200 hover:bg-[#fef2f2] hover:text-red-600"
+                              >
+                                <Trash2 className="h-3 w-3" strokeWidth={2.25} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -3281,21 +3346,25 @@ export function PatientProfileView({
               <h5 className="text-[12px] font-bold text-[#0f172a]">Notas Rápidas</h5>
             </div>
             <div className="space-y-2 bg-white p-2.5">
-              <textarea
-                value={quickNoteText}
-                onChange={(e) => setQuickNoteText(e.target.value)}
-                rows={2}
-                placeholder="Escreva uma nota rápida..."
-                className="w-full resize-none rounded-lg border border-[#e2e8f0] p-2.5 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
-              />
-              <button
-                type="button"
-                onClick={handleAddQuickNote}
-                disabled={!quickNoteText.trim()}
-                className="flex h-8 w-full items-center justify-center rounded-lg bg-[#00a88e] text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Adicionar nota rápida
-              </button>
+              {!isNivel1 && (
+                <>
+                  <textarea
+                    value={quickNoteText}
+                    onChange={(e) => setQuickNoteText(e.target.value)}
+                    rows={2}
+                    placeholder="Escreva uma nota rápida..."
+                    className="w-full resize-none rounded-lg border border-[#e2e8f0] p-2.5 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]/40 focus:ring-2 focus:ring-[#00a88e]/10"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddQuickNote}
+                    disabled={!quickNoteText.trim()}
+                    className="flex h-8 w-full items-center justify-center rounded-lg bg-[#00a88e] text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Adicionar nota rápida
+                  </button>
+                </>
+              )}
               <div className="space-y-1.5 pt-0.5">
                 {displayNotes.length ? (
                   displayNotes.map((nota, i) => (
@@ -3315,7 +3384,7 @@ export function PatientProfileView({
                         </span>
                         <div className="flex shrink-0 items-center gap-2">
                           <span className="text-[11px] text-[#94a3b8]">{nota.data}</span>
-                          {nota._fromApi ? (
+                          {!isNivel1 && nota._fromApi ? (
                             <button
                               type="button"
                               onClick={() => handleDeleteNote(nota.id)}

@@ -78,7 +78,13 @@ const BTN_ACTION =
 /**
  * Card de resumo de um slot (painel do dia, resumo de lista, detalhe modo Semana).
  */
-export function AgendaAppointmentSummaryCard({ appointment, onPrimary, onEdit, renderSlotActions }) {
+export function AgendaAppointmentSummaryCard({
+  appointment,
+  onPrimary,
+  onEdit,
+  renderSlotActions,
+  isNivel1 = false,
+}) {
   const isReagendado = appointment.status === 'reagendado';
   const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
@@ -137,22 +143,30 @@ export function AgendaAppointmentSummaryCard({ appointment, onPrimary, onEdit, r
         </div>
 
         <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
-          {showPrimaryActionButton(appointment.status) ? (
-            <button
-              type="button"
-              onClick={() => onPrimary(appointment)}
-              className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
-            >
-              {actionLabel(appointment.status)}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => onEdit(appointment)}
-            className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-[11px] font-bold text-[#64748b] transition-colors hover:bg-[#F5F6FA]`}
-          >
-            Editar
-          </button>
+          {isNivel1 ? (
+            <div className="flex w-full items-center justify-center rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-center text-[11px] font-bold text-rose-600">
+              Nível 1: Apenas visualização
+            </div>
+          ) : (
+            <>
+              {showPrimaryActionButton(appointment.status) ? (
+                <button
+                  type="button"
+                  onClick={() => onPrimary(appointment)}
+                  className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
+                >
+                  {actionLabel(appointment.status)}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onEdit(appointment)}
+                className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-[11px] font-bold text-[#64748b] transition-colors hover:bg-[#F5F6FA]`}
+              >
+                Editar
+              </button>
+            </>
+          )}
         </div>
         {typeof renderSlotActions === 'function' ? (
           <div className="mt-2 border-t border-[#f1f5f9] pt-2">{renderSlotActions(appointment)}</div>

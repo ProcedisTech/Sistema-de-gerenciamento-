@@ -77,7 +77,7 @@ function StatCard({ label, value, icon, tone = 'default' }) {
   );
 }
 
-function DayPanel({ selectedDay, appointments, onPrimary, onEdit, renderSlotActions }) {
+function DayPanel({ selectedDay, appointments, onPrimary, onEdit, renderSlotActions, isNivel1 = false }) {
   return (
     <div className="h-full rounded-[14px] border border-calendar-border bg-white">
       <div className="rounded-t-[14px] border-2 border-teal-200 bg-gradient-to-br from-teal-50 to-blue-50 p-4">
@@ -103,6 +103,7 @@ function DayPanel({ selectedDay, appointments, onPrimary, onEdit, renderSlotActi
               onPrimary={onPrimary}
               onEdit={onEdit}
               renderSlotActions={renderSlotActions}
+              isNivel1={isNivel1}
             />
           ))
         )}
@@ -264,7 +265,7 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
   );
 }
 
-function DaySummaryModal({ group, onClose, onEdit, onPrimary, renderSlotActions }) {
+function DaySummaryModal({ group, onClose, onEdit, onPrimary, renderSlotActions, isNivel1 = false }) {
   if (!group) return null;
 
   return (
@@ -296,6 +297,7 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary, renderSlotActions 
                 onClose();
               }}
               renderSlotActions={renderSlotActions}
+              isNivel1={isNivel1}
             />
           ))}
         </div>
@@ -325,7 +327,7 @@ export function AgendaDashboard({
 
   const renderSlotActions = React.useCallback(
     (appointment) => {
-      const disabled = Boolean(agenda.loading);
+      const disabled = Boolean(agenda.loading) || agenda.isNivel1;
       return (
         <AgendaSlotActions
           agenda={appointment}
@@ -380,7 +382,7 @@ export function AgendaDashboard({
 
   const renderSlotActionsWeekDetail = React.useCallback(
     (appointment) => {
-      const disabled = Boolean(agenda.loading);
+      const disabled = Boolean(agenda.loading) || agenda.isNivel1;
       return (
         <AgendaSlotActions
           agenda={appointment}
@@ -440,14 +442,16 @@ export function AgendaDashboard({
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={() => agenda.openCreateModal(agenda.selectedDay)}
-          className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-brand-primary px-5 py-3 text-center text-[13px] font-bold leading-tight text-white shadow-sm transition-colors hover:bg-brand-primaryDark lg:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          Novo Agendamento
-        </button>
+        {!agenda.isNivel1 && (
+          <button
+            type="button"
+            onClick={() => agenda.openCreateModal(agenda.selectedDay)}
+            className="inline-flex max-w-[min(100%,16rem)] shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-brand-primary px-5 py-3 text-center text-[13px] font-bold leading-tight text-white shadow-sm transition-colors hover:bg-brand-primaryDark lg:self-auto"
+          >
+            <Plus className="h-4 w-4" />
+            Novo Agendamento
+          </button>
+        )}
       </div>
 
       {agenda.error ? (
@@ -523,7 +527,7 @@ export function AgendaDashboard({
               appointments={agenda.weekGridAppointments}
               todayIso={agenda.todayIso}
               onOpenSlotDetail={setWeekSlotDetail}
-              onClickEmptySlot={openWeekCreateAtSlot}
+              onClickEmptySlot={agenda.isNivel1 ? null : openWeekCreateAtSlot}
               disponibilidades={agenda.disponibilidades}
             />
           )}
@@ -536,6 +540,7 @@ export function AgendaDashboard({
             onPrimary={handlePrimary}
             onEdit={agenda.openEditModal}
             renderSlotActions={renderSlotActions}
+            isNivel1={agenda.isNivel1}
           />
         </aside>
       </div>
@@ -551,6 +556,7 @@ export function AgendaDashboard({
               onPrimary={handlePrimary}
               onEdit={agenda.openEditModal}
               renderSlotActions={renderSlotActions}
+              isNivel1={agenda.isNivel1}
             />
           </div>
         </div>
@@ -562,6 +568,7 @@ export function AgendaDashboard({
         onEdit={agenda.openEditModal}
         onPrimary={handlePrimary}
         renderSlotActions={renderSlotActions}
+        isNivel1={agenda.isNivel1}
       />
 
       <AgendaWeekSlotDetailModal
@@ -570,6 +577,7 @@ export function AgendaDashboard({
         onPrimary={handlePrimaryFromWeekDetail}
         onEdit={handleEditFromWeekDetail}
         renderSlotActions={renderSlotActionsWeekDetail}
+        isNivel1={agenda.isNivel1}
       />
     </div>
   );

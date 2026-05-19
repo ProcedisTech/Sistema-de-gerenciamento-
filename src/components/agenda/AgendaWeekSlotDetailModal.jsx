@@ -4,7 +4,14 @@ import { AgendaAppointmentSummaryCard } from './AgendaAppointmentSummaryCard.jsx
 /**
  * Detalhe de um slot na vista Semana — z-[215], abaixo do AgendaFormModal (220) e dos fluxos 230.
  */
-export function AgendaWeekSlotDetailModal({ appointment, onClose, onPrimary, onEdit, renderSlotActions }) {
+export function AgendaWeekSlotDetailModal({
+  appointment,
+  onClose,
+  onPrimary,
+  onEdit,
+  renderSlotActions,
+  isNivel1 = false,
+}) {
   if (!appointment) return null;
 
   return (
@@ -28,6 +35,7 @@ export function AgendaWeekSlotDetailModal({ appointment, onClose, onPrimary, onE
             onPrimary={onPrimary}
             onEdit={onEdit}
             renderSlotActions={renderSlotActions}
+            isNivel1={isNivel1}
           />
         </div>
       </div>

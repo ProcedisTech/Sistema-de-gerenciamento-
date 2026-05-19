@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, LogOut, Menu, Settings, Shield, Users } from 'lucide-react';
+import { CalendarDays, ChevronLeft, LogOut, Menu, Settings, Shield, Users, UserCog } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { usePapel } from '../../hooks/usePapel';
@@ -20,6 +20,7 @@ function perfilFotoDisplaySrc(u) {
 const NAV_ITEMS = [
   { view: 'pacientes', label: 'Pacientes', icon: Users },
   { view: 'agenda', label: 'Agenda', icon: CalendarDays },
+  { view: 'gestao-equipe', label: 'Gestão de Equipe', icon: UserCog },
   { view: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
@@ -95,10 +96,11 @@ export function Sidebar({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopCollapsed);
-  const { isAtLeast } = usePapel();
+  const { isAtLeast, canSeeConfigEquipe } = usePapel();
   const canSeeConfig = isAtLeast('NIVEL_3');
   const visibleNavItems = NAV_ITEMS.filter((item) => {
     if (item.view === 'configuracoes') return canSeeConfig;
+    if (item.view === 'gestao-equipe') return canSeeConfigEquipe;
     return true;
   });
 
@@ -175,15 +177,24 @@ export function Sidebar({
             </div>
 
             <div className="flex justify-center py-3">
-              <button
-                type="button"
-                onClick={() => onOpenPerfilSettings?.()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white transition-opacity duration-200 hover:opacity-95"
-                title={displayName}
-                aria-label="Abrir perfil do profissional"
-              >
-                {renderAvatarInner()}
-              </button>
+              {canSeeConfig ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenPerfilSettings?.()}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white transition-opacity duration-200 hover:opacity-95"
+                  title={displayName}
+                  aria-label="Abrir perfil do profissional"
+                >
+                  {renderAvatarInner()}
+                </button>
+              ) : (
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white"
+                  title={displayName}
+                >
+                  {renderAvatarInner()}
+                </div>
+              )}
             </div>
 
             <nav className="flex flex-1 flex-col gap-2 px-1 pt-1">
@@ -223,28 +234,50 @@ export function Sidebar({
         {!narrowRail && isDesktop ? (
           <>
             <div className="flex items-center gap-2 border-b border-app-border p-4 pl-4 pr-3 transition-opacity duration-200">
-              <button
-                type="button"
-                onClick={() => onOpenClinicaSettings?.()}
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-1 text-left transition-colors hover:bg-app-nav-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
-                aria-label="Abrir dados da clínica"
-              >
-                <div className="shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
-                  {clinicaLogoResolved ? (
-                    <img
-                      src={clinicaLogoResolved}
-                      alt="Logo"
-                      className="h-10 w-10 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <Shield className="h-6 w-6 text-white" strokeWidth={2} />
-                  )}
+              {canSeeConfig ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenClinicaSettings?.()}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-1 text-left transition-colors hover:bg-app-nav-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
+                  aria-label="Abrir dados da clínica"
+                >
+                  <div className="shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
+                    {clinicaLogoResolved ? (
+                      <img
+                        src={clinicaLogoResolved}
+                        alt="Logo"
+                        className="h-10 w-10 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h1 className="truncate text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
+                    <p className="truncate text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
+                  </div>
+                </button>
+              ) : (
+                <div
+                  className="flex min-w-0 flex-1 items-center gap-3 py-1"
+                >
+                  <div className="shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
+                    {clinicaLogoResolved ? (
+                      <img
+                        src={clinicaLogoResolved}
+                        alt="Logo"
+                        className="h-10 w-10 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h1 className="truncate text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
+                    <p className="truncate text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h1 className="truncate text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
-                  <p className="truncate text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
-                </div>
-              </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDesktopCollapsed(true)}
@@ -256,20 +289,34 @@ export function Sidebar({
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => onOpenPerfilSettings?.()}
-              className="mx-4 mb-6 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 text-left shadow-app-card transition-colors hover:bg-[#e8f5f3] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
-              aria-label="Abrir perfil do profissional"
-            >
-              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white">
-                {renderAvatarInner()}
+            {canSeeConfig ? (
+              <button
+                type="button"
+                onClick={() => onOpenPerfilSettings?.()}
+                className="mx-4 mb-6 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 text-left shadow-app-card transition-colors hover:bg-[#e8f5f3] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
+                aria-label="Abrir perfil do profissional"
+              >
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white">
+                  {renderAvatarInner()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
+                  <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
+                </div>
+              </button>
+            ) : (
+              <div
+                className="mx-4 mb-6 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 shadow-app-card"
+              >
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white">
+                  {renderAvatarInner()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
+                  <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
-                <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
-              </div>
-            </button>
+            )}
 
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
               {visibleNavItems.map((item) => {
@@ -320,43 +367,79 @@ export function Sidebar({
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => onOpenClinicaSettings?.()}
-              className="flex w-full items-center gap-3 border-b border-app-border px-6 pb-4 pt-2 text-left transition-colors hover:bg-app-nav-hover/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300/50"
-              aria-label="Abrir dados da clínica"
-            >
-              <div className="shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
-                {clinicaLogoResolved ? (
-                  <img
-                    src={clinicaLogoResolved}
-                    alt="Logo"
-                    className="h-10 w-10 rounded-xl object-cover"
-                  />
-                ) : (
-                  <Shield className="h-6 w-6 text-white" strokeWidth={2} />
-                )}
+            {canSeeConfig ? (
+              <button
+                type="button"
+                onClick={() => onOpenClinicaSettings?.()}
+                className="flex w-full items-center gap-3 border-b border-app-border px-6 pb-4 pt-2 text-left transition-colors hover:bg-app-nav-hover/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300/50"
+                aria-label="Abrir dados da clínica"
+              >
+                <div className="shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
+                  {clinicaLogoResolved ? (
+                    <img
+                      src={clinicaLogoResolved}
+                      alt="Logo"
+                      className="h-10 w-10 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
+                  <p className="truncate text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
+                </div>
+              </button>
+            ) : (
+              <div
+                className="flex w-full items-center gap-3 border-b border-app-border px-6 pb-4 pt-2"
+              >
+                <div className="shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm">
+                  {clinicaLogoResolved ? (
+                    <img
+                      src={clinicaLogoResolved}
+                      alt="Logo"
+                      className="h-10 w-10 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <Shield className="h-6 w-6 text-white" strokeWidth={2} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
+                  <p className="truncate text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="truncate text-[19px] font-bold leading-tight text-[#0f172a]">{tituloClinica}</h1>
-                <p className="truncate text-[11px] font-medium text-[#64748b]">{subtituloClinica}</p>
-              </div>
-            </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => onOpenPerfilSettings?.()}
-              className="mx-4 mb-6 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 text-left shadow-app-card transition-colors hover:bg-[#e8f5f3] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
-              aria-label="Abrir perfil do profissional"
-            >
-              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white">
-                {renderAvatarInner()}
+            {canSeeConfig ? (
+              <button
+                type="button"
+                onClick={() => onOpenPerfilSettings?.()}
+                className="mx-4 mb-6 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 text-left shadow-app-card transition-colors hover:bg-[#e8f5f3] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
+                aria-label="Abrir perfil do profissional"
+              >
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white">
+                  {renderAvatarInner()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
+                  <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
+                </div>
+              </button>
+            ) : (
+              <div
+                className="mx-4 mb-6 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-[14px] border border-app-border bg-app-nav-active p-3 shadow-app-card"
+              >
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white">
+                  {renderAvatarInner()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
+                  <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[14px] font-bold leading-tight text-app-accent-deep">{displayName}</h2>
-                <p className="truncate text-[12px] font-medium text-app-accent">{roleLabel}</p>
-              </div>
-            </button>
+            )}
 
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
               {visibleNavItems.map((item) => {

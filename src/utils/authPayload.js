@@ -52,14 +52,25 @@ export function resolverPapel(roleNome) {
   if (!roleNome) return null;
   const roleLimpo = String(roleNome).trim().toUpperCase();
 
-  // Mapeamento direto dos novos códigos cirúrgicos
-  const codigosCirurgicos = ['DONO', 'NIVEL_5', 'NIVEL_4', 'NIVEL_3', 'NIVEL_2', 'NIVEL_1'];
-  if (codigosCirurgicos.includes(roleLimpo)) return roleLimpo;
+  if (roleLimpo === 'DONO') {
+    return 'DONO';
+  }
+  if (roleLimpo === 'NIVEL_5' || roleLimpo === 'ADMINISTRADOR' || roleLimpo === 'ADMIN') {
+    return 'NIVEL_5';
+  }
+  if (roleLimpo === 'NIVEL_4') {
+    return 'NIVEL_4';
+  }
+  if (roleLimpo === 'NIVEL_3' || roleLimpo === 'PROFISSIONAL') {
+    return 'NIVEL_3';
+  }
+  if (roleLimpo === 'NIVEL_2' || roleLimpo === 'RECEPCIONISTA') {
+    return 'NIVEL_2';
+  }
+  if (roleLimpo === 'NIVEL_1') {
+    return 'NIVEL_1';
+  }
 
-  // Legado / Mapeamento Amigável
-  if (roleLimpo === 'ADMINISTRADOR' || roleLimpo === 'ADMIN') return 'ADMIN';
-  if (roleLimpo === 'MEDICO' || roleLimpo === 'ESTETICISTA' || roleLimpo === 'PROFISSIONAL') return 'PROFISSIONAL';
-  if (roleLimpo === 'RECEPCIONISTA') return 'RECEPCIONISTA';
-
-  return roleLimpo; // Retorna o código bruto se não mapeado, para flexibilidade
+  return roleLimpo;
 }
+
