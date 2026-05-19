@@ -35,6 +35,7 @@ export default defineConfig([
       '**/Step5Finalization.jsx',
       '**/components/agenda/MarcarCompromissoModal.jsx',
       '**/components/agenda/PacienteSearchInput.jsx',
+      '**/components/agenda/useAgendaPage.js',
       '**/components/agenda/CancelarAgendaModal.jsx',
       '**/components/anamnese/AnamneseAdminView.jsx',
       '**/components/journey/Step1CheckIn.jsx',

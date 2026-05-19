@@ -13,7 +13,13 @@ function formatTelefone(p) {
   return p?.telefone || p?.phone || p?.telefonePrincipal || '';
 }
 
-export function PacienteSearchInput({ value, onChange, locked = false, displayNome = '' }) {
+export function PacienteSearchInput({
+  value,
+  onChange,
+  locked = false,
+  displayNome = '',
+  hideSelectedHint = false,
+}) {
   const [query, setQuery] = useState('');
   const [remotePatients, setRemotePatients] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -110,7 +116,7 @@ export function PacienteSearchInput({ value, onChange, locked = false, displayNo
         </div>
       ) : query.trim().length > 0 ? (
         <p className="text-[11px] font-medium text-gray-500">Digite ao menos 2 caracteres</p>
-      ) : value && displayNome ? (
+      ) : !hideSelectedHint && value && displayNome ? (
         <p className="text-[12px] font-semibold text-teal-700">Selecionado: {displayNome}</p>
       ) : null}
         </div>

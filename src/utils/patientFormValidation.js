@@ -32,6 +32,27 @@ export function validatePacienteFormBasics(v, opts = {}) {
   return e;
 }
 
+/**
+ * Cadastro mínimo inline na agenda (nome + telefone; CPF opcional).
+ * @param {{ nome?: string, telefoneCountryCode?: string, telefoneNumero?: string, cpf?: string }} v
+ * @returns {Record<string, boolean>}
+ */
+export function validatePacienteInlineAgenda(v) {
+  const e = {};
+  if (!String(v.nome ?? '').trim()) e.nome = true;
+  if (
+    !String(v.telefoneNumero ?? '').trim() ||
+    !isPhoneValid(v.telefoneCountryCode ?? 'BR', v.telefoneNumero ?? '')
+  ) {
+    e.telefone = true;
+  }
+  const cpfDigits = normalizeCpf(String(v.cpf ?? ''));
+  if (cpfDigits.length > 0 && (cpfDigits.length !== 11 || !isCpfValidCheckDigits(cpfDigits))) {
+    e.cpf = true;
+  }
+  return e;
+}
+
 export function validateCpfField(cpfMasked) {
   const cpfDigits = normalizeCpf(String(cpfMasked ?? ''));
   if (cpfDigits.length !== 11) {

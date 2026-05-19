@@ -2,7 +2,7 @@ import React from 'react';
 import { CalendarDays, CornerDownLeft, Trash2, X } from 'lucide-react';
 import { formatLongDate } from './useAgendaPage';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
-import { PacienteSearchInput } from './PacienteSearchInput.jsx';
+import { PacienteAgendaSection } from './PacienteAgendaSection.jsx';
 import { ProfissionalPills } from './ProfissionalPills.jsx';
 import { DuracaoPills } from './DuracaoPills.jsx';
 import { AgendaFormStatusBar } from './AgendaFormStatusBar.jsx';
@@ -199,11 +199,17 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             <div className="space-y-6">
               <FieldError error={agenda.formErrors.pacienteId}>
                 <FieldLabel required>Paciente</FieldLabel>
-                <PacienteSearchInput
-                  value={agenda.form.pacienteId}
-                  displayNome={agenda.form.pacienteNome}
+                <PacienteAgendaSection
                   locked={lockPatient}
-                  onChange={agenda.selectPaciente}
+                  pacienteId={agenda.form.pacienteId}
+                  pacienteNome={agenda.form.pacienteNome}
+                  telefone={agenda.form.telefone}
+                  context={agenda.pacienteContext}
+                  contextLoading={agenda.pacienteContextLoading}
+                  onSelect={agenda.selectPaciente}
+                  onClear={agenda.clearPacienteSelection}
+                  onCreate={agenda.createPacienteInline}
+                  createSubmitting={agenda.pacienteCreateSubmitting}
                 />
               </FieldError>
 
