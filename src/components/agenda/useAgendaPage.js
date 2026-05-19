@@ -23,14 +23,11 @@ import {
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
+import { buildDaySlotList, buildMonthHeatmap } from '../../utils/agendaDisponibilidadeBuilder.js';
 import {
-  AGENDA_DAY_END_MIN,
-  AGENDA_DAY_START_MIN,
-  AGENDA_SLOT_STEP_MIN,
   findFirstConflictHhmm,
-  findNextFreeSlotStart,
+  findNextFreeSlotAcrossDays,
   occupiedIntervalsFromAgendaDtos,
-  parseHhmmToMinutes,
   proposalOverlapsOccupied,
 } from '../../utils/agendaAvailability';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
@@ -112,7 +109,7 @@ function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
     procedimentoNome: '',
     catalogoProcedimentoSaudeIds: proc.id ? [String(proc.id)] : [],
     data: selectedDay || toLocalDateIso(),
-    horaInicio: '09:00',
+    horaInicio: '',
     duracaoMin: 60,
     observacao: '',
   };
@@ -226,6 +223,18 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
   const equipeFetchedRef = useRef(false);
+  const dispMonthCacheRef = useRef({});
+  const disponibilidadesRef = useRef(disponibilidades);
+  disponibilidadesRef.current = disponibilidades;
+
+  const [dispMonthDate, setDispMonthDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [dispCalendarioDia, setDispCalendarioDia] = useState('');
+  const [dispMonthDtos, setDispMonthDtos] = useState([]);
+  const [dispMonthLoading, setDispMonthLoading] = useState(false);
+  const [dispMonthError, setDispMonthError] = useState('');
 
   const { modal: foraDispModal, abrirConfirmacao: abrirConfirmacaoForaDisp } =
     useConfirmacaoForaDisp();
@@ -343,27 +352,113 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     loadMonth();
   }, [loadMonth]);
 
+  const dispCacheKey = useCallback((roleId, md) => {
+    return `${String(roleId || '').trim()}:${monthKey(md)}`;
+  }, []);
+
+  const ensureDispMonthLoaded = useCallback(
+    async (monthDateTarget) => {
+      const role = String(roleUserIdAgenda || '').trim();
+      if (!role || !authEnabled) {
+        setDispMonthDtos([]);
+        return [];
+      }
+      const key = dispCacheKey(role, monthDateTarget);
+      const hit = dispMonthCacheRef.current[key];
+      if (hit?.dtos) {
+        setDispMonthDtos(hit.dtos);
+        return hit.dtos;
+      }
+
+      setDispMonthLoading(true);
+      setDispMonthError('');
+      try {
+        const { start, end } = monthRangeIso(monthDateTarget);
+        const dispCached = disponibilidadesRef.current[role];
+        const [raw, dispRaw] = await Promise.all([
+          agendasApi.byRange(start, end, { profissionalRoleUserId: role }),
+          dispCached ? Promise.resolve(dispCached) : disponibilidadeApi.buscar(role),
+        ]);
+        const dtos = normalizeApiList(raw);
+        dispMonthCacheRef.current[key] = { dtos };
+        if (!dispCached && Array.isArray(dispRaw)) {
+          setDisponibilidades((prev) => ({ ...prev, [role]: dispRaw }));
+        }
+        setDispMonthDtos(dtos);
+        return dtos;
+      } catch (e) {
+        setDispMonthError(e?.message || 'Não foi possível carregar a disponibilidade.');
+        setDispMonthDtos([]);
+        return [];
+      } finally {
+        setDispMonthLoading(false);
+      }
+    },
+    [authEnabled, dispCacheKey, roleUserIdAgenda]
+  );
+
+  useEffect(() => {
+    if (!modalMode) return undefined;
+    const iso = toDateKey(form.data) || todayIso;
+    setDispCalendarioDia(iso);
+    const [y, m] = iso.split('-').map(Number);
+    setDispMonthDate(new Date(y, m - 1, 1));
+    return undefined;
+    // Só ao abrir/fechar modal — não seguir form.data (coluna esquerda).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form.data intencionalmente omitido
+  }, [modalMode, todayIso]);
+
+  useEffect(() => {
+    if (!authEnabled || !modalMode || !String(roleUserIdAgenda || '').trim()) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      await ensureDispMonthLoaded(dispMonthDate);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
+
   useEffect(() => {
     if (!authEnabled || !modalMode || !form.data) {
       setSlotsOcupados([]);
       setSlotsOcupadosLoading(false);
-      return;
+      return undefined;
     }
+    const role = String(roleUserIdAgenda || '').trim();
+    const skipId = editingAppointment?.agendaId;
+    const formDay = toDateKey(form.data);
+    const cacheKey = dispCacheKey(role, dispMonthDate);
+    const cached = dispMonthCacheRef.current[cacheKey];
+    const ym = monthKey(dispMonthDate);
+    if (cached?.dtos && formDay.startsWith(ym)) {
+      const dayDtos = cached.dtos.filter(
+        (d) => d?.dataAgendamento && String(d.dataAgendamento).slice(0, 10) === formDay
+      );
+      const intervals = occupiedIntervalsFromAgendaDtos(dayDtos, {
+        activeOnly: true,
+        profissionalRoleUserId: role || undefined,
+        excludeAgendaId: skipId,
+      });
+      setSlotsOcupados(intervals);
+      setSlotsOcupadosLoading(false);
+      return undefined;
+    }
+
     let cancelled = false;
     setSlotsOcupadosLoading(true);
     agendasApi
-      .byRange(form.data, form.data)
+      .byRange(formDay, formDay, role ? { profissionalRoleUserId: role } : {})
       .then((raw) => {
         if (cancelled) return;
-        let dtos = normalizeApiList(raw);
-        const skipId = editingAppointment?.agendaId;
-        if (skipId) {
-          dtos = dtos.filter((d) => d && String(d.id) !== String(skipId));
-        }
-        const role = String(roleUserIdAgenda || '').trim();
+        const dtos = normalizeApiList(raw);
         const intervals = occupiedIntervalsFromAgendaDtos(dtos, {
-          excludeCancelled: true,
+          activeOnly: true,
           profissionalRoleUserId: role || undefined,
+          excludeAgendaId: skipId,
         });
         setSlotsOcupados(intervals);
       })
@@ -376,7 +471,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [authEnabled, modalMode, form.data, roleUserIdAgenda, editingAppointment?.agendaId]);
+  }, [
+    authEnabled,
+    modalMode,
+    form.data,
+    roleUserIdAgenda,
+    editingAppointment?.agendaId,
+    dispMonthDate,
+    dispCacheKey,
+  ]);
 
   const horarioConflita = useMemo(
     () => (modalMode ? proposalOverlapsOccupied(form.horaInicio, form.duracaoMin, slotsOcupados) : false),
@@ -458,18 +561,138 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     };
   }, [modalMode, form.pacienteId]);
 
-  const proximoHorarioLivre = useMemo(() => {
-    if (!modalMode || !form.data) return null;
-    const from = parseHhmmToMinutes(String(form.horaInicio || '').slice(0, 5));
-    return findNextFreeSlotStart(
-      from,
-      form.duracaoMin,
-      slotsOcupados,
-      AGENDA_DAY_START_MIN,
-      AGENDA_DAY_END_MIN,
-      AGENDA_SLOT_STEP_MIN
-    );
-  }, [modalMode, form.data, form.horaInicio, form.duracaoMin, slotsOcupados]);
+  const dispProfissionalDisponibilidade = useMemo(() => {
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return [];
+    return Array.isArray(disponibilidades[role]) ? disponibilidades[role] : [];
+  }, [disponibilidades, roleUserIdAgenda]);
+
+  const dispHeatmap = useMemo(() => {
+    if (!modalMode) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return null;
+    return buildMonthHeatmap({
+      monthDate: dispMonthDate,
+      disponibilidade: dispProfissionalDisponibilidade,
+      dtos: dispMonthDtos,
+      todayIso,
+      excludeAgendaId: editingAppointment?.agendaId,
+      profissionalRoleUserId: role,
+      selectedIso: dispCalendarioDia,
+    });
+  }, [
+    modalMode,
+    dispMonthDate,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
+    todayIso,
+    editingAppointment?.agendaId,
+    roleUserIdAgenda,
+    dispCalendarioDia,
+  ]);
+
+  const dispDaySlots = useMemo(() => {
+    if (!modalMode) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    return buildDaySlotList({
+      iso: dispCalendarioDia,
+      disponibilidade: dispProfissionalDisponibilidade,
+      dtos: dispMonthDtos,
+      duracaoMin: form.duracaoMin,
+      excludeAgendaId: editingAppointment?.agendaId,
+      profissionalRoleUserId: role,
+      selectedFormIso: form.data,
+      selectedFormHora: form.horaInicio,
+    });
+  }, [
+    modalMode,
+    dispCalendarioDia,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
+    form.duracaoMin,
+    form.data,
+    form.horaInicio,
+    editingAppointment?.agendaId,
+    roleUserIdAgenda,
+  ]);
+
+  const selectDispCalendarioDia = useCallback((iso) => {
+    setDispCalendarioDia(toDateKey(iso) || '');
+  }, []);
+
+  const selectDispSlot = useCallback((iso, hhmm) => {
+    const day = toDateKey(iso) || '';
+    const hi = String(hhmm || '').slice(0, 5);
+    setDispCalendarioDia(day);
+    setForm((prev) => ({ ...prev, data: day, horaInicio: hi }));
+    setFormErrors((prev) => ({ ...prev, data: undefined, horaInicio: undefined }));
+  }, []);
+
+  const goDispPrevMonth = useCallback(() => {
+    setDispMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  }, []);
+
+  const goDispNextMonth = useCallback(() => {
+    setDispMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  }, []);
+
+  const handleProximoHorarioLivre = useCallback(async () => {
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return;
+
+    let monthCursor = dispMonthDate;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const dtos = await ensureDispMonthLoaded(monthCursor);
+      const disp =
+        disponibilidadesRef.current[role] ||
+        dispProfissionalDisponibilidade ||
+        [];
+
+      const result = findNextFreeSlotAcrossDays({
+        startIso: dispCalendarioDia || form.data || todayIso,
+        startHora: form.horaInicio,
+        duracaoMin: form.duracaoMin,
+        dtos,
+        disponibilidade: disp,
+        todayIso,
+        excludeAgendaId: editingAppointment?.agendaId,
+        profissionalRoleUserId: role,
+        monthDates: [monthCursor],
+      });
+
+      if (result) {
+        setDispCalendarioDia(result.iso);
+        setDispMonthDate(
+          new Date(
+            Number(result.iso.slice(0, 4)),
+            Number(result.iso.slice(5, 7)) - 1,
+            1
+          )
+        );
+        setForm((prev) => ({
+          ...prev,
+          data: result.iso,
+          horaInicio: result.hhmm,
+        }));
+        setFormErrors((prev) => ({ ...prev, data: undefined, horaInicio: undefined }));
+        return;
+      }
+
+      monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1);
+      setDispMonthDate(monthCursor);
+    }
+  }, [
+    dispMonthDate,
+    dispCalendarioDia,
+    form.data,
+    form.horaInicio,
+    form.duracaoMin,
+    todayIso,
+    editingAppointment?.agendaId,
+    roleUserIdAgenda,
+    ensureDispMonthLoaded,
+    dispProfissionalDisponibilidade,
+  ]);
 
   const isHorarioOcupado = useCallback(
     (horaInicio, duracaoMin) => proposalOverlapsOccupied(horaInicio, duracaoMin, slotsOcupados),
@@ -788,6 +1011,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setPacienteContextLoading(false);
     setFormErrors({});
     equipeFetchedRef.current = false;
+    dispMonthCacheRef.current = {};
+    setDispMonthDtos([]);
+    setDispCalendarioDia('');
+    setDispMonthError('');
   }, []);
 
   const validateForm = useCallback(() => {
@@ -801,11 +1028,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     } else if (procIds.length === 0) {
       nextErrors.catalogoProcedimentoSaudeIds = 'Selecione ao menos um procedimento.';
     }
-    if (!form.data) nextErrors.data = 'Informe a data.';
+    if (!form.data) nextErrors.data = 'Selecione um dia no calendário.';
     else if (form.data < todayIso) {
       nextErrors.data = 'Data inválida — não é possível agendar para o passado.';
     }
-    if (!form.horaInicio) nextErrors.horaInicio = 'Informe o horário.';
+    if (!form.horaInicio) nextErrors.horaInicio = 'Selecione um horário na lista.';
     const d = Number(form.duracaoMin);
     if (!DURACOES_PILL.includes(d)) {
       nextErrors.duracaoMin = 'Selecione a duração.';
@@ -897,6 +1124,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
+      const savedRole = String(roleUserIdAgenda || '').trim();
+      if (savedRole) {
+        delete dispMonthCacheRef.current[dispCacheKey(savedRole, nextMonthDate)];
+      }
       setSelectedDay(form.data);
       setMonthDate(nextMonthDate);
       await loadMonth();
@@ -919,6 +1150,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     patientOptions,
     refreshWeekGrid,
     roleUserIdAgenda,
+    dispCacheKey,
     toastSuccess,
     validateForm,
   ]);
@@ -1008,8 +1240,17 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     patientSelectLocked,
     patientOptions,
     procedimentoOptions,
-    proximoHorarioLivre,
+    dispCalendarioDia,
+    dispDaySlots,
+    dispHeatmap,
+    dispMonthError,
+    dispMonthLoading,
+    goDispNextMonth,
+    goDispPrevMonth,
+    handleProximoHorarioLivre,
     refreshDashboard,
+    selectDispCalendarioDia,
+    selectDispSlot,
     saveAppointment,
     selectDay,
     selectedDay,
