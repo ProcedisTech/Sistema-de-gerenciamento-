@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
 import { PacienteContextCard } from './PacienteContextCard.jsx';
-import { PacienteInlineCreate } from './PacienteInlineCreate.jsx';
+import { PatientCreateView } from '../patients/PatientCreateView.jsx';
 
 export function PacienteAgendaSection({
   locked = false,
@@ -13,16 +13,26 @@ export function PacienteAgendaSection({
   contextLoading = false,
   onSelect,
   onClear,
-  onCreate,
-  createSubmitting = false,
+  onCreateModalOpenChange,
 }) {
-  const [creating, setCreating] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const id = String(pacienteId || '').trim();
 
+  useEffect(() => {
+    onCreateModalOpenChange?.(createModalOpen);
+  }, [createModalOpen, onCreateModalOpenChange]);
+
+  useEffect(() => {
+    if (!createModalOpen) return undefined;
+    return () => onCreateModalOpenChange?.(false);
+  }, [createModalOpen, onCreateModalOpenChange]);
+
   const handleSelect = (patientId, patient) => {
-    setCreating(false);
+    setCreateModalOpen(false);
     onSelect(patientId, patient);
   };
+
+  const closeCreateModal = () => setCreateModalOpen(false);
 
   if (locked) {
     return (
@@ -31,20 +41,6 @@ export function PacienteAgendaSection({
         displayNome={pacienteNome}
         locked
         onChange={onSelect}
-      />
-    );
-  }
-
-  if (creating) {
-    return (
-      <PacienteInlineCreate
-        submitting={createSubmitting}
-        onCancel={() => setCreating(false)}
-        onSubmit={async (payload) => {
-          const result = await onCreate(payload);
-          if (result?.ok) setCreating(false);
-          return result;
-        }}
       />
     );
   }
@@ -70,25 +66,41 @@ export function PacienteAgendaSection({
   }
 
   return (
-    <div className="flex gap-2">
-      <div className="min-w-0 flex-1">
-        <PacienteSearchInput
-          value={id}
-          displayNome={pacienteNome}
-          locked={false}
-          onChange={handleSelect}
-          hideSelectedHint
-        />
+    <>
+      <div className="flex gap-2">
+        <div className="min-w-0 flex-1">
+          <PacienteSearchInput
+            value={id}
+            displayNome={pacienteNome}
+            locked={false}
+            onChange={handleSelect}
+            hideSelectedHint
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setCreateModalOpen(true)}
+          className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-teal-600 hover:border-teal-300 hover:bg-teal-50"
+          aria-label="Cadastrar paciente"
+          title="Cadastrar paciente"
+        >
+          <Plus className="h-5 w-5" strokeWidth={2.5} />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => setCreating(true)}
-        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-teal-600 hover:border-teal-300 hover:bg-teal-50"
-        aria-label="Cadastrar paciente"
-        title="Cadastrar paciente"
-      >
-        <Plus className="h-5 w-5" strokeWidth={2.5} />
-      </button>
-    </div>
+
+      {createModalOpen ? (
+        <PatientCreateView
+          variant="modal"
+          hostMode="agenda"
+          zIndex={240}
+          setPatientView={closeCreateModal}
+          onClose={closeCreateModal}
+          onSuccess={(patient) => {
+            if (patient?.id) onSelect(String(patient.id), patient);
+            closeCreateModal();
+          }}
+        />
+      ) : null}
+    </>
   );
 }

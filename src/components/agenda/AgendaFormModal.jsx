@@ -90,6 +90,7 @@ function ShortcutSubtitle() {
  */
 export function AgendaFormModal({ agenda, onExcluirClick }) {
   const horaInicioInputRef = React.useRef(null);
+  const [pacienteCreateModalOpen, setPacienteCreateModalOpen] = React.useState(false);
   if (!agenda.modalMode) return null;
   const isEdit = agenda.modalMode === 'edit';
   const lockPatient = Boolean(agenda.patientSelectLocked) && !isEdit;
@@ -163,7 +164,13 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-black/40" onClick={agenda.closeModal} aria-label="Fechar modal" />
+      <button
+        type="button"
+        className={`absolute inset-0 bg-black/40 ${pacienteCreateModalOpen ? 'pointer-events-none' : ''}`}
+        onClick={agenda.closeModal}
+        aria-label="Fechar modal"
+        tabIndex={pacienteCreateModalOpen ? -1 : 0}
+      />
       <div className="relative flex max-h-[92vh] w-full max-w-[960px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 p-5">
           <div className="min-w-0 flex-1">
@@ -208,8 +215,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                   contextLoading={agenda.pacienteContextLoading}
                   onSelect={agenda.selectPaciente}
                   onClear={agenda.clearPacienteSelection}
-                  onCreate={agenda.createPacienteInline}
-                  createSubmitting={agenda.pacienteCreateSubmitting}
+                  onCreateModalOpenChange={setPacienteCreateModalOpen}
                 />
               </FieldError>
 

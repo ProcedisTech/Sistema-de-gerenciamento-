@@ -169,6 +169,7 @@ export function mapBackendPatient(dto) {
     proximoAgendamento,
     ultimaVisita: ultimaVisitaLegacy,
     proximoRetorno: proximoRetornoLegacy,
+    createdAt: pickDateTimeIso(dto, 'createdAt', 'created_at') ?? pickDateTimeIso(dto, 'criadoEm', 'criado_em'),
     saldoDevedor: 0,
     lgpdAssinado: false,
     lgpdRenovacao: '',
