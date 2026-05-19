@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   CalendarDays,
   CalendarRange,
@@ -17,7 +17,12 @@ import { WeekTimeGrid } from './WeekTimeGrid';
 import AgendaSlotActions from './AgendaSlotActions.jsx';
 import { AgendaAppointmentSummaryCard } from './AgendaAppointmentSummaryCard.jsx';
 import { AgendaWeekSlotDetailModal } from './AgendaWeekSlotDetailModal.jsx';
+import { AgendaKpiStatusSheet } from './AgendaKpiStatusSheet.jsx';
+import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
 import NotificationBell from '../layout/NotificationBell.jsx';
+import { KPI_DRILLDOWN_PERIOD } from '../../utils/agendaKpiDrilldown.js';
+import { buildAdvanceOffersByAgendaId } from '../../utils/agendaAdvanceOffer.js';
+import { addMinutesToTime } from '../../utils/agendaMapping.js';
 
 function formatDayHeading(iso) {
   if (!iso) return '';
@@ -32,7 +37,7 @@ function samePatient(a, b) {
   );
 }
 
-function StatCard({ label, value, icon, tone = 'default' }) {
+function StatCard({ label, value, icon, tone = 'default', onClick, interactive = false }) {
   const isToday = tone === 'today';
   const renderedIcon = React.createElement(icon, { className: 'h-5 w-5', strokeWidth: 2.4 });
   const iconClass =
@@ -44,14 +49,14 @@ function StatCard({ label, value, icon, tone = 'default' }) {
           ? 'bg-stats-totalBg text-stats-totalIcon'
           : 'bg-white/20 text-stats-todayIcon';
 
-  return (
-    <div
-      className={`rounded-[12px] border p-4 shadow-sm transition-shadow ${
-        isToday
-          ? 'border-transparent bg-gradient-to-br from-teal-500 to-teal-600 text-white hover:from-teal-600 hover:to-teal-700'
-          : 'border-calendar-border bg-white hover:border-gray-300 hover:shadow-md'
-      }`}
-    >
+  const className = `rounded-[12px] border p-4 shadow-sm transition-shadow ${
+    isToday
+      ? 'border-transparent bg-gradient-to-br from-teal-500 to-teal-600 text-white hover:from-teal-600 hover:to-teal-700'
+      : 'border-calendar-border bg-white hover:border-gray-300 hover:shadow-md'
+  }${interactive ? ' cursor-pointer hover:ring-2 hover:ring-brand-primary/25 focus:outline-none focus:ring-2 focus:ring-brand-primary/40' : ''}`;
+
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`text-[11px] font-semibold ${isToday ? 'text-white/85' : 'text-[#888888]'}`}>{label}</div>
@@ -73,11 +78,30 @@ function StatCard({ label, value, icon, tone = 'default' }) {
           {renderedIcon}
         </div>
       </div>
-    </div>
+    </>
   );
+
+  if (interactive && typeof onClick === 'function') {
+    return (
+      <button type="button" onClick={onClick} className={`w-full text-left ${className}`} aria-label={`Ver ${label}`}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
-function DayPanel({ selectedDay, appointments, onPrimary, onEdit, renderSlotActions, isNivel1 = false }) {
+function DayPanel({
+  selectedDay,
+  appointments,
+  onPrimary,
+  onEdit,
+  renderSlotActions,
+  isNivel1 = false,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
+}) {
   return (
     <div className="h-full rounded-[14px] border border-calendar-border bg-white">
       <div className="rounded-t-[14px] border-2 border-teal-200 bg-gradient-to-br from-teal-50 to-blue-50 p-4">
@@ -104,6 +128,8 @@ function DayPanel({ selectedDay, appointments, onPrimary, onEdit, renderSlotActi
               onEdit={onEdit}
               renderSlotActions={renderSlotActions}
               isNivel1={isNivel1}
+              advanceOffer={advanceOfferByAgendaId?.get(String(appointment.id))}
+              onAdvanceClick={onAdvanceClick}
             />
           ))
         )}
@@ -215,7 +241,7 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
   if (agenda.groupedAppointments.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-[#E8E8E8] bg-white p-6 text-center text-[13px] font-semibold text-[#888888]">
-        Nenhum agendamento no mês.
+        Nenhum agendamento no mÃªs.
       </div>
     );
   }
@@ -251,7 +277,7 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
             {first ? (
               <p className="mt-3 line-clamp-2 text-[12px] font-medium text-[#64748b]">
                 <span className="font-bold text-brand-primary">{first.horaInicio}</span>
-                <span className="mx-1.5 text-[#CBD5E1]">·</span>
+                <span className="mx-1.5 text-[#CBD5E1]">Â·</span>
                 {first.pacienteNome}
                 {group.items.length > 1 ? (
                   <span className="mt-0.5 block text-[11px] text-[#94a3b8]">+{group.items.length - 1} outros</span>
@@ -265,7 +291,16 @@ function ListDayCards({ agenda, onOpenDaySummary }) {
   );
 }
 
-function DaySummaryModal({ group, onClose, onEdit, onPrimary, renderSlotActions, isNivel1 = false }) {
+function DaySummaryModal({
+  group,
+  onClose,
+  onEdit,
+  onPrimary,
+  renderSlotActions,
+  isNivel1 = false,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
+}) {
   if (!group) return null;
 
   return (
@@ -298,6 +333,8 @@ function DaySummaryModal({ group, onClose, onEdit, onPrimary, renderSlotActions,
               }}
               renderSlotActions={renderSlotActions}
               isNivel1={isNivel1}
+              advanceOffer={advanceOfferByAgendaId?.get(String(appointment.id))}
+              onAdvanceClick={onAdvanceClick}
             />
           ))}
         </div>
@@ -316,6 +353,92 @@ export function AgendaDashboard({
 }) {
   const [listDaySummary, setListDaySummary] = React.useState(null);
   const [weekSlotDetail, setWeekSlotDetail] = React.useState(null);
+  const [kpiDrilldown, setKpiDrilldown] = React.useState(null);
+  const [kpiPeriod, setKpiPeriod] = React.useState(KPI_DRILLDOWN_PERIOD.HOJE);
+  const [kpiProfissionalId, setKpiProfissionalId] = React.useState('');
+  const [kpiRows, setKpiRows] = React.useState([]);
+  const [kpiLoading, setKpiLoading] = React.useState(false);
+  const [kpiError, setKpiError] = React.useState('');
+  const [advancePending, setAdvancePending] = React.useState(null);
+
+  const advanceSourceAppointments = React.useMemo(() => {
+    if (agenda.viewMode === 'semana') return agenda.weekGridAppointments;
+    return agenda.selectedDayAppointments;
+  }, [agenda.viewMode, agenda.weekGridAppointments, agenda.selectedDayAppointments]);
+
+  const advanceOfferByAgendaId = React.useMemo(
+    () => buildAdvanceOffersByAgendaId(advanceSourceAppointments),
+    [advanceSourceAppointments],
+  );
+
+  const listDayAdvanceOffers = React.useMemo(
+    () => (listDaySummary?.items ? buildAdvanceOffersByAgendaId(listDaySummary.items) : new Map()),
+    [listDaySummary],
+  );
+
+  const showProfissionalFilter = (agenda.equipeList?.length || 0) > 1;
+
+  const loadKpiRows = React.useCallback(async () => {
+    if (!kpiDrilldown?.status) return;
+    setKpiLoading(true);
+    setKpiError('');
+    try {
+      const rows = await agenda.loadKpiDrilldownRows({
+        period: kpiPeriod,
+        status: kpiDrilldown.status,
+        profissionalRoleUserId: kpiProfissionalId,
+      });
+      setKpiRows(rows);
+    } catch (e) {
+      setKpiRows([]);
+      setKpiError(e?.message || 'Não foi possível carregar a lista.');
+    } finally {
+      setKpiLoading(false);
+    }
+  }, [agenda, kpiDrilldown?.status, kpiPeriod, kpiProfissionalId]);
+
+  React.useEffect(() => {
+    if (!kpiDrilldown?.status) return;
+    const t = setTimeout(() => {
+      loadKpiRows();
+    }, 150);
+    return () => clearTimeout(t);
+  }, [kpiDrilldown?.status, kpiPeriod, kpiProfissionalId, loadKpiRows]);
+
+  const openKpiDrilldown = React.useCallback(
+    (status) => {
+      setKpiPeriod(KPI_DRILLDOWN_PERIOD.HOJE);
+      setKpiProfissionalId('');
+      setKpiRows([]);
+      setKpiError('');
+      setKpiDrilldown({ status });
+      agenda.ensureEquipeLoaded?.();
+    },
+    [agenda],
+  );
+
+  const handleAdvanceClick = React.useCallback((appointment, offer) => {
+    if (!appointment || !offer?.targetHoraInicio || agenda.isNivel1) return;
+    setAdvancePending({ appointment, targetHoraInicio: offer.targetHoraInicio });
+  }, [agenda.isNivel1]);
+
+  const handleConfirmAdvance = React.useCallback(async () => {
+    const { appointment, targetHoraInicio } = advancePending || {};
+    if (!appointment?.agendaId || !targetHoraInicio) return;
+    const hi = String(targetHoraInicio).slice(0, 5);
+    const hf = addMinutesToTime(hi, Number(appointment.duracaoMin) || 45);
+    const ok = await agenda.handleReagendar(
+      appointment.agendaId,
+      {
+        novaData: appointment.data,
+        novaHoraInicio: `${hi}:00`,
+        novaHoraFim: `${hf}:00`,
+        observacao: 'Adiantado para preencher horário liberado',
+      },
+      { successToast: 'Consulta adiantada. Lembre-se de avisar o paciente.' },
+    );
+    if (ok) setAdvancePending(null);
+  }, [advancePending, agenda]);
 
   React.useEffect(() => {
     if (agenda.viewMode === 'grid' || agenda.viewMode === 'semana') setListDaySummary(null);
@@ -460,8 +583,22 @@ export function AgendaDashboard({
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total do Mês" value={agenda.stats.totalMes} icon={CalendarDays} tone="purple" />
-        <StatCard label="Confirmados" value={agenda.stats.confirmados} icon={CheckCircle2} tone="success" />
-        <StatCard label="Pendentes" value={agenda.stats.pendentes} icon={Clock3} tone="warning" />
+        <StatCard
+          label="Confirmados"
+          value={agenda.stats.confirmados}
+          icon={CheckCircle2}
+          tone="success"
+          interactive
+          onClick={() => openKpiDrilldown('confirmado')}
+        />
+        <StatCard
+          label="Pendentes"
+          value={agenda.stats.pendentes}
+          icon={Clock3}
+          tone="warning"
+          interactive
+          onClick={() => openKpiDrilldown('pendente')}
+        />
         <StatCard label="Hoje" value={agenda.stats.hoje} icon={Clock3} tone="today" />
       </div>
 
@@ -480,17 +617,17 @@ export function AgendaDashboard({
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <h3 className="min-w-0 text-[14px] font-black leading-tight text-[#1A1A2E] sm:text-[16px]">{agenda.weekRangeLabel}</h3>
-                <button type="button" onClick={agenda.goWeekNext} aria-label="Próxima semana" className="rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
+                <button type="button" onClick={agenda.goWeekNext} aria-label="PrÃ³xima semana" className="rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             ) : (
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <button type="button" onClick={agenda.goPrevMonth} aria-label="Mês anterior" className="shrink-0 rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
+                <button type="button" onClick={agenda.goPrevMonth} aria-label="MÃªs anterior" className="shrink-0 rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <h3 className="min-w-0 flex-1 truncate text-center text-[16px] font-black text-[#1A1A2E]">{agenda.monthLabel}</h3>
-                <button type="button" onClick={agenda.goNextMonth} aria-label="Próximo mês" className="shrink-0 rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
+                <button type="button" onClick={agenda.goNextMonth} aria-label="PrÃ³ximo mÃªs" className="shrink-0 rounded-lg p-1.5 text-[#64748b] hover:bg-[#F5F6FA]">
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -529,6 +666,8 @@ export function AgendaDashboard({
               onOpenSlotDetail={setWeekSlotDetail}
               onClickEmptySlot={agenda.isNivel1 ? null : openWeekCreateAtSlot}
               disponibilidades={agenda.disponibilidades}
+              advanceOfferByAgendaId={advanceOfferByAgendaId}
+              onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
             />
           )}
         </section>
@@ -541,6 +680,8 @@ export function AgendaDashboard({
             onEdit={agenda.openEditModal}
             renderSlotActions={renderSlotActions}
             isNivel1={agenda.isNivel1}
+            advanceOfferByAgendaId={advanceOfferByAgendaId}
+            onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
           />
         </aside>
       </div>
@@ -557,6 +698,8 @@ export function AgendaDashboard({
               onEdit={agenda.openEditModal}
               renderSlotActions={renderSlotActions}
               isNivel1={agenda.isNivel1}
+              advanceOfferByAgendaId={advanceOfferByAgendaId}
+              onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
             />
           </div>
         </div>
@@ -569,6 +712,8 @@ export function AgendaDashboard({
         onPrimary={handlePrimary}
         renderSlotActions={renderSlotActions}
         isNivel1={agenda.isNivel1}
+        advanceOfferByAgendaId={listDayAdvanceOffers}
+        onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
       />
 
       <AgendaWeekSlotDetailModal
@@ -579,6 +724,35 @@ export function AgendaDashboard({
         renderSlotActions={renderSlotActionsWeekDetail}
         isNivel1={agenda.isNivel1}
       />
+
+      <AgendaKpiStatusSheet
+        status={kpiDrilldown?.status}
+        onClose={() => setKpiDrilldown(null)}
+        period={kpiPeriod}
+        onPeriodChange={setKpiPeriod}
+        profissionalRoleUserId={kpiProfissionalId}
+        onProfissionalChange={setKpiProfissionalId}
+        equipeList={agenda.equipeList}
+        showProfissionalFilter={showProfissionalFilter}
+        rows={kpiRows}
+        loading={kpiLoading}
+        error={kpiError}
+        onRetry={loadKpiRows}
+        todayIso={agenda.todayIso}
+        onSelectAppointment={(appt) => {
+          setKpiDrilldown(null);
+          setWeekSlotDetail(appt);
+        }}
+      />
+
+      <AgendaAdvanceConfirmModal
+        appointment={advancePending?.appointment}
+        targetHoraInicio={advancePending?.targetHoraInicio}
+        onClose={() => setAdvancePending(null)}
+        onConfirm={handleConfirmAdvance}
+        isSubmitting={agenda.submittingReagendar}
+      />
     </div>
   );
 }
+

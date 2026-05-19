@@ -1,5 +1,6 @@
 import { Clock3, UserRound } from 'lucide-react';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
+import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 
 const STATUS_STYLES = {
   confirmado: {
@@ -84,6 +85,8 @@ export function AgendaAppointmentSummaryCard({
   onEdit,
   renderSlotActions,
   isNivel1 = false,
+  advanceOffer,
+  onAdvanceClick,
 }) {
   const isReagendado = appointment.status === 'reagendado';
   const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
@@ -128,6 +131,16 @@ export function AgendaAppointmentSummaryCard({
             {isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
           </span>
         </div>
+
+        {isValidAdvanceOffer(appointment, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (
+          <button
+            type="button"
+            onClick={() => onAdvanceClick(appointment, advanceOffer)}
+            className="mt-2 text-left text-[11px] font-semibold text-teal-700 underline-offset-2 hover:underline"
+          >
+            Adiantar para {String(advanceOffer.targetHoraInicio).slice(0, 5)}
+          </button>
+        ) : null}
 
         <div className="mt-3 space-y-1.5 text-[11px] font-medium text-[#555]">
           <div className="flex items-center gap-2">

@@ -4,6 +4,7 @@ import { toDateKey } from '../../utils/agendaDateUtils';
 import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
 import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
+import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
@@ -204,6 +205,8 @@ function DayColumn({
   onOpenSlotDetail,
   onClickEmptySlot,
   disponibilidades,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
 }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -270,6 +273,9 @@ function DayColumn({
         const corProc = appt.corHex || '#00a88e';
         const slotVis = getAgendaSlotActionVisibility(appt.status);
         const showBadges = baseStyle.height >= 56;
+        const advanceOffer = advanceOfferByAgendaId?.get(String(appt.id));
+        const showAdvance =
+          showBadges && isValidAdvanceOffer(appt, advanceOffer) && typeof onAdvanceClick === 'function';
         const labelParts = [
           appt.horaInicio,
           appt.pacienteNome,
@@ -307,6 +313,26 @@ function DayColumn({
                 {appt.procedimentoNome || 'Sem procedimento informado'}
               </div>
             ) : null}
+            {showAdvance ? (
+              <span
+                role="button"
+                tabIndex={0}
+                className="relative z-[6] mt-0.5 block max-w-full truncate text-[10px] font-semibold text-teal-800 underline-offset-1 hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdvanceClick(appt, advanceOffer);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onAdvanceClick(appt, advanceOffer);
+                  }
+                }}
+              >
+                Adiantar {String(advanceOffer.targetHoraInicio).slice(0, 5)}
+              </span>
+            ) : null}
             {showBadges && (slotVis.showFalta || slotVis.showWhatsApp) ? (
               <div className="mt-0.5 flex max-w-full flex-wrap gap-0.5" aria-hidden>
                 {slotVis.showFalta ? (
@@ -335,6 +361,8 @@ export function WeekTimeGrid({
   onOpenSlotDetail,
   onClickEmptySlot,
   disponibilidades,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
 }) {
   const scrollRef = React.useRef(null);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -417,6 +445,8 @@ export function WeekTimeGrid({
             onOpenSlotDetail={onOpenSlotDetail}
             onClickEmptySlot={onClickEmptySlot}
             disponibilidades={disponibilidades}
+            advanceOfferByAgendaId={advanceOfferByAgendaId}
+            onAdvanceClick={onAdvanceClick}
           />
         ))}
       </div>
