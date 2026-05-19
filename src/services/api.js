@@ -807,9 +807,9 @@ export const agendasApi = {
     }),
 
   /**
-   * Atualiza status do slot (confirmado | realizado | falta).
+   * Atualiza status do slot (confirmado | realizado).
    * @param {string} id UUID do slot
-   * @param {'confirmado'|'realizado'|'falta'} codigo
+   * @param {'confirmado'|'realizado'} codigo
    */
   atualizarStatus: (id, codigo) =>
     request(`/api/v1/agendas/${id}/status`, {

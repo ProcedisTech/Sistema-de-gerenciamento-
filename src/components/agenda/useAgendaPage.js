@@ -35,6 +35,11 @@ import {
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
+import {
+  NO_SHOW_MOTIVO_CODIGO,
+  NO_SHOW_OBS_PREFIX,
+  resolveMotivoCancelamentoIdByCodigo,
+} from '../../utils/agendaCancelamentoMotivo.js';
 import { isRoleAgendaPreselect } from './agendaRoleConstants.js';
 import { DURACOES_PILL, snapDuracaoToPill } from '../../utils/agendaDuracaoPills.js';
 
@@ -783,12 +788,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [loadMonth, refreshWeekGrid]);
 
   const handleCancelar = useCallback(
-    async (agendaId, payload) => {
+    async (agendaId, payload, opts = {}) => {
       if (isNivel1) return false;
       if (!agendaId || !payload) return false;
       try {
         await agendasApi.cancelar(agendaId, payload);
-        toastSuccess('Agendamento cancelado');
+        toastSuccess(opts.successToast || 'Agendamento cancelado');
         await loadMonth();
         await refreshWeekGrid();
         setError('');
@@ -801,6 +806,34 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       }
     },
     [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError]
+  );
+
+  const handleMarcarNaoCompareceu = useCallback(
+    async (agendaId) => {
+      if (isNivel1) return false;
+      if (!agendaId) return false;
+      try {
+        const motivoId = await resolveMotivoCancelamentoIdByCodigo(NO_SHOW_MOTIVO_CODIGO);
+        if (!motivoId) {
+          toastError(
+            'Motivo "paciente não compareceu" não encontrado. Verifique se o backend está atualizado.',
+          );
+          return false;
+        }
+        return handleCancelar(
+          agendaId,
+          {
+            motivoCancelamentoId: motivoId,
+            motivoCancelamentoTexto: NO_SHOW_OBS_PREFIX,
+          },
+          { successToast: 'Paciente marcado como não compareceu' },
+        );
+      } catch (e) {
+        toastError(e?.body?.message || formatAgendamentoApiError(e) || 'Erro ao marcar não compareceu');
+        return false;
+      }
+    },
+    [isNivel1, handleCancelar, toastError],
   );
 
   const handleAtualizarStatus = useCallback(
@@ -1265,6 +1298,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     goWeekPrev,
     groupedAppointments,
     handleAtualizarStatus,
+    handleMarcarNaoCompareceu,
     handleCancelar,
     handleEnviarWhatsApp,
     handleReagendar,

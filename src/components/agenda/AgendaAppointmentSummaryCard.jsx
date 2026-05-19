@@ -1,6 +1,7 @@
 import { Clock3, UserRound } from 'lucide-react';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
+import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
 
 const STATUS_STYLES = {
   confirmado: {
@@ -42,7 +43,6 @@ const STATUS_BADGE_CLASSES = {
   pendente: 'text-amber-600 bg-amber-100',
   realizado: 'text-slate-600 bg-slate-100',
   cancelado: 'text-red-600 bg-red-100',
-  falta: 'text-red-700 bg-red-50',
   aguardando_confirmacao: 'text-amber-700 bg-amber-50',
   reagendado: 'bg-purple-100 text-purple-800',
 };
@@ -68,7 +68,7 @@ function actionLabel(status) {
 }
 
 function showPrimaryActionButton(status) {
-  if (status === 'falta' || status === 'realizado' || status === 'reagendado') return false;
+  if (status === 'realizado' || status === 'reagendado') return false;
   return true;
 }
 
@@ -89,11 +89,17 @@ export function AgendaAppointmentSummaryCard({
   onAdvanceClick,
 }) {
   const isReagendado = appointment.status === 'reagendado';
+  const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
   const styles = STATUS_STYLES[appointment.status] || STATUS_STYLES.pendente;
   const statusTone = getStatusColors(appointment.status);
   const grad = hashGradient(appointment.pacienteNome);
   const avatarStyle = { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
   const badgeClass = STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
+  const statusBadgeLabel = isReagendado
+    ? 'Reagendado'
+    : isNoShow
+      ? 'No-show'
+      : statusTone.label || appointment.status;
 
   return (
     <div className="rounded-xl border-2 border-slate-200 bg-white shadow-sm transition-all overflow-hidden hover:border-teal-300 hover:shadow-lg">
@@ -125,10 +131,14 @@ export function AgendaAppointmentSummaryCard({
           </div>
           <span
             className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
-              isReagendado ? 'bg-purple-100 text-purple-800' : badgeClass
+              isReagendado
+                ? 'bg-purple-100 text-purple-800'
+                : isNoShow
+                  ? 'bg-orange-100 text-orange-800'
+                  : badgeClass
             }`}
           >
-            {isReagendado ? 'Reagendado' : statusTone.label || appointment.status}
+            {statusBadgeLabel}
           </span>
         </div>
 
