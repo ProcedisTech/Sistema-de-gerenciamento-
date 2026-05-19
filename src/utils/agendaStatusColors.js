@@ -33,12 +33,6 @@ export const STATUS_COLORS = {
     border: 'border-red-200',
     label: 'Cancelado',
   },
-  falta: {
-    bg: 'bg-orange-100',
-    text: 'text-orange-800',
-    border: 'border-orange-300',
-    label: 'Falta',
-  },
 };
 
 export function getStatusColors(codigo) {

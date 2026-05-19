@@ -458,8 +458,8 @@ export function AgendaDashboard({
           onMarcarRealizado={() => {
             if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'realizado');
           }}
-          onMarcarFalta={() => {
-            if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'falta');
+          onMarcarNaoCompareceu={() => {
+            if (appointment.agendaId) agenda.handleMarcarNaoCompareceu(appointment.agendaId);
           }}
           onReagendar={() => onSlotReagendar?.(appointment)}
           onCancelar={() => onSlotCancelar?.(appointment)}
@@ -513,8 +513,8 @@ export function AgendaDashboard({
           onMarcarRealizado={() => {
             if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'realizado');
           }}
-          onMarcarFalta={() => {
-            if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'falta');
+          onMarcarNaoCompareceu={() => {
+            if (appointment.agendaId) agenda.handleMarcarNaoCompareceu(appointment.agendaId);
           }}
           onReagendar={() => {
             setWeekSlotDetail(null);

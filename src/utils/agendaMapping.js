@@ -22,7 +22,6 @@ export function deriveAgendaSlotStatus(dto) {
   if (codigo.includes('cancel') || nome.includes('cancel')) return 'cancelado';
   if (codigo.includes('reagend') || nome.includes('reagend')) return 'reagendado';
   if (codigo.includes('realiz') || nome.includes('realiz')) return 'realizado';
-  if (codigo.includes('falta') || nome.includes('falta')) return 'falta';
   if (
     codigo.includes('aguardando') ||
     codigo.includes('aguardando_confirmacao') ||

@@ -1,13 +1,17 @@
 import { Check, UserX, Calendar, XCircle, MessageCircle } from 'lucide-react';
 import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
-import { resolveMotivoCancelamentoFromRow, labelMotivoCancelamentoFallback } from '../../utils/agendaCancelamentoMotivo.js';
+import {
+  resolveMotivoCancelamentoFromRow,
+  labelMotivoCancelamentoFallback,
+  isAgendaNoShow,
+} from '../../utils/agendaCancelamentoMotivo.js';
 
 /**
  * Ações disponíveis pra um slot da agenda.
  * @param {object} props
  * @param {object} props.agenda — slot atual
  * @param {Function} props.onMarcarRealizado
- * @param {Function} props.onMarcarFalta
+ * @param {Function} props.onMarcarNaoCompareceu
  * @param {Function} props.onReagendar — abre modal
  * @param {Function} props.onCancelar — abre modal
  * @param {Function} props.onEnviarWhatsApp — gera link e abre
@@ -16,7 +20,7 @@ import { resolveMotivoCancelamentoFromRow, labelMotivoCancelamentoFallback } fro
 export default function AgendaSlotActions({
   agenda,
   onMarcarRealizado,
-  onMarcarFalta,
+  onMarcarNaoCompareceu,
   onReagendar,
   onCancelar,
   onEnviarWhatsApp,
@@ -25,14 +29,20 @@ export default function AgendaSlotActions({
   const status = agenda?.status;
   const v = getAgendaSlotActionVisibility(status);
   const anyChip =
-    v.showRealizado || v.showFalta || v.showWhatsApp || v.showReagendar || v.showCancelar;
+    v.showRealizado ||
+    v.showNaoCompareceu ||
+    v.showWhatsApp ||
+    v.showReagendar ||
+    v.showCancelar;
 
   const { codigo: motivoCodigo, nome: motivoNome } =
     status === 'cancelado' ? resolveMotivoCancelamentoFromRow(agenda) : { codigo: null, nome: '' };
   const codigoTrim = motivoCodigo != null && String(motivoCodigo).trim() !== '' ? String(motivoCodigo).trim() : '';
-  const showMotivoLine = status === 'cancelado' && (motivoNome || codigoTrim);
-  const labelMotivo =
-    motivoNome || (codigoTrim ? labelMotivoCancelamentoFallback(codigoTrim) : '');
+  const noShow = status === 'cancelado' && isAgendaNoShow(agenda);
+  const showMotivoLine = status === 'cancelado' && (motivoNome || codigoTrim || noShow);
+  const labelMotivo = noShow
+    ? 'Não compareceu (no-show)'
+    : motivoNome || (codigoTrim ? labelMotivoCancelamentoFallback(codigoTrim) : '');
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -40,7 +50,7 @@ export default function AgendaSlotActions({
         <span className="text-xs italic text-gray-500">Atendimento finalizado</span>
       ) : null}
       {status === 'cancelado' ? (
-        <span className="text-xs italic text-gray-500">Cancelado</span>
+        <span className="text-xs italic text-gray-500">{noShow ? 'Cancelado — no-show' : 'Cancelado'}</span>
       ) : status === 'reagendado' ? (
         <span className="text-xs italic text-purple-800">Reagendado</span>
       ) : null}
@@ -64,16 +74,16 @@ export default function AgendaSlotActions({
               Realizado
             </button>
           ) : null}
-          {v.showFalta ? (
+          {v.showNaoCompareceu ? (
             <button
               type="button"
-              onClick={onMarcarFalta}
+              onClick={onMarcarNaoCompareceu}
               disabled={disabled}
-              title="Marcar como falta"
+              title="Marcar não compareceu (no-show)"
               className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
             >
               <UserX className="h-3.5 w-3.5" />
-              Falta
+              Não compareceu
             </button>
           ) : null}
           {v.showWhatsApp ? (

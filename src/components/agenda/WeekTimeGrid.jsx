@@ -3,8 +3,8 @@ import { AlertTriangle } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
 import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
-import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
+import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
@@ -193,7 +193,6 @@ function statusCardClass(status) {
   if (status === 'cancelado') return 'bg-[#FCE8E8] border-l-[3px] border-l-[#E24B4A]';
   if (status === 'reagendado') return 'text-purple-700 bg-purple-50 border-l-[3px] border-l-purple-300';
   if (status === 'realizado') return 'bg-blue-50 border-l-[3px] border-l-blue-500';
-  if (status === 'falta') return 'bg-orange-50 border-l-[3px] border-l-orange-500';
   if (status === 'aguardando_confirmacao') return 'bg-amber-50 border-l-[3px] border-l-amber-500';
   return 'bg-[#E1F5EE] border-l-[3px] border-l-[#0FA37F]';
 }
@@ -268,10 +267,14 @@ function DayColumn({
         const disp = disponibilidades?.[pid];
         const dentro = dentroDaDisponibilidade(appointment, disp);
         const showProc = baseStyle.height >= 72;
+        const noShow = appt.status === 'cancelado' && isAgendaNoShow(appt);
         const cardClass = statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
         const corProc = appt.corHex || '#00a88e';
-        const slotVis = getAgendaSlotActionVisibility(appt.status);
+        const showWhatsAppBadge =
+          appt.status === 'pendente' ||
+          appt.status === 'aguardando_confirmacao' ||
+          appt.status === 'confirmado';
         const showBadges = baseStyle.height >= 56;
         const advanceOffer = advanceOfferByAgendaId?.get(String(appt.id));
         const showAdvance =
@@ -333,14 +336,14 @@ function DayColumn({
                 Adiantar {String(advanceOffer.targetHoraInicio).slice(0, 5)}
               </span>
             ) : null}
-            {showBadges && (slotVis.showFalta || slotVis.showWhatsApp) ? (
+            {showBadges && (showWhatsAppBadge || noShow) ? (
               <div className="mt-0.5 flex max-w-full flex-wrap gap-0.5" aria-hidden>
-                {slotVis.showFalta ? (
+                {noShow ? (
                   <span className="rounded bg-orange-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-orange-800">
-                    Falta
+                    No-show
                   </span>
                 ) : null}
-                {slotVis.showWhatsApp ? (
+                {showWhatsAppBadge ? (
                   <span className="rounded bg-green-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-green-800">
                     Zap
                   </span>

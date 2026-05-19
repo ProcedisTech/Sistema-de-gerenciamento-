@@ -1,6 +1,6 @@
 import { intervalsOverlap, minutesToHhmm, parseHhmmToMinutes } from './agendaAvailability';
 
-const VACANT_STATUSES = new Set(['cancelado', 'reagendado', 'falta']);
+const VACANT_STATUSES = new Set(['cancelado', 'reagendado']);
 const ACTIVE_STATUSES = new Set(['pendente', 'confirmado', 'aguardando_confirmacao']);
 
 function profKey(appt) {
