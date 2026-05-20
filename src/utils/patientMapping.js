@@ -178,6 +178,15 @@ export function mapBackendPatient(dto) {
     procedures: [],
     notas: [],
     galeria: [],
+    // Campos de status vindos do backend (v1)
+    statusPlanoCodigo: dto.statusPlanoCodigo ?? null,
+    statusPlanoNome: dto.statusPlanoNome ?? null,
+    statusPlanoCorHex: dto.statusPlanoCorHex ?? null,
+    menorDeIdade: dto.menorDeIdade === true,
+    semRetorno60Dias: dto.semRetorno60Dias === true,
+    ehNovo: dto.ehNovo === true,
+    ehAniversariante: dto.ehAniversariante === true,
+    anamneseDesatualizada: dto.anamneseDesatualizada === true,
   };
 }
 

@@ -300,6 +300,12 @@ export default function App() {
     patientListSortBy,
     setPatientListSortBy,
     bumpPatientList,
+    statusPlanoFilter,
+    setStatusPlanoFilter,
+    anamneseDesatualizadaFilter,
+    setAnamneseDesatualizadaFilter,
+    semRetornoFilter,
+    setSemRetornoFilter,
   } = patientState;
 
   const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
@@ -1885,6 +1891,12 @@ export default function App() {
                 patientListMeta={patientListMeta}
                 patientListSortBy={patientListSortBy}
                 setPatientListSortBy={setPatientListSortBy}
+                statusPlanoFilter={statusPlanoFilter}
+                setStatusPlanoFilter={setStatusPlanoFilter}
+                anamneseDesatualizadaFilter={anamneseDesatualizadaFilter}
+                setAnamneseDesatualizadaFilter={setAnamneseDesatualizadaFilter}
+                semRetornoFilter={semRetornoFilter}
+                setSemRetornoFilter={setSemRetornoFilter}
                 roleUserId={roleUserId}
               />
             )}

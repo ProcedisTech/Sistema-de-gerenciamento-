@@ -514,6 +514,13 @@ function buildPacientesListQuery(opts = {}) {
   const sort =
     !order && opts.sort != null && String(opts.sort).trim() !== '' ? String(opts.sort).trim() : '';
   if (sort) params.set('sort', sort);
+  // Filtros server-side v1
+  const VALID_STATUS_PLANO = ['sem_plano', 'plano_ativo'];
+  if (opts.statusPlano != null && VALID_STATUS_PLANO.includes(String(opts.statusPlano))) {
+    params.set('statusPlano', String(opts.statusPlano));
+  }
+  if (opts.anamneseDesatualizada === true) params.set('anamneseDesatualizada', 'true');
+  if (opts.semRetorno === true) params.set('semRetorno', 'true');
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
@@ -527,6 +534,9 @@ export const pacientesApi = {
    *   size?: number,
    *   order?: string,
    *   sort?: string,
+   *   statusPlano?: 'sem_plano' | 'plano_ativo',
+   *   anamneseDesatualizada?: boolean,
+   *   semRetorno?: boolean,
    * }} [opts]
    */
   list: async (opts = {}) => {
