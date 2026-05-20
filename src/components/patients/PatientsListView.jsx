@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
+import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
 import {
   ProcedureTimelineHeading,
@@ -21,31 +22,12 @@ import {
   ProcedureTimelinePreviewCard,
 } from './ProcedureTimelineBlock.jsx';
 import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
-import {
-  formatCartaoDiaPtBr,
-  latestProcedureOccurredInstantIso,
-  patientUltimaVisitaDayFromDto,
-} from '../../utils/patientProfileDerivedDates.js';
+import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
 
 function hasClinicalAlert(p) {
   return Boolean(String(p?.alergias || '').trim() || String(p?.condicoesSaude || '').trim());
 }
 
-function lastProcedureLabel(p) {
-  const procs = Array.isArray(p?.procedures) ? p.procedures : [];
-  if (!procs.length) return '—';
-  const last = procs[procs.length - 1];
-  const n = last?.nome || last?.nomeProcedimento;
-  return n ? String(n) : '—';
-}
-
-/** Data no rodapé: mesma prioridade do cartão Última visita do perfil; fallback ao procedimento mais recente. */
-function lastProcedureDateForCard(p) {
-  const primary = patientUltimaVisitaDayFromDto(p);
-  if (primary !== '-') return primary;
-  const iso = latestProcedureOccurredInstantIso(p?.procedures || []);
-  return iso ? formatCartaoDiaPtBr(iso) : '—';
-}
 
 const SORT_OPTIONS = [
   { value: 'nome-asc', label: 'Nome (A–Z)' },
@@ -219,6 +201,7 @@ function PatientPreviewPanel({
   previewAnamneseLoading = false,
 }) {
   const [attendanceChoiceModalOpen, setAttendanceChoiceModalOpen] = useState(false);
+  const { isNivel1 } = usePapel();
 
   /** Origem ordenada mais recentes primeiro — API ou legado `{ data, nome, … }`. */
   const procedureSourceSorted = useMemo(() => {
@@ -255,12 +238,13 @@ function PatientPreviewPanel({
   const previewTimelineTruncated = timelineRows.length > PREVIEW_TIMELINE_MAX;
 
   const goToPacienteProntuario = () => {
+    if (isNivel1) return;
     setPatientDetailTab('prontuario');
     setPatientView('profile');
   };
 
   const handleIniciarAtendimentoClick = () => {
-    if (previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
+    if (isNivel1 || previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
     if (previewHasExistingAnamnese) {
       setAttendanceChoiceModalOpen(true);
       return;
@@ -358,26 +342,38 @@ function PatientPreviewPanel({
             {selectedPatient.telefone || '—'}
           </p>
         </div>
-        <div className="flex w-full shrink-0 flex-col items-stretch justify-start sm:ml-auto sm:w-auto sm:max-w-[13rem] sm:items-end">
-          <button
-            type="button"
-            onClick={handleIniciarAtendimentoClick}
-            disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
-            className="flex min-h-[48px] w-full flex-row items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-3 py-2 text-[13px] font-semibold leading-snug text-white transition-colors hover:bg-[#00967f] active:bg-[#00967f] disabled:pointer-events-none disabled:opacity-60 sm:min-h-[44px] sm:w-auto sm:max-w-full sm:px-3.5 sm:text-[12px] sm:leading-tight"
-          >
-            {previewAnamneseLoading ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
-            ) : (
-              <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-            )}
-            <span className="min-w-0 whitespace-normal text-center sm:text-right">Iniciar Atendimento</span>
-          </button>
-        </div>
+        {!isNivel1 && (
+          <div className="flex w-full shrink-0 flex-col items-stretch justify-start sm:ml-auto sm:w-auto sm:max-w-[13rem] sm:items-end">
+            <button
+              type="button"
+              onClick={handleIniciarAtendimentoClick}
+              disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
+              className="flex min-h-[48px] w-full flex-row items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-3 py-2 text-[13px] font-semibold leading-snug text-white transition-colors hover:bg-[#00967f] active:bg-[#00967f] disabled:pointer-events-none disabled:opacity-60 sm:min-h-[44px] sm:w-auto sm:max-w-full sm:px-3.5 sm:text-[12px] sm:leading-tight"
+            >
+              {previewAnamneseLoading ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
+              ) : (
+                <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+              )}
+              <span className="min-w-0 whitespace-normal text-center sm:text-right">Iniciar Atendimento</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="min-w-0">
         <ProcedureTimelineHeading title="Linha do Tempo de Procedimentos" />
-        {loadingPreviewProcedures ? (
+        {isNivel1 ? (
+          <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+              <Shield className="h-5 w-5" />
+            </div>
+            <h4 className="mt-2 text-sm font-bold text-slate-800">Visualização Limitada</h4>
+            <p className="mt-1 text-xs text-slate-500 max-w-[280px] mx-auto leading-relaxed">
+              Seu nível de permissão (Nível 1) permite apenas visualizar os dados cadastrais básicos deste paciente.
+            </p>
+          </div>
+        ) : loadingPreviewProcedures ? (
           <ProcedureTimelineLoading message="Carregando procedimentos…" />
         ) : timelineRows.length > 0 ? (
           <ProcedureTimelineRail>
@@ -417,7 +413,7 @@ function PatientPreviewPanel({
           className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
         >
           <ExternalLink className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2.25} />
-          Ver Visão Geral Completa do Paciente
+          {isNivel1 ? 'Ver Cadastro do Paciente' : 'Ver Visão Geral Completa do Paciente'}
         </button>
       </div>
     </div>
@@ -442,7 +438,7 @@ export function PatientsListView({
   getPatientInitials,
   onCreatePatient,
   onStartAttendance,
-  isRecepcionista,
+  isRecepcionista: _isRecepcionista,
   statusPlanoFilter = '',
   setStatusPlanoFilter,
   anamneseDesatualizadaFilter = false,
@@ -450,9 +446,9 @@ export function PatientsListView({
   semRetornoFilter = false,
   setSemRetornoFilter,
 }) {
+  const { isNivel1: _isNivel1, canWritePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
   const isSearching = Boolean(patientSearchQuery?.trim());
-
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   const [quickFilter, setQuickFilter] = useState('todos');
@@ -586,7 +582,7 @@ export function PatientsListView({
             Histórico completo e dados protegidos
           </p>
         </div>
-        {!isRecepcionista && (
+        {canWritePacientes && (
           <button
             type="button"
             onClick={onCreatePatient}

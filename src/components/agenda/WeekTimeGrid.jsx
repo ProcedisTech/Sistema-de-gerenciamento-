@@ -1,9 +1,16 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
 import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
-import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
+import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
+import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
+import {
+  BLOQUEIO_CARD_CLASS,
+  BLOQUEIO_HATCH_BG,
+  bloqueioHoraFimLabel,
+  bloqueioMotivoLabel,
+} from './agendaBloqueioStyles.js';
 
 const SLOT_HEIGHT = 48;
 const START_MIN = 7 * 60;
@@ -192,7 +199,6 @@ function statusCardClass(status) {
   if (status === 'cancelado') return 'bg-[#FCE8E8] border-l-[3px] border-l-[#E24B4A]';
   if (status === 'reagendado') return 'text-purple-700 bg-purple-50 border-l-[3px] border-l-purple-300';
   if (status === 'realizado') return 'bg-blue-50 border-l-[3px] border-l-blue-500';
-  if (status === 'falta') return 'bg-orange-50 border-l-[3px] border-l-orange-500';
   if (status === 'aguardando_confirmacao') return 'bg-amber-50 border-l-[3px] border-l-amber-500';
   return 'bg-[#E1F5EE] border-l-[3px] border-l-[#0FA37F]';
 }
@@ -204,6 +210,10 @@ function DayColumn({
   onOpenSlotDetail,
   onClickEmptySlot,
   disponibilidades,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
+  onRemoverBloqueio,
+  submittingRemoverBloqueioId,
 }) {
   const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -255,7 +265,7 @@ function DayColumn({
       {appointments.map((appt) => {
         const layout = layouts.get(appt.id);
         const baseStyle = eventBlockStyle(appt, layout);
-        const style = baseStyle;
+        const blockStyle = { ...baseStyle, ...BLOQUEIO_HATCH_BG };
         const pid = appt.profissionalRoleUserId ?? appt.roleUserId;
         const appointment = {
           dataAgendamento: toDateKey(appt.data),
@@ -264,12 +274,65 @@ function DayColumn({
         };
         const disp = disponibilidades?.[pid];
         const dentro = dentroDaDisponibilidade(appointment, disp);
+        const isBloqueioAtivo = appt.tipo === 'bloqueio' && appt.status !== 'cancelado';
+        const removing =
+          String(submittingRemoverBloqueioId || '') === String(appt.id || appt.agendaId || '');
+
+        if (isBloqueioAtivo) {
+          const motivo = bloqueioMotivoLabel(appt);
+          const hf = bloqueioHoraFimLabel(appt);
+          return (
+            <div
+              key={appt.id}
+              className={`absolute z-[4] overflow-hidden rounded-md shadow-sm ${BLOQUEIO_CARD_CLASS}`}
+              style={blockStyle}
+            >
+              {typeof onRemoverBloqueio === 'function' ? (
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoverBloqueio(appt);
+                  }}
+                  className="absolute right-0.5 top-0.5 z-[6] rounded p-0.5 text-slate-600 hover:bg-slate-200/80 disabled:opacity-40"
+                  aria-label="Remover bloqueio"
+                  title="Remover bloqueio"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onOpenSlotDetail?.(appt)}
+                className="h-full w-full px-1.5 py-1 pr-6 text-left transition-opacity hover:opacity-95"
+                aria-label={`Bloqueio: ${motivo}, ${appt.horaInicio}–${hf}`}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  Bloqueio
+                </div>
+                <div className="truncate text-[11px] font-bold leading-tight text-slate-800">
+                  {appt.horaInicio}–{hf}
+                </div>
+                <div className="truncate text-[11px] font-semibold text-slate-700">{motivo}</div>
+              </button>
+            </div>
+          );
+        }
+
         const showProc = baseStyle.height >= 72;
+        const noShow = appt.status === 'cancelado' && isAgendaNoShow(appt);
         const cardClass = statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
         const corProc = appt.corHex || '#00a88e';
-        const slotVis = getAgendaSlotActionVisibility(appt.status);
+        const showWhatsAppBadge =
+          appt.status === 'pendente' ||
+          appt.status === 'aguardando_confirmacao' ||
+          appt.status === 'confirmado';
         const showBadges = baseStyle.height >= 56;
+        const advanceOffer = advanceOfferByAgendaId?.get(String(appt.id));
+        const showAdvance =
+          showBadges && isValidAdvanceOffer(appt, advanceOffer) && typeof onAdvanceClick === 'function';
         const labelParts = [
           appt.horaInicio,
           appt.pacienteNome,
@@ -282,7 +345,7 @@ function DayColumn({
             onClick={() => onOpenSlotDetail?.(appt)}
             aria-label={`Detalhes: ${labelParts.join(', ')}`}
             className={`absolute z-[4] overflow-hidden rounded-md px-1.5 py-1 text-left shadow-sm transition-opacity hover:opacity-95 ${cardClass} ${!dentro ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
-            style={style}
+            style={baseStyle}
           >
             {!dentro ? (
               <span title="Fora do horario do profissional" className="absolute right-1 top-1">
@@ -307,14 +370,34 @@ function DayColumn({
                 {appt.procedimentoNome || 'Sem procedimento informado'}
               </div>
             ) : null}
-            {showBadges && (slotVis.showFalta || slotVis.showWhatsApp) ? (
+            {showAdvance ? (
+              <span
+                role="button"
+                tabIndex={0}
+                className="relative z-[6] mt-0.5 block max-w-full truncate text-[10px] font-semibold text-teal-800 underline-offset-1 hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdvanceClick(appt, advanceOffer);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onAdvanceClick(appt, advanceOffer);
+                  }
+                }}
+              >
+                Adiantar {String(advanceOffer.targetHoraInicio).slice(0, 5)}
+              </span>
+            ) : null}
+            {showBadges && (showWhatsAppBadge || noShow) ? (
               <div className="mt-0.5 flex max-w-full flex-wrap gap-0.5" aria-hidden>
-                {slotVis.showFalta ? (
+                {noShow ? (
                   <span className="rounded bg-orange-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-orange-800">
-                    Falta
+                    No-show
                   </span>
                 ) : null}
-                {slotVis.showWhatsApp ? (
+                {showWhatsAppBadge ? (
                   <span className="rounded bg-green-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-green-800">
                     Zap
                   </span>
@@ -329,12 +412,17 @@ function DayColumn({
 }
 
 export function WeekTimeGrid({
+  className = '',
   weekDayIsos,
   appointments,
   todayIso,
   onOpenSlotDetail,
   onClickEmptySlot,
   disponibilidades,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
+  onRemoverBloqueio,
+  submittingRemoverBloqueioId,
 }) {
   const scrollRef = React.useRef(null);
   const slots = React.useMemo(() => buildTimeSlots(), []);
@@ -417,6 +505,10 @@ export function WeekTimeGrid({
             onOpenSlotDetail={onOpenSlotDetail}
             onClickEmptySlot={onClickEmptySlot}
             disponibilidades={disponibilidades}
+            advanceOfferByAgendaId={advanceOfferByAgendaId}
+            onAdvanceClick={onAdvanceClick}
+            onRemoverBloqueio={onRemoverBloqueio}
+            submittingRemoverBloqueioId={submittingRemoverBloqueioId}
           />
         ))}
       </div>
@@ -425,9 +517,9 @@ export function WeekTimeGrid({
   };
 
   return (
-    <div className="w-full min-w-0">
-      <div className="hidden md:block">
-        <div className="flex border-b border-[#E8E8E8]">
+    <div className={`flex h-full min-h-0 w-full min-w-0 flex-col ${className}`.trim()}>
+      <div className="hidden min-h-0 flex-1 flex-col md:flex">
+        <div className="flex shrink-0 border-b border-[#E8E8E8]">
           <div className="w-14 shrink-0" />
           <div
             className="grid min-w-0 flex-1"
@@ -442,19 +534,19 @@ export function WeekTimeGrid({
         </div>
         <div
           ref={scrollRef}
-          className="max-h-[520px] overflow-y-auto scroll-smooth"
+          className="min-h-0 flex-1 overflow-y-auto scroll-smooth"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {innerGrid(weekDayIsos)}
         </div>
       </div>
 
-      <div className="md:hidden">
-        <div className="-mx-1 flex gap-2 overflow-x-auto pb-2 scroll-smooth px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="flex min-h-0 flex-1 flex-col md:hidden">
+        <div className="-mx-1 flex min-h-0 flex-1 gap-2 overflow-x-auto px-1 pb-2 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
           {mobileDays.map((iso) => (
-            <div key={iso} className="w-[min(92vw,360px)] shrink-0 rounded-lg border border-[#E8E8E8] bg-white">
-              <div className="border-b border-[#E8E8E8]">{dayHeader(iso, todayIso)}</div>
-              <div className="max-h-[520px] overflow-y-auto scroll-smooth">
+            <div key={iso} className="flex w-[min(92vw,360px)] shrink-0 flex-col rounded-lg border border-[#E8E8E8] bg-white">
+              <div className="shrink-0 border-b border-[#E8E8E8]">{dayHeader(iso, todayIso)}</div>
+              <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
                 {innerGrid([iso])}
               </div>
             </div>

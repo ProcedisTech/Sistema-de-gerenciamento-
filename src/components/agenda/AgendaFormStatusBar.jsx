@@ -4,8 +4,8 @@ const LABELS = {
   paciente: 'paciente',
   procedimento: 'procedimento',
   profissional: 'profissional',
-  data: 'dia',
-  hora: 'horário',
+  data: 'dia no calendário',
+  hora: 'horário no calendário',
 };
 
 function hasPaciente(form) {

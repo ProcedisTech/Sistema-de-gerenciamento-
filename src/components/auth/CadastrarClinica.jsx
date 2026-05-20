@@ -128,27 +128,34 @@ export function CadastrarClinica({ onComplete }) {
 
     const stripIg = (s) => s.replace(/^@+/, '').trim();
 
+    // Helper: converte string vazia em null para campos opcionais
+    // (o backend usa @Pattern/@Size que rejeita "" mas ignora null)
+    const strOrNull = (s) => (s && s.trim() ? s.trim() : null);
+
+    const uf = enderecoEstado.trim().toUpperCase().slice(0, 2);
+
     const dto = {
       razaoSocial: rs,
       nome: nf,
       cnpj: cnpjDigits,
-      inscricaoEstadual: inscricaoEstadual.trim(),
-      inscricaoMunicipal: inscricaoMunicipal.trim(),
-      telefonePrincipal: telefonePrincipal.trim(),
-      whatsapp: whatsapp.trim(),
-      email: em,
-      siteUrl: siteUrl.trim(),
-      instagramHandle: stripIg(instagramHandle),
-      cep: onlyDigitsCep(cep),
-      enderecoLogradouro: enderecoLogradouro.trim(),
-      enderecoNumero: enderecoNumero.trim(),
-      enderecoComplemento: enderecoComplemento.trim(),
-      enderecoBairro: enderecoBairro.trim(),
-      enderecoCidade: enderecoCidade.trim(),
-      enderecoEstado: enderecoEstado.trim().toUpperCase().slice(0, 2),
+      inscricaoEstadual: strOrNull(inscricaoEstadual),
+      inscricaoMunicipal: strOrNull(inscricaoMunicipal),
+      telefonePrincipal: strOrNull(telefonePrincipal),
+      whatsapp: strOrNull(whatsapp),
+      email: em || null,
+      siteUrl: strOrNull(siteUrl),
+      instagramHandle: strOrNull(stripIg(instagramHandle)),
+      cep: strOrNull(onlyDigitsCep(cep)),
+      enderecoLogradouro: strOrNull(enderecoLogradouro),
+      enderecoNumero: strOrNull(enderecoNumero),
+      enderecoComplemento: strOrNull(enderecoComplemento),
+      enderecoBairro: strOrNull(enderecoBairro),
+      enderecoCidade: strOrNull(enderecoCidade),
+      // @Pattern não aceita string vazia — enviar null quando UF não preenchida
+      enderecoEstado: uf.length === 2 ? uf : null,
       enderecoPais: enderecoPais.trim() || 'Brasil',
-      responsavelTecnicoNome: responsavelTecnicoNome.trim(),
-      responsavelTecnicoRegistro: responsavelTecnicoRegistro.trim(),
+      responsavelTecnicoNome: strOrNull(responsavelTecnicoNome),
+      responsavelTecnicoRegistro: strOrNull(responsavelTecnicoRegistro),
     };
 
     setSaving(true);

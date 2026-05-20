@@ -12,21 +12,19 @@ import {
   Clock,
   CalendarDays,
   MessageCircle,
-  History,
   Stethoscope,
 } from 'lucide-react';
 import { AuditoriaView } from './AuditoriaView';
-import { authHeadersForFetch } from '../../services/api';
 import { AnamneseAdminView } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
-import { GestaoUsuariosView } from './GestaoUsuariosView';
 import { HorarioClinicaPanel } from './HorarioClinicaPanel';
 import { FeriadosPanel } from './FeriadosPanel';
 import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
 import { PacientesInativadosPanel } from './PacientesInativadosPanel';
 import { BancoProcedimentosPanel } from './BancoProcedimentosPanel';
+import { authHeadersForFetch } from '../../services/api';
 
 const SECTION_SUBTITLE = {
   fichas: 'Gerencie fichas de anamnese',
@@ -36,7 +34,6 @@ const SECTION_SUBTITLE = {
   procedimentos: 'Catálogo de procedimentos da clínica',
   perfil: 'Suas informações profissionais',
   clinica: 'Informações da clínica',
-  'usuarios-acessos': 'Gerencie sua equipe e acessos',
   'horarios-funcionamento': 'Horários de funcionamento da clínica',
   'agenda-feriados': 'Feriados em que a clínica não atende',
   'agenda-templates': 'Mensagens automáticas de WhatsApp',
@@ -82,27 +79,52 @@ function SidebarNavItem({ icon, label, active, onClick, badge }) {
 }
 
 /**
- * @param {object} [props]
- * @param {Record<string, unknown>} [props.anamneseAdminProps] — repassadas a {@link AnamneseAdminView}
- * @param {Record<string, unknown>} [props.termosManagerProps] — repassadas a {@link TermosManager}
- * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada] — repassada a {@link DadosClinicaPanel}
- * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
- * @param {() => void} [props.onPacientesCatalogRefresh] — após reativar paciente (catálogo + lista paginada)
- * @param {string} props.configSection
+ * Flags granulares de acesso por seção (vindas de usePapel via AppRefactored).
+ *
+ * @param {object} props
+ * @param {boolean} [props.canSeeAnamnese]       — N3+: categorias, perguntas, fichas
+ * @param {boolean} [props.canSeeProcedimentos]  — N4+: procedimentos + termos
+ * @param {boolean} [props.canSeeTermos]         — N4+
+ * @param {boolean} [props.canSeePerfil]         — N4+: perfil profissional
+ * @param {boolean} [props.canSeeClinica]        — N5+: dados da clínica
+ * @param {boolean} [props.canSeeAgendaConfig]   — N5+: horários, feriados, templates
+ * @param {boolean} [props.canSeeEquipe]         — N5+: usuários, pacientes inativados
+ * @param {string}  props.configSection
  * @param {(s: string) => void} props.setConfigSection
+ * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada]
+ * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
+ * @param {() => void} [props.onPacientesCatalogRefresh]
  */
 export function ConfiguracoesView({
-  anamneseAdminProps = {},
-  termosManagerProps = {},
+  canSeeAnamnese = false,
+  canSeeProcedimentos = false,
+  canSeeTermos = false,
+  canSeePerfil = false,
+  canSeeClinica = false,
+  canSeeAgendaConfig = false,
+  canSeeEquipe = false,
   onClinicaAtualizada,
   onPerfilAtualizado,
   onPacientesCatalogRefresh,
   configSection,
   setConfigSection,
-  isAdmin = false,
-  isProfissional = false,
 }) {
   const subtitle = SECTION_SUBTITLE[configSection] ?? SECTION_SUBTITLE.fichas;
+
+  // Pills para mobile: lista apenas o que o usuário pode ver
+  const mobilePills = [
+    canSeeProcedimentos && ['procedimentos', 'Procedimentos'],
+    canSeeTermos        && ['termos', 'Termos'],
+    canSeeAnamnese      && ['categorias', 'Categorias'],
+    canSeeAnamnese      && ['perguntas', 'Perguntas'],
+    canSeeAnamnese      && ['fichas', 'Fichas'],
+    canSeePerfil        && ['perfil', 'Perfil'],
+    canSeeClinica       && ['clinica', 'Clínica'],
+    canSeeAgendaConfig  && ['horarios-funcionamento', 'Horários'],
+    canSeeAgendaConfig  && ['agenda-feriados', 'Feriados'],
+    canSeeAgendaConfig  && ['agenda-templates', 'Templates'],
+    canSeeEquipe        && ['pacientes-inativados', 'Inativos'],
+  ].filter(Boolean);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
@@ -120,24 +142,11 @@ export function ConfiguracoesView({
         </div>
       </div>
 
-      {/* Mobile (&lt;768px): pills com scroll horizontal (touch-friendly) */}
+      {/* Mobile (<768px): pills com scroll horizontal */}
       <div className="mb-4 md:hidden">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">Seção</p>
         <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] px-1">
-          {[
-            isAdmin && ['procedimentos', 'Procedimentos'],
-            isAdmin && ['termos', 'Termos'],
-            (isAdmin || isProfissional) && ['categorias', 'Categorias'],
-            (isAdmin || isProfissional) && ['perguntas', 'Perguntas'],
-            (isAdmin || isProfissional) && ['fichas', 'Fichas'],
-            (isAdmin || isProfissional) && ['perfil', 'Perfil'],
-            (isAdmin || isProfissional) && ['clinica', 'Clínica'],
-            isAdmin && ['usuarios-acessos', 'Usuários'],
-            isAdmin && ['horarios-funcionamento', 'Horários'],
-            isAdmin && ['agenda-feriados', 'Feriados'],
-            isAdmin && ['agenda-templates', 'Templates'],
-            isAdmin && ['pacientes-inativados', 'Inativos'],
-          ].filter(Boolean).map(([id, short]) => (
+          {mobilePills.map(([id, short]) => (
             <button
               key={id}
               type="button"
@@ -157,7 +166,9 @@ export function ConfiguracoesView({
       <div className="flex min-h-[min(70dvh,720px)] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#e2e8f0] bg-white md:flex-row">
         {/* Sidebar interna — desktop / tablet */}
         <aside className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden overflow-x-hidden border-b border-[#e2e8f0] bg-[#f8fafc] px-2 py-2 md:flex md:border-b-0 md:border-r">
-          {isAdmin && (
+
+          {/* ── Clínica: Procedimentos + Termos (N4+) ─────────────────────── */}
+          {canSeeProcedimentos && (
             <>
               <NavGroupLabel>Clínica</NavGroupLabel>
               <SidebarNavItem
@@ -166,22 +177,19 @@ export function ConfiguracoesView({
                 active={configSection === 'procedimentos'}
                 onClick={() => setConfigSection('procedimentos')}
               />
-              <SidebarNavItem
-                icon={FileText}
-                label={
-                  <>
-                    Termos de{' '}
-                    <wbr />
-                    Consentimento
-                  </>
-                }
-                active={configSection === 'termos'}
-                onClick={() => setConfigSection('termos')}
-              />
             </>
           )}
+          {canSeeTermos && (
+            <SidebarNavItem
+              icon={FileText}
+              label={<>Termos de{' '}<wbr />Consentimento</>}
+              active={configSection === 'termos'}
+              onClick={() => setConfigSection('termos')}
+            />
+          )}
 
-          {(isAdmin || isProfissional) && (
+          {/* ── Anamnese: categorias, perguntas, fichas (N3+) ──────────────── */}
+          {canSeeAnamnese && (
             <>
               <NavGroupLabel>Anamnese</NavGroupLabel>
               <SidebarNavItem
@@ -205,7 +213,8 @@ export function ConfiguracoesView({
             </>
           )}
 
-          {(isAdmin || isProfissional) && (
+          {/* ── Sistema: Perfil + Dados da Clínica (N4+) ───────────────────── */}
+          {canSeePerfil && (
             <>
               <NavGroupLabel>Sistema</NavGroupLabel>
               <SidebarNavItem
@@ -214,15 +223,19 @@ export function ConfiguracoesView({
                 active={configSection === 'perfil'}
                 onClick={() => setConfigSection('perfil')}
               />
-              <SidebarNavItem
-                icon={Building2}
-                label="Dados da Clínica"
-                active={configSection === 'clinica'}
-                onClick={() => setConfigSection('clinica')}
-              />
             </>
           )}
-          {isAdmin && (
+          {canSeeClinica && (
+            <SidebarNavItem
+              icon={Building2}
+              label="Dados da Clínica"
+              active={configSection === 'clinica'}
+              onClick={() => setConfigSection('clinica')}
+            />
+          )}
+
+          {/* ── Agenda: horários, feriados, templates (N5+) ────────────────── */}
+          {canSeeAgendaConfig && (
             <>
               <NavGroupLabel>Agenda</NavGroupLabel>
               <SidebarNavItem
@@ -246,15 +259,10 @@ export function ConfiguracoesView({
             </>
           )}
 
-          {isAdmin && (
+          {/* ── Equipe: usuários, pacientes inativados (N5+) ───────────────── */}
+          {canSeeEquipe && (
             <>
               <NavGroupLabel>Equipe</NavGroupLabel>
-              <SidebarNavItem
-                icon={Users}
-                label="Usuários e Acessos"
-                active={configSection === 'usuarios-acessos'}
-                onClick={() => setConfigSection('usuarios-acessos')}
-              />
               <SidebarNavItem
                 icon={UserX}
                 label="Pacientes Inativados"
@@ -265,53 +273,49 @@ export function ConfiguracoesView({
           )}
         </aside>
 
-        {/* Conteúdo */}
+        {/* Conteúdo principal */}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] px-3 py-4 sm:px-5 sm:py-6 md:px-6 md:py-8">
-          {configSection === 'procedimentos' && isAdmin && <BancoProcedimentosPanel />}
 
-          {configSection === 'termos' && <TermosManager {...termosManagerProps} />}
+          {/* Procedimentos — N4+ */}
+          {configSection === 'procedimentos' && canSeeProcedimentos && <BancoProcedimentosPanel />}
 
-          {(configSection === 'categorias' ||
-            configSection === 'perguntas' ||
-            configSection === 'fichas') && (
-            <AnamneseAdminView {...anamneseAdminProps} embeddedSection={configSection} />
-          )}
+          {/* Termos — N4+ */}
+          {configSection === 'termos' && canSeeTermos && <TermosManager />}
 
-          {configSection === 'perfil' && (
+          {/* Anamnese — N3+ */}
+          {(configSection === 'categorias' || configSection === 'perguntas' || configSection === 'fichas') &&
+            canSeeAnamnese && (
+              <AnamneseAdminView embeddedSection={configSection} />
+            )}
+
+          {/* Perfil — N4+ */}
+          {configSection === 'perfil' && canSeePerfil && (
             <PerfilProfissionalPanel
               getAuthHeaders={() => authHeadersForFetch({ needsOrg: false })}
               onPerfilAtualizado={onPerfilAtualizado}
             />
           )}
 
-          {configSection === 'clinica' && (isAdmin || isProfissional) && (
+          {/* Dados da Clínica — N5+ */}
+          {configSection === 'clinica' && canSeeClinica && (
             <DadosClinicaPanel
               getAuthHeaders={() => authHeadersForFetch({ needsOrg: true })}
               onClinicaAtualizada={onClinicaAtualizada}
             />
           )}
-          
-          {configSection === 'usuarios-acessos' && isAdmin && (
-            <GestaoUsuariosView />
-          )}
 
-          {configSection === 'horarios-funcionamento' && isAdmin && <HorarioClinicaPanel />}
-          {configSection === 'agenda-feriados' && isAdmin && <FeriadosPanel />}
-          {configSection === 'agenda-templates' && isAdmin && <TemplatesMensagemPanel />}
-          {configSection === 'pacientes-inativados' && isAdmin && (
+
+          {/* Agenda — N5+ */}
+          {configSection === 'horarios-funcionamento' && canSeeAgendaConfig && <HorarioClinicaPanel />}
+          {configSection === 'agenda-feriados'        && canSeeAgendaConfig && <FeriadosPanel />}
+          {configSection === 'agenda-templates'       && canSeeAgendaConfig && <TemplatesMensagemPanel />}
+
+          {/* Pacientes Inativados — N5+ */}
+          {configSection === 'pacientes-inativados' && canSeeEquipe && (
             <PacientesInativadosPanel onPacientesCatalogRefresh={onPacientesCatalogRefresh} />
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function PlaceholderPanel({ title, body }) {
-  return (
-    <div className="rounded-xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] px-5 py-10 text-center">
-      <p className="text-[15px] font-semibold text-[#0f172a]">{title}</p>
-      <p className="mt-2 text-[13px] font-medium text-[#64748b]">{body}</p>
     </div>
   );
 }

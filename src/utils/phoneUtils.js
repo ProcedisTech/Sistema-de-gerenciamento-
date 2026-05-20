@@ -116,6 +116,23 @@ export function parsePhoneFromApi(savedPhone, fallbackCountry = 'BR') {
  * @param {string} raw
  * @returns {string}
  */
+/**
+ * Exibe telefone salvo no backend em formato internacional legível (+55 38 99969-3119).
+ * @param {string} savedPhone
+ * @param {string} [fallbackCountry='BR']
+ * @returns {string}
+ */
+export function formatPhoneInternationalDisplay(savedPhone, fallbackCountry = 'BR') {
+  if (!savedPhone || !String(savedPhone).trim()) return '';
+  try {
+    const parsed = parsePhoneNumber(String(savedPhone), fallbackCountry);
+    return parsed.formatInternational();
+  } catch {
+    const raw = String(savedPhone).trim();
+    return raw.startsWith('+') ? raw : raw;
+  }
+}
+
 export function formatBrNationalParentheses(raw) {
   const d = String(raw || '')
     .replace(/\D/g, '')

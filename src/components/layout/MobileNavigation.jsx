@@ -1,10 +1,10 @@
 import React from 'react';
-import { CalendarDays, LogOut, Settings, Users } from 'lucide-react';
+import { CalendarDays, LogOut, Settings, Users, UserCog } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel';
 
-export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoConfiguracoes, onLogout }) {
-  const { isAdmin, isProfissional } = usePapel();
-  const canSeeConfig = isAdmin || isProfissional;
+export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoGestaoEquipe, onGoConfiguracoes, onLogout }) {
+  const { isAtLeast, canSeeConfigEquipe } = usePapel();
+  const canSeeConfig = isAtLeast('NIVEL_3');
   const tabClass = (isActive) =>
     `flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1 transition-all ${
       isActive
@@ -34,6 +34,18 @@ export function MobileNavigation({ activeView, onGoPacientes, onGoAgenda, onGoCo
           <CalendarDays className="h-5 w-5" strokeWidth={2.5} />
           <span className="text-[10px] font-bold leading-tight">Agenda</span>
         </button>
+
+        {canSeeConfigEquipe && (
+          <button
+            type="button"
+            onClick={onGoGestaoEquipe}
+            className={tabClass(activeView === 'gestao-equipe')}
+            aria-current={activeView === 'gestao-equipe' ? 'page' : undefined}
+          >
+            <UserCog className="h-5 w-5" strokeWidth={2.5} />
+            <span className="text-[10px] font-bold leading-tight">Equipe</span>
+          </button>
+        )}
 
         {canSeeConfig && (
           <button

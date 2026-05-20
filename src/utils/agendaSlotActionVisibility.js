@@ -1,59 +1,79 @@
 /**
- * Chips secundárias do card de agenda (Realizado / Falta / WhatsApp / Reagendar / Cancelar).
+ * Chips secundárias do card de agenda (Realizado / Não compareceu / WhatsApp / Reagendar / Cancelar).
  * Botões primários (Confirmar / Iniciar / Reagendar) e Editar ficam no AppointmentCard.
+ * @param {string} status
+ * @param {{ tipo?: string }} [opts]
  */
-export function getAgendaSlotActionVisibility(status) {
+export function getAgendaSlotActionVisibility(status, opts = {}) {
+  if (String(opts.tipo || '').toLowerCase() === 'bloqueio') {
+    const s = String(status || '');
+    if (s === 'cancelado' || s === 'reagendado') {
+      return {
+        showRealizado: false,
+        showNaoCompareceu: false,
+        showWhatsApp: false,
+        showReagendar: false,
+        showCancelar: false,
+        showRemoverBloqueio: false,
+      };
+    }
+    return {
+      showRealizado: false,
+      showNaoCompareceu: false,
+      showWhatsApp: false,
+      showReagendar: false,
+      showCancelar: false,
+      showRemoverBloqueio: true,
+    };
+  }
+
   const s = String(status || '');
   if (s === 'pendente' || s === 'aguardando_confirmacao' || s === 'confirmado') {
     return {
       showRealizado: false,
-      showFalta: true,
+      showNaoCompareceu: true,
       showWhatsApp: true,
       showReagendar: true,
       showCancelar: true,
-    };
-  }
-  if (s === 'falta') {
-    return {
-      showRealizado: false,
-      showFalta: false,
-      showWhatsApp: true,
-      showReagendar: true,
-      showCancelar: false,
+      showRemoverBloqueio: false,
     };
   }
   if (s === 'realizado') {
     return {
       showRealizado: false,
-      showFalta: false,
+      showNaoCompareceu: false,
       showWhatsApp: false,
       showReagendar: true,
       showCancelar: false,
+      showRemoverBloqueio: false,
     };
   }
   if (s === 'cancelado') {
     return {
       showRealizado: false,
-      showFalta: false,
+      showNaoCompareceu: false,
       showWhatsApp: false,
       showReagendar: false,
       showCancelar: false,
+      showRemoverBloqueio: false,
     };
   }
   if (s === 'reagendado') {
     return {
       showRealizado: false,
-      showFalta: false,
+      showNaoCompareceu: false,
       showWhatsApp: false,
       showReagendar: false,
       showCancelar: false,
+      showRemoverBloqueio: false,
     };
   }
   return {
     showRealizado: false,
-    showFalta: false,
+    showNaoCompareceu: false,
     showWhatsApp: false,
     showReagendar: false,
     showCancelar: false,
+    showRemoverBloqueio: false,
   };
 }

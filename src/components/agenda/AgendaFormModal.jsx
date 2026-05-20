@@ -1,23 +1,16 @@
-import React from 'react';
+import React, { useCallback, useRef } from 'react';
 import { CalendarDays, CornerDownLeft, Trash2, X } from 'lucide-react';
-import { formatLongDate } from './useAgendaPage';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
-import { PacienteSearchInput } from './PacienteSearchInput.jsx';
+import { PacienteAgendaSection } from './PacienteAgendaSection.jsx';
 import { ProfissionalPills } from './ProfissionalPills.jsx';
 import { DuracaoPills } from './DuracaoPills.jsx';
 import { AgendaFormStatusBar } from './AgendaFormStatusBar.jsx';
+import { AgendaDisponibilidadePanel } from './AgendaDisponibilidadePanel.jsx';
+import { AgendaDisponibilidadeMobileSheet } from './AgendaDisponibilidadeMobileSheet.jsx';
+import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
 
 const BTN_ACTION =
   'inline-flex max-w-[min(100%,14rem)] shrink-0 justify-center whitespace-normal text-center leading-tight';
-
-const DATE_TIME_INPUT_CLASS = [
-  'relative w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-[13px] font-medium text-gray-900',
-  'outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20',
-  '[appearance:none] [-webkit-appearance:none]',
-  '[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0',
-  '[&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full',
-  '[&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0',
-].join(' ');
 
 const KBD_CLASS =
   'rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-700';
@@ -39,20 +32,6 @@ function FieldLabel({ children, required, optional }) {
       {optional ? <span className="font-normal normal-case text-gray-400"> (opcional)</span> : null}
     </label>
   );
-}
-
-function capitalizeFirst(s) {
-  if (!s) return '';
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function formatSubtitleDateTime(iso, horaHm) {
-  if (!iso || !horaHm) return '';
-  const long = formatLongDate(iso, { weekday: 'long' });
-  const [, m, d] = iso.split('-').map(Number);
-  const ddmm = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
-  const hi = String(horaHm).slice(0, 5);
-  return `${capitalizeFirst(long.split(',')[0] || long)}, ${ddmm} às ${hi}`;
 }
 
 function resolveProfissionalNome(agenda) {
@@ -84,47 +63,142 @@ function ShortcutSubtitle() {
   );
 }
 
+function AgendaDisponibilidadeMobileCta({ agenda, formErrors, onOpen, expanded }) {
+  const role = String(agenda.roleUserIdAgenda || '').trim();
+  const hasSelection = Boolean(agenda.form.data && agenda.form.horaInicio);
+  const ctaLabel = hasSelection
+    ? formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio)
+    : 'Escolher data e horário';
+
+  const dataHoraError =
+    formErrors?.data || formErrors?.horaInicio
+      ? [formErrors.data, formErrors.horaInicio].filter(Boolean).join(' · ')
+      : '';
+
+  if (!role) {
+    return (
+      <div className="lg:hidden">
+        <FieldLabel required>Data e horário</FieldLabel>
+        <div className="flex min-h-[52px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50/50 px-4 py-3">
+          <p className="text-center text-[13px] text-gray-500">Selecione um profissional</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="lg:hidden">
+      <FieldLabel required>Data e horário</FieldLabel>
+      {dataHoraError ? (
+        <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-800">
+          {dataHoraError}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-haspopup="dialog"
+        aria-expanded={expanded}
+        className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3.5 text-left text-[13px] font-semibold transition-colors ${
+          hasSelection
+            ? 'border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100/80'
+            : 'border-dashed border-gray-300 bg-white text-gray-600 hover:border-teal-300 hover:bg-teal-50/30'
+        }`}
+      >
+        <CalendarDays
+          className={`h-5 w-5 shrink-0 ${hasSelection ? 'text-teal-600' : 'text-gray-400'}`}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        <span className="min-w-0 flex-1">{ctaLabel}</span>
+      </button>
+    </div>
+  );
+}
+
 /**
  * Modal "Novo Agendamento" / edição — mesmo UI usado na agenda.
  * `agenda.patientSelectLocked`: quando true (abrir do perfil), paciente somente leitura.
  */
 export function AgendaFormModal({ agenda, onExcluirClick }) {
-  const horaInicioInputRef = React.useRef(null);
+  const [pacienteCreateModalOpen, setPacienteCreateModalOpen] = React.useState(false);
+  const [dispSheetOpen, setDispSheetOpen] = React.useState(false);
+  const dispSnapshotRef = useRef('');
+
+  const closeDispSheetRevert = useCallback(() => {
+    setDispSheetOpen(false);
+    agenda.selectDispCalendarioDia(dispSnapshotRef.current || '');
+  }, [agenda]);
+
+  const openDispSheet = useCallback(() => {
+    const initial = agenda.dispCalendarioDia || agenda.form.data || '';
+    dispSnapshotRef.current = initial;
+    if (initial && initial !== agenda.dispCalendarioDia) {
+      agenda.selectDispCalendarioDia(initial);
+    }
+    setDispSheetOpen(true);
+  }, [agenda]);
+
+  const confirmDispSheet = useCallback(() => {
+    setDispSheetOpen(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (!agenda.modalMode) {
+      setDispSheetOpen(false);
+    }
+  }, [agenda.modalMode]);
+
+  React.useEffect(() => {
+    if (!agenda.modalMode) return undefined;
+
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        if (pacienteCreateModalOpen || dispSheetOpen) return;
+        event.preventDefault();
+        void agenda.saveAppointment();
+        return;
+      }
+
+      if (event.key !== 'Escape') return;
+
+      if (pacienteCreateModalOpen) return;
+
+      if (dispSheetOpen) {
+        event.preventDefault();
+        closeDispSheetRevert();
+        return;
+      }
+
+      event.preventDefault();
+      agenda.closeModal();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    agenda,
+    pacienteCreateModalOpen,
+    dispSheetOpen,
+    closeDispSheetRevert,
+  ]);
+
   if (!agenda.modalMode) return null;
   const isEdit = agenda.modalMode === 'edit';
   const lockPatient = Boolean(agenda.patientSelectLocked) && !isEdit;
-
-  const openHoraInicioPicker = () => {
-    const el = horaInicioInputRef.current;
-    if (!el) return;
-    if (typeof el.showPicker === 'function') {
-      try {
-        el.showPicker();
-        return;
-      } catch {
-        // Safari / contexto sem gesto
-      }
-    }
-    el.focus();
-  };
 
   const modalTitle = isEdit ? 'Editar agendamento' : 'Novo agendamento';
   const profNome = resolveProfissionalNome(agenda);
   const hasProfDataHora =
     Boolean(profNome) && Boolean(agenda.form.data) && Boolean(agenda.form.horaInicio);
   const subtitleDynamic = hasProfDataHora
-    ? `${formatSubtitleDateTime(agenda.form.data, agenda.form.horaInicio)} · ${profNome.startsWith('Dr') ? profNome : `Dr. ${profNome}`}`
+    ? `${formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio)} · ${profNome.startsWith('Dr') ? profNome : `Dr. ${profNome}`}`
     : null;
 
   const chipPacienteActive = Boolean(
     String(agenda.form.pacienteId || '').trim() || String(agenda.form.pacienteNome || '').trim()
   );
   const chipDataHoraActive = Boolean(agenda.form.data && agenda.form.horaInicio);
-
-  const horarioConflita = Boolean(agenda.horarioConflita);
-  const horarioInputClass = `${DATE_TIME_INPUT_CLASS} ${
-    horarioConflita ? 'border-amber-500 bg-amber-50/40 ring-1 ring-amber-300' : ''
-  }`;
 
   const selectedProcedimentos = Array.isArray(agenda.form.catalogoProcedimentoSaudeIds)
     ? agenda.form.catalogoProcedimentoSaudeIds
@@ -163,8 +237,14 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
   return (
     <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-black/40" onClick={agenda.closeModal} aria-label="Fechar modal" />
-      <div className="relative flex max-h-[92vh] w-full max-w-[960px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <button
+        type="button"
+        className={`absolute inset-0 bg-black/40 ${pacienteCreateModalOpen || dispSheetOpen ? 'pointer-events-none' : ''}`}
+        onClick={agenda.closeModal}
+        aria-label="Fechar modal"
+        tabIndex={pacienteCreateModalOpen || dispSheetOpen ? -1 : 0}
+      />
+      <div className="relative flex max-h-[92vh] w-full max-w-[1120px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 p-5">
           <div className="min-w-0 flex-1">
             <h3 className="text-[18px] font-black text-gray-900">{modalTitle}</h3>
@@ -195,15 +275,20 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             </div>
           ) : null}
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="space-y-6">
+          <div className="flex flex-col gap-6">
+            <div className="grid gap-6 lg:grid-cols-2">
               <FieldError error={agenda.formErrors.pacienteId}>
                 <FieldLabel required>Paciente</FieldLabel>
-                <PacienteSearchInput
-                  value={agenda.form.pacienteId}
-                  displayNome={agenda.form.pacienteNome}
+                <PacienteAgendaSection
                   locked={lockPatient}
-                  onChange={agenda.selectPaciente}
+                  pacienteId={agenda.form.pacienteId}
+                  pacienteNome={agenda.form.pacienteNome}
+                  telefone={agenda.form.telefone}
+                  context={agenda.pacienteContext}
+                  contextLoading={agenda.pacienteContextLoading}
+                  onSelect={agenda.selectPaciente}
+                  onClear={agenda.clearPacienteSelection}
+                  onCreateModalOpenChange={setPacienteCreateModalOpen}
                 />
               </FieldError>
 
@@ -245,7 +330,9 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                   </div>
                 ) : null}
               </FieldError>
+            </div>
 
+            <div className="grid gap-6 lg:grid-cols-2">
               <FieldError error={agenda.formErrors.profissional}>
                 <FieldLabel>Profissional</FieldLabel>
                 <ProfissionalPills
@@ -258,40 +345,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                 />
               </FieldError>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <FieldLabel required>Data</FieldLabel>
-                  <input
-                    type="date"
-                    min={agenda.todayIso}
-                    value={agenda.form.data}
-                    onChange={(event) => agenda.updateForm('data', event.target.value)}
-                    className={DATE_TIME_INPUT_CLASS}
-                  />
-                  {(() => {
-                    const past = Boolean(agenda.form.data) && agenda.form.data < agenda.todayIso;
-                    const msg =
-                      agenda.formErrors.data ||
-                      (past ? 'Data inválida — não é possível agendar para o passado.' : '');
-                    return msg ? <p className="mt-1 text-sm text-red-500">{msg}</p> : null;
-                  })()}
-                </div>
-
-                <FieldError error={agenda.formErrors.horaInicio}>
-                  <FieldLabel required>Horário</FieldLabel>
-                  <input
-                    id="agenda-hora-inicio"
-                    ref={horaInicioInputRef}
-                    type="time"
-                    value={agenda.form.horaInicio}
-                    title={horarioConflita ? 'Horário ocupado' : undefined}
-                    onChange={(event) => agenda.updateForm('horaInicio', event.target.value)}
-                    onClick={openHoraInicioPicker}
-                    className={horarioInputClass}
-                  />
-                </FieldError>
-              </div>
-
               <FieldError error={agenda.formErrors.duracaoMin}>
                 <FieldLabel required>Duração</FieldLabel>
                 <DuracaoPills
@@ -301,23 +354,24 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               </FieldError>
             </div>
 
-            <div className="hidden min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 lg:flex">
-              <CalendarDays className="mb-4 h-8 w-8 text-gray-400" strokeWidth={1.5} aria-hidden />
-              <p className="max-w-[220px] text-center text-[13px] leading-snug text-gray-500">
-                <span className="block font-medium">Disponibilidade</span>
-                <span className="block">aparecerá aqui em breve</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <FieldLabel optional>Observações</FieldLabel>
-            <textarea
-              value={agenda.form.observacao}
-              onChange={(event) => agenda.updateForm('observacao', event.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
+            <AgendaDisponibilidadeMobileCta
+              agenda={agenda}
+              formErrors={agenda.formErrors}
+              onOpen={openDispSheet}
+              expanded={dispSheetOpen}
             />
+
+            <AgendaDisponibilidadePanel agenda={agenda} formErrors={agenda.formErrors} />
+
+            <div>
+              <FieldLabel optional>Observações</FieldLabel>
+              <textarea
+                value={agenda.form.observacao}
+                onChange={(event) => agenda.updateForm('observacao', event.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
+              />
+            </div>
           </div>
         </div>
 
@@ -363,6 +417,14 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           </div>
         </div>
       </div>
+
+      <AgendaDisponibilidadeMobileSheet
+        open={dispSheetOpen}
+        agenda={agenda}
+        formErrors={agenda.formErrors}
+        onCancel={closeDispSheetRevert}
+        onConfirm={confirmDispSheet}
+      />
     </div>
   );
 }

@@ -68,9 +68,11 @@ export function mapAgendaDtoToDashboardRow(dto) {
     pacienteId,
     telefone: '',
     procedimentoNome:
-      dto.catalogoProcedimentoNome?.trim() ||
-      (dto.observacao != null && String(dto.observacao).trim()) ||
-      'Sem procedimento informado',
+      tipo === 'bloqueio'
+        ? (dto.observacao != null && String(dto.observacao).trim()) || 'Bloqueio'
+        : dto.catalogoProcedimentoNome?.trim() ||
+          (dto.observacao != null && String(dto.observacao).trim()) ||
+          'Sem procedimento informado',
     catalogoProcedimentoSaudeId: catId,
     catalogoProcedimentoSaudeIds: catId ? [catId] : [],
     tipoProcedimentoId: dto.tipoProcedimentoId != null ? String(dto.tipoProcedimentoId) : '',
@@ -82,14 +84,49 @@ export function mapAgendaDtoToDashboardRow(dto) {
   };
 }
 
+/** Bloqueio removido (cancelado) não deve aparecer na grade/painel/calendário. */
+export function isAgendaVisibleOnDashboard(row) {
+  if (!row) return false;
+  if (row.tipo === 'bloqueio' && row.status === 'cancelado') return false;
+  return true;
+}
+
 /**
  * Agendas no intervalo (1 linha por AgendaDTO — sem GET aninhado de agendamentos).
  */
 export async function fetchDashboardAppointmentsForRange(startIso, endIso) {
   const raw = await agendasApi.byRange(startIso, endIso);
   const dtos = normalizeApiList(raw);
-  const rows = dtos.map(mapAgendaDtoToDashboardRow).filter(Boolean);
+  const rows = dtos
+    .map(mapAgendaDtoToDashboardRow)
+    .filter(Boolean)
+    .filter(isAgendaVisibleOnDashboard);
   return sortByDateTime(rows);
+}
+
+/** POST de bloqueio de horário (sem paciente/catálogo). */
+export function buildAgendaBloqueioCreateBody({
+  dataAgendamento,
+  horaInicio,
+  horaFim,
+  profissionalRoleUserId,
+  tipoProcedimentoId,
+  observacao,
+  statusAgendaCodigo = 'confirmado',
+}) {
+  const hi = String(horaInicio || '09:00').slice(0, 5);
+  const hf = String(horaFim || addMinutesToTime(hi, 60)).slice(0, 5);
+  const motivo =
+    observacao != null && String(observacao).trim() ? String(observacao).trim().slice(0, 500) : '';
+  return {
+    dataAgendamento,
+    horaInicio: hi.length === 5 ? `${hi}:00` : hi,
+    horaFim: hf.length === 5 ? `${hf}:00` : hf,
+    profissionalRoleUserId: String(profissionalRoleUserId || '').trim(),
+    tipoProcedimentoId: String(tipoProcedimentoId || '').trim(),
+    observacao: motivo,
+    statusAgendaCodigo: String(statusAgendaCodigo || 'confirmado').trim(),
+  };
 }
 
 export function buildAgendaCreateBody({
