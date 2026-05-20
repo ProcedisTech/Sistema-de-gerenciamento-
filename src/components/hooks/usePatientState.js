@@ -116,6 +116,11 @@ export const usePatientState = (opts = {}) => {
   /** Mesmos valores que o select da lista (`nome-asc`, `birthday-asc`, …). */
   const [patientListSortBy, setPatientListSortBy] = useState('nome-asc');
 
+  // Filtros server-side v1 (só aplicados na rota /pacientes, não em /search)
+  const [statusPlanoFilter, setStatusPlanoFilter] = useState(''); // '' | 'sem_plano' | 'plano_ativo'
+  const [anamneseDesatualizadaFilter, setAnamneseDesatualizadaFilter] = useState(false);
+  const [semRetornoFilter, setSemRetornoFilter] = useState(false);
+
   const [selectedPatientCpf, _setSelectedPatientCpf] = useState(readSelectedPatientCpf);
   const [patientView, setPatientView] = useState(() =>
     readSessionValue(PATIENT_VIEW_KEY, 'list'),
@@ -166,7 +171,7 @@ export const usePatientState = (opts = {}) => {
   /* Voltar à primeira página ao mudar filtro ou ordenação */
   useEffect(() => {
     setPatientListPage(0);
-  }, [patientSearchQuery, patientListSortBy]);
+  }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -241,6 +246,9 @@ export const usePatientState = (opts = {}) => {
           size: PATIENT_LIST_PAGE_SIZE,
           order: isBirthday ? 'birthday_asc' : undefined,
           sort: isBirthday ? undefined : patientListSortToApiParam(patientListSortBy),
+          statusPlano: statusPlanoFilter || undefined,
+          anamneseDesatualizada: anamneseDesatualizadaFilter || undefined,
+          semRetorno: semRetornoFilter || undefined,
         })
         .then((pageData) => {
           if (cancelled) return;
@@ -308,6 +316,9 @@ export const usePatientState = (opts = {}) => {
     patientListSortBy,
     patientListBump,
     mergePatientById,
+    statusPlanoFilter,
+    anamneseDesatualizadaFilter,
+    semRetornoFilter,
   ]);
 
   useEffect(() => {
@@ -383,5 +394,11 @@ export const usePatientState = (opts = {}) => {
     patientListSortBy,
     setPatientListSortBy,
     bumpPatientList,
+    statusPlanoFilter,
+    setStatusPlanoFilter,
+    anamneseDesatualizadaFilter,
+    setAnamneseDesatualizadaFilter,
+    semRetornoFilter,
+    setSemRetornoFilter,
   };
 };
