@@ -28,6 +28,14 @@ export default function DisponibilidadeProfissionalModal({
   }, [roleUserId, toastError]);
 
   useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow || 'unset';
+    };
+  }, []);
+
+  useEffect(() => {
     carregar();
   }, [carregar]);
 
@@ -51,7 +59,7 @@ export default function DisponibilidadeProfissionalModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>

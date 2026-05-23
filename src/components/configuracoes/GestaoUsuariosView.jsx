@@ -340,6 +340,53 @@ export function GestaoUsuariosView() {
   );
 }
 
+const FUNCOES_SISTEMA = [
+  {
+    categoria: 'Agenda',
+    itens: [
+      { id: 'agenda_ver', label: 'Visualizar Agenda', minNivel: 1, descricao: 'Permite visualizar os horários e agendamentos.' },
+      { id: 'agenda_criar', label: 'Criar Agendamento', minNivel: 2, descricao: 'Permite cadastrar novos agendamentos na agenda da clínica.' },
+      { id: 'agenda_editar', label: 'Editar/Cancelar Agendamento', minNivel: 2, descricao: 'Permite alterar horários, status ou cancelar agendamentos.' },
+      { id: 'agenda_config', label: 'Configurar Agenda', minNivel: 5, descricao: 'Permite configurar horários de funcionamento, feriados e templates.' }
+    ]
+  },
+  {
+    categoria: 'Pacientes',
+    itens: [
+      { id: 'pacientes_ver', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e as fichas dos pacientes.' },
+      { id: 'pacientes_criar', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes e preencher dados.' },
+      { id: 'pacientes_editar', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente.' }
+    ]
+  },
+  {
+    categoria: 'Configurações e Sistema',
+    itens: [
+      { id: 'config_anamnese', label: 'Configurar Modelos de Anamnese', minNivel: 3, descricao: 'Permite gerenciar categorias e perguntas de anamnese.' },
+      { id: 'config_procedimentos', label: 'Configurar Catálogo de Procedimentos', minNivel: 4, descricao: 'Permite gerenciar os procedimentos oferecidos.' },
+      { id: 'config_termos', label: 'Configurar Termos e Documentos', minNivel: 4, descricao: 'Permite gerenciar termos de consentimento e contratos.' },
+      { id: 'config_perfil', label: 'Configurar Perfil do Profissional', minNivel: 4, descricao: 'Permite ajustar o perfil de atendimento.' },
+      { id: 'config_clinica', label: 'Configurar Dados da Clínica', minNivel: 5, descricao: 'Permite gerenciar dados institucionais da clínica.' },
+      { id: 'config_equipe', label: 'Gerenciar Equipe e Permissões', minNivel: 5, descricao: 'Permite criar, editar e desativar acessos da equipe.' },
+      { id: 'config_auditoria', label: 'Visualizar Logs de Auditoria', minNivel: 5, descricao: 'Permite visualizar o histórico de ações do sistema.' }
+    ]
+  }
+];
+
+const getLevelFromPerfilAcessoId = (perfilId, perfis) => {
+  if (!perfilId || !perfis) return 0;
+  const perfil = perfis.find(p => String(p.id) === String(perfilId));
+  if (!perfil) return 0;
+  const code = (perfil.codigo || '').toUpperCase();
+  const name = (perfil.nome || '').toLowerCase();
+  
+  if (code.includes('NIVEL_5') || name.includes('administrador') || name.includes('adm')) return 5;
+  if (code.includes('NIVEL_4') || name.includes('sênior') || name.includes('senior')) return 4;
+  if (code.includes('NIVEL_3') || name.includes('padrão') || name.includes('padrao') || name.includes('profissional')) return 3;
+  if (code.includes('NIVEL_2') || name.includes('recepção') || name.includes('recepcao') || name.includes('recepcionista')) return 2;
+  if (code.includes('NIVEL_1') || name.includes('leitura') || name.includes('auxiliar')) return 1;
+  return 0;
+};
+
 const getPresetProfileId = (roleName, perfis) => {
   if (!roleName) return null;
   const nameLower = roleName.toLowerCase();
@@ -390,6 +437,15 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
   const toast = useToast();
   const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '' });
   const [saving, setSaving] = useState(false);
+  const [selectedFuncs, setSelectedFuncs] = useState([]);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow || 'unset';
+    };
+  }, []);
 
   const handleRoleChangeInvite = (selectedRoleId) => {
     let nextPerfilAcessoId = form.perfilAcessoId;
@@ -401,6 +457,35 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
       }
     }
     setForm({ ...form, roleId: selectedRoleId, perfilAcessoId: nextPerfilAcessoId });
+    
+    if (nextPerfilAcessoId) {
+      const level = getLevelFromPerfilAcessoId(nextPerfilAcessoId, perfisAcesso);
+      const defaultFuncs = [];
+      FUNCOES_SISTEMA.forEach(cat => {
+        cat.itens.forEach(item => {
+          if (item.minNivel <= level) {
+            defaultFuncs.push(item.id);
+          }
+        });
+      });
+      setSelectedFuncs(defaultFuncs);
+    }
+  };
+
+  const handlePerfilChangeInvite = (selectedPerfilId) => {
+    setForm({ ...form, perfilAcessoId: selectedPerfilId });
+    if (selectedPerfilId) {
+      const level = getLevelFromPerfilAcessoId(selectedPerfilId, perfisAcesso);
+      const defaultFuncs = [];
+      FUNCOES_SISTEMA.forEach(cat => {
+        cat.itens.forEach(item => {
+          if (item.minNivel <= level) {
+            defaultFuncs.push(item.id);
+          }
+        });
+      });
+      setSelectedFuncs(defaultFuncs);
+    }
   };
 
   const maskCPF = (value) => {
@@ -520,110 +605,180 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl my-auto">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900">Novo Acesso</h3>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition touch-manipulation">
+    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/40 p-2 sm:p-4 md:p-6 backdrop-blur-sm overflow-y-auto [webkit-overflow-scrolling:touch]">
+      <div className="w-full max-w-md md:max-w-4xl lg:max-w-5xl rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[90vh] flex flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-4 mb-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Novo Acesso</h3>
+            <p className="text-sm text-slate-500 mt-1">Cadastre e configure um novo membro para a sua equipe.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition touch-manipulation">
             <X className="h-5 w-5" />
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Nome Completo</label>
-            <input 
-              required
-              maxLength={80}
-              value={form.nome}
-              onChange={e => setForm({...form, nome: e.target.value})}
-              placeholder="Ex: João da Silva"
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">E-mail</label>
-              <input 
-                required
-                type="email"
-                value={form.email}
-                onChange={e => setForm({...form, email: e.target.value})}
-                placeholder="exemplo@google.com"
-                className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">CPF</label>
-              <input 
-                required
-                value={form.cpf}
-                onChange={e => setForm({...form, cpf: maskCPF(e.target.value)})}
-                placeholder="123.456.789-10"
-                maxLength={14}
-                className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Senha Temporária</label>
-            <input 
-              required
-              type="password"
-              minLength={8}
-              value={form.senha}
-              onChange={e => setForm({...form, senha: e.target.value})}
-              placeholder="Mínimo 8 caracteres"
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Cargo</label>
-              <select 
-                required
-                value={form.roleId}
-                onChange={e => handleRoleChangeInvite(e.target.value)}
-                className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-              >
-                <option value="">Selecione...</option>
-                {roles.filter(r => r.nome !== 'ADMIN').map(r => (
-                  <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Nível de Permissão</label>
-              <select 
-                required
-                value={form.perfilAcessoId}
-                onChange={e => setForm({...form, perfilAcessoId: e.target.value})}
-                className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-              >
-                <option value="">Selecione...</option>
-                {[...perfisAcesso]
-                  .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                  .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
-                  .map(p => (
-                    <option key={p.id} value={p.id}>{p.nome}</option>
-                  ))
-                }
-              </select>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
+              {/* Coluna Esquerda: Dados Básicos (col-span-5) */}
+              <div className="md:col-span-5 space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Nome Completo</label>
+                  <input 
+                    required
+                    maxLength={80}
+                    value={form.nome}
+                    onChange={e => setForm({...form, nome: e.target.value})}
+                    placeholder="Ex: João da Silva"
+                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">CPF</label>
+                  <input 
+                    required
+                    value={form.cpf}
+                    onChange={e => setForm({...form, cpf: maskCPF(e.target.value)})}
+                    placeholder="123.456.789-10"
+                    maxLength={14}
+                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">E-mail</label>
+                  <input 
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={e => setForm({...form, email: e.target.value})}
+                    placeholder="exemplo@google.com"
+                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Senha Temporária</label>
+                  <input 
+                    required
+                    type="password"
+                    minLength={8}
+                    value={form.senha}
+                    onChange={e => setForm({...form, senha: e.target.value})}
+                    placeholder="Mínimo 8 caracteres"
+                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Cargo</label>
+                    <select 
+                      required
+                      value={form.roleId}
+                      onChange={e => handleRoleChangeInvite(e.target.value)}
+                      className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    >
+                      <option value="">Selecione...</option>
+                      {roles.filter(r => r.nome !== 'ADMIN').map(r => (
+                        <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Nível de Permissão</label>
+                    <select 
+                      required
+                      value={form.perfilAcessoId}
+                      onChange={e => handlePerfilChangeInvite(e.target.value)}
+                      className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    >
+                      <option value="">Selecione...</option>
+                      {[...perfisAcesso]
+                        .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                        .map(p => (
+                          <option key={p.id} value={p.id}>{p.nome}</option>
+                        ))
+                      }
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Coluna Direita: Personalização de Funções (col-span-7) */}
+              <div className="md:col-span-7 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6 lg:pl-8 border-slate-100 flex flex-col justify-between">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-teal-700">
+                      Personalizar Funções do Usuário
+                    </label>
+                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2 py-0.5 rounded-full uppercase">
+                      Customizável
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                    O nível selecionado preenche as funções recomendadas, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.
+                  </p>
+                  
+                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[320px] lg:max-h-[340px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
+                    <div className="grid grid-cols-1 gap-3">
+                      {FUNCOES_SISTEMA.map(cat => (
+                        <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block mb-2 border-b border-slate-200/60 pb-1">
+                            {cat.categoria}
+                          </span>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                            {cat.itens.map(item => {
+                              const isChecked = selectedFuncs.includes(item.id);
+                              return (
+                                <label key={item.id} className="flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg transition cursor-pointer hover:bg-slate-100/50">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setSelectedFuncs(prev =>
+                                        prev.includes(item.id)
+                                          ? prev.filter(id => id !== item.id)
+                                          : [...prev, item.id]
+                                      );
+                                    }}
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                                  />
+                                  <div className="flex-1">
+                                    <span className="text-xs font-semibold text-slate-700 block leading-snug">
+                                      {item.label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 block mt-0.5 leading-snug">
+                                      {item.descricao}
+                                    </span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row justify-end border-t border-slate-100 pt-4 shrink-0">
             <button 
               type="button" 
               onClick={onClose}
-              className="flex-1 rounded-xl border-2 border-slate-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 active:bg-slate-100 sm:py-2.5 touch-manipulation"
+              className="w-full sm:w-32 rounded-xl border-2 border-slate-100 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 active:bg-slate-100 touch-manipulation"
             >
               Cancelar
             </button>
             <button 
               type="submit"
               disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 text-sm font-bold text-white transition hover:bg-teal-700 active:scale-95 disabled:opacity-60 sm:py-2.5 touch-manipulation"
+              className="w-full sm:w-44 flex items-center justify-center gap-2 rounded-xl bg-[#00a88e] hover:bg-[#00967f] py-2.5 text-sm font-bold text-white transition active:scale-95 disabled:opacity-60 touch-manipulation"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving ? 'Criando...' : 'Criar Acesso'}
@@ -643,11 +798,43 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
   const [email, setEmail] = useState(usuario.email || '');
   const [saving, setSaving] = useState(false);
+  const [selectedFuncs, setSelectedFuncs] = useState([]);
 
   const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
   const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
   const isDono = papel === 'DONO';
   const lockSensitiveFields = isUserOwner || (isSelfEdit && isDono);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow || 'unset';
+    };
+  }, []);
+
+  useEffect(() => {
+    let level = 0;
+    if (isUserOwner) {
+      level = 5;
+    } else if (perfilAcessoId) {
+      level = getLevelFromPerfilAcessoId(perfilAcessoId, perfisAcesso);
+    }
+    
+    if (level > 0) {
+      const defaultFuncs = [];
+      FUNCOES_SISTEMA.forEach(cat => {
+        cat.itens.forEach(item => {
+          if (item.minNivel <= level) {
+            defaultFuncs.push(item.id);
+          }
+        });
+      });
+      setSelectedFuncs(defaultFuncs);
+    } else {
+      setSelectedFuncs([]);
+    }
+  }, [perfilAcessoId, perfisAcesso, isUserOwner]);
 
   const handleRoleChangeEdit = (selectedRoleId) => {
     setRoleId(selectedRoleId);
@@ -697,106 +884,195 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl my-auto">
-        <h3 className="mb-1 text-lg font-bold text-slate-900">Editar Acesso</h3>
-        <p className="mb-5 text-sm text-slate-500">Atualize as informações do membro da equipe.</p>
+    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/40 p-2 sm:p-4 md:p-6 backdrop-blur-sm overflow-y-auto [webkit-overflow-scrolling:touch]">
+      <div className="w-full max-w-md md:max-w-4xl lg:max-w-5xl rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[90vh] flex flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-4 mb-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Editar Acesso</h3>
+            <p className="text-sm text-slate-500 mt-1">Atualize as informações e permissões do membro da equipe.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition touch-manipulation">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-teal-700">Nome Completo</label>
-            <input 
-              required
-              maxLength={80}
-              value={nome}
-              onChange={e => setNome(e.target.value)}
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
-              E-mail {lockSensitiveFields && '(Não editável para o Dono)'}
-            </label>
-            <input 
-              required
-              type="email"
-              disabled={lockSensitiveFields}
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-400">CPF (Não editável)</label>
-            <input 
-              disabled
-              value={usuario.cpf || 'Não informado'}
-              className="w-full rounded-xl border-2 border-slate-100 bg-slate-50/50 px-4 py-3 text-base outline-none text-slate-500 cursor-not-allowed sm:py-2.5 sm:text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
-                Novo Cargo
-              </label>
-              {isUserOwner ? (
-                <input 
-                  disabled
-                  value="Dono"
-                  className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none text-slate-500 cursor-not-allowed sm:py-2.5 sm:text-sm"
-                />
-              ) : (
-                <select 
-                  required
-                  disabled={lockSensitiveFields}
-                  value={roleId}
-                  onChange={e => handleRoleChangeEdit(e.target.value)}
-                  className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
-                >
-                  <option value="">Selecione...</option>
-                  {roles.map(r => (
-                    <option key={r.id} value={r.id}>{r.nome}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div>
-              <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
-                Novo Nível
-              </label>
-              {isUserOwner ? (
-                <input 
-                  disabled
-                  value="Dono"
-                  className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none text-slate-500 cursor-not-allowed sm:py-2.5 sm:text-sm"
-                />
-              ) : (
-                <select 
-                  required
-                  disabled={lockSensitiveFields}
-                  value={perfilAcessoId}
-                  onChange={e => setPerfilAcessoId(e.target.value)}
-                  className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-base outline-none transition focus:border-teal-500 focus:bg-white sm:py-2.5 sm:text-sm ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
-                >
-                  <option value="">Selecione...</option>
-                  {[...perfisAcesso]
-                    .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                    .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
-                    .map(p => (
-                      <option key={p.id} value={p.id}>{p.nome}</option>
-                    ))
-                  }
-                </select>
-              )}
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
+              {/* Coluna Esquerda: Campos (col-span-5) */}
+              <div className="md:col-span-5 space-y-4">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Nome Completo</label>
+                  <input 
+                    required
+                    maxLength={80}
+                    value={nome}
+                    onChange={e => setNome(e.target.value)}
+                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">CPF (Não editável)</label>
+                  <input 
+                    disabled
+                    value={usuario.cpf || 'Não informado'}
+                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50/50 px-3 py-2 text-sm outline-none text-slate-500 cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className={`mb-1 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
+                    E-mail {lockSensitiveFields && '(Dono)'}
+                  </label>
+                  <input 
+                    required
+                    type="email"
+                    disabled={lockSensitiveFields}
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={`mb-1 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
+                      Novo Cargo
+                    </label>
+                    {isUserOwner ? (
+                      <input 
+                        disabled
+                        value="Dono"
+                        className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none text-slate-500 cursor-not-allowed"
+                      />
+                    ) : (
+                      <select 
+                        required
+                        disabled={lockSensitiveFields}
+                        value={roleId}
+                        onChange={e => handleRoleChangeEdit(e.target.value)}
+                        className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                      >
+                        <option value="">Selecione...</option>
+                        {roles.map(r => (
+                          <option key={r.id} value={r.id}>{r.nome}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className={`mb-1 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
+                      Novo Nível
+                    </label>
+                    {isUserOwner ? (
+                      <input 
+                        disabled
+                        value="Dono"
+                        className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none text-slate-500 cursor-not-allowed"
+                      />
+                    ) : (
+                      <select 
+                        required
+                        disabled={lockSensitiveFields}
+                        value={perfilAcessoId}
+                        onChange={e => setPerfilAcessoId(e.target.value)}
+                        className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                      >
+                        <option value="">Selecione...</option>
+                        {[...perfisAcesso]
+                          .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                          .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                          .map(p => (
+                            <option key={p.id} value={p.id}>{p.nome}</option>
+                          ))
+                        }
+                      </select>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Coluna Direita: Personalização (col-span-7) */}
+              <div className="md:col-span-7 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6 lg:pl-8 border-slate-100 flex flex-col justify-between">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-teal-700">
+                      Personalizar Funções do Usuário
+                    </label>
+                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2 py-0.5 rounded-full uppercase">
+                      Customizável
+                    </span>
+                  </div>
+                  
+                  <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                    {lockSensitiveFields 
+                      ? 'As funções do Dono principal não podem ser customizadas.' 
+                      : 'O nível selecionado preenche as funções recomendadas, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.'
+                    }
+                  </p>
+                  
+                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[320px] lg:max-h-[340px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
+                    <div className="grid grid-cols-1 gap-3">
+                      {FUNCOES_SISTEMA.map(cat => (
+                        <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block mb-2 border-b border-slate-200/60 pb-1">
+                            {cat.categoria}
+                          </span>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                            {cat.itens.map(item => {
+                              const isChecked = selectedFuncs.includes(item.id);
+                              return (
+                                <label 
+                                  key={item.id} 
+                                  className={`flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg transition ${
+                                    lockSensitiveFields 
+                                      ? 'cursor-not-allowed opacity-60' 
+                                      : 'cursor-pointer hover:bg-slate-100/50'
+                                  }`}
+                                >
+                                  <input 
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    disabled={lockSensitiveFields}
+                                    onChange={() => {
+                                      if (lockSensitiveFields) return;
+                                      setSelectedFuncs(prev => 
+                                        prev.includes(item.id) 
+                                          ? prev.filter(id => id !== item.id) 
+                                          : [...prev, item.id]
+                                      );
+                                    }}
+                                    className={`mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 ${
+                                      lockSensitiveFields ? 'cursor-not-allowed' : 'cursor-pointer'
+                                    }`}
+                                  />
+                                  <div className="flex-1">
+                                    <span className="text-xs font-semibold text-slate-700 block leading-snug">
+                                      {item.label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 block mt-0.5 leading-snug">
+                                      {item.descricao}
+                                    </span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <button type="button" onClick={onClose} className="flex-1 py-3 text-sm font-bold text-slate-500 active:bg-slate-50 rounded-xl sm:py-2.5 touch-manipulation">Voltar</button>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row justify-end border-t border-slate-100 pt-4 shrink-0">
+            <button type="button" onClick={onClose} className="w-full sm:w-32 rounded-xl border-2 border-slate-100 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 active:bg-slate-100 touch-manipulation">Voltar</button>
             <button 
               type="submit"
               disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 text-sm font-bold text-white transition hover:bg-teal-700 active:scale-95 disabled:opacity-60 sm:py-2.5 touch-manipulation"
+              className="w-full sm:w-44 flex items-center justify-center gap-2 rounded-xl bg-[#00a88e] hover:bg-[#00967f] py-2.5 text-sm font-bold text-white transition active:scale-95 disabled:opacity-60 touch-manipulation"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving ? 'Salvando...' : 'Salvar'}
