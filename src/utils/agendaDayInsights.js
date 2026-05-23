@@ -1,5 +1,7 @@
 import { addMinutesToTime } from './agendaMapping.js';
 import { isAgendaNoShow } from './agendaCancelamentoMotivo.js';
+import { isKpiCountableAppointment } from './agendaKpiDrilldown.js';
+import { bloqueioMotivoLabel } from '../components/agenda/agendaBloqueioStyles.js';
 
 export const STATUS_FILTER_KEYS = ['confirmado', 'pendente', 'cancelado', 'noshow'];
 
@@ -84,6 +86,7 @@ export function sortAppointmentsByTime(appointments) {
 export function getNextAppointment(appointments, { now = new Date(), todayIso } = {}) {
   const nowHm = normalizeHm(`${now.getHours()}:${now.getMinutes()}`);
   const candidates = sortAppointmentsByTime(appointments).filter((item) => {
+    if (!isKpiCountableAppointment(item)) return false;
     if (!isActiveSlot(item)) return false;
     if (todayIso && String(item.data) !== String(todayIso)) return false;
     return compareHm(item.horaInicio, nowHm) >= 0;
@@ -280,4 +283,35 @@ export function filterAppointmentsByStatus(appointments, statusFilter) {
     }
     return item.status === statusFilter;
   });
+}
+
+/** Contagens separadas para cards da aba Lista (agendamentos vs bloqueios). */
+export function countListDayItems(items) {
+  const rows = Array.isArray(items) ? items : [];
+  return {
+    agendamentos: rows.filter(isKpiCountableAppointment).length,
+    bloqueios: rows.filter((item) => item?.tipo === 'bloqueio').length,
+  };
+}
+
+function pluralPt(count, singular, plural) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** Badge/modal da aba Lista — omite contadores zero; separador " · ". */
+export function formatListDayCountLabel(items, { suffix = '' } = {}) {
+  const { agendamentos, bloqueios } = countListDayItems(items);
+  const parts = [];
+  if (agendamentos > 0) parts.push(pluralPt(agendamentos, 'agendamento', 'agendamentos'));
+  if (bloqueios > 0) parts.push(pluralPt(bloqueios, 'bloqueio', 'bloqueios'));
+  if (parts.length === 0) return suffix ? `0 agendamentos${suffix}` : '0 agendamentos';
+  return `${parts.join(' · ')}${suffix}`;
+}
+
+/** Preview do primeiro item cronológico no card da aba Lista. */
+export function formatListDayPreviewLabel(item) {
+  if (item?.tipo === 'bloqueio') {
+    return `[BLOQUEIO] ${bloqueioMotivoLabel(item)}`;
+  }
+  return item?.pacienteNome || 'Paciente';
 }

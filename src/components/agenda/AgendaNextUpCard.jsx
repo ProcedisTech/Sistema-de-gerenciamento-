@@ -1,16 +1,7 @@
-import { Check, MessageCircle, Calendar, Play, XCircle } from 'lucide-react';
-import { getRailCardActions, getRailPrimaryLabel } from '../../utils/agendaCardActions.js';
+import { getRailCardActions } from '../../utils/agendaCardActions.js';
 import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
-
-const BTN_FOCUS =
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2';
-
-const BTN_SECONDARY = `inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-ink-200 bg-white px-2 text-xs font-medium text-ink-700 hover:bg-ink-50 ${BTN_FOCUS}`;
-
-const BTN_CANCEL = `${BTN_SECONDARY} text-status-danger-ink hover:bg-status-danger-bg`;
-
-const BTN_PRIMARY = `inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br from-vivid-teal-500 to-vivid-teal-600 px-3 text-[13px] font-medium text-white shadow-agenda-glow transition-all duration-150 ease-out motion-reduce:transition-none hover:-translate-y-px hover:brightness-[1.06] ${BTN_FOCUS}`;
+import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
 
 function formatHmDisplay(hm) {
   return String(hm || '').slice(0, 5);
@@ -21,6 +12,7 @@ export function AgendaNextUpCard({
   now,
   showProfissional,
   isNivel1,
+  compact = false,
   onCheckIn,
   onWhatsApp,
   onReagendar,
@@ -30,7 +22,6 @@ export function AgendaNextUpCard({
 
   const countdown = formatCountdown(appointment.horaInicio, now);
   const actions = getRailCardActions(appointment.status);
-  const primaryLabel = getRailPrimaryLabel(actions.primary);
 
   return (
     <article className="relative mb-3 grid grid-cols-[1fr_auto] gap-3 rounded-2xl border-2 border-vivid-teal-500 bg-white p-4 shadow-agenda-glow">
@@ -68,36 +59,19 @@ export function AgendaNextUpCard({
 
       {!isNivel1 ? (
         <div className="col-span-2 border-t border-ink-150 pt-3">
-          {actions.primary ? (
-            <button type="button" onClick={() => onCheckIn?.(appointment)} className={BTN_PRIMARY}>
-              {actions.primary === 'confirmar' ? (
-                <Check className="h-4 w-4 shrink-0" aria-hidden />
-              ) : (
-                <Play className="h-4 w-4 shrink-0" aria-hidden />
-              )}
-              {primaryLabel}
-            </button>
-          ) : null}
-          <div className="mt-2 flex gap-1.5">
-            {actions.secondary.includes('whatsapp') ? (
-              <button type="button" onClick={() => onWhatsApp?.(appointment)} className={BTN_SECONDARY}>
-                <MessageCircle className="h-3 w-3 shrink-0" aria-hidden />
-                WhatsApp
-              </button>
-            ) : null}
-            {actions.secondary.includes('reagendar') ? (
-              <button type="button" onClick={() => onReagendar?.(appointment)} className={BTN_SECONDARY}>
-                <Calendar className="h-3 w-3 shrink-0" aria-hidden />
-                Reagendar
-              </button>
-            ) : null}
-            {actions.secondary.includes('cancelar') ? (
-              <button type="button" onClick={() => onCancelar?.(appointment)} className={BTN_CANCEL}>
-                <XCircle className="h-3 w-3 shrink-0" aria-hidden />
-                Cancelar
-              </button>
-            ) : null}
-          </div>
+          <AgendaRailCardActions
+            appointment={appointment}
+            actions={actions}
+            compact={compact}
+            className="flex flex-col gap-1.5"
+            secondaryRowClassName="mt-2 flex gap-1.5"
+            primaryHeightClass="h-9"
+            primaryIconClass="h-4 w-4"
+            onPrimaryClick={onCheckIn}
+            onWhatsApp={onWhatsApp}
+            onReagendar={onReagendar}
+            onCancelar={onCancelar}
+          />
         </div>
       ) : null}
     </article>

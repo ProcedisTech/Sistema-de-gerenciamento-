@@ -20,6 +20,8 @@ import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { buildAdvanceOffersByAgendaId } from '../../utils/agendaAdvanceOffer.js';
 import { addMinutesToTime } from '../../utils/agendaMapping.js';
 import {
+  formatListDayCountLabel,
+  formatListDayPreviewLabel,
   getNextAppointment,
 } from '../../utils/agendaDayInsights.js';
 
@@ -62,7 +64,7 @@ function ListDayCards({ agenda, onOpenDaySummary, className = '' }) {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-app-border bg-brand-primarySubtle px-2 py-0.5 text-[11px] font-bold text-brand-primaryDark">
-                {group.items.length} agendamento{group.items.length === 1 ? '' : 's'}
+                {formatListDayCountLabel(group.items)}
               </span>
               {isToday ? (
                 <span className="rounded-md border border-brand-primary/25 bg-brand-primary/10 px-2 py-0.5 text-[11px] font-bold text-brand-primaryDark">
@@ -74,7 +76,7 @@ function ListDayCards({ agenda, onOpenDaySummary, className = '' }) {
               <p className="mt-3 line-clamp-2 text-[12px] font-medium text-[#64748b]">
                 <span className="font-bold text-brand-primary">{first.horaInicio}</span>
                 <span className="mx-1.5 text-[#CBD5E1]">·</span>
-                {first.pacienteNome}
+                {formatListDayPreviewLabel(first)}
                 {group.items.length > 1 ? (
                   <span className="mt-0.5 block text-[11px] text-[#94a3b8]">+{group.items.length - 1} outros</span>
                 ) : null}
@@ -108,7 +110,7 @@ function DaySummaryModal({
           <div className="min-w-0">
             <h3 className="text-[16px] font-black leading-tight text-[#1A1A2E] sm:text-[18px]">{formatLongDate(group.date)}</h3>
             <p className="mt-1 text-[12px] font-medium text-[#888888]">
-              {group.items.length} agendamento{group.items.length === 1 ? '' : 's'} neste dia
+              {formatListDayCountLabel(group.items, { suffix: ' neste dia' })}
             </p>
           </div>
           <button type="button" onClick={onClose} className="shrink-0 rounded-xl p-2 text-[#64748b] hover:bg-[#F5F6FA]">

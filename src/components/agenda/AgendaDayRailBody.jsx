@@ -34,6 +34,7 @@ export function AgendaDayRailBody({
   highlightedId,
   showProfissional,
   isNivel1,
+  compact = false,
   advanceOfferByAgendaId,
   onAdvanceClick,
   onCheckIn,
@@ -60,7 +61,7 @@ export function AgendaDayRailBody({
     <div
       ref={listRef}
       key={selectedDay}
-      className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-ink-50 px-4 pb-2 pt-4"
+      className="custom-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-ink-50 px-4 pb-2 pt-4"
     >
       {isToday && nextUp ? (
         <AgendaNextUpCard
@@ -68,6 +69,7 @@ export function AgendaDayRailBody({
           now={now}
           showProfissional={showProfissional}
           isNivel1={isNivel1}
+          compact={compact}
           onCheckIn={onCheckIn}
           onWhatsApp={onWhatsApp}
           onReagendar={onReagendar}
@@ -117,6 +119,7 @@ export function AgendaDayRailBody({
                         highlighted={highlightedId === id}
                         showProfissional={showProfissional}
                         isNivel1={isNivel1}
+                        compact={compact}
                         advanceOffer={advanceOfferByAgendaId?.get(id)}
                         onAdvanceClick={onAdvanceClick}
                         onConfirmar={onConfirmar}
