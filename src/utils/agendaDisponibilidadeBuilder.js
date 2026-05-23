@@ -136,11 +136,16 @@ export function buildDaySlotList({
     selectedFormIso === iso && selectedHm ? parseHhmmToMinutes(selectedHm) : null;
 
   const slots = [];
-  const lastStart = dayEndMin - dur;
 
-  for (let t = dayStartMin; t <= lastStart; t += step) {
-    const end = t + dur;
-    if (!intervalWithinWindows(t, end, windows)) continue;
+  for (let t = dayStartMin; t < dayEndMin; t += step) {
+    const blockEnd = t + step;
+    if (!intervalWithinWindows(t, blockEnd, windows)) continue;
+
+    const proposedEnd = t + dur;
+    const canStart =
+      t <= dayEndMin - dur &&
+      intervalWithinWindows(t, proposedEnd, windows) &&
+      !segmentAtSlot(segments, t, proposedEnd);
 
     const hhmm = minutesToHhmm(t);
     let state = 'livre';
@@ -152,7 +157,7 @@ export function buildDaySlotList({
     if (selectedMin != null && t === selectedMin) {
       state = 'selecionado';
     } else {
-      const hit = segmentAtSlot(segments, t, end);
+      const hit = segmentAtSlot(segments, t, blockEnd);
       if (hit) {
         if (hit.kind === 'bloqueio') {
           state = 'bloqueio';
@@ -172,11 +177,23 @@ export function buildDaySlotList({
       }
     }
 
+    if (
+      state === 'livre' &&
+      selectedMin != null &&
+      t > selectedMin &&
+      t < selectedMin + dur
+    ) {
+      state = 'previewOcupacao';
+    }
+
+    const clickable = state === 'selecionado' || (state === 'livre' && canStart);
+
     slots.push({
       startMin: t,
-      endMin: end,
+      endMin: blockEnd,
       hhmm,
       state,
+      clickable,
       label,
       sublabel,
       observacao,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { AGENDA_SELECTED_SURFACE } from './agendaSelectionStyles.js';
 
 const FOCUS_RING =
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2';
@@ -35,7 +36,7 @@ export const AgendaFilterChip = React.forwardRef(function AgendaFilterChip(
     'border-ink-200 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50';
 
   const activeDefault = isAll
-    ? 'border-ink-900 bg-ink-900 text-white'
+    ? AGENDA_SELECTED_SURFACE
     : activeClassName || 'border-ink-900 bg-ink-900 text-white';
 
   const countClass = active

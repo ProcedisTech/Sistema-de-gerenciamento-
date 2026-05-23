@@ -92,6 +92,7 @@ export function AgendaDayRail({
         highlightedId={highlightedId}
         showProfissional={showProfissional}
         isNivel1={isNivel1}
+        compact={compact}
         advanceOfferByAgendaId={advanceOfferByAgendaId}
         onAdvanceClick={onAdvanceClick}
         onCheckIn={onCheckIn}

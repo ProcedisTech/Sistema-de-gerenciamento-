@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { AGENDA_SELECTED_DAY_CELL } from './agendaSelectionStyles.js';
 import {
   countCountableAppointments,
   getAppointmentStatusBucket,
@@ -67,8 +68,7 @@ function AgendaCalendarDayCellInner({
   }
 
   if (isSelected) {
-    cellClass +=
-      '-translate-y-px border-vivid-teal-700 bg-gradient-to-br from-vivid-teal-600 to-vivid-teal-800 text-white shadow-agenda-glow';
+    cellClass += AGENDA_SELECTED_DAY_CELL;
   } else if (isHovered && !isSelected) {
     cellClass += 'z-10 border-ink-200 bg-white text-ink-900 shadow-agenda-sm';
   } else if (isToday) {

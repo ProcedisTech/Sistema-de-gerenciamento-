@@ -6,14 +6,18 @@ function capitalizeFirst(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function slotRowClass(state) {
+function slotRowClass(state, clickable = true) {
   const base =
     'flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] transition-all';
   switch (state) {
     case 'selecionado':
       return `${base} border-transparent bg-white ring-2 ring-teal-600`;
+    case 'previewOcupacao':
+      return `${base} border-transparent bg-teal-50 ring-1 ring-teal-400/60 cursor-default`;
     case 'livre':
-      return `${base} border-transparent bg-white hover:bg-gray-50 cursor-pointer`;
+      return clickable
+        ? `${base} border-transparent bg-white hover:bg-gray-50 cursor-pointer`
+        : `${base} border-transparent bg-white text-gray-400 cursor-default`;
     case 'ocupado':
       return `${base} border-transparent bg-gray-100 text-gray-600 cursor-default`;
     case 'bloqueio':
@@ -64,14 +68,15 @@ export function AgendaDisponibilidadeSlots({
           style={maxListHeight ? { maxHeight: maxListHeight } : { maxHeight: '380px' }}
         >
           {dayModel.slots.map((slot) => {
-            const clickable = slot.state === 'livre' || slot.state === 'selecionado';
+            const clickable =
+              slot.clickable ?? (slot.state === 'livre' || slot.state === 'selecionado');
             return (
               <li key={slot.hhmm}>
                 <button
                   type="button"
                   disabled={!clickable}
                   onClick={() => clickable && onSelectSlot(selectedIso, slot.hhmm)}
-                  className={slotRowClass(slot.state)}
+                  className={slotRowClass(slot.state, clickable)}
                 >
                   <span className="w-12 shrink-0 font-mono text-[12px] font-bold tabular-nums">
                     {slot.hhmm}
@@ -90,6 +95,8 @@ export function AgendaDisponibilidadeSlots({
                     </span>
                   ) : slot.state === 'selecionado' ? (
                     <span className="font-medium text-teal-700">Horário selecionado</span>
+                  ) : slot.state === 'previewOcupacao' ? (
+                    <span className="font-medium text-teal-600/90">Será ocupado</span>
                   ) : (
                     <span className="text-gray-500">Livre</span>
                   )}

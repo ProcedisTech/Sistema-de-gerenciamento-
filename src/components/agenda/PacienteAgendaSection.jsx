@@ -67,7 +67,7 @@ export function PacienteAgendaSection({
 
   return (
     <>
-      <div className="flex gap-2">
+      <div className="flex flex-nowrap gap-2">
         <div className="min-w-0 flex-1">
           <PacienteSearchInput
             value={id}
@@ -80,11 +80,12 @@ export function PacienteAgendaSection({
         <button
           type="button"
           onClick={() => setCreateModalOpen(true)}
-          className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-teal-600 hover:border-teal-300 hover:bg-teal-50"
+          className="inline-flex h-[42px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-brand-primary bg-white px-3 text-[13px] font-semibold text-brand-primaryDark transition-colors hover:border-brand-primary hover:bg-brand-primaryGhost focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 max-[380px]:w-[42px] max-[380px]:px-0"
           aria-label="Cadastrar paciente"
           title="Cadastrar paciente"
         >
-          <Plus className="h-5 w-5" strokeWidth={2.5} />
+          <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+          <span className="hidden min-[381px]:inline whitespace-nowrap">Cadastrar paciente</span>
         </button>
       </div>
 

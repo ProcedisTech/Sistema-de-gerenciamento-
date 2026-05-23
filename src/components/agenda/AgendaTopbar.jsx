@@ -1,6 +1,7 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
 import NotificationBell from '../layout/NotificationBell.jsx';
+import { AGENDA_SELECTED_SURFACE } from './agendaSelectionStyles.js';
 import { useNowClock } from './hooks/useNowClock.js';
 
 const VIEW_OPTIONS = [
@@ -31,7 +32,7 @@ function ViewToggle({ viewMode, onChangeViewMode, onSyncWeekFromSelection }) {
             }}
             className={`h-9 min-w-[4.5rem] rounded-lg px-3 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 ${
               active
-                ? 'bg-ink-900 text-white shadow-agenda-sm'
+                ? `${AGENDA_SELECTED_SURFACE} shadow-agenda-sm`
                 : 'text-ink-700 hover:bg-ink-50'
             }`}
           >
