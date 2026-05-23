@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { formatLongDate } from './useAgendaPage';
 import { WeekTimeGrid } from './WeekTimeGrid';
 import AgendaSlotActions from './AgendaSlotActions.jsx';
-import { AgendaAppointmentSummaryCard } from './AgendaAppointmentSummaryCard.jsx';
+import { AgendaSummaryEntryCard } from './AgendaSummaryEntryCard.jsx';
 import { AgendaWeekSlotDetailModal } from './AgendaWeekSlotDetailModal.jsx';
 import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
 import { AgendaTopbar } from './AgendaTopbar.jsx';
@@ -17,13 +17,23 @@ import { AgendaKbdHint } from './AgendaKbdHint.jsx';
 import { agendaEnterClass } from './agendaEnterClasses.js';
 import { useAgendaKeyboardShortcuts } from './hooks/useAgendaKeyboardShortcuts.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
+import { useToast } from '../../contexts/useToast.js';
 import { buildAdvanceOffersByAgendaId } from '../../utils/agendaAdvanceOffer.js';
 import { addMinutesToTime } from '../../utils/agendaMapping.js';
 import {
   formatListDayCountLabel,
-  formatListDayPreviewLabel,
-  getNextAppointment,
+  formatListDayPreviewEntry,
+  getEntryPrimaryAppointment,
+  getNextAppointmentEntry,
+  groupConsecutiveAppointments,
 } from '../../utils/agendaDayInsights.js';
+import {
+  applyActionToAppointmentGroup,
+  formatGroupActionResultMessage,
+  resolveActionAppointments,
+  scheduleRowFromTarget,
+} from '../../utils/agendaGroupActions.js';
+import { getEntryDomId } from '../../utils/agendaRailHelpers.js';
 
 function samePatient(a, b) {
   if (!a || !b) return false;
@@ -48,7 +58,9 @@ function ListDayCards({ agenda, onOpenDaySummary, className = '' }) {
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 lg:gap-4">
       {agenda.groupedAppointments.map((group) => {
         const isToday = group.date === agenda.todayIso;
-        const first = group.items[0];
+        const entries = groupConsecutiveAppointments(group.items);
+        const firstEntry = entries[0];
+        const firstAppt = getEntryPrimaryAppointment(firstEntry);
         return (
           <button
             key={group.date}
@@ -72,13 +84,19 @@ function ListDayCards({ agenda, onOpenDaySummary, className = '' }) {
                 </span>
               ) : null}
             </div>
-            {first ? (
+            {firstAppt ? (
               <p className="mt-3 line-clamp-2 text-[12px] font-medium text-[#64748b]">
-                <span className="font-bold text-brand-primary">{first.horaInicio}</span>
+                <span className="font-bold text-brand-primary">
+                  {firstEntry?.kind === 'group'
+                    ? `${firstEntry.horaInicio} → ${firstEntry.horaFim}`
+                    : firstAppt.horaInicio}
+                </span>
                 <span className="mx-1.5 text-[#CBD5E1]">·</span>
-                {formatListDayPreviewLabel(first)}
-                {group.items.length > 1 ? (
-                  <span className="mt-0.5 block text-[11px] text-[#94a3b8]">+{group.items.length - 1} outros</span>
+                {formatListDayPreviewEntry(firstEntry)}
+                {entries.length > 1 ? (
+                  <span className="mt-0.5 block text-[11px] text-[#94a3b8]">
+                    +{entries.length - 1} outro{entries.length - 1 === 1 ? '' : 's'}
+                  </span>
                 ) : null}
               </p>
             ) : null}
@@ -102,6 +120,8 @@ function DaySummaryModal({
 }) {
   if (!group) return null;
 
+  const entries = groupConsecutiveAppointments(group.items);
+
   return (
     <div className="fixed inset-0 z-[215] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Fechar resumo do dia" />
@@ -118,24 +138,30 @@ function DaySummaryModal({
           </button>
         </div>
         <div className="space-y-3 p-4 sm:p-5">
-          {group.items.map((appointment) => (
-            <AgendaAppointmentSummaryCard
-              key={appointment.id}
-              appointment={appointment}
-              onPrimary={(item) => {
-                onPrimary(item);
-                onClose();
-              }}
-              onEdit={(item) => {
-                onEdit(item);
-                onClose();
-              }}
-              renderSlotActions={renderSlotActions}
-              isNivel1={isNivel1}
-              advanceOffer={advanceOfferByAgendaId?.get(String(appointment.id))}
-              onAdvanceClick={onAdvanceClick}
-            />
-          ))}
+          {entries.map((entry) => {
+            const primary = getEntryPrimaryAppointment(entry);
+            const advanceId = primary?.id ? String(primary.id) : '';
+            return (
+              <AgendaSummaryEntryCard
+                key={getEntryDomId(entry)}
+                entry={entry}
+                onPrimary={(target) => {
+                  onPrimary(target);
+                  onClose();
+                }}
+                onEdit={(target) => {
+                  onEdit(getEntryPrimaryAppointment(
+                    target?.kind === 'group' ? target : { kind: 'single', appointment: target },
+                  ) || target);
+                  onClose();
+                }}
+                renderSlotActions={renderSlotActions}
+                isNivel1={isNivel1}
+                advanceOffer={advanceId ? advanceOfferByAgendaId?.get(advanceId) : undefined}
+                onAdvanceClick={onAdvanceClick}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
@@ -161,7 +187,9 @@ export function AgendaDashboard({
   const [advancePending, setAdvancePending] = React.useState(null);
   const [showEntrance, setShowEntrance] = React.useState(true);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const isWideDesktop = useMediaQuery('(min-width: 1440px)');
   const isMobile = !isDesktop;
+  const toast = useToast();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
@@ -240,10 +268,11 @@ export function AgendaDashboard({
     return agenda.appointments.filter((item) => String(item.data) === String(agenda.todayIso));
   }, [agenda.appointments, agenda.todayIso]);
 
-  const nextAppointment = React.useMemo(
-    () => getNextAppointment(todayAppointments, { todayIso: agenda.todayIso }),
-    [todayAppointments, agenda.todayIso],
-  );
+  const nextAppointment = React.useMemo(() => {
+    const entries = groupConsecutiveAppointments(todayAppointments);
+    const nextEntry = getNextAppointmentEntry(entries, { todayIso: agenda.todayIso });
+    return getEntryPrimaryAppointment(nextEntry);
+  }, [todayAppointments, agenda.todayIso]);
 
   const handleAdvanceClick = React.useCallback((appointment, offer) => {
     if (!appointment || !offer?.targetHoraInicio || agenda.isNivel1) return;
@@ -277,36 +306,90 @@ export function AgendaDashboard({
   }, [agenda.viewMode]);
 
   const renderSlotActions = React.useCallback(
-    (appointment) => {
+    (target) => {
+      const items = resolveActionAppointments(target);
+      const primary = items[0];
+      if (!primary) return null;
       const disabled = Boolean(agenda.loading) || agenda.isNivel1;
+      const isGroup = items.length > 1;
+
       return (
         <AgendaSlotActions
-          agenda={appointment}
+          agenda={primary}
           disabled={disabled}
-          onMarcarRealizado={() => {
-            if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'realizado');
+          onMarcarRealizado={async () => {
+            if (isGroup) {
+              const result = await applyActionToAppointmentGroup(items, (item) =>
+                item.agendaId
+                  ? agenda.handleAtualizarStatus(item.agendaId, 'realizado', { successToast: false })
+                  : Promise.resolve(false),
+              );
+              if (result.allOk) toast.success(`${items.length} agendamentos marcados como realizados`);
+              else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'realizadas' }));
+              return;
+            }
+            if (primary.agendaId) agenda.handleAtualizarStatus(primary.agendaId, 'realizado');
           }}
-          onMarcarNaoCompareceu={() => {
-            if (appointment.agendaId) agenda.handleMarcarNaoCompareceu(appointment.agendaId);
+          onMarcarNaoCompareceu={async () => {
+            if (isGroup) {
+              const result = await applyActionToAppointmentGroup(items, (item) =>
+                item.agendaId ? agenda.handleMarcarNaoCompareceu(item.agendaId) : Promise.resolve(false),
+              );
+              if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'marcadas' }));
+              return;
+            }
+            if (primary.agendaId) agenda.handleMarcarNaoCompareceu(primary.agendaId);
           }}
-          onReagendar={() => onSlotReagendar?.(appointment)}
-          onCancelar={() => onSlotCancelar?.(appointment)}
-          onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h')}
-          onRemoverBloqueio={() => agenda.handleRemoverBloqueio(appointment)}
+          onReagendar={() => onSlotReagendar?.(items.length > 1 ? target : primary)}
+          onCancelar={() => onSlotCancelar?.(items.length > 1 ? target : primary)}
+          onEnviarWhatsApp={async () => {
+            if (isGroup) {
+              const result = await applyActionToAppointmentGroup(items, (item) =>
+                item.agendaId
+                  ? agenda.handleEnviarWhatsApp(item.agendaId, 'confirmacao_24h')
+                  : Promise.resolve(false),
+              );
+              if (result.allOk) toast.success(`WhatsApp gerado para ${items.length} agendamentos`);
+              else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'enviadas' }));
+              return;
+            }
+            if (primary.agendaId) agenda.handleEnviarWhatsApp(primary.agendaId, 'confirmacao_24h');
+          }}
+          onRemoverBloqueio={() => agenda.handleRemoverBloqueio(primary)}
         />
       );
     },
-    [agenda, onSlotCancelar, onSlotReagendar]
+    [agenda, onSlotCancelar, onSlotReagendar, toast],
   );
 
-  const handlePrimary = React.useCallback((appointment) => {
-    if (appointment.tipo === 'bloqueio') return;
-    if (appointment.status === 'pendente' || appointment.status === 'aguardando_confirmacao') {
-      agenda.updateStatus(appointment, 'confirmado');
+  const handlePrimary = React.useCallback((target) => {
+    const items = resolveActionAppointments(target);
+    const appointment = items[0];
+    if (!appointment || appointment.tipo === 'bloqueio') return;
+
+    const hasPending = items.some(
+      (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
+    );
+    if (hasPending) {
+      void (async () => {
+        const pending = items.filter(
+          (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
+        );
+        if (pending.length <= 1) {
+          agenda.updateStatus(pending[0] || appointment, 'confirmado');
+          return;
+        }
+        const result = await applyActionToAppointmentGroup(pending, (item) =>
+          agenda.handleAtualizarStatus(item.agendaId, 'confirmado', { successToast: false }),
+        );
+        if (result.allOk) toast.success(`${pending.length} agendamentos confirmados`);
+        else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'confirmadas' }));
+      })();
       return;
     }
+
     if (appointment.status === 'cancelado') {
-      onSlotReagendar?.(appointment);
+      onSlotReagendar?.(scheduleRowFromTarget(target) || appointment);
       return;
     }
 
@@ -323,7 +406,7 @@ export function AgendaDashboard({
       return;
     }
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
-  }, [agenda, onSlotReagendar, onStartAttendance, patients]);
+  }, [agenda, onSlotReagendar, onStartAttendance, patients, toast]);
 
   const handleEditAppointment = React.useCallback(
     (appointment) => {
@@ -390,46 +473,86 @@ export function AgendaDashboard({
     [agenda]
   );
 
-  const handleCheckIn = React.useCallback(
-    (appointment) => {
-      if (!appointment) return;
-      if (appointment.status === 'pendente' || appointment.status === 'aguardando_confirmacao') {
-        if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'confirmado');
+  const handleRailConfirmar = React.useCallback(
+    async (target) => {
+      const items = resolveActionAppointments(target);
+      const pending = items.filter(
+        (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
+      );
+      const toConfirm = pending.length ? pending : items;
+      if (toConfirm.length <= 1) {
+        const a = toConfirm[0];
+        if (a?.agendaId) agenda.handleAtualizarStatus(a.agendaId, 'confirmado');
         return;
       }
-      if (appointment.status === 'confirmado') {
-        handlePrimary(appointment);
-      }
+      const result = await applyActionToAppointmentGroup(toConfirm, (item) =>
+        agenda.handleAtualizarStatus(item.agendaId, 'confirmado', { successToast: false }),
+      );
+      if (result.allOk) toast.success(`${toConfirm.length} agendamentos confirmados`);
+      else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'confirmadas' }));
     },
-    [agenda, handlePrimary],
+    [agenda, toast],
   );
 
-  const handleRailConfirmar = React.useCallback(
-    (appointment) => {
-      if (appointment?.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'confirmado');
+  const handleCheckIn = React.useCallback(
+    (target) => {
+      if (!target) return;
+      const items = resolveActionAppointments(target);
+      const appointment = items[0];
+      if (!appointment) return;
+
+      const hasPending = items.some(
+        (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
+      );
+      if (hasPending) {
+        void handleRailConfirmar(target);
+        return;
+      }
+      if (items.every((item) => item.status === 'confirmado')) {
+        handlePrimary(target);
+      }
     },
-    [agenda],
+    [handlePrimary, handleRailConfirmar],
   );
 
   const handleRailIniciarAtendimento = React.useCallback(
-    (appointment) => {
-      handlePrimary(appointment);
+    (target) => {
+      handlePrimary(target);
     },
     [handlePrimary],
   );
 
   const handleRailCancelar = React.useCallback(
-    (appointment) => {
-      onSlotCancelar?.(appointment);
+    (target) => {
+      const row = scheduleRowFromTarget(target);
+      onSlotCancelar?.(row || target);
     },
     [onSlotCancelar],
   );
 
-  const handleRailWhatsApp = React.useCallback(
-    (appointment) => {
-      if (appointment?.agendaId) agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h');
+  const handleRailReagendar = React.useCallback(
+    (target) => {
+      const row = scheduleRowFromTarget(target);
+      onSlotReagendar?.(row || target);
     },
-    [agenda],
+    [onSlotReagendar],
+  );
+
+  const handleRailWhatsApp = React.useCallback(
+    async (target) => {
+      const items = resolveActionAppointments(target);
+      if (items.length <= 1) {
+        const a = items[0];
+        if (a?.agendaId) agenda.handleEnviarWhatsApp(a.agendaId, 'confirmacao_24h');
+        return;
+      }
+      const result = await applyActionToAppointmentGroup(items, (item) =>
+        item.agendaId ? agenda.handleEnviarWhatsApp(item.agendaId, 'confirmacao_24h') : Promise.resolve(false),
+      );
+      if (result.allOk) toast.success(`WhatsApp gerado para ${items.length} agendamentos`);
+      else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'enviadas' }));
+    },
+    [agenda, toast],
   );
 
   const railProps = {
@@ -438,6 +561,8 @@ export function AgendaDashboard({
     todayIso: agenda.todayIso,
     showProfissional,
     isNivel1: agenda.isNivel1,
+    dense: isDesktop && !isWideDesktop,
+    compactActions: isDesktop && !isWideDesktop,
     listRef: panelListRef,
     cardRefs,
     advanceOfferByAgendaId,
@@ -448,7 +573,7 @@ export function AgendaDashboard({
     onConfirmar: handleRailConfirmar,
     onIniciarAtendimento: handleRailIniciarAtendimento,
     onWhatsApp: handleRailWhatsApp,
-    onReagendar: onSlotReagendar,
+    onReagendar: handleRailReagendar,
     onCancelar: handleRailCancelar,
     onEdit: handleEditAppointment,
     onRemoverBloqueio: agenda.handleRemoverBloqueio,
@@ -456,7 +581,7 @@ export function AgendaDashboard({
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col gap-3 font-sans text-ink-900">
+    <div className="relative flex h-full min-h-0 flex-col gap-3 font-sans text-ink-900 lg:gap-2">
       <div className={agendaEnterClass(showEntrance, 'agenda-delay-100')}>
         <AgendaTopbar
           clinicaNome={clinicaNome}
@@ -493,7 +618,7 @@ export function AgendaDashboard({
         onSelectDay={(iso) => handleSelectDay(iso, true)}
       />
 
-      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:grid-cols-[minmax(0,7fr)_minmax(420px,480px)]">
+      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:max-[1439px]:grid-cols-[minmax(0,1fr)_minmax(400px,440px)] min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(420px,480px)]">
         <section
           className={`relative flex min-h-0 flex-col overflow-hidden md:max-lg:shrink-0 ${
             agenda.viewMode === 'grid'

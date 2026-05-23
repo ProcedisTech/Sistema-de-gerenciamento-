@@ -8,19 +8,30 @@ import {
 
 const HOUR_LABELS = [8, 10, 12, 14, 16, 18, 20];
 
-function AgendaDayRailTimelineStripInner({ appointments, selectedDay, todayIso, now, onBlockClick, compact = false }) {
+function AgendaDayRailTimelineStripInner({
+  appointments,
+  selectedDay,
+  todayIso,
+  now,
+  onBlockClick,
+  compact = false,
+  dense = false,
+}) {
   const blocks = getTimelineBlocks(appointments);
   const nowLeft = getNowLineLeftPercent(now, selectedDay, todayIso);
+  const useDense = dense && !compact;
+  const labelSizeClass = compact ? 'text-[9px]' : useDense ? 'text-[9px]' : 'text-[10px]';
+  const blockSizeClass = compact ? 'min-h-[28px] text-[9px]' : useDense ? 'text-[9px]' : 'text-[9.5px]';
 
   return (
-    <section className={`shrink-0 border-b border-ink-150 bg-white pb-3.5 pt-4 ${compact ? 'px-4' : 'px-5'}`}>
+    <section className={`shrink-0 border-b border-ink-150 bg-white pb-3.5 pt-4 ${compact ? 'px-4' : useDense ? 'px-4' : 'px-5'}`}>
       <div className={`relative mb-1.5 ${compact ? 'h-3' : 'h-3.5'}`}>
         {HOUR_LABELS.map((h) => {
           const left = ((h * 60 - TIMELINE_START_MIN) / TIMELINE_SPAN_MIN) * 100;
           return (
             <span
               key={h}
-              className={`absolute top-0 -translate-x-1/2 font-mono text-ink-500 ${compact ? 'text-[9px]' : 'text-[10px]'}`}
+              className={`absolute top-0 -translate-x-1/2 font-mono text-ink-500 ${labelSizeClass}`}
               style={{ left: `${left}%` }}
             >
               {String(h).padStart(2, '0')}h
@@ -45,7 +56,7 @@ function AgendaDayRailTimelineStripInner({ appointments, selectedDay, todayIso, 
             type="button"
             title={block.initials}
             onClick={() => onBlockClick?.(block.id)}
-            className={`absolute top-1 bottom-1 z-[1] flex items-center justify-center rounded font-mono font-semibold text-white transition-[transform,filter] duration-150 hover:z-[2] hover:scale-105 hover:brightness-110 motion-reduce:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 ${compact ? 'min-h-[28px] text-[9px]' : 'text-[9.5px]'} ${block.colorClass} ${block.faded ? 'opacity-75' : ''}`}
+            className={`absolute top-1 bottom-1 z-[1] flex items-center justify-center rounded font-mono font-semibold text-white transition-[transform,filter] duration-150 hover:z-[2] hover:scale-105 hover:brightness-110 motion-reduce:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 ${blockSizeClass} ${block.colorClass} ${block.faded ? 'opacity-75' : ''}`}
             style={{
               left: `${block.leftPercent}%`,
               width: `${block.widthPercent}%`,

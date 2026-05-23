@@ -315,3 +315,166 @@ export function formatListDayPreviewLabel(item) {
   }
   return item?.pacienteNome || 'Paciente';
 }
+
+/** horaFim de uma linha do dashboard (campo explícito ou derivado). */
+export function appointmentHoraFim(appointment) {
+  if (!appointment) return '00:00';
+  const hf = appointment.horaFim != null ? String(appointment.horaFim).slice(0, 5) : '';
+  if (hf) return normalizeHm(hf);
+  const hi = normalizeHm(appointment.horaInicio);
+  const dur = Number(appointment.duracaoMin) || 45;
+  return normalizeHm(addMinutesToTime(hi, dur));
+}
+
+function isGroupEligible(appointment) {
+  return (
+    appointment?.tipo !== 'bloqueio' &&
+    String(appointment?.pacienteId || '').trim() !== ''
+  );
+}
+
+function canMergeConsecutive(prev, next) {
+  if (!prev || !next) return false;
+  if (!isGroupEligible(prev) || !isGroupEligible(next)) return false;
+  if (String(prev.pacienteId) !== String(next.pacienteId)) return false;
+  if (String(prev.profissionalRoleUserId || prev.roleUserId) !== String(next.profissionalRoleUserId || next.roleUserId)) {
+    return false;
+  }
+  if (String(prev.data) !== String(next.data)) return false;
+  return normalizeHm(appointmentHoraFim(prev)) === normalizeHm(next.horaInicio);
+}
+
+function buildGroupEntry(appointments) {
+  const first = appointments[0];
+  const last = appointments[appointments.length - 1];
+  const horaInicio = normalizeHm(first.horaInicio);
+  const horaFim = appointmentHoraFim(last);
+  const duracaoTotalMin = appointments.reduce((sum, a) => sum + (Number(a.duracaoMin) || 45), 0);
+  return {
+    kind: 'group',
+    id: `group-${appointments.map((a) => a.id).join('__')}`,
+    appointments,
+    horaInicio,
+    horaFim,
+    duracaoTotalMin,
+    pacienteId: first.pacienteId,
+    pacienteNome: first.pacienteNome,
+    profissionalRoleUserId: first.profissionalRoleUserId || first.roleUserId,
+    profissionalNome: first.profissionalNome,
+    data: first.data,
+  };
+}
+
+/**
+ * Agrupa agendas consecutivas do mesmo paciente/profissional/dia.
+ * Retorna array de { kind: 'single', appointment } | { kind: 'group', ... }.
+ */
+export function groupConsecutiveAppointments(items) {
+  const rows = sortAppointmentsByTime(items || []);
+  const result = [];
+  let chain = [];
+
+  function flushChain() {
+    if (chain.length === 0) return;
+    if (chain.length === 1) {
+      result.push({ kind: 'single', appointment: chain[0] });
+    } else {
+      result.push(buildGroupEntry(chain));
+    }
+    chain = [];
+  }
+
+  for (const item of rows) {
+    if (!isGroupEligible(item)) {
+      flushChain();
+      result.push({ kind: 'single', appointment: item });
+      continue;
+    }
+    if (chain.length === 0) {
+      chain.push(item);
+      continue;
+    }
+    const prev = chain[chain.length - 1];
+    if (canMergeConsecutive(prev, item)) {
+      chain.push(item);
+    } else {
+      flushChain();
+      chain.push(item);
+    }
+  }
+  flushChain();
+  return result;
+}
+
+/** Bucket de status para um grupo de agendas. */
+export function getGroupedStatusBucket(appointments) {
+  const buckets = (appointments || [])
+    .map((a) => getAppointmentStatusBucket(a))
+    .filter(Boolean);
+  const unique = [...new Set(buckets)];
+  if (unique.length === 0) return 'pendente';
+  if (unique.length === 1) return unique[0];
+  return 'misto';
+}
+
+/** IDs de todas as agendas em uma entry (single ou group). */
+export function getEntryAppointmentIds(entry) {
+  if (!entry) return [];
+  if (entry.kind === 'group') return (entry.appointments || []).map((a) => String(a.id));
+  if (entry.kind === 'single' && entry.appointment) return [String(entry.appointment.id)];
+  return [];
+}
+
+/** Primeiro appointment representativo de uma entry. */
+export function getEntryPrimaryAppointment(entry) {
+  if (!entry) return null;
+  if (entry.kind === 'group') return entry.appointments?.[0] || null;
+  return entry.appointment || null;
+}
+
+/** Todas as agendas de uma entry (single ou group). */
+export function getAppointmentsFromEntry(entry) {
+  if (!entry) return [];
+  if (entry.kind === 'group') return entry.appointments || [];
+  return entry.appointment ? [entry.appointment] : [];
+}
+
+/** Próximo slot (single ou group) a partir de entries já agrupadas. */
+export function getNextAppointmentEntry(entries, { now = new Date(), todayIso } = {}) {
+  const nowHm = normalizeHm(`${now.getHours()}:${now.getMinutes()}`);
+  for (const entry of entries || []) {
+    const primary = getEntryPrimaryAppointment(entry);
+    if (!primary) continue;
+    if (!isKpiCountableAppointment(primary)) continue;
+    if (!isActiveSlot(primary)) continue;
+    if (todayIso && String(primary.data) !== String(todayIso)) continue;
+    if (compareHm(entry.horaInicio || primary.horaInicio, nowHm) >= 0) return entry;
+  }
+  return null;
+}
+
+/** Preview agrupado para ListDayCards. */
+export function formatListDayPreviewEntry(entry) {
+  if (!entry) return '';
+  if (entry.kind === 'single') return formatListDayPreviewLabel(entry.appointment);
+  const names = (entry.appointments || [])
+    .map((a) => a.procedimentoNome || 'Sem procedimento')
+    .filter(Boolean);
+  const patient = entry.pacienteNome || 'Paciente';
+  if (names.length <= 2) return `${patient} · ${names.join(' + ')}`;
+  return `${patient} · ${names[0]} +${names.length - 1} proc.`;
+}
+
+/** Faixa horária formatada para card agrupado. */
+export function formatGroupedTimeRange(entry) {
+  if (!entry) return '';
+  if (entry.kind === 'single') {
+    const a = entry.appointment;
+    return `${normalizeHm(a.horaInicio)} · ${Number(a.duracaoMin) || 0}min`;
+  }
+  const totalMin = entry.duracaoTotalMin || 0;
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  const durLabel = hours > 0 ? (mins ? `${hours}h ${mins}min` : `${hours}h`) : `${totalMin}min`;
+  return `${entry.horaInicio} → ${entry.horaFim} · ${durLabel}`;
+}

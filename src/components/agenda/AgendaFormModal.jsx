@@ -2,6 +2,7 @@ import React, { useCallback, useRef } from 'react';
 import { CalendarDays, CornerDownLeft, Trash2, X } from 'lucide-react';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { PacienteAgendaSection } from './PacienteAgendaSection.jsx';
+import { ProcedimentoChipList } from './ProcedimentoChipList.jsx';
 import { ProfissionalPills } from './ProfissionalPills.jsx';
 import { DuracaoPills } from './DuracaoPills.jsx';
 import { AgendaFormStatusBar } from './AgendaFormStatusBar.jsx';
@@ -212,6 +213,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
         ? [newId]
         : [...selectedProcedimentos, newId].filter((v, i, arr) => arr.indexOf(v) === i);
       agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
+      if (!isEdit) agenda.updateForm('procedimentoNome', '');
       return;
     }
     if (!id) return;
@@ -219,7 +221,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
       ? [id]
       : [...selectedProcedimentos, id].filter((v, i, arr) => arr.indexOf(v) === i);
     agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
-    if (nome) agenda.updateForm('procedimentoNome', nome);
+    if (!isEdit) agenda.updateForm('procedimentoNome', '');
   };
 
   const removeProcedimentoChip = (catalogoId) => {
@@ -295,40 +297,34 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               <FieldError error={agenda.formErrors.catalogoProcedimentoSaudeIds}>
                 <FieldLabel required>{isEdit ? 'Procedimento' : 'Procedimentos'}</FieldLabel>
                 <ProcedimentoAutocomplete
+                  key={`proc-ac-${selectedProcedimentos.length}`}
                   value={agenda.form.procedimentoNome || ''}
                   onInputChange={(nome) => agenda.updateForm('procedimentoNome', nome)}
-                  onCommit={(nome, catalogoId) => {
-                    agenda.updateForm('procedimentoNome', nome);
-                    addProcedimentoChip(catalogoId, nome);
-                  }}
-                  placeholder="Ex: Botox, Preenchimento..."
-                  catalogoOptions={agenda.procedimentoOptions.map((o) => ({
-                    id: o.id,
-                    nomeProcedimento: o.nome,
-                  }))}
+                  onCommit={(nome, catalogoId) => addProcedimentoChip(catalogoId, nome)}
+                  placeholder={
+                    isEdit
+                      ? 'Ex: Botox, Preenchimento...'
+                      : selectedProcedimentos.length > 0
+                        ? 'Adicionar procedimento'
+                        : 'Ex: Botox, Preenchimento...'
+                  }
+                  catalogoOptions={agenda.procedimentoOptions
+                    .filter((o) => !selectedProcedimentos.includes(String(o.id)))
+                    .map((o) => ({
+                      id: o.id,
+                      nomeProcedimento: o.nome,
+                    }))}
                   error={Boolean(agenda.formErrors.catalogoProcedimentoSaudeIds)}
                   showCatalogCommitBadge={false}
                 />
-                {selectedProcedimentos.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {selectedProcedimentos.map((id) => (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-700"
-                      >
-                        {procedimentoChipLabel(id)}
-                        <button
-                          type="button"
-                          onClick={() => removeProcedimentoChip(id)}
-                          className="rounded-full p-0.5 hover:bg-teal-100"
-                          aria-label="Remover procedimento"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                <ProcedimentoChipList
+                  ids={selectedProcedimentos}
+                  labelForId={procedimentoChipLabel}
+                  onReorder={(next) => agenda.updateForm('catalogoProcedimentoSaudeIds', next)}
+                  onRemove={removeProcedimentoChip}
+                  sortable={!isEdit}
+                  duracaoMin={agenda.form.duracaoMin}
+                />
               </FieldError>
             </div>
 

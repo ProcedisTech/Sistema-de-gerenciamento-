@@ -49,7 +49,7 @@ function NowPill() {
 
   return (
     <div
-      className="hidden lg:inline-flex w-fit items-center gap-2 rounded-full bg-ink-900 py-[5px] pl-2 pr-2.5 text-sm text-white"
+      className="hidden lg:inline-flex w-fit items-center gap-2 rounded-full bg-ink-900 py-[5px] pl-2 pr-2.5 text-sm text-white lg:py-1"
       aria-live="polite"
       aria-label={`Horário atual ${clockLabel}`}
     >
@@ -75,8 +75,8 @@ export function AgendaTopbar({
   const crumbText = crumbProf ? `${crumbClinica} · ${crumbProf}` : crumbClinica;
 
   return (
-    <header className="flex shrink-0 flex-col gap-3 px-[22px] pt-[22px] lg:grid lg:grid-cols-[1fr_auto] lg:items-start lg:gap-4">
-      <div className="flex min-w-0 flex-col gap-1">
+    <header className="flex shrink-0 flex-col gap-3 px-[22px] pt-[22px] lg:grid lg:grid-cols-[1fr_auto] lg:items-start lg:gap-4 lg:pt-3">
+      <div className="flex min-w-0 flex-col gap-1 lg:gap-0.5">
         <h1
           className="font-display text-[28px] font-bold leading-tight text-ink-900 lg:text-[34px]"
           style={{ fontVariationSettings: '"wdth" 90' }}
@@ -90,7 +90,7 @@ export function AgendaTopbar({
         <NowPill />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 lg:justify-end lg:pt-1">
+      <div className="flex flex-wrap items-center gap-3 lg:justify-end lg:pt-0">
         <ViewToggle
           viewMode={viewMode}
           onChangeViewMode={onChangeViewMode}

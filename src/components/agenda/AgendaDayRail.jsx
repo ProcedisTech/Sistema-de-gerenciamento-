@@ -14,6 +14,8 @@ export function AgendaDayRail({
   showProfissional = false,
   isNivel1 = false,
   compact = false,
+  dense = false,
+  compactActions = false,
   listRef,
   cardRefs,
   advanceOfferByAgendaId,
@@ -71,6 +73,7 @@ export function AgendaDayRail({
         todayIso={todayIso}
         appointments={appointments}
         compact={compact}
+        dense={dense}
       />
 
       <AgendaDayRailTimelineStrip
@@ -80,6 +83,7 @@ export function AgendaDayRail({
         now={now}
         onBlockClick={highlightCard}
         compact={compact}
+        dense={dense}
       />
 
       <AgendaDayRailBody
@@ -92,7 +96,7 @@ export function AgendaDayRail({
         highlightedId={highlightedId}
         showProfissional={showProfissional}
         isNivel1={isNivel1}
-        compact={compact}
+        compact={compact || compactActions}
         advanceOfferByAgendaId={advanceOfferByAgendaId}
         onAdvanceClick={onAdvanceClick}
         onCheckIn={onCheckIn}

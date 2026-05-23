@@ -1,13 +1,19 @@
 import { Calendar } from 'lucide-react';
-import { getNextAppointment } from '../../utils/agendaDayInsights.js';
+import { useMemo } from 'react';
 import {
+  getAppointmentsFromEntry,
+  getEntryAppointmentIds,
+  getNextAppointmentEntry,
+  groupConsecutiveAppointments,
+} from '../../utils/agendaDayInsights.js';
+import {
+  getEntryDomId,
   getPeriodSuffix,
-  groupAppointmentsByPeriod,
+  groupEntriesByPeriod,
   PERIOD_LABELS,
   PERIOD_ORDER,
 } from '../../utils/agendaRailHelpers.js';
-import { AgendaAppointmentCardRich } from './AgendaAppointmentCardRich.jsx';
-import { AgendaNextUpCard } from './AgendaNextUpCard.jsx';
+import { AgendaEntryCard } from './AgendaEntryCard.jsx';
 
 function SectionTitle({ label, count, suffix }) {
   const fullLabel = suffix ? `${label} · ${suffix}` : label;
@@ -49,13 +55,36 @@ export function AgendaDayRailBody({
   submittingRemoverBloqueioId,
 }) {
   const isToday = selectedDay === todayIso;
-  const nextUp = isToday
-    ? getNextAppointment(appointments, { now, todayIso: selectedDay })
-    : null;
-  const nextUpId = nextUp?.id ? String(nextUp.id) : null;
 
-  const grouped = groupAppointmentsByPeriod(appointments);
+  const entries = useMemo(
+    () => groupConsecutiveAppointments(appointments),
+    [appointments],
+  );
+
+  const nextUpEntry = isToday
+    ? getNextAppointmentEntry(entries, { now, todayIso: selectedDay })
+    : null;
+  const nextUpIds = useMemo(
+    () => new Set(getEntryAppointmentIds(nextUpEntry)),
+    [nextUpEntry],
+  );
+
+  const grouped = groupEntriesByPeriod(entries);
   const hasAny = PERIOD_ORDER.some((p) => grouped[p].length > 0);
+
+  function entryAdvanceOffer(entry) {
+    const items = getAppointmentsFromEntry(entry);
+    for (const appt of items) {
+      const offer = advanceOfferByAgendaId?.get(String(appt.id));
+      if (offer) return offer;
+    }
+    return undefined;
+  }
+
+  function isEntryHiddenByNextUp(entry) {
+    const ids = getEntryAppointmentIds(entry);
+    return ids.some((id) => nextUpIds.has(id));
+  }
 
   return (
     <div
@@ -63,9 +92,10 @@ export function AgendaDayRailBody({
       key={selectedDay}
       className="custom-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-ink-50 px-4 pb-2 pt-4"
     >
-      {isToday && nextUp ? (
-        <AgendaNextUpCard
-          appointment={nextUp}
+      {isToday && nextUpEntry ? (
+        <AgendaEntryCard
+          entry={nextUpEntry}
+          variant="nextUp"
           now={now}
           showProfissional={showProfissional}
           isNivel1={isNivel1}
@@ -96,31 +126,31 @@ export function AgendaDayRailBody({
         </div>
       ) : (
         PERIOD_ORDER.map((period) => {
-          const items = grouped[period];
-          if (items.length === 0) return null;
+          const periodEntries = grouped[period];
+          if (periodEntries.length === 0) return null;
           const suffix = getPeriodSuffix(period, { selectedDay, todayIso, now });
 
           return (
             <section key={period} className="mb-4">
-              <SectionTitle label={PERIOD_LABELS[period]} count={items.length} suffix={suffix} />
+              <SectionTitle label={PERIOD_LABELS[period]} count={periodEntries.length} suffix={suffix} />
               <div className="space-y-2">
-                {items.map((appointment) => {
-                  const id = String(appointment.id);
-                  if (nextUpId && id === nextUpId) return null;
+                {periodEntries.map((entry) => {
+                  if (isEntryHiddenByNextUp(entry)) return null;
+                  const domId = getEntryDomId(entry);
                   return (
                     <div
-                      key={appointment.id}
+                      key={domId}
                       ref={(el) => {
-                        if (cardRefs && appointment.id) cardRefs.current[id] = el;
+                        if (cardRefs && domId) cardRefs.current[domId] = el;
                       }}
                     >
-                      <AgendaAppointmentCardRich
-                        appointment={appointment}
-                        highlighted={highlightedId === id}
+                      <AgendaEntryCard
+                        entry={entry}
+                        highlighted={highlightedId === domId}
                         showProfissional={showProfissional}
                         isNivel1={isNivel1}
                         compact={compact}
-                        advanceOffer={advanceOfferByAgendaId?.get(id)}
+                        advanceOffer={entryAdvanceOffer(entry)}
                         onAdvanceClick={onAdvanceClick}
                         onConfirmar={onConfirmar}
                         onIniciarAtendimento={onIniciarAtendimento}

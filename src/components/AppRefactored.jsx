@@ -23,6 +23,12 @@ import { usePapel } from '../hooks/usePapel';
 import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
+import {
+  applyActionToAppointmentGroup,
+  formatGroupActionResultMessage,
+  reagendarAppointmentGroup,
+  scheduleRowFromTarget,
+} from '../utils/agendaGroupActions.js';
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { authHeadersForFetch } from '../services/api.js';
 import {
@@ -341,26 +347,56 @@ export default function App() {
   const handleScheduleConfirmCancelar = React.useCallback(
     async (payload) => {
       const row = scheduleCancelRow?.agenda;
+      const group = scheduleCancelRow?.groupAppointments;
       if (!row?.agendaId || !payload) return;
       setScheduleCancelSubmitting(true);
       try {
+        if (Array.isArray(group) && group.length > 1) {
+          const result = await applyActionToAppointmentGroup(group, (item) =>
+            agendaSchedule.handleCancelar(item.agendaId, payload, { successToast: false }),
+          );
+          const partialMsg = formatGroupActionResultMessage(result, { verb: 'canceladas' });
+          if (result.allOk) {
+            toast.success(`${group.length} agendamentos cancelados`);
+            setScheduleCancelRow(null);
+          } else if (result.succeeded.length > 0) {
+            toast.error(partialMsg || 'Cancelamento parcial');
+            setScheduleCancelRow(null);
+          }
+          return;
+        }
         const ok = await agendaSchedule.handleCancelar(row.agendaId, payload);
         if (ok) setScheduleCancelRow(null);
       } finally {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow],
+    [agendaSchedule, scheduleCancelRow, toast],
   );
 
   const handleScheduleConfirmReagendar = React.useCallback(
     async (payload) => {
       const row = scheduleReagendarRow?.agenda;
+      const group = scheduleReagendarRow?.groupAppointments;
       if (!row?.agendaId || !payload) return;
+      if (Array.isArray(group) && group.length > 1) {
+        const result = await reagendarAppointmentGroup(group, payload, agendaSchedule.handleReagendar);
+        const partialMsg = formatGroupActionResultMessage(result, { verb: 'reagendadas' });
+        if (result.allOk) {
+          toast.success(`${group.length} agendamentos reagendados`);
+          await agendaSchedule.refreshDashboard?.();
+          setScheduleReagendarRow(null);
+        } else if (result.succeeded.length > 0) {
+          toast.error(partialMsg || 'Reagendamento parcial');
+          await agendaSchedule.refreshDashboard?.();
+          setScheduleReagendarRow(null);
+        }
+        return;
+      }
       const ok = await agendaSchedule.handleReagendar(row.agendaId, payload);
       if (ok) setScheduleReagendarRow(null);
     },
-    [agendaSchedule, scheduleReagendarRow],
+    [agendaSchedule, scheduleReagendarRow, toast],
   );
 
   const refreshPatientsAndPagedList = React.useCallback(() => {
@@ -1992,8 +2028,14 @@ export default function App() {
                   clinicaNome={clinicaInfo.nome}
                   profissionalNome={perfilInfo.nomeCompleto || roleNome}
                   onStartAttendance={handleAgendaStartAttendance}
-                  onSlotCancelar={(appointment) => setScheduleCancelRow({ agenda: appointment })}
-                  onSlotReagendar={(appointment) => setScheduleReagendarRow({ agenda: appointment })}
+                  onSlotCancelar={(target) => {
+                    const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+                    if (row) setScheduleCancelRow(row);
+                  }}
+                  onSlotReagendar={(target) => {
+                    const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+                    if (row) setScheduleReagendarRow(row);
+                  }}
                   shortcutsBlocked={Boolean(scheduleCancelRow?.agenda || scheduleReagendarRow?.agenda)}
                 />
                 </div>

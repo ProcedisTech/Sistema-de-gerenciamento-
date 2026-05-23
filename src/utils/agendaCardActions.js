@@ -22,3 +22,25 @@ export function getRailPrimaryLabel(primary) {
   if (primary === 'iniciar') return 'Iniciar atendimento';
   return null;
 }
+
+/**
+ * Matriz de ações para card agrupado (status misto ou uniforme).
+ * @param {string[]} statuses — status bruto de cada agenda do grupo
+ */
+export function getGroupedRailCardActions(statuses = []) {
+  const list = (statuses || []).map((s) => String(s || ''));
+  const hasPending = list.some((s) => s === 'pendente' || s === 'aguardando_confirmacao');
+  const allConfirmed = list.length > 0 && list.every((s) => s === 'confirmado');
+  const anyActive = list.some((s) =>
+    ['pendente', 'aguardando_confirmacao', 'confirmado'].includes(s),
+  );
+
+  let primary = null;
+  if (hasPending) primary = 'confirmar';
+  else if (allConfirmed) primary = 'iniciar';
+
+  return {
+    primary,
+    secondary: anyActive ? ['whatsapp', 'reagendar', 'cancelar'] : ['whatsapp', 'reagendar'],
+  };
+}
