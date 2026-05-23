@@ -41,6 +41,7 @@ export function mapAgendaDtoToDashboardRow(dto) {
   const hi = dto.horaInicio != null ? String(dto.horaInicio).slice(0, 5) : '09:00';
   const hf = dto.horaFim != null ? String(dto.horaFim).slice(0, 5) : '';
   const duracaoMin = hf ? minutesBetweenHhmm(hi, hf) : 45;
+  const horaFim = hf || addMinutesToTime(hi, duracaoMin).slice(0, 5);
   const tipoCodigo = String(dto.tipoProcedimentoCodigo || '').toLowerCase();
   const tipo = tipoCodigo === 'bloqueio' ? 'bloqueio' : 'atendimento';
   const catId = dto.catalogoProcedimentoSaudeId != null ? String(dto.catalogoProcedimentoSaudeId).trim() : '';
@@ -54,6 +55,7 @@ export function mapAgendaDtoToDashboardRow(dto) {
     agendaId: String(dto.id),
     data: date,
     horaInicio: hi,
+    horaFim,
     duracaoMin,
     tipo,
     status,

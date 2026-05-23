@@ -93,7 +93,7 @@ export function AgendaControlStrip({
 
   return (
     <section
-      className="grid shrink-0 grid-cols-1 gap-3 rounded-2xl border border-ink-200 bg-white p-2.5 shadow-agenda-sm max-lg:grid-cols-1 lg:grid-cols-[1fr_auto] lg:items-center lg:px-3.5 lg:py-2.5"
+      className="grid shrink-0 grid-cols-1 gap-3 rounded-2xl border border-ink-200 bg-white p-2.5 shadow-agenda-sm max-lg:grid-cols-1 lg:grid-cols-[1fr_auto] lg:items-center lg:px-3.5 lg:py-1.5"
       aria-label="Filtros e próximo atendimento"
     >
       <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">

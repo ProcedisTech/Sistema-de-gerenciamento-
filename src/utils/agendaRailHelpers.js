@@ -25,6 +25,19 @@ export function formatHmFromMinutes(totalMin) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
+export function formatHmDisplay(hm) {
+  return String(hm || '').slice(0, 5);
+}
+
+export function formatDurationLabel(totalMin) {
+  const mins = Number(totalMin) || 0;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${mins}min`;
+}
+
 export function appointmentInitials(appointment) {
   if (appointment?.tipo === 'bloqueio') {
     const label = String(appointment.motivo || appointment.observacao || 'Bloqueio').trim();
@@ -133,6 +146,32 @@ export function groupAppointmentsByPeriod(appointments) {
   return grouped;
 }
 
+/** Agrupa entries (single/group) por período do dia usando horaInicio da entry. */
+export function groupEntriesByPeriod(entries) {
+  const grouped = { manha: [], tarde: [], noite: [] };
+  for (const entry of entries || []) {
+    const hm =
+      entry?.kind === 'group'
+        ? entry.horaInicio
+        : entry?.appointment?.horaInicio;
+    const key = periodForHm(hm);
+    grouped[key].push(entry);
+  }
+  return grouped;
+}
+
+export function getEntrySortKey(entry) {
+  if (!entry) return '';
+  if (entry.kind === 'group') return entry.horaInicio || '';
+  return entry.appointment?.horaInicio || '';
+}
+
+export function getEntryDomId(entry) {
+  if (!entry) return '';
+  if (entry.kind === 'group') return String(entry.id);
+  return String(entry.appointment?.id || '');
+}
+
 export function getPeriodSuffix(period, { selectedDay, todayIso, now }) {
   if (!selectedDay || !todayIso || selectedDay !== todayIso || !now) return '';
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -230,6 +269,11 @@ export function getStatusBadgePresentation(appointment) {
       dotClass: 'bg-ink-400',
       pillClass: 'bg-ink-100 text-ink-600',
     },
+    misto: {
+      label: 'Parcial',
+      dotClass: 'bg-gradient-to-r from-status-warn to-status-ok',
+      pillClass: 'bg-ink-100 text-ink-700',
+    },
   };
   if (bucket && map[bucket]) return map[bucket];
   const status = appointment?.status || 'pendente';
@@ -240,6 +284,49 @@ export function getStatusBadgePresentation(appointment) {
       pillClass: 'bg-ink-100 text-ink-600',
     }
   );
+}
+
+/** Badge para grupo de agendas (status uniforme ou MISTO). */
+export function getGroupedStatusBadgePresentation(appointments) {
+  const buckets = (appointments || [])
+    .map((a) => getAppointmentStatusBucket(a))
+    .filter(Boolean);
+  const unique = [...new Set(buckets)];
+  if (unique.length === 1) {
+    return getStatusBadgePresentation({ ...appointments[0], tipo: 'atendimento', status: appointments[0]?.status });
+  }
+  const pending = buckets.filter((b) => b === 'pendente').length;
+  const confirmed = buckets.filter((b) => b === 'confirmado').length;
+  const parts = [];
+  if (pending) parts.push(`${pending} pend`);
+  if (confirmed) parts.push(`${confirmed} conf`);
+  return {
+    label: parts.length ? parts.join(' · ') : 'Parcial',
+    dotClass: 'bg-gradient-to-r from-status-warn to-status-ok',
+    pillClass: 'bg-ink-100 text-ink-700',
+  };
+}
+
+export function getGroupedRailStripeClass(appointments) {
+  const bucket = getGroupedStatusBucketFromList(appointments);
+  const map = {
+    confirmado: 'bg-status-ok',
+    pendente: 'bg-status-warn',
+    cancelado: 'bg-status-danger',
+    noshow: 'bg-status-noshow',
+    misto: 'bg-gradient-to-b from-status-warn to-status-ok',
+  };
+  return map[bucket] || 'bg-ink-300';
+}
+
+function getGroupedStatusBucketFromList(appointments) {
+  const buckets = (appointments || [])
+    .map((a) => getAppointmentStatusBucket(a))
+    .filter(Boolean);
+  const unique = [...new Set(buckets)];
+  if (unique.length === 0) return 'pendente';
+  if (unique.length === 1) return unique[0];
+  return 'misto';
 }
 
 export function getRailStripeClass(appointment) {

@@ -837,7 +837,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (!agendaId || !payload) return false;
       try {
         await agendasApi.cancelar(agendaId, payload);
-        toastSuccess(opts.successToast || 'Agendamento cancelado');
+        if (opts.successToast !== false) {
+          toastSuccess(opts.successToast || 'Agendamento cancelado');
+        }
         await loadMonth();
         await refreshWeekGrid();
         setError('');
@@ -1033,7 +1035,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const handleAtualizarStatus = useCallback(
-    async (agendaId, codigo) => {
+    async (agendaId, codigo, opts = {}) => {
       if (isNivel1) return false;
       if (!agendaId || !codigo) return false;
 
@@ -1057,9 +1059,12 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
       try {
         await agendasApi.atualizarStatus(agendaId, codigo);
-        toastSuccess(
-          codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`,
-        );
+        if (opts.successToast !== false) {
+          toastSuccess(
+            opts.successToast ||
+              (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
+          );
+        }
         await loadMonth();
         await refreshWeekGrid();
         setError('');
@@ -1090,7 +1095,9 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           abrirConfirmacaoForaDisp
         );
         if (resultado === null) return false;
-        toastSuccess(opts.successToast || 'Agendamento reagendado');
+        if (opts.successToast !== false) {
+          toastSuccess(opts.successToast || 'Agendamento reagendado');
+        }
         await loadMonth();
         await refreshWeekGrid();
         setError('');
