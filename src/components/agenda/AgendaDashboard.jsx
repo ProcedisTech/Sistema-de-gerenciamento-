@@ -618,7 +618,7 @@ export function AgendaDashboard({
         onSelectDay={(iso) => handleSelectDay(iso, true)}
       />
 
-      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:max-[1439px]:grid-cols-[minmax(0,1fr)_minmax(400px,440px)] min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(420px,480px)]">
+      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:max-[1199px]:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] min-[1200px]:max-[1439px]:grid-cols-[minmax(0,1fr)_minmax(400px,440px)] min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(420px,480px)]">
         <section
           className={`relative flex min-h-0 flex-col overflow-hidden md:max-lg:shrink-0 ${
             agenda.viewMode === 'grid'
