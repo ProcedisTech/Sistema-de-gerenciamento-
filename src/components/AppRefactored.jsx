@@ -348,7 +348,12 @@ export default function App() {
     async (payload) => {
       const row = scheduleCancelRow?.agenda;
       const group = scheduleCancelRow?.groupAppointments;
-      if (!row?.agendaId || !payload) return;
+      if (!row?.agendaId || !payload) {
+        if (import.meta.env.DEV) {
+          console.warn('[handleScheduleConfirmCancelar] payload inválido', { row, payload });
+        }
+        return;
+      }
       setScheduleCancelSubmitting(true);
       try {
         if (Array.isArray(group) && group.length > 1) {
@@ -378,7 +383,12 @@ export default function App() {
     async (payload) => {
       const row = scheduleReagendarRow?.agenda;
       const group = scheduleReagendarRow?.groupAppointments;
-      if (!row?.agendaId || !payload) return;
+      if (!row?.agendaId || !payload) {
+        if (import.meta.env.DEV) {
+          console.warn('[handleScheduleConfirmReagendar] payload inválido', { row, payload });
+        }
+        return;
+      }
       if (Array.isArray(group) && group.length > 1) {
         const result = await reagendarAppointmentGroup(group, payload, agendaSchedule.handleReagendar);
         const partialMsg = formatGroupActionResultMessage(result, { verb: 'reagendadas' });
