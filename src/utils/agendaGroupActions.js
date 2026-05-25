@@ -46,6 +46,12 @@ export function resolveActionAppointments(target) {
 
 /** Payload para modais de cancelar/reagendar com suporte a grupo. */
 export function scheduleRowFromTarget(target) {
+  if (target?.agenda && (target.agenda.agendaId || target.agenda.id)) {
+    return {
+      agenda: target.agenda,
+      groupAppointments: target.groupAppointments,
+    };
+  }
   const items = resolveActionAppointments(target);
   const first = items[0];
   if (!first) return null;

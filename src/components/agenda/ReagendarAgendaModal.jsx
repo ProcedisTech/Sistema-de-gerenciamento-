@@ -14,8 +14,11 @@ function initialFromAgenda(agenda) {
   const raw = agenda.rawSlot || {};
   const d = agenda.data || (raw.dataAgendamento && String(raw.dataAgendamento).slice(0, 10)) || '';
   const hi = (agenda.horaInicio && String(agenda.horaInicio).slice(0, 5)) || '';
-  const hfRaw = raw.horaFim && String(raw.horaFim).slice(0, 5);
-  return { novaData: d, novaHoraInicio: hi, novaHoraFim: hfRaw || '' };
+  const hfRaw =
+    (agenda.horaFim && String(agenda.horaFim).slice(0, 5)) ||
+    (raw.horaFim && String(raw.horaFim).slice(0, 5)) ||
+    '';
+  return { novaData: d, novaHoraInicio: hi, novaHoraFim: hfRaw };
 }
 
 export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSubmitting = false }) {
