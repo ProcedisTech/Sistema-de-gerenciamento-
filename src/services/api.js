@@ -852,6 +852,28 @@ export const agendasApi = {
     ),
 };
 
+function buildDisponibilidadeQuery(params) {
+  const qs = new URLSearchParams();
+  if (params.data) qs.set('data', String(params.data));
+  if (params.ano != null) qs.set('ano', String(params.ano));
+  if (params.mes != null) qs.set('mes', String(params.mes));
+  if (params.roleUserId) qs.set('roleUserId', String(params.roleUserId));
+  if (params.especialidadeId) qs.set('especialidadeId', String(params.especialidadeId));
+  return qs.toString();
+}
+
+/** Disponibilidade agregada de slots (Agenda V2 — granularidade 1h). */
+export const agendaDisponibilidadeApi = {
+  slotsDoDia: ({ data, roleUserId, especialidadeId } = {}) => {
+    const q = buildDisponibilidadeQuery({ data, roleUserId, especialidadeId });
+    return request(`/api/v1/agenda/disponibilidade/dia?${q}`);
+  },
+  diasDoMes: ({ ano, mes, roleUserId, especialidadeId } = {}) => {
+    const q = buildDisponibilidadeQuery({ ano, mes, roleUserId, especialidadeId });
+    return request(`/api/v1/agenda/disponibilidade/mes?${q}`);
+  },
+};
+
 /** Motivos de cancelamento de agenda (Onda 4; UUID para PATCH /agendas/{id}/cancelar). */
 export const motivosCancelamentoApi = {
   /** @returns {Promise<Array<{ motivoCancelamentoId: string, codigo: string, nome: string, ordem: number }>>} */

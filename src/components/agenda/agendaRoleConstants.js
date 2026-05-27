@@ -3,7 +3,8 @@ export const ROLES_AGENDA_PRESELECT = Object.freeze([
   'medico',
   'médico',
   'esteticista',
-  'profissional',
+  'dentista',
+  'biomedico',
   'administrador',
   'admin',
 ]);

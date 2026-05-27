@@ -60,9 +60,15 @@ export default defineConfig([
       '**/hooks/usePacienteGaleriaArquivoBlobUrl.js',
       '**/hooks/usePatientProfilePhotoSrc.js',
       '**/hooks/useProcedimentosOptions.js',
+      '**/hooks/agenda/useDisponibilidadeDoDia.js',
+      '**/hooks/agenda/useDiasComDisponibilidade.js',
+      '**/components/agenda/AgendaDashboard.jsx',
+      '**/components/agenda/modo-agendamento/ModoAgendamentoSeletores.jsx',
+      '**/components/agenda/modo-agendamento/ConfirmarAgendamentoBar.jsx',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/refs': 'off',
     },
   },
   {

@@ -38,6 +38,18 @@ export function useProcedimentosOptions({ enabled = true } = {}) {
               v.nome ||
               ''
             ).trim(),
+            tipoCodigo: String(
+              v.procedimento?.tipoCodigo ||
+              v.procedimento?.tipoProcedimentoCodigo ||
+              v.tipoCodigo ||
+              ''
+            ).trim().toLowerCase(),
+            duracaoMin: Number(
+              v.procedimento?.duracaoEstimadaMinutos ||
+              v.duracaoEstimadaMinutos ||
+              v.duracaoMin ||
+              0
+            ) || 60,
           }))
           .filter((o) => o.id && o.nomeProcedimento);
         setOptions(normalized);
