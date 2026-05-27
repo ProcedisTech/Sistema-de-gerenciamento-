@@ -2,16 +2,26 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpDown,
+  BadgeCheck,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   ExternalLink,
+  FileX,
+  LayoutGrid,
   Loader2,
   Play,
   Plus,
   Search,
+  Shield,
+  ShieldAlert,
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
+import { MinorAgeIcon } from './MinorAgeIcon.jsx';
+import { PatientStatusIconBadge } from './PatientStatusIconBadge.jsx';
+import { PatientFilterChip } from './PatientFilterChip.jsx';
+import { getPatientCardStatuses } from './patientListStatusConfig.js';
 import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
 import {
@@ -37,12 +47,6 @@ const SORT_OPTIONS = [
   { value: 'visita-desc', label: 'Última visita (recente)' },
   { value: 'visita-asc', label: 'Última visita (antiga)' },
   { value: 'birthday-asc', label: 'Aniversário (mais próximo)' },
-];
-
-// Apenas filtros client-side restantes (semRetorno e anamneseVencida migraram para server-side)
-const QUICK_FILTERS = [
-  { value: 'todos', label: 'Todos' },
-  { value: 'menor', label: 'Menor de idade' },
 ];
 
 function applyQuickFilter(items, filter) {
@@ -84,75 +88,42 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
         <p className="truncate text-[14px] font-semibold leading-snug text-[#0f172a] sm:text-[15px] md:text-[16px]">
           {patient.nome}
         </p>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2 md:mt-1.5">
-          {mutedInfoParts.length > 0 || hasLastVisitDate ? (
-            <p className="text-[13px] text-[#64748b] sm:text-[14px] md:text-[15px]">
-              {mutedInfoParts.map((part, idx) => (
-                <React.Fragment key={`muted-${patient.id}-${idx}`}>
-                  {idx > 0 ? ' · ' : ''}
-                  {part}
-                </React.Fragment>
-              ))}
-              {hasLastVisitDate ? (
-                <>
-                  {mutedInfoParts.length > 0 ? ' · ' : ''}
-                  Última visita ·{' '}
-                  <span className="font-semibold text-[#00a88e]">{lastProcDate}</span>
-                </>
-              ) : null}
-            </p>
-          ) : null}
-          {/* Chips DTO v1 — ordem: anamneseDesatualizada → plano → semRetorno60Dias → menorDeIdade → ehNovo → ehAniversariante */}
-          {patient.anamneseDesatualizada ? (
-            <span className="inline-flex shrink-0 items-center rounded-full border border-[#fef08a] bg-[#fefce8] px-1.5 py-0.5 text-[11px] font-semibold text-[#854d0e] sm:px-2 sm:text-[12px]">
-              Anamnese vencida
-            </span>
-          ) : null}
-          {patient.statusPlanoCodigo != null ? (
-            <span
-              className="inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[11px] font-semibold sm:px-2 sm:text-[12px]"
-              style={
-                patient.statusPlanoCorHex
-                  ? {
-                      backgroundColor: patient.statusPlanoCorHex + '1a',
-                      borderColor: patient.statusPlanoCorHex + '66',
-                      color: patient.statusPlanoCorHex,
-                    }
-                  : { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1', color: '#475569' }
-              }
-            >
-              {patient.statusPlanoNome || patient.statusPlanoCodigo}
-            </span>
-          ) : null}
-          {patient.semRetorno60Dias ? (
-            <span className="inline-flex shrink-0 items-center rounded-full border border-[#c7d2fe] bg-[#eef2ff] px-1.5 py-0.5 text-[11px] font-semibold text-[#4338ca] sm:px-2 sm:text-[12px]">
-              Sem retorno
-            </span>
-          ) : null}
-          {patient.menorDeIdade ? (
-            <span className="inline-flex shrink-0 items-center rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-1.5 py-0.5 text-[11px] font-semibold text-[#2563eb] sm:px-2 sm:text-[12px]">
-              Menor de idade
-            </span>
-          ) : null}
-          {patient.ehNovo ? (
-            <span className="inline-flex shrink-0 items-center rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-1.5 py-0.5 text-[11px] font-semibold text-[#0f766e] sm:px-2 sm:text-[12px]">
-              Paciente novo
-            </span>
-          ) : null}
-          {patient.ehAniversariante ? (
-            <span className="inline-flex shrink-0 items-center rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-1.5 py-0.5 text-[11px] font-semibold text-[#9d174d] sm:px-2 sm:text-[12px]">
-              Aniversariante
-            </span>
-          ) : null}
-        </div>
+        {mutedInfoParts.length > 0 || hasLastVisitDate ? (
+          <p className="mt-1 text-[13px] text-[#64748b] sm:mt-1.5 sm:text-[14px] md:text-[15px]">
+            {mutedInfoParts.map((part, idx) => (
+              <React.Fragment key={`muted-${patient.id}-${idx}`}>
+                {idx > 0 ? ' · ' : ''}
+                {part}
+              </React.Fragment>
+            ))}
+            {hasLastVisitDate ? (
+              <>
+                {mutedInfoParts.length > 0 ? ' · ' : ''}
+                Última visita ·{' '}
+                <span className="font-semibold text-[#00a88e]">{lastProcDate}</span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+        {/* Ícones de status (ordem por importância, definida em patientListStatusConfig) */}
+        {getPatientCardStatuses(patient).length > 0 ? (
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {getPatientCardStatuses(patient).map((statusId) => (
+              <PatientStatusIconBadge key={statusId} statusId={statusId} />
+            ))}
+          </div>
+        ) : null}
+        {/* Alerta clínico: alergias / condições de saúde — sinal independente dos status acima */}
         {clinical ? (
-          <AlertTriangle
-            className="h-4 w-4 text-orange-400 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5"
-            strokeWidth={2}
-            aria-hidden
-          />
+          <span title="Alergias ou condições de saúde cadastradas">
+            <ShieldAlert
+              className="h-4 w-4 text-orange-400 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5"
+              strokeWidth={2}
+              aria-hidden
+            />
+          </span>
         ) : null}
         <span
           className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] lg:text-[13px] md:inline-flex ${
@@ -640,69 +611,63 @@ export function PatientsListView({
                 </div>
               </div>
 
-              {/* Filtros: server-side (plano, anamnese, sem retorno) + local (menor de idade) */}
+              {/* Filtros: chips de plano (server-side) + anamnese/retorno (server-side) + local (todos/menor) */}
               <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-                {/* Status de plano — server-side */}
-                <select
-                  value={statusPlanoFilter}
-                  onChange={(e) => setStatusPlanoFilter && setStatusPlanoFilter(e.target.value)}
+                {/* Status de plano — 3 chips com seleção exclusiva (server-side) */}
+                <PatientFilterChip
+                  label="Plano: Todos"
+                  icon={LayoutGrid}
+                  active={statusPlanoFilter === ''}
                   disabled={isSearching || !setStatusPlanoFilter}
-                  aria-label="Filtrar por status de plano"
-                  className="h-8 cursor-pointer appearance-none rounded-full border border-[#e2e8f0] bg-white px-3 pr-7 text-[13px] font-medium text-[#475569] outline-none transition-colors focus:border-[#00a88e]/40 disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{
-                    backgroundImage:
-                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 0.5rem center',
-                  }}
-                >
-                  <option value="">Plano: Todos</option>
-                  <option value="sem_plano">Sem plano</option>
-                  <option value="plano_ativo">Com plano ativo</option>
-                </select>
+                  onClick={() => setStatusPlanoFilter && setStatusPlanoFilter('')}
+                />
+                <PatientFilterChip
+                  label="Sem plano"
+                  icon={FileX}
+                  active={statusPlanoFilter === 'sem_plano'}
+                  disabled={isSearching || !setStatusPlanoFilter}
+                  onClick={() => setStatusPlanoFilter && setStatusPlanoFilter('sem_plano')}
+                />
+                <PatientFilterChip
+                  label="Com plano ativo"
+                  icon={BadgeCheck}
+                  active={statusPlanoFilter === 'plano_ativo'}
+                  disabled={isSearching || !setStatusPlanoFilter}
+                  onClick={() => setStatusPlanoFilter && setStatusPlanoFilter('plano_ativo')}
+                />
                 {/* Anamnese vencida — server-side toggle */}
-                <button
-                  type="button"
-                  onClick={() => setAnamneseDesatualizadaFilter && setAnamneseDesatualizadaFilter((v) => !v)}
+                <PatientFilterChip
+                  label="Anamnese vencida"
+                  icon={AlertTriangle}
+                  active={anamneseDesatualizadaFilter}
+                  activeClass="bg-[#854d0e] text-white"
                   disabled={isSearching || !setAnamneseDesatualizadaFilter}
-                  className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                    anamneseDesatualizadaFilter
-                      ? 'bg-[#854d0e] text-white'
-                      : 'border border-[#e2e8f0] bg-white text-[#475569] hover:border-[#cbd5e1] hover:bg-slate-50'
-                  }`}
-                >
-                  Anamnese vencida
-                </button>
+                  onClick={() => setAnamneseDesatualizadaFilter && setAnamneseDesatualizadaFilter((v) => !v)}
+                />
                 {/* Sem retorno 60d — server-side toggle */}
-                <button
-                  type="button"
-                  onClick={() => setSemRetornoFilter && setSemRetornoFilter((v) => !v)}
+                <PatientFilterChip
+                  label="Sem retorno 60d"
+                  icon={Clock3}
+                  active={semRetornoFilter}
+                  activeClass="bg-[#4338ca] text-white"
                   disabled={isSearching || !setSemRetornoFilter}
-                  className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                    semRetornoFilter
-                      ? 'bg-[#4338ca] text-white'
-                      : 'border border-[#e2e8f0] bg-white text-[#475569] hover:border-[#cbd5e1] hover:bg-slate-50'
-                  }`}
-                >
-                  Sem retorno 60d
-                </button>
+                  onClick={() => setSemRetornoFilter && setSemRetornoFilter((v) => !v)}
+                />
                 {/* Separador */}
                 <span className="h-5 w-px bg-[#e2e8f0]" aria-hidden />
-                {/* Filtros locais (todos / menor de idade) */}
-                {QUICK_FILTERS.map((f) => (
-                  <button
-                    key={f.value}
-                    type="button"
-                    onClick={() => setQuickFilter(f.value)}
-                    className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                      quickFilter === f.value
-                        ? 'bg-[#00a88e] text-white'
-                        : 'border border-[#e2e8f0] bg-white text-[#475569] hover:border-[#cbd5e1] hover:bg-slate-50'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+                {/* Filtros locais: Todos e Menor de idade */}
+                <PatientFilterChip
+                  label="Todos"
+                  icon={LayoutGrid}
+                  active={quickFilter === 'todos'}
+                  onClick={() => setQuickFilter('todos')}
+                />
+                <PatientFilterChip
+                  label="Menor de idade"
+                  icon={MinorAgeIcon}
+                  active={quickFilter === 'menor'}
+                  onClick={() => setQuickFilter('menor')}
+                />
               </div>
             </div>
           </div>
