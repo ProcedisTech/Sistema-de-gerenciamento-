@@ -107,7 +107,15 @@ function normalizeEquipeList(raw) {
     .map((p) => {
       const roleUserId = String(p?.roleUserId || p?.role_user_id || p?.id || '').trim();
       const nome = p?.nomeCompleto || p?.nome || p?.name || p?.username || 'Profissional';
-      return roleUserId ? { roleUserId, nome: String(nome).trim() || 'Profissional' } : null;
+      return roleUserId
+        ? {
+            roleUserId,
+            nome: String(nome).trim() || 'Profissional',
+            roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
+            fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
+            especialidade: p?.especialidade || p?.specialty || '',
+          }
+        : null;
     })
     .filter(Boolean);
 }
@@ -296,6 +304,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         .map((c) => ({
           id: c.id,
           nome: c.nomeProcedimento,
+          tipoCodigo: c.tipoCodigo || '',
+          duracaoMin: c.duracaoMin || 60,
         }))
         .filter((o) => o.id && o.nome),
     [procedimentosClinica]
@@ -1559,6 +1569,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     disponibilidades,
     editingAppointment,
     foraDispModal,
+    abrirConfirmacaoForaDisp,
     error,
     form,
     formErrors,

@@ -26,7 +26,6 @@ import { useToast } from '../contexts/useToast.js';
 import {
   applyActionToAppointmentGroup,
   formatGroupActionResultMessage,
-  reagendarAppointmentGroup,
   scheduleRowFromTarget,
 } from '../utils/agendaGroupActions.js';
 import { resolveApiUrl } from '../config/apiEnv.js';
@@ -55,7 +54,6 @@ import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import { AgendaBloqueioModal } from './agenda/AgendaBloqueioModal.jsx';
 import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
-import ReagendarAgendaModal from './agenda/ReagendarAgendaModal.jsx';
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
@@ -331,7 +329,6 @@ export default function App() {
 
   const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
   const [scheduleCancelRow, setScheduleCancelRow] = React.useState(null);
-  const [scheduleReagendarRow, setScheduleReagendarRow] = React.useState(null);
   const [scheduleCancelSubmitting, setScheduleCancelSubmitting] = React.useState(false);
   const [iniciarTolModal, setIniciarTolModal] = React.useState(null);
   const [iniciarTolAdiantarSubmitting, setIniciarTolAdiantarSubmitting] = React.useState(false);
@@ -377,36 +374,6 @@ export default function App() {
       }
     },
     [agendaSchedule, scheduleCancelRow, toast],
-  );
-
-  const handleScheduleConfirmReagendar = React.useCallback(
-    async (payload) => {
-      const row = scheduleReagendarRow?.agenda;
-      const group = scheduleReagendarRow?.groupAppointments;
-      if (!row?.agendaId || !payload) {
-        if (import.meta.env.DEV) {
-          console.warn('[handleScheduleConfirmReagendar] payload inválido', { row, payload });
-        }
-        return;
-      }
-      if (Array.isArray(group) && group.length > 1) {
-        const result = await reagendarAppointmentGroup(group, payload, agendaSchedule.handleReagendar);
-        const partialMsg = formatGroupActionResultMessage(result, { verb: 'reagendadas' });
-        if (result.allOk) {
-          toast.success(`${group.length} agendamentos reagendados`);
-          await agendaSchedule.refreshDashboard?.();
-          setScheduleReagendarRow(null);
-        } else if (result.succeeded.length > 0) {
-          toast.error(partialMsg || 'Reagendamento parcial');
-          await agendaSchedule.refreshDashboard?.();
-          setScheduleReagendarRow(null);
-        }
-        return;
-      }
-      const ok = await agendaSchedule.handleReagendar(row.agendaId, payload);
-      if (ok) setScheduleReagendarRow(null);
-    },
-    [agendaSchedule, scheduleReagendarRow, toast],
   );
 
   const refreshPatientsAndPagedList = React.useCallback(() => {
@@ -2042,11 +2009,7 @@ export default function App() {
                     const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                     if (row) setScheduleCancelRow(row);
                   }}
-                  onSlotReagendar={(target) => {
-                    const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
-                    if (row) setScheduleReagendarRow(row);
-                  }}
-                  shortcutsBlocked={Boolean(scheduleCancelRow?.agenda || scheduleReagendarRow?.agenda)}
+                  shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
                 />
                 </div>
               </RoleGuard>
@@ -2147,14 +2110,6 @@ export default function App() {
               onClose={() => setScheduleCancelRow(null)}
               onConfirm={handleScheduleConfirmCancelar}
               isSubmitting={scheduleCancelSubmitting}
-            />
-          ) : null}
-          {scheduleReagendarRow?.agenda ? (
-            <ReagendarAgendaModal
-              agenda={scheduleReagendarRow.agenda}
-              onClose={() => setScheduleReagendarRow(null)}
-              onConfirm={handleScheduleConfirmReagendar}
-              isSubmitting={agendaSchedule.submittingReagendar}
             />
           ) : null}
           {iniciarTolModal ? (

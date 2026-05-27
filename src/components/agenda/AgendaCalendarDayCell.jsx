@@ -61,7 +61,7 @@ function AgendaCalendarDayCellInner({
   }
 
   let cellClass =
-    'group/cell relative flex h-full min-h-[44px] w-full min-w-0 flex-col overflow-visible rounded-xl border p-1 pt-1.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 lg:min-h-0 lg:p-2 ';
+    'group/cell relative flex h-full min-h-[44px] w-full min-w-0 flex-col overflow-visible rounded-xl border p-1 pt-1.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 lg:min-h-0 lg:p-1.5 xl:p-2 ';
 
   if (showEntrance && cell.inCurrentMonth) {
     cellClass += 'animate-agenda-rise-cells ';
