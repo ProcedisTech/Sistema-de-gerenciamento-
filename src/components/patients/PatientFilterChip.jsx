@@ -16,6 +16,7 @@ export function PatientFilterChip({
   disabled,
   icon: Icon,
   activeClass = 'bg-[#00a88e] text-white',
+  title,
 }) {
   return (
     <button
@@ -23,6 +24,7 @@ export function PatientFilterChip({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
+      title={title}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         active
           ? activeClass

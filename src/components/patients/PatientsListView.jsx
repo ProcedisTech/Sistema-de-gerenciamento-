@@ -420,6 +420,7 @@ export function PatientsListView({
   const { isNivel1: _isNivel1, canWritePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
   const isSearching = Boolean(patientSearchQuery?.trim());
+  const isBirthdaySort = patientListSortBy === 'birthday-asc';
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   const [quickFilter, setQuickFilter] = useState('todos');
@@ -644,13 +645,14 @@ export function PatientsListView({
                   disabled={isSearching || !setAnamneseDesatualizadaFilter}
                   onClick={() => setAnamneseDesatualizadaFilter && setAnamneseDesatualizadaFilter((v) => !v)}
                 />
-                {/* Sem retorno 60d — server-side toggle */}
+                {/* Sem retorno 60d — server-side toggle; indisponível com birthday-asc (back ignora param) */}
                 <PatientFilterChip
                   label="Sem retorno 60d"
                   icon={Clock3}
                   active={semRetornoFilter}
                   activeClass="bg-[#4338ca] text-white"
-                  disabled={isSearching || !setSemRetornoFilter}
+                  disabled={isSearching || isBirthdaySort || !setSemRetornoFilter}
+                  title={isBirthdaySort ? 'Indisponível com ordenação por aniversário' : undefined}
                   onClick={() => setSemRetornoFilter && setSemRetornoFilter((v) => !v)}
                 />
                 {/* Separador */}
