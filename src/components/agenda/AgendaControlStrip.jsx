@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Clock3, UserX, Users, XCircle, Zap } from 'lucide-react';
+import { Clock3, UserX, XCircle, Zap } from 'lucide-react';
 import { ALL_STATUS_FILTERS } from '../../utils/agendaDayInsights.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { AgendaFilterChip } from './AgendaFilterChip.jsx';
@@ -71,7 +71,6 @@ export function AgendaControlStrip({
   onToggleAll,
   statusCounts,
   nextAppointment = null,
-  monthVisibleCount = 0,
   firstFilterRef,
 }) {
   const isMobile = useMediaQuery('(max-width: 1023px)');
@@ -129,13 +128,7 @@ export function AgendaControlStrip({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3 max-lg:w-full lg:pl-4">
-        <div className="stat-pro flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-700">
-          <Users className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />
-          <span>{monthVisibleCount} visíveis</span>
-        </div>
-
-        <div className="hidden items-center gap-3 lg:flex">
+      <div className="hidden items-center gap-3 border-t-0 pt-0 lg:flex lg:pl-4">
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-status-ok-bg text-vivid-teal-700"
           aria-hidden
@@ -152,7 +145,6 @@ export function AgendaControlStrip({
           >
             {formatNextValue(nextAppointment)}
           </p>
-        </div>
         </div>
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Lock, Plus, Target } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Target, Users } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isDayEmptyByFilter } from '../../utils/agendaDayInsights.js';
 import { agendaEnterClass } from './agendaEnterClasses.js';
@@ -32,14 +32,7 @@ function useCanHover() {
   return canHover;
 }
 
-export function AgendaCalendarGrid({
-  agenda,
-  showEntrance = false,
-  onSelectDay,
-  isNivel1 = false,
-  onBloquear,
-  onNovoAgendamento,
-}) {
+export function AgendaCalendarGrid({ agenda, showEntrance = false, onSelectDay }) {
   const selectDay = onSelectDay ?? agenda.selectDay;
   const canHover = useCanHover();
   const gridRef = useRef(null);
@@ -93,19 +86,19 @@ export function AgendaCalendarGrid({
   useEffect(() => () => clearHoverTimer(), [clearHoverTimer]);
 
   return (
-    <div className={`flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-ink-200 bg-white p-2 shadow-agenda-sm lg:p-2.5 xl:p-3 ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}>
-      <header className="cal-head flex shrink-0 items-center gap-2 pb-1.5 lg:pb-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+    <div className={`flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-ink-200 bg-white p-2 shadow-agenda-sm lg:p-3 ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}>
+      <header className="cal-head flex shrink-0 flex-wrap items-center justify-between gap-3 pb-2">
+        <div className="month-nav flex items-center gap-2">
           <button
             type="button"
             onClick={agenda.goPrevMonth}
             aria-label="Mês anterior"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-ink-200 text-ink-600 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 lg:h-[34px] lg:w-[34px]"
+            className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-ink-200 text-ink-600 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <h2
-            className="min-w-0 truncate font-display text-lg font-bold leading-tight text-ink-900 lg:text-[22px]"
+            className="font-display text-[22px] font-bold leading-tight text-ink-900"
             style={{ fontVariationSettings: '"wdth" 90' }}
           >
             {agenda.monthLabel}
@@ -114,44 +107,26 @@ export function AgendaCalendarGrid({
             type="button"
             onClick={agenda.goNextMonth}
             aria-label="Próximo mês"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-ink-200 text-ink-600 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 lg:h-[34px] lg:w-[34px]"
+            className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-ink-200 text-ink-600 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={agenda.goToToday}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 sm:px-3 sm:py-1.5 sm:text-sm"
+            className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2"
           >
             <Target className="h-3.5 w-3.5 text-vivid-teal-600" aria-hidden />
             Hoje
           </button>
-          {!isNivel1 ? (
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onNovoAgendamento}
-                aria-label="Novo agendamento"
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br from-vivid-teal-500 to-vivid-teal-600 px-2.5 text-xs font-semibold text-white shadow-agenda-glow transition-all duration-150 ease-out motion-reduce:transition-none hover:-translate-y-px hover:brightness-[1.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 sm:px-3 sm:text-sm xl:gap-2 xl:px-3.5 lg:h-[34px]"
-              >
-                <Plus className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="hidden xl:inline">Novo agendamento</span>
-              </button>
-              <button
-                type="button"
-                onClick={onBloquear}
-                title="Bloquear horário"
-                aria-label="Bloquear horário"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2 lg:h-[34px] lg:w-[34px]"
-              >
-                <Lock className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-          ) : null}
+        </div>
+        <div className="stat-pro flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-700">
+          <Users className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />
+          <span>{agenda.monthVisibleCount ?? 0} visíveis</span>
         </div>
       </header>
 
-      <div role="row" className="grid shrink-0 grid-cols-7 px-0.5 pb-1 text-center text-[11px] font-bold uppercase tracking-wide text-ink-500 lg:px-1 lg:pb-1.5">
+      <div role="row" className="grid shrink-0 grid-cols-7 px-1 pt-3 pb-2 text-center text-[11px] font-bold uppercase tracking-wide text-ink-500">
         {WEEK_DAYS.map((day, index) => (
           <div
             key={day}
@@ -167,7 +142,7 @@ export function AgendaCalendarGrid({
         ref={gridRef}
         role="grid"
         aria-label={`Calendário de ${agenda.monthLabel}`}
-        className="cal-grid grid min-h-0 flex-1 grid-cols-7 grid-rows-[repeat(6,minmax(0,1fr))] gap-1 overflow-visible lg:gap-1.5 xl:gap-2"
+        className="cal-grid grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1 overflow-visible lg:gap-1.5"
       >
         {agenda.calendarCells.map((cell, cellIndex) => {
           const isOutside = !cell.inCurrentMonth;
