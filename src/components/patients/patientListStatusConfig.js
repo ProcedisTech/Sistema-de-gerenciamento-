@@ -1,5 +1,6 @@
-import { AlertTriangle, BadgeCheck, Cake, Clock3, FileX, UserPlus } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CalendarOff, Cake, FileX, UserPlus } from 'lucide-react';
 import { MinorAgeIcon } from './MinorAgeIcon.jsx';
+import { patientUltimaVisitaDayFromDto } from '../../utils/patientProfileDerivedDates.js';
 
 /**
  * Mapa de configuração para os ícones de status do card de paciente.
@@ -23,9 +24,9 @@ export const PATIENT_STATUS_CONFIG = {
     iconClass: 'text-status-danger-ink',
     hasBg: true,
   },
-  sem_retorno: {
-    label: 'Sem retorno',
-    Icon: Clock3,
+  sem_retorno_marcado: {
+    label: 'Sem retorno agendado',
+    Icon: CalendarOff,
     circleClass: 'bg-status-warn-bg',
     iconClass: 'text-status-warn-ink',
     hasBg: true,
@@ -67,14 +68,30 @@ export const PATIENT_STATUS_CONFIG = {
   },
 };
 
+/** Próxima agenda futura presente no DTO (listagem). */
+function hasProximoAgendamento(patient) {
+  const v = patient?.proximoAgendamento;
+  return v != null && String(v).trim() !== '';
+}
+
+/** Paciente já teve ao menos uma consulta (ultimaVinda ISO ou ultimaVisita legado). */
+function hasUltimaVisita(patient) {
+  const day = patientUltimaVisitaDayFromDto(patient);
+  return day !== '-' && day !== '—' && day !== '';
+}
+
 /**
  * Retorna os ids de status ativos para um paciente, na ordem de importância:
- * anamnese_vencida → sem_retorno → sem_plano | plano_ativo → paciente_novo → menor_idade → aniversariante
+ * anamnese_vencida → sem_retorno_marcado → sem_plano | plano_ativo → paciente_novo → menor_idade → aniversariante
+ *
+ * sem_retorno_marcado: somente quando já houve primeira consulta (hasUltimaVisita) e
+ * não há retorno agendado (!hasProximoAgendamento). Pacientes recém-cadastrados sem
+ * consulta não recebem este badge.
  */
 export function getPatientCardStatuses(patient) {
   const statuses = [];
   if (patient.anamneseDesatualizada) statuses.push('anamnese_vencida');
-  if (patient.semRetorno60Dias) statuses.push('sem_retorno');
+  if (hasUltimaVisita(patient) && !hasProximoAgendamento(patient)) statuses.push('sem_retorno_marcado');
   if (patient.statusPlanoCodigo === 'sem_plano') {
     statuses.push('sem_plano');
   } else if (patient.statusPlanoCodigo != null) {

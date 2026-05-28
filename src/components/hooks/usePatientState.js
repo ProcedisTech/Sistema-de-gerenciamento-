@@ -173,6 +173,13 @@ export const usePatientState = (opts = {}) => {
     setPatientListPage(0);
   }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter]);
 
+  /* birthday-asc ignora semRetorno no backend — limpar filtro ao trocar para esse sort */
+  useEffect(() => {
+    if (patientListSortBy === 'birthday-asc' && semRetornoFilter) {
+      setSemRetornoFilter(false);
+    }
+  }, [patientListSortBy, semRetornoFilter]);
+
   useEffect(() => {
     if (!authEnabled) {
       setPatientListItems([]);
@@ -248,7 +255,7 @@ export const usePatientState = (opts = {}) => {
           sort: isBirthday ? undefined : patientListSortToApiParam(patientListSortBy),
           statusPlano: statusPlanoFilter || undefined,
           anamneseDesatualizada: anamneseDesatualizadaFilter || undefined,
-          semRetorno: semRetornoFilter || undefined,
+          semRetorno: !isBirthday && semRetornoFilter ? true : undefined,
         })
         .then((pageData) => {
           if (cancelled) return;
