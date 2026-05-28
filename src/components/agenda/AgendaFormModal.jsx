@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useUsuarioLogado } from '../../hooks/useUsuarioLogado.js';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
@@ -20,15 +20,19 @@ function resolveProfissionalNome(agenda) {
   return agenda.editingAppointment?.profissionalNome || '';
 }
 
-function buildResumo({ form, agenda, duracaoTotalMin }) {
+function buildResumo({ form, agenda, duracaoTotalMin, procedimentosSelecionados }) {
   const partes = [];
   if (form.pacienteNome) partes.push(form.pacienteNome);
+  if (procedimentosSelecionados.length > 0) {
+    const nomes = procedimentosSelecionados.map((p) => p.nome).join(', ');
+    partes.push(nomes);
+  }
   if (form.data) {
     const [y, m, d] = form.data.split('-');
     partes.push(`${d}/${m}/${y}`);
   }
   if (form.horaInicio) partes.push(form.horaInicio);
-  if (duracaoTotalMin) partes.push(`${duracaoTotalMin} min`);
+  if (duracaoTotalMin > 0) partes.push(`${duracaoTotalMin} min`);
   const profNome = resolveProfissionalNome(agenda);
   if (profNome) partes.push(profNome);
   return partes.join(' · ');
@@ -37,18 +41,68 @@ function buildResumo({ form, agenda, duracaoTotalMin }) {
 export function AgendaFormModal({ agenda, onExcluirClick }) {
   const { ehProfissionalClinico, roleUserId: roleLogadoId } = useUsuarioLogado();
   const [painelAtivo, setPainelAtivo] = useState(PAINEL.A);
-  // Armazena a hora pendente enquanto o usuário escolhe o profissional no Painel C
   const [horaPendentePainelC, setHoraPendentePainelC] = useState('');
   const [obsAberta, setObsAberta] = useState(false);
 
+  // ── Estado local de procedimentos selecionados ──────────────────────────────
+  // Array de { id, nome, tipoCodigo, duracaoMin, duracaoSelecionada }
+  // fonte autoritativa de IDs: form.catalogoProcedimentoSaudeIds (sincronizados via handlers)
+  const [procedimentosSelecionados, setProcedimentosSelecionados] = useState([]);
+  const prevIdsRef = useRef([]);
+
+  // Hidratação: sincroniza chips com form.catalogoProcedimentoSaudeIds
+  // Roda quando: (A) ids mudaram OU (B) há chips fallback resolvíveis pelo catálogo
+  useEffect(() => {
+    const ids = agenda.form.catalogoProcedimentoSaudeIds ?? [];
+    const opts = agenda.procedimentoOptions ?? [];
+    const prevIds = prevIdsRef.current;
+
+    const idsIguais =
+      ids.length === prevIds.length && ids.every((id, i) => id === prevIds[i]);
+
+    // Condição B: chip fallback + catálogo já chegou
+    const temFallbackResolvivel =
+      idsIguais &&
+      procedimentosSelecionados.some(
+        (p) => p.nome === '(Procedimento)' && opts.find((o) => String(o.id) === String(p.id))
+      );
+
+    if (idsIguais && !temFallbackResolvivel) return;
+
+    prevIdsRef.current = ids;
+
+    if (ids.length === 0) {
+      setProcedimentosSelecionados([]);
+      return;
+    }
+
+    setProcedimentosSelecionados((current) =>
+      ids.map((id) => {
+        const existente = current.find((p) => p.id === id);
+        const opt = opts.find((o) => String(o.id) === String(id));
+        if (opt) {
+          // Se já existe com nome real, preserva (inclusive duracaoSelecionada editada)
+          if (existente && existente.nome !== '(Procedimento)') return existente;
+          return {
+            id: opt.id,
+            nome: opt.nome,
+            tipoCodigo: opt.tipoCodigo,
+            duracaoMin: opt.duracaoMin,
+            duracaoSelecionada: existente?.duracaoSelecionada ?? opt.duracaoMin,
+          };
+        }
+        // Catálogo ainda não chegou — fallback temporário
+        return existente ?? { id, nome: '(Procedimento)', tipoCodigo: '', duracaoMin: 45, duracaoSelecionada: 45 };
+      })
+    );
+  }, [agenda.form.catalogoProcedimentoSaudeIds, agenda.procedimentoOptions]); // procedimentosSelecionados fora das deps — lido via setter funcional
+
+  // ── Derivados ───────────────────────────────────────────────────────────────
   const isReagendar = Boolean(agenda.editingAppointment?.agendaIdOrigem);
   const lockPatient = Boolean(agenda.patientSelectLocked);
-
   const profissionalFixado = ehProfissionalClinico || Boolean(agenda.roleUserIdAgenda);
   const roleUserIdFiltro = ehProfissionalClinico ? roleLogadoId : (agenda.roleUserIdAgenda || '');
-
-  // Duração total = duracaoMin do form (Checkpoint 3 mudará para soma por procedimento)
-  const duracaoTotalMin = Number(agenda.form.duracaoMin) || 45;
+  const duracaoTotalMin = procedimentosSelecionados.reduce((acc, p) => acc + (Number(p.duracaoSelecionada) || 0), 0);
 
   const confirmDisabled =
     !agenda.form.pacienteId ||
@@ -57,9 +111,44 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     !agenda.form.horaInicio ||
     !agenda.roleUserIdAgenda;
 
-  const resumoTexto = buildResumo({ form: agenda.form, agenda, duracaoTotalMin });
+  const resumoTexto = buildResumo({ form: agenda.form, agenda, duracaoTotalMin, procedimentosSelecionados });
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── Handlers de procedimentos ───────────────────────────────────────────────
+
+  const handleToggleProc = useCallback(
+    (proc) => {
+      setProcedimentosSelecionados((current) => {
+        const existe = current.find((p) => p.id === proc.id);
+        const proximos = existe
+          ? current.filter((p) => p.id !== proc.id)
+          : [...current, { id: proc.id, nome: proc.nome, tipoCodigo: proc.tipoCodigo, duracaoMin: proc.duracaoMin, duracaoSelecionada: proc.duracaoMin }];
+        // Sincroniza IDs com o hook
+        agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+        return proximos;
+      });
+    },
+    [agenda]
+  );
+
+  const handleRemoverProc = useCallback(
+    (id) => {
+      setProcedimentosSelecionados((current) => {
+        const proximos = current.filter((p) => p.id !== id);
+        agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+        return proximos;
+      });
+    },
+    [agenda]
+  );
+
+  const handleMudarDuracao = useCallback((id, minutos) => {
+    setProcedimentosSelecionados((current) =>
+      current.map((p) => p.id === id ? { ...p, duracaoSelecionada: Number(minutos) } : p)
+    );
+    // duracaoSelecionada é estado local; não precisa sincronizar com o hook
+  }, []);
+
+  // ── Handlers de calendário/slots/profissional ───────────────────────────────
 
   const handleSelecionarDia = useCallback(
     (iso) => {
@@ -100,7 +189,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   );
 
   // Fechar com Escape
-  React.useEffect(() => {
+  useEffect(() => {
     if (!agenda.modalMode) return undefined;
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -194,7 +283,9 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                 Procedimentos <span className="text-red-500">*</span>
               </p>
               <ProcedimentosMultiSeletor
-                procedimentoOptions={agenda.procedimentoOptions}
+                procedimentos={procedimentosSelecionados}
+                onRemover={handleRemoverProc}
+                onMudarDuracao={handleMudarDuracao}
                 onAbrirPainelB={() => setPainelAtivo(PAINEL.B)}
               />
               {agenda.formErrors?.catalogoProcedimentoSaudeIds && (
@@ -284,6 +375,8 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               {painelAtivo === PAINEL.B && (
                 <PainelB_SeletorProcedimento
                   procedimentoOptions={agenda.procedimentoOptions}
+                  procedimentosSelecionados={procedimentosSelecionados}
+                  onToggle={handleToggleProc}
                   onVoltar={() => setPainelAtivo(PAINEL.A)}
                 />
               )}
@@ -291,6 +384,8 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               {painelAtivo === PAINEL.C && (
                 <PainelC_SeletorProfissional
                   equipeList={agenda.equipeList}
+                  equipeLoading={agenda.equipeLoading}
+                  equipeError={agenda.equipeError}
                   horaSelecionandoPendente={horaPendentePainelC}
                   onSelecionarProfissional={handleSelecionarProfissional}
                   onVoltar={() => setPainelAtivo(PAINEL.A)}

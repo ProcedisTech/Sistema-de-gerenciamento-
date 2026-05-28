@@ -63,6 +63,7 @@ export default defineConfig([
       '**/hooks/agenda/useDisponibilidadeDoDia.js',
       '**/hooks/agenda/useDiasComDisponibilidade.js',
       '**/components/agenda/AgendaDashboard.jsx',
+      '**/components/agenda/AgendaFormModal.jsx',
       '**/components/agenda/modo-agendamento/ModoAgendamentoSeletores.jsx',
       '**/components/agenda/modo-agendamento/ConfirmarAgendamentoBar.jsx',
     ],
