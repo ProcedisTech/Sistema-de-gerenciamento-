@@ -425,7 +425,7 @@ export function PatientsListView({
   nomeUsuario = '',
   onNavigateToAgenda,
 }) {
-  const { isNivel1: _isNivel1, canWritePacientes } = usePapel();
+  const { isNivel1: _isNivel1, canCreatePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
   const isSearching = Boolean(patientSearchQuery?.trim());
   const isBirthdaySort = patientListSortBy === 'birthday-asc';
@@ -636,7 +636,7 @@ export function PatientsListView({
             Histórico completo e dados protegidos
           </p>
         </div>
-        {canWritePacientes && (
+        {canCreatePacientes && (
           <button
             type="button"
             onClick={onCreatePatient}
