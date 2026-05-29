@@ -43,6 +43,8 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   const [painelAtivo, setPainelAtivo] = useState(PAINEL.A);
   const [horaPendentePainelC, setHoraPendentePainelC] = useState('');
   const [obsAberta, setObsAberta] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [resultadosSalvar, setResultadosSalvar] = useState(null);
 
   // ── Estado local de procedimentos selecionados ──────────────────────────────
   // Array de { id, nome, tipoCodigo, duracaoMin, duracaoSelecionada }
@@ -98,7 +100,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   }, [agenda.form.catalogoProcedimentoSaudeIds, agenda.procedimentoOptions]); // procedimentosSelecionados fora das deps — lido via setter funcional
 
   // ── Derivados ───────────────────────────────────────────────────────────────
-  const isReagendar = Boolean(agenda.editingAppointment?.agendaIdOrigem);
+  const isReagendar = agenda.modalMode === 'reagendar';
   const lockPatient = Boolean(agenda.patientSelectLocked);
   const profissionalFixado = ehProfissionalClinico || Boolean(agenda.roleUserIdAgenda);
   const roleUserIdFiltro = ehProfissionalClinico ? roleLogadoId : (agenda.roleUserIdAgenda || '');
@@ -155,6 +157,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
       agenda.selectDispCalendarioDia(iso);
       agenda.updateForm('data', iso);
       agenda.updateForm('horaInicio', '');
+      setResultadosSalvar(null);
       setPainelAtivo(PAINEL.A);
     },
     [agenda]
@@ -166,6 +169,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
       if (profissional?.roleUserId) {
         agenda.setRoleUserIdAgenda(profissional.roleUserId);
       }
+      setResultadosSalvar(null);
       setPainelAtivo(PAINEL.A);
     },
     [agenda]
@@ -188,6 +192,39 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     [agenda]
   );
 
+  // ── Foco inicial ao abrir ───────────────────────────────────────────────────
+  const focoInicialRef = useRef(null);
+  const modalMode = agenda.modalMode; // primitivo — estável por valor, evita dep instável no efeito abaixo
+  useEffect(() => {
+    if (!modalMode) return;
+    const id = requestAnimationFrame(() => {
+      if (!focoInicialRef.current) return;
+      // Se travado (reagendar), foca o primeiro botão interativo dentro do ref
+      // Se livre (criar), foca o input de busca do paciente
+      const alvo = focoInicialRef.current.querySelector('input, button');
+      alvo?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [modalMode]);
+
+  // ── Handler de submit ───────────────────────────────────────────────────────
+
+  const handleConfirmar = useCallback(async () => {
+    setSubmitting(true);
+    setResultadosSalvar(null);
+    try {
+      await agenda.saveAppointment({
+        duracoesPorProc: procedimentosSelecionados.map((p) => ({
+          id: p.id,
+          duracaoSelecionada: p.duracaoSelecionada,
+        })),
+        onConflictResult: (resultados) => setResultadosSalvar(resultados),
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [agenda, procedimentosSelecionados]);
+
   // Fechar com Escape
   useEffect(() => {
     if (!agenda.modalMode) return undefined;
@@ -208,7 +245,10 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   if (!agenda.modalMode) return null;
 
   const isEdit = agenda.modalMode === 'edit';
-  const modalTitulo = isReagendar ? 'Reagendar agendamento' : isEdit ? 'Editar agendamento' : 'Novo agendamento';
+  const nProcs = procedimentosSelecionados.length;
+  const modalTitulo = isReagendar
+    ? `Reagendar — ${nProcs} procedimento${nProcs !== 1 ? 's' : ''}`
+    : isEdit ? 'Editar agendamento' : 'Novo agendamento';
 
   return (
     <div
@@ -260,7 +300,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
         <div className="shrink-0 border-b border-ink-100 px-6 py-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {/* Paciente */}
-            <div>
+            <div ref={lockPatient ? null : focoInicialRef}>
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
                 Paciente <span className="text-red-500">*</span>
               </p>
@@ -278,7 +318,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             </div>
 
             {/* Procedimentos */}
-            <div>
+            <div ref={lockPatient ? focoInicialRef : null}>
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
                 Procedimentos <span className="text-red-500">*</span>
               </p>
@@ -287,6 +327,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                 onRemover={handleRemoverProc}
                 onMudarDuracao={handleMudarDuracao}
                 onAbrirPainelB={() => setPainelAtivo(PAINEL.B)}
+                readOnly={isReagendar}
               />
               {agenda.formErrors?.catalogoProcedimentoSaudeIds && (
                 <p className="mt-1 text-[11px] font-bold text-red-600">
@@ -303,6 +344,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               <ProfissionalSeletor
                 roleUserIdAgenda={agenda.roleUserIdAgenda}
                 equipeList={agenda.equipeList}
+                locked={isReagendar}
                 onAbrirPainelC={() => {
                   setHoraPendentePainelC('');
                   setPainelAtivo(PAINEL.C);
@@ -397,6 +439,25 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
         {/* ── Footer ─────────────────────────────────────────────────────── */}
         <div className="shrink-0 border-t border-ink-100 px-6 py-4">
+          {/* Feedback de conflito parcial */}
+          {resultadosSalvar?.some((r) => r.status !== 'ok') && (
+            <div className="mb-3 space-y-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs">
+              {resultadosSalvar.filter((r) => r.status !== 'ok').map((r) => {
+                const proc = procedimentosSelecionados.find((p) => p.id === r.id);
+                return (
+                  <div key={r.id} className="flex items-center gap-1.5 text-red-700">
+                    <X className="h-3 w-3 shrink-0" />
+                    <span>
+                      <strong>{proc?.nome ?? '—'}</strong>:{' '}
+                      {r.status === 'conflito' ? 'horário ocupado — escolha outro slot' : 'cancelado'}
+                    </span>
+                  </div>
+                );
+              })}
+              <p className="mt-1 text-red-500">Selecione outro horário e confirme novamente.</p>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Resumo dinâmico */}
             <div className="min-w-0 flex-1">
@@ -427,11 +488,16 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               </button>
               <button
                 type="button"
-                onClick={agenda.saveAppointment}
-                disabled={confirmDisabled}
+                onClick={handleConfirmar}
+                disabled={confirmDisabled || submitting}
                 className="rounded-xl bg-vivid-teal-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-vivid-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Confirmar
+                {submitting ? (
+                  <span className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Salvando…
+                  </span>
+                ) : 'Confirmar'}
               </button>
             </div>
           </div>

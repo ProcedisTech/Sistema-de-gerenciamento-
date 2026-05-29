@@ -34,12 +34,12 @@ function formatMesAno(year, month) {
   });
 }
 
-// Cor de intensidade baseada na qtd de slots livres (bônus visual)
+// Cor de intensidade baseada na qtd de slots livres — dessaturada em superfícies grandes.
 function slotIntensityClass(qtd) {
   if (!qtd || qtd <= 0) return '';
-  if (qtd >= 6) return 'bg-emerald-500 text-white';
-  if (qtd >= 3) return 'bg-emerald-400 text-white';
-  return 'bg-emerald-300 text-emerald-900';
+  if (qtd >= 6) return 'bg-teal-700 text-white';
+  if (qtd >= 3) return 'bg-teal-600 text-white';
+  return 'bg-teal-500 text-white';
 }
 
 export function CalendarioMensal({ roleUserId, diaSelecionado, onSelecionarDia }) {
@@ -186,7 +186,7 @@ export function CalendarioMensal({ roleUserId, diaSelecionado, onSelecionarDia }
               const intensidade = slotIntensityClass(qtdSlots);
               cellClass += intensidade
                 ? ` cursor-pointer ${intensidade} hover:opacity-90`
-                : ' cursor-pointer bg-emerald-200 text-emerald-900 hover:bg-emerald-300';
+                : ' cursor-pointer bg-teal-500 text-white hover:bg-teal-600';
             } else {
               // temDisponibilidade ainda não carregado (undefined) — neutro clicável
               cellClass += ' cursor-pointer text-ink-700 hover:bg-vivid-teal-50 hover:text-vivid-teal-700';

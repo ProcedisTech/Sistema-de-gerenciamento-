@@ -26,7 +26,6 @@ import { useToast } from '../contexts/useToast.js';
 import {
   applyActionToAppointmentGroup,
   formatGroupActionResultMessage,
-  reagendarAppointmentGroup,
   scheduleRowFromTarget,
 } from '../utils/agendaGroupActions.js';
 import { resolveApiUrl } from '../config/apiEnv.js';
@@ -55,7 +54,7 @@ import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import { AgendaBloqueioModal } from './agenda/AgendaBloqueioModal.jsx';
 import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
-import ReagendarAgendaModal from './agenda/ReagendarAgendaModal.jsx';
+// ReagendarAgendaModal removido — substituído por AgendaFormModal em modo 'reagendar'.
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
@@ -331,7 +330,6 @@ export default function App() {
 
   const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
   const [scheduleCancelRow, setScheduleCancelRow] = React.useState(null);
-  const [scheduleReagendarRow, setScheduleReagendarRow] = React.useState(null);
   const [scheduleCancelSubmitting, setScheduleCancelSubmitting] = React.useState(false);
   const [iniciarTolModal, setIniciarTolModal] = React.useState(null);
   const [iniciarTolAdiantarSubmitting, setIniciarTolAdiantarSubmitting] = React.useState(false);
@@ -379,34 +377,53 @@ export default function App() {
     [agendaSchedule, scheduleCancelRow, toast],
   );
 
-  const handleScheduleConfirmReagendar = React.useCallback(
-    async (payload) => {
-      const row = scheduleReagendarRow?.agenda;
-      const group = scheduleReagendarRow?.groupAppointments;
-      if (!row?.agendaId || !payload) {
-        if (import.meta.env.DEV) {
-          console.warn('[handleScheduleConfirmReagendar] payload inválido', { row, payload });
+  const handleSlotReagendar = React.useCallback(
+    async (target) => {
+      const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+      if (!row?.agenda) return;
+      const appointment = row.agenda;
+      // Buscar agendamentos do dia para detectar grupo consecutivo.
+      try {
+        const raw = await agendasApi.byDate(appointment.data);
+        const todos = Array.isArray(raw) ? raw : (raw?.content ?? []);
+        const mesmos = todos
+          .filter(
+            (a) =>
+              String(a.pacienteId) === String(appointment.pacienteId) &&
+              String(a.profissionalRoleUserId || a.roleUserId) === String(appointment.profissionalRoleUserId || appointment.roleUserId)
+          )
+          .map((a) => ({
+            agendaId: String(a.id || a.agendaId),
+            catalogoProcedimentoSaudeId: String(a.catalogoProcedimentoSaudeId || ''),
+            horaInicio: String(a.horaInicio || '').slice(0, 5),
+            horaFim: String(a.horaFim || '').slice(0, 5),
+          }))
+          .filter((a) => a.horaInicio)
+          .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+        // Detectar sequência consecutiva que contém o agendamento clicado.
+        let grupo = [appointment];
+        const idxInicial = mesmos.findIndex((a) => a.agendaId === String(appointment.agendaId));
+        if (idxInicial >= 0) {
+          const seq = [mesmos[idxInicial]];
+          for (let i = idxInicial + 1; i < mesmos.length; i++) {
+            if (mesmos[i].horaInicio === seq[seq.length - 1].horaFim) seq.push(mesmos[i]);
+            else break;
+          }
+          // Estender para trás
+          const seqBack = [];
+          for (let i = idxInicial - 1; i >= 0; i--) {
+            if (mesmos[i].horaFim === seq[0].horaInicio || mesmos[i].horaFim === seqBack[0]?.horaInicio) seqBack.unshift(mesmos[i]);
+            else break;
+          }
+          grupo = [...seqBack, ...seq];
         }
-        return;
+        agendaSchedule.openReagendarModal(appointment, grupo);
+      } catch (e) {
+        console.warn('[handleSlotReagendar] Falha ao detectar grupo, abrindo reagendar individual:', e);
+        agendaSchedule.openReagendarModal(appointment, [appointment]);
       }
-      if (Array.isArray(group) && group.length > 1) {
-        const result = await reagendarAppointmentGroup(group, payload, agendaSchedule.handleReagendar);
-        const partialMsg = formatGroupActionResultMessage(result, { verb: 'reagendadas' });
-        if (result.allOk) {
-          toast.success(`${group.length} agendamentos reagendados`);
-          await agendaSchedule.refreshDashboard?.();
-          setScheduleReagendarRow(null);
-        } else if (result.succeeded.length > 0) {
-          toast.error(partialMsg || 'Reagendamento parcial');
-          await agendaSchedule.refreshDashboard?.();
-          setScheduleReagendarRow(null);
-        }
-        return;
-      }
-      const ok = await agendaSchedule.handleReagendar(row.agendaId, payload);
-      if (ok) setScheduleReagendarRow(null);
     },
-    [agendaSchedule, scheduleReagendarRow, toast],
+    [agendaSchedule],
   );
 
   const refreshPatientsAndPagedList = React.useCallback(() => {
@@ -2042,11 +2059,8 @@ export default function App() {
                     const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                     if (row) setScheduleCancelRow(row);
                   }}
-                  onSlotReagendar={(target) => {
-                    const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
-                    if (row) setScheduleReagendarRow(row);
-                  }}
-                  shortcutsBlocked={Boolean(scheduleCancelRow?.agenda || scheduleReagendarRow?.agenda)}
+                  onSlotReagendar={handleSlotReagendar}
+                  shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
                 />
                 </div>
               </RoleGuard>
@@ -2149,14 +2163,7 @@ export default function App() {
               isSubmitting={scheduleCancelSubmitting}
             />
           ) : null}
-          {scheduleReagendarRow?.agenda ? (
-            <ReagendarAgendaModal
-              agenda={scheduleReagendarRow.agenda}
-              onClose={() => setScheduleReagendarRow(null)}
-              onConfirm={handleScheduleConfirmReagendar}
-              isSubmitting={agendaSchedule.submittingReagendar}
-            />
-          ) : null}
+          {/* ReagendarAgendaModal removido — reagendar agora usa AgendaFormModal v8 em modo 'reagendar'. */}
           {iniciarTolModal ? (
             <IniciarAtendimentoToleranciaModal
               variant={iniciarTolModal.variant}
