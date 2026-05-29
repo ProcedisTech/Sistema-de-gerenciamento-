@@ -42,7 +42,11 @@ export function usePapel() {
 
   // ── Ações dentro de Pacientes ────────────────────────────────────────────
   /** N1 = apenas leitura; N2+ = criação/edição */
-  const canWritePacientes = isAtLeast('NIVEL_2');
+  const canWritePacientes   = isAtLeast('NIVEL_2'); // alias legado
+  const canCreatePacientes  = isAtLeast('NIVEL_2'); // cadastrar novo paciente
+  const canEditPacientes    = isAtLeast('NIVEL_2'); // editar ficha do paciente
+  /** Inativar/excluir é ação mais destrutiva — requer N3+ */
+  const canInativarPacientes = isAtLeast('NIVEL_3');
 
   // ── Ações dentro de Agenda ───────────────────────────────────────────────
   /** N1 = apenas leitura; N2+ = criar/editar/cancelar agendamentos */
@@ -109,6 +113,9 @@ export function usePapel() {
 
     // Ações por módulo
     canWritePacientes,
+    canCreatePacientes,
+    canEditPacientes,
+    canInativarPacientes,
     canWriteAgenda,
 
     // Seções de Configurações

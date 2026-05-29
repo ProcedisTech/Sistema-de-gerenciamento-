@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, CalendarClock } from 'lucide-react';
+import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, CalendarClock, Phone, Mail, Crown } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { authHeadersForFetch, configuracoesClinicaApi, getApiErrorDetail, getApiErrorToastMessage } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
@@ -22,6 +22,11 @@ export function GestaoUsuariosView() {
   const [selectedUsuario, setSelectedUsuario] = useState(null);
   const [activeTab, setActiveTab] = useState('membros'); // 'membros' | 'auditoria'
   const [tipoOrg, setTipoOrg] = useState('clinica');
+  
+  // Filtros
+  const [searchName, setSearchName] = useState('');
+  const [filterRole, setFilterRole] = useState('');
+  const [filterLevel, setFilterLevel] = useState('');
 
   const fetchHeaders = useCallback(() => {
     return authHeadersForFetch({ needsOrg: true });
@@ -132,175 +137,254 @@ export function GestaoUsuariosView() {
   return (
     <div className="space-y-6">
       {/* Header Responsivo */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex-1 min-w-0">
-          <h3 className="text-xl font-bold text-[#0f172a] sm:text-lg truncate">Gestão de Equipe</h3>
-          <p className="text-sm text-slate-500 truncate">Gerencie os membros da equipe e níveis de acesso da sua clínica.</p>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 bg-teal-50 rounded-xl">
+              <Users className="h-6 w-6 text-[#00a88e]" />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900 truncate tracking-tight">Gestão de Equipe</h3>
+          </div>
+          <p className="text-sm text-slate-500 truncate pl-12 sm:pl-0 sm:mt-1">Gerencie os membros da equipe e níveis de acesso da sua clínica.</p>
         </div>
         {activeTab === 'membros' && (
           <button
             onClick={() => setShowInviteModal(true)}
-            className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#00967f] active:scale-95 touch-manipulation sm:w-auto sm:py-2.5"
+            className="group flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-teal-500/30 transition-all duration-300 hover:shadow-teal-500/40 hover:-translate-y-0.5 active:scale-95 touch-manipulation sm:w-auto"
           >
-            <UserPlus className="h-4 w-4" />
+            <UserPlus className="h-4 w-4 transition-transform group-hover:scale-110" />
             <span className="whitespace-nowrap">Convidar / Criar Acesso</span>
           </button>
         )}
       </div>
       
-      {/* Abas Internas */}
-      <div className="flex border-b border-slate-200">
+      {/* Abas Internas (Segmented Control) */}
+      <div className="inline-flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:w-auto overflow-x-auto">
         <button
           onClick={() => setActiveTab('membros')}
-          className={`px-6 py-3 text-sm font-bold transition-colors relative ${
-            activeTab === 'membros' ? 'text-[#00a88e]' : 'text-slate-500 hover:text-slate-700'
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
+            activeTab === 'membros' 
+              ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5' 
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
+          <Users className="h-4 w-4" />
           Membros da Equipe
-          {activeTab === 'membros' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00a88e]" />
-          )}
         </button>
         <button
           onClick={() => setActiveTab('auditoria')}
-          className={`px-6 py-3 text-sm font-bold transition-colors relative ${
-            activeTab === 'auditoria' ? 'text-[#00a88e]' : 'text-slate-500 hover:text-slate-700'
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
+            activeTab === 'auditoria' 
+              ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5' 
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
+          <Shield className="h-4 w-4" />
           Histórico de Ações
-          {activeTab === 'auditoria' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00a88e]" />
-          )}
         </button>
       </div>
 
       {activeTab === 'membros' ? (
         <>
-          {/* Desktop Table View */}
-          <div className="hidden xl:block overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-6 py-4">Usuário</th>
-                  <th className="px-6 py-4">Papel</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {usuarios.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="px-6 py-10 text-center text-slate-400">
-                      Nenhum usuário encontrado.
-                    </td>
-                  </tr>
-                ) : (
-                  usuarios.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-900">{u.nomeCompleto}</div>
-                        <div className="text-xs text-slate-500">{u.email}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-bold text-teal-700">
-                          {(u.perfilAcessoCodigo || '').toUpperCase() === 'DONO' ? 'Dono' : u.roleName}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <span className={`inline-flex h-2 w-2 rounded-full ${u.ativo ? 'bg-green-500' : 'bg-slate-300'}`} />
-                          <span className={`ml-2 font-medium ${u.ativo ? 'text-slate-600' : 'text-slate-400'}`}>
-                            {u.ativo ? 'Ativo' : 'Desativado'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          {tipoOrg === 'clinica' && (u.roleName || '').toUpperCase().includes('PROFISSIONAL') && (
-                            <button
-                              onClick={() => { setSelectedUsuario(u); setShowDispModal(true); }}
-                              className="rounded-lg p-2 text-slate-400 hover:bg-teal-50 hover:text-[#00a88e] transition"
-                              title="Configurar disponibilidade"
-                            >
-                              <CalendarClock className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => { setSelectedUsuario(u); setShowEditModal(true); }}
-                            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition touch-manipulation"
-                            title="Editar papel"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeactivate(u.id)}
-                            className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition touch-manipulation"
-                            title="Desativar"
-                          >
-                            <UserX className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Buscar por nome..."
+                value={searchName}
+                onChange={e => setSearchName(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10"
+              />
+            </div>
+            <div className="sm:w-48">
+              <select
+                value={filterRole}
+                onChange={e => setFilterRole(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
+              >
+                <option value="">Todos os cargos</option>
+                {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
+                  <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:w-48">
+              <select
+                value={filterLevel}
+                onChange={e => setFilterLevel(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
+              >
+                <option value="">Todos os níveis</option>
+                {perfisAcesso.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '')).map(p => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Mobile/Tablet Card View */}
-          <div className="grid grid-cols-1 gap-4 xl:hidden">
-            {usuarios.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 bg-white">
-                Nenhum usuário encontrado.
-              </div>
-            ) : (
-              usuarios.map((u) => (
-                <div key={u.id} className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm active:bg-slate-50 transition-colors">
-                  <div className="flex items-start justify-between mb-auto pb-4 gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-slate-900 truncate leading-tight">{u.nomeCompleto}</div>
-                      <div className="text-[11px] text-slate-500 truncate mt-0.5">{u.email}</div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${u.ativo ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {u.ativo ? 'Ativo' : 'Desativado'}
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[9px] font-bold text-teal-700 uppercase">
-                        {(u.perfilAcessoCodigo || '').toUpperCase() === 'DONO' ? 'Dono' : u.roleName}
-                      </span>
-                    </div>
+          {/* Unified Rich Card Grid */}
+          {(() => {
+            const filteredUsers = usuarios.filter(u => {
+              const matchName = searchName === '' || (u.nomeCompleto || u.usuarioNome || '').toLowerCase().includes(searchName.toLowerCase());
+              const matchRole = filterRole === '' || String(u.roleId || u.role?.id) === String(filterRole);
+              const matchLevel = filterLevel === '' || String(u.perfilAcessoId) === String(filterLevel);
+              return matchName && matchRole && matchLevel;
+            });
+
+            if (filteredUsers.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-20 px-6 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
+                    <Users className="h-8 w-8 text-slate-400" />
                   </div>
-                  
-                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 mt-auto">
-                    {tipoOrg === 'clinica' && (u.roleName || '').toUpperCase().includes('PROFISSIONAL') && (
-                      <button
-                        onClick={() => { setSelectedUsuario(u); setShowDispModal(true); }}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2 text-xs font-semibold text-[#00a88e] active:bg-teal-100 touch-manipulation"
-                      >
-                        <CalendarClock className="h-3.5 w-3.5" />
-                        Disponibilidade
-                      </button>
-                    )}
-                    <button
-                      onClick={() => { setSelectedUsuario(u); setShowEditModal(true); }}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 active:bg-slate-100 touch-manipulation"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDeactivate(u.id)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 active:bg-red-100 touch-manipulation"
-                    >
-                      <UserX className="h-3.5 w-3.5" />
-                      Desativar
-                    </button>
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900">Nenhum membro encontrado</h4>
+                    <p className="text-sm font-medium text-slate-500 mt-1 max-w-sm mx-auto">Não há membros correspondentes aos filtros aplicados.</p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {filteredUsers.map((u) => {
+
+                const isDono = (u.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
+                const isProfissional = (u.roleName || '').toUpperCase().includes('PROFISSIONAL');
+                const perfilData = perfisAcesso.find(p => String(p.id) === String(u.perfilAcessoId)) || {};
+                const nivelNome = u.perfilAcessoNome || perfilData.nome || (isDono ? 'Dono' : 'Nível não definido');
+                // Generate avatar initials from full name
+                const initials = (u.nomeCompleto || u.usuarioNome || '?')
+                  .split(' ')
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map(w => w[0].toUpperCase())
+                  .join('');
+                // Avatar background color based on role
+                const avatarBg = isDono
+                  ? 'from-amber-400 to-orange-500'
+                  : isProfissional
+                  ? 'from-[#00a88e] to-teal-500'
+                  : 'from-slate-400 to-slate-500';
+
+                return (
+                  <div
+                    key={u.id}
+                    className={`group relative flex flex-col rounded-2xl border bg-white shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 ${
+                      u.ativo ? 'border-slate-100' : 'border-slate-100 opacity-60 grayscale-[0.2]'
+                    }`}
+                  >
+                    {/* Status strip at top */}
+                    <div className={`h-1.5 w-full rounded-t-2xl ${
+                      u.ativo ? (isDono ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-[#00a88e] to-teal-400') : 'bg-slate-300'
+                    }`} />
+
+                    <div className="flex flex-col gap-5 p-5">
+                      {/* Header row: avatar + name + status */}
+                      <div className="flex items-start gap-3.5">
+                        {/* Avatar */}
+                        <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-white text-base font-bold shadow-md bg-gradient-to-br ring-2 ring-white ${avatarBg}`}>
+                          {isDono ? <Crown className="h-6 w-6" /> : initials}
+                          {u.ativo && (
+                            <span className="absolute -bottom-1 -right-1 block h-4 w-4 rounded-full bg-green-500 ring-2 ring-white"></span>
+                          )}
+                        </div>
+
+                        {/* Name + badges */}
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <h4 className="font-bold text-base text-slate-900 leading-snug truncate">
+                            {u.nomeCompleto || u.usuarioNome}
+                          </h4>
+                          {/* Role badges */}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {/* Nível Badge */}
+                            <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              isDono 
+                                ? 'bg-amber-50 border-amber-200/60 text-amber-700' 
+                                : 'bg-indigo-50 border-indigo-200/60 text-indigo-700'
+                            }`}>
+                              {isDono && <Crown className="h-3 w-3 mr-1" />}
+                              {nivelNome}
+                            </span>
+                            
+                            {u.roleName && (
+                              <span className="inline-flex items-center rounded-md bg-teal-50 border border-teal-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                                {u.roleName === 'PROFISSIONAL' ? 'Profissional' : u.roleName}
+                              </span>
+                            )}
+                            {!isDono && !u.roleName && (
+                              <span className="inline-flex items-center rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                Sem cargo
+                              </span>
+                            )}
+                            {!u.ativo && (
+                              <span className="inline-flex items-center rounded-md bg-slate-100 text-slate-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                                Inativo
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Contact info */}
+                      <div className="space-y-2.5 bg-slate-50/50 rounded-xl p-3 border border-slate-100/50">
+                        {u.email && (
+                          <div className="flex items-center gap-2.5 text-[13px] text-slate-600 min-w-0">
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-slate-900/5">
+                              <Mail className="h-3.5 w-3.5 text-slate-400" />
+                            </div>
+                            <span className="truncate font-medium">{u.email}</span>
+                          </div>
+                        )}
+                        {(u.telefone || u.usuarioTelefone) && (
+                          <div className="flex items-center gap-2.5 text-[13px] text-slate-600">
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-slate-900/5">
+                              <Phone className="h-3.5 w-3.5 text-slate-400" />
+                            </div>
+                            <span className="font-medium">{u.telefone || u.usuarioTelefone}</span>
+                          </div>
+                        )}
+                        {!u.email && !(u.telefone || u.usuarioTelefone) && (
+                          <p className="text-[12px] text-slate-400 italic py-1 text-center">Sem contato cadastrado</p>
+                        )}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 pt-2">
+                        {tipoOrg === 'clinica' && isProfissional && (
+                          <button
+                            onClick={() => { setSelectedUsuario(u); setShowDispModal(true); }}
+                            title="Configurar disponibilidade"
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-[#00a88e] transition hover:bg-teal-100 active:scale-95 touch-manipulation"
+                          >
+                            <CalendarClock className="h-4 w-4" />
+                            <span className="hidden sm:inline">Agenda</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setSelectedUsuario(u); setShowEditModal(true); }}
+                          title="Editar membro"
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-95 touch-manipulation"
+                        >
+                          <Edit2 className="h-4 w-4 text-slate-400" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDeactivate(u.id)}
+                          title="Desativar acesso"
+                          className="flex flex-none items-center justify-center rounded-xl bg-white border border-slate-200 p-2.5 text-slate-400 shadow-sm transition hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 touch-manipulation"
+                        >
+                          <UserX className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
           {showInviteModal && (
             <InviteModal 
@@ -353,9 +437,19 @@ const FUNCOES_SISTEMA = [
   {
     categoria: 'Pacientes',
     itens: [
-      { id: 'pacientes_ver', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e as fichas dos pacientes.' },
-      { id: 'pacientes_criar', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes e preencher dados.' },
-      { id: 'pacientes_editar', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente.' }
+      { id: 'pacientes_ver', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e os dados cadastrais dos pacientes.' },
+      { id: 'pacientes_criar', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes no sistema.' },
+      { id: 'pacientes_editar', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente (nome, telefone, endereço, etc).' },
+      { id: 'pacientes_excluir', label: 'Inativar / Excluir Pacientes', minNivel: 3, descricao: 'Permite inativar ou excluir o cadastro de um paciente. Requer confirmação de senha.' }
+    ]
+  },
+  {
+    categoria: 'Atendimento e Prontuário',
+    itens: [
+      { id: 'atendimento_iniciar', label: 'Iniciar Atendimento (Anamnese)', minNivel: 2, descricao: 'Permite iniciar um atendimento e preencher a anamnese do paciente.' },
+      { id: 'prontuario_ver', label: 'Ver Prontuário Completo', minNivel: 2, descricao: 'Permite acessar o prontuário e o histórico de procedimentos do paciente.' },
+      { id: 'prontuario_escrever', label: 'Criar/Editar Notas no Prontuário', minNivel: 2, descricao: 'Permite adicionar e editar notas rápidas no prontuário do paciente.' },
+      { id: 'prontuario_procedimentos', label: 'Registrar Procedimentos', minNivel: 3, descricao: 'Permite lançar procedimentos realizados no prontuário do paciente.' }
     ]
   },
   {
@@ -371,6 +465,7 @@ const FUNCOES_SISTEMA = [
     ]
   }
 ];
+
 
 const getLevelFromPerfilAcessoId = (perfilId, perfis) => {
   if (!perfilId || !perfis) return 0;
@@ -433,9 +528,18 @@ const getPresetProfileId = (roleName, perfis) => {
   return null;
 };
 
+const maskTelefone = (value) => {
+  if (!value) return '';
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{4,5})(\d{4})$/, '$1-$2')
+    .substring(0, 15);
+};
+
 function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
   const toast = useToast();
-  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '' });
+  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', telefone: '', roleId: '', perfilAcessoId: '' });
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState([]);
 
@@ -565,7 +669,7 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
         body: JSON.stringify({
           nomeCompleto: form.nome,
           email: form.email,
-          telefone: null,
+          telefone: form.telefone || null,
           cpf: form.cpf
         })
       });
@@ -605,61 +709,77 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/40 p-2 sm:p-4 md:p-6 backdrop-blur-sm overflow-y-auto [webkit-overflow-scrolling:touch]">
-      <div className="w-full max-w-md md:max-w-4xl lg:max-w-5xl rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[90vh] flex flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-4 mb-4">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">Novo Acesso</h3>
-            <p className="text-sm text-slate-500 mt-1">Cadastre e configure um novo membro para a sua equipe.</p>
+    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]">
+      <div className="w-full max-w-md md:max-w-5xl lg:max-w-6xl xl:max-w-7xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 min-h-[70vh] max-h-none md:max-h-[95vh] flex flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-teal-50 rounded-xl">
+              <UserPlus className="h-6 w-6 text-[#00a88e]" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Novo Acesso</h3>
+              <p className="text-sm text-slate-500 mt-0.5">Cadastre e configure um novo membro para a sua equipe.</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition touch-manipulation">
+          <button type="button" onClick={onClose} className="rounded-xl p-2.5 text-slate-400 bg-slate-50 hover:bg-slate-100 hover:text-slate-600 active:bg-slate-200 transition-colors touch-manipulation">
             <X className="h-5 w-5" />
           </button>
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
+          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 pb-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 h-full">
               {/* Coluna Esquerda: Dados Básicos (col-span-5) */}
-              <div className="md:col-span-5 space-y-4">
+              <div className="md:col-span-5 space-y-5">
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Nome Completo</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nome Completo</label>
                   <input 
                     required
                     maxLength={80}
                     value={form.nome}
                     onChange={e => setForm({...form, nome: e.target.value})}
                     placeholder="Ex: João da Silva"
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">CPF</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">CPF</label>
                   <input 
                     required
                     value={form.cpf}
                     onChange={e => setForm({...form, cpf: maskCPF(e.target.value)})}
                     placeholder="123.456.789-10"
                     maxLength={14}
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">E-mail</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Telefone <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
+                  <input 
+                    value={form.telefone}
+                    onChange={e => setForm({...form, telefone: maskTelefone(e.target.value)})}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">E-mail</label>
                   <input 
                     required
                     type="email"
                     value={form.email}
                     onChange={e => setForm({...form, email: e.target.value})}
                     placeholder="exemplo@google.com"
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Senha Temporária</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Senha Temporária</label>
                   <input 
                     required
                     type="password"
@@ -667,32 +787,32 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                     value={form.senha}
                     onChange={e => setForm({...form, senha: e.target.value})}
                     placeholder="Mínimo 8 caracteres"
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Cargo</label>
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cargo</label>
                     <select 
                       required
                       value={form.roleId}
                       onChange={e => handleRoleChangeInvite(e.target.value)}
-                      className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                     >
                       <option value="">Selecione...</option>
-                      {roles.filter(r => r.nome !== 'ADMIN').map(r => (
+                      {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
                         <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Nível de Permissão</label>
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nível de Permissão</label>
                     <select 
                       required
                       value={form.perfilAcessoId}
                       onChange={e => handlePerfilChangeInvite(e.target.value)}
-                      className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                     >
                       <option value="">Selecione...</option>
                       {[...perfisAcesso]
@@ -708,21 +828,21 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
               </div>
               
               {/* Coluna Direita: Personalização de Funções (col-span-7) */}
-              <div className="md:col-span-7 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6 lg:pl-8 border-slate-100 flex flex-col justify-between">
+              <div className="md:col-span-7 border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8 border-slate-100 flex flex-col justify-between bg-slate-50/30 rounded-r-3xl">
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wider text-teal-700">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
                       Personalizar Funções do Usuário
                     </label>
-                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2 py-0.5 rounded-full uppercase">
+                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2.5 py-1 rounded-lg uppercase">
                       Customizável
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                  <p className="text-xs text-slate-500 mb-4 leading-relaxed max-w-lg">
                     O nível selecionado preenche as funções recomendadas, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.
                   </p>
                   
-                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[320px] lg:max-h-[340px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
+                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[400px] lg:max-h-[460px] xl:max-h-[580px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
                     <div className="grid grid-cols-1 gap-3">
                       {FUNCOES_SISTEMA.map(cat => (
                         <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
@@ -767,18 +887,18 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
             </div>
           </div>
           
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row justify-end border-t border-slate-100 pt-4 shrink-0">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end border-t border-slate-100 pt-5 shrink-0 bg-white md:bg-transparent">
             <button 
               type="button" 
               onClick={onClose}
-              className="w-full sm:w-32 rounded-xl border-2 border-slate-100 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 active:bg-slate-100 touch-manipulation"
+              className="w-full sm:w-32 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 shadow-sm active:scale-95 touch-manipulation"
             >
               Cancelar
             </button>
             <button 
               type="submit"
               disabled={saving}
-              className="w-full sm:w-44 flex items-center justify-center gap-2 rounded-xl bg-[#00a88e] hover:bg-[#00967f] py-2.5 text-sm font-bold text-white transition active:scale-95 disabled:opacity-60 touch-manipulation"
+              className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving ? 'Criando...' : 'Criar Acesso'}
@@ -796,6 +916,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   const [roleId, setRoleId] = useState(usuario.roleId || usuario.role?.id || '');
   const [perfilAcessoId, setPerfilAcessoId] = useState(usuario.perfilAcessoId || '');
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
+  const [telefone, setTelefone] = useState(usuario.telefone || '');
   const [email, setEmail] = useState(usuario.email || '');
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState([]);
@@ -803,7 +924,10 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
   const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
   const isDono = papel === 'DONO';
-  const lockSensitiveFields = isUserOwner || (isSelfEdit && isDono);
+  // O DONO pode ter um cargo (role) na clínica — apenas o nível de acesso (perfilAcesso) fica bloqueado
+  const lockNivelField = isUserOwner;
+  // E-mail também fica bloqueado para o próprio dono editando a si mesmo
+  const lockEmailField = isUserOwner || (isSelfEdit && isDono);
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
@@ -816,7 +940,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   useEffect(() => {
     let level = 0;
     if (isUserOwner) {
-      level = 5;
+      level = 5; // DONO sempre tem nível máximo de funções
     } else if (perfilAcessoId) {
       level = getLevelFromPerfilAcessoId(perfilAcessoId, perfisAcesso);
     }
@@ -838,6 +962,8 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
 
   const handleRoleChangeEdit = (selectedRoleId) => {
     setRoleId(selectedRoleId);
+    // Não altera o nível de acesso do DONO — ele fica sempre bloqueado
+    if (isUserOwner) return;
     const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
     if (selectedRole) {
       const presetId = getPresetProfileId(selectedRole.nome, perfisAcesso);
@@ -862,6 +988,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
           usuarioId: usuario.usuarioId || usuario.usuario?.id,
           nomeCompleto: nome,
           email: email,
+          telefone: telefone || null,
           roleId,
           perfilAcessoId
         })
@@ -884,99 +1011,106 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/40 p-2 sm:p-4 md:p-6 backdrop-blur-sm overflow-y-auto [webkit-overflow-scrolling:touch]">
-      <div className="w-full max-w-md md:max-w-4xl lg:max-w-5xl rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[90vh] flex flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-4 mb-4">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">Editar Acesso</h3>
-            <p className="text-sm text-slate-500 mt-1">Atualize as informações e permissões do membro da equipe.</p>
+    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]">
+      <div className="w-full max-w-md md:max-w-5xl lg:max-w-6xl xl:max-w-7xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[95vh] flex flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-slate-100 rounded-xl">
+              <Edit2 className="h-6 w-6 text-slate-700" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Editar Acesso</h3>
+              <p className="text-sm text-slate-500 mt-0.5">Atualize as informações e permissões do membro da equipe.</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition touch-manipulation">
+          <button type="button" onClick={onClose} className="rounded-xl p-2.5 text-slate-400 bg-slate-50 hover:bg-slate-100 hover:text-slate-600 active:bg-slate-200 transition-colors touch-manipulation">
             <X className="h-5 w-5" />
           </button>
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10">
               {/* Coluna Esquerda: Campos (col-span-5) */}
-              <div className="md:col-span-5 space-y-4">
+              <div className="md:col-span-5 space-y-5">
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700">Nome Completo</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nome Completo</label>
                   <input 
                     required
                     maxLength={80}
                     value={nome}
                     onChange={e => setNome(e.target.value)}
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">CPF (Não editável)</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400 ml-1">CPF (Não editável)</label>
                   <input 
                     disabled
                     value={usuario.cpf || 'Não informado'}
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50/50 px-3 py-2 text-sm outline-none text-slate-500 cursor-not-allowed"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className={`mb-1 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
-                    E-mail {lockSensitiveFields && '(Dono)'}
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Telefone <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
+                  <input 
+                    value={telefone}
+                    onChange={e => setTelefone(maskTelefone(e.target.value))}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-[11px] font-bold uppercase tracking-wider ml-1 ${lockEmailField ? 'text-slate-400' : 'text-teal-700'}`}>
+                    E-mail {lockEmailField && '(Dono)'}
                   </label>
                   <input 
                     required
                     type="email"
-                    disabled={lockSensitiveFields}
+                    disabled={lockEmailField}
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${lockEmailField ? 'bg-slate-50/70 text-slate-500 cursor-not-allowed' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={`mb-1 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
-                      Novo Cargo
+                    {/* Cargo: editável mesmo para o DONO — ele pode ser Profissional na clínica */}
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
+                      Cargo na Clínica
                     </label>
-                    {isUserOwner ? (
-                      <input 
-                        disabled
-                        value="Dono"
-                        className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none text-slate-500 cursor-not-allowed"
-                      />
-                    ) : (
-                      <select 
-                        required
-                        disabled={lockSensitiveFields}
-                        value={roleId}
-                        onChange={e => handleRoleChangeEdit(e.target.value)}
-                        className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
-                      >
-                        <option value="">Selecione...</option>
-                        {roles.map(r => (
-                          <option key={r.id} value={r.id}>{r.nome}</option>
-                        ))}
-                      </select>
-                    )}
+                    <select 
+                      value={roleId}
+                      onChange={e => handleRoleChangeEdit(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                    >
+                      <option value="">Sem cargo específico</option>
+                      {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
+                        <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className={`mb-1 block text-xs font-bold uppercase tracking-wider ${lockSensitiveFields ? 'text-slate-400' : 'text-teal-700'}`}>
-                      Novo Nível
+                    {/* Nível de acesso: sempre bloqueado para o DONO */}
+                    <label className={`mb-1.5 block text-[11px] font-bold uppercase tracking-wider ml-1 ${lockNivelField ? 'text-slate-400' : 'text-teal-700'}`}>
+                      Nível de Acesso {lockNivelField && '(Dono)'}
                     </label>
                     {isUserOwner ? (
                       <input 
                         disabled
-                        value="Dono"
-                        className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none text-slate-500 cursor-not-allowed"
+                        value="Dono — acesso total"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm"
                       />
                     ) : (
                       <select 
                         required
-                        disabled={lockSensitiveFields}
                         value={perfilAcessoId}
                         onChange={e => setPerfilAcessoId(e.target.value)}
-                        className={`w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white ${lockSensitiveFields ? 'cursor-not-allowed opacity-70' : ''}`}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                       >
                         <option value="">Selecione...</option>
                         {[...perfisAcesso]
@@ -993,25 +1127,25 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
               </div>
               
               {/* Coluna Direita: Personalização (col-span-7) */}
-              <div className="md:col-span-7 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6 lg:pl-8 border-slate-100 flex flex-col justify-between">
+              <div className="md:col-span-7 border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8 border-slate-100 flex flex-col justify-between bg-slate-50/30 rounded-r-3xl">
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wider text-teal-700">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
                       Personalizar Funções do Usuário
                     </label>
-                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2 py-0.5 rounded-full uppercase">
+                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2.5 py-1 rounded-lg uppercase">
                       Customizável
                     </span>
                   </div>
                   
-                  <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-                    {lockSensitiveFields 
-                      ? 'As funções do Dono principal não podem ser customizadas.' 
+                  <p className="text-xs text-slate-500 mb-4 leading-relaxed max-w-lg">
+                    {isUserOwner 
+                      ? 'O Dono possui acesso total ao sistema. As funções abaixo são apenas informativas.' 
                       : 'O nível selecionado preenche as funções recomendadas, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.'
                     }
                   </p>
                   
-                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[320px] lg:max-h-[340px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
+                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[400px] lg:max-h-[460px] xl:max-h-[580px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
                     <div className="grid grid-cols-1 gap-3">
                       {FUNCOES_SISTEMA.map(cat => (
                         <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
@@ -1025,7 +1159,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                                 <label 
                                   key={item.id} 
                                   className={`flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg transition ${
-                                    lockSensitiveFields 
+                                    isUserOwner 
                                       ? 'cursor-not-allowed opacity-60' 
                                       : 'cursor-pointer hover:bg-slate-100/50'
                                   }`}
@@ -1033,9 +1167,9 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                                   <input 
                                     type="checkbox"
                                     checked={isChecked}
-                                    disabled={lockSensitiveFields}
+                                    disabled={isUserOwner}
                                     onChange={() => {
-                                      if (lockSensitiveFields) return;
+                                      if (isUserOwner) return;
                                       setSelectedFuncs(prev => 
                                         prev.includes(item.id) 
                                           ? prev.filter(id => id !== item.id) 
@@ -1043,7 +1177,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                                       );
                                     }}
                                     className={`mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 ${
-                                      lockSensitiveFields ? 'cursor-not-allowed' : 'cursor-pointer'
+                                      isUserOwner ? 'cursor-not-allowed' : 'cursor-pointer'
                                     }`}
                                   />
                                   <div className="flex-1">
@@ -1067,15 +1201,15 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
             </div>
           </div>
           
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row justify-end border-t border-slate-100 pt-4 shrink-0">
-            <button type="button" onClick={onClose} className="w-full sm:w-32 rounded-xl border-2 border-slate-100 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 active:bg-slate-100 touch-manipulation">Voltar</button>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end border-t border-slate-100 pt-5 shrink-0 bg-white md:bg-transparent">
+            <button type="button" onClick={onClose} className="w-full sm:w-32 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 shadow-sm active:scale-95 touch-manipulation">Voltar</button>
             <button 
               type="submit"
               disabled={saving}
-              className="w-full sm:w-44 flex items-center justify-center gap-2 rounded-xl bg-[#00a88e] hover:bg-[#00967f] py-2.5 text-sm font-bold text-white transition active:scale-95 disabled:opacity-60 touch-manipulation"
+              className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? 'Salvando...' : 'Salvar'}
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
             </button>
           </div>
         </form>
