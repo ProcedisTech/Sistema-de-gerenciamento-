@@ -120,6 +120,8 @@ export const usePatientState = (opts = {}) => {
   const [statusPlanoFilter, setStatusPlanoFilter] = useState(''); // '' | 'sem_plano' | 'plano_ativo'
   const [anamneseDesatualizadaFilter, setAnamneseDesatualizadaFilter] = useState(false);
   const [semRetornoFilter, setSemRetornoFilter] = useState(false);
+  const [ehNovoFilter, setEhNovoFilter] = useState(false);
+  const [ehAniversarianteFilter, setEhAniversarianteFilter] = useState(false);
 
   const [selectedPatientCpf, _setSelectedPatientCpf] = useState(readSelectedPatientCpf);
   const [patientView, setPatientView] = useState(() =>
@@ -171,7 +173,7 @@ export const usePatientState = (opts = {}) => {
   /* Voltar à primeira página ao mudar filtro ou ordenação */
   useEffect(() => {
     setPatientListPage(0);
-  }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter]);
+  }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter, ehNovoFilter, ehAniversarianteFilter]);
 
   /* birthday-asc ignora semRetorno no backend — limpar filtro ao trocar para esse sort */
   useEffect(() => {
@@ -256,6 +258,8 @@ export const usePatientState = (opts = {}) => {
           statusPlano: statusPlanoFilter || undefined,
           anamneseDesatualizada: anamneseDesatualizadaFilter || undefined,
           semRetorno: !isBirthday && semRetornoFilter ? true : undefined,
+          ehNovo: ehNovoFilter || undefined,
+          ehAniversarianteMes: ehAniversarianteFilter || undefined,
         })
         .then((pageData) => {
           if (cancelled) return;
@@ -326,6 +330,8 @@ export const usePatientState = (opts = {}) => {
     statusPlanoFilter,
     anamneseDesatualizadaFilter,
     semRetornoFilter,
+    ehNovoFilter,
+    ehAniversarianteFilter,
   ]);
 
   useEffect(() => {
@@ -401,11 +407,16 @@ export const usePatientState = (opts = {}) => {
     patientListSortBy,
     setPatientListSortBy,
     bumpPatientList,
+    patientListBump,
     statusPlanoFilter,
     setStatusPlanoFilter,
     anamneseDesatualizadaFilter,
     setAnamneseDesatualizadaFilter,
     semRetornoFilter,
     setSemRetornoFilter,
+    ehNovoFilter,
+    setEhNovoFilter,
+    ehAniversarianteFilter,
+    setEhAniversarianteFilter,
   };
 };

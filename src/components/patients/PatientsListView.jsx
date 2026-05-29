@@ -2,13 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpDown,
-  BadgeCheck,
-  ChevronLeft,
   ChevronRight,
-  Clock3,
   ExternalLink,
-  FileX,
-  LayoutGrid,
+  Filter,
   Loader2,
   Play,
   Plus,
@@ -18,10 +14,14 @@ import {
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
-import { MinorAgeIcon } from './MinorAgeIcon.jsx';
 import { PatientStatusIconBadge } from './PatientStatusIconBadge.jsx';
-import { PatientFilterChip } from './PatientFilterChip.jsx';
 import { getPatientCardStatuses } from './patientListStatusConfig.js';
+import { KpiCards } from './KpiCards.jsx';
+import { PulseSidebar } from './PulseSidebar.jsx';
+import { PatientsTodayStrip } from './PatientsTodayStrip.jsx';
+import { PatientFiltersSheet, PatientListFilterChips } from './PatientFiltersSheet.jsx';
+import { countActivePatientFilters } from './patientListFilters.js';
+import { PatientListPagination } from './PatientListPagination.jsx';
 import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
 import {
@@ -416,6 +416,14 @@ export function PatientsListView({
   setAnamneseDesatualizadaFilter,
   semRetornoFilter = false,
   setSemRetornoFilter,
+  ehNovoFilter = false,
+  setEhNovoFilter,
+  ehAniversarianteFilter = false,
+  setEhAniversarianteFilter,
+  kpi,
+  kpiLoading = false,
+  nomeUsuario = '',
+  onNavigateToAgenda,
 }) {
   const { isNivel1: _isNivel1, canCreatePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
@@ -423,13 +431,72 @@ export function PatientsListView({
   const isBirthdaySort = patientListSortBy === 'birthday-asc';
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
+  /** Paciente vindo da sidebar quando ainda não está na página atual da lista. */
+  const [previewPatientSeed, setPreviewPatientSeed] = useState(null);
   const [quickFilter, setQuickFilter] = useState('todos');
+  const [activeKpiCard, setActiveKpiCard] = useState(null);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const desktopTitleId = 'patient-detail-title';
   const [previewProcedures, setPreviewProcedures] = useState([]);
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
   const [previewAnamneseList, setPreviewAnamneseList] = useState([]);
   /** Paciente ao qual `previewAnamneseList` corresponde após o último fetch concluído; `null` = nenhum. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
+  const activeFiltersCount = useMemo(
+    () =>
+      countActivePatientFilters({
+        statusPlanoFilter,
+        anamneseDesatualizadaFilter,
+        semRetornoFilter,
+        ehNovoFilter,
+        ehAniversarianteFilter,
+        quickFilter,
+      }),
+    [
+      statusPlanoFilter,
+      anamneseDesatualizadaFilter,
+      semRetornoFilter,
+      ehNovoFilter,
+      ehAniversarianteFilter,
+      quickFilter,
+    ]
+  );
+  const filterChipProps = {
+    isSearching,
+    isBirthdaySort,
+    statusPlanoFilter,
+    setStatusPlanoFilter,
+    anamneseDesatualizadaFilter,
+    setAnamneseDesatualizadaFilter,
+    semRetornoFilter,
+    setSemRetornoFilter,
+    ehNovoFilter,
+    setEhNovoFilter,
+    ehAniversarianteFilter,
+    setEhAniversarianteFilter,
+    quickFilter,
+    setQuickFilter,
+  };
+
+  const handleActivateFilter = (cardId) => {
+    if (activeKpiCard === cardId) {
+      setActiveKpiCard(null);
+      if (cardId === 'risco') setSemRetornoFilter && setSemRetornoFilter(false);
+      if (cardId === 'planos') setStatusPlanoFilter && setStatusPlanoFilter('');
+      if (cardId === 'novos') setEhNovoFilter && setEhNovoFilter(false);
+      if (cardId === 'aniversariantes') setEhAniversarianteFilter && setEhAniversarianteFilter(false);
+      return;
+    }
+    setSemRetornoFilter && setSemRetornoFilter(false);
+    setStatusPlanoFilter && setStatusPlanoFilter('');
+    setEhNovoFilter && setEhNovoFilter(false);
+    setEhAniversarianteFilter && setEhAniversarianteFilter(false);
+    setActiveKpiCard(cardId);
+    if (cardId === 'risco') setSemRetornoFilter && setSemRetornoFilter(true);
+    if (cardId === 'planos') setStatusPlanoFilter && setStatusPlanoFilter('plano_ativo');
+    if (cardId === 'novos') setEhNovoFilter && setEhNovoFilter(true);
+    if (cardId === 'aniversariantes') setEhAniversarianteFilter && setEhAniversarianteFilter(true);
+  };
 
   const meta = patientListMeta || {
     first: true,
@@ -437,13 +504,12 @@ export function PatientsListView({
     totalPages: 0,
     number: 0,
   };
-  const totalPagesUi = Math.max(meta.totalPages, 1);
-  const pageLabelNum = meta.number + 1;
 
   const previewPatient =
     (previewPatientCpf &&
       (patientListItems.find((p) => p.cpf === previewPatientCpf) ||
-        patients.find((p) => p.cpf === previewPatientCpf))) ||
+        patients.find((p) => p.cpf === previewPatientCpf) ||
+        (previewPatientSeed?.cpf === previewPatientCpf ? previewPatientSeed : null))) ||
     null;
   const previewPatientId = previewPatient?.id ?? null;
 
@@ -511,9 +577,17 @@ export function PatientsListView({
 
   const closeDetail = () => {
     setPreviewPatientCpf(null);
+    setPreviewPatientSeed(null);
     setSelectedPatientCpf(null);
     setPatientDetailTab('atendimento');
     setPreviewProcedures([]);
+  };
+
+  const openPatientPreview = (patient, { fromSidebar = false } = {}) => {
+    if (!patient?.cpf) return;
+    setSelectedPatientCpf(patient.cpf);
+    setPreviewPatientCpf(patient.cpf);
+    setPreviewPatientSeed(fromSidebar ? patient : null);
   };
 
   useEffect(() => {
@@ -521,6 +595,7 @@ export function PatientsListView({
     const onKey = (e) => {
       if (e.key === 'Escape') {
         setPreviewPatientCpf(null);
+        setPreviewPatientSeed(null);
         setSelectedPatientCpf(null);
         setPatientDetailTab('atendimento');
       }
@@ -545,6 +620,13 @@ export function PatientsListView({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <KpiCards
+        kpi={kpi}
+        loading={kpiLoading}
+        activeCard={activeKpiCard}
+        onActivateFilter={handleActivateFilter}
+      />
+
       <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <h1 className="text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
@@ -565,14 +647,16 @@ export function PatientsListView({
         )}
       </div>
 
+      <PatientsTodayStrip kpi={kpi} loading={kpiLoading} />
+
       <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
         <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
           <div className="flex min-w-0 flex-col overflow-x-hidden">
             {/* Header: search + chips + sort */}
             <div className="sticky top-0 z-10 bg-transparent">
-              {/* Linha principal: pesquisa · ordenação */}
-              <div className="flex w-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2 sm:flex-row sm:flex-nowrap sm:items-center md:gap-3">
-                <div className="relative order-1 min-h-[44px] min-w-0 flex-1 sm:min-h-0">
+              {/* Mobile: busca full-width */}
+              <div className="px-4 pt-3 pb-2 lg:hidden">
+                <div className="relative min-h-[44px] min-w-0">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -583,12 +667,31 @@ export function PatientsListView({
                     value={patientSearchQuery}
                     onChange={(e) => setPatientSearchQuery(e.target.value)}
                     placeholder="Buscar por nome, CPF ou telefone…"
-                    className="h-11 min-h-[44px] w-full min-w-0 rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50 sm:h-10 sm:min-h-0 sm:text-[14px]"
+                    className="h-11 min-h-[44px] w-full min-w-0 rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[16px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+
+              {/* Desktop: busca + ordenação */}
+              <div className="hidden w-full min-w-0 flex-row flex-nowrap items-center gap-3 px-4 pt-3 pb-2 lg:flex">
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <input
+                    type="text"
+                    value={patientSearchQuery}
+                    onChange={(e) => setPatientSearchQuery(e.target.value)}
+                    placeholder="Buscar por nome, CPF ou telefone…"
+                    className="h-10 w-full min-w-0 rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[14px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50"
                     autoComplete="off"
                   />
                 </div>
 
-                <div className="relative order-2 flex h-11 min-h-[44px] w-full shrink-0 items-center sm:h-10 sm:min-h-0 sm:w-fit sm:flex-none">
+                <div className="relative flex h-10 w-fit shrink-0 items-center">
                   <ArrowUpDown
                     className="pointer-events-none absolute left-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -601,7 +704,7 @@ export function PatientsListView({
                     id="patient-sort"
                     value={patientListSortBy}
                     onChange={(e) => setPatientListSortBy(e.target.value)}
-                    className="h-full w-full min-w-[8rem] max-w-none cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white px-2 py-1.5 pl-7 text-[13px] font-medium leading-snug text-[#475569] outline-none focus:border-[#00a88e]/40 sm:h-10 sm:min-h-0 sm:w-fit sm:min-w-[6.75rem] sm:max-w-[10.75rem] sm:px-1.5 sm:py-1 sm:pl-6 sm:pr-2 sm:text-[11px] sm:leading-tight"
+                    className="h-10 min-w-[6.75rem] max-w-[10.75rem] cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white px-1.5 py-1 pl-6 pr-2 text-[11px] font-medium leading-tight text-[#475569] outline-none focus:border-[#00a88e]/40"
                   >
                     {SORT_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -612,76 +715,56 @@ export function PatientsListView({
                 </div>
               </div>
 
-              {/* Filtros: chips de plano (server-side) + anamnese/retorno (server-side) + local (todos/menor) */}
-              <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-                {/* Status de plano — 3 chips com seleção exclusiva (server-side) */}
-                <PatientFilterChip
-                  label="Plano: Todos"
-                  icon={LayoutGrid}
-                  active={statusPlanoFilter === ''}
-                  disabled={isSearching || !setStatusPlanoFilter}
-                  onClick={() => setStatusPlanoFilter && setStatusPlanoFilter('')}
-                />
-                <PatientFilterChip
-                  label="Sem plano"
-                  icon={FileX}
-                  active={statusPlanoFilter === 'sem_plano'}
-                  disabled={isSearching || !setStatusPlanoFilter}
-                  onClick={() => setStatusPlanoFilter && setStatusPlanoFilter('sem_plano')}
-                />
-                <PatientFilterChip
-                  label="Com plano ativo"
-                  icon={BadgeCheck}
-                  active={statusPlanoFilter === 'plano_ativo'}
-                  disabled={isSearching || !setStatusPlanoFilter}
-                  onClick={() => setStatusPlanoFilter && setStatusPlanoFilter('plano_ativo')}
-                />
-                {/* Anamnese vencida — server-side toggle */}
-                <PatientFilterChip
-                  label="Anamnese vencida"
-                  icon={AlertTriangle}
-                  active={anamneseDesatualizadaFilter}
-                  activeClass="bg-[#854d0e] text-white"
-                  disabled={isSearching || !setAnamneseDesatualizadaFilter}
-                  onClick={() => setAnamneseDesatualizadaFilter && setAnamneseDesatualizadaFilter((v) => !v)}
-                />
-                {/* Sem retorno 60d — server-side toggle; indisponível com birthday-asc (back ignora param) */}
-                <PatientFilterChip
-                  label="Sem retorno 60d"
-                  icon={Clock3}
-                  active={semRetornoFilter}
-                  activeClass="bg-[#4338ca] text-white"
-                  disabled={isSearching || isBirthdaySort || !setSemRetornoFilter}
-                  title={isBirthdaySort ? 'Indisponível com ordenação por aniversário' : undefined}
-                  onClick={() => setSemRetornoFilter && setSemRetornoFilter((v) => !v)}
-                />
-                {/* Separador */}
-                <span className="h-5 w-px bg-[#e2e8f0]" aria-hidden />
-                {/* Filtros locais: Todos e Menor de idade */}
-                <PatientFilterChip
-                  label="Todos"
-                  icon={LayoutGrid}
-                  active={quickFilter === 'todos'}
-                  onClick={() => setQuickFilter('todos')}
-                />
-                <PatientFilterChip
-                  label="Menor de idade"
-                  icon={MinorAgeIcon}
-                  active={quickFilter === 'menor'}
-                  onClick={() => setQuickFilter('menor')}
-                />
+              {/* Mobile: sort compacto + Filtros */}
+              <div className="flex gap-2 px-4 pb-2 lg:hidden">
+                <div className="relative flex h-9 min-w-0 flex-1 items-center">
+                  <ArrowUpDown
+                    className="pointer-events-none absolute left-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 text-[#94a3b8]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <label className="sr-only" htmlFor="patient-sort-mobile">
+                    Ordenar lista
+                  </label>
+                  <select
+                    id="patient-sort-mobile"
+                    value={patientListSortBy}
+                    onChange={(e) => setPatientListSortBy(e.target.value)}
+                    className="h-9 w-full min-w-0 cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white py-1 pl-7 pr-2 text-[13px] font-medium text-[#475569] outline-none focus:border-[#00a88e]/40"
+                  >
+                    {SORT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFilterSheetOpen(true)}
+                  className="relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc]"
+                  aria-label={
+                    activeFiltersCount > 0
+                      ? `Filtros, ${activeFiltersCount} ativos`
+                      : 'Filtros'
+                  }
+                >
+                  <Filter className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
+                  Filtros
+                  {activeFiltersCount > 0 ? (
+                    <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#00a88e] px-1 text-[11px] font-bold text-white">
+                      {activeFiltersCount}
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+
+              {/* Desktop: chips inline */}
+              <div className="hidden flex-wrap items-center gap-2 px-4 pb-3 lg:flex">
+                <PatientListFilterChips {...filterChipProps} />
               </div>
             </div>
           </div>
-
-          {!previewPatient ? (
-            <p
-              className="lg:hidden border-b border-app-border/80 bg-app-surface px-4 py-2.5 text-center text-[13px] font-medium text-[#64748b]"
-              role="status"
-            >
-              Toque em um paciente da lista para ver o resumo
-            </p>
-          ) : null}
 
           <div className="px-4">
             <div className="relative min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
@@ -713,10 +796,7 @@ export function PatientsListView({
                       <PatientListCard
                         patient={patient}
                         selected={selected}
-                        onSelect={() => {
-                          setSelectedPatientCpf(patient.cpf);
-                          setPreviewPatientCpf(patient.cpf);
-                        }}
+                        onSelect={() => openPatientPreview(patient)}
                         getPatientInitials={getPatientInitials}
                       />
                     </li>
@@ -725,82 +805,91 @@ export function PatientsListView({
               )}
             </ul>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e2e8f0] bg-white py-2.5">
-            <button
-              type="button"
-              disabled={meta.first || patientListLoading}
-              onClick={() => setPatientListPage((p) => Math.max(0, p - 1))}
-              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] disabled:pointer-events-none disabled:opacity-40"
-              aria-label="Página anterior"
-            >
-              <ChevronLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </button>
-            <p className="text-[13px] font-semibold text-[#64748b]" aria-live="polite">
-              Página {pageLabelNum} de {totalPagesUi}
-            </p>
-            <button
-              type="button"
-              disabled={meta.last || patientListLoading}
-              onClick={() => setPatientListPage((p) => p + 1)}
-              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] disabled:pointer-events-none disabled:opacity-40"
-              aria-label="Próxima página"
-            >
-              <ChevronRight className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </button>
-            </div>
+            <PatientListPagination
+              page={meta.number}
+              totalPages={meta.totalPages}
+              loading={patientListLoading}
+              first={meta.first}
+              last={meta.last}
+              onPageChange={setPatientListPage}
+            />
           </div>
         </div>
-
-      {previewPatient ? (
-        <>
-          {/* Mobile (&lt;640px): bottom sheet */}
-          <div
-            className="fixed inset-0 z-[200] flex flex-col justify-end sm:hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Resumo do paciente"
-          >
-            <button
-              type="button"
-              className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
-              aria-label="Fechar resumo do paciente"
-              onClick={closeDetail}
-            />
-            <div className="relative z-10 w-full max-h-[85dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border border-b-0 border-[#e2e8f0] bg-white pb-[env(safe-area-inset-bottom)] [-webkit-overflow-scrolling:touch] custom-scrollbar">
-              <div className="sticky top-0 z-20 flex justify-center bg-white pt-3 pb-1">
-                <div className="h-1 w-10 rounded-full bg-[#e2e8f0]" aria-hidden />
-              </div>
-              <PatientPreviewPanel
-                key={previewPatient.cpf || String(previewPatient.id || '')}
-                selectedPatient={previewPatient}
-                detailTitleId={undefined}
-                closeDetail={closeDetail}
-                getPatientInitials={getPatientInitials}
-                setPatientDetailTab={setPatientDetailTab}
-                setPatientView={setPatientView}
-                previewProcedures={previewProcedures}
-                loadingPreviewProcedures={loadingPreviewProcedures}
-                onStartAttendance={onStartAttendance}
-                previewHasExistingAnamnese={previewHasExistingAnamnese}
-                previewAnamneseLoading={previewAnamneseLoading}
-                shellClassName="patient-preview-sheet w-full border-0 shadow-none"
+        {/* ─── Coluna direita: PulseSidebar (sem preview) ou painel de preview (desktop) ─── */}
+        {previewPatient ? (
+          <>
+            {/* Mobile (<640px): bottom sheet */}
+            <div
+              className="fixed inset-0 z-[200] flex flex-col justify-end sm:hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Resumo do paciente"
+            >
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+                aria-label="Fechar resumo do paciente"
+                onClick={closeDetail}
               />
+              <div className="relative z-10 w-full max-h-[85dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border border-b-0 border-[#e2e8f0] bg-white pb-[env(safe-area-inset-bottom)] [-webkit-overflow-scrolling:touch] custom-scrollbar">
+                <div className="sticky top-0 z-20 flex justify-center bg-white pt-3 pb-1">
+                  <div className="h-1 w-10 rounded-full bg-[#e2e8f0]" aria-hidden />
+                </div>
+                <PatientPreviewPanel
+                  key={previewPatient.cpf || String(previewPatient.id || '')}
+                  selectedPatient={previewPatient}
+                  detailTitleId={undefined}
+                  closeDetail={closeDetail}
+                  getPatientInitials={getPatientInitials}
+                  setPatientDetailTab={setPatientDetailTab}
+                  setPatientView={setPatientView}
+                  previewProcedures={previewProcedures}
+                  loadingPreviewProcedures={loadingPreviewProcedures}
+                  onStartAttendance={onStartAttendance}
+                  previewHasExistingAnamnese={previewHasExistingAnamnese}
+                  previewAnamneseLoading={previewAnamneseLoading}
+                  shellClassName="patient-preview-sheet w-full border-0 shadow-none"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Tablet (640px–1023px): drawer direita */}
-          <div className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex lg:hidden" role="dialog" aria-modal="true" aria-label="Resumo do paciente">
-            <button
-              type="button"
-              className="absolute inset-0 bg-black/30"
-              aria-label="Fechar resumo do paciente"
-              onClick={closeDetail}
-            />
-            <aside className="relative ml-auto flex h-full w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
+            {/* Tablet (640px–1023px): drawer direita */}
+            <div className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex lg:hidden" role="dialog" aria-modal="true" aria-label="Resumo do paciente">
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/30"
+                aria-label="Fechar resumo do paciente"
+                onClick={closeDetail}
+              />
+              <aside className="relative ml-auto flex h-full w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
+                <PatientPreviewPanel
+                  key={previewPatient.cpf || String(previewPatient.id || '')}
+                  selectedPatient={previewPatient}
+                  detailTitleId={undefined}
+                  closeDetail={closeDetail}
+                  getPatientInitials={getPatientInitials}
+                  setPatientDetailTab={setPatientDetailTab}
+                  setPatientView={setPatientView}
+                  previewProcedures={previewProcedures}
+                  loadingPreviewProcedures={loadingPreviewProcedures}
+                  onStartAttendance={onStartAttendance}
+                  previewHasExistingAnamnese={previewHasExistingAnamnese}
+                  previewAnamneseLoading={previewAnamneseLoading}
+                  shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
+                />
+              </aside>
+            </div>
+
+            {/* Desktop (lg+): painel lateral — irmão de flex-1 no flex-row */}
+            <aside
+              className="patient-preview-sheet relative z-10 mt-0 hidden w-full shrink-0 flex-col gap-0 lg:flex lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0 custom-scrollbar"
+              aria-labelledby={desktopTitleId}
+              aria-label="Resumo do paciente"
+            >
               <PatientPreviewPanel
                 key={previewPatient.cpf || String(previewPatient.id || '')}
                 selectedPatient={previewPatient}
-                detailTitleId={undefined}
+                detailTitleId={desktopTitleId}
                 closeDetail={closeDetail}
                 getPatientInitials={getPatientInitials}
                 setPatientDetailTab={setPatientDetailTab}
@@ -810,37 +899,27 @@ export function PatientsListView({
                 onStartAttendance={onStartAttendance}
                 previewHasExistingAnamnese={previewHasExistingAnamnese}
                 previewAnamneseLoading={previewAnamneseLoading}
-                shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
+                shellClassName="w-full min-w-0"
               />
             </aside>
-          </div>
-
-          {/* Desktop (lg+): painel lateral que empurra a lista */}
-          <aside
-            className="patient-preview-sheet relative z-10 mt-0 hidden w-full shrink-0 flex-col gap-0 lg:flex lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0 custom-scrollbar"
-            aria-labelledby={desktopTitleId}
-            aria-label="Resumo do paciente"
-          >
-            <PatientPreviewPanel
-              key={previewPatient.cpf || String(previewPatient.id || '')}
-              selectedPatient={previewPatient}
-              detailTitleId={desktopTitleId}
-              closeDetail={closeDetail}
-              getPatientInitials={getPatientInitials}
-              setPatientDetailTab={setPatientDetailTab}
-              setPatientView={setPatientView}
-              previewProcedures={previewProcedures}
-              loadingPreviewProcedures={loadingPreviewProcedures}
-              onStartAttendance={onStartAttendance}
-              previewHasExistingAnamnese={previewHasExistingAnamnese}
-              previewAnamneseLoading={previewAnamneseLoading}
-              shellClassName="w-full min-w-0"
-            />
-          </aside>
-        </>
-      ) : null}
+          </>
+        ) : (
+          <PulseSidebar
+            kpi={kpi}
+            loading={kpiLoading}
+            nomeUsuario={nomeUsuario}
+            onNavigateToAgenda={onNavigateToAgenda}
+            onSelectPatient={(patient) => openPatientPreview(patient, { fromSidebar: true })}
+            getPatientInitials={getPatientInitials}
+          />
+        )}
       </div>
 
+      <PatientFiltersSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        chipProps={filterChipProps}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   useJourneyState,
   useProcedureCamera,
 } from './hooks';
+import { usePatientsKpi } from './hooks/usePatientsKpi.js';
 
 // Componentes de Autenticação
 import { LoginForm } from './auth';
@@ -319,13 +320,20 @@ export default function App() {
     patientListSortBy,
     setPatientListSortBy,
     bumpPatientList,
+    patientListBump,
     statusPlanoFilter,
     setStatusPlanoFilter,
     anamneseDesatualizadaFilter,
     setAnamneseDesatualizadaFilter,
     semRetornoFilter,
     setSemRetornoFilter,
+    ehNovoFilter,
+    setEhNovoFilter,
+    ehAniversarianteFilter,
+    setEhAniversarianteFilter,
   } = patientState;
+
+  const kpiState = usePatientsKpi({ authEnabled: authSessionReady, bump: patientListBump });
 
   const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
   const [scheduleCancelRow, setScheduleCancelRow] = React.useState(null);
@@ -1963,6 +1971,14 @@ export default function App() {
                   setAnamneseDesatualizadaFilter={setAnamneseDesatualizadaFilter}
                   semRetornoFilter={semRetornoFilter}
                   setSemRetornoFilter={setSemRetornoFilter}
+                  ehNovoFilter={ehNovoFilter}
+                  setEhNovoFilter={setEhNovoFilter}
+                  ehAniversarianteFilter={ehAniversarianteFilter}
+                  setEhAniversarianteFilter={setEhAniversarianteFilter}
+                  kpi={kpiState}
+                  kpiLoading={kpiState.loading}
+                  nomeUsuario={perfilInfo.nomeCompleto}
+                  onNavigateToAgenda={() => setActiveView('agenda')}
                   roleUserId={roleUserId}
                 />
               </RoleGuard>
