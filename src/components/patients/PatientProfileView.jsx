@@ -724,7 +724,7 @@ export function PatientProfileView({
   isRecepcionista,
 }) {
   const toast = useToast();
-  const { isNivel1 } = usePapel();
+  const { isNivel1, canEditPacientes, canInativarPacientes } = usePapel();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const birthParts = useMemo(
     () => parsePatientBirthDate(patient.dataNascimento),
@@ -1068,31 +1068,7 @@ export function PatientProfileView({
   const clearEditFieldError = (field) =>
     setEditFormErrors((prev) => ({ ...prev, [field]: false }));
 
-  const handleEditingBirthDisplayChange = (raw) => {
-    const digits = sanitizeBirthDateDigits(raw);
-    const display = formatBirthDigitsBR(digits);
-    let dataNascimentoIso = '';
-    let idadeCalc = '';
-    if (digits.length === 8) {
-      const r = validateBirthDateDigits8(digits);
-      if (r.ok) {
-        dataNascimentoIso = r.iso;
-        idadeCalc = calculateAgeFromISODate(r.iso);
-      }
-    }
-    setEditing((prev) =>
-      prev
-        ? {
-            ...prev,
-            dataNascimentoDisplay: display,
-            dataNascimentoIso,
-            idade: idadeCalc !== '' ? idadeCalc : '',
-          }
-        : prev,
-    );
-    setEditFormErrors((prev) => ({ ...prev, dataNascimento: false }));
-    setProfileSaveError('');
-  };
+
 
   const handleScrollToAlertas = () => {
     alertasCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1941,21 +1917,7 @@ export function PatientProfileView({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="relative mb-6 rounded-[18px] border border-[#e2e8f0] bg-white p-5 shadow-md sm:p-6">
-            {isPerfilAtivo && !isRecepcionista ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setInativarMotivo('');
-                  setInativarSenha('');
-                  setInativarSenhaErro('');
-                  setInativarModalOpen(true);
-                }}
-                className="absolute right-5 top-5 z-10 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-600 bg-red-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-colors hover:border-red-700 hover:bg-red-700 sm:right-6 sm:top-6 sm:text-[13px]"
-              >
-                <UserMinus className="h-3.5 w-3.5 shrink-0 text-white sm:h-4 sm:w-4" strokeWidth={2} aria-hidden />
-                Inativar Paciente
-              </button>
-            ) : null}
+
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1 space-y-4">
                 <div className="flex w-full flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-5">
@@ -1979,7 +1941,7 @@ export function PatientProfileView({
                       initialsClassName="text-lg font-bold md:text-xl"
                       spinnerClassName="h-5 w-5"
                     />
-                    {!isNivel1 && (
+                    {canEditPacientes && (
                       <>
                         <button
                           type="button"
@@ -2162,7 +2124,7 @@ export function PatientProfileView({
                         <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
                         <span className="min-w-0 truncate">Agendar Paciente</span>
                       </button>
-                      {!isRecepcionista && (
+                      {canEditPacientes && (
                         <button
                           type="button"
                           onClick={() => {
@@ -2192,7 +2154,10 @@ export function PatientProfileView({
                         <span className="min-w-0 truncate">Gerar PDF</span>
                       </button>
                     </div>
-                    {isPerfilAtivo && !isRecepcionista ? (
+                  </div>
+                  
+                  {isPerfilAtivo && canInativarPacientes ? (
+                    <div className="mt-auto pt-6">
                       <button
                         type="button"
                         onClick={() => {
@@ -2206,8 +2171,8 @@ export function PatientProfileView({
                         <UserMinus className="h-4 w-4 shrink-0 text-white" strokeWidth={2} aria-hidden />
                         <span className="min-w-0 truncate">Inativar Paciente</span>
                       </button>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex w-full shrink-0 flex-col gap-3 rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-center sm:min-w-[220px] sm:max-w-[280px]">
@@ -2223,13 +2188,51 @@ export function PatientProfileView({
             </div>
 
             {isEditing && editing ? (
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-[#f8fbfb] p-4">
-                <PatientForm
-                  mode="edit"
-                  variant="profile"
-                  showFormHeading
-                  formHeading="Editar Paciente"
-                  nome={editing.nome}
+              <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" role="presentation">
+                <button
+                  type="button"
+                  className="absolute inset-0 bg-black/60"
+                  onClick={() => {
+                    setEditing(null);
+                    setEditFormErrors({});
+                    setProfileSaveError('');
+                  }}
+                  aria-label="Fechar"
+                />
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+                >
+                  <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#00a88e] text-white shadow-sm">
+                        <UserIcon className="h-6 w-6" strokeWidth={2.5} />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-[18px] font-bold text-slate-900 sm:text-[20px]">Editar Cadastro</h3>
+                        <p className="text-[13px] font-medium text-slate-500">Atualize os dados pessoais do paciente</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(null);
+                        setEditFormErrors({});
+                        setProfileSaveError('');
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      <X className="h-5 w-5" strokeWidth={2.25} />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 bg-[#f8fbfb]">
+                    <PatientForm
+                      mode="edit"
+                      variant="modal"
+                      showFormHeading={false}
+                      formHeading=""
+                      nome={editing.nome}
                   dataNascimentoDisplay={editing.dataNascimentoDisplay}
                   idade={editing.idade}
                   sexo={editing.sexo}
@@ -2257,17 +2260,42 @@ export function PatientProfileView({
                   dataNascimentoIso={editing.dataNascimentoIso}
                   errors={editFormErrors}
                   erroBanner={profileSaveError}
-                  onNomeChange={(value) =>
-                    setEditing((p) => (p ? { ...p, nome: value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto) } : p))
-                  }
-                  onDataNascimentoDisplayChange={handleEditingBirthDisplayChange}
-                  onSexoChange={(value) => setEditing((p) => (p ? { ...p, sexo: value } : p))}
-                  onEstadoCivilChange={(value) => setEditing((p) => (p ? { ...p, estadoCivilId: value } : p))}
-                  onProfissaoIdChange={(value) => setEditing((p) => (p ? { ...p, profissaoId: value } : p))}
-                  onGeneroChange={(value) => setEditing((p) => (p ? { ...p, genero: value } : p))}
-                  onCpfChange={() => {}}
-                  onCpfBlur={undefined}
-                  onRgChange={(value) => setEditing((p) => (p ? { ...p, rg: value } : p))}
+                  onNomeChange={(value) => setEditing((p) => p ? { ...p, nome: value } : p)}
+                  onDataNascimentoDisplayChange={(raw) => {
+                    setEditing((p) => {
+                      if (!p) return p;
+                      const numeric = raw.replace(/\D/g, '');
+                      return { ...p, dataNascimentoDisplay: numeric, dataNascimentoIso: '' };
+                    });
+                  }}
+                  onSexoChange={(value) => setEditing((p) => p ? { ...p, sexo: value } : p)}
+                  onEstadoCivilChange={(value) => setEditing((p) => p ? { ...p, estadoCivilId: value } : p)}
+                  onProfissaoIdChange={(value) => setEditing((p) => p ? { ...p, profissaoId: value } : p)}
+                  onGeneroChange={(value) => setEditing((p) => p ? { ...p, genero: value } : p)}
+                  onCpfChange={(value) => setEditing((p) => {
+                      if (!p) return p;
+                      const next = { ...p, cpfDisplay: value };
+                      if (value.length === 14) {
+                        const cpfNum = value.replace(/\D/g, '');
+                        if (cpfNum && cpfNum !== selectedPatient?.cpf) {
+                          // TODO: Implement CPF conflict check if needed
+                        } else {
+                          setEditFormErrors((prev) => {
+                            const n = { ...prev };
+                            delete n.cpf;
+                            return n;
+                          });
+                        }
+                      } else {
+                        setEditFormErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.cpf;
+                          return n;
+                        });
+                      }
+                      return next;
+                  })}
+                  onRgChange={(value) => setEditing((p) => p ? { ...p, rg: value } : p)}
                   onTelefoneCountryChange={(code) =>
                     setEditing((p) =>
                       p
@@ -2308,7 +2336,9 @@ export function PatientProfileView({
                   salvando={profileSaving}
                   cpfInputId="patient-profile-edit-cpf"
                   onManageAlerts={handleScrollToAlertas}
-                />
+                    />
+                  </div>
+                </div>
               </div>
             ) : null}
 

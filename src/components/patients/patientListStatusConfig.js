@@ -69,15 +69,25 @@ export const PATIENT_STATUS_CONFIG = {
 };
 
 /** Próxima agenda futura presente no DTO (listagem). */
-function hasProximoAgendamento(patient) {
+export function hasProximoAgendamento(patient) {
   const v = patient?.proximoAgendamento;
   return v != null && String(v).trim() !== '';
 }
 
 /** Paciente já teve ao menos uma consulta (ultimaVinda ISO ou ultimaVisita legado). */
-function hasUltimaVisita(patient) {
+export function hasUltimaVisita(patient) {
   const day = patientUltimaVisitaDayFromDto(patient);
   return day !== '-' && day !== '—' && day !== '';
+}
+
+/**
+ * Paciente atendido ao menos uma vez, sem próxima consulta agendada.
+ * @param {{ excluirPlanoAtivo?: boolean }} [opts] — sidebar exclui quem já tem plano ativo.
+ */
+export function isSemRetornoMarcado(patient, { excluirPlanoAtivo = false } = {}) {
+  if (!hasUltimaVisita(patient) || hasProximoAgendamento(patient)) return false;
+  if (excluirPlanoAtivo && patient?.statusPlanoCodigo === 'plano_ativo') return false;
+  return true;
 }
 
 /**
@@ -91,7 +101,7 @@ function hasUltimaVisita(patient) {
 export function getPatientCardStatuses(patient) {
   const statuses = [];
   if (patient.anamneseDesatualizada) statuses.push('anamnese_vencida');
-  if (hasUltimaVisita(patient) && !hasProximoAgendamento(patient)) statuses.push('sem_retorno_marcado');
+  if (isSemRetornoMarcado(patient)) statuses.push('sem_retorno_marcado');
   if (patient.statusPlanoCodigo === 'sem_plano') {
     statuses.push('sem_plano');
   } else if (patient.statusPlanoCodigo != null) {
