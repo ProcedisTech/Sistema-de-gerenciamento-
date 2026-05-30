@@ -316,7 +316,7 @@ export function AuditoriaView() {
       {/* ── MOBILE: Cards (até md) ── */}
       <div className="flex flex-col gap-4 lg:hidden">
         {emptyState ?? itensDaPagina.map((item) => {
-          const acao = ACOES_MAP[item.acao] ?? { label: item.acao, cor: 'blue' };
+          const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
           return (
             <div
               key={item.id}
@@ -430,7 +430,7 @@ export function AuditoriaView() {
                 </tr>
               ) : (
                 itensDaPagina.map((item) => {
-                  const acao = ACOES_MAP[item.acao] ?? { label: item.acao, cor: 'blue' };
+                  const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 transition-colors group">
                       <td className="px-6 py-4 text-[13px] font-medium text-slate-600">

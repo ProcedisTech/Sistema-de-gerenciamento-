@@ -31,5 +31,23 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    test: {
+      // Ambiente DOM para testes de componente React
+      environment: 'jsdom',
+      // Injeta globals (describe, it, expect, vi) automaticamente — sem imports manuais
+      globals: true,
+      // Arquivo de setup para @testing-library/jest-dom matchers
+      setupFiles: ['./src/test/setup.js'],
+      // Glob de arquivos de teste
+      include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+      // Cobertura via V8 (nativa, mais rápida)
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'lcov'],
+        include: ['src/components/journey/lgpd/**'],
+      },
+      // Permite imports de CSS sem processar
+      css: false,
+    },
   }
 })

@@ -2702,15 +2702,46 @@ export function PatientProfileView({
                                   </div>
                                   {assinaturaVinculada ? (
                                     <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm">
-                                      <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
-                                        <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                                        Termo Assinado
+                                      <div className="mb-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
+                                          <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                                          Termo Assinado
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                                              generateTermoPdf({
+                                                titulo: tituloTermoAssinado,
+                                                conteudo: assinaturaVinculada?.conteudoSnapshot || assinaturaVinculada?.termo?.conteudo || '',
+                                                assinaturaPaciente: imgAssinPac,
+                                                assinaturaProfissional: imgAssinProf,
+                                                metadados: {
+                                                  pacienteNome: selectedPatient?.nome,
+                                                  profissionalNome: proc?.profissionalNome || '',
+                                                  dataHora: formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac),
+                                                  ipAddress: assinaturaVinculada?.ipAddress,
+                                                },
+                                                fileName: `termo_${selectedPatient?.nome?.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
+                                              });
+                                            });
+                                          }}
+                                          className="flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0f172a] shadow-sm hover:bg-[#f8fafc] transition-colors"
+                                        >
+                                          Exportar PDF
+                                        </button>
                                       </div>
-                                      <p className="mb-4 text-[13px] font-medium text-[#64748b]">
+                                      <p className="mb-2 text-[13px] font-medium text-[#64748b]">
                                         <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
                                         {' · '}
                                         {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
                                       </p>
+                                      {assinaturaVinculada?.ipAddress && (
+                                        <p className="mb-4 text-[11px] text-[#64748b] bg-[#f1f5f9] px-2 py-1 rounded w-fit">
+                                          IP do Aceite: <span className="font-mono">{assinaturaVinculada.ipAddress}</span>
+                                        </p>
+                                      )}
                                       <div className="space-y-4">
                                         <div>
                                           <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">

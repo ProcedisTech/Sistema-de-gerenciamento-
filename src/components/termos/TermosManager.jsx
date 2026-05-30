@@ -9,9 +9,12 @@ import {
   X,
   Lightbulb,
   MoreVertical,
+  Shield,
 } from 'lucide-react';
 import { termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
+import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
+import { TermoVisualizacao } from './TermoVisualizacao';
 
 function normalizeList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -37,6 +40,7 @@ export function TermosManager() {
   const [editingId, setEditingId] = useState(null);
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
+  const [autoAssinarProfissional, setAutoAssinarProfissional] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [confirmDeleteRow, setConfirmDeleteRow] = useState(null);
   const [viewingRow, setViewingRow] = useState(null);
@@ -75,6 +79,17 @@ export function TermosManager() {
     setEditingId(null);
     setTitulo('');
     setConteudo('');
+    setAutoAssinarProfissional(false);
+    setFormErrors({});
+    setFormOpen(true);
+    setViewingRow(null);
+  };
+
+  const openNewWithLgpdTemplate = () => {
+    setEditingId(null);
+    setTitulo('Termo de Consentimento LGPD');
+    setConteudo(LGPD_TEMPLATE_BRUTO);
+    setAutoAssinarProfissional(true);
     setFormErrors({});
     setFormOpen(true);
     setViewingRow(null);
@@ -84,6 +99,7 @@ export function TermosManager() {
     setEditingId(row.id);
     setTitulo(row.titulo ?? row.title ?? '');
     setConteudo(row.conteudo ?? row.content ?? '');
+    setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
     setFormErrors({});
     setFormOpen(true);
     setViewingRow(null);
@@ -95,6 +111,7 @@ export function TermosManager() {
     setEditingId(null);
     setTitulo('');
     setConteudo('');
+    setAutoAssinarProfissional(false);
     setFormErrors({});
   };
 
@@ -111,7 +128,7 @@ export function TermosManager() {
     setFormErrors({});
     setSaving(true);
     try {
-      const body = { titulo: t, conteudo: c, ativo: true };
+      const body = { titulo: t, conteudo: c, autoAssinarProfissional, ativo: true };
       if (editingId != null) {
         await termosApi.update(editingId, body);
         toastSuccess('Termo atualizado.');
@@ -174,14 +191,25 @@ export function TermosManager() {
             aria-label="Buscar termos"
           />
         </div>
-        <button
-          type="button"
-          onClick={openNew}
-          className="ml-auto inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-          Novo Termo
-        </button>
+        <div className="ml-auto flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={openNewWithLgpdTemplate}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-[#00a88e] bg-white px-4 text-[13px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f0fdfa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-1"
+            title="Usar Template LGPD pré-preenchido"
+          >
+            <Shield className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            Template LGPD
+          </button>
+          <button
+            type="button"
+            onClick={openNew}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            Novo Termo
+          </button>
+        </div>
       </div>
 
       {/* Loading */}
@@ -203,14 +231,26 @@ export function TermosManager() {
               : 'Crie termos de consentimento para cada procedimento que realiza'}
           </p>
           {emptyNoData ? (
-            <button
-              type="button"
-              onClick={openNew}
-              className="mt-4 inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-              Criar primeiro termo
-            </button>
+            <div className="mt-5 flex flex-col items-center gap-3">
+              {/* Ação primária: usar o template LGPD pronto */}
+              <button
+                type="button"
+                onClick={openNewWithLgpdTemplate}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-2"
+              >
+                <Shield className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                Usar Template LGPD
+              </button>
+              {/* Ação secundária: criar do zero */}
+              <button
+                type="button"
+                onClick={openNew}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-2"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                Criar do zero
+              </button>
+            </div>
           ) : null}
         </div>
       ) : (
@@ -369,6 +409,20 @@ export function TermosManager() {
                 <p className="mt-0.5 text-[12px] text-[#64748b]">
                   Texto completo que será exibido ao paciente para leitura e assinatura
                 </p>
+                {/* Banner de atalho para template LGPD — só aparece em novos termos sem conteúdo */}
+                {editingId == null && !conteudo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTitulo((t) => t || 'Termo de Consentimento LGPD');
+                      setConteudo(LGPD_TEMPLATE_BRUTO);
+                    }}
+                    className="mt-2 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#00a88e]/50 bg-[#f0fdfa] px-4 py-2.5 text-left text-[13px] font-medium text-[#0f766e] transition-colors hover:bg-[#dcfce7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]"
+                  >
+                    <Shield className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                    Usar Template LGPD pronto — Lei nº 13.709/2018
+                  </button>
+                )}
                 <textarea
                   value={conteudo}
                   onChange={(e) => setConteudo(e.target.value)}
@@ -382,9 +436,33 @@ export function TermosManager() {
                 ) : null}
                 <div className="mt-2 flex gap-3 rounded-lg border border-[#99f6e4] bg-[#f0fdfa] p-3">
                   <Lightbulb className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                  <p className="text-[12px] leading-relaxed text-[#0f766e]">
-                    Inclua: identificação do procedimento, riscos conhecidos, cuidados pós-procedimento e autorização
-                    de uso de dados (LGPD).
+                  <div className="text-[12px] leading-relaxed text-[#0f766e]">
+                    <p className="font-semibold mb-1">Campos Automáticos (Copie e cole no texto):</p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      <li><strong className="font-semibold">{'[NOME DO PACIENTE]'}</strong> - Nome completo</li>
+                      <li><strong className="font-semibold">{'[CPF DO PACIENTE]'}</strong> - CPF formatado</li>
+                      <li><strong className="font-semibold">{'[NOME DA CLÍNICA]'}</strong> - Razão social ou nome</li>
+                      <li><strong className="font-semibold">{'[CNPJ DA CLÍNICA]'}</strong> - CNPJ formatado</li>
+                      <li><strong className="font-semibold">{'[NOME DO PROFISSIONAL]'}</strong> - Nome do atendente</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
+                <input
+                  type="checkbox"
+                  id="autoAssinarProfissional"
+                  checked={autoAssinarProfissional}
+                  onChange={(e) => setAutoAssinarProfissional(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+                />
+                <div>
+                  <label htmlFor="autoAssinarProfissional" className="block text-[13px] font-semibold text-[#0f172a] cursor-pointer">
+                    Preencher assinatura do profissional automaticamente
+                  </label>
+                  <p className="mt-0.5 text-[12px] text-[#64748b]">
+                    Se o profissional possuir uma Assinatura Padrão configurada no perfil, ela será inserida automaticamente neste termo.
                   </p>
                 </div>
               </div>
@@ -452,10 +530,11 @@ export function TermosManager() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[#334155]">
-                {viewingRow.conteudo ?? viewingRow.content ?? ''}
-              </p>
+            <div className="flex-1 overflow-y-auto bg-[#f8fafc] px-6 py-5">
+              <TermoVisualizacao
+                titulo={viewingRow.titulo}
+                conteudo={viewingRow.conteudo ?? viewingRow.content ?? ''}
+              />
             </div>
             <div className="flex flex-col items-center gap-3 border-t border-[#e2e8f0] px-6 py-4 sm:flex-row sm:justify-center">
               <button

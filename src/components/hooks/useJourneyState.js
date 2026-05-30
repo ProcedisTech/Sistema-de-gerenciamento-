@@ -50,6 +50,12 @@ export const useJourneyState = () => {
   const [profissionalAssinaturaDataUrl, setProfissionalAssinaturaDataUrl] = useState('');
   /** Id do termo escolhido na etapa LGPD (sincronizado via Step3Termos → onTermoChange). */
   const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
+  
+  /** Array de termos já assinados na jornada atual. { termoId, termoTitulo, assinaturaProfissional, assinaturaPaciente, backendAssinaturaId } */
+  const [termosAssinados, setTermosAssinados] = useState([]);
+  
+  /** Array de IDs dos termos selecionados, mas ainda pendentes de leitura/assinatura. */
+  const [termosPendentesIds, setTermosPendentesIds] = useState([]);
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
   /** Itens editáveis de orientação pós-procedimento. */
@@ -162,6 +168,10 @@ export const useJourneyState = () => {
     setProfissionalAssinaturaDataUrl,
     termoSelecionadoId,
     setTermoSelecionadoId,
+    termosAssinados,
+    setTermosAssinados,
+    termosPendentesIds,
+    setTermosPendentesIds,
     orientacoes,
     orientacoesItens,
     setOrientacoesItens,
