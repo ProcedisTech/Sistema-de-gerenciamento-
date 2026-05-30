@@ -331,6 +331,12 @@ export default function App() {
     setEhNovoFilter,
     ehAniversarianteFilter,
     setEhAniversarianteFilter,
+    patientQuickFilter,
+    setPatientQuickFilter,
+    captureProfileNavSnapshot,
+    navigateProfilePatient,
+    profileNav,
+    clearProfileNavSnapshot,
   } = patientState;
 
   const kpiState = usePatientsKpi({ authEnabled: authSessionReady, bump: patientListBump });
@@ -1980,6 +1986,12 @@ export default function App() {
                   nomeUsuario={perfilInfo.nomeCompleto}
                   onNavigateToAgenda={() => setActiveView('agenda')}
                   roleUserId={roleUserId}
+                  patientQuickFilter={patientQuickFilter}
+                  setPatientQuickFilter={setPatientQuickFilter}
+                  captureProfileNavSnapshot={captureProfileNavSnapshot}
+                  navigateProfilePatient={navigateProfilePatient}
+                  profileNav={profileNav}
+                  clearProfileNavSnapshot={clearProfileNavSnapshot}
                 />
               </RoleGuard>
             )}

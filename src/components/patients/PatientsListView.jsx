@@ -20,7 +20,7 @@ import { KpiCards } from './KpiCards.jsx';
 import { PulseSidebar } from './PulseSidebar.jsx';
 import { PatientsTodayStrip } from './PatientsTodayStrip.jsx';
 import { PatientFiltersSheet, PatientListFilterChips } from './PatientFiltersSheet.jsx';
-import { countActivePatientFilters } from './patientListFilters.js';
+import { countActivePatientFilters, applyPatientQuickFilter } from './patientListFilters.js';
 import { PatientListPagination } from './PatientListPagination.jsx';
 import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
@@ -50,8 +50,7 @@ const SORT_OPTIONS = [
 ];
 
 function applyQuickFilter(items, filter) {
-  if (filter === 'menor') return items.filter((p) => p.menorDeIdade === true);
-  return items;
+  return applyPatientQuickFilter(items, filter);
 }
 
 function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
@@ -170,6 +169,7 @@ function PatientPreviewPanel({
   onStartAttendance,
   previewHasExistingAnamnese = false,
   previewAnamneseLoading = false,
+  captureProfileNavSnapshot,
 }) {
   const [attendanceChoiceModalOpen, setAttendanceChoiceModalOpen] = useState(false);
   const { isNivel1 } = usePapel();
@@ -210,6 +210,7 @@ function PatientPreviewPanel({
 
   const goToPacienteProntuario = () => {
     if (isNivel1) return;
+    if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
     setPatientDetailTab('prontuario');
     setPatientView('profile');
   };
@@ -378,6 +379,7 @@ function PatientPreviewPanel({
         <button
           type="button"
           onClick={() => {
+            if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
             setPatientDetailTab('atendimento');
             setPatientView('profile');
           }}
@@ -424,6 +426,9 @@ export function PatientsListView({
   kpiLoading = false,
   nomeUsuario = '',
   onNavigateToAgenda,
+  patientQuickFilter = 'todos',
+  setPatientQuickFilter,
+  captureProfileNavSnapshot,
 }) {
   const { isNivel1: _isNivel1, canCreatePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
@@ -433,7 +438,8 @@ export function PatientsListView({
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   /** Paciente vindo da sidebar quando ainda não está na página atual da lista. */
   const [previewPatientSeed, setPreviewPatientSeed] = useState(null);
-  const [quickFilter, setQuickFilter] = useState('todos');
+  const quickFilter = patientQuickFilter;
+  const setQuickFilter = setPatientQuickFilter ?? (() => {});
   const [activeKpiCard, setActiveKpiCard] = useState(null);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const desktopTitleId = 'patient-detail-title';
@@ -848,6 +854,7 @@ export function PatientsListView({
                   onStartAttendance={onStartAttendance}
                   previewHasExistingAnamnese={previewHasExistingAnamnese}
                   previewAnamneseLoading={previewAnamneseLoading}
+                  captureProfileNavSnapshot={captureProfileNavSnapshot}
                   shellClassName="patient-preview-sheet w-full border-0 shadow-none"
                 />
               </div>
@@ -875,6 +882,7 @@ export function PatientsListView({
                   onStartAttendance={onStartAttendance}
                   previewHasExistingAnamnese={previewHasExistingAnamnese}
                   previewAnamneseLoading={previewAnamneseLoading}
+                  captureProfileNavSnapshot={captureProfileNavSnapshot}
                   shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
                 />
               </aside>
@@ -899,6 +907,7 @@ export function PatientsListView({
                 onStartAttendance={onStartAttendance}
                 previewHasExistingAnamnese={previewHasExistingAnamnese}
                 previewAnamneseLoading={previewAnamneseLoading}
+                captureProfileNavSnapshot={captureProfileNavSnapshot}
                 shellClassName="w-full min-w-0"
               />
             </aside>
