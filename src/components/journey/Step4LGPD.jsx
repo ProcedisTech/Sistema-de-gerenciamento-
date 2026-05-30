@@ -23,10 +23,18 @@ import {
 } from '../../services/api';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
+import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
+import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
+
+/**
+ * ID virtual usado para o Termo LGPD padrão do Procedi.
+ * Começa com '__' para não colidir com IDs numéricos do backend.
+ */
+const LGPD_VIRTUAL_ID = '__lgpd_padrao';
 
 function formatTimestamp(ts) {
   if (!ts) return '';
@@ -241,6 +249,10 @@ export function Step3Termos({
   setProfissionalAssinaturaDataUrl,
   step4Errors = {},
   setStep4Errors = () => {},
+  termosAssinados = [],
+  setTermosAssinados = () => {},
+  termosPendentesIds = [],
+  setTermosPendentesIds = () => {},
   termoTitulo,
   termoConteudo,
   onTermoChange,
@@ -248,6 +260,9 @@ export function Step3Termos({
   pacienteId = null,
   procedimentoFeitoId = null,
   roleUserId = null,
+  pacienteCtx,
+  clinicaCtx,
+  profissionalCtx,
 }) {
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
@@ -270,6 +285,8 @@ export function Step3Termos({
   const [assinaturaPersistida, setAssinaturaPersistida] = useState(false);
   const [showSalvarPadraoPrompt, setShowSalvarPadraoPrompt] = useState(false);
   const [savingPadraoPrompt, setSavingPadraoPrompt] = useState(false);
+  const [pendingNextTermoId, setPendingNextTermoId] = useState(null);
+  const [termoToCancel, setTermoToCancel] = useState(null);
   const [autoSignatureApplied, setAutoSignatureApplied] = useState(false);
   const assinaturaProfRecenteRef = useRef('');
 
@@ -291,8 +308,27 @@ export function Step3Termos({
     const salvar = async () => {
       try {
         setAssinaturaPersistida(true);
+        // O conteúdo do termo selecionado é enviado como snapshot imutável
+        // para garantir validade jurídica (o paciente assinou ESTE texto).
+        // Usamos conteudoExibicao para garantir que as interpolações
+        // (como [NOME DO PACIENTE]) já estejam aplicadas no snapshot salvo.
+        const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
+
+        let ipAddress = null;
+        try {
+          const res = await fetch('https://api.ipify.org?format=json');
+          if (res.ok) {
+            const data = await res.json();
+            ipAddress = data.ip;
+          }
+        } catch (e) {
+          console.warn('Não foi possível capturar o IP', e);
+        }
+
         const resultado = await termoAssinaturaApi.criar({
-          termoId: termoSelecionadoId,
+          // Para termos virtuais (LGPD padrão) não há ID numérico no banco;
+          // enviamos null e o backend persiste somente via conteudoSnapshot.
+          termoId: termoSelecionado?._virtual ? null : termoSelecionadoId,
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
@@ -306,9 +342,39 @@ export function Step3Termos({
             patAssinaturaTimestamp != null
               ? new Date(patAssinaturaTimestamp).toISOString()
               : new Date().toISOString(),
+          conteudoSnapshot,
+          userAgent: navigator.userAgent,
+          ipAddress,
         });
         toast.success('Termo assinado e salvo com sucesso.');
         onAssinaturaSalva?.(resultado);
+
+        const novoTermoAssinado = {
+          termoId: termoSelecionado?._virtual ? null : termoSelecionadoId,
+          termoTitulo: tituloExibicao,
+          backendAssinaturaId: resultado?.id,
+          resultadoCompleto: resultado,
+        };
+        setTermosAssinados(prev => [...prev, novoTermoAssinado]);
+        
+        // Remover da fila de pendentes se estiver lá
+        setTermosPendentesIds(prev => {
+          const newList = prev.filter(id => String(id) !== String(termoSelecionadoId));
+          if (newList.length > 0) {
+            setPendingNextTermoId(newList[0]);
+          }
+          return newList;
+        });
+        
+        // Limpar para permitir um novo termo
+        setProfissionalAssinaturaDataUrl('');
+        setTermoAssinaturaDataUrl('');
+        setProfAssinaturaTimestamp(null);
+        setPatAssinaturaTimestamp(null);
+        if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+        setTermoSelecionadoId(null);
+        setTermoSelecionado(null);
+        setAssinaturaPersistida(false);
       } catch (e) {
         setAssinaturaPersistida(false);
         toast.error('Erro ao salvar assinatura: ' + (e?.message || 'Tente novamente'));
@@ -335,7 +401,22 @@ export function Step3Termos({
       .list()
       .then((raw) => {
         const list = Array.isArray(raw) ? raw : raw?.content ?? [];
-        setTermosDisponiveis(list.filter((t) => t.ativo !== false));
+        const ativos = list.filter((t) => t.ativo !== false);
+        // Se a clínica ainda não cadastrou nenhum termo, injetamos o template
+        // LGPD como item virtual para que o fluxo não fique bloqueado.
+        if (ativos.length === 0) {
+          setTermosDisponiveis([
+            {
+              id: LGPD_VIRTUAL_ID,
+              titulo: 'Termo de Consentimento LGPD (Padrão Procedi)',
+              conteudo: buildLgpdConsentText({}),
+              ativo: true,
+              _virtual: true, // marca para tratamento especial ao salvar
+            },
+          ]);
+        } else {
+          setTermosDisponiveis(ativos);
+        }
       })
       .catch(() => setTermosDisponiveis([]))
       .finally(() => setTermosLoading(false));
@@ -377,8 +458,19 @@ export function Step3Termos({
 
   const tituloExibicao =
     termoSelecionado?.titulo ?? termoSelecionado?.title ?? tituloFallbackProp;
-  const conteudoExibicao =
+  
+  let conteudoExibicao =
     termoSelecionado?.conteudo ?? termoSelecionado?.content ?? conteudoFallbackProp;
+
+  if (conteudoExibicao) {
+    // Interpolação genérica para placeholders de templates
+    if (pacienteCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DO PACIENTE\]/gi, pacienteCtx.nome);
+    if (pacienteCtx?.cpf) conteudoExibicao = conteudoExibicao.replace(/\[CPF DO PACIENTE\]/gi, pacienteCtx.cpf);
+    if (clinicaCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DA CLÍNICA\]/gi, clinicaCtx.nome);
+    if (clinicaCtx?.cnpj) conteudoExibicao = conteudoExibicao.replace(/\[CNPJ DA CLÍNICA\]/gi, clinicaCtx.cnpj);
+    if (profissionalCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DO PROFISSIONAL\]/gi, profissionalCtx.nome);
+  }
+
   const temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
 
   const termosFiltradosBusca = useMemo(() => {
@@ -391,24 +483,42 @@ export function Step3Termos({
     );
   }, [termosDisponiveis, termoSearch]);
 
-  const aplicarSelecaoTermo = useCallback(
-    (termo) => {
+  const toggleTermoPendente = useCallback((termo) => {
+    if (!termo) return;
+    const id = termo.id != null ? String(termo.id) : null;
+    if (!id) return;
+    
+    setTermosPendentesIds((prev) => {
+      if (prev.includes(id)) {
+        const novo = prev.filter((pId) => String(pId) !== id);
+        if (String(termoSelecionadoId) === id) {
+          setTermoSelecionadoId(null);
+          setTermoSelecionado(null);
+        }
+        return novo;
+      } else {
+        return [...prev, id];
+      }
+    });
+  }, [setTermosPendentesIds, termoSelecionadoId]);
+
+  const abrirTermoParaAssinatura = useCallback(
+    (id) => {
+      const termo = termosDisponiveis.find((t) => String(t.id) === String(id));
       if (!termo) return;
-      const id = termo.id != null ? String(termo.id) : null;
-      setTermoSelecionadoId(id);
+      if (typeof onTermoChange === 'function') onTermoChange(String(id));
+      setTermoSelecionadoId(String(id));
       setTermoSelecionado(termo);
-      setTermoMenuOpen(false);
-      setTermoSearch('');
-      setTermoLido(false);
+      
       setProfissionalAssinaturaDataUrl('');
-      setAutoSignatureApplied(false);
       setTermoAssinaturaDataUrl('');
-      if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
       setProfAssinaturaTimestamp(null);
       setPatAssinaturaTimestamp(null);
       setAssinaturaPersistida(false);
-      setStep4Errors({});
-      onTermoChange?.(id, termo);
+      
+      if (typeof setStep4Errors === 'function') {
+        setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
+      }
     },
     [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors]
   );
@@ -436,6 +546,11 @@ export function Step3Termos({
 
   useEffect(() => {
     if (profissionalAssinaturaDataUrl) return;
+    if (!termoSelecionado) return;
+    // O preenchimento automático só ocorre se o termo for virtual (LGPD padrão) 
+    // ou se a flag autoAssinarProfissional estiver ativada no termo.
+    if (!termoSelecionado._virtual && !termoSelecionado.autoAssinarProfissional) return;
+
     let cancelled = false;
     (async () => {
       try {
@@ -451,24 +566,7 @@ export function Step3Termos({
     };
   }, [applyProfissionalSignature, fetchAssinaturaPadrao, profissionalAssinaturaDataUrl]);
 
-  useEffect(() => {
-    if (!profSigningOpen) return;
-    if (profissionalAssinaturaDataUrl) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const assinaturaPadrao = await fetchAssinaturaPadrao();
-        if (cancelled || !assinaturaPadrao) return;
-        applyProfissionalSignature(assinaturaPadrao, { auto: true });
-        setProfSigningOpen(false);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [profSigningOpen, profissionalAssinaturaDataUrl, fetchAssinaturaPadrao, applyProfissionalSignature]);
+  // Removido useEffect duplicado que forçava auto-assinatura ao abrir modal
 
   const handleConfirmProf = async (dataUrl) => {
     applyProfissionalSignature(dataUrl, { auto: false });
@@ -491,7 +589,7 @@ export function Step3Termos({
     toast.success('Assinatura do paciente registrada');
   };
 
-  const podeExibirAssinaturas = Boolean(termoSelecionadoId) && termoLido;
+  const podeExibirAssinaturas = Boolean(termoSelecionadoId);
   const mostrarBuscaDropdown = termosDisponiveis.length > 3;
 
   const handleAssinarManualmente = () => {
@@ -544,15 +642,71 @@ export function Step3Termos({
             <Shield className="h-7 w-7" strokeWidth={2.5} />
           </div>
           <div>
-            <h3 className="text-[20px] font-bold text-[#0f172a]">Termo de consentimento</h3>
+            <h3 className="text-[20px] font-bold text-[#0f172a]">Termos de consentimento</h3>
             <p className="text-[14px] font-medium text-[#64748b]">Leitura e assinaturas (profissional e paciente)</p>
           </div>
         </div>
       </div>
 
+      {termosAssinados.length > 0 && (
+        <div className="mb-8 space-y-3">
+          <h4 className="text-[14px] font-bold text-[#0f172a]">Termos assinados nesta jornada</h4>
+          {termosAssinados.map((t, index) => (
+            <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                  <Check className="h-4 w-4" strokeWidth={3} />
+                </div>
+                <div>
+                  <p className="text-[14px] font-bold text-emerald-900">{t.termoTitulo || 'Termo de Consentimento'}</p>
+                  <p className="text-[12px] text-emerald-700">Assinado e salvo com sucesso.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                      generateTermoPdf({
+                        titulo: t.termoTitulo || 'Termo',
+                        conteudo: t.resultadoCompleto?.conteudoSnapshot || '',
+                        fileName: `termo_assinado_${t.backendAssinaturaId}.pdf`,
+                        pacienteCtx: pacienteCtx,
+                        clinicaCtx: clinicaCtx,
+                        profissionalCtx: profissionalCtx,
+                        assinaturaProfissional: t.resultadoCompleto?.assinaturaProfissional,
+                        assinaturaPaciente: t.resultadoCompleto?.assinaturaPaciente,
+                        metadados: {
+                          pacienteNome: pacienteCtx?.nome || t.resultadoCompleto?.pacienteNome,
+                          profissionalNome: profissionalCtx?.nome || t.resultadoCompleto?.profissionalNome,
+                          dataHora: t.resultadoCompleto?.profissionalAssinouEm ? new Date(t.resultadoCompleto.profissionalAssinouEm).toLocaleString('pt-BR') : undefined,
+                          ipAddress: t.resultadoCompleto?.ipAddress,
+                        }
+                      });
+                    });
+                  }}
+                  className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                >
+                  Ver PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTermoToCancel(t);
+                  }}
+                  className="rounded-lg bg-red-50 px-3 py-1.5 text-[12px] font-bold text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="relative mb-6" ref={termoMenuRef}>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
-          Selecionar termo de consentimento
+          {termosAssinados.length > 0 ? 'Adicionar outro termo' : 'Selecionar termo de consentimento'}
         </p>
         {termosLoading ? (
           <div className="flex h-12 items-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-4 text-[13px] text-[#64748b]">
@@ -583,17 +737,17 @@ export function Step3Termos({
                 />
               </div>
               <div className="min-w-0 flex-1 text-left">
-                {termoSelecionado ? (
+                {termosPendentesIds.length > 0 ? (
                   <>
                     <p className="text-[14px] font-semibold text-[#0f172a]">
-                      {termoSelecionado.titulo ?? termoSelecionado.title ?? '—'}
+                      {termosPendentesIds.length} termo(s) selecionado(s)
                     </p>
-                    <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">
-                      {(termoSelecionado.conteudo ?? termoSelecionado.content ?? '').replace(/\s+/g, ' ').trim()}
+                    <p className="mt-0.5 text-[12px] text-[#64748b]">
+                      Clique para adicionar ou remover termos
                     </p>
                   </>
                 ) : (
-                  <p className="text-[14px] text-[#94a3b8]">Selecione o termo...</p>
+                  <p className="text-[14px] text-[#94a3b8]">Selecione os termos...</p>
                 )}
               </div>
               <ChevronDown
@@ -629,7 +783,7 @@ export function Step3Termos({
                     <div className="px-4 py-6 text-center text-[13px] text-[#94a3b8]">Nenhum termo encontrado</div>
                   ) : (
                     termosFiltradosBusca.map((t) => {
-                      const sel = termoSelecionadoId != null && String(t.id) === String(termoSelecionadoId);
+                      const sel = termosPendentesIds.includes(String(t.id));
                       const preview = String(t.conteudo ?? t.content ?? '')
                         .replace(/\s+/g, ' ')
                         .trim()
@@ -638,14 +792,16 @@ export function Step3Termos({
                         <button
                           key={String(t.id)}
                           type="button"
-                          onClick={() => aplicarSelecaoTermo(t)}
+                          onClick={(e) => { e.stopPropagation(); toggleTermoPendente(t); }}
                           className="flex w-full items-start gap-3 border-b border-[#f8fafc] px-3 py-2.5 text-left last:border-0 hover:bg-[#f8fafc]"
                         >
+                          <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${sel ? 'border-[#00a88e] bg-[#00a88e]' : 'border-[#cbd5e1] bg-white'}`}>
+                            {sel && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                          </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-[14px] font-semibold text-[#0f172a]">{t.titulo ?? t.title ?? '—'}</p>
                             <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">{preview || '—'}</p>
                           </div>
-                          {sel ? <Check className="mt-1 h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.5} /> : null}
                         </button>
                       );
                     })
@@ -657,200 +813,255 @@ export function Step3Termos({
         )}
       </div>
 
+      {/* Lista de Termos Pendentes */}
+      {termosPendentesIds.length > 0 && (
+        <div className="mb-6 space-y-3">
+          <h4 className="text-[14px] font-bold text-[#0f172a]">Termos aguardando assinatura</h4>
+          {termosPendentesIds.map((pId) => {
+            const t = termosDisponiveis.find((item) => String(item.id) === String(pId));
+            if (!t) return null;
+            const isOpen = String(termoSelecionadoId) === String(pId);
+            return (
+              <div key={pId} className={`rounded-xl border ${isOpen ? 'border-[#00a88e] ring-2 ring-[#00a88e]/20' : 'border-[#e2e8f0]'} bg-white px-4 py-3 shadow-sm transition-all`}>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-bold text-[#0f172a] truncate">{t.titulo ?? t.title ?? '—'}</p>
+                    <p className="text-[12px] text-[#64748b]">Aguardando leitura e assinatura</p>
+                  </div>
+                  <div className="shrink-0">
+                    {!isOpen && (
+                      <button
+                        type="button"
+                        onClick={() => abrirTermoParaAssinatura(pId)}
+                        className="rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-[12px] font-bold text-[#0f172a] hover:bg-[#e2e8f0]"
+                      >
+                        Ler e Assinar
+                      </button>
+                    )}
+                    {isOpen && (
+                      <span className="rounded bg-[#00a88e]/10 px-2 py-1 text-[11px] font-bold text-[#00a88e]">Aberto abaixo</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {!termosLoading && termosDisponiveis.length === 0 ? (
         <div className="mb-6 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-4 text-[13px] font-medium text-[#92400e]">
           Nenhum termo cadastrado. Crie termos em Configurações → Clínica → Termos
         </div>
       ) : null}
 
+      {/* Banner informativo quando o Termo LGPD virtual está ativo */}
+      {!termosLoading && termosDisponiveis.length > 0 && termosDisponiveis[0]?._virtual ? (
+        <div className="mb-6 flex gap-3 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-[13px] text-[#1e40af]">
+          <Shield className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+          <span>
+            Usando o <strong>Termo LGPD padrão do Procedi</strong>. Para criar um termo personalizado da sua clínica,
+            acesse <strong>Configurações → Clínica → Termos</strong>.
+          </span>
+        </div>
+      ) : null}
+
       {!termosLoading && termosDisponiveis.length > 0 && termoSelecionadoId ? (
         <>
-          <h3 className="mb-3 text-[17px] font-bold text-[#0f172a]">{tituloExibicao}</h3>
-          <div className="mb-8 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-5">
-            {temConteudoTexto ? (
-              <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[#334155]">{conteudoExibicao}</div>
-            ) : (
-              <>
-                <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">
-                  Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta,
-                  armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos
-                  estéticos.
-                </p>
-                <p className="text-[14px] leading-relaxed text-[#334155]">
-                  Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por
-                  omitir qualquer condição de saúde que possa interferir no procedimento.
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="mb-8">
+          <div className="mb-3 flex items-center justify-end">
             <button
               type="button"
               onClick={() => {
-                setTermoLido(!termoLido);
-                setStep4Errors((prev) => ({ ...prev, termoLido: false }));
+                import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                  generateTermoPdf({
+                    titulo: tituloExibicao,
+                    conteudo: conteudoExibicao,
+                    fileName: `termo_em_branco_${new Date().getTime()}.pdf`,
+                    pacienteCtx,
+                    clinicaCtx,
+                    profissionalCtx
+                  });
+                });
               }}
-              className={`flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-all ${
-                step4Errors.termoLido
-                  ? 'border-red-400 bg-red-50 ring-1 ring-red-200'
-                  : termoLido
-                    ? 'border-[#86efac] bg-[#f0fdf4] shadow-sm'
-                    : 'border-[#e2e8f0] bg-white hover:bg-[#f8fafc]'
-              }`}
+              className="flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#0f172a] shadow-sm hover:bg-[#f8fafc] transition-colors"
             >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                  termoLido ? 'border-[#16a34a] bg-[#16a34a]' : 'border-[#94a3b8] bg-white'
-                }`}
-                aria-hidden
-              >
-                {termoLido ? <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} /> : null}
-              </span>
-              <span className={`text-[14px] font-bold ${termoLido ? 'text-[#166534]' : 'text-[#475569]'}`}>
-                Li e concordo com os termos. Autorizo a realização do procedimento.
-              </span>
+              Exportar PDF em branco
             </button>
           </div>
-        </>
-      ) : null}
-
-      {podeExibirAssinaturas ? (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-[15px] font-bold text-[#0f172a]">1. Assinatura do Profissional</h4>
-              {profissionalAssinaturaDataUrl ? (
-                <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">✓ Assinado</span>
-              ) : (
-                <span className="rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                  Obrigatório
-                </span>
-              )}
-            </div>
-            {profissionalAssinaturaDataUrl ? (
-              <div className="flex flex-col items-stretch gap-2">
-                <img
-                  src={profissionalAssinaturaDataUrl}
-                  alt="Assinatura do profissional"
-                  className="mx-auto h-20 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
-                />
-                <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
-                  <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-                  <span>Assinado em {formatTimestamp(profAssinaturaTimestamp)}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAssinaturaPersistida(false);
-                    setProfissionalAssinaturaDataUrl('');
-                    setAutoSignatureApplied(false);
-                    setProfAssinaturaTimestamp(null);
-                    setTermoAssinaturaDataUrl('');
-                    setPatAssinaturaTimestamp(null);
-                    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
-                    setProfSigningOpen(true);
-                  }}
-                  className="self-start text-[12px] font-medium text-[#64748b] hover:text-[#475569]"
-                >
-                  Refazer assinatura
-                </button>
-                {autoSignatureApplied ? (
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                      Assinatura automática aplicada
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleAssinarManualmente}
-                      className="text-[12px] font-medium text-[#00a88e] hover:text-[#0f766e]"
-                    >
-                      Assinar manualmente
-                    </button>
+          <div className="mb-8">
+            <TermoVisualizacao
+              titulo={tituloExibicao}
+              conteudo={conteudoExibicao}
+              pacienteCtx={pacienteCtx}
+              clinicaCtx={clinicaCtx}
+              profissionalCtx={profissionalCtx}
+            >
+              {podeExibirAssinaturas ? (
+                <div className="space-y-6">
+                  <div className="rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-[15px] font-bold text-[#0f172a]">1. Assinatura do Profissional</h4>
+                      {profissionalAssinaturaDataUrl ? (
+                        <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">✓ Assinado</span>
+                      ) : (
+                        <span className="rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                          Obrigatório
+                        </span>
+                      )}
+                    </div>
+                    {profissionalAssinaturaDataUrl ? (
+                      <div className="flex flex-col items-stretch gap-2">
+                        <img
+                          src={profissionalAssinaturaDataUrl}
+                          alt="Assinatura do profissional"
+                          className="mx-auto h-20 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                        />
+                        <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                          <span>Assinado em {formatTimestamp(profAssinaturaTimestamp)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssinaturaPersistida(false);
+                            setProfissionalAssinaturaDataUrl('');
+                            setAutoSignatureApplied(false);
+                            setProfAssinaturaTimestamp(null);
+                            setTermoAssinaturaDataUrl('');
+                            setPatAssinaturaTimestamp(null);
+                            if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+                            setProfSigningOpen(true);
+                          }}
+                          className="self-start text-[12px] font-medium text-[#64748b] hover:text-[#475569]"
+                        >
+                          Refazer assinatura
+                        </button>
+                        {autoSignatureApplied ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                              Assinatura automática aplicada
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleAssinarManualmente}
+                              className="text-[12px] font-medium text-[#00a88e] hover:text-[#0f766e]"
+                            >
+                              Assinar manualmente
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-4 py-6 text-center">
+                        <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
+                        <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
+                        <button
+                          type="button"
+                          onClick={() => setProfSigningOpen(true)}
+                          className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                        >
+                          Assinar como Profissional
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4 py-6 text-center">
-                <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
-                <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
-                <button
-                  type="button"
-                  onClick={() => setProfSigningOpen(true)}
-                  className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                >
-                  Assinar como Profissional
-                </button>
-              </div>
-            )}
-          </div>
 
-          <div className="relative min-h-[220px] overflow-hidden rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-[15px] font-bold text-[#0f172a]">2. Assinatura do Paciente</h4>
-              {termoAssinaturaDataUrl && profissionalAssinaturaDataUrl ? (
-                <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">✓ Assinado</span>
-              ) : (
-                <span className="rounded-md bg-[#64748b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                  Após profissional
-                </span>
-              )}
-            </div>
+                  <div className="relative min-h-[220px] overflow-hidden rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-[15px] font-bold text-[#0f172a]">2. Assinatura do Paciente</h4>
+                      <div className="flex items-center gap-2">
+                        {assinaturaPersistida && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                                generateTermoPdf({
+                                  titulo: tituloExibicao,
+                                  conteudo: conteudoExibicao,
+                                  assinaturaPaciente: termoAssinaturaDataUrl,
+                                  assinaturaProfissional: profissionalAssinaturaDataUrl,
+                                  metadados: {
+                                    pacienteNome: pacienteCtx?.nome,
+                                    profissionalNome: profissionalCtx?.nome,
+                                    dataHora: new Date().toLocaleString('pt-BR'),
+                                  },
+                                  fileName: `termo_assinado_${new Date().getTime()}.pdf`
+                                });
+                              });
+                            }}
+                            className="flex items-center gap-1.5 rounded-lg bg-[#0f172a] px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-[#1e293b] transition-colors"
+                          >
+                            Baixar Termo Assinado
+                          </button>
+                        )}
+                        {termoAssinaturaDataUrl && profissionalAssinaturaDataUrl ? (
+                          <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">✓ Assinado</span>
+                        ) : (
+                          <span className="rounded-md bg-[#64748b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                            Após profissional
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-            {!profissionalAssinaturaDataUrl ? (
-              <div className="relative flex min-h-[180px] flex-col items-center justify-center rounded-lg bg-[#f8fafc]">
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-lg bg-slate-500/85 px-4 text-center">
-                  <Lock className="h-10 w-10 text-white" strokeWidth={2} aria-hidden />
-                  <p className="text-[13px] font-semibold text-white">Aguardando assinatura do profissional</p>
-                  <button
-                    type="button"
-                    disabled
-                    className="cursor-not-allowed rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white opacity-50"
-                  >
-                    Assinar como Paciente
-                  </button>
+                    {!profissionalAssinaturaDataUrl ? (
+                      <div className="relative flex min-h-[180px] flex-col items-center justify-center rounded-lg bg-[#f8fafc]">
+                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-lg bg-slate-500/85 px-4 text-center">
+                          <Lock className="h-10 w-10 text-white" strokeWidth={2} aria-hidden />
+                          <p className="text-[13px] font-semibold text-white">Aguardando assinatura do profissional</p>
+                          <button
+                            type="button"
+                            disabled
+                            className="cursor-not-allowed rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white opacity-50"
+                          >
+                            Assinar como Paciente
+                          </button>
+                        </div>
+                      </div>
+                    ) : termoAssinaturaDataUrl ? (
+                      <div className="flex flex-col items-stretch gap-2">
+                        <img
+                          src={termoAssinaturaDataUrl}
+                          alt="Assinatura do paciente"
+                          className="mx-auto h-20 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                        />
+                        <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                          <span>Assinado em {formatTimestamp(patAssinaturaTimestamp)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssinaturaPersistida(false);
+                            setTermoAssinaturaDataUrl('');
+                            setPatAssinaturaTimestamp(null);
+                            if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+                            setPatSigningOpen(true);
+                          }}
+                          className="self-start text-[12px] font-medium text-[#64748b] hover:text-[#475569]"
+                        >
+                          Refazer assinatura
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-4 py-6 text-center">
+                        <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
+                        <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
+                        <button
+                          type="button"
+                          onClick={() => setPatSigningOpen(true)}
+                          className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                        >
+                          Assinar como Paciente
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : termoAssinaturaDataUrl ? (
-              <div className="flex flex-col items-stretch gap-2">
-                <img
-                  src={termoAssinaturaDataUrl}
-                  alt="Assinatura do paciente"
-                  className="mx-auto h-20 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
-                />
-                <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
-                  <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-                  <span>Assinado em {formatTimestamp(patAssinaturaTimestamp)}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAssinaturaPersistida(false);
-                    setTermoAssinaturaDataUrl('');
-                    setPatAssinaturaTimestamp(null);
-                    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
-                    setPatSigningOpen(true);
-                  }}
-                  className="self-start text-[12px] font-medium text-[#64748b] hover:text-[#475569]"
-                >
-                  Refazer assinatura
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4 py-6 text-center">
-                <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
-                <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
-                <button
-                  type="button"
-                  onClick={() => setPatSigningOpen(true)}
-                  className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                >
-                  Assinar como Paciente
-                </button>
-              </div>
-            )}
+              ) : null}
+            </TermoVisualizacao>
           </div>
-        </div>
+        </>
       ) : null}
 
       <SignatureFullscreenModal
@@ -894,6 +1105,77 @@ export function Step3Termos({
                 className="h-10 flex-1 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Agora não
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Popup de Próximo Termo */}
+      {pendingNextTermoId ? (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
+            <h4 className="text-[16px] font-bold text-[#0f172a]">Termo salvo com sucesso!</h4>
+            <p className="mt-2 text-[14px] text-[#475569]">
+              Ainda há {termosPendentesIds.length} termo(s) aguardando assinatura. Deseja abrir o próximo agora?
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  abrirTermoParaAssinatura(pendingNextTermoId);
+                  setPendingNextTermoId(null);
+                }}
+                className="h-10 flex-1 rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white hover:bg-[#00967f]"
+              >
+                Sim, abrir próximo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingNextTermoId(null)}
+                className="h-10 flex-1 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
+              >
+                Deixar para depois
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Popup de Cancelar Assinatura */}
+      {termoToCancel ? (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
+            <h4 className="text-[16px] font-bold text-[#0f172a]">Cancelar Assinatura</h4>
+            <p className="mt-2 text-[14px] text-[#475569]">
+              Deseja realmente cancelar a assinatura deste documento? O termo <strong>{termoToCancel.termoTitulo || 'Termo de Consentimento'}</strong> voltará para a fila de pendentes.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTermosAssinados(prev => prev.filter(item => item.backendAssinaturaId !== termoToCancel.backendAssinaturaId));
+                  if (termoToCancel.termoId) {
+                    setTermosPendentesIds(prev => {
+                      if (!prev.includes(String(termoToCancel.termoId))) return [...prev, String(termoToCancel.termoId)];
+                      return prev;
+                    });
+                  }
+                  if (typeof setTermoAssinado === 'function' && termosAssinados.length <= 1) {
+                     setTermoAssinado(false);
+                  }
+                  setTermoToCancel(null);
+                }}
+                className="h-10 flex-1 rounded-lg bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700"
+              >
+                Sim, cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => setTermoToCancel(null)}
+                className="h-10 flex-1 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
+              >
+                Voltar
               </button>
             </div>
           </div>

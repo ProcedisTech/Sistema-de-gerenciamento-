@@ -258,14 +258,8 @@ export function JourneyView({
 
   const onNext = () => {
     if (currentStep === 3) {
-      if (termoSelecionadoId == null || String(termoSelecionadoId).trim() === '') {
-        toast.error('Selecione um termo de consentimento');
-        return;
-      }
-      const hasProf = Boolean(profissionalAssinaturaDataUrl && String(profissionalAssinaturaDataUrl).length > 50);
-      const hasPac = Boolean(termoAssinaturaDataUrl && String(termoAssinaturaDataUrl).length > 50);
-      if (!termoLido || !hasProf || !hasPac) {
-        toast.error('Confirme a leitura do termo e as assinaturas do profissional e do paciente.');
+      if (!termosAssinados || termosAssinados.length === 0) {
+        toast.error('Assine pelo menos um termo de consentimento.');
         return;
       }
     }
@@ -363,6 +357,9 @@ export function JourneyView({
           termoTitulo={termoTitulo}
           termoConteudo={termoConteudo}
           onTermoChange={(id) => setTermoSelecionadoId(id)}
+          pacienteCtx={{ nome: pacienteAtual?.nome, cpf: pacienteAtual?.cpf ?? cpf }}
+          clinicaCtx={{}}
+          profissionalCtx={{}}
         />
       )}
 

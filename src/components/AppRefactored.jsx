@@ -216,11 +216,20 @@ export default function App() {
             const nomeClinica = clinicaJson?.nome || clinicaJson?.nomeFantasia || '';
             const logoRaw = clinicaJson?.logoUrl ?? clinicaJson?.logo_url;
             const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
-            if (nomeClinica || logoUrl) {
+            
+            let endCompleto = String(clinicaJson?.enderecoLogradouro ?? clinicaJson?.endereco ?? clinicaJson?.logradouro ?? '').trim();
+            if (clinicaJson?.enderecoNumero) endCompleto += `, ${clinicaJson.enderecoNumero}`;
+            if (clinicaJson?.enderecoCidade) endCompleto += ` - ${clinicaJson.enderecoCidade}`;
+            if (clinicaJson?.enderecoEstado) endCompleto += `/${clinicaJson.enderecoEstado}`;
+
+            if (nomeClinica || logoUrl || clinicaJson) {
               setClinicaInfo((prev) => ({
                 ...prev,
                 ...(nomeClinica ? { nome: nomeClinica, subtitulo: 'Harmonização Premium' } : {}),
                 ...(logoUrl ? { logoUrl } : {}),
+                endereco: endCompleto,
+                telefone: String(clinicaJson?.telefone ?? clinicaJson?.celular ?? '').trim(),
+                cnpj: String(clinicaJson?.cnpj ?? '').trim(),
               }));
             }
           }
@@ -248,12 +257,12 @@ export default function App() {
   const [queixaVisivel, setQueixaVisivel] = useState(true);
   /** Procedimento já registrado no Step 4, quando existir (na etapa 3 costuma ser null). */
   const [ultimoProcedimentoId, setUltimoProcedimentoId] = React.useState(null);
-  /** Id da assinatura de termo persistida no Step 3 (para vincular ao procedimento no finalizar). */
-  const [ultimaAssinaturaId, setUltimaAssinaturaId] = React.useState(null);
+  /** Array com IDs das assinaturas persistidas no Step 3 (para vincular ao procedimento no finalizar). */
+  const [assinaturasRealizadasIds, setAssinaturasRealizadasIds] = React.useState([]);
 
   const handleTermoAssinaturaSalva = React.useCallback((assinaturaObj) => {
     if (assinaturaObj?.id) {
-      setUltimaAssinaturaId(assinaturaObj.id);
+      setAssinaturasRealizadasIds((prev) => [...prev, assinaturaObj.id]);
     }
   }, []);
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
@@ -742,6 +751,9 @@ export default function App() {
           setPerfilInfo({
             nomeCompleto: String(p?.nomeCompleto ?? p?.nome_completo ?? '').trim(),
             fotoUrl: String(p?.fotoUrl ?? p?.foto_url ?? '').trim(),
+            cpf: String(p?.cpf ?? '').trim(),
+            crm: String(p?.crm ?? '').trim(),
+            telefone: String(p?.telefone ?? p?.celular ?? '').trim(),
           });
         }
         if (clinicaRes.ok) {
@@ -749,10 +761,19 @@ export default function App() {
           const nomeClinica = c?.nome || c?.nomeFantasia || c?.nome_fantasia || '';
           const logoRaw = c?.logoUrl ?? c?.logo_url;
           const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
+          
+          let endCompleto = String(c?.enderecoLogradouro ?? c?.endereco ?? c?.logradouro ?? '').trim();
+          if (c?.enderecoNumero) endCompleto += `, ${c.enderecoNumero}`;
+          if (c?.enderecoCidade) endCompleto += ` - ${c.enderecoCidade}`;
+          if (c?.enderecoEstado) endCompleto += `/${c.enderecoEstado}`;
+
           setClinicaInfo((prev) => ({
             ...prev,
             ...(nomeClinica ? { nome: String(nomeClinica).trim(), subtitulo: 'Harmonização Premium' } : {}),
             ...(logoUrl ? { logoUrl } : {}),
+            endereco: endCompleto,
+            telefone: String(c?.telefone ?? c?.celular ?? '').trim(),
+            cnpj: String(c?.cnpj ?? '').trim(),
           }));
         }
       } catch {
@@ -1143,20 +1164,8 @@ export default function App() {
     }
 
     if (currentStep === 3) {
-      if (journeyState.termoSelecionadoId == null || String(journeyState.termoSelecionadoId).trim() === '') {
-        toast.error('Selecione um termo de consentimento');
-        return;
-      }
-      const { termoLido, profissionalAssinaturaDataUrl, termoAssinaturaDataUrl } = journeyState;
-      const hasProf = Boolean(profissionalAssinaturaDataUrl && String(profissionalAssinaturaDataUrl).length > 50);
-      const hasPac = Boolean(termoAssinaturaDataUrl && String(termoAssinaturaDataUrl).length > 50);
-      if (!termoLido || !hasProf || !hasPac) {
-        journeyState.setStep4Errors({
-          termoLido: !termoLido,
-        });
-        toast.error(
-          'Para prosseguir, confirme a leitura do termo e as assinaturas do profissional e do paciente.'
-        );
+      if (!journeyState.termosAssinados || journeyState.termosAssinados.length === 0) {
+        toast.error('Para prosseguir, assine pelo menos um termo de consentimento.');
         return;
       }
 
@@ -1253,11 +1262,13 @@ export default function App() {
           setUltimoProcedimentoId(String(pid));
         }
       }
-      if (ultimaAssinaturaId && procedimentoFeitoIdParaVinculo) {
-        try {
-          await termoAssinaturaApi.vincularProcedimento(ultimaAssinaturaId, procedimentoFeitoIdParaVinculo);
-        } catch (e) {
-          console.warn('Não foi possível vincular assinatura ao procedimento:', e);
+      if (assinaturasRealizadasIds.length > 0 && procedimentoFeitoIdParaVinculo) {
+        for (const assinaturaId of assinaturasRealizadasIds) {
+          try {
+            await termoAssinaturaApi.vincularProcedimento(assinaturaId, procedimentoFeitoIdParaVinculo);
+          } catch (e) {
+            console.warn(`Não foi possível vincular assinatura ${assinaturaId} ao procedimento:`, e);
+          }
         }
       }
 
@@ -1466,7 +1477,7 @@ export default function App() {
     pendingAnnotatedGalleryBlobsRef.current = [];
     journeyState.setTermoSelecionadoId(null);
     setUltimoProcedimentoId(null);
-    setUltimaAssinaturaId(null);
+    setAssinaturasRealizadasIds([]);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
     setJourneyProcedureDateIso(toLocalISODate());
@@ -1704,6 +1715,10 @@ export default function App() {
                       setProfissionalAssinaturaDataUrl={journeyState.setProfissionalAssinaturaDataUrl}
                       step4Errors={journeyState.step4Errors}
                       setStep4Errors={journeyState.setStep4Errors}
+                      termosAssinados={journeyState.termosAssinados}
+                      setTermosAssinados={journeyState.setTermosAssinados}
+                      termosPendentesIds={journeyState.termosPendentesIds}
+                      setTermosPendentesIds={journeyState.setTermosPendentesIds}
                       termoTitulo={journeyTermoTitulo || undefined}
                       termoConteudo={journeyTermoConteudo || undefined}
                       onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
@@ -1711,6 +1726,22 @@ export default function App() {
                       procedimentoFeitoId={ultimoProcedimentoId ?? null}
                       roleUserId={roleUserId ?? null}
                       onAssinaturaSalva={handleTermoAssinaturaSalva}
+                      pacienteCtx={{
+                        nome: pacienteAtual?.nome,
+                        cpf: pacienteAtual?.cpf,
+                        telefone: pacienteAtual?.telefone || pacienteAtual?.phone || pacienteAtual?.telefoneNumero || pacienteAtual?.telefonePrincipal
+                      }}
+                      clinicaCtx={{
+                        nome: clinicaInfo?.nome,
+                        cnpj: clinicaInfo?.cnpj,
+                        endereco: clinicaInfo?.endereco,
+                        telefone: clinicaInfo?.telefone
+                      }}
+                      profissionalCtx={{
+                        nome: perfilInfo?.nomeCompleto,
+                        cpf: perfilInfo?.cpf || perfilInfo?.crm,
+                        telefone: perfilInfo?.telefone
+                      }}
                     />
                   )}
 

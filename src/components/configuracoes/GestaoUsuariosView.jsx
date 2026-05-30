@@ -7,6 +7,8 @@ import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import DisponibilidadeProfissionalModal from './DisponibilidadeProfissionalModal';
 import { AuditoriaView } from './AuditoriaView';
+import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
+import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 
 export function GestaoUsuariosView() {
   const { isAdmin } = usePapel();
@@ -539,9 +541,12 @@ const maskTelefone = (value) => {
 
 function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
   const toast = useToast();
-  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', telefone: '', roleId: '', perfilAcessoId: '' });
+  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '' });
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState([]);
+  const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
+  const [telefoneNumero, setTelefoneNumero] = useState('');
+  const [telefoneTouched, setTelefoneTouched] = useState(false);
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
@@ -669,7 +674,7 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
         body: JSON.stringify({
           nomeCompleto: form.nome,
           email: form.email,
-          telefone: form.telefone || null,
+          telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
           cpf: form.cpf
         })
       });
@@ -708,9 +713,20 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
     }
   };
 
+  const sectionCardCls = (err, cls) => `transition-all duration-300 shadow-sm ${cls} ${err ? 'border-red-300 ring-2 ring-red-100' : 'hover:shadow-md hover:border-slate-300'}`;
+  const sectionHeadingCls = (cls) => `font-bold tracking-tight ${cls}`;
+  const sectionMb = "mb-5";
+  const gridGapClass = "gap-x-6 gap-y-5";
+
+  const phoneWrapClass = () => `flex items-center gap-2 rounded-xl border bg-white px-3 py-2.5 transition-all shadow-sm ${
+    telefoneTouched && telefoneNumero && !isPhoneValid(telefoneCountryCode, telefoneNumero)
+      ? 'border-red-300 ring-4 ring-red-100'
+      : 'border-slate-200 focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10'
+  }`;
+
   return (
     <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]">
-      <div className="w-full max-w-md md:max-w-5xl lg:max-w-6xl xl:max-w-7xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 min-h-[70vh] max-h-none md:max-h-[95vh] flex flex-col">
+      <div className="w-full max-w-md md:max-w-3xl lg:max-w-4xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 min-h-[70vh] max-h-none md:max-h-[95vh] flex flex-col">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-teal-50 rounded-xl">
@@ -727,10 +743,16 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 pb-4">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 h-full">
-              {/* Coluna Esquerda: Dados Básicos (col-span-5) */}
-              <div className="md:col-span-5 space-y-5">
+          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 pb-4 space-y-6">
+            {/* Seção 1: Dados Básicos */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-teal-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
+                  1
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#00a88e]')}>Dados Básicos</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nome Completo</label>
                   <input 
@@ -742,7 +764,6 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
-
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">CPF</label>
                   <input 
@@ -754,18 +775,18 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
+              </div>
+            </div>
 
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Telefone <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
-                  <input 
-                    value={form.telefone}
-                    onChange={e => setForm({...form, telefone: maskTelefone(e.target.value)})}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
-                  />
+            {/* Seção 2: Contato */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-purple-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
+                  2
                 </div>
-
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#a855f7]')}>Contato</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">E-mail</label>
                   <input 
@@ -777,7 +798,56 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
+                    Telefone Celular <span className="font-normal text-slate-400 normal-case">(Opcional)</span>
+                  </label>
+                  <div className={phoneWrapClass()}>
+                    <select
+                      value={telefoneCountryCode}
+                      onChange={(e) => {
+                        setTelefoneCountryCode(e.target.value);
+                        setTelefoneNumero('');
+                      }}
+                      className="w-16 bg-transparent text-[14px] font-medium text-slate-700 outline-none cursor-pointer"
+                    >
+                      {COUNTRY_PHONE_CODES.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.code}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="h-5 w-px bg-slate-200 mx-1"></div>
+                    <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                      <span className="flex items-center text-[14px] text-slate-500 font-medium pt-0.5">
+                        {getDdi(telefoneCountryCode)}
+                      </span>
+                      <input
+                        type="tel"
+                        value={telefoneNumero}
+                        onChange={(e) => setTelefoneNumero(formatPhoneAsYouType(telefoneCountryCode, e.target.value))}
+                        onBlur={() => setTelefoneTouched(true)}
+                        placeholder="99999-9999"
+                        className="w-full min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 placeholder-slate-400 outline-none"
+                      />
+                    </div>
+                  </div>
+                  {telefoneTouched && telefoneNumero && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
+                    <span className="mt-1.5 ml-1 block text-[11px] font-semibold text-red-500">Telefone inválido para {countrySelectDisplayLabel(getCountryByCode(telefoneCountryCode))}.</span>
+                  )}
+                </div>
+              </div>
+            </div>
 
+            {/* Seção 3: Acesso e Permissões */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-blue-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
+                  3
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#1d4ed8]')}>Acesso</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Senha Temporária</label>
                   <input 
@@ -790,60 +860,54 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cargo</label>
-                    <select 
-                      required
-                      value={form.roleId}
-                      onChange={e => handleRoleChangeInvite(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                    >
-                      <option value="">Selecione...</option>
-                      {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
-                        <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nível de Permissão</label>
-                    <select 
-                      required
-                      value={form.perfilAcessoId}
-                      onChange={e => handlePerfilChangeInvite(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                    >
-                      <option value="">Selecione...</option>
-                      {[...perfisAcesso]
-                        .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
-                        .map(p => (
-                          <option key={p.id} value={p.id}>{p.nome}</option>
-                        ))
-                      }
-                    </select>
-                  </div>
+                <div className="hidden md:block"></div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cargo</label>
+                  <select 
+                    required
+                    value={form.roleId}
+                    onChange={e => handleRoleChangeInvite(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  >
+                    <option value="">Selecione...</option>
+                    {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
+                      <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nível de Permissão</label>
+                  <select 
+                    required
+                    value={form.perfilAcessoId}
+                    onChange={e => handlePerfilChangeInvite(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  >
+                    <option value="">Selecione...</option>
+                    {[...perfisAcesso]
+                      .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                      .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                      .map(p => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))
+                    }
+                  </select>
                 </div>
               </div>
-              
-              {/* Coluna Direita: Personalização de Funções (col-span-7) */}
-              <div className="md:col-span-7 border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8 border-slate-100 flex flex-col justify-between bg-slate-50/30 rounded-r-3xl">
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
-                      Personalizar Funções do Usuário
-                    </label>
-                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2.5 py-1 rounded-lg uppercase">
-                      Customizável
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-4 leading-relaxed max-w-lg">
-                    O nível selecionado preenche as funções recomendadas, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.
-                  </p>
-                  
-                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[400px] lg:max-h-[460px] xl:max-h-[580px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
-                    <div className="grid grid-cols-1 gap-3">
+            </div>
+            
+            {/* Seção 4: Personalização de Funções */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-amber-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
+                  4
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#d97706]')}>Personalizar Funções</h4>
+              </div>
+              <p className="text-xs text-slate-500 mb-5 leading-relaxed max-w-2xl">
+                O nível de permissão selecionado preenche as funções recomendadas abaixo, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {FUNCOES_SISTEMA.map(cat => (
                         <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                           <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block mb-2 border-b border-slate-200/60 pb-1">
@@ -880,9 +944,6 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                           </div>
                         </div>
                       ))}
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -916,7 +977,12 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   const [roleId, setRoleId] = useState(usuario.roleId || usuario.role?.id || '');
   const [perfilAcessoId, setPerfilAcessoId] = useState(usuario.perfilAcessoId || '');
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
-  const [telefone, setTelefone] = useState(usuario.telefone || '');
+  
+  const parsedPhone = parsePhoneFromApi(usuario.telefone || usuario.usuarioTelefone);
+  const [telefoneCountryCode, setTelefoneCountryCode] = useState(parsedPhone.countryCode);
+  const [telefoneNumero, setTelefoneNumero] = useState(parsedPhone.number);
+  const [telefoneTouched, setTelefoneTouched] = useState(false);
+  
   const [email, setEmail] = useState(usuario.email || '');
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState([]);
@@ -988,7 +1054,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
           usuarioId: usuario.usuarioId || usuario.usuario?.id,
           nomeCompleto: nome,
           email: email,
-          telefone: telefone || null,
+          telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
           roleId,
           perfilAcessoId
         })
@@ -1010,9 +1076,20 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
     }
   };
 
+  const sectionCardCls = (err, cls) => `transition-all duration-300 shadow-sm ${cls} ${err ? 'border-red-300 ring-2 ring-red-100' : 'hover:shadow-md hover:border-slate-300'}`;
+  const sectionHeadingCls = (cls) => `font-bold tracking-tight ${cls}`;
+  const sectionMb = "mb-5";
+  const gridGapClass = "gap-x-6 gap-y-5";
+
+  const phoneWrapClass = () => `flex items-center gap-2 rounded-xl border bg-white px-3 py-2.5 transition-all shadow-sm ${
+    telefoneTouched && telefoneNumero && !isPhoneValid(telefoneCountryCode, telefoneNumero)
+      ? 'border-red-300 ring-4 ring-red-100'
+      : 'border-slate-200 focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10'
+  }`;
+
   return (
     <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]">
-      <div className="w-full max-w-md md:max-w-5xl lg:max-w-6xl xl:max-w-7xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[95vh] flex flex-col">
+      <div className="w-full max-w-md md:max-w-3xl lg:max-w-4xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[95vh] flex flex-col">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-slate-100 rounded-xl">
@@ -1029,10 +1106,16 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10">
-              {/* Coluna Esquerda: Campos (col-span-5) */}
-              <div className="md:col-span-5 space-y-5">
+          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 space-y-6">
+            {/* Seção 1: Dados Básicos */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-teal-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
+                  1
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#00a88e]')}>Dados Básicos</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nome Completo</label>
                   <input 
@@ -1051,18 +1134,18 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                     className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm"
                   />
                 </div>
+              </div>
+            </div>
 
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Telefone <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
-                  <input 
-                    value={telefone}
-                    onChange={e => setTelefone(maskTelefone(e.target.value))}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
-                  />
+            {/* Seção 2: Contato */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-purple-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
+                  2
                 </div>
-
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#a855f7]')}>Contato</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
                   <label className={`mb-1.5 block text-[11px] font-bold uppercase tracking-wider ml-1 ${lockEmailField ? 'text-slate-400' : 'text-teal-700'}`}>
                     E-mail {lockEmailField && '(Dono)'}
@@ -1076,77 +1159,117 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                     className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${lockEmailField ? 'bg-slate-50/70 text-slate-500 cursor-not-allowed' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    {/* Cargo: editável mesmo para o DONO — ele pode ser Profissional na clínica */}
-                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
-                      Cargo na Clínica
-                    </label>
-                    <select 
-                      value={roleId}
-                      onChange={e => handleRoleChangeEdit(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
+                    Telefone Celular <span className="font-normal text-slate-400 normal-case">(Opcional)</span>
+                  </label>
+                  <div className={phoneWrapClass()}>
+                    <select
+                      value={telefoneCountryCode}
+                      onChange={(e) => {
+                        setTelefoneCountryCode(e.target.value);
+                        setTelefoneNumero('');
+                      }}
+                      className="w-16 bg-transparent text-[14px] font-medium text-slate-700 outline-none cursor-pointer"
                     >
-                      <option value="">Sem cargo específico</option>
-                      {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
-                        <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                      {COUNTRY_PHONE_CODES.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.code}
+                        </option>
                       ))}
                     </select>
-                  </div>
-                  <div>
-                    {/* Nível de acesso: sempre bloqueado para o DONO */}
-                    <label className={`mb-1.5 block text-[11px] font-bold uppercase tracking-wider ml-1 ${lockNivelField ? 'text-slate-400' : 'text-teal-700'}`}>
-                      Nível de Acesso {lockNivelField && '(Dono)'}
-                    </label>
-                    {isUserOwner ? (
-                      <input 
-                        disabled
-                        value="Dono — acesso total"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm"
+                    <div className="h-5 w-px bg-slate-200 mx-1"></div>
+                    <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                      <span className="flex items-center text-[14px] text-slate-500 font-medium pt-0.5">
+                        {getDdi(telefoneCountryCode)}
+                      </span>
+                      <input
+                        type="tel"
+                        value={telefoneNumero}
+                        onChange={(e) => setTelefoneNumero(formatPhoneAsYouType(telefoneCountryCode, e.target.value))}
+                        onBlur={() => setTelefoneTouched(true)}
+                        placeholder="99999-9999"
+                        className="w-full min-w-0 flex-1 bg-transparent text-[14px] text-slate-900 placeholder-slate-400 outline-none"
                       />
-                    ) : (
-                      <select 
-                        required
-                        value={perfilAcessoId}
-                        onChange={e => setPerfilAcessoId(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                      >
-                        <option value="">Selecione...</option>
-                        {[...perfisAcesso]
-                          .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                          .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
-                          .map(p => (
-                            <option key={p.id} value={p.id}>{p.nome}</option>
-                          ))
-                        }
-                      </select>
-                    )}
+                    </div>
                   </div>
+                  {telefoneTouched && telefoneNumero && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
+                    <span className="mt-1.5 ml-1 block text-[11px] font-semibold text-red-500">Telefone inválido para {countrySelectDisplayLabel(getCountryByCode(telefoneCountryCode))}.</span>
+                  )}
                 </div>
               </div>
-              
-              {/* Coluna Direita: Personalização (col-span-7) */}
-              <div className="md:col-span-7 border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8 border-slate-100 flex flex-col justify-between bg-slate-50/30 rounded-r-3xl">
+            </div>
+
+            {/* Seção 3: Acesso e Permissões */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-blue-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
+                  3
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#1d4ed8]')}>Acesso</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
-                      Personalizar Funções do Usuário
-                    </label>
-                    <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-2.5 py-1 rounded-lg uppercase">
-                      Customizável
-                    </span>
-                  </div>
-                  
-                  <p className="text-xs text-slate-500 mb-4 leading-relaxed max-w-lg">
-                    {isUserOwner 
-                      ? 'O Dono possui acesso total ao sistema. As funções abaixo são apenas informativas.' 
-                      : 'O nível selecionado preenche as funções recomendadas, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.'
-                    }
-                  </p>
-                  
-                  <div className="space-y-3 max-h-none overflow-y-visible md:max-h-[400px] lg:max-h-[460px] xl:max-h-[580px] md:overflow-y-auto pr-2 select-none scrollbar-thin">
-                    <div className="grid grid-cols-1 gap-3">
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
+                    Cargo na Clínica
+                  </label>
+                  <select 
+                    value={roleId}
+                    onChange={e => handleRoleChangeEdit(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  >
+                    <option value="">Sem cargo específico</option>
+                    {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
+                      <option key={r.id} value={r.id}>{r.nome === 'PROFISSIONAL' ? 'Profissional / Médico' : r.nome}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={`mb-1.5 block text-[11px] font-bold uppercase tracking-wider ml-1 ${lockNivelField ? 'text-slate-400' : 'text-teal-700'}`}>
+                    Nível de Acesso {lockNivelField && '(Dono)'}
+                  </label>
+                  {isUserOwner ? (
+                    <input 
+                      disabled
+                      value="Dono — acesso total"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm"
+                    />
+                  ) : (
+                    <select 
+                      required
+                      value={perfilAcessoId}
+                      onChange={e => setPerfilAcessoId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                    >
+                      <option value="">Selecione...</option>
+                      {[...perfisAcesso]
+                        .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                        .map(p => (
+                          <option key={p.id} value={p.id}>{p.nome}</option>
+                        ))
+                      }
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+              
+            {/* Seção 4: Personalização de Funções */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-amber-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
+                  4
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#d97706]')}>Personalizar Funções</h4>
+              </div>
+              <p className="text-xs text-slate-500 mb-5 leading-relaxed max-w-2xl">
+                {isUserOwner 
+                  ? 'O Dono possui acesso total ao sistema. As funções abaixo são apenas informativas.' 
+                  : 'O nível de permissão selecionado preenche as funções recomendadas abaixo, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.'
+                }
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {FUNCOES_SISTEMA.map(cat => (
                         <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                           <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block mb-2 border-b border-slate-200/60 pb-1">
@@ -1194,9 +1317,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                           </div>
                         </div>
                       ))}
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
