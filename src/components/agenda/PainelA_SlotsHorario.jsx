@@ -78,7 +78,7 @@ export function PainelA_SlotsHorario({
               aria-selected={false}
               aria-disabled="true"
               title="Horário indisponível"
-              className="flex w-full cursor-not-allowed items-center justify-between rounded-lg border border-ink-100 bg-ink-50 px-3 py-2 opacity-50"
+              className="flex min-h-[44px] w-full cursor-not-allowed items-center justify-between rounded-lg border border-ink-100 bg-ink-50 px-3 py-2 opacity-50"
             >
               <div className="flex items-center gap-2">
                 <Lock className="h-3.5 w-3.5 shrink-0 text-ink-400" />
@@ -105,7 +105,7 @@ export function PainelA_SlotsHorario({
         }
 
         let cardClass =
-          'flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500';
+          'flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500';
 
         if (isSelecionado) {
           cardClass += ' border-vivid-teal-400 bg-vivid-teal-50 ring-1 ring-vivid-teal-400';

@@ -518,7 +518,7 @@ export function WeekTimeGrid({
 
   return (
     <div className={`flex h-full min-h-0 w-full min-w-0 flex-col ${className}`.trim()}>
-      <div className="hidden min-h-0 flex-1 flex-col md:flex">
+      <div className="hidden min-h-0 flex-1 flex-col lg:flex">
         <div className="flex shrink-0 border-b border-[#E8E8E8]">
           <div className="w-14 shrink-0" />
           <div
@@ -541,7 +541,7 @@ export function WeekTimeGrid({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col md:hidden">
+      <div className="flex min-h-0 flex-1 flex-col lg:hidden">
         <div className="-mx-1 flex min-h-0 flex-1 gap-2 overflow-x-auto px-1 pb-2 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
           {mobileDays.map((iso) => (
             <div key={iso} className="flex w-[min(92vw,360px)] shrink-0 flex-col rounded-lg border border-[#E8E8E8] bg-white">
