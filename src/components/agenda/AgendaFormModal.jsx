@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import { useUsuarioLogado } from '../../hooks/useUsuarioLogado.js';
+import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
 import { CalendarioMensal } from './CalendarioMensal.jsx';
 import { PainelA_SlotsHorario } from './PainelA_SlotsHorario.jsx';
@@ -8,6 +9,8 @@ import { ProcedimentosMultiSeletor } from './ProcedimentosMultiSeletor.jsx';
 import { ProfissionalSeletor } from './ProfissionalSeletor.jsx';
 import { PainelB_SeletorProcedimento } from './PainelB_SeletorProcedimento.jsx';
 import { PainelC_SeletorProfissional } from './PainelC_SeletorProfissional.jsx';
+import { AgendaFormDataHoraSheet } from './AgendaFormDataHoraSheet.jsx';
+import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
 
 // painel ativo no lado direito: 'A' = slots, 'B' = procedimentos, 'C' = profissional
 const PAINEL = { A: 'A', B: 'B', C: 'C' };
@@ -40,7 +43,9 @@ function buildResumo({ form, agenda, duracaoTotalMin, procedimentosSelecionados 
 
 export function AgendaFormModal({ agenda, onExcluirClick }) {
   const { ehProfissionalClinico, roleUserId: roleLogadoId } = useUsuarioLogado();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [painelAtivo, setPainelAtivo] = useState(PAINEL.A);
+  const [dispSheetOpen, setDispSheetOpen] = useState(false);
   const [horaPendentePainelC, setHoraPendentePainelC] = useState('');
   const [obsAberta, setObsAberta] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -115,6 +120,11 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
   const resumoTexto = buildResumo({ form: agenda.form, agenda, duracaoTotalMin, procedimentosSelecionados });
 
+  // CTA mobile (botão que abre o sheet de data/horário)
+  const ctaLabelRaw = formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio);
+  const ctaPreenchido = Boolean(ctaLabelRaw);
+  const ctaLabel = ctaLabelRaw || 'Escolher data e horário';
+
   // ── Handlers de procedimentos ───────────────────────────────────────────────
 
   const handleToggleProc = useCallback(
@@ -175,10 +185,26 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     [agenda]
   );
 
+  // Wrapper de evento (não componente) que reusa o handler existente e fecha o sheet mobile.
+  const handleSheetSelectSlot = useCallback(
+    (payload) => {
+      handleSelecionarSlotDireto(payload);
+      setDispSheetOpen(false);
+    },
+    [handleSelecionarSlotDireto]
+  );
+
   const handleAbrirPainelC = useCallback((hora) => {
     setHoraPendentePainelC(hora);
     setPainelAtivo(PAINEL.C);
   }, []);
+
+  // No sheet mobile, abrir o PainelC significa fechar o sheet e mostrar o picker de
+  // profissional na área mobile do modal (o sheet só tem calendário + slots).
+  const handleSheetAbrirPainelC = useCallback((hora) => {
+    handleAbrirPainelC(hora);
+    setDispSheetOpen(false);
+  }, [handleAbrirPainelC]);
 
   const handleSelecionarProfissional = useCallback(
     ({ hora, profissional }) => {
@@ -354,7 +380,9 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           </div>
         </div>
 
-        {/* ── Corpo: 2 colunas — calendário protagonista (7fr) + slots (5fr) ── */}
+        {/* ── Corpo desktop (lg+): 2 colunas. Render condicional que DESMONTA no
+            mobile — nunca ter CalendarioMensal/PainelA montados em 2 lugares (anti-loop). ── */}
+        {isDesktop && (
         <div className="min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full flex-col lg:grid lg:grid-cols-[7fr_5fr]">
 
@@ -436,6 +464,74 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             </div>
           </div>
         </div>
+        )}
+
+        {/* ── Corpo mobile (<lg): seletores já ficam acima; aqui vai o picker de
+            procedimento/profissional (quando aberto) OU o botão que abre o sheet de
+            data/horário. CalendarioMensal/PainelA NÃO montam aqui — só no sheet. ── */}
+        {!isDesktop && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
+            {painelAtivo === PAINEL.B ? (
+              <PainelB_SeletorProcedimento
+                procedimentoOptions={agenda.procedimentoOptions}
+                procedimentosSelecionados={procedimentosSelecionados}
+                onToggle={handleToggleProc}
+                onVoltar={() => setPainelAtivo(PAINEL.A)}
+              />
+            ) : painelAtivo === PAINEL.C ? (
+              <PainelC_SeletorProfissional
+                equipeList={agenda.equipeList}
+                equipeLoading={agenda.equipeLoading}
+                equipeError={agenda.equipeError}
+                horaSelecionandoPendente={horaPendentePainelC}
+                onSelecionarProfissional={handleSelecionarProfissional}
+                onVoltar={() => setPainelAtivo(PAINEL.A)}
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDispSheetOpen(true)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 ${
+                    ctaPreenchido
+                      ? 'border-vivid-teal-300 bg-vivid-teal-50'
+                      : 'border-ink-200 bg-white hover:border-vivid-teal-200 hover:bg-vivid-teal-50'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Calendar className={`h-4 w-4 shrink-0 ${ctaPreenchido ? 'text-vivid-teal-600' : 'text-ink-400'}`} />
+                    <span className={`truncate text-sm font-semibold ${ctaPreenchido ? 'text-vivid-teal-700' : 'text-ink-600'}`}>
+                      {ctaLabel}
+                    </span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-ink-400" />
+                </button>
+
+                {/* Observações colapsável (mobile) */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setObsAberta((v) => !v)}
+                    className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
+                  >
+                    <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
+                    {obsAberta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                  {obsAberta && (
+                    <textarea
+                      value={agenda.form.observacao || ''}
+                      onChange={(e) => agenda.updateForm('observacao', e.target.value)}
+                      maxLength={500}
+                      rows={4}
+                      placeholder="Informações adicionais sobre o atendimento..."
+                      className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* ── Footer ─────────────────────────────────────────────────────── */}
         <div className="shrink-0 border-t border-ink-100 px-6 py-4">
@@ -503,6 +599,23 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           </div>
         </div>
       </div>
+
+      {/* Sheet mobile de data/horário — CalendarioMensal + PainelA montados SÓ aqui
+          (e só quando <lg e aberto), nunca junto com o corpo desktop. */}
+      {!isDesktop && dispSheetOpen && (
+        <AgendaFormDataHoraSheet
+          open
+          diaSelecionado={isReagendar ? undefined : agenda.form.data}
+          roleUserIdFiltro={roleUserIdFiltro}
+          duracaoTotalMin={duracaoTotalMin}
+          horaSelecionada={agenda.form.horaInicio}
+          profissionalFixado={profissionalFixado}
+          onSelecionarDia={handleSelecionarDia}
+          onSelecionarSlot={handleSheetSelectSlot}
+          onAbrirPainelC={handleSheetAbrirPainelC}
+          onCancel={() => setDispSheetOpen(false)}
+        />
+      )}
 
       {/* Portal para o modal de bypass fora de disponibilidade */}
       {agenda.foraDispModal}

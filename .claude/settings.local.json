@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm run build)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(git -C \"c:/DEV/Sistema-de-gerenciamento-\" checkout HEAD -- src/components/agenda/AgendaFormModal.jsx)",
+      "Bash(git -C \"c:/DEV/Sistema-de-gerenciamento-\" status --short -- src/components/agenda/AgendaFormModal.jsx)"
     ]
   }
 }
