@@ -50,6 +50,9 @@ export function PatientsView(props) {
         setSelectedPatientCpf={setSelectedPatientCpf}
         roleUserId={roleUserId}
         isRecepcionista={props.isRecepcionista}
+        profileNav={props.profileNav}
+        onProfileNavigatePrev={() => props.navigateProfilePatient?.(-1)}
+        onProfileNavigateNext={() => props.navigateProfilePatient?.(1)}
       />
     );
   }

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   Bell,
   Cake,
   Calendar,
@@ -10,15 +9,10 @@ import {
   ChevronDown,
   Clock,
   ClipboardList,
-  DollarSign,
-  Download,
-  FileText,
   Filter,
+  FileText,
   Image as ImageIcon,
   Loader2,
-  Mail,
-  MapPin,
-  Phone,
   Play,
   Sparkles,
   StickyNote,
@@ -26,7 +20,6 @@ import {
   Pencil,
   Plus,
   User as   UserIcon,
-  UserMinus,
   X,
 } from 'lucide-react';
 import {
@@ -52,9 +45,6 @@ import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import {
   maskCPF,
   maskRG,
-  calculateAgeFromISODate,
-  sanitizeBirthDateDigits,
-  formatBirthDigitsBR,
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
@@ -67,16 +57,19 @@ import {
 } from '../../utils/birthday.js';
 import {
   compressImageFileToJpegDataUrl,
-  getPatientProfilePhotoDisplayUrl,
   profilePhotoStorageKey,
   setStoredProfilePhotoDataUrl,
 } from '../../utils/patientProfilePhoto.js';
-import { PatientAvatar } from './PatientAvatar.jsx';
+import { ProfileBreadcrumb } from './ProfileBreadcrumb.jsx';
+import { ProfileHero } from './ProfileHero.jsx';
+import { ProfileKpiStrip } from './ProfileKpiStrip.jsx';
+import { formatDiasAtrasPtBr } from './profileDisplayUtils.js';
 import {
   ProcedureTimelineHeading,
   ProcedureTimelineRail,
   ProcedureTimelineEntry,
   ProcedureTimelineProfileVerMaisStrip,
+  ProcedureTimelinePreviewCard,
 } from './ProcedureTimelineBlock.jsx';
 import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
 import {
@@ -691,21 +684,6 @@ function profileProximoAgendamentoResumo(p) {
   return leg && leg !== '-' && leg !== '—' ? leg : 'Nenhum agendamento';
 }
 
-/** True se houver ao menos um campo do endereço estruturado preenchido. */
-function hasStructuredAddressData(p) {
-  if (!p) return false;
-  const s = (v) => String(v ?? '').trim();
-  return (
-    s(p.cep) ||
-    s(p.enderecoRua) ||
-    s(p.enderecoNumero) ||
-    s(p.enderecoComplemento) ||
-    s(p.enderecoBairro) ||
-    s(p.enderecoCidade) ||
-    s(p.enderecoEstado)
-  );
-}
-
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
@@ -721,10 +699,13 @@ export function PatientProfileView({
   mergePatientById,
   refreshPatients,
   roleUserId,
-  isRecepcionista,
+  isRecepcionista: _isRecepcionista,
+  profileNav = null,
+  onProfileNavigatePrev,
+  onProfileNavigateNext,
 }) {
   const toast = useToast();
-  const { isNivel1, canEditPacientes, canInativarPacientes } = usePapel();
+  const { isNivel1, canEditPacientes, papel } = usePapel();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const birthParts = useMemo(
     () => parsePatientBirthDate(patient.dataNascimento),
@@ -807,6 +788,38 @@ export function PatientProfileView({
     if (primary !== 'Nenhum agendamento') return primary;
     return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : 'Nenhum agendamento';
   }, [selectedPatient, proximoAgendaIso]);
+
+  const sortedApiProceduresEarly = useMemo(
+    () => sortProcedimentosPorCriadoEmDesc(apiProcedures || []),
+    [apiProcedures],
+  );
+
+  const ultimaVisitaIso = useMemo(() => {
+    if (selectedPatient?.ultimaVinda != null && String(selectedPatient.ultimaVinda).trim() !== '') {
+      return selectedPatient.ultimaVinda;
+    }
+    return latestProcedureOccurredInstantIso(apiProcedures);
+  }, [selectedPatient, apiProcedures]);
+
+  const ultimaVisitaMeta = useMemo(() => {
+    const dias = formatDiasAtrasPtBr(ultimaVisitaIso);
+    const procName =
+      sortedApiProceduresEarly[0]?.procedimentoNome || sortedApiProceduresEarly[0]?.nome;
+    const parts = [dias, procName].filter(Boolean);
+    return parts.length ? parts.join(' · ') : null;
+  }, [ultimaVisitaIso, sortedApiProceduresEarly]);
+
+  const proximoRetornoKpiDisplay = useMemo(() => {
+    if (proximoRetornoCardDisplay === '-' || proximoRetornoCardDisplay === '—') {
+      return 'Sem agendamento';
+    }
+    return proximoRetornoCardDisplay;
+  }, [proximoRetornoCardDisplay]);
+
+  const proximoRetornoMeta = useMemo(() => {
+    if (proximoRetornoKpiDisplay === 'Sem agendamento') return 'Sem agendamento';
+    return null;
+  }, [proximoRetornoKpiDisplay]);
 
   const galeriaSmUp = useMediaQuery('(min-width: 640px)');
   const galeriaMdUp = useMediaQuery('(min-width: 768px)');
@@ -906,14 +919,12 @@ export function PatientProfileView({
   }, [selectedPatient, onAgendarPaciente, toast]);
 
   useEffect(() => {
-    if (patientDetailTab === 'timeline') {
+    if (patientDetailTab === 'timeline' || patientDetailTab === 'cadastro') {
       setPatientDetailTab('atendimento');
     }
   }, [patientDetailTab, setPatientDetailTab]);
 
   const isEditing = Boolean(editing);
-
-  const profilePhotoDisplayUrl = getPatientProfilePhotoDisplayUrl(patient);
 
   const applyProfilePhoto = useCallback(
     (dataUrl) => {
@@ -1008,28 +1019,6 @@ export function PatientProfileView({
     }
   };
 
-  const handleRemoveProfilePhoto = async () => {
-    if (selectedPatient?.id) {
-      setProfilePhotoBusy(true);
-      try {
-        await pacientesApi.removeFotoPerfil(selectedPatient.id);
-        const dto = await pacientesApi.get(selectedPatient.id);
-        const key = profilePhotoStorageKey(selectedPatient);
-        if (key) setStoredProfilePhotoDataUrl(key, null);
-        mergeServerPatientIntoState(dto);
-        refreshPatients?.();
-        toast.info('Foto de perfil removida.');
-      } catch (err) {
-        toast.error(err?.message || 'Não foi possível remover a foto.');
-      } finally {
-        setProfilePhotoBusy(false);
-      }
-      return;
-    }
-    applyProfilePhoto('');
-    toast.info('Foto de perfil removida.');
-  };
-
 
   const createEditDraft = () => {
     const { countryCode, nationalNumber } = parsePhoneFromApi(patient.telefone || '', 'BR');
@@ -1064,6 +1053,12 @@ export function PatientProfileView({
       idade: patient.idade ?? '',
     };
   };
+
+  const openEditProfile = useCallback(() => {
+    setEditFormErrors({});
+    setProfileSaveError('');
+    setEditing(createEditDraft());
+  }, [patient]);
 
   const clearEditFieldError = (field) =>
     setEditFormErrors((prev) => ({ ...prev, [field]: false }));
@@ -1559,55 +1554,10 @@ export function PatientProfileView({
     ? sortedApiProcedures.slice(0, prontuarioListMax)
     : sortedApiProcedures;
 
-  /* Agregação (procedimentos + galeria); mantida — Prontuário usa sortedApiProcedures na UI. */
-  // eslint-disable-next-line no-unused-vars -- valor agregado intencionalmente preservado
-  const timelineEvents = useMemo(() => {
-    const events = [];
-
-    sortedApiProcedures.forEach((proc, pIdx) => {
-      events.push({
-        id: proc.id || `api_proc_${pIdx}`,
-        type: 'procedimento',
-        title: proc.procedimentoNome || 'Procedimento',
-        meta: `${proc.statusNome || ''} ${proc.criadoEm ? new Date(proc.criadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''} ${proc.profissionalNome ? `· ${proc.profissionalNome}` : ''}`,
-      });
-    });
-
-    (patient.procedures || []).forEach((proc, idx) => {
-      events.push({
-        id: `proc_local_${idx}`,
-        type: 'procedimento',
-        title: proc.nome || 'Procedimento',
-        meta: `${proc.data || '-'} ${proc.hora ? `- ${proc.hora}` : ''} ${proc.profissional ? `- ${proc.profissional}` : ''}`,
-      });
-    });
-
-    if (galeriaBackend === 'api') {
-      apiGaleriaItems.forEach((it) => {
-        const title = it.legenda || it.fileName || 'Foto na galeria de evolução';
-        const dataRef = it.dataReferencia ? String(it.dataReferencia) : '';
-        const quando = it.createdAt ? new Date(it.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
-        const meta = [dataRef, quando].filter(Boolean).join(' · ') || it.fileName;
-        events.push({
-          id: `galeria_api_${it.serverId}`,
-          type: 'foto',
-          title,
-          meta,
-        });
-      });
-    } else {
-      capturedPhotos.forEach((photo, idx) => {
-        events.push({
-          id: `photo_${idx}`,
-          type: 'foto',
-          title: 'Foto adicionada na galeria',
-          meta: photo.capturedAt ? new Date(photo.capturedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : photo.fileName,
-        });
-      });
-    }
-
-    return events;
-  }, [patient, capturedPhotos, sortedApiProcedures, galeriaBackend, apiGaleriaItems]);
+  const perfilRecentProcedures = useMemo(
+    () => sortedApiProcedures.slice(0, 5),
+    [sortedApiProcedures],
+  );
 
   const anamneseAtendimentoInfo = useMemo(() => {
     const rows = (Array.isArray(anamneseListSummary) ? [...anamneseListSummary] : []).filter((r) => r?.dataHora);
@@ -1847,6 +1797,8 @@ export function PatientProfileView({
   };
 
   const isPerfilAtivo = (patient.status || 'ativo') !== 'inativo';
+  /** Mesma regra do perfil antes do redesign: só oculta para papel RECEPCIONISTA. */
+  const showInativarPaciente = isPerfilAtivo && String(papel ?? '').trim().toUpperCase() !== 'RECEPCIONISTA';
 
   const handleConfirmInativar = async () => {
     if (!selectedPatient?.id) return;
@@ -1901,291 +1853,50 @@ export function PatientProfileView({
           {profileSaveError}
         </div>
       ) : null}
-      <div className="mb-3 flex flex-wrap items-center gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={() => {
-            setPatientView('list');
-            setPatientDetailTab('atendimento');
-          }}
-          className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#1db8a2] px-3 py-2 text-[14px] font-bold text-white transition-colors hover:bg-[#00a88e]"
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Voltar para Pacientes
-        </button>
-      </div>
+      <ProfileBreadcrumb
+        patientName={selectedPatient.nome}
+        onBackToList={() => {
+          setPatientView('list');
+          setPatientDetailTab('atendimento');
+        }}
+      />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="relative mb-6 rounded-[18px] border border-[#e2e8f0] bg-white p-5 shadow-md sm:p-6">
-
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="min-w-0 flex-1 space-y-4">
-                <div className="flex w-full flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-5">
-                  <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-start">
-                    <input
-                      ref={profilePhotoInputRef}
-                      type="file"
-                      accept={
-                        selectedPatient?.id
-                          ? 'image/jpeg,image/jpg,image/png,image/webp'
-                          : 'image/*'
-                      }
-                      className="hidden"
-                      disabled={profilePhotoBusy}
-                      onChange={handleProfilePhotoFile}
-                    />
-                    <PatientAvatar
-                      patient={patient}
-                      getPatientInitials={getPatientInitials}
-                      className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] shadow-sm md:h-20 md:w-20"
-                      initialsClassName="text-lg font-bold md:text-xl"
-                      spinnerClassName="h-5 w-5"
-                    />
-                    {canEditPacientes && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => profilePhotoInputRef.current?.click()}
-                          disabled={profilePhotoBusy}
-                          className="text-[12px] font-medium text-[#00a88e] underline decoration-[#00a88e]/40 underline-offset-2 transition-colors hover:text-[#00967f] disabled:pointer-events-none disabled:opacity-50"
-                        >
-                          {profilePhotoBusy ? 'Enviando…' : 'Trocar foto'}
-                        </button>
-                        {profilePhotoDisplayUrl ? (
-                          <button
-                            type="button"
-                            onClick={handleRemoveProfilePhoto}
-                            disabled={profilePhotoBusy}
-                            className="text-[12px] font-medium text-[#94a3b8] transition-colors hover:text-red-600 disabled:opacity-50"
-                          >
-                            Remover foto
-                          </button>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                  <div
-                    className={`min-w-0 w-full flex-1 text-left ${isPerfilAtivo && !isRecepcionista ? 'pr-[168px]' : ''}`}
-                  >
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <h3 className="text-[18px] font-bold tracking-tight text-[#0f172a] md:text-[22px]">{selectedPatient.nome}</h3>
-                      {isPerfilAtivo ? (
-                        <span className="rounded-full border border-[#86efac] bg-[#dcfce7] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#16a34a]">
-                          ATIVO
-                        </span>
-                      ) : (
-                        <span className="rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
-                          INATIVO
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-x-8 gap-y-2 text-left text-[15px] sm:grid-cols-2">
-                  <div className="min-w-0 space-y-2">
-                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
-                      <Calendar className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                      {selectedPatient.idade != null ? `${selectedPatient.idade} anos` : '—'}
-                    </span>
-                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
-                      <FileText className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                      <span className="min-w-0 break-words">{selectedPatient.cpf || '—'}</span>
-                    </span>
-                    <p className="min-w-0 break-words">
-                      <span className="font-semibold text-gray-700">Pai: </span>
-                      <span className="font-normal text-gray-700">
-                        {(selectedPatient.nomePai && String(selectedPatient.nomePai).trim()) || '—'}
-                      </span>
-                    </p>
-                    <div className="pt-1 font-normal text-gray-700">
-                      <div className="flex items-start gap-2 text-left">
-                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2.25} aria-hidden />
-                        <div className="min-w-0 flex-1 text-left">
-                          {hasStructuredAddressData(selectedPatient) ? (
-                            <>
-                              <div className="min-w-0 space-y-1">
-                                <p className="min-w-0 break-words">
-                                  <span className="font-semibold text-gray-700">CEP: </span>
-                                  <span className="font-normal text-gray-700">
-                                    {(selectedPatient.cep && String(selectedPatient.cep).trim()) || '—'}
-                                  </span>
-                                </p>
-                                <p className="min-w-0 break-words">
-                                  <span className="font-semibold text-gray-700">Logradouro: </span>
-                                  <span className="font-normal text-gray-700">
-                                    {(selectedPatient.enderecoRua && String(selectedPatient.enderecoRua).trim()) ||
-                                      '—'}
-                                  </span>
-                                </p>
-                                <p className="min-w-0 break-words">
-                                  <span className="font-semibold text-gray-700">Bairro: </span>
-                                  <span className="font-normal text-gray-700">
-                                    {(selectedPatient.enderecoBairro &&
-                                      String(selectedPatient.enderecoBairro).trim()) ||
-                                      '—'}
-                                  </span>
-                                </p>
-                              </div>
-                              {selectedPatient.enderecoComplemento &&
-                              String(selectedPatient.enderecoComplemento).trim() ? (
-                                <p className="mt-1 min-w-0 break-words">
-                                  <span className="font-semibold text-gray-700">Complemento: </span>
-                                  <span className="font-normal text-gray-700">
-                                    {String(selectedPatient.enderecoComplemento).trim()}
-                                  </span>
-                                </p>
-                              ) : null}
-                            </>
-                          ) : (selectedPatient.endereco && String(selectedPatient.endereco).trim()) ? (
-                            <>
-                              <p className="min-w-0 break-words">
-                                <span className="font-semibold text-gray-700">Endereço (formato antigo): </span>
-                                <span className="font-normal text-gray-700">
-                                  {String(selectedPatient.endereco).trim()}
-                                </span>
-                              </p>
-                              <p className="text-left text-[11px] font-medium text-[#94a3b8]">
-                                Ao editar o cadastro, atualize para o novo formato de endereço.
-                              </p>
-                            </>
-                          ) : (
-                            <p className="min-w-0 break-words">
-                              <span className="font-semibold text-gray-700">Endereço: </span>
-                              <span className="font-normal text-gray-700">—</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="min-w-0 space-y-2">
-                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
-                      <Phone className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                      <span className="min-w-0 break-words">{selectedPatient.telefone || '—'}</span>
-                    </span>
-                    <span className="flex min-w-0 items-center gap-1.5 font-normal text-gray-700">
-                      <Mail className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                      <span className="min-w-0 break-words">{selectedPatient.email || '—'}</span>
-                    </span>
-                    <p className="min-w-0 break-words">
-                      <span className="font-semibold text-gray-700">Mãe: </span>
-                      <span className="font-normal text-gray-700">
-                        {(selectedPatient.nomeMae && String(selectedPatient.nomeMae).trim()) || '—'}
-                      </span>
-                    </p>
-                    {hasStructuredAddressData(selectedPatient) ? (
-                      <div className="mt-3 min-w-0 space-y-1 border-t border-slate-100 pt-3 pl-2 sm:pl-3">
-                        <p className="min-w-0 break-words">
-                          <span className="font-semibold text-gray-700">Número: </span>
-                          <span className="font-normal text-gray-700">
-                            {(selectedPatient.enderecoNumero &&
-                              String(selectedPatient.enderecoNumero).trim()) ||
-                              '—'}
-                          </span>
-                        </p>
-                        <p className="min-w-0 break-words">
-                          <span className="font-semibold text-gray-700">Cidade: </span>
-                          <span className="font-normal text-gray-700">
-                            {(selectedPatient.enderecoCidade &&
-                              String(selectedPatient.enderecoCidade).trim()) ||
-                              '—'}
-                          </span>
-                        </p>
-                        <p className="min-w-0 break-words">
-                          <span className="font-semibold text-gray-700">Estado (UF): </span>
-                          <span className="font-normal text-gray-700">
-                            {(selectedPatient.enderecoEstado &&
-                              String(selectedPatient.enderecoEstado).trim()) ||
-                              '—'}
-                          </span>
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              {!isNivel1 ? (
-                <div className="flex w-full shrink-0 flex-col gap-2 sm:min-w-[220px] sm:max-w-[280px]">
-                  <button
-                    type="button"
-                    onClick={() => onStartAttendance?.(selectedPatient)}
-                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f] active:bg-[#00967f]"
-                  >
-                    <Play className="inline h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden /> Iniciar Atendimento
-                  </button>
-                  <div className="flex w-full flex-col gap-2">
-                    <div className="flex w-full flex-row gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAgendarPacienteClick}
-                        disabled={!isPerfilAtivo || !selectedPatient?.id}
-                        className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2 text-[13px] font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Calendar className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                        <span className="min-w-0 truncate">Agendar Paciente</span>
-                      </button>
-                      {canEditPacientes && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditing((prev) => {
-                              if (prev) {
-                                setEditFormErrors({});
-                                setProfileSaveError('');
-                                return null;
-                              }
-                              setEditFormErrors({});
-                              setProfileSaveError('');
-                              return createEditDraft();
-                            });
-                          }}
-                          className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2 text-[13px] font-normal text-gray-700 transition-colors hover:bg-slate-50"
-                        >
-                          <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                          <span className="min-w-0 truncate">Editar Cadastro</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2 text-[13px] font-normal text-gray-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled
-                      >
-                        <Download className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                        <span className="min-w-0 truncate">Gerar PDF</span>
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {isPerfilAtivo && canInativarPacientes ? (
-                    <div className="mt-auto pt-6">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInativarMotivo('');
-                          setInativarSenha('');
-                          setInativarSenhaErro('');
-                          setInativarModalOpen(true);
-                        }}
-                        className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-red-600 bg-red-600 px-4 text-[13px] font-semibold text-white transition-colors hover:border-red-700 hover:bg-red-700"
-                      >
-                        <UserMinus className="h-4 w-4 shrink-0 text-white" strokeWidth={2} aria-hidden />
-                        <span className="min-w-0 truncate">Inativar Paciente</span>
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="flex w-full shrink-0 flex-col gap-3 rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-center sm:min-w-[220px] sm:max-w-[280px]">
-                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-                    <Shield className="h-5 w-5" />
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-800">Acesso Limitado</h4>
-                  <p className="text-xs leading-relaxed text-slate-500">
-                    Seu nível de permissão (Nível 1) permite apenas visualizar os dados cadastrais básicos deste paciente.
-                  </p>
-                </div>
-              )}
-            </div>
+        <div className="flex flex-col gap-4 lg:col-span-2">
+          <div className="mb-2 overflow-hidden rounded-[20px] border border-vivid-teal-700/55 shadow-agenda-glow">
+            <ProfileHero
+              patient={patient}
+              getPatientInitials={getPatientInitials}
+              isPerfilAtivo={isPerfilAtivo}
+              isNivel1={isNivel1}
+              canEditPacientes={canEditPacientes}
+              showInativarPaciente={showInativarPaciente}
+              profilePhotoInputRef={profilePhotoInputRef}
+              profilePhotoBusy={profilePhotoBusy}
+              onProfilePhotoClick={handleProfilePhotoFile}
+              onStartAttendance={onStartAttendance}
+              onAgendar={handleAgendarPacienteClick}
+              onEdit={openEditProfile}
+              onCadastro={openEditProfile}
+              onInativar={() => {
+                setInativarMotivo('');
+                setInativarSenha('');
+                setInativarSenhaErro('');
+                setInativarModalOpen(true);
+              }}
+              onAddAddress={openEditProfile}
+              onAddResponsavel={openEditProfile}
+              profileNav={profileNav}
+              onNavigatePrev={onProfileNavigatePrev}
+              onNavigateNext={onProfileNavigateNext}
+            />
+            <ProfileKpiStrip
+              ultimaVisitaDisplay={ultimaVisitaCardDisplay}
+              ultimaVisitaMeta={ultimaVisitaMeta}
+              proximoRetornoDisplay={proximoRetornoKpiDisplay}
+              proximoRetornoMeta={proximoRetornoMeta}
+            />
+          </div>
 
             {isEditing && editing ? (
               <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" role="presentation">
@@ -2342,67 +2053,10 @@ export function PatientProfileView({
               </div>
             ) : null}
 
-            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-[#f1f5f9] pt-5 sm:grid-cols-3">
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50"
-                  aria-hidden
-                >
-                  <Clock className="h-5 w-5 text-teal-700" strokeWidth={2} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-slate-500">Última Visita</div>
-                  <div className="mt-1 text-base font-semibold text-slate-900">{ultimaVisitaCardDisplay}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50"
-                  aria-hidden
-                >
-                  <Calendar className="h-5 w-5 text-blue-600" strokeWidth={2} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-slate-500">Próximo Retorno</div>
-                  <div className="mt-1 text-base font-semibold text-slate-900">{proximoRetornoCardDisplay}</div>
-                </div>
-              </div>
-              <div
-                className={`flex items-start gap-2.5 rounded-xl border p-3 ${
-                  selectedPatient.saldoDevedor > 0
-                    ? 'border-red-100 bg-red-50/90'
-                    : 'border-slate-100 bg-slate-50/90'
-                }`}
-              >
-                <DollarSign
-                  className={`mt-0.5 h-4 w-4 shrink-0 ${selectedPatient.saldoDevedor > 0 ? 'text-red-600' : 'text-slate-500'}`}
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <div
-                    className={`text-[11px] font-semibold uppercase tracking-[0.05em] ${
-                      selectedPatient.saldoDevedor > 0 ? 'text-red-800/85' : 'text-slate-600'
-                    }`}
-                  >
-                    Saldo devedor
-                  </div>
-                  <div
-                    className={`mt-0.5 text-[15px] font-bold ${selectedPatient.saldoDevedor > 0 ? 'text-[#dc2626]' : 'text-[#0f172a]'}`}
-                  >
-                    {selectedPatient.saldoDevedor > 0
-                      ? `R$ ${selectedPatient.saldoDevedor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                      : '-'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
                 <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
-                { key: 'atendimento', label: 'Atendimento', title: 'Atendimento', icon: Play },
+                { key: 'atendimento', label: 'Perfil', title: 'Perfil', icon: Play },
                 { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
@@ -2580,6 +2234,82 @@ export function PatientProfileView({
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 mt-5 flex flex-wrap items-center justify-between gap-2">
+                      <h5 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+                        Histórico recente
+                      </h5>
+                      {!isNivel1 && detailLoading ? (
+                        <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
+                          <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
+                          Carregando…
+                        </span>
+                      ) : null}
+                    </div>
+                    {isNivel1 ? (
+                      <p className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-4 py-6 text-center text-[13px] font-medium text-[#94a3b8]">
+                        Acesso restrito
+                      </p>
+                    ) : !sortedApiProcedures.length ? (
+                      <p className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-4 py-6 text-center text-[13px] font-medium text-[#94a3b8]">
+                        Nenhum procedimento registrado ainda.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <ProcedureTimelineRail>
+                          {perfilRecentProcedures.map((proc, idx) => {
+                            const rowKey =
+                              proc.id != null && proc.id !== ''
+                                ? String(proc.id)
+                                : `perfil-proc-${idx}`;
+                            const criado = proc.criadoEm ? new Date(proc.criadoEm) : null;
+                            const dateLabel = criado
+                              ? criado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                              : '—';
+                            const timeLabel = criado
+                              ? criado.toLocaleTimeString('pt-BR', {
+                                  timeZone: 'America/Sao_Paulo',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '';
+                            const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
+                            const isLast = idx === perfilRecentProcedures.length - 1;
+                            const showVerMais =
+                              isLast && sortedApiProcedures.length > perfilRecentProcedures.length;
+                            return (
+                              <ProcedureTimelineEntry key={rowKey}>
+                                <ProcedureTimelinePreviewCard
+                                  dateLabel={dateLabel}
+                                  timeLabel={timeLabel}
+                                  procedureName={nomeProc}
+                                  professionalName={proc.profissionalNome || '—'}
+                                  onPress={
+                                    showVerMais
+                                      ? () => setPatientDetailTab('prontuario')
+                                      : undefined
+                                  }
+                                  fusedVerMais={showVerMais}
+                                  verMaisLabel="Ver prontuário completo"
+                                />
+                              </ProcedureTimelineEntry>
+                            );
+                          })}
+                        </ProcedureTimelineRail>
+                        {sortedApiProcedures.length <= perfilRecentProcedures.length ? (
+                          <button
+                            type="button"
+                            onClick={() => setPatientDetailTab('prontuario')}
+                            className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2.5 text-[13px] font-semibold text-[#00a88e] transition-colors hover:border-[#cbd5e1] hover:bg-[#f1f5f9]"
+                          >
+                            Ver prontuário completo
+                            <ChevronDown className="h-4 w-4 shrink-0 -rotate-90" strokeWidth={2.25} aria-hidden />
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -3301,7 +3031,7 @@ export function PatientProfileView({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 lg:col-span-1">
+        <div className="flex flex-col gap-3 lg:col-span-1 lg:sticky lg:top-4 lg:self-start">
           <div
             ref={alertasCardRef}
             id="patient-profile-alertas-card"
@@ -3458,14 +3188,6 @@ export function PatientProfileView({
                   <p>Cadastre a data de nascimento para ver quantos dias faltam para o aniversário.</p>
                 )}
               </div>
-              {selectedPatient.saldoDevedor > 0 ? (
-                <div className="rounded-md border border-red-200/90 bg-red-50/90 px-2.5 py-1.5 text-[12px] font-medium text-[#991b1b]">
-                  <p className="flex items-center gap-1.5">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-                    Parcela vence em 7 dias
-                  </p>
-                </div>
-              ) : null}
             </div>
           </div>
 

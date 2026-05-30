@@ -1,3 +1,9 @@
+/** Filtro rápido client-side da lista (ex.: menores de idade). */
+export function applyPatientQuickFilter(items, filter) {
+  if (filter === 'menor') return items.filter((p) => p.menorDeIdade === true);
+  return items;
+}
+
 /**
  * Conta filtros ativos na lista de pacientes (badge do botão Filtros no mobile).
  */

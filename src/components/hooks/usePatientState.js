@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { applyPatientQuickFilter } from '../patients/patientListFilters.js';
 import {
   pacientesApi,
   patientListSortToApiParam,
@@ -30,7 +31,26 @@ function readSelectedPatientCpf() {
   return readSessionValue(ACTIVE_PATIENT_CPF_LEGACY_KEY, null);
 }
 
-const PATIENT_LIST_PAGE_SIZE = 20;
+export const PATIENT_LIST_PAGE_SIZE = 20;
+
+function buildProfileNavSnapshot(cpf, items, quickFilter, meta, page) {
+  const filtered = applyPatientQuickFilter(items, quickFilter);
+  const indexInList = filtered.findIndex((p) => p.cpf === cpf);
+  const totalElements =
+    typeof meta.totalElements === 'number' && meta.totalElements >= 0
+      ? meta.totalElements
+      : filtered.length;
+  const safeIndex = indexInList >= 0 ? indexInList : 0;
+  const globalIndex = page * PATIENT_LIST_PAGE_SIZE + safeIndex + 1;
+  return {
+    cpfs: filtered.map((p) => p.cpf).filter(Boolean),
+    indexInList: safeIndex,
+    page,
+    totalElements,
+    quickFilter,
+    globalIndex,
+  };
+}
 
 /** Termo para GET /pacientes/search — só dígitos quando parece CPF/telefone mascarado. */
 function queryForPacientesSearch(raw) {
@@ -112,7 +132,11 @@ export const usePatientState = (opts = {}) => {
     last: true,
     totalPages: 0,
     number: 0,
+    totalElements: 0,
   });
+  const [patientQuickFilter, setPatientQuickFilter] = useState('todos');
+  const [profileNavSnapshot, setProfileNavSnapshot] = useState(null);
+  const pendingProfileNavRef = useRef(null);
   /** Mesmos valores que o select da lista (`nome-asc`, `birthday-asc`, …). */
   const [patientListSortBy, setPatientListSortBy] = useState('nome-asc');
 
@@ -190,6 +214,7 @@ export const usePatientState = (opts = {}) => {
         last: true,
         totalPages: 0,
         number: 0,
+        totalElements: 0,
       });
       setPatientListLoading(false);
       return undefined;
@@ -240,6 +265,7 @@ export const usePatientState = (opts = {}) => {
         last: true,
         totalPages: 0,
         number: 0,
+        totalElements: 0,
       });
       if (err.status === 401) {
         console.warn('[usePatientState] Sessão ausente ou expirada; página de pacientes não carregada.');
@@ -273,6 +299,8 @@ export const usePatientState = (opts = {}) => {
             totalPages:
               typeof pageData.totalPages === 'number' ? pageData.totalPages : 0,
             number: typeof pageData.number === 'number' ? pageData.number : 0,
+            totalElements:
+              typeof pageData.totalElements === 'number' ? pageData.totalElements : mapped.length,
           });
           fetchProceduresForTargets(mapped);
         })
@@ -309,6 +337,7 @@ export const usePatientState = (opts = {}) => {
           last: pageIdx >= totalPages - 1,
           totalPages,
           number: pageIdx,
+          totalElements: total,
         });
         fetchProceduresForTargets(slice);
       })
@@ -384,6 +413,99 @@ export const usePatientState = (opts = {}) => {
     else setPatientListSortBy('nome-asc');
   }, []);
 
+  const captureProfileNavSnapshot = useCallback(
+    (cpf) => {
+      if (!cpf) {
+        setProfileNavSnapshot(null);
+        return;
+      }
+      setProfileNavSnapshot(
+        buildProfileNavSnapshot(
+          cpf,
+          patientListItems,
+          patientQuickFilter,
+          patientListMeta,
+          patientListPage,
+        ),
+      );
+    },
+    [patientListItems, patientQuickFilter, patientListMeta, patientListPage],
+  );
+
+  /* Seleção após troca de página na nav do perfil */
+  useEffect(() => {
+    const pending = pendingProfileNavRef.current;
+    if (!pending || !patientListItems.length) return;
+    const filtered = applyPatientQuickFilter(patientListItems, patientQuickFilter);
+    if (!filtered.length) {
+      pendingProfileNavRef.current = null;
+      return;
+    }
+    const target =
+      pending === 'first' ? filtered[0] : filtered[filtered.length - 1];
+    if (target?.cpf) {
+      _setSelectedPatientCpf(target.cpf);
+      try {
+        sessionStorage.setItem(ACTIVE_PATIENT_CPF_KEY, target.cpf);
+      } catch {
+        // ignore
+      }
+      setProfileNavSnapshot(
+        buildProfileNavSnapshot(
+          target.cpf,
+          patientListItems,
+          patientQuickFilter,
+          patientListMeta,
+          patientListPage,
+        ),
+      );
+    }
+    pendingProfileNavRef.current = null;
+  }, [patientListItems, patientQuickFilter, patientListMeta, patientListPage]);
+
+  const navigateProfilePatient = useCallback(
+    (delta) => {
+      if (!profileNavSnapshot?.cpfs?.length) return;
+      const { cpfs, indexInList } = profileNavSnapshot;
+      const newIndex = indexInList + delta;
+      if (newIndex >= 0 && newIndex < cpfs.length) {
+        setSelectedPatientCpf(cpfs[newIndex]);
+        setProfileNavSnapshot((prev) =>
+          prev
+            ? {
+                ...prev,
+                indexInList: newIndex,
+                globalIndex: prev.page * PATIENT_LIST_PAGE_SIZE + newIndex + 1,
+              }
+            : prev,
+        );
+        return;
+      }
+      if (delta < 0 && newIndex < 0 && !patientListMeta.first) {
+        pendingProfileNavRef.current = 'last';
+        setPatientListPage((p) => Math.max(0, p - 1));
+        return;
+      }
+      if (delta > 0 && newIndex >= cpfs.length && !patientListMeta.last) {
+        pendingProfileNavRef.current = 'first';
+        setPatientListPage((p) => p + 1);
+      }
+    },
+    [profileNavSnapshot, patientListMeta.first, patientListMeta.last, setSelectedPatientCpf],
+  );
+
+  const profileNav = profileNavSnapshot
+    ? {
+        globalIndex: profileNavSnapshot.globalIndex,
+        totalElements: profileNavSnapshot.totalElements,
+        hasPrev:
+          profileNavSnapshot.indexInList > 0 || !patientListMeta.first,
+        hasNext:
+          profileNavSnapshot.indexInList < profileNavSnapshot.cpfs.length - 1 ||
+          !patientListMeta.last,
+      }
+    : null;
+
   return {
     patients,
     setPatients,
@@ -418,5 +540,12 @@ export const usePatientState = (opts = {}) => {
     setEhNovoFilter,
     ehAniversarianteFilter,
     setEhAniversarianteFilter,
+    patientQuickFilter,
+    setPatientQuickFilter,
+    profileNavSnapshot,
+    captureProfileNavSnapshot,
+    navigateProfilePatient,
+    profileNav,
+    clearProfileNavSnapshot: () => setProfileNavSnapshot(null),
   };
 };
