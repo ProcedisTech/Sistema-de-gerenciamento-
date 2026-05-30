@@ -1,39 +1,19 @@
-import React, { useCallback, useRef } from 'react';
-import { CalendarDays, CornerDownLeft, Trash2, X } from 'lucide-react';
-import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
-import { PacienteAgendaSection } from './PacienteAgendaSection.jsx';
-import { ProcedimentoChipList } from './ProcedimentoChipList.jsx';
-import { ProfissionalPills } from './ProfissionalPills.jsx';
-import { DuracaoPills } from './DuracaoPills.jsx';
-import { AgendaFormStatusBar } from './AgendaFormStatusBar.jsx';
-import { AgendaDisponibilidadePanel } from './AgendaDisponibilidadePanel.jsx';
-import { AgendaDisponibilidadeMobileSheet } from './AgendaDisponibilidadeMobileSheet.jsx';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { X, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { useUsuarioLogado } from '../../hooks/useUsuarioLogado.js';
+import { useMediaQuery } from '../../hooks/useMediaQuery.js';
+import { PacienteSearchInput } from './PacienteSearchInput.jsx';
+import { CalendarioMensal } from './CalendarioMensal.jsx';
+import { PainelA_SlotsHorario } from './PainelA_SlotsHorario.jsx';
+import { ProcedimentosMultiSeletor } from './ProcedimentosMultiSeletor.jsx';
+import { ProfissionalSeletor } from './ProfissionalSeletor.jsx';
+import { PainelB_SeletorProcedimento } from './PainelB_SeletorProcedimento.jsx';
+import { PainelC_SeletorProfissional } from './PainelC_SeletorProfissional.jsx';
+import { AgendaFormDataHoraSheet } from './AgendaFormDataHoraSheet.jsx';
 import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
 
-const BTN_ACTION =
-  'inline-flex max-w-[min(100%,14rem)] shrink-0 justify-center whitespace-normal text-center leading-tight';
-
-const KBD_CLASS =
-  'rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-700';
-
-function FieldError({ error, children }) {
-  return (
-    <div>
-      {children}
-      {error ? <div className="mt-1 text-[11px] font-bold text-red-600">{error}</div> : null}
-    </div>
-  );
-}
-
-function FieldLabel({ children, required, optional }) {
-  return (
-    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-      {children}
-      {required ? <span className="text-red-500"> *</span> : null}
-      {optional ? <span className="font-normal normal-case text-gray-400"> (opcional)</span> : null}
-    </label>
-  );
-}
+// painel ativo no lado direito: 'A' = slots, 'B' = procedimentos, 'C' = profissional
+const PAINEL = { A: 'A', B: 'B', C: 'C' };
 
 function resolveProfissionalNome(agenda) {
   const id = String(agenda.roleUserIdAgenda || '').trim();
@@ -43,384 +23,602 @@ function resolveProfissionalNome(agenda) {
   return agenda.editingAppointment?.profissionalNome || '';
 }
 
-function HeaderChip({ label, active }) {
-  return (
-    <span
-      className={`rounded px-3 py-1 font-mono text-xs ${
-        active ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600'
-      }`}
-    >
-      {label}
-    </span>
-  );
-}
-
-function ShortcutSubtitle() {
-  return (
-    <p className="mt-1 text-[12px] font-medium text-gray-500">
-      <kbd className={KBD_CLASS}>Tab</kbd> navega ·{' '}
-      <kbd className={KBD_CLASS}>Ctrl</kbd>+<kbd className={KBD_CLASS}>Enter</kbd> salva
-    </p>
-  );
-}
-
-function AgendaDisponibilidadeMobileCta({ agenda, formErrors, onOpen, expanded }) {
-  const role = String(agenda.roleUserIdAgenda || '').trim();
-  const hasSelection = Boolean(agenda.form.data && agenda.form.horaInicio);
-  const ctaLabel = hasSelection
-    ? formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio)
-    : 'Escolher data e horário';
-
-  const dataHoraError =
-    formErrors?.data || formErrors?.horaInicio
-      ? [formErrors.data, formErrors.horaInicio].filter(Boolean).join(' · ')
-      : '';
-
-  if (!role) {
-    return (
-      <div className="lg:hidden">
-        <FieldLabel required>Data e horário</FieldLabel>
-        <div className="flex min-h-[52px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50/50 px-4 py-3">
-          <p className="text-center text-[13px] text-gray-500">Selecione um profissional</p>
-        </div>
-      </div>
-    );
+function buildResumo({ form, agenda, duracaoTotalMin, procedimentosSelecionados }) {
+  const partes = [];
+  if (form.pacienteNome) partes.push(form.pacienteNome);
+  if (procedimentosSelecionados.length > 0) {
+    const nomes = procedimentosSelecionados.map((p) => p.nome).join(', ');
+    partes.push(nomes);
   }
-
-  return (
-    <div className="lg:hidden">
-      <FieldLabel required>Data e horário</FieldLabel>
-      {dataHoraError ? (
-        <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-800">
-          {dataHoraError}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-haspopup="dialog"
-        aria-expanded={expanded}
-        className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3.5 text-left text-[13px] font-semibold transition-colors ${
-          hasSelection
-            ? 'border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100/80'
-            : 'border-dashed border-gray-300 bg-white text-gray-600 hover:border-teal-300 hover:bg-teal-50/30'
-        }`}
-      >
-        <CalendarDays
-          className={`h-5 w-5 shrink-0 ${hasSelection ? 'text-teal-600' : 'text-gray-400'}`}
-          strokeWidth={1.75}
-          aria-hidden
-        />
-        <span className="min-w-0 flex-1">{ctaLabel}</span>
-      </button>
-    </div>
-  );
+  if (form.data) {
+    const [y, m, d] = form.data.split('-');
+    partes.push(`${d}/${m}/${y}`);
+  }
+  if (form.horaInicio) partes.push(form.horaInicio);
+  if (duracaoTotalMin > 0) partes.push(`${duracaoTotalMin} min`);
+  const profNome = resolveProfissionalNome(agenda);
+  if (profNome) partes.push(profNome);
+  return partes.join(' · ');
 }
 
-/**
- * Modal "Novo Agendamento" / edição — mesmo UI usado na agenda.
- * `agenda.patientSelectLocked`: quando true (abrir do perfil), paciente somente leitura.
- */
 export function AgendaFormModal({ agenda, onExcluirClick }) {
-  const [pacienteCreateModalOpen, setPacienteCreateModalOpen] = React.useState(false);
-  const [dispSheetOpen, setDispSheetOpen] = React.useState(false);
-  const dispSnapshotRef = useRef('');
+  const { ehProfissionalClinico, roleUserId: roleLogadoId } = useUsuarioLogado();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const [painelAtivo, setPainelAtivo] = useState(PAINEL.A);
+  const [dispSheetOpen, setDispSheetOpen] = useState(false);
+  const [horaPendentePainelC, setHoraPendentePainelC] = useState('');
+  const [obsAberta, setObsAberta] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [resultadosSalvar, setResultadosSalvar] = useState(null);
 
-  const closeDispSheetRevert = useCallback(() => {
-    setDispSheetOpen(false);
-    agenda.selectDispCalendarioDia(dispSnapshotRef.current || '');
-  }, [agenda]);
+  // ── Estado local de procedimentos selecionados ──────────────────────────────
+  // Array de { id, nome, tipoCodigo, duracaoMin, duracaoSelecionada }
+  // fonte autoritativa de IDs: form.catalogoProcedimentoSaudeIds (sincronizados via handlers)
+  const [procedimentosSelecionados, setProcedimentosSelecionados] = useState([]);
+  const prevIdsRef = useRef([]);
 
-  const openDispSheet = useCallback(() => {
-    const initial = agenda.dispCalendarioDia || agenda.form.data || '';
-    dispSnapshotRef.current = initial;
-    if (initial && initial !== agenda.dispCalendarioDia) {
-      agenda.selectDispCalendarioDia(initial);
-    }
-    setDispSheetOpen(true);
-  }, [agenda]);
+  // Hidratação: sincroniza chips com form.catalogoProcedimentoSaudeIds
+  // Roda quando: (A) ids mudaram OU (B) há chips fallback resolvíveis pelo catálogo
+  useEffect(() => {
+    const ids = agenda.form.catalogoProcedimentoSaudeIds ?? [];
+    const opts = agenda.procedimentoOptions ?? [];
+    const prevIds = prevIdsRef.current;
 
-  const confirmDispSheet = useCallback(() => {
-    setDispSheetOpen(false);
-  }, []);
+    const idsIguais =
+      ids.length === prevIds.length && ids.every((id, i) => id === prevIds[i]);
 
-  React.useEffect(() => {
-    if (!agenda.modalMode) {
-      setDispSheetOpen(false);
-    }
-  }, [agenda.modalMode]);
+    // Condição B: chip fallback + catálogo já chegou
+    const temFallbackResolvivel =
+      idsIguais &&
+      procedimentosSelecionados.some(
+        (p) => p.nome === '(Procedimento)' && opts.find((o) => String(o.id) === String(p.id))
+      );
 
-  React.useEffect(() => {
-    if (!agenda.modalMode) return undefined;
+    if (idsIguais && !temFallbackResolvivel) return;
 
-    const onKeyDown = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        if (pacienteCreateModalOpen || dispSheetOpen) return;
-        event.preventDefault();
-        void agenda.saveAppointment();
-        return;
-      }
+    prevIdsRef.current = ids;
 
-      if (event.key !== 'Escape') return;
-
-      if (pacienteCreateModalOpen) return;
-
-      if (dispSheetOpen) {
-        event.preventDefault();
-        closeDispSheetRevert();
-        return;
-      }
-
-      event.preventDefault();
-      agenda.closeModal();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [
-    agenda,
-    pacienteCreateModalOpen,
-    dispSheetOpen,
-    closeDispSheetRevert,
-  ]);
-
-  if (!agenda.modalMode) return null;
-  const isEdit = agenda.modalMode === 'edit';
-  const lockPatient = Boolean(agenda.patientSelectLocked) && !isEdit;
-
-  const modalTitle = isEdit ? 'Editar agendamento' : 'Novo agendamento';
-  const profNome = resolveProfissionalNome(agenda);
-  const hasProfDataHora =
-    Boolean(profNome) && Boolean(agenda.form.data) && Boolean(agenda.form.horaInicio);
-  const subtitleDynamic = hasProfDataHora
-    ? `${formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio)} · ${profNome.startsWith('Dr') ? profNome : `Dr. ${profNome}`}`
-    : null;
-
-  const chipPacienteActive = Boolean(
-    String(agenda.form.pacienteId || '').trim() || String(agenda.form.pacienteNome || '').trim()
-  );
-  const chipDataHoraActive = Boolean(agenda.form.data && agenda.form.horaInicio);
-
-  const selectedProcedimentos = Array.isArray(agenda.form.catalogoProcedimentoSaudeIds)
-    ? agenda.form.catalogoProcedimentoSaudeIds
-    : [];
-
-  const addProcedimentoChip = (catalogoId, nome) => {
-    const id = String(catalogoId || '').trim();
-    if (!id && nome) {
-      const newId = `new:${nome}`;
-      const merged = isEdit
-        ? [newId]
-        : [...selectedProcedimentos, newId].filter((v, i, arr) => arr.indexOf(v) === i);
-      agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
-      if (!isEdit) agenda.updateForm('procedimentoNome', '');
+    if (ids.length === 0) {
+      setProcedimentosSelecionados([]);
       return;
     }
-    if (!id) return;
-    const merged = isEdit
-      ? [id]
-      : [...selectedProcedimentos, id].filter((v, i, arr) => arr.indexOf(v) === i);
-    agenda.updateForm('catalogoProcedimentoSaudeIds', merged);
-    if (!isEdit) agenda.updateForm('procedimentoNome', '');
-  };
 
-  const removeProcedimentoChip = (catalogoId) => {
-    const id = String(catalogoId || '').trim();
-    agenda.updateForm(
-      'catalogoProcedimentoSaudeIds',
-      selectedProcedimentos.filter((v) => v !== id)
+    setProcedimentosSelecionados((current) =>
+      ids.map((id) => {
+        const existente = current.find((p) => p.id === id);
+        const opt = opts.find((o) => String(o.id) === String(id));
+        if (opt) {
+          // Se já existe com nome real, preserva (inclusive duracaoSelecionada editada)
+          if (existente && existente.nome !== '(Procedimento)') return existente;
+          return {
+            id: opt.id,
+            nome: opt.nome,
+            tipoCodigo: opt.tipoCodigo,
+            duracaoMin: opt.duracaoMin,
+            duracaoSelecionada: existente?.duracaoSelecionada ?? (agenda.grupoReagendarDuracoes?.[id] ?? opt.duracaoMin),
+          };
+        }
+        // Catálogo ainda não chegou — fallback temporário
+        return existente ?? { id, nome: '(Procedimento)', tipoCodigo: '', duracaoMin: 45, duracaoSelecionada: 45 };
+      })
     );
-  };
+  }, [agenda.form.catalogoProcedimentoSaudeIds, agenda.procedimentoOptions]); // procedimentosSelecionados fora das deps — lido via setter funcional
 
-  const procedimentoChipLabel = (id) =>
-    id.startsWith('new:')
-      ? id.substring(4) + ' (Novo)'
-      : agenda.procedimentoOptions.find((o) => String(o.id) === String(id))?.nome || id;
+  // ── Derivados ───────────────────────────────────────────────────────────────
+  const isReagendar = agenda.modalMode === 'reagendar';
+  const lockPatient = Boolean(agenda.patientSelectLocked);
+  const profissionalFixado = ehProfissionalClinico || Boolean(agenda.roleUserIdAgenda);
+  const roleUserIdFiltro = ehProfissionalClinico ? roleLogadoId : (agenda.roleUserIdAgenda || '');
+  const duracaoTotalMin = procedimentosSelecionados.reduce((acc, p) => acc + (Number(p.duracaoSelecionada) || 0), 0);
+
+  const confirmDisabled =
+    !agenda.form.pacienteId ||
+    !(agenda.form.catalogoProcedimentoSaudeIds?.length > 0) ||
+    !agenda.form.data ||
+    !agenda.form.horaInicio ||
+    !agenda.roleUserIdAgenda;
+
+  const resumoTexto = buildResumo({ form: agenda.form, agenda, duracaoTotalMin, procedimentosSelecionados });
+
+  // CTA mobile (botão que abre o sheet de data/horário)
+  const ctaLabelRaw = formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio);
+  const ctaPreenchido = Boolean(ctaLabelRaw);
+  const ctaLabel = ctaLabelRaw || 'Escolher data e horário';
+
+  // ── Handlers de procedimentos ───────────────────────────────────────────────
+
+  const handleToggleProc = useCallback(
+    (proc) => {
+      setProcedimentosSelecionados((current) => {
+        const existe = current.find((p) => p.id === proc.id);
+        const proximos = existe
+          ? current.filter((p) => p.id !== proc.id)
+          : [...current, { id: proc.id, nome: proc.nome, tipoCodigo: proc.tipoCodigo, duracaoMin: proc.duracaoMin, duracaoSelecionada: proc.duracaoMin }];
+        // Sincroniza IDs com o hook
+        agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+        return proximos;
+      });
+    },
+    [agenda]
+  );
+
+  const handleRemoverProc = useCallback(
+    (id) => {
+      setProcedimentosSelecionados((current) => {
+        const proximos = current.filter((p) => p.id !== id);
+        agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+        return proximos;
+      });
+    },
+    [agenda]
+  );
+
+  const handleMudarDuracao = useCallback((id, minutos) => {
+    setProcedimentosSelecionados((current) =>
+      current.map((p) => p.id === id ? { ...p, duracaoSelecionada: Number(minutos) } : p)
+    );
+    // duracaoSelecionada é estado local; não precisa sincronizar com o hook
+  }, []);
+
+  // ── Handlers de calendário/slots/profissional ───────────────────────────────
+
+  const handleSelecionarDia = useCallback(
+    (iso) => {
+      agenda.selectDispCalendarioDia(iso);
+      agenda.updateForm('data', iso);
+      agenda.updateForm('horaInicio', '');
+      setResultadosSalvar(null);
+      setPainelAtivo(PAINEL.A);
+    },
+    [agenda]
+  );
+
+  const handleSelecionarSlotDireto = useCallback(
+    ({ hora, profissional }) => {
+      agenda.updateForm('horaInicio', hora);
+      if (profissional?.roleUserId) {
+        agenda.setRoleUserIdAgenda(profissional.roleUserId);
+      }
+      setResultadosSalvar(null);
+      setPainelAtivo(PAINEL.A);
+    },
+    [agenda]
+  );
+
+  // Wrapper de evento (não componente) que reusa o handler existente e fecha o sheet mobile.
+  const handleSheetSelectSlot = useCallback(
+    (payload) => {
+      handleSelecionarSlotDireto(payload);
+      setDispSheetOpen(false);
+    },
+    [handleSelecionarSlotDireto]
+  );
+
+  const handleAbrirPainelC = useCallback((hora) => {
+    setHoraPendentePainelC(hora);
+    setPainelAtivo(PAINEL.C);
+  }, []);
+
+  // No sheet mobile, abrir o PainelC significa fechar o sheet e mostrar o picker de
+  // profissional na área mobile do modal (o sheet só tem calendário + slots).
+  const handleSheetAbrirPainelC = useCallback((hora) => {
+    handleAbrirPainelC(hora);
+    setDispSheetOpen(false);
+  }, [handleAbrirPainelC]);
+
+  const handleSelecionarProfissional = useCallback(
+    ({ hora, profissional }) => {
+      if (hora) agenda.updateForm('horaInicio', hora);
+      if (profissional?.roleUserId) {
+        agenda.setRoleUserIdAgenda(profissional.roleUserId);
+      }
+      setHoraPendentePainelC('');
+      setPainelAtivo(PAINEL.A);
+    },
+    [agenda]
+  );
+
+  // ── Foco inicial ao abrir ───────────────────────────────────────────────────
+  const focoInicialRef = useRef(null);
+  const modalMode = agenda.modalMode; // primitivo — estável por valor, evita dep instável no efeito abaixo
+  useEffect(() => {
+    if (!modalMode) return;
+    const id = requestAnimationFrame(() => {
+      if (!focoInicialRef.current) return;
+      // Se travado (reagendar), foca o primeiro botão interativo dentro do ref
+      // Se livre (criar), foca o input de busca do paciente
+      const alvo = focoInicialRef.current.querySelector('input, button');
+      alvo?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [modalMode]);
+
+  // ── Handler de submit ───────────────────────────────────────────────────────
+
+  const handleConfirmar = useCallback(async () => {
+    setSubmitting(true);
+    setResultadosSalvar(null);
+    try {
+      await agenda.saveAppointment({
+        duracoesPorProc: procedimentosSelecionados.map((p) => ({
+          id: p.id,
+          duracaoSelecionada: p.duracaoSelecionada,
+        })),
+        onConflictResult: (resultados) => setResultadosSalvar(resultados),
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [agenda, procedimentosSelecionados]);
+
+  // Fechar com Escape
+  useEffect(() => {
+    if (!agenda.modalMode) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (painelAtivo !== PAINEL.A) {
+          setPainelAtivo(PAINEL.A);
+        } else {
+          agenda.closeModal();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [agenda, painelAtivo]);
+
+  if (!agenda.modalMode) return null;
+
+  const isEdit = agenda.modalMode === 'edit';
+  const nProcs = procedimentosSelecionados.length;
+  const modalTitulo = isReagendar
+    ? `Reagendar — ${nProcs} procedimento${nProcs !== 1 ? 's' : ''}`
+    : isEdit ? 'Editar agendamento' : 'Novo agendamento';
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-label={modalTitulo}
+    >
+      {/* Backdrop */}
       <button
         type="button"
-        className={`absolute inset-0 bg-black/40 ${pacienteCreateModalOpen || dispSheetOpen ? 'pointer-events-none' : ''}`}
+        className="absolute inset-0 bg-black/50"
         onClick={agenda.closeModal}
         aria-label="Fechar modal"
-        tabIndex={pacienteCreateModalOpen || dispSheetOpen ? -1 : 0}
+        tabIndex={-1}
       />
-      <div className="relative flex max-h-[92vh] w-full max-w-[1120px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 p-5">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[18px] font-black text-gray-900">{modalTitle}</h3>
-            {subtitleDynamic ? (
-              <p className="mt-1 text-[12px] font-medium text-gray-500">{subtitleDynamic}</p>
-            ) : (
-              <ShortcutSubtitle />
+
+      {/* Container do modal */}
+      <div className="relative flex max-h-[95vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-100 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <h2 className="font-display text-lg font-black text-ink-900">{modalTitulo}</h2>
+            {isReagendar && (
+              <span className="rounded-full bg-amber-100 px-3 py-0.5 text-xs font-semibold text-amber-800">
+                Reagendamento
+              </span>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <HeaderChip label="paciente" active={chipPacienteActive} />
-            <HeaderChip label="data · hora" active={chipDataHoraActive} />
-            <button
-              type="button"
-              onClick={agenda.closeModal}
-              className="rounded-xl p-2 text-gray-500 hover:bg-gray-50"
-              aria-label="Fechar"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={agenda.closeModal}
+            className="rounded-xl p-2 text-ink-500 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500"
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-24 lg:pb-5">
-          {agenda.formErrors._global ? (
-            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] font-bold text-amber-900">
-              {agenda.formErrors._global}
-            </div>
-          ) : null}
+        {/* ── Erro global ─────────────────────────────────────────────────── */}
+        {agenda.formErrors?._global && (
+          <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm font-semibold text-amber-900">
+            {agenda.formErrors._global}
+          </div>
+        )}
 
-          <div className="flex flex-col gap-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <FieldError error={agenda.formErrors.pacienteId}>
-                <FieldLabel required>Paciente</FieldLabel>
-                <PacienteAgendaSection
-                  locked={lockPatient}
-                  pacienteId={agenda.form.pacienteId}
-                  pacienteNome={agenda.form.pacienteNome}
-                  telefone={agenda.form.telefone}
-                  context={agenda.pacienteContext}
-                  contextLoading={agenda.pacienteContextLoading}
-                  onSelect={agenda.selectPaciente}
-                  onClear={agenda.clearPacienteSelection}
-                  onCreateModalOpenChange={setPacienteCreateModalOpen}
-                />
-              </FieldError>
-
-              <FieldError error={agenda.formErrors.catalogoProcedimentoSaudeIds}>
-                <FieldLabel required>{isEdit ? 'Procedimento' : 'Procedimentos'}</FieldLabel>
-                <ProcedimentoAutocomplete
-                  key={`proc-ac-${selectedProcedimentos.length}`}
-                  value={agenda.form.procedimentoNome || ''}
-                  onInputChange={(nome) => agenda.updateForm('procedimentoNome', nome)}
-                  onCommit={(nome, catalogoId) => addProcedimentoChip(catalogoId, nome)}
-                  placeholder={
-                    isEdit
-                      ? 'Ex: Botox, Preenchimento...'
-                      : selectedProcedimentos.length > 0
-                        ? 'Adicionar procedimento'
-                        : 'Ex: Botox, Preenchimento...'
-                  }
-                  catalogoOptions={agenda.procedimentoOptions
-                    .filter((o) => !selectedProcedimentos.includes(String(o.id)))
-                    .map((o) => ({
-                      id: o.id,
-                      nomeProcedimento: o.nome,
-                    }))}
-                  error={Boolean(agenda.formErrors.catalogoProcedimentoSaudeIds)}
-                  showCatalogCommitBadge={false}
-                />
-                <ProcedimentoChipList
-                  ids={selectedProcedimentos}
-                  labelForId={procedimentoChipLabel}
-                  onReorder={(next) => agenda.updateForm('catalogoProcedimentoSaudeIds', next)}
-                  onRemove={removeProcedimentoChip}
-                  sortable={!isEdit}
-                  duracaoMin={agenda.form.duracaoMin}
-                />
-              </FieldError>
+        {/* ── Seletores do topo (linha de 3 colunas) ──────────────────────── */}
+        <div className="shrink-0 border-b border-ink-100 px-6 py-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {/* Paciente */}
+            <div ref={lockPatient ? null : focoInicialRef}>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                Paciente <span className="text-red-500">*</span>
+              </p>
+              <PacienteSearchInput
+                value={agenda.form.pacienteId}
+                onChange={agenda.selectPaciente}
+                locked={lockPatient}
+                displayNome={agenda.form.pacienteNome}
+              />
+              {agenda.formErrors?.pacienteId && (
+                <p className="mt-1 text-[11px] font-bold text-red-600">
+                  {agenda.formErrors.pacienteId}
+                </p>
+              )}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <FieldError error={agenda.formErrors.profissional}>
-                <FieldLabel>Profissional</FieldLabel>
-                <ProfissionalPills
-                  profissionais={agenda.equipeList}
-                  value={agenda.roleUserIdAgenda}
-                  onChange={agenda.setRoleUserIdAgenda}
-                  loading={agenda.equipeLoading}
-                  error={agenda.equipeError}
-                  orphanLabel={agenda.editingAppointment?.profissionalNome}
-                />
-              </FieldError>
-
-              <FieldError error={agenda.formErrors.duracaoMin}>
-                <FieldLabel required>Duração</FieldLabel>
-                <DuracaoPills
-                  value={agenda.form.duracaoMin}
-                  onChange={(min) => agenda.updateForm('duracaoMin', min)}
-                />
-              </FieldError>
+            {/* Procedimentos */}
+            <div ref={lockPatient ? focoInicialRef : null}>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                Procedimentos <span className="text-red-500">*</span>
+              </p>
+              <ProcedimentosMultiSeletor
+                procedimentos={procedimentosSelecionados}
+                onRemover={handleRemoverProc}
+                onMudarDuracao={handleMudarDuracao}
+                onAbrirPainelB={() => setPainelAtivo(PAINEL.B)}
+                readOnly={isReagendar}
+              />
+              {agenda.formErrors?.catalogoProcedimentoSaudeIds && (
+                <p className="mt-1 text-[11px] font-bold text-red-600">
+                  {agenda.formErrors.catalogoProcedimentoSaudeIds}
+                </p>
+              )}
             </div>
 
-            <AgendaDisponibilidadeMobileCta
-              agenda={agenda}
-              formErrors={agenda.formErrors}
-              onOpen={openDispSheet}
-              expanded={dispSheetOpen}
-            />
-
-            <AgendaDisponibilidadePanel agenda={agenda} formErrors={agenda.formErrors} />
-
+            {/* Profissional */}
             <div>
-              <FieldLabel optional>Observações</FieldLabel>
-              <textarea
-                value={agenda.form.observacao}
-                onChange={(event) => agenda.updateForm('observacao', event.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                Profissional
+              </p>
+              <ProfissionalSeletor
+                roleUserIdAgenda={agenda.roleUserIdAgenda}
+                equipeList={agenda.equipeList}
+                locked={isReagendar}
+                onAbrirPainelC={() => {
+                  setHoraPendentePainelC('');
+                  setPainelAtivo(PAINEL.C);
+                }}
               />
             </div>
           </div>
         </div>
 
-        <div className="sticky bottom-0 z-[2] shrink-0 border-t border-gray-200 bg-white p-4 lg:static lg:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              {isEdit ? (
+        {/* ── Corpo desktop (lg+): 2 colunas. Render condicional que DESMONTA no
+            mobile — nunca ter CalendarioMensal/PainelA montados em 2 lugares (anti-loop). ── */}
+        {isDesktop && (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <div className="flex h-full flex-col lg:grid lg:grid-cols-[7fr_5fr]">
+
+            {/* Coluna esquerda: calendário + observações */}
+            <div className="overflow-y-auto border-b border-ink-100 px-6 py-6 lg:border-b-0 lg:border-r">
+              <CalendarioMensal
+                roleUserId={roleUserIdFiltro || undefined}
+                diaSelecionado={isReagendar ? undefined : agenda.form.data}
+                onSelecionarDia={handleSelecionarDia}
+              />
+
+              {/* Observações colapsável */}
+              <div className="mt-6">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (typeof onExcluirClick === 'function') onExcluirClick();
-                  }}
-                  className={`${BTN_ACTION} items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50`}
+                  onClick={() => setObsAberta((v) => !v)}
+                  className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
                 >
-                  <Trash2 className="h-4 w-4 shrink-0" /> Excluir agendamento
+                  <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
+                  {obsAberta ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
                 </button>
-              ) : null}
-              <AgendaFormStatusBar
-                form={agenda.form}
-                roleUserIdAgenda={agenda.roleUserIdAgenda}
-                horarioConflita={agenda.horarioConflita}
-                slotsOcupadosLoading={agenda.slotsOcupadosLoading}
-                horarioConflitoCom={agenda.horarioConflitoCom}
-              />
+                {obsAberta && (
+                  <textarea
+                    value={agenda.form.observacao || ''}
+                    onChange={(e) => agenda.updateForm('observacao', e.target.value)}
+                    maxLength={500}
+                    rows={4}
+                    placeholder="Informações adicionais sobre o atendimento..."
+                    className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
+                  />
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+
+            {/* Coluna direita: painéis A / B / C */}
+            <div className="min-h-0 overflow-y-auto px-5 py-6">
+              {/* Rótulo do painel */}
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                {painelAtivo === PAINEL.A && 'Horários disponíveis'}
+                {painelAtivo === PAINEL.B && 'Selecionar procedimento'}
+                {painelAtivo === PAINEL.C && 'Escolher profissional'}
+              </p>
+
+              {painelAtivo === PAINEL.A && (
+                <PainelA_SlotsHorario
+                  diaSelecionado={agenda.form.data}
+                  roleUserIdFiltro={roleUserIdFiltro}
+                  duracaoTotalMin={duracaoTotalMin}
+                  horaSelecionada={agenda.form.horaInicio}
+                  profissionalFixado={profissionalFixado}
+                  onSelecionarSlot={handleSelecionarSlotDireto}
+                  onAbrirPainelC={handleAbrirPainelC}
+                />
+              )}
+
+              {painelAtivo === PAINEL.B && (
+                <PainelB_SeletorProcedimento
+                  procedimentoOptions={agenda.procedimentoOptions}
+                  procedimentosSelecionados={procedimentosSelecionados}
+                  onToggle={handleToggleProc}
+                  onVoltar={() => setPainelAtivo(PAINEL.A)}
+                />
+              )}
+
+              {painelAtivo === PAINEL.C && (
+                <PainelC_SeletorProfissional
+                  equipeList={agenda.equipeList}
+                  equipeLoading={agenda.equipeLoading}
+                  equipeError={agenda.equipeError}
+                  horaSelecionandoPendente={horaPendentePainelC}
+                  onSelecionarProfissional={handleSelecionarProfissional}
+                  onVoltar={() => setPainelAtivo(PAINEL.A)}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* ── Corpo mobile (<lg): seletores já ficam acima; aqui vai o picker de
+            procedimento/profissional (quando aberto) OU o botão que abre o sheet de
+            data/horário. CalendarioMensal/PainelA NÃO montam aqui — só no sheet. ── */}
+        {!isDesktop && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
+            {painelAtivo === PAINEL.B ? (
+              <PainelB_SeletorProcedimento
+                procedimentoOptions={agenda.procedimentoOptions}
+                procedimentosSelecionados={procedimentosSelecionados}
+                onToggle={handleToggleProc}
+                onVoltar={() => setPainelAtivo(PAINEL.A)}
+              />
+            ) : painelAtivo === PAINEL.C ? (
+              <PainelC_SeletorProfissional
+                equipeList={agenda.equipeList}
+                equipeLoading={agenda.equipeLoading}
+                equipeError={agenda.equipeError}
+                horaSelecionandoPendente={horaPendentePainelC}
+                onSelecionarProfissional={handleSelecionarProfissional}
+                onVoltar={() => setPainelAtivo(PAINEL.A)}
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDispSheetOpen(true)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 ${
+                    ctaPreenchido
+                      ? 'border-vivid-teal-300 bg-vivid-teal-50'
+                      : 'border-ink-200 bg-white hover:border-vivid-teal-200 hover:bg-vivid-teal-50'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Calendar className={`h-4 w-4 shrink-0 ${ctaPreenchido ? 'text-vivid-teal-600' : 'text-ink-400'}`} />
+                    <span className={`truncate text-sm font-semibold ${ctaPreenchido ? 'text-vivid-teal-700' : 'text-ink-600'}`}>
+                      {ctaLabel}
+                    </span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-ink-400" />
+                </button>
+
+                {/* Observações colapsável (mobile) */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setObsAberta((v) => !v)}
+                    className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
+                  >
+                    <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
+                    {obsAberta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                  {obsAberta && (
+                    <textarea
+                      value={agenda.form.observacao || ''}
+                      onChange={(e) => agenda.updateForm('observacao', e.target.value)}
+                      maxLength={500}
+                      rows={4}
+                      placeholder="Informações adicionais sobre o atendimento..."
+                      className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Footer ─────────────────────────────────────────────────────── */}
+        <div className="shrink-0 border-t border-ink-100 px-6 py-4">
+          {/* Feedback de conflito parcial */}
+          {resultadosSalvar?.some((r) => r.status !== 'ok') && (
+            <div className="mb-3 space-y-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs">
+              {resultadosSalvar.filter((r) => r.status !== 'ok').map((r) => {
+                const proc = procedimentosSelecionados.find((p) => p.id === r.id);
+                return (
+                  <div key={r.id} className="flex items-center gap-1.5 text-red-700">
+                    <X className="h-3 w-3 shrink-0" />
+                    <span>
+                      <strong>{proc?.nome ?? '—'}</strong>:{' '}
+                      {r.status === 'conflito' ? 'horário ocupado — escolha outro slot' : 'cancelado'}
+                    </span>
+                  </div>
+                );
+              })}
+              <p className="mt-1 text-red-500">Selecione outro horário e confirme novamente.</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Resumo dinâmico */}
+            <div className="min-w-0 flex-1">
+              {resumoTexto ? (
+                <p className="truncate text-sm text-ink-600">{resumoTexto}</p>
+              ) : (
+                <p className="text-sm text-ink-400">Preencha os campos para confirmar</p>
+              )}
+            </div>
+
+            {/* Ações */}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {isEdit && typeof onExcluirClick === 'function' && (
+                <button
+                  type="button"
+                  onClick={onExcluirClick}
+                  className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                >
+                  Excluir
+                </button>
+              )}
               <button
                 type="button"
                 onClick={agenda.closeModal}
-                className={`${BTN_ACTION} rounded-lg border border-gray-200 px-4 py-2.5 text-[13px] font-bold text-gray-500 hover:bg-gray-50`}
+                className="rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-bold text-ink-600 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-400"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                onClick={agenda.saveAppointment}
-                className={`${BTN_ACTION} items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-[13px] font-bold text-white hover:bg-teal-700`}
+                onClick={handleConfirmar}
+                disabled={confirmDisabled || submitting}
+                className="rounded-xl bg-vivid-teal-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-vivid-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Salvar
-                <CornerDownLeft className="h-4 w-4 shrink-0" aria-hidden />
+                {submitting ? (
+                  <span className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Salvando…
+                  </span>
+                ) : 'Confirmar'}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <AgendaDisponibilidadeMobileSheet
-        open={dispSheetOpen}
-        agenda={agenda}
-        formErrors={agenda.formErrors}
-        onCancel={closeDispSheetRevert}
-        onConfirm={confirmDispSheet}
-      />
+      {/* Sheet mobile de data/horário — CalendarioMensal + PainelA montados SÓ aqui
+          (e só quando <lg e aberto), nunca junto com o corpo desktop. */}
+      {!isDesktop && dispSheetOpen && (
+        <AgendaFormDataHoraSheet
+          open
+          diaSelecionado={isReagendar ? undefined : agenda.form.data}
+          roleUserIdFiltro={roleUserIdFiltro}
+          duracaoTotalMin={duracaoTotalMin}
+          horaSelecionada={agenda.form.horaInicio}
+          profissionalFixado={profissionalFixado}
+          onSelecionarDia={handleSelecionarDia}
+          onSelecionarSlot={handleSheetSelectSlot}
+          onAbrirPainelC={handleSheetAbrirPainelC}
+          onCancel={() => setDispSheetOpen(false)}
+        />
+      )}
+
+      {/* Portal para o modal de bypass fora de disponibilidade */}
+      {agenda.foraDispModal}
     </div>
   );
 }

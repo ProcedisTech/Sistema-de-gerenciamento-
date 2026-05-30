@@ -55,6 +55,7 @@ import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import { AgendaBloqueioModal } from './agenda/AgendaBloqueioModal.jsx';
 import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
+// ReagendarAgendaModal removido — substituído por AgendaFormModal em modo 'reagendar'.
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
@@ -388,6 +389,65 @@ export default function App() {
       }
     },
     [agendaSchedule, scheduleCancelRow, toast],
+  );
+
+  const handleSlotReagendar = React.useCallback(
+    async (target) => {
+      const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+      if (!row?.agenda) return;
+      const appointment = row.agenda;
+      // Buscar agendamentos do dia para detectar grupo consecutivo.
+      try {
+        const raw = await agendasApi.byDate(appointment.data);
+        const todos = Array.isArray(raw) ? raw : (raw?.content ?? []);
+        const mesmos = todos
+          .filter(
+            (a) =>
+              String(a.pacienteId) === String(appointment.pacienteId) &&
+              String(a.profissionalRoleUserId || a.roleUserId) === String(appointment.profissionalRoleUserId || appointment.roleUserId) &&
+              // Excluir status inativos — evita pegar originais já reagendados/cancelados/realizados
+              !String(a.statusCodigo || '').toLowerCase().replace(/\s+/g, '_').match(/^(reagend|cancel|realiz|nao_compareceu)/)
+          )
+          .map((a) => {
+            const hi = String(a.horaInicio || '').slice(0, 5);
+            const hf = String(a.horaFim || '').slice(0, 5);
+            const [hh, hm] = hi.split(':').map(Number);
+            const [eh, em] = hf.split(':').map(Number);
+            const diff = (eh * 60 + em) - (hh * 60 + hm);
+            return {
+              agendaId: String(a.id || a.agendaId),
+              catalogoProcedimentoSaudeId: String(a.catalogoProcedimentoSaudeId || ''),
+              horaInicio: hi,
+              horaFim: hf,
+              duracaoMin: diff > 0 ? diff : null,
+            };
+          })
+          .filter((a) => a.horaInicio)
+          .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+        // Detectar sequência consecutiva que contém o agendamento clicado.
+        let grupo = [appointment];
+        const idxInicial = mesmos.findIndex((a) => a.agendaId === String(appointment.agendaId));
+        if (idxInicial >= 0) {
+          const seq = [mesmos[idxInicial]];
+          for (let i = idxInicial + 1; i < mesmos.length; i++) {
+            if (mesmos[i].horaInicio === seq[seq.length - 1].horaFim) seq.push(mesmos[i]);
+            else break;
+          }
+          // Estender para trás
+          const seqBack = [];
+          for (let i = idxInicial - 1; i >= 0; i--) {
+            if (mesmos[i].horaFim === seq[0].horaInicio || mesmos[i].horaFim === seqBack[0]?.horaInicio) seqBack.unshift(mesmos[i]);
+            else break;
+          }
+          grupo = [...seqBack, ...seq];
+        }
+        agendaSchedule.openReagendarModal(appointment, grupo);
+      } catch (e) {
+        console.warn('[handleSlotReagendar] Falha ao detectar grupo, abrindo reagendar individual:', e);
+        agendaSchedule.openReagendarModal(appointment, [appointment]);
+      }
+    },
+    [agendaSchedule],
   );
 
   const refreshPatientsAndPagedList = React.useCallback(() => {
@@ -2037,6 +2097,7 @@ export default function App() {
                     const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                     if (row) setScheduleCancelRow(row);
                   }}
+                  onSlotReagendar={handleSlotReagendar}
                   shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
                 />
                 </div>
@@ -2140,6 +2201,7 @@ export default function App() {
               isSubmitting={scheduleCancelSubmitting}
             />
           ) : null}
+          {/* ReagendarAgendaModal removido — reagendar agora usa AgendaFormModal v8 em modo 'reagendar'. */}
           {iniciarTolModal ? (
             <IniciarAtendimentoToleranciaModal
               variant={iniciarTolModal.variant}
