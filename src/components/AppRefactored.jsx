@@ -398,14 +398,24 @@ export default function App() {
           .filter(
             (a) =>
               String(a.pacienteId) === String(appointment.pacienteId) &&
-              String(a.profissionalRoleUserId || a.roleUserId) === String(appointment.profissionalRoleUserId || appointment.roleUserId)
+              String(a.profissionalRoleUserId || a.roleUserId) === String(appointment.profissionalRoleUserId || appointment.roleUserId) &&
+              // Excluir status inativos — evita pegar originais já reagendados/cancelados/realizados
+              !String(a.statusCodigo || '').toLowerCase().replace(/\s+/g, '_').match(/^(reagend|cancel|realiz|nao_compareceu)/)
           )
-          .map((a) => ({
-            agendaId: String(a.id || a.agendaId),
-            catalogoProcedimentoSaudeId: String(a.catalogoProcedimentoSaudeId || ''),
-            horaInicio: String(a.horaInicio || '').slice(0, 5),
-            horaFim: String(a.horaFim || '').slice(0, 5),
-          }))
+          .map((a) => {
+            const hi = String(a.horaInicio || '').slice(0, 5);
+            const hf = String(a.horaFim || '').slice(0, 5);
+            const [hh, hm] = hi.split(':').map(Number);
+            const [eh, em] = hf.split(':').map(Number);
+            const diff = (eh * 60 + em) - (hh * 60 + hm);
+            return {
+              agendaId: String(a.id || a.agendaId),
+              catalogoProcedimentoSaudeId: String(a.catalogoProcedimentoSaudeId || ''),
+              horaInicio: hi,
+              horaFim: hf,
+              duracaoMin: diff > 0 ? diff : null,
+            };
+          })
           .filter((a) => a.horaInicio)
           .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
         // Detectar sequência consecutiva que contém o agendamento clicado.

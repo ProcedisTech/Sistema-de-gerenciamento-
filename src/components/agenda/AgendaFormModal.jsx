@@ -90,7 +90,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             nome: opt.nome,
             tipoCodigo: opt.tipoCodigo,
             duracaoMin: opt.duracaoMin,
-            duracaoSelecionada: existente?.duracaoSelecionada ?? opt.duracaoMin,
+            duracaoSelecionada: existente?.duracaoSelecionada ?? (agenda.grupoReagendarDuracoes?.[id] ?? opt.duracaoMin),
           };
         }
         // Catálogo ainda não chegou — fallback temporário
@@ -362,7 +362,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             <div className="overflow-y-auto border-b border-ink-100 px-6 py-6 lg:border-b-0 lg:border-r">
               <CalendarioMensal
                 roleUserId={roleUserIdFiltro || undefined}
-                diaSelecionado={agenda.form.data}
+                diaSelecionado={isReagendar ? undefined : agenda.form.data}
                 onSelecionarDia={handleSelecionarDia}
               />
 

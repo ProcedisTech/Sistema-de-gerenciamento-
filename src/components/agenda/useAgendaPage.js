@@ -280,6 +280,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [roleUserIdAgenda, setRoleUserIdAgenda] = useState('');
   /** Mapa {catalogoProcedimentoSaudeId → agendaId original} para reagendamento em grupo. */
   const [grupoReagendarMap, setGrupoReagendarMap] = useState({});
+  /** Mapa {catalogoProcedimentoSaudeId → duracaoMin real} extraído de horaFim−horaInicio do DTO original. */
+  const [grupoReagendarDuracoes, setGrupoReagendarDuracoes] = useState({});
   const [equipeList, setEquipeList] = useState([]);
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
@@ -1370,8 +1372,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         pacienteNome: appointment?.pacienteNome || base.pacienteNome,
         telefone: appointment?.telefone || base.telefone,
         catalogoProcedimentoSaudeIds: catIds,
-        data: appointment?.data || base.data,
-        horaInicio: appointment?.horaInicio || base.horaInicio,
+        data: '',        // usuário escolhe nova data no calendário
+        horaInicio: '',  // usuário escolhe novo slot
         duracaoMin: snapDuracaoToPill(appointment?.duracaoMin ?? base.duracaoMin),
         observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
       });
@@ -1382,6 +1384,13 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       );
       setGrupoReagendarMap(
         Object.fromEntries(grupo.map((a) => [String(a.catalogoProcedimentoSaudeId), a.agendaId]))
+      );
+      setGrupoReagendarDuracoes(
+        Object.fromEntries(
+          grupo
+            .filter((a) => a.duracaoMin != null)
+            .map((a) => [String(a.catalogoProcedimentoSaudeId), a.duracaoMin])
+        )
       );
       setModalMode('reagendar');
     },
@@ -1396,6 +1405,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setPacienteContextLoading(false);
     setFormErrors({});
     setGrupoReagendarMap({});
+    setGrupoReagendarDuracoes({});
     equipeFetchedRef.current = false;
     dispMonthCacheRef.current = {};
     setDispMonthDtos([]);
@@ -1671,6 +1681,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openCreateModalForPatient,
     openEditModal,
     openReagendarModal,
+    grupoReagendarDuracoes,
     closeModal,
     patientSelectLocked,
     patientOptions,

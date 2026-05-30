@@ -37,7 +37,8 @@ export function PainelB_SeletorProcedimento({ procedimentoOptions, procedimentos
         autoFocus
       />
 
-      {/* Lista */}
+      {/* Lista com scroll */}
+      <div className="max-h-[320px] overflow-y-auto">
       {lista.length === 0 ? (
         <div className="py-6 text-center text-xs text-ink-400">
           {termo ? `Nenhum resultado para "${busca}"` : 'Nenhum procedimento disponível'}
@@ -87,6 +88,7 @@ export function PainelB_SeletorProcedimento({ procedimentoOptions, procedimentos
           })}
         </ul>
       )}
+      </div>
     </div>
   );
 }
