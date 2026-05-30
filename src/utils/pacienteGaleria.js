@@ -17,6 +17,26 @@ export const GALERIA_CATEGORIA_LABELS = {
   outro: 'Outros',
 };
 
+export const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'depois', 'outro'];
+
+/** Badge pill por categoria na galeria por sessão. */
+export const GALERIA_CATEGORIA_BADGE_CLASS = {
+  antes: 'bg-amber-100 text-amber-800 border-amber-200',
+  planejamento: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  avaliacao: 'bg-sky-100 text-sky-800 border-sky-200',
+  depois: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  outro: 'bg-slate-100 text-slate-600 border-slate-200',
+};
+
+/** Sessões pequenas (≤2 categorias, ≤8 fotos) iniciam colapsadas; demais abertas. */
+export function sessaoDeveIniciarAberta(sess) {
+  const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
+  const cats = new Set(fotos.map((f) => f.categoria || 'outro'));
+  const poucasCategorias = cats.size <= 2;
+  const poucasFotos = fotos.length <= 8;
+  return !(poucasCategorias && poucasFotos);
+}
+
 const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o)\]\s*(.*)$/i;
 
 /**
