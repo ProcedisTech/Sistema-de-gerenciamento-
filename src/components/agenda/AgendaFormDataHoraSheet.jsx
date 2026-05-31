@@ -20,6 +20,13 @@ export function AgendaFormDataHoraSheet({
   duracaoTotalMin,
   horaSelecionada,
   profissionalFixado,
+  heatmap,
+  loading,
+  error,
+  onPrevMonth,
+  onNextMonth,
+  onRetry,
+  noProfissional,
   onSelecionarDia,
   onSelecionarSlot,
   onAbrirPainelC,
@@ -57,27 +64,33 @@ export function AgendaFormDataHoraSheet({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 custom-scrollbar">
-        <div className="flex flex-col gap-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 custom-scrollbar">
+        <div className="flex min-h-[min(42vh,22rem)] shrink-0 flex-col">
           <CalendarioMensal
-            roleUserId={roleUserIdFiltro || undefined}
+            heatmap={heatmap}
+            loading={loading}
+            error={error}
+            onPrevMonth={onPrevMonth}
+            onNextMonth={onNextMonth}
+            onRetry={onRetry}
             diaSelecionado={diaSelecionado}
             onSelecionarDia={onSelecionarDia}
+            noProfissional={noProfissional}
           />
-          <div>
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              Horários disponíveis
-            </p>
-            <PainelA_SlotsHorario
-              diaSelecionado={diaSelecionado}
-              roleUserIdFiltro={roleUserIdFiltro}
-              duracaoTotalMin={duracaoTotalMin}
-              horaSelecionada={horaSelecionada}
-              profissionalFixado={profissionalFixado}
-              onSelecionarSlot={onSelecionarSlot}
-              onAbrirPainelC={onAbrirPainelC}
-            />
-          </div>
+        </div>
+        <div className="mt-6 shrink-0">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+            Horários disponíveis
+          </p>
+          <PainelA_SlotsHorario
+            diaSelecionado={diaSelecionado}
+            roleUserIdFiltro={roleUserIdFiltro}
+            duracaoTotalMin={duracaoTotalMin}
+            horaSelecionada={horaSelecionada}
+            profissionalFixado={profissionalFixado}
+            onSelecionarSlot={onSelecionarSlot}
+            onAbrirPainelC={onAbrirPainelC}
+          />
         </div>
       </div>
 
