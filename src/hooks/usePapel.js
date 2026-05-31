@@ -47,6 +47,8 @@ export function usePapel() {
   const canEditPacientes    = isAtLeast('NIVEL_2'); // editar ficha do paciente
   /** Inativar/excluir é ação mais destrutiva — requer N3+ */
   const canInativarPacientes = isAtLeast('NIVEL_3');
+  /** Reativar pacientes inativos — requer N3+ */
+  const canReativarPacientes = isAtLeast('NIVEL_3');
 
   // ── Ações dentro de Agenda ───────────────────────────────────────────────
   /** N1 = apenas leitura; N2+ = criar/editar/cancelar agendamentos */
@@ -116,6 +118,7 @@ export function usePapel() {
     canCreatePacientes,
     canEditPacientes,
     canInativarPacientes,
+    canReativarPacientes,
     canWriteAgenda,
 
     // Seções de Configurações

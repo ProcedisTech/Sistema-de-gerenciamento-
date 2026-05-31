@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Loader2, RotateCcw, X } from 'lucide-react';
 import { pacientesApi, getApiErrorDetail } from '../../services/api';
 import { maskCPF } from '../utils/formatters';
 import { useToast } from '../../contexts/useToast.js';
+import { usePapel } from '../../hooks/usePapel';
 
 function mapInativoRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -38,6 +39,7 @@ function formatDataPt(isoOrRaw) {
  */
 export function PacientesInativadosPanel({ onPacientesCatalogRefresh }) {
   const toast = useToast();
+  const { canReativarPacientes } = usePapel();
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({
@@ -169,12 +171,13 @@ export function PacientesInativadosPanel({ onPacientesCatalogRefresh }) {
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <button
                         type="button"
+                        disabled={!canReativarPacientes}
                         onClick={() => {
                           setReativarId(r.id);
                           setReativarSenha('');
                           setReativarSenhaErro('');
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1.5 text-[12px] font-semibold text-[#0f766e] hover:bg-[#f0fdf9]"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-1.5 text-[12px] font-semibold text-[#0f766e] hover:bg-[#f0fdf9] disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                         Reativar

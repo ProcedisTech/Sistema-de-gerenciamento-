@@ -442,7 +442,8 @@ const FUNCOES_SISTEMA = [
       { id: 'pacientes_ver', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e os dados cadastrais dos pacientes.' },
       { id: 'pacientes_criar', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes no sistema.' },
       { id: 'pacientes_editar', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente (nome, telefone, endereço, etc).' },
-      { id: 'pacientes_excluir', label: 'Inativar / Excluir Pacientes', minNivel: 3, descricao: 'Permite inativar ou excluir o cadastro de um paciente. Requer confirmação de senha.' }
+      { id: 'pacientes_excluir', label: 'Inativar / Excluir Pacientes', minNivel: 3, descricao: 'Permite inativar ou excluir o cadastro de um paciente. Requer confirmação de senha.' },
+      { id: 'pacientes_reativar', label: 'Reativar Pacientes', minNivel: 3, descricao: 'Permite reativar o cadastro de um paciente inativo. Requer confirmação de senha.' }
     ]
   },
   {
@@ -530,7 +531,7 @@ const getPresetProfileId = (roleName, perfis) => {
   return null;
 };
 
-const maskTelefone = (value) => {
+const _maskTelefone = (value) => {
   if (!value) return '';
   return value
     .replace(/\D/g, '')
