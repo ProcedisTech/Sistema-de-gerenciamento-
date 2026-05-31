@@ -33,7 +33,7 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDur
 
   return (
     <div className="rounded-xl border border-ink-200 bg-white">
-      <ul className="divide-y divide-ink-100">
+      <ul className="max-h-[7.5rem] divide-y divide-ink-100 overflow-y-auto overscroll-contain">
         {procedimentos.map((proc) => {
           const cor = gerarCorAvatar(proc.nome);
           const iniciais = iniciaisDoNome(proc.nome);

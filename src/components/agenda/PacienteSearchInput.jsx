@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { pacientesApi } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { PacienteSearchDropdownItem } from './PacienteSearchDropdownItem.jsx';
@@ -9,7 +9,7 @@ const MIN_QUERY_LEN = 2;
 const LIST_SIZE = 10;
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20';
+  'w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20';
 
 function mapPatients(rows) {
   const mapped = Array.isArray(rows) ? rows.map(mapBackendPatient).filter(Boolean) : [];
@@ -31,9 +31,9 @@ function sortPatientsForDropdown(list) {
 export function PacienteSearchInput({
   value,
   onChange,
+  onClear,
   locked = false,
   displayNome = '',
-  hideSelectedHint = false,
 }) {
   const [query, setQuery] = useState('');
   const [patients, setPatients] = useState([]);
@@ -119,6 +119,26 @@ export function PacienteSearchInput({
     inputRef.current?.blur();
   };
 
+  const handleClear = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setQuery('');
+    setPatients([]);
+    closeList();
+    if (typeof onClear === 'function') {
+      onClear();
+    } else {
+      onChange('', null);
+    }
+  };
+
+  const handleFocus = () => {
+    setOpen(true);
+    if (value && displayNome && !query) {
+      setQuery('');
+    }
+  };
+
   const onKeyDown = (e) => {
     if (e.key === 'Escape') {
       closeList();
@@ -133,10 +153,26 @@ export function PacienteSearchInput({
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300"
           aria-hidden
         />
-        <div className={`${INPUT_CLASS} bg-gray-50`}>{displayNome || '—'}</div>
+        <div className={`${INPUT_CLASS} bg-gray-50 pr-3`}>{displayNome || '—'}</div>
       </div>
     );
   }
+
+  const hasSelection = Boolean(value && displayNome);
+  const isSearching = open || query.length > 0;
+  const showFilledValue = hasSelection && !isSearching;
+  const inputValue = isSearching ? query : showFilledValue ? displayNome : '';
+  const showClearButton = hasSelection && !open;
+
+  const inputClassName = [
+    INPUT_CLASS,
+    showFilledValue
+      ? 'border-teal-300 bg-teal-50 text-teal-900 focus:border-teal-500 focus:ring-teal-500/20'
+      : '',
+    showClearButton ? 'pr-10' : 'pr-3',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const showDropdown = open;
   const qTrim = query.trim();
@@ -144,7 +180,7 @@ export function PacienteSearchInput({
   return (
     <div ref={containerRef} className="relative">
       <Search
-        className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-gray-400"
+        className={`pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 ${showFilledValue ? 'text-teal-500' : 'text-gray-400'}`}
         aria-hidden
       />
       <input
@@ -154,15 +190,27 @@ export function PacienteSearchInput({
         aria-expanded={showDropdown}
         aria-controls="paciente-search-listbox"
         aria-autocomplete="list"
-        value={query}
+        aria-label={showFilledValue ? `Paciente selecionado: ${displayNome}` : 'Buscar paciente'}
+        value={inputValue}
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => setOpen(true)}
+        onFocus={handleFocus}
         onClick={() => setOpen(true)}
         onKeyDown={onKeyDown}
         placeholder="Buscar por nome, CPF ou telefone..."
-        className={INPUT_CLASS}
+        className={inputClassName}
         autoComplete="off"
       />
+
+      {showClearButton ? (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="absolute right-2 top-1/2 z-[1] -translate-y-1/2 rounded-md p-1 text-teal-600 hover:bg-teal-100 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+          aria-label="Remover paciente selecionado"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
 
       {showDropdown ? (
         <ul
@@ -191,10 +239,6 @@ export function PacienteSearchInput({
             </li>
           )}
         </ul>
-      ) : null}
-
-      {!showDropdown && !hideSelectedHint && value && displayNome ? (
-        <p className="mt-2 text-[12px] font-semibold text-teal-700">Selecionado: {displayNome}</p>
       ) : null}
     </div>
   );

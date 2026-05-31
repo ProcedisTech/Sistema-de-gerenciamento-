@@ -13,7 +13,7 @@ export function PainelB_SeletorProcedimento({ procedimentoOptions, procedimentos
   const idsSelecionados = new Set((procedimentosSelecionados || []).map((p) => p.id));
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Cabeçalho */}
       <div className="flex items-center gap-2">
         <button
@@ -38,7 +38,7 @@ export function PainelB_SeletorProcedimento({ procedimentoOptions, procedimentos
       />
 
       {/* Lista com scroll */}
-      <div className="max-h-[320px] overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3">
       {lista.length === 0 ? (
         <div className="py-6 text-center text-xs text-ink-400">
           {termo ? `Nenhum resultado para "${busca}"` : 'Nenhum procedimento disponível'}

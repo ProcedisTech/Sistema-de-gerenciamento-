@@ -287,6 +287,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [equipeError, setEquipeError] = useState('');
   const equipeFetchedRef = useRef(false);
   const dispMonthCacheRef = useRef({});
+  /** Evita double-fetch quando saveAppointment já chamou loadMonth com mês explícito. */
+  const skipNextAutoLoadRef = useRef(false);
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
 
@@ -415,7 +417,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     };
   }, [appointments, disponibilidades]);
 
-  const loadMonth = useCallback(async () => {
+  const loadMonth = useCallback(async (overrideMonthDate) => {
     if (!authEnabled) {
       setAppointments([]);
       setHojeCount(0);
@@ -423,10 +425,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setError('');
       return;
     }
+    const targetMonth = overrideMonthDate ?? monthDate;
     setLoading(true);
     setError('');
     try {
-      const { start, end } = monthRangeIso(monthDate);
+      const { start, end } = monthRangeIso(targetMonth);
       const rows = await fetchDashboardAppointmentsForRange(start, end);
       setAppointments(rows);
 
@@ -448,6 +451,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [authEnabled, monthDate]);
 
   useEffect(() => {
+    if (skipNextAutoLoadRef.current) {
+      skipNextAutoLoadRef.current = false;
+      return;
+    }
     loadMonth();
   }, [loadMonth]);
 
@@ -677,7 +684,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       todayIso,
       excludeAgendaId: editingAppointment?.agendaId,
       profissionalRoleUserId: role,
-      selectedIso: dispCalendarioDia,
+      selectedIso: toDateKey(form.data) || dispCalendarioDia,
     });
   }, [
     modalMode,
@@ -688,7 +695,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     editingAppointment?.agendaId,
     roleUserIdAgenda,
     dispCalendarioDia,
+    form.data,
   ]);
+
+  const retryDispMonth = useCallback(() => {
+    if (!authEnabled || !modalMode) return;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return;
+    ensureDispMonthLoaded(dispMonthDate);
+  }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
 
   const dispDaySlots = useMemo(() => {
     if (!modalMode) return null;
@@ -1553,9 +1568,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (savedRole) {
         delete dispMonthCacheRef.current[dispCacheKey(savedRole, nextMonthDate)];
       }
+      skipNextAutoLoadRef.current = true;
       setSelectedDay(form.data);
       setMonthDate(nextMonthDate);
-      await loadMonth();
+      await loadMonth(nextMonthDate);
       await refreshWeekGrid();
       closeModal();
       setError('');
@@ -1691,6 +1707,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispHeatmap,
     dispMonthError,
     dispMonthLoading,
+    retryDispMonth,
     goDispNextMonth,
     goDispPrevMonth,
     handleProximoHorarioLivre,

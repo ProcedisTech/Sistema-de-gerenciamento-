@@ -292,8 +292,8 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
         tabIndex={-1}
       />
 
-      {/* Container do modal */}
-      <div className="relative flex max-h-[95vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      {/* Container do modal — altura fixa no desktop para orçamento vertical estável do calendário */}
+      <div className="relative flex max-h-[95vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl lg:h-[95vh]">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-100 px-6 py-4">
@@ -333,6 +333,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               <PacienteSearchInput
                 value={agenda.form.pacienteId}
                 onChange={agenda.selectPaciente}
+                onClear={lockPatient ? undefined : agenda.clearPacienteSelection}
                 locked={lockPatient}
                 displayNome={agenda.form.pacienteNome}
               />
@@ -384,18 +385,26 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             mobile — nunca ter CalendarioMensal/PainelA montados em 2 lugares (anti-loop). ── */}
         {isDesktop && (
         <div className="min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full flex-col lg:grid lg:grid-cols-[7fr_5fr]">
+          <div className="grid h-full min-h-0 grid-cols-[7fr_5fr] grid-rows-1">
 
             {/* Coluna esquerda: calendário + observações */}
-            <div className="overflow-y-auto border-b border-ink-100 px-6 py-6 lg:border-b-0 lg:border-r">
-              <CalendarioMensal
-                roleUserId={roleUserIdFiltro || undefined}
-                diaSelecionado={isReagendar ? undefined : agenda.form.data}
-                onSelecionarDia={handleSelecionarDia}
-              />
+            <div className="flex h-full min-h-0 flex-col overflow-hidden border-b border-ink-100 px-6 py-4 lg:border-b-0 lg:border-r lg:py-5">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <CalendarioMensal
+                  heatmap={agenda.dispHeatmap}
+                  loading={agenda.dispMonthLoading}
+                  error={agenda.dispMonthError}
+                  onPrevMonth={agenda.goDispPrevMonth}
+                  onNextMonth={agenda.goDispNextMonth}
+                  onRetry={agenda.retryDispMonth}
+                  diaSelecionado={isReagendar ? undefined : agenda.form.data}
+                  onSelecionarDia={handleSelecionarDia}
+                  noProfissional={!roleUserIdFiltro}
+                />
+              </div>
 
               {/* Observações colapsável */}
-              <div className="mt-6">
+              <div className="mt-4 shrink-0">
                 <button
                   type="button"
                   onClick={() => setObsAberta((v) => !v)}
@@ -421,15 +430,16 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               </div>
             </div>
 
-            {/* Coluna direita: painéis A / B / C */}
-            <div className="min-h-0 overflow-y-auto px-5 py-6">
+            {/* Coluna direita: painéis A / B / C — scroll isolado, não afeta altura do calendário */}
+            <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 py-5 lg:py-6">
               {/* Rótulo do painel */}
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              <p className="mb-3 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
                 {painelAtivo === PAINEL.A && 'Horários disponíveis'}
                 {painelAtivo === PAINEL.B && 'Selecionar procedimento'}
                 {painelAtivo === PAINEL.C && 'Escolher profissional'}
               </p>
 
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
               {painelAtivo === PAINEL.A && (
                 <PainelA_SlotsHorario
                   diaSelecionado={agenda.form.data}
@@ -461,6 +471,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                   onVoltar={() => setPainelAtivo(PAINEL.A)}
                 />
               )}
+              </div>
             </div>
           </div>
         </div>
@@ -610,6 +621,13 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           duracaoTotalMin={duracaoTotalMin}
           horaSelecionada={agenda.form.horaInicio}
           profissionalFixado={profissionalFixado}
+          heatmap={agenda.dispHeatmap}
+          loading={agenda.dispMonthLoading}
+          error={agenda.dispMonthError}
+          onPrevMonth={agenda.goDispPrevMonth}
+          onNextMonth={agenda.goDispNextMonth}
+          onRetry={agenda.retryDispMonth}
+          noProfissional={!roleUserIdFiltro}
           onSelecionarDia={handleSelecionarDia}
           onSelecionarSlot={handleSheetSelectSlot}
           onAbrirPainelC={handleSheetAbrirPainelC}
