@@ -240,14 +240,14 @@ export function SignatureFullscreenModal({
 }
 
 export function Step3Termos({
-  termoLido,
+  _termoLido,
   setTermoLido,
   termoAssinaturaDataUrl,
   setTermoAssinaturaDataUrl,
   setTermoAssinado,
   profissionalAssinaturaDataUrl,
   setProfissionalAssinaturaDataUrl,
-  step4Errors = {},
+  _step4Errors = {},
   setStep4Errors = () => {},
   termosAssinados = [],
   setTermosAssinados = () => {},
@@ -471,7 +471,7 @@ export function Step3Termos({
     if (profissionalCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DO PROFISSIONAL\]/gi, profissionalCtx.nome);
   }
 
-  const temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
+  const _temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
 
   const termosFiltradosBusca = useMemo(() => {
     const q = termoSearch.trim().toLowerCase();
@@ -520,7 +520,7 @@ export function Step3Termos({
         setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
       }
     },
-    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors]
+    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis]
   );
 
   const applyProfissionalSignature = useCallback((dataUrl, { auto = false } = {}) => {
@@ -564,7 +564,7 @@ export function Step3Termos({
     return () => {
       cancelled = true;
     };
-  }, [applyProfissionalSignature, fetchAssinaturaPadrao, profissionalAssinaturaDataUrl]);
+  }, [applyProfissionalSignature, fetchAssinaturaPadrao, profissionalAssinaturaDataUrl, termoSelecionado]);
 
   // Removido useEffect duplicado que forçava auto-assinatura ao abrir modal
 
