@@ -16,6 +16,7 @@ const ACOES_MAP = {
   CRIAR_PACIENTE:         { label: 'Criou paciente',        cor: 'green' },
   EDITAR_PACIENTE:        { label: 'Editou paciente',        cor: 'blue' },
   DESATIVAR_PACIENTE:     { label: 'Inativou paciente',      cor: 'red' },
+  REATIVAR_PACIENTE:      { label: 'Reativou paciente',      cor: 'green' },
   
   // Agenda & Agendamento
   CRIAR_AGENDAMENTO:      { label: 'Criou agendamento',      cor: 'green' },
