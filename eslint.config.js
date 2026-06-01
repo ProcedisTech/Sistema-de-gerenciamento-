@@ -32,6 +32,7 @@ export default defineConfig([
   {
     files: [
       '**/PatientProfileView.jsx',
+      '**/components/patients/galeria/**/*.jsx',
       '**/Step5Finalization.jsx',
       '**/components/agenda/MarcarCompromissoModal.jsx',
       '**/components/agenda/PacienteSearchInput.jsx',

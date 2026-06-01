@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Cake, CalendarDays, CalendarOff, ChevronRight, Clock } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
 import { formatCartaoDiaPtBr } from '../../utils/patientProfileDerivedDates.js';
@@ -17,6 +17,73 @@ function getSaudacao() {
 function primeiroNome(nomeCompleto) {
   if (!nomeCompleto) return '';
   return String(nomeCompleto).trim().split(/\s+/)[0];
+}
+
+function countAniversariantesEstaSemana(aniversariantesList) {
+  return (aniversariantesList ?? []).filter((p) => {
+    const info = getPatientNextBirthdayInfo(p);
+    return info != null && info.daysUntil <= 6;
+  }).length;
+}
+
+function WelcomeTealNum({ n }) {
+  return <span className="font-semibold text-[#00a88e]">{n}</span>;
+}
+
+function buildAtendimentosSegment(n) {
+  return (
+    <>
+      Hoje você tem <WelcomeTealNum n={n} /> {n === 1 ? 'atendimento' : 'atendimentos'}
+    </>
+  );
+}
+
+function buildRetornoSegment(n) {
+  return (
+    <>
+      <WelcomeTealNum n={n} />{' '}
+      {n === 1 ? 'paciente precisa de retorno' : 'pacientes precisam de retorno'}
+    </>
+  );
+}
+
+function buildAniversariosSegment(n) {
+  return (
+    <>
+      <WelcomeTealNum n={n} /> {n === 1 ? 'aniversariante esta semana' : 'aniversariantes esta semana'}
+    </>
+  );
+}
+
+function joinWelcomeSegments(segments) {
+  if (segments.length === 0) return null;
+  if (segments.length === 1) {
+    return (
+      <>
+        {segments[0]}.
+      </>
+    );
+  }
+  if (segments.length === 2) {
+    return (
+      <>
+        {segments[0]} e {segments[1]}.
+      </>
+    );
+  }
+  return (
+    <>
+      {segments[0]}, {segments[1]} e {segments[2]}.
+    </>
+  );
+}
+
+function buildWelcomeResumo({ nAtendimentos, nRetorno, nAniversarios }) {
+  const segments = [];
+  if (nAtendimentos > 0) segments.push(buildAtendimentosSegment(nAtendimentos));
+  if (nRetorno > 0) segments.push(buildRetornoSegment(nRetorno));
+  if (nAniversarios > 0) segments.push(buildAniversariosSegment(nAniversarios));
+  return joinWelcomeSegments(segments);
 }
 
 function formatarDataAniversario(dataNascimento) {
@@ -39,11 +106,19 @@ function SidebarSkeleton() {
   );
 }
 
-function SectionHeader({ icon: Icon, title, count, onVerTodos, verTodosLabel }) {
+function SectionHeader({
+  icon: Icon,
+  title,
+  count,
+  onVerTodos,
+  verTodosLabel,
+  iconBg = 'bg-[#e6f7f5]',
+  iconColor = 'text-[#00a88e]',
+}) {
   return (
     <div className="flex items-center gap-2 px-1 pb-2">
-      <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#e6f7f5]">
-        <Icon className="h-3.5 w-3.5 text-[#00a88e]" strokeWidth={2.2} aria-hidden />
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+        <Icon className={`h-3.5 w-3.5 ${iconColor}`} strokeWidth={2.2} aria-hidden />
       </span>
       <span className="flex-1 text-[13px] font-semibold leading-snug text-[#0f172a]">{title}</span>
       {count != null && count > 0 ? (
@@ -168,7 +243,6 @@ export function PulseSidebar({
   onSelectPatient,
   getPatientInitials,
 }) {
-  const saudacao = useMemo(() => getSaudacao(), []);
   const nome = primeiroNome(nomeUsuario);
 
   const agendamentos = kpi?.agendamentosHoje ?? [];
@@ -176,32 +250,38 @@ export function PulseSidebar({
   const totalSemRetornoMarcado = kpi?.totalSemRetornoMarcado ?? 0;
   const aniversariantes = kpi?.aniversariantesList ?? [];
 
-  const resumoPartes = [];
-  if (agendamentos.length > 0) {
-    resumoPartes.push(`${agendamentos.length} agendamento${agendamentos.length !== 1 ? 's' : ''} hoje`);
-  }
-  if (totalSemRetornoMarcado > 0) {
-    resumoPartes.push(
-      `${totalSemRetornoMarcado} sem retorno marcado${totalSemRetornoMarcado !== 1 ? 's' : ''}`
-    );
-  }
+  const nAtendimentos = agendamentos.length;
+  const nRetorno = totalSemRetornoMarcado ?? 0;
+  const nAniversarios = countAniversariantesEstaSemana(aniversariantes);
+  const welcomeResumo = buildWelcomeResumo({ nAtendimentos, nRetorno, nAniversarios });
+  const resumoVazio = !loading && nAtendimentos === 0 && nRetorno === 0 && nAniversarios === 0;
 
   return (
     <aside className="hidden w-[min(100%,340px)] shrink-0 flex-col gap-4 lg:flex xl:w-[380px]">
       <div className="sticky top-4 flex max-h-[calc(100dvh-7rem)] flex-col gap-4 overflow-y-auto overflow-x-hidden rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm custom-scrollbar">
 
         {/* Saudação */}
-        <div className="rounded-xl border border-[#d1fae5] bg-gradient-to-br from-[#f0fdf9] to-white p-4">
-          <p className="text-[15px] font-bold text-[#0f172a]">
-            {saudacao}{nome ? `, ${nome}` : ''}
-          </p>
-          {resumoPartes.length > 0 ? (
-            <p className="mt-1 text-[12px] leading-relaxed text-[#64748b]">
-              {resumoPartes.join(' · ')}
+        <div className="relative overflow-hidden rounded-xl border border-[#e2e8f0] bg-white p-4">
+          <div
+            className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-[radial-gradient(circle,#e6f7f5_0%,transparent_70%)] opacity-80"
+            aria-hidden
+          />
+          <div className="relative">
+            <p className="text-[15px] font-bold text-[#0f172a]">
+              {getSaudacao()}
+              {nome ? `, ${nome}` : ''}{' '}
+              <span aria-hidden="true">👋</span>
             </p>
-          ) : loading ? (
-            <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-[#e2e8f0]" />
-          ) : null}
+            {loading ? (
+              <div className="mt-1.5 h-4 w-3/4 animate-pulse rounded bg-[#e2e8f0]" />
+            ) : welcomeResumo ? (
+              <p className="mt-1.5 text-[13px] leading-relaxed text-[#64748b]">{welcomeResumo}</p>
+            ) : resumoVazio ? (
+              <p className="mt-1.5 text-[13px] leading-relaxed text-[#64748b]">
+                Nenhum compromisso ou pendência urgente para hoje.
+              </p>
+            ) : null}
+          </div>
         </div>
 
         {/* Agendamentos de hoje */}
@@ -244,6 +324,8 @@ export function PulseSidebar({
             icon={CalendarOff}
             title="Sem retorno marcado"
             count={totalSemRetornoMarcado > 0 ? totalSemRetornoMarcado : undefined}
+            iconBg="bg-amber-50"
+            iconColor="text-amber-500"
           />
           {loading ? (
             <SidebarSkeleton />
@@ -279,6 +361,8 @@ export function PulseSidebar({
             icon={Cake}
             title="Próximos aniversários"
             count={aniversariantes.length > 0 ? aniversariantes.length : undefined}
+            iconBg="bg-pink-50"
+            iconColor="text-pink-500"
           />
           {loading ? (
             <SidebarSkeleton />
