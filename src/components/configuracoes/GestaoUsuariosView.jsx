@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, CalendarClock, Phone, Mail, Crown } from 'lucide-react';
+import { Users, UserPlus, Shield, UserX, Edit2, Loader2, X, AlertCircle, CalendarClock, Phone, Mail, Crown, MapPin, Stethoscope, Settings2, PartyPopper, CalendarDays, MessageCircle, Activity, Award, Clock, Eye, EyeOff } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
-import { authHeadersForFetch, configuracoesClinicaApi, getApiErrorDetail, getApiErrorToastMessage } from '../../services/api';
+import { authHeadersForFetch, configuracoesClinicaApi, getApiErrorDetail, getApiErrorToastMessage, equipeApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
@@ -12,14 +12,17 @@ import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePho
 
 export function GestaoUsuariosView() {
   const { isAdmin } = usePapel();
+  const { roleUserId: currentRoleUserId } = useOrg();
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
   const [perfisAcesso, setPerfisAcesso] = useState([]);
+  const [especialidadesList, setEspecialidadesList] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [editModalReadOnly, setEditModalReadOnly] = useState(false);
   const [showDispModal, setShowDispModal] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState(null);
   const [activeTab, setActiveTab] = useState('membros'); // 'membros' | 'auditoria'
@@ -37,7 +40,7 @@ export function GestaoUsuariosView() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [equipeRes, rolesRes, perfisRes] = await Promise.all([
+      const [equipeRes, rolesRes, perfisRes, especialidadesRes] = await Promise.all([
         fetch(resolveApiUrl('/api/v1/equipe'), {
           headers: fetchHeaders(),
           credentials: 'include'
@@ -49,16 +52,22 @@ export function GestaoUsuariosView() {
         fetch(resolveApiUrl('/api/v1/dimensoes/perfis-acesso'), {
           headers: fetchHeaders(),
           credentials: 'include'
+        }),
+        fetch(resolveApiUrl('/api/v1/dimensoes/especialidades'), {
+          headers: fetchHeaders(),
+          credentials: 'include'
         })
       ]);
 
-      if (equipeRes.ok && rolesRes.ok && perfisRes.ok) {
+      if (equipeRes.ok && rolesRes.ok && perfisRes.ok && especialidadesRes.ok) {
         const equipeData = await equipeRes.json();
         const rolesData = await rolesRes.json();
         const perfisData = await perfisRes.json();
+        const especialidadesData = await especialidadesRes.json();
         setUsuarios(Array.isArray(equipeData) ? equipeData : equipeData.content || []);
         setRoles(Array.isArray(rolesData) ? rolesData : rolesData.content || []);
         setPerfisAcesso(Array.isArray(perfisData) ? perfisData : perfisData.content || []);
+        setEspecialidadesList(Array.isArray(especialidadesData) ? especialidadesData : especialidadesData.content || []);
       } else {
         const badRes = !equipeRes.ok ? equipeRes : (!rolesRes.ok ? rolesRes : perfisRes);
         const body = await badRes.json().catch(() => ({}));
@@ -95,7 +104,87 @@ export function GestaoUsuariosView() {
     };
   }, [isAdmin]);
 
+  // Lógica de aniversários e tempo de casa
+  const [aniversariantesHoje, setAniversariantesHoje] = useState([]);
+  const [proximoAniversariante, setProximoAniversariante] = useState(null);
+  const [tempoCasaHoje, setTempoCasaHoje] = useState([]);
+
+  useEffect(() => {
+    if (!usuarios || usuarios.length === 0) return;
+
+    const hoje = new Date();
+    const currentMonth = hoje.getMonth() + 1;
+    const currentDay = hoje.getDate();
+    const currentYear = hoje.getFullYear();
+
+    const hojeList = [];
+    const tempoList = [];
+    let prox = null;
+    let minDaysDiff = Infinity;
+
+    usuarios.forEach(u => {
+      // 1. Tempo de Casa
+      if (u.criadoEm) {
+        const d = new Date(u.criadoEm);
+        const startMonth = d.getMonth() + 1;
+        const startDay = d.getDate();
+        const startYear = d.getFullYear();
+        if (startMonth === currentMonth && startDay === currentDay && startYear < currentYear) {
+          const anos = currentYear - startYear;
+          tempoList.push({ usuario: u, anos });
+        }
+      }
+
+      // 2. Aniversários
+      if (!u.dataNascimento) return;
+      const parts = u.dataNascimento.split('-');
+      if (parts.length === 3) {
+        const month = parseInt(parts[1], 10);
+        const day = parseInt(parts[2], 10);
+
+        if (month === currentMonth && day === currentDay) {
+          hojeList.push(u);
+        } else {
+          let nextBDay = new Date(hoje.getFullYear(), month - 1, day);
+          // Se o aniversário já passou este ano, calcula pro ano que vem
+          if (nextBDay < new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) {
+            nextBDay = new Date(hoje.getFullYear() + 1, month - 1, day);
+          }
+          const diffTime = nextBDay - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays < minDaysDiff) {
+            minDaysDiff = diffDays;
+            prox = { 
+              usuario: u, 
+              dias: diffDays, 
+              dataStr: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`
+            };
+          }
+        }
+      }
+    });
+
+    setAniversariantesHoje(hojeList);
+    setProximoAniversariante(prox);
+    setTempoCasaHoje(tempoList);
+  }, [usuarios]);
+
+  // Mini Dashboard Stats
+  const stats = React.useMemo(() => {
+    const total = usuarios.length;
+    const ativos = usuarios.filter(u => u.ativo !== false).length;
+    const medicos = usuarios.filter(u => {
+      const role = String(u.roleName || u.role?.nome || '').toUpperCase();
+      const isNotAdminOrRecep = role && !['ADMINISTRADOR', 'ADMIN', 'RECEPCIONISTA', 'RECEPCAO', 'ATENDENTE'].includes(role);
+      const isProfLevel = String(u.perfilAcessoCodigo || '').toUpperCase().match(/NIVEL_(3|4)/);
+      return isNotAdminOrRecep || isProfLevel;
+    }).length;
+    return { total, ativos, medicos };
+  }, [usuarios]);
+
   const handleDeactivate = async (id) => {
+    // eslint-disable-next-line no-alert
     if (!window.confirm('Tem certeza que deseja desativar este acesso?')) return;
     
     try {
@@ -161,33 +250,130 @@ export function GestaoUsuariosView() {
       </div>
       
       {/* Abas Internas (Segmented Control) */}
-      <div className="inline-flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:w-auto overflow-x-auto">
+      <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:inline-flex sm:w-auto relative z-10">
         <button
           onClick={() => setActiveTab('membros')}
-          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
+          className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${
             activeTab === 'membros' 
               ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
-          <Users className="h-4 w-4" />
-          Membros da Equipe
+          <Users className="h-5 w-5 sm:h-4 sm:w-4" />
+          <span className="text-center leading-tight">Membros <span className="hidden sm:inline">da Equipe</span></span>
         </button>
         <button
           onClick={() => setActiveTab('auditoria')}
-          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
+          className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${
             activeTab === 'auditoria' 
               ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
-          <Shield className="h-4 w-4" />
-          Histórico de Ações
+          <Shield className="h-5 w-5 sm:h-4 sm:w-4" />
+          <span className="text-center leading-tight">Histórico <span className="hidden sm:inline">de Ações</span></span>
         </button>
       </div>
 
       {activeTab === 'membros' ? (
         <>
+          {/* Mini Dashboard */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+              <div className="bg-teal-50 text-teal-600 p-3 rounded-xl shrink-0">
+                <Users className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Total da Equipe</p>
+                <h4 className="text-2xl font-bold text-slate-900">{stats.total}</h4>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+              <div className="bg-green-50 text-green-600 p-3 rounded-xl shrink-0">
+                <Activity className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Membros Ativos</p>
+                <h4 className="text-2xl font-bold text-slate-900">{stats.ativos}</h4>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+              <div className="bg-indigo-50 text-indigo-600 p-3 rounded-xl shrink-0">
+                <Stethoscope className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Profissionais/Médicos</p>
+                <h4 className="text-2xl font-bold text-slate-900">{stats.medicos}</h4>
+              </div>
+            </div>
+          </div>
+
+          {/* Alertas de Aniversário e Tempo de Casa */}
+          {tempoCasaHoje.length > 0 && (
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-4 shadow-md text-white mb-4 flex items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4">
+              <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
+                <Award className="h-6 w-6 sm:h-8 sm:w-8" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-lg font-bold tracking-tight mb-0.5 flex flex-wrap gap-1">
+                  Dia de comemorar! 🏆
+                </h4>
+                <p className="text-orange-100 text-sm leading-relaxed">
+                  {tempoCasaHoje.map(tc => {
+                    const isMe = String(tc.usuario.id) === String(currentRoleUserId);
+                    return isMe ? (
+                      <span key={tc.usuario.id} className="block mt-1">
+                        Hoje você completa <span className="font-bold">{tc.anos} ano(s)</span> com a gente! Parabéns pela trajetória! 🌟
+                      </span>
+                    ) : (
+                      <span key={tc.usuario.id} className="block mt-1">
+                        Parabéns para <span className="font-bold">{tc.usuario.nomeCompleto || tc.usuario.usuarioNome}</span> que completa <span className="font-bold">{tc.anos} ano(s)</span> de casa hoje!
+                      </span>
+                    );
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {aniversariantesHoje.length > 0 && (
+            <div className="bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl p-4 shadow-md text-white mb-4 flex items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4">
+              <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
+                <PartyPopper className="h-6 w-6 sm:h-8 sm:w-8" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-lg font-bold tracking-tight mb-0.5 flex flex-wrap gap-1">
+                  Hoje é dia de festa! 🎉
+                </h4>
+                <p className="text-pink-100 text-sm leading-relaxed">
+                  {aniversariantesHoje.map(u => {
+                    const isMe = String(u.id) === String(currentRoleUserId);
+                    return isMe ? (
+                      <span key={u.id} className="block mt-1">
+                        Feliz aniversário, <span className="font-bold">{u.nomeCompleto || u.usuarioNome}</span>! Desejamos um dia incrível e muito sucesso! 🎂🎁
+                      </span>
+                    ) : (
+                      <span key={u.id} className="block mt-1">
+                        Parabéns para <span className="font-bold">{u.nomeCompleto || u.usuarioNome}</span>! Não esqueça de parabenizar.
+                      </span>
+                    );
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {aniversariantesHoje.length === 0 && proximoAniversariante && (
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 flex items-center gap-3">
+              <div className="bg-blue-50 text-blue-500 p-2 rounded-lg shrink-0">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <p className="text-sm text-slate-600">
+                Próximo aniversário da equipe: <span className="font-semibold text-slate-900">{proximoAniversariante.usuario.nomeCompleto || proximoAniversariante.usuario.usuarioNome}</span> em <span className="font-semibold text-blue-600">{proximoAniversariante.dataStr}</span> ({proximoAniversariante.dias} dias).
+              </p>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
             <div className="flex-1">
@@ -288,15 +474,13 @@ export function GestaoUsuariosView() {
                         {/* Avatar */}
                         <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-white text-base font-bold shadow-md bg-gradient-to-br ring-2 ring-white ${avatarBg}`}>
                           {isDono ? <Crown className="h-6 w-6" /> : initials}
-                          {u.ativo && (
-                            <span className="absolute -bottom-1 -right-1 block h-4 w-4 rounded-full bg-green-500 ring-2 ring-white"></span>
-                          )}
                         </div>
 
                         {/* Name + badges */}
                         <div className="min-w-0 flex-1 pt-0.5">
                           <h4 className="font-bold text-base text-slate-900 leading-snug truncate">
                             {u.nomeCompleto || u.usuarioNome}
+                            {String(u.id) === String(currentRoleUserId) && <span className="text-xs text-slate-400 ml-2 font-normal">(Você)</span>}
                           </h4>
                           {/* Role badges */}
                           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -339,14 +523,33 @@ export function GestaoUsuariosView() {
                             <span className="truncate font-medium">{u.email}</span>
                           </div>
                         )}
-                        {(u.telefone || u.usuarioTelefone) && (
-                          <div className="flex items-center gap-2.5 text-[13px] text-slate-600">
-                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-slate-900/5">
-                              <Phone className="h-3.5 w-3.5 text-slate-400" />
+                        {(u.telefone || u.usuarioTelefone) && (() => {
+                          const fone = u.telefone || u.usuarioTelefone;
+                          const onlyNumbers = String(fone).replace(/\D/g, '');
+                          const isMobile = onlyNumbers.length >= 10;
+                          return (
+                            <div className="flex items-center justify-between text-[13px] text-slate-600">
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-slate-900/5">
+                                  <Phone className="h-3.5 w-3.5 text-slate-400" />
+                                </div>
+                                <span className="font-medium">{fone}</span>
+                              </div>
+                              {isMobile && (
+                                <a 
+                                  href={`https://wa.me/${onlyNumbers.length <= 11 && !onlyNumbers.startsWith('55') ? '55' + onlyNumbers : onlyNumbers}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-colors font-semibold text-xs"
+                                  title="Abrir no WhatsApp"
+                                >
+                                  <MessageCircle className="h-3.5 w-3.5" />
+                                  <span className="hidden sm:inline">WhatsApp</span>
+                                </a>
+                              )}
                             </div>
-                            <span className="font-medium">{u.telefone || u.usuarioTelefone}</span>
-                          </div>
-                        )}
+                          );
+                        })()}
                         {!u.email && !(u.telefone || u.usuarioTelefone) && (
                           <p className="text-[12px] text-slate-400 italic py-1 text-center">Sem contato cadastrado</p>
                         )}
@@ -358,19 +561,27 @@ export function GestaoUsuariosView() {
                           <button
                             onClick={() => { setSelectedUsuario(u); setShowDispModal(true); }}
                             title="Configurar disponibilidade"
-                            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-[#00a88e] transition hover:bg-teal-100 active:scale-95 touch-manipulation"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-teal-50 px-2 py-2.5 text-xs font-bold text-[#00a88e] transition hover:bg-teal-100 active:scale-95 touch-manipulation"
                           >
-                            <CalendarClock className="h-4 w-4" />
-                            <span className="hidden sm:inline">Agenda</span>
+                            <CalendarClock className="h-4 w-4 shrink-0" />
+                            <span className="truncate">Agenda</span>
                           </button>
                         )}
                         <button
-                          onClick={() => { setSelectedUsuario(u); setShowEditModal(true); }}
-                          title="Editar membro"
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-95 touch-manipulation"
+                          onClick={() => { setSelectedUsuario(u); setEditModalReadOnly(true); setShowEditModal(true); }}
+                          title="Ver dados do membro"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white border border-slate-200 px-2 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-95 touch-manipulation"
                         >
-                          <Edit2 className="h-4 w-4 text-slate-400" />
-                          Editar
+                          <Eye className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="truncate">Ver</span>
+                        </button>
+                        <button
+                          onClick={() => { setSelectedUsuario(u); setEditModalReadOnly(false); setShowEditModal(true); }}
+                          title="Editar membro"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white border border-slate-200 px-2 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-95 touch-manipulation"
+                        >
+                          <Edit2 className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="truncate">Editar</span>
                         </button>
                         <button
                           onClick={() => handleDeactivate(u.id)}
@@ -392,6 +603,7 @@ export function GestaoUsuariosView() {
             <InviteModal 
               roles={roles} 
               perfisAcesso={perfisAcesso}
+              especialidadesList={especialidadesList}
               onClose={() => setShowInviteModal(false)} 
               onSuccess={() => { setShowInviteModal(false); loadData(); }}
               fetchHeaders={fetchHeaders}
@@ -403,9 +615,11 @@ export function GestaoUsuariosView() {
               usuario={selectedUsuario}
               roles={roles}
               perfisAcesso={perfisAcesso}
+              especialidadesList={especialidadesList}
               onClose={() => setShowEditModal(false)}
               onSuccess={() => { setShowEditModal(false); loadData(); }}
               fetchHeaders={fetchHeaders}
+              readOnly={editModalReadOnly}
             />
           )}
 
@@ -540,9 +754,12 @@ const _maskTelefone = (value) => {
     .substring(0, 15);
 };
 
-function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
+function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSuccess }) {
   const toast = useToast();
-  const [form, setForm] = useState({ nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '' });
+  const [form, setForm] = useState({ 
+    nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '',
+    dataNascimento: '', estadoCivil: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', especialidades: []
+  });
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState([]);
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
@@ -676,7 +893,17 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
           nomeCompleto: form.nome,
           email: form.email,
           telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
-          cpf: form.cpf
+          cpf: form.cpf,
+          dataNascimento: form.dataNascimento || null,
+          estadoCivil: form.estadoCivil || null,
+          cep: form.cep || null,
+          logradouro: form.logradouro || null,
+          numero: form.numero || null,
+          complemento: form.complemento || null,
+          bairro: form.bairro || null,
+          cidade: form.cidade || null,
+          uf: form.uf || null,
+          especialidades: form.especialidades
         })
       });
       
@@ -686,23 +913,14 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
       }
 
       // 3. Vincular à Equipe
-      const teamRes = await fetch(resolveApiUrl('/api/v1/equipe'), {
-        method: 'POST',
-        headers: { 
-          ...fetchHeaders(),
-          'Content-Type': 'application/json' 
-        },
-        credentials: 'include',
-        body: JSON.stringify({
+      try {
+        await equipeApi.create({
           usuarioId,
           roleId: form.roleId,
           perfilAcessoId: form.perfilAcessoId
-        })
-      });
-      
-      if (!teamRes.ok) {
-        const teamErr = await teamRes.json().catch(() => ({}));
-        throw new Error(teamErr.message || 'Perfil completado, mas erro ao vincular à equipe.');
+        });
+      } catch (err) {
+        throw new Error(getApiErrorToastMessage(err) || 'Perfil completado, mas erro ao vincular à equipe.');
       }
       
       toast.success('Acesso criado com sucesso!');
@@ -726,8 +944,11 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
   }`;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]">
-      <div className="w-full max-w-md md:max-w-3xl lg:max-w-4xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 min-h-[70vh] max-h-none md:max-h-[95vh] flex flex-col">
+    <div 
+      className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-[95vw] md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto rounded-3xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 min-h-[70vh] max-h-none md:max-h-[95vh] flex flex-col">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-teal-50 rounded-xl">
@@ -775,6 +996,64 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                     maxLength={14}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Data de Nascimento <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
+                  <input 
+                    type="date"
+                    value={form.dataNascimento}
+                    onChange={e => setForm({...form, dataNascimento: e.target.value})}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Estado Civil <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
+                  <select
+                    value={form.estadoCivil}
+                    onChange={e => setForm({...form, estadoCivil: e.target.value})}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  >
+                    <option value="">Selecione...</option>
+                    <option value="Solteiro(a)">Solteiro(a)</option>
+                    <option value="Casado(a)">Casado(a)</option>
+                    <option value="Divorciado(a)">Divorciado(a)</option>
+                    <option value="Viúvo(a)">Viúvo(a)</option>
+                    <option value="Separado(a)">Separado(a)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Nova Seção: Especialidades */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-teal-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
+                  1b
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#00a88e]')}>Especialidades (Opcional)</h4>
+              </div>
+              <div className="grid grid-cols-1">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Especialidades de Estética / Saúde</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(especialidadesList || []).map(esp => (
+                      <label key={esp.id} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100">
+                        <input
+                          type="checkbox"
+                          checked={form.especialidades.includes(esp.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setForm({...form, especialidades: [...form.especialidades, esp.id]});
+                            } else {
+                              setForm({...form, especialidades: form.especialidades.filter(id => id !== esp.id)});
+                            }
+                          }}
+                          className="h-4 w-4 text-[#00a88e] rounded border-slate-300 focus:ring-[#00a88e]"
+                        />
+                        <span className="text-[13px] font-medium text-slate-700">{esp.nome}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -836,6 +1115,85 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                   {telefoneTouched && telefoneNumero && !isPhoneValid(telefoneCountryCode, telefoneNumero) && (
                     <span className="mt-1.5 ml-1 block text-[11px] font-semibold text-red-500">Telefone inválido para {countrySelectDisplayLabel(getCountryByCode(telefoneCountryCode))}.</span>
                   )}
+                </div>
+              </div>
+            </div>
+
+            {/* Nova Seção: Endereço */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-purple-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
+                  2b
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#a855f7]')}>Endereço (Opcional)</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">CEP</label>
+                  <input 
+                    value={form.cep}
+                    onChange={e => setForm({...form, cep: e.target.value})}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Logradouro</label>
+                  <input 
+                    value={form.logradouro}
+                    onChange={e => setForm({...form, logradouro: e.target.value})}
+                    placeholder="Ex: Rua das Flores"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Número</label>
+                  <input 
+                    value={form.numero}
+                    onChange={e => setForm({...form, numero: e.target.value})}
+                    placeholder="Ex: 123"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Complemento</label>
+                  <input 
+                    value={form.complemento}
+                    onChange={e => setForm({...form, complemento: e.target.value})}
+                    placeholder="Ex: Apto 42"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Bairro</label>
+                  <input 
+                    value={form.bairro}
+                    onChange={e => setForm({...form, bairro: e.target.value})}
+                    placeholder="Ex: Centro"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cidade</label>
+                    <input 
+                      value={form.cidade}
+                      onChange={e => setForm({...form, cidade: e.target.value})}
+                      placeholder="Ex: São Paulo"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">UF</label>
+                    <input 
+                      value={form.uf}
+                      onChange={e => setForm({...form, uf: e.target.value.toUpperCase()})}
+                      placeholder="Ex: SP"
+                      maxLength={2}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -918,7 +1276,7 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
                             {cat.itens.map(item => {
                               const isChecked = selectedFuncs.includes(item.id);
                               return (
-                                <label key={item.id} className="flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg transition cursor-pointer hover:bg-slate-100/50">
+                                <label key={item.id} className="flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg cursor-pointer hover:bg-slate-100/50 transition">
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
@@ -963,7 +1321,7 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
               className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? 'Criando...' : 'Criar Acesso'}
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
             </button>
           </div>
         </form>
@@ -972,7 +1330,7 @@ function InviteModal({ roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) 
   );
 }
 
-function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetchHeaders }) {
+function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClose, onSuccess, readOnly = false }) {
   const { roleUserId: currentRoleUserId, papel } = useOrg();
   const toast = useToast();
   const [roleId, setRoleId] = useState(usuario.roleId || usuario.role?.id || '');
@@ -981,10 +1339,20 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   
   const parsedPhone = parsePhoneFromApi(usuario.telefone || usuario.usuarioTelefone);
   const [telefoneCountryCode, setTelefoneCountryCode] = useState(parsedPhone.countryCode);
-  const [telefoneNumero, setTelefoneNumero] = useState(parsedPhone.number);
+  const [telefoneNumero, setTelefoneNumero] = useState(parsedPhone.nationalNumber);
   const [telefoneTouched, setTelefoneTouched] = useState(false);
   
   const [email, setEmail] = useState(usuario.email || '');
+  const [dataNascimento, setDataNascimento] = useState(usuario.dataNascimento || '');
+  const [estadoCivil, setEstadoCivil] = useState(usuario.estadoCivil || '');
+  const [cep, setCep] = useState(usuario.cep || '');
+  const [logradouro, setLogradouro] = useState(usuario.logradouro || '');
+  const [numero, setNumero] = useState(usuario.numero || '');
+  const [complemento, setComplemento] = useState(usuario.complemento || '');
+  const [bairro, setBairro] = useState(usuario.bairro || '');
+  const [cidade, setCidade] = useState(usuario.cidade || '');
+  const [uf, setUf] = useState(usuario.uf || '');
+  const [especialidades, setEspecialidades] = useState(usuario.especialidades || []);
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState([]);
 
@@ -995,6 +1363,32 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   const lockNivelField = isUserOwner;
   // E-mail também fica bloqueado para o próprio dono editando a si mesmo
   const lockEmailField = isUserOwner || (isSelfEdit && isDono);
+
+  const handleCepChangeEdit = async (e) => {
+    const rawValue = e.target.value.replace(/\D/g, '');
+    let formattedCep = rawValue;
+    if (rawValue.length > 5) {
+      formattedCep = rawValue.replace(/^(\d{5})(\d)/, '$1-$2');
+    }
+    setCep(formattedCep);
+
+    if (rawValue.length === 8) {
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${rawValue}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setLogradouro(data.logradouro || '');
+          setBairro(data.bairro || '');
+          setCidade(data.localidade || '');
+          setUf(data.uf || '');
+          // foca no número
+          document.getElementById('edit-numero')?.focus();
+        }
+      } catch (error) {
+        console.error('Erro ao buscar CEP:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
@@ -1044,34 +1438,29 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(resolveApiUrl(`/api/v1/equipe/${usuario.id}`), {
-        method: 'PUT',
-        headers: { 
-          ...fetchHeaders(),
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          usuarioId: usuario.usuarioId || usuario.usuario?.id,
-          nomeCompleto: nome,
-          email: email,
-          telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
-          roleId,
-          perfilAcessoId
-        })
+      await equipeApi.update(usuario.id, {
+        usuarioId: usuario.usuarioId || usuario.usuario?.id,
+        nomeCompleto: nome,
+        email: email,
+        telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || "",
+        roleId: roleId || null,
+        perfilAcessoId: perfilAcessoId || null,
+        dataNascimento: dataNascimento || null,
+        estadoCivil: estadoCivil || "",
+        cep: cep || "",
+        logradouro: logradouro || "",
+        numero: numero || "",
+        complemento: complemento || "",
+        bairro: bairro || "",
+        cidade: cidade || "",
+        uf: uf || "",
+        especialidades: especialidades
       });
-      if (res.ok) {
-        toast.success('Papel atualizado com sucesso.');
-        onSuccess();
-      } else {
-        const body = await res.json().catch(() => ({}));
-        toast.error(
-          getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao atualizar papel.'
-        );
-      }
-    } catch (error) {
-      console.error('Erro ao buscar usuários:', error);
-      toast.error(getApiErrorToastMessage(error, 'Erro ao atualizar papel.'));
+      toast.success('Acesso atualizado com sucesso.');
+      onSuccess();
+    } catch (err) {
+      console.error('Erro ao atualizar papel:', err);
+      toast.error(getApiErrorToastMessage(err, 'Erro ao atualizar acesso.'));
     } finally {
       setSaving(false);
     }
@@ -1089,16 +1478,19 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
   }`;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]">
-      <div className="w-full max-w-md md:max-w-3xl lg:max-w-4xl rounded-3xl bg-white p-5 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 max-h-none md:max-h-[95vh] flex flex-col">
+    <div 
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-slate-900/60 sm:p-4 md:p-6 backdrop-blur-md"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full h-[100dvh] sm:h-auto max-w-full sm:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto rounded-none sm:rounded-3xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 transition-all duration-300 sm:max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-slate-100 rounded-xl">
               <Edit2 className="h-6 w-6 text-slate-700" />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Editar Acesso</h3>
-              <p className="text-sm text-slate-500 mt-0.5">Atualize as informações e permissões do membro da equipe.</p>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">{readOnly ? 'Visualizar Acesso' : 'Editar Acesso'}</h3>
+              <p className="text-sm text-slate-500 mt-0.5">{readOnly ? 'Visualize as informações do membro da equipe.' : 'Atualize as informações e permissões do membro da equipe.'}</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl p-2.5 text-slate-400 bg-slate-50 hover:bg-slate-100 hover:text-slate-600 active:bg-slate-200 transition-colors touch-manipulation">
@@ -1107,7 +1499,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 space-y-6">
+          <div className="flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 space-y-6 pb-4">
             {/* Seção 1: Dados Básicos */}
             <div className={sectionCardCls(false, 'rounded-2xl border border-teal-200 bg-white p-6')}>
               <div className={`flex items-center gap-3 ${sectionMb}`}>
@@ -1121,19 +1513,147 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nome Completo</label>
                   <input 
                     required
+                    disabled={readOnly}
                     maxLength={80}
                     value={nome}
                     onChange={e => setNome(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400 ml-1">CPF (Não editável)</label>
+                  <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400 ml-1">
+                    <span>CPF (Não editável)</span>
+                    {usuario.cpf && (
+                      <button 
+                        type="button" 
+                        onClick={() => setShowCpf(!showCpf)}
+                        className="text-teal-600 hover:text-teal-700 p-0.5"
+                      >
+                        {showCpf ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </button>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input 
+                      disabled
+                      value={usuario.cpf || 'Não informado'}
+                      className={`w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm ${!showCpf && usuario.cpf ? 'filter blur-sm select-none' : ''}`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Data de Nascimento</label>
                   <input 
-                    disabled
-                    value={usuario.cpf || 'Não informado'}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-[14px] text-slate-500 outline-none cursor-not-allowed shadow-sm"
+                    type="date"
+                    disabled={readOnly}
+                    value={dataNascimento}
+                    onChange={e => setDataNascimento(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Estado Civil</label>
+                  <select 
+                    value={estadoCivil}
+                    disabled={readOnly}
+                    onChange={e => setEstadoCivil(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm appearance-none ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  >
+                    <option value="">Selecione...</option>
+                    <option value="SOLTEIRO">Solteiro(a)</option>
+                    <option value="CASADO">Casado(a)</option>
+                    <option value="DIVORCIADO">Divorciado(a)</option>
+                    <option value="VIUVO">Viúvo(a)</option>
+                    <option value="SEPARADO">Separado(a)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Nova Seção: Endereço */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-indigo-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[14px] font-bold text-white shadow-sm">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-indigo-600')}>Endereço</h4>
+              </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${gridGapClass}`}>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">CEP</label>
+                  <input 
+                    maxLength={9}
+                    disabled={readOnly}
+                    placeholder="00000-000"
+                    value={cep}
+                    onChange={handleCepChangeEdit}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Logradouro</label>
+                  <input 
+                    maxLength={150}
+                    disabled={readOnly}
+                    value={logradouro}
+                    onChange={e => setLogradouro(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Número</label>
+                  <input 
+                    id="edit-numero"
+                    maxLength={20}
+                    disabled={readOnly}
+                    value={numero}
+                    onChange={e => setNumero(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Complemento</label>
+                  <input 
+                    maxLength={100}
+                    disabled={readOnly}
+                    value={complemento}
+                    onChange={e => setComplemento(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Bairro</label>
+                  <input 
+                    maxLength={100}
+                    disabled={readOnly}
+                    value={bairro}
+                    onChange={e => setBairro(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cidade</label>
+                  <input 
+                    maxLength={100}
+                    disabled={readOnly}
+                    value={cidade}
+                    onChange={e => setCidade(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">UF</label>
+                  <select 
+                    value={uf}
+                    disabled={readOnly}
+                    onChange={e => setUf(e.target.value)}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm appearance-none ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  >
+                    <option value="">UF</option>
+                    {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(state => (
+                      <option key={state} value={state}>{state}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -1142,7 +1662,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
             <div className={sectionCardCls(false, 'rounded-2xl border border-purple-200 bg-white p-6')}>
               <div className={`flex items-center gap-3 ${sectionMb}`}>
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
-                  2
+                  <Phone className="h-4 w-4" />
                 </div>
                 <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#a855f7]')}>Contato</h4>
               </div>
@@ -1154,10 +1674,10 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                   <input 
                     required
                     type="email"
-                    disabled={lockEmailField}
+                    disabled={readOnly || lockEmailField}
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${lockEmailField ? 'bg-slate-50/70 text-slate-500 cursor-not-allowed' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${(readOnly || lockEmailField) ? 'bg-slate-50/70 text-slate-500 cursor-not-allowed' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
                 </div>
                 <div>
@@ -1167,11 +1687,12 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                   <div className={phoneWrapClass()}>
                     <select
                       value={telefoneCountryCode}
+                      disabled={readOnly}
                       onChange={(e) => {
                         setTelefoneCountryCode(e.target.value);
                         setTelefoneNumero('');
                       }}
-                      className="w-16 bg-transparent text-[14px] font-medium text-slate-700 outline-none cursor-pointer"
+                      className={`w-16 bg-transparent text-[14px] font-medium text-slate-700 outline-none ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
                     >
                       {COUNTRY_PHONE_CODES.map((country) => (
                         <option key={country.code} value={country.code}>
@@ -1186,6 +1707,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                       </span>
                       <input
                         type="tel"
+                        disabled={readOnly}
                         value={telefoneNumero}
                         onChange={(e) => setTelefoneNumero(formatPhoneAsYouType(telefoneCountryCode, e.target.value))}
                         onBlur={() => setTelefoneTouched(true)}
@@ -1201,11 +1723,67 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
               </div>
             </div>
 
+            {/* Seção Especialidades (Opcional) */}
+            <div className={sectionCardCls(false, 'rounded-2xl border border-pink-200 bg-white p-6')}>
+              <div className={`flex items-center gap-3 ${sectionMb}`}>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pink-500 text-[14px] font-bold text-white shadow-sm">
+                  <Stethoscope className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className={sectionHeadingCls('text-[18px] font-bold text-pink-600')}>Especialidades Clínicas</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Selecione as especialidades de atuação (opcional).</p>
+                </div>
+              </div>
+              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                {especialidadesList && especialidadesList.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {especialidadesList.map(esp => {
+                      const isSelected = especialidades.includes(esp.id);
+                      return (
+                        <label 
+                          key={esp.id} 
+                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                            isSelected 
+                              ? 'border-pink-300 bg-pink-50 text-pink-900 shadow-sm' 
+                              : 'border-slate-200 bg-white hover:border-pink-200 hover:bg-pink-50/30'
+                          }`}
+                        >
+                          <div className="flex items-center h-5">
+                            <input 
+                              type="checkbox"
+                              disabled={readOnly}
+                              className="h-4 w-4 rounded border-slate-300 text-pink-600 focus:ring-pink-600"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEspecialidades([...especialidades, esp.id]);
+                                } else {
+                                  setEspecialidades(especialidades.filter(id => id !== esp.id));
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{esp.nome}</span>
+                            <span className="text-[11px] text-slate-500 leading-tight mt-0.5">{esp.descricao}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-slate-500 text-sm">
+                    Nenhuma especialidade cadastrada no sistema.
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Seção 3: Acesso e Permissões */}
             <div className={sectionCardCls(false, 'rounded-2xl border border-blue-200 bg-white p-6')}>
               <div className={`flex items-center gap-3 ${sectionMb}`}>
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
-                  3
+                  <Shield className="h-4 w-4" />
                 </div>
                 <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#1d4ed8]')}>Acesso</h4>
               </div>
@@ -1216,6 +1794,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                   </label>
                   <select 
                     value={roleId}
+                    disabled={readOnly}
                     onChange={e => handleRoleChangeEdit(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                   >
@@ -1239,6 +1818,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                     <select 
                       required
                       value={perfilAcessoId}
+                      disabled={readOnly}
                       onChange={e => setPerfilAcessoId(e.target.value)}
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                     >
@@ -1260,7 +1840,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
             <div className={sectionCardCls(false, 'rounded-2xl border border-amber-200 bg-white p-6')}>
               <div className={`flex items-center gap-3 ${sectionMb}`}>
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
-                  4
+                  <Settings2 className="h-4 w-4" />
                 </div>
                 <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#d97706]')}>Personalizar Funções</h4>
               </div>
@@ -1283,7 +1863,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                                 <label 
                                   key={item.id} 
                                   className={`flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg transition ${
-                                    isUserOwner 
+                                    isUserOwner || readOnly
                                       ? 'cursor-not-allowed opacity-60' 
                                       : 'cursor-pointer hover:bg-slate-100/50'
                                   }`}
@@ -1291,9 +1871,9 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                                   <input 
                                     type="checkbox"
                                     checked={isChecked}
-                                    disabled={isUserOwner}
+                                    disabled={isUserOwner || readOnly}
                                     onChange={() => {
-                                      if (isUserOwner) return;
+                                      if (isUserOwner || readOnly) return;
                                       setSelectedFuncs(prev => 
                                         prev.includes(item.id) 
                                           ? prev.filter(id => id !== item.id) 
@@ -1301,7 +1881,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
                                       );
                                     }}
                                     className={`mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 ${
-                                      isUserOwner ? 'cursor-not-allowed' : 'cursor-pointer'
+                                      isUserOwner || readOnly ? 'cursor-not-allowed' : 'cursor-pointer'
                                     }`}
                                   />
                                   <div className="flex-1">
@@ -1322,16 +1902,24 @@ function EditRoleModal({ usuario, roles, perfisAcesso, onClose, onSuccess, fetch
             </div>
           </div>
           
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end border-t border-slate-100 pt-5 shrink-0 bg-white md:bg-transparent">
-            <button type="button" onClick={onClose} className="w-full sm:w-32 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 shadow-sm active:scale-95 touch-manipulation">Voltar</button>
-            <button 
-              type="submit"
-              disabled={saving}
-              className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? 'Salvando...' : 'Salvar Alterações'}
-            </button>
+          <div className="mt-4 border-t border-slate-100 pt-4 shrink-0 bg-white md:bg-transparent">
+            {readOnly ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={onClose} className="w-full sm:w-32 rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-slate-800 transition-all touch-manipulation">Fechar</button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={onClose} className="w-full sm:w-32 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900 shadow-sm active:scale-95 touch-manipulation">Voltar</button>
+                <button 
+                  type="submit"
+                  disabled={saving}
+                  className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation"
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {saving ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            )}
           </div>
         </form>
       </div>

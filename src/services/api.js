@@ -718,6 +718,9 @@ export const notasApi = {
 export const equipeApi = {
   list: () => request('/api/v1/equipe'),
   get: (id) => request(`/api/v1/equipe/${id}`),
+  create: (data) => request('/api/v1/equipe', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => request(`/api/v1/equipe/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id) => request(`/api/v1/equipe/${id}`, { method: 'DELETE' }),
 };
 
 export const usuariosApi = {
@@ -1289,7 +1292,8 @@ export const auditoriaApi = {
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.size != null) params.set('size', String(opts.size));
     if (opts.roleUserId) params.set('roleUserId', opts.roleUserId);
-    if (opts.entidade) params.set('entidade', opts.entidade);
+    if (opts.search) params.set('search', opts.search);
+    if (opts.suspeito !== undefined) params.set('suspeito', String(opts.suspeito));
     const qs = params.toString();
     return request(`/api/v1/auditoria${qs ? `?${qs}` : ''}`);
   },
