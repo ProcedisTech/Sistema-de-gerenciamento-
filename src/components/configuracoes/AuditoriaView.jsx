@@ -1,86 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  User,
-  Calendar,
-  FileText,
   History,
-  Activity,
   Clock,
+  Search,
+  FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { auditoriaApi, equipeApi } from '../../services/api';
-
-// ─── Constantes de domínio ───────────────────────────────────────────────────
-
-const ACOES_MAP = {
-  // Paciente
-  CRIAR_PACIENTE:         { label: 'Criou paciente',        cor: 'green' },
-  EDITAR_PACIENTE:        { label: 'Editou paciente',        cor: 'blue' },
-  DESATIVAR_PACIENTE:     { label: 'Inativou paciente',      cor: 'red' },
-  REATIVAR_PACIENTE:      { label: 'Reativou paciente',      cor: 'green' },
-  
-  // Agenda & Agendamento
-  CRIAR_AGENDAMENTO:      { label: 'Criou agendamento',      cor: 'green' },
-  REMOVER_AGENDAMENTO:    { label: 'Removeu agendamento',    cor: 'red' },
-  CRIAR_AGENDA:           { label: 'Criou agenda',           cor: 'green' },
-  EDITAR_AGENDA:          { label: 'Editou agenda',          cor: 'blue' },
-  CANCELAR_AGENDA:        { label: 'Cancelou agenda',        cor: 'red' },
-  REAGENDAR_AGENDA:       { label: 'Reagendou agenda',       cor: 'purple' },
-  
-  // Procedimento & Notas
-  INICIAR_PROCEDIMENTO:   { label: 'Iniciou procedimento',   cor: 'blue' },
-  FINALIZAR_PROCEDIMENTO: { label: 'Finalizou procedimento', cor: 'purple' },
-  CRIAR_NOTA:             { label: 'Criou nota',             cor: 'green' },
-  EDITAR_NOTA:            { label: 'Editou nota',            cor: 'blue' },
-  REMOVER_NOTA:           { label: 'Removeu nota',           cor: 'red' },
-  
-  // Anamnese
-  PREENCHER_ANAMNESE:     { label: 'Preencheu anamnese',     cor: 'blue' },
-  FINALIZAR_ANAMNESE:     { label: 'Finalizou anamnese',     cor: 'purple' },
-  CRIAR_CATEGORIA_ANAMNESE:   { label: 'Criou categoria',    cor: 'green' },
-  EDITAR_CATEGORIA_ANAMNESE:  { label: 'Editou categoria',   cor: 'blue' },
-  DESATIVAR_CATEGORIA_ANAMNESE: { label: 'Desativou categoria', cor: 'red' },
-  CRIAR_PERGUNTA_ANAMNESE:    { label: 'Criou pergunta',     cor: 'green' },
-  EDITAR_PERGUNTA_ANAMNESE:   { label: 'Editou pergunta',    cor: 'blue' },
-  DESATIVAR_PERGUNTA_ANAMNESE: { label: 'Desativou pergunta', cor: 'red' },
-  CRIAR_FICHA_ANAMNESE:       { label: 'Criou ficha',        cor: 'green' },
-  EDITAR_FICHA_ANAMNESE:      { label: 'Editou ficha',       cor: 'blue' },
-  DESATIVAR_FICHA_ANAMNESE:   { label: 'Desativou ficha',    cor: 'red' },
-  
-  // Equipe & Usuário
-  CRIAR_PROFISSIONAL:     { label: 'Criou profissional',    cor: 'green' },
-  EDITAR_PROFISSIONAL:    { label: 'Editou profissional',   cor: 'blue' },
-  DESATIVAR_PROFISSIONAL: { label: 'Desativou profissional', cor: 'red' },
-  CRIAR_USUARIO:          { label: 'Criou login',           cor: 'green' },
-  EDITAR_USUARIO:         { label: 'Editou login',          cor: 'blue' },
-  DESATIVAR_USUARIO:      { label: 'Desativou login',       cor: 'red' },
-  UPLOAD_FOTO_PERFIL:     { label: 'Alterou foto perfil',   cor: 'blue' },
-  EDITAR_PERFIL_PROPRIO:  { label: 'Editou próprio perfil', cor: 'blue' },
-  EDITAR_ASSINATURA_PERFIL: { label: 'Alterou assinatura',  cor: 'blue' },
-  
-  // Clínica & Termos
-  EDITAR_DADOS_CLINICA:   { label: 'Editou dados clínica',  cor: 'blue' },
-  UPLOAD_LOGO_CLINICA:    { label: 'Alterou logo clínica',  cor: 'blue' },
-  EDITAR_HORARIO_CLINICA: { label: 'Editou horários clínica', cor: 'blue' },
-  CRIAR_TERMO_CONSENTIMENTO: { label: 'Criou termo',         cor: 'green' },
-  EDITAR_TERMO_CONSENTIMENTO: { label: 'Editou termo',        cor: 'blue' },
-  REMOVER_TERMO_CONSENTIMENTO: { label: 'Removeu termo',      cor: 'red' },
-  ASSINAR_TERMO:          { label: 'Assinou termo',          cor: 'purple' },
-
-  // Agenda Config
-  EDITAR_HORARIO_AGENDA:  { label: 'Editou horários profissional', cor: 'blue' },
-  SINCRONIZAR_HORARIO_AGENDA: { label: 'Sincronizou horários', cor: 'blue' },
-  CRIAR_FERIADO:          { label: 'Criou feriado',          cor: 'green' },
-  DESATIVAR_FERIADO:      { label: 'Removeu feriado',        cor: 'red' },
-  EDITAR_TEMPLATE_LEMBRETE: { label: 'Editou lembrete',      cor: 'blue' },
-  EDITAR_TEMPLATE_CONFIRMACAO: { label: 'Editou confirmação', cor: 'blue' },
-};
-
-const BADGE_CORES = {
-  green:  'bg-emerald-50 border-emerald-100 text-emerald-700',
-  blue:   'bg-blue-50 border-blue-100 text-blue-700',
-  red:    'bg-rose-50 border-rose-100 text-rose-700',
-  purple: 'bg-indigo-50 border-indigo-100 text-indigo-700',
-};
+import { AuditoriaDetailsModal } from './AuditoriaDetailsModal';
+import { formatData, formatarEntidade, getIconForEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
 
 const PERIODOS = [
   { value: '',       label: 'Todos' },
@@ -98,8 +26,6 @@ const ORDENACOES = [
 
 const PAGE_SIZE = 15;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function calcularDataLimite(periodo) {
   const agora = new Date();
   if (periodo === '1h')     return new Date(agora - 60 * 60 * 1000);
@@ -108,36 +34,6 @@ function calcularDataLimite(periodo) {
   if (periodo === 'mes')    return new Date(agora.getFullYear(), agora.getMonth(), 1);
   if (periodo === 'ano')    return new Date(agora.getFullYear(), 0, 1);
   return null;
-}
-
-function formatarEntidade(ent) {
-  if (!ent) return '-';
-  const normalized = ent.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (normalized === 'clinica') return 'Clínica';
-  return ent
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatData(iso) {
-  if (!iso) return '-';
-  return new Date(iso).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function getIconForEntidade(ent) {
-  switch (ent?.toLowerCase()) {
-    case 'paciente':     return <User className="h-3.5 w-3.5" />;
-    case 'agenda':       return <Calendar className="h-3.5 w-3.5" />;
-    case 'agendamento':  return <Calendar className="h-3.5 w-3.5" />;
-    case 'procedimento': return <Activity className="h-3.5 w-3.5" />;
-    default:             return <FileText className="h-3.5 w-3.5" />;
-  }
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -149,8 +45,11 @@ export function AuditoriaView() {
 
   const [filtroRoleUserId, setFiltroRoleUserId] = useState('');
   const [filtroPeriodo, setFiltroPeriodo]       = useState('');
+  const [busca, setBusca]                       = useState('');
+  const [filtroSuspeito, setFiltroSuspeito]     = useState(false);
   const [ordenacao, setOrdenacao]               = useState('desc');
   const [pagina, setPagina]                     = useState(1);
+  const [selectedRegistro, setSelectedRegistro] = useState(null);
 
   useEffect(() => {
     fetchEquipe();
@@ -191,11 +90,24 @@ export function AuditoriaView() {
     if (filtroRoleUserId) {
       lista = lista.filter((r) => r.roleUserId === filtroRoleUserId);
     }
+    if (busca.trim()) {
+      const q = busca.toLowerCase();
+      lista = lista.filter(r => 
+        r.nomeUsuario?.toLowerCase().includes(q) ||
+        r.acao?.toLowerCase().includes(q) ||
+        r.entidade?.toLowerCase().includes(q) ||
+        r.descricao?.toLowerCase().includes(q) ||
+        r.ipOrigem?.toLowerCase().includes(q)
+      );
+    }
+    if (filtroSuspeito) {
+      lista = lista.filter(r => r.suspeito === true);
+    }
     return [...lista].sort((a, b) => {
       const diff = new Date(b.criadoEm) - new Date(a.criadoEm);
       return ordenacao === 'asc' ? -diff : diff;
     });
-  }, [registros, filtroPeriodo, filtroRoleUserId, ordenacao]);
+  }, [registros, filtroPeriodo, filtroRoleUserId, busca, filtroSuspeito, ordenacao]);
 
   const totalPaginas  = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const itensDaPagina = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
@@ -252,10 +164,81 @@ export function AuditoriaView() {
     </div>
   );
 
+  const exportarParaPDF = () => {
+    import('jspdf').then(({ default: jsPDF }) => {
+      import('jspdf-autotable').then(({ default: autoTable }) => {
+        const doc = new jsPDF('landscape');
+        
+        doc.setFontSize(18);
+        doc.text('Relatório de Auditoria e Segurança', 14, 22);
+        
+        doc.setFontSize(11);
+        doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 30);
+
+        const tableColumn = ["Data", "Profissional", "Ação", "Módulo", "Descrição", "IP", "Suspeito?"];
+        const tableRows = [];
+
+        filtrados.forEach(item => {
+          const rowData = [
+            formatData(item.criadoEm),
+            item.nomeUsuario,
+            item.acao,
+            item.entidade,
+            item.descricao || '-',
+            item.ipOrigem || 'Desconhecido',
+            item.suspeito ? 'SIM' : 'NÃO'
+          ];
+          tableRows.push(rowData);
+        });
+
+        autoTable(doc, {
+          head: [tableColumn],
+          body: tableRows,
+          startY: 35,
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [0, 168, 142] }
+        });
+
+        doc.save('relatorio_auditoria.pdf');
+      });
+    });
+  };
+
   return (
     <div className="flex flex-col gap-6">
+      {/* ── Botões de Ação ── */}
+      <div className="flex justify-end">
+        <button
+          onClick={exportarParaPDF}
+          disabled={loading || filtrados.length === 0}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 transition disabled:opacity-50"
+        >
+          <FileText className="w-4 h-4" />
+          Exportar para PDF
+        </button>
+      </div>
+
       {/* ── Filtros ── */}
-      <div className="grid grid-cols-1 gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
+        
+        {/* Busca */}
+        <div className="flex flex-col gap-2 lg:col-span-2">
+          <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
+            Busca Rápida
+          </label>
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <Search className="h-4 w-4 text-slate-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Ex: Deletar, IP, Nome..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className={`${selectCls} pl-10`}
+            />
+          </div>
+        </div>
         {/* Profissional */}
         <div className="flex flex-col gap-2">
           <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
@@ -312,6 +295,23 @@ export function AuditoriaView() {
             </select>
           </div>
         </div>
+        {/* Ações Suspeitas */}
+        <div className="flex flex-col gap-2 justify-end sm:col-span-2 lg:col-span-5 border-t border-slate-100 pt-3 mt-1">
+          <label className="flex items-center gap-2 cursor-pointer w-max">
+            <input 
+              type="checkbox" 
+              className="hidden" 
+              checked={filtroSuspeito} 
+              onChange={() => setFiltroSuspeito(!filtroSuspeito)} 
+            />
+            <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${filtroSuspeito ? 'bg-red-500' : 'bg-slate-200'}`}>
+              <div className={`w-4 h-4 bg-white rounded-full transition-transform ${filtroSuspeito ? 'translate-x-4' : 'translate-x-0'}`} />
+            </div>
+            <span className="text-sm font-bold text-slate-700 select-none">
+              Mostrar apenas Ações Suspeitas
+            </span>
+          </label>
+        </div>
       </div>
 
       {/* ── MOBILE: Cards (até md) ── */}
@@ -340,6 +340,12 @@ export function AuditoriaView() {
                   {acao.label}
                 </span>
               </div>
+              {item.suspeito && (
+                <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg border border-red-100 text-[11px] font-bold">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  AÇÃO SUSPEITA DETECTADA
+                </div>
+              )}
 
               {/* linha 2: data + entidade */}
               <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100/50">
@@ -353,12 +359,18 @@ export function AuditoriaView() {
                 </span>
               </div>
 
-              {/* linha 3: descrição (se existir) */}
-              {item.descricao && (
-                <p className="mt-3 text-[13px] text-slate-500 leading-relaxed">
-                  {item.descricao}
+              {/* linha 3: descrição + botão de detalhes */}
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-[13px] text-slate-500 leading-relaxed truncate max-w-[70%]" title={item.descricao || ''}>
+                  {item.descricao || '-'}
                 </p>
-              )}
+                <button
+                  onClick={() => setSelectedRegistro(item)}
+                  className="shrink-0 text-teal-600 hover:text-teal-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-teal-100 bg-teal-50/50 hover:bg-teal-100/50 transition-colors"
+                >
+                  Ver Detalhes
+                </button>
+              </div>
             </div>
           );
         })}
@@ -400,7 +412,8 @@ export function AuditoriaView() {
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Profissional</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Ação Realizada</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Módulo / Entidade</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Detalhes</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Descrição</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -452,6 +465,11 @@ export function AuditoriaView() {
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${BADGE_CORES[acao.cor]}`}>
                           {acao.label}
                         </span>
+                        {item.suspeito && (
+                          <div className="mt-1 flex items-center gap-1 text-red-600 text-[10px] font-bold">
+                            <AlertTriangle className="w-3 h-3" /> SUSPEITO
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-[13px] font-medium text-slate-600">
@@ -462,6 +480,14 @@ export function AuditoriaView() {
                       <td className="px-6 py-4 text-[13px] font-medium text-slate-500 max-w-xs truncate" title={item.descricao || ''}>
                         {item.descricao || '-'}
                       </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => setSelectedRegistro(item)}
+                          className="text-teal-600 hover:text-teal-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-teal-100 bg-teal-50/50 hover:bg-teal-100/50 transition-colors uppercase tracking-wider"
+                        >
+                          Detalhes
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -471,6 +497,11 @@ export function AuditoriaView() {
         </div>
         {paginacaoFooter}
       </div>
+
+      <AuditoriaDetailsModal 
+        registro={selectedRegistro} 
+        onClose={() => setSelectedRegistro(null)} 
+      />
     </div>
   );
 }
