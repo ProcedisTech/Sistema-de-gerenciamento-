@@ -1336,6 +1336,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
   const [roleId, setRoleId] = useState(usuario.roleId || usuario.role?.id || '');
   const [perfilAcessoId, setPerfilAcessoId] = useState(usuario.perfilAcessoId || '');
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
+  const [showCpf, setShowCpf] = useState(false);
   
   const parsedPhone = parsePhoneFromApi(usuario.telefone || usuario.usuarioTelefone);
   const [telefoneCountryCode, setTelefoneCountryCode] = useState(parsedPhone.countryCode);
