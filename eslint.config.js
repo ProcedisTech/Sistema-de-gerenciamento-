@@ -65,8 +65,6 @@ export default defineConfig([
       '**/hooks/agenda/useDiasComDisponibilidade.js',
       '**/components/agenda/AgendaDashboard.jsx',
       '**/components/agenda/AgendaFormModal.jsx',
-      '**/components/agenda/modo-agendamento/ModoAgendamentoSeletores.jsx',
-      '**/components/agenda/modo-agendamento/ConfirmarAgendamentoBar.jsx',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',

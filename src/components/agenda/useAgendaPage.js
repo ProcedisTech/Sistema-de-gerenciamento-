@@ -30,7 +30,11 @@ import {
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
-import { buildDaySlotList, buildMonthHeatmap } from '../../utils/agendaDisponibilidadeBuilder.js';
+import {
+  buildDaySlotList,
+  buildMonthHeatmap,
+  buildNeutralMonthHeatmap,
+} from '../../utils/agendaDisponibilidadeBuilder.js';
 import {
   findFirstConflictHhmm,
   findNextFreeSlotAcrossDays,
@@ -697,6 +701,19 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispCalendarioDia,
     form.data,
   ]);
+
+  const dispNeutralHeatmap = useMemo(() => {
+    if (!modalMode) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (role) return null;
+    return buildNeutralMonthHeatmap({
+      monthDate: dispMonthDate,
+      todayIso,
+      selectedIso: toDateKey(form.data) || dispCalendarioDia,
+    });
+  }, [modalMode, roleUserIdAgenda, dispMonthDate, todayIso, form.data, dispCalendarioDia]);
+
+  const dispCalendarioHeatmap = dispHeatmap ?? dispNeutralHeatmap;
 
   const retryDispMonth = useCallback(() => {
     if (!authEnabled || !modalMode) return;
@@ -1705,6 +1722,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispCalendarioDia,
     dispDaySlots,
     dispHeatmap,
+    dispCalendarioHeatmap,
     dispMonthError,
     dispMonthLoading,
     retryDispMonth,

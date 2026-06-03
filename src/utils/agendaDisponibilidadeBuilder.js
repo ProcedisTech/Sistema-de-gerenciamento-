@@ -101,6 +101,31 @@ export function buildMonthHeatmap({
 }
 
 /**
+ * Grade mensal neutra (sem densidade) — modo "qualquer profissional".
+ * Mesmo shape de saída que buildMonthHeatmap para CalendarioMensal.
+ * @param {object} params
+ * @returns {{ monthLabel: string, weekLabels: string[], cells: Array }}
+ */
+export function buildNeutralMonthHeatmap({ monthDate, todayIso, selectedIso }) {
+  const today = String(todayIso || toLocalDateIso()).slice(0, 10);
+  const cells = buildCalendarCells(monthDate).map((cell) => {
+    const isPast = cell.iso < today;
+    return {
+      ...cell,
+      isPast,
+      density: 'neutral',
+      clickable: cell.inCurrentMonth && !isPast,
+      isSelected: Boolean(selectedIso && cell.iso === selectedIso),
+    };
+  });
+  return {
+    monthLabel: formatMonthYearLabel(monthDate),
+    weekLabels: HEATMAP_WEEK_LABELS,
+    cells,
+  };
+}
+
+/**
  * @returns {{ headerTitle: string, expedienteLabel: string, dayStartMin: number, dayEndMin: number, slots: Array }}
  */
 export function buildDaySlotList({

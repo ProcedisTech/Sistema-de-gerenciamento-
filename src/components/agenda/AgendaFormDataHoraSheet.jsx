@@ -26,10 +26,9 @@ export function AgendaFormDataHoraSheet({
   onPrevMonth,
   onNextMonth,
   onRetry,
-  noProfissional,
+  showDensityLegend = true,
   onSelecionarDia,
   onSelecionarSlot,
-  onAbrirPainelC,
   onCancel,
 }) {
   useEffect(() => {
@@ -75,7 +74,7 @@ export function AgendaFormDataHoraSheet({
             onRetry={onRetry}
             diaSelecionado={diaSelecionado}
             onSelecionarDia={onSelecionarDia}
-            noProfissional={noProfissional}
+            showDensityLegend={showDensityLegend}
           />
         </div>
         <div className="mt-6 shrink-0">
@@ -89,7 +88,6 @@ export function AgendaFormDataHoraSheet({
             horaSelecionada={horaSelecionada}
             profissionalFixado={profissionalFixado}
             onSelecionarSlot={onSelecionarSlot}
-            onAbrirPainelC={onAbrirPainelC}
           />
         </div>
       </div>

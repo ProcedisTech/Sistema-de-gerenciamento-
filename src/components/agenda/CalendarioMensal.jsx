@@ -41,6 +41,10 @@ function cellButtonClass(cell, diaSelecionado) {
     return `${base} ${DENSITY_CLASS.neutral} cursor-not-allowed opacity-40`;
   }
 
+  if (cell.density === 'neutral') {
+    return `${base} text-ink-700 hover:bg-vivid-teal-50 hover:text-vivid-teal-700 cursor-pointer`;
+  }
+
   const density = DENSITY_CLASS[cell.density] || DENSITY_CLASS.neutral;
   return `${base} ${density} cursor-pointer`;
 }
@@ -58,7 +62,7 @@ export function CalendarioMensal({
   onRetry,
   diaSelecionado,
   onSelecionarDia,
-  noProfissional = false,
+  showDensityLegend = true,
 }) {
   const hoje = useMemo(() => toLocalDateIso(new Date()), []);
 
@@ -69,8 +73,8 @@ export function CalendarioMensal({
     onSelecionarDia?.(cell.iso);
   }
 
-  const showSkeleton = loading && !heatmap;
-  const showError = Boolean(error) && !showSkeleton;
+  const showSkeleton = showDensityLegend && loading && !heatmap;
+  const showError = showDensityLegend && Boolean(error) && !showSkeleton;
   const showGrid = heatmap && !showError;
 
   return (
@@ -80,7 +84,7 @@ export function CalendarioMensal({
         <button
           type="button"
           onClick={onPrevMonth}
-          disabled={!onPrevMonth || noProfissional}
+          disabled={!onPrevMonth}
           className="rounded-xl p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 disabled:opacity-40"
           aria-label="Mês anterior"
         >
@@ -94,7 +98,7 @@ export function CalendarioMensal({
         <button
           type="button"
           onClick={onNextMonth}
-          disabled={!onNextMonth || noProfissional}
+          disabled={!onNextMonth}
           className="rounded-xl p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 disabled:opacity-40"
           aria-label="Próximo mês"
         >
@@ -114,11 +118,7 @@ export function CalendarioMensal({
         ))}
       </div>
 
-      {noProfissional ? (
-        <div className="flex min-h-[12rem] flex-1 items-center justify-center rounded-xl border border-dashed border-ink-200 px-4 py-8 text-center text-sm text-ink-500">
-          Selecione um profissional para ver a disponibilidade do mês
-        </div>
-      ) : showSkeleton ? (
+      {showSkeleton ? (
         <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1">
           {Array.from({ length: 42 }).map((_, i) => (
             <div key={i} className="min-h-0 animate-pulse rounded-lg bg-ink-100" />
@@ -178,7 +178,7 @@ export function CalendarioMensal({
       )}
 
       {/* Legenda */}
-      {!noProfissional && (
+      {showDensityLegend && (
         <footer className="mt-2 flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] font-medium text-ink-500">
           {LEGEND_ITEMS.map((item) => (
             <span key={item.key} className="inline-flex items-center gap-1">
