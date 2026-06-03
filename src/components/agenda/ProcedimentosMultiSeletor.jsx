@@ -10,14 +10,15 @@ function badgeTipo(tipoCodigo) {
   return null;
 }
 
-export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDuracao, onAbrirPainelB, readOnly }) {
+export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDuracao, onAbrirPainelB, readOnly, showAdicionar = true }) {
   const total = procedimentos.reduce((acc, p) => acc + (Number(p.duracaoSelecionada) || 0), 0);
+  const podeAdicionar = !readOnly && showAdicionar && typeof onAbrirPainelB === 'function';
 
   if (!procedimentos || procedimentos.length === 0) {
     return (
       <div className="flex min-h-[2.5rem] flex-wrap items-center gap-1.5 rounded-xl border border-dashed border-ink-300 bg-ink-50 px-3 py-2">
         <span className="text-xs text-ink-400">Nenhum procedimento selecionado</span>
-        {!readOnly && (
+        {podeAdicionar && (
           <button
             type="button"
             onClick={() => onAbrirPainelB?.()}
@@ -99,7 +100,7 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDur
         <span className="text-[11px] text-ink-500">
           Total: <span className="font-semibold text-ink-700">{total} min</span>
         </span>
-        {!readOnly && (
+        {podeAdicionar && (
           <button
             type="button"
             onClick={() => onAbrirPainelB?.()}
