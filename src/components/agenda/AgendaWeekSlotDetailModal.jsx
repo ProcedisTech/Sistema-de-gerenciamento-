@@ -1,24 +1,43 @@
 import { X } from 'lucide-react';
-import { AgendaAppointmentSummaryCard } from './AgendaAppointmentSummaryCard.jsx';
+import { getEntryPrimaryAppointment } from '../../utils/agendaDayInsights.js';
+import { AgendaSummaryEntryCard } from './AgendaSummaryEntryCard.jsx';
+
+function normalizeTarget(target) {
+  if (!target) return null;
+  if (target.kind === 'group' || target.kind === 'single') return target;
+  return { kind: 'single', appointment: target };
+}
 
 /**
  * Detalhe de um slot na vista Semana — z-[215], abaixo do AgendaFormModal (220) e dos fluxos 230.
+ * `target` é entry (group/single) ou linha única; ações usam o grupo resolvido no clique.
  */
 export function AgendaWeekSlotDetailModal({
-  appointment,
+  target,
   onClose,
   onPrimary,
   onEdit,
   renderSlotActions,
   isNivel1 = false,
+  advanceOfferByAgendaId,
+  onAdvanceClick,
 }) {
-  if (!appointment) return null;
+  const entry = normalizeTarget(target);
+  const primary = getEntryPrimaryAppointment(entry);
+  if (!entry || !primary) return null;
 
-  const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
+  const isBloqueio = primary.tipo === 'bloqueio' && primary.status !== 'cancelado';
   const motivo =
-    (appointment.observacao && String(appointment.observacao).trim()) ||
-    appointment.procedimentoNome ||
+    (primary.observacao && String(primary.observacao).trim()) ||
+    primary.procedimentoNome ||
     'Bloqueio';
+  const advanceId = primary?.id ? String(primary.id) : '';
+  const advanceOffer = advanceId ? advanceOfferByAgendaId?.get(advanceId) : undefined;
+
+  const headerTime =
+    entry.kind === 'group'
+      ? `${entry.horaInicio} → ${entry.horaFim}`
+      : primary.horaInicio;
 
   return (
     <div className="fixed inset-0 z-[215] flex items-end justify-center p-0 sm:items-center sm:p-4">
@@ -31,8 +50,8 @@ export function AgendaWeekSlotDetailModal({
             </h3>
             <p className="mt-1 text-[12px] font-medium text-[#888888]">
               {isBloqueio
-                ? `${appointment.horaInicio} · ${motivo}`
-                : `${appointment.horaInicio} · ${appointment.pacienteNome}`}
+                ? `${headerTime} · ${motivo}`
+                : `${headerTime} · ${primary.pacienteNome}`}
             </p>
           </div>
           <button type="button" onClick={onClose} className="shrink-0 rounded-xl p-2 text-[#64748b] hover:bg-[#F5F6FA]">
@@ -40,12 +59,14 @@ export function AgendaWeekSlotDetailModal({
           </button>
         </div>
         <div className="p-4 sm:p-5">
-          <AgendaAppointmentSummaryCard
-            appointment={appointment}
+          <AgendaSummaryEntryCard
+            entry={entry}
             onPrimary={onPrimary}
             onEdit={onEdit}
             renderSlotActions={renderSlotActions}
             isNivel1={isNivel1}
+            advanceOffer={advanceOffer}
+            onAdvanceClick={onAdvanceClick}
           />
         </div>
       </div>

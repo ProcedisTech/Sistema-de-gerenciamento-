@@ -38,9 +38,14 @@ import {
 import {
   findFirstConflictHhmm,
   findNextFreeSlotAcrossDays,
+  minutesToHhmm,
   occupiedIntervalsFromAgendaDtos,
   proposalOverlapsOccupied,
 } from '../../utils/agendaAvailability';
+import {
+  dayBoundsFromWindows,
+  getDayWindowsForIso,
+} from '../../utils/disponibilidadeDayWindows.js';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
@@ -142,8 +147,21 @@ function defaultBloqueioForm(selectedDay) {
     horaInicio: '09:00',
     horaFim: '10:00',
     duracaoMin: 60,
-    useCustomEnd: false,
+    diaInteiro: false,
     motivo: '',
+  };
+}
+
+function bloqueioBoundsFromDisponibilidade(iso, disponibilidade) {
+  const windows = getDayWindowsForIso(iso, disponibilidade);
+  if (!windows.length) {
+    return { ok: false, error: 'Profissional não atende neste dia.' };
+  }
+  const { dayStartMin, dayEndMin } = dayBoundsFromWindows(windows);
+  return {
+    ok: true,
+    horaInicio: minutesToHhmm(dayStartMin),
+    horaFim: minutesToHhmm(dayEndMin),
   };
 }
 
@@ -533,6 +551,31 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
 
   useEffect(() => {
+    if (!bloqueioModalOpen) return undefined;
+    const iso = toDateKey(bloqueioForm.data) || todayIso;
+    setDispCalendarioDia(iso);
+    const [y, m] = iso.split('-').map(Number);
+    setDispMonthDate(new Date(y, m - 1, 1));
+    return undefined;
+    // Só ao abrir/fechar modal de bloqueio — não seguir bloqueioForm.data a cada clique.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bloqueioForm.data intencionalmente omitido
+  }, [bloqueioModalOpen, todayIso]);
+
+  useEffect(() => {
+    if (!authEnabled || !bloqueioModalOpen || !String(roleUserIdAgenda || '').trim()) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      await ensureDispMonthLoaded(dispMonthDate);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, bloqueioModalOpen, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
+
+  useEffect(() => {
     if (!authEnabled || !modalMode || !form.data) {
       setSlotsOcupados([]);
       setSlotsOcupadosLoading(false);
@@ -715,12 +758,42 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   const dispCalendarioHeatmap = dispHeatmap ?? dispNeutralHeatmap;
 
+  const bloqueioCalendarioHeatmap = useMemo(() => {
+    if (!bloqueioModalOpen) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return null;
+    return buildMonthHeatmap({
+      monthDate: dispMonthDate,
+      disponibilidade: dispProfissionalDisponibilidade,
+      dtos: dispMonthDtos,
+      todayIso,
+      profissionalRoleUserId: role,
+      selectedIso: toDateKey(bloqueioForm.data) || dispCalendarioDia,
+    });
+  }, [
+    bloqueioModalOpen,
+    dispMonthDate,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
+    todayIso,
+    roleUserIdAgenda,
+    dispCalendarioDia,
+    bloqueioForm.data,
+  ]);
+
   const retryDispMonth = useCallback(() => {
     if (!authEnabled || !modalMode) return;
     const role = String(roleUserIdAgenda || '').trim();
     if (!role) return;
     ensureDispMonthLoaded(dispMonthDate);
   }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
+
+  const retryBloqueioDispMonth = useCallback(() => {
+    if (!authEnabled || !bloqueioModalOpen) return;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return;
+    ensureDispMonthLoaded(dispMonthDate);
+  }, [authEnabled, bloqueioModalOpen, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
 
   const dispDaySlots = useMemo(() => {
     if (!modalMode) return null;
@@ -886,8 +959,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (opts.successToast !== false) {
           toastSuccess(opts.successToast || 'Agendamento cancelado');
         }
-        await loadMonth();
-        await refreshWeekGrid();
+        if (!opts.skipDashboardRefresh) {
+          await loadMonth();
+          await refreshWeekGrid();
+        }
         setError('');
         return true;
       } catch (e) {
@@ -901,7 +976,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const handleMarcarNaoCompareceu = useCallback(
-    async (agendaId) => {
+    async (agendaId, opts = {}) => {
       if (isNivel1) return false;
       if (!agendaId) return false;
       try {
@@ -918,7 +993,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             motivoCancelamentoId: motivoId,
             motivoCancelamentoTexto: NO_SHOW_OBS_PREFIX,
           },
-          { successToast: 'Paciente marcado como não compareceu' },
+          {
+            successToast:
+              opts.successToast !== undefined ? opts.successToast : 'Paciente marcado como não compareceu',
+            skipDashboardRefresh: opts.skipDashboardRefresh,
+          },
         );
       } catch (e) {
         toastError(e?.body?.message || formatAgendamentoApiError(e) || 'Erro ao marcar não compareceu');
@@ -955,10 +1034,100 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [isNivel1, selectedDay, todayIso, roleUserId, roleNome]
   );
 
-  const updateBloqueioForm = useCallback((field, value) => {
-    setBloqueioForm((prev) => ({ ...prev, [field]: value }));
-    setBloqueioFormErrors((prev) => ({ ...prev, [field]: undefined }));
-  }, []);
+  const selectBloqueioDia = useCallback(
+    (iso) => {
+      const prof = String(roleUserIdAgenda || '').trim();
+      setBloqueioForm((prev) => {
+        const next = { ...prev, data: iso };
+        if (!prev.diaInteiro) {
+          setBloqueioFormErrors((e) => ({ ...e, data: undefined }));
+          return next;
+        }
+        if (!prof) return next;
+        const disp = disponibilidades[prof];
+        const bounds = bloqueioBoundsFromDisponibilidade(iso, disp);
+        if (!bounds.ok) {
+          setBloqueioFormErrors((e) => ({
+            ...e,
+            data: bounds.error,
+            horaInicio: undefined,
+            horaFim: undefined,
+          }));
+          return next;
+        }
+        setBloqueioFormErrors((e) => ({
+          ...e,
+          data: undefined,
+          horaInicio: undefined,
+          horaFim: undefined,
+        }));
+        return {
+          ...next,
+          horaInicio: bounds.horaInicio,
+          horaFim: bounds.horaFim,
+        };
+      });
+    },
+    [roleUserIdAgenda, disponibilidades]
+  );
+
+  const updateBloqueioForm = useCallback(
+    (field, value) => {
+      if (field === 'diaInteiro') {
+        const checked = Boolean(value);
+        const prof = String(roleUserIdAgenda || '').trim();
+        setBloqueioForm((prev) => {
+          if (!checked) {
+            const hi = String(prev.horaInicio || '09:00').slice(0, 5);
+            const dur = Number(prev.duracaoMin) || 60;
+            return {
+              ...prev,
+              diaInteiro: false,
+              horaInicio: hi,
+              duracaoMin: DURACOES_PILL.includes(dur) ? dur : 60,
+              horaFim: addMinutesToTime(hi, DURACOES_PILL.includes(dur) ? dur : 60),
+            };
+          }
+          if (prev.data && prof) {
+            const disp = disponibilidades[prof];
+            const bounds = bloqueioBoundsFromDisponibilidade(prev.data, disp);
+            if (!bounds.ok) {
+              setBloqueioFormErrors((e) => ({ ...e, data: bounds.error }));
+              return { ...prev, diaInteiro: true };
+            }
+            setBloqueioFormErrors((e) => ({
+              ...e,
+              data: undefined,
+              horaInicio: undefined,
+              horaFim: undefined,
+              duracaoMin: undefined,
+            }));
+            return {
+              ...prev,
+              diaInteiro: true,
+              horaInicio: bounds.horaInicio,
+              horaFim: bounds.horaFim,
+            };
+          }
+          return { ...prev, diaInteiro: true };
+        });
+        return;
+      }
+      setBloqueioForm((prev) => {
+        const next = { ...prev, [field]: value };
+        if (field === 'horaInicio' && !prev.diaInteiro) {
+          next.horaFim = addMinutesToTime(String(value || '').slice(0, 5), Number(prev.duracaoMin) || 60);
+        }
+        if (field === 'duracaoMin' && !prev.diaInteiro) {
+          const hi = String(prev.horaInicio || '09:00').slice(0, 5);
+          next.horaFim = addMinutesToTime(hi, Number(value) || 60);
+        }
+        return next;
+      });
+      setBloqueioFormErrors((prev) => ({ ...prev, [field]: undefined }));
+    },
+    [roleUserIdAgenda, disponibilidades]
+  );
 
   const validateBloqueioForm = useCallback(() => {
     const nextErrors = {};
@@ -968,28 +1137,40 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     else if (bloqueioForm.data < todayIso) {
       nextErrors.data = 'Não é possível bloquear no passado.';
     }
-    const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
-    if (!hi) nextErrors.horaInicio = 'Informe o horário de início.';
-    let hfMin;
-    if (bloqueioForm.useCustomEnd) {
+
+    if (bloqueioForm.diaInteiro) {
+      const disp = disponibilidades[prof];
+      const bounds = bloqueioForm.data
+        ? bloqueioBoundsFromDisponibilidade(bloqueioForm.data, disp)
+        : { ok: false, error: 'Selecione a data.' };
+      if (!bounds.ok) {
+        nextErrors.data = bounds.error || 'Profissional não atende neste dia.';
+      }
+      const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
       const hf = String(bloqueioForm.horaFim || '').trim().slice(0, 5);
-      if (!hf) nextErrors.horaFim = 'Informe o horário de fim.';
-      hfMin = bloqueioTimeToMinutes(hf);
+      if (!hi || !hf) {
+        nextErrors.data = nextErrors.data || 'Não foi possível calcular o expediente do dia.';
+      } else if (bloqueioTimeToMinutes(hf) <= bloqueioTimeToMinutes(hi)) {
+        nextErrors.data = 'Expediente inválido para este dia.';
+      }
     } else {
+      const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
+      if (!hi) nextErrors.horaInicio = 'Informe o horário de início.';
       const d = Number(bloqueioForm.duracaoMin);
       if (!DURACOES_PILL.includes(d)) nextErrors.duracaoMin = 'Selecione a duração.';
-      hfMin = bloqueioTimeToMinutes(hi) + (Number(bloqueioForm.duracaoMin) || 60);
+      const hfMin = bloqueioTimeToMinutes(hi) + (Number(bloqueioForm.duracaoMin) || 60);
+      const hiMin = bloqueioTimeToMinutes(hi);
+      if (hi && hfMin <= hiMin) {
+        nextErrors.horaFim = 'O horário de fim deve ser após o início.';
+      }
     }
-    const hiMin = bloqueioTimeToMinutes(hi);
-    if (hi && hfMin <= hiMin) {
-      nextErrors.horaFim = 'O horário de fim deve ser após o início.';
-    }
+
     if (!String(bloqueioForm.motivo || '').trim()) {
       nextErrors.motivo = 'Descreva o motivo do bloqueio.';
     }
     setBloqueioFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [bloqueioForm, roleUserIdAgenda, todayIso]);
+  }, [bloqueioForm, roleUserIdAgenda, todayIso, disponibilidades]);
 
   const saveBloqueio = useCallback(async () => {
     if (isNivel1) return false;
@@ -1005,7 +1186,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         return false;
       }
       const hi = String(bloqueioForm.horaInicio || '').slice(0, 5);
-      const horaFim = bloqueioForm.useCustomEnd
+      const horaFim = bloqueioForm.diaInteiro
         ? String(bloqueioForm.horaFim || '').slice(0, 5)
         : addMinutesToTime(hi, Number(bloqueioForm.duracaoMin) || 60);
       const body = buildAgendaBloqueioCreateBody({
@@ -1017,14 +1198,16 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         observacao: String(bloqueioForm.motivo || '').trim(),
       });
       await agendasApi.create(body);
-      setSelectedDay(bloqueioForm.data);
       const nextMonthDate = new Date(
         Number(bloqueioForm.data.slice(0, 4)),
         Number(bloqueioForm.data.slice(5, 7)) - 1,
         1
       );
+      skipNextAutoLoadRef.current = true;
+      setSelectedDay(bloqueioForm.data);
       setMonthDate(nextMonthDate);
-      await refreshDashboard();
+      await loadMonth(nextMonthDate);
+      await refreshWeekGrid();
       closeBloqueioModal();
       setError('');
       toastSuccess('Horário bloqueado');
@@ -1041,7 +1224,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     bloqueioForm,
     closeBloqueioModal,
     isNivel1,
-    refreshDashboard,
+    loadMonth,
+    refreshWeekGrid,
     roleUserIdAgenda,
     toastError,
     toastSuccess,
@@ -1111,8 +1295,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
               (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
           );
         }
-        await loadMonth();
-        await refreshWeekGrid();
+        if (!opts.skipDashboardRefresh) {
+          await loadMonth();
+          await refreshWeekGrid();
+        }
         setError('');
         return true;
       } catch (e) {
@@ -1144,8 +1330,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (opts.successToast !== false) {
           toastSuccess(opts.successToast || 'Agendamento reagendado');
         }
-        await loadMonth();
-        await refreshWeekGrid();
+        if (!opts.skipDashboardRefresh) {
+          await loadMonth();
+          await refreshWeekGrid();
+        }
         setError('');
         return true;
       } catch (e) {
@@ -1689,6 +1877,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     groupedAppointments,
     handleAtualizarStatus,
     handleMarcarNaoCompareceu,
+    bloqueioCalendarioHeatmap,
     bloqueioForm,
     bloqueioFormErrors,
     bloqueioModalOpen,
@@ -1726,8 +1915,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispMonthError,
     dispMonthLoading,
     retryDispMonth,
+    retryBloqueioDispMonth,
     goDispNextMonth,
     goDispPrevMonth,
+    selectBloqueioDia,
     handleProximoHorarioLivre,
     refreshDashboard,
     selectDispCalendarioDia,

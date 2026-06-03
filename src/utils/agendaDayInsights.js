@@ -439,6 +439,37 @@ export function getAppointmentsFromEntry(entry) {
   return entry.appointment ? [entry.appointment] : [];
 }
 
+/** Chave estável de agenda (dashboard row). */
+export function appointmentIdKey(appointment) {
+  return String(appointment?.agendaId || appointment?.id || '');
+}
+
+/**
+ * Entry (single ou group) que contém a agenda clicada.
+ * @param {Array} entries — saída de groupConsecutiveAppointments
+ */
+export function findEntryForAppointmentId(entries, agendaId) {
+  const id = String(agendaId || '');
+  if (!id) return null;
+  for (const entry of entries || []) {
+    const apps = getAppointmentsFromEntry(entry);
+    if (apps.some((a) => appointmentIdKey(a) === id)) return entry;
+  }
+  return null;
+}
+
+/**
+ * Resolve target de ação (entry group/single) a partir de uma linha clicada e do dia.
+ * Única regra de contiguidade: groupConsecutiveAppointments.
+ */
+export function resolveActionTargetFromDayAppointments(dayRows, clickedRow) {
+  if (!clickedRow) return null;
+  const entries = groupConsecutiveAppointments(dayRows || []);
+  const entry = findEntryForAppointmentId(entries, appointmentIdKey(clickedRow));
+  if (entry) return entry;
+  return { kind: 'single', appointment: clickedRow };
+}
+
 /** Próximo slot (single ou group) a partir de entries já agrupadas. */
 export function getNextAppointmentEntry(entries, { now = new Date(), todayIso } = {}) {
   const nowHm = normalizeHm(`${now.getHours()}:${now.getMinutes()}`);

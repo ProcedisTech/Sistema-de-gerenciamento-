@@ -25,10 +25,19 @@ import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
 import {
-  applyActionToAppointmentGroup,
+  applyGroupActionAndRefresh,
+  excludeInactiveForReagendarGroup,
   formatGroupActionResultMessage,
+  resolveActionAppointments,
+  resolveActionTargetFromDayAppointments,
   scheduleRowFromTarget,
 } from '../utils/agendaGroupActions.js';
+import { getEntryPrimaryAppointment } from '../utils/agendaDayInsights.js';
+import {
+  isAgendaVisibleOnDashboard,
+  mapAgendaDtoToDashboardRow,
+  normalizeApiList,
+} from '../utils/agendaDashboardMapping.js';
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { authHeadersForFetch } from '../services/api.js';
 import {
@@ -378,8 +387,14 @@ export default function App() {
       setScheduleCancelSubmitting(true);
       try {
         if (Array.isArray(group) && group.length > 1) {
-          const result = await applyActionToAppointmentGroup(group, (item) =>
-            agendaSchedule.handleCancelar(item.agendaId, payload, { successToast: false }),
+          const result = await applyGroupActionAndRefresh(
+            group,
+            (item) =>
+              agendaSchedule.handleCancelar(item.agendaId, payload, {
+                successToast: false,
+                skipDashboardRefresh: true,
+              }),
+            agendaSchedule.refreshDashboard,
           );
           const partialMsg = formatGroupActionResultMessage(result, { verb: 'canceladas' });
           if (result.allOk) {
@@ -405,52 +420,24 @@ export default function App() {
       const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
       if (!row?.agenda) return;
       const appointment = row.agenda;
-      // Buscar agendamentos do dia para detectar grupo consecutivo.
+      const groupFromTarget = row.groupAppointments;
+      if (Array.isArray(groupFromTarget) && groupFromTarget.length > 1) {
+        const grupo = excludeInactiveForReagendarGroup(groupFromTarget);
+        const primary = grupo[0] || appointment;
+        agendaSchedule.openReagendarModal(primary, grupo.length > 0 ? grupo : [appointment]);
+        return;
+      }
       try {
         const raw = await agendasApi.byDate(appointment.data);
-        const todos = Array.isArray(raw) ? raw : (raw?.content ?? []);
-        const mesmos = todos
-          .filter(
-            (a) =>
-              String(a.pacienteId) === String(appointment.pacienteId) &&
-              String(a.profissionalRoleUserId || a.roleUserId) === String(appointment.profissionalRoleUserId || appointment.roleUserId) &&
-              // Excluir status inativos — evita pegar originais já reagendados/cancelados/realizados
-              !String(a.statusCodigo || '').toLowerCase().replace(/\s+/g, '_').match(/^(reagend|cancel|realiz|nao_compareceu)/)
-          )
-          .map((a) => {
-            const hi = String(a.horaInicio || '').slice(0, 5);
-            const hf = String(a.horaFim || '').slice(0, 5);
-            const [hh, hm] = hi.split(':').map(Number);
-            const [eh, em] = hf.split(':').map(Number);
-            const diff = (eh * 60 + em) - (hh * 60 + hm);
-            return {
-              agendaId: String(a.id || a.agendaId),
-              catalogoProcedimentoSaudeId: String(a.catalogoProcedimentoSaudeId || ''),
-              horaInicio: hi,
-              horaFim: hf,
-              duracaoMin: diff > 0 ? diff : null,
-            };
-          })
-          .filter((a) => a.horaInicio)
-          .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
-        // Detectar sequência consecutiva que contém o agendamento clicado.
-        let grupo = [appointment];
-        const idxInicial = mesmos.findIndex((a) => a.agendaId === String(appointment.agendaId));
-        if (idxInicial >= 0) {
-          const seq = [mesmos[idxInicial]];
-          for (let i = idxInicial + 1; i < mesmos.length; i++) {
-            if (mesmos[i].horaInicio === seq[seq.length - 1].horaFim) seq.push(mesmos[i]);
-            else break;
-          }
-          // Estender para trás
-          const seqBack = [];
-          for (let i = idxInicial - 1; i >= 0; i--) {
-            if (mesmos[i].horaFim === seq[0].horaInicio || mesmos[i].horaFim === seqBack[0]?.horaInicio) seqBack.unshift(mesmos[i]);
-            else break;
-          }
-          grupo = [...seqBack, ...seq];
-        }
-        agendaSchedule.openReagendarModal(appointment, grupo);
+        const mappedRows = normalizeApiList(raw)
+          .map(mapAgendaDtoToDashboardRow)
+          .filter(Boolean)
+          .filter(isAgendaVisibleOnDashboard);
+        const activePool = excludeInactiveForReagendarGroup(mappedRows);
+        const resolved = resolveActionTargetFromDayAppointments(activePool, appointment);
+        const grupo = resolveActionAppointments(resolved);
+        const primary = getEntryPrimaryAppointment(resolved) || appointment;
+        agendaSchedule.openReagendarModal(primary, grupo.length > 0 ? grupo : [appointment]);
       } catch (e) {
         console.warn('[handleSlotReagendar] Falha ao detectar grupo, abrindo reagendar individual:', e);
         agendaSchedule.openReagendarModal(appointment, [appointment]);
