@@ -27,7 +27,7 @@ export function isAgendaDtoActiveForOccupancy(dto) {
   return false;
 }
 
-function dtoIntervalMinutes(dto) {
+export function dtoIntervalMinutes(dto) {
   const hi = dto.horaInicio != null ? String(dto.horaInicio).slice(0, 5) : '';
   const hf = dto.horaFim != null ? String(dto.horaFim).slice(0, 5) : '';
   const start = parseHhmmToMinutes(hi);

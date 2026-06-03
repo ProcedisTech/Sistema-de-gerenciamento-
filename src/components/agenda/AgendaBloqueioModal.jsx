@@ -40,8 +40,22 @@ export function AgendaBloqueioModal({ agenda }) {
   const form = agenda.bloqueioForm || {};
   const errors = agenda.bloqueioFormErrors || {};
   const saving = Boolean(agenda.submittingBloqueio);
+  const verifying = Boolean(agenda.bloqueioSubmitVerifying);
+  const conflictLoading = Boolean(agenda.bloqueioConflitosLoading);
+  const conflictCount = agenda.bloqueioConflitosCount;
+  const conflictFetchError = Boolean(agenda.bloqueioConflitosFetchError);
+  const resyncMessage = String(agenda.bloqueioConflitosResyncMessage || '').trim();
   const roleId = String(agenda.roleUserIdAgenda || '').trim();
   const diaInteiro = Boolean(form.diaInteiro);
+
+  const showConflictNotice = roleId && form.data;
+  const conflictKnown = typeof conflictCount === 'number' && !conflictLoading && !conflictFetchError;
+  const destructiveCount = conflictKnown && conflictCount > 0;
+  const primaryLabel =
+    destructiveCount && !saving && !verifying
+      ? `Cancelar ${conflictCount} e bloquear`
+      : 'Salvar';
+  const primaryBusyLabel = verifying ? 'Verificando…' : 'Salvando…';
 
   return (
     <div
@@ -156,6 +170,33 @@ export function AgendaBloqueioModal({ agenda }) {
               className="w-full resize-y rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-900 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
             />
           </FieldWrap>
+
+          {showConflictNotice ? (
+            <div className="space-y-2">
+              {conflictLoading ? (
+                <p className="text-sm text-ink-500">Calculando…</p>
+              ) : resyncMessage ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  {resyncMessage}
+                </p>
+              ) : conflictFetchError || conflictCount == null ? (
+                <p className="text-sm text-ink-500">
+                  Não foi possível estimar quantos agendamentos serão cancelados. O bloqueio ainda
+                  pode cancelar conflitos existentes.
+                </p>
+              ) : destructiveCount ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  Isto cancelará <strong>{conflictCount}</strong> agendamento
+                  {conflictCount === 1 ? '' : 's'} neste horário. Os pacientes serão notificados
+                  conforme o fluxo da clínica.
+                </p>
+              ) : (
+                <p className="text-sm text-ink-500">
+                  Nenhum agendamento será cancelado neste intervalo.
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-ink-100 px-6 py-4">
@@ -173,13 +214,13 @@ export function AgendaBloqueioModal({ agenda }) {
             disabled={saving}
             className="inline-flex items-center gap-2 rounded-xl bg-vivid-teal-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-vivid-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {saving ? (
+            {saving || verifying ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Salvando…
+                {primaryBusyLabel}
               </>
             ) : (
-              'Salvar'
+              primaryLabel
             )}
           </button>
         </div>

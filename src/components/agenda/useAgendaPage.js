@@ -24,12 +24,13 @@ import {
   isKpiCountableAgendaDto,
 } from '../../utils/agendaKpiDrilldown';
 import {
-  buildAgendaBloqueioCreateBody,
+  buildAgendaBloquearPeriodoBody,
   buildAgendaCreateBody,
   buildAgendaUpdateBody,
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
+import { countBloqueioPeriodoConflicts } from '../../utils/agendaBloqueioConflicts.js';
 import {
   buildDaySlotList,
   buildMonthHeatmap,
@@ -50,6 +51,8 @@ import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
 import {
+  BLOQUEIO_CANCEL_MOTIVO_CODIGO,
+  BLOQUEIO_CANCEL_MOTIVO_TEXTO,
   NO_SHOW_MOTIVO_CODIGO,
   NO_SHOW_OBS_PREFIX,
   resolveMotivoCancelamentoIdByCodigo,
@@ -163,6 +166,29 @@ function bloqueioBoundsFromDisponibilidade(iso, disponibilidade) {
     horaInicio: minutesToHhmm(dayStartMin),
     horaFim: minutesToHhmm(dayEndMin),
   };
+}
+
+function deriveBloqueioIntervalFromForm(bloqueioForm) {
+  const hi = String(bloqueioForm?.horaInicio || '').slice(0, 5);
+  const horaFim = bloqueioForm?.diaInteiro
+    ? String(bloqueioForm?.horaFim || '').slice(0, 5)
+    : addMinutesToTime(hi, Number(bloqueioForm?.duracaoMin) || 60);
+  return { horaInicio: hi, horaFim };
+}
+
+async function fetchBloqueioConflitosCount(prof, dataAgendamento, horaInicio, horaFim) {
+  try {
+    const raw = await agendasApi.byProfissional(prof, dataAgendamento);
+    const count = countBloqueioPeriodoConflicts(normalizeApiList(raw), {
+      profissionalRoleUserId: prof,
+      dataAgendamento,
+      horaInicio,
+      horaFim,
+    });
+    return { ok: true, count };
+  } catch {
+    return { ok: false, count: null };
+  }
 }
 
 function bloqueioTimeToMinutes(t) {
@@ -293,6 +319,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [bloqueioForm, setBloqueioForm] = useState(() => defaultBloqueioForm(todayIso));
   const [bloqueioFormErrors, setBloqueioFormErrors] = useState({});
   const [submittingBloqueio, setSubmittingBloqueio] = useState(false);
+  const [bloqueioSubmitVerifying, setBloqueioSubmitVerifying] = useState(false);
+  const [bloqueioConflitosCount, setBloqueioConflitosCount] = useState(null);
+  const [bloqueioConflitosLoading, setBloqueioConflitosLoading] = useState(false);
+  const [bloqueioConflitosFetchError, setBloqueioConflitosFetchError] = useState(false);
+  const [bloqueioConflitosResyncMessage, setBloqueioConflitosResyncMessage] = useState('');
   const [submittingRemoverBloqueioId, setSubmittingRemoverBloqueioId] = useState('');
   /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
@@ -1007,10 +1038,19 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [isNivel1, handleCancelar, toastError],
   );
 
+  const resetBloqueioConflitosState = useCallback(() => {
+    setBloqueioConflitosCount(null);
+    setBloqueioConflitosLoading(false);
+    setBloqueioConflitosFetchError(false);
+    setBloqueioConflitosResyncMessage('');
+    setBloqueioSubmitVerifying(false);
+  }, []);
+
   const closeBloqueioModal = useCallback(() => {
     setBloqueioModalOpen(false);
     setBloqueioFormErrors({});
-  }, []);
+    resetBloqueioConflitosState();
+  }, [resetBloqueioConflitosState]);
 
   const openBloqueioModal = useCallback(
     (date = selectedDay, horaHm = '') => {
@@ -1023,6 +1063,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         horaFim: addMinutesToTime(hi, 60),
       });
       setBloqueioFormErrors({});
+      resetBloqueioConflitosState();
       const sessionRole = String(roleUserId || '').trim();
       if (isRoleAgendaPreselect(roleNome) && sessionRole) {
         setRoleUserIdAgenda(sessionRole);
@@ -1031,8 +1072,62 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       }
       setBloqueioModalOpen(true);
     },
-    [isNivel1, selectedDay, todayIso, roleUserId, roleNome]
+    [isNivel1, selectedDay, todayIso, roleUserId, roleNome, resetBloqueioConflitosState]
   );
+
+  useEffect(() => {
+    if (!bloqueioModalOpen) {
+      resetBloqueioConflitosState();
+      return undefined;
+    }
+    const prof = String(roleUserIdAgenda || '').trim();
+    const data = toDateKey(bloqueioForm.data);
+    if (!prof || !data) {
+      setBloqueioConflitosCount(null);
+      setBloqueioConflitosLoading(false);
+      setBloqueioConflitosFetchError(false);
+      return undefined;
+    }
+    const { horaInicio, horaFim } = deriveBloqueioIntervalFromForm(bloqueioForm);
+    if (!horaInicio || !horaFim) {
+      setBloqueioConflitosCount(null);
+      setBloqueioConflitosLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      (async () => {
+        setBloqueioConflitosLoading(true);
+        setBloqueioConflitosResyncMessage('');
+        const result = await fetchBloqueioConflitosCount(prof, data, horaInicio, horaFim);
+        if (cancelled) return;
+        if (result.ok) {
+          setBloqueioConflitosCount(result.count);
+          setBloqueioConflitosFetchError(false);
+        } else {
+          setBloqueioConflitosCount(null);
+          setBloqueioConflitosFetchError(true);
+        }
+        setBloqueioConflitosLoading(false);
+      })();
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    bloqueioModalOpen,
+    roleUserIdAgenda,
+    bloqueioForm.data,
+    bloqueioForm.diaInteiro,
+    bloqueioForm.horaInicio,
+    bloqueioForm.horaFim,
+    bloqueioForm.duracaoMin,
+    resetBloqueioConflitosState,
+     
+  ]);
 
   const selectBloqueioDia = useCallback(
     (iso) => {
@@ -1178,39 +1273,71 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     const prof = String(roleUserIdAgenda || '').trim();
     if (!prof) return false;
 
+    const data = toDateKey(bloqueioForm.data);
+    const { horaInicio: hi, horaFim } = deriveBloqueioIntervalFromForm(bloqueioForm);
+
     setSubmittingBloqueio(true);
+    setBloqueioSubmitVerifying(true);
     try {
+      const fresh = await fetchBloqueioConflitosCount(prof, data, hi, horaFim);
+      setBloqueioSubmitVerifying(false);
+
+      if (fresh.ok) {
+        const displayed = bloqueioConflitosCount;
+        if (fresh.count !== displayed) {
+          setBloqueioConflitosCount(fresh.count);
+          setBloqueioConflitosFetchError(false);
+          setBloqueioConflitosResyncMessage(
+            `O número de agendamentos mudou: agora isto cancelará ${fresh.count}. Confirme novamente.`,
+          );
+          return false;
+        }
+      }
+
       const tipoId = await resolveTipoProcedimentoIdByCodigo(BLOQUEIO_TIPO_CODIGO);
       if (!tipoId) {
         toastError('Tipo "bloqueio" não encontrado. Verifique se o backend está atualizado.');
         return false;
       }
-      const hi = String(bloqueioForm.horaInicio || '').slice(0, 5);
-      const horaFim = bloqueioForm.diaInteiro
-        ? String(bloqueioForm.horaFim || '').slice(0, 5)
-        : addMinutesToTime(hi, Number(bloqueioForm.duracaoMin) || 60);
-      const body = buildAgendaBloqueioCreateBody({
-        dataAgendamento: bloqueioForm.data,
+      const motivoId = await resolveMotivoCancelamentoIdByCodigo(BLOQUEIO_CANCEL_MOTIVO_CODIGO);
+      if (!motivoId) {
+        toastError(
+          'Motivo "profissional indisponível" não encontrado. Verifique se o backend está atualizado.',
+        );
+        return false;
+      }
+
+      const body = buildAgendaBloquearPeriodoBody({
+        dataAgendamento: data,
         horaInicio: hi,
         horaFim,
         profissionalRoleUserId: prof,
         tipoProcedimentoId: tipoId,
-        observacao: String(bloqueioForm.motivo || '').trim(),
+        motivoCancelamentoId: motivoId,
+        motivoCancelamentoTexto: BLOQUEIO_CANCEL_MOTIVO_TEXTO,
+        observacaoBloqueio: String(bloqueioForm.motivo || '').trim(),
       });
-      await agendasApi.create(body);
+      const res = await agendasApi.bloquearPeriodo(body);
+      const q = Number(res?.quantidadeCancelada) || 0;
+
       const nextMonthDate = new Date(
-        Number(bloqueioForm.data.slice(0, 4)),
-        Number(bloqueioForm.data.slice(5, 7)) - 1,
-        1
+        Number(data.slice(0, 4)),
+        Number(data.slice(5, 7)) - 1,
+        1,
       );
       skipNextAutoLoadRef.current = true;
-      setSelectedDay(bloqueioForm.data);
+      setSelectedDay(data);
       setMonthDate(nextMonthDate);
       await loadMonth(nextMonthDate);
       await refreshWeekGrid();
       closeBloqueioModal();
       setError('');
-      toastSuccess('Horário bloqueado');
+      setBloqueioConflitosResyncMessage('');
+      toastSuccess(
+        q > 0
+          ? `Bloqueio criado. ${q} agendamento(s) cancelado(s).`
+          : 'Horário bloqueado',
+      );
       return true;
     } catch (e) {
       const msg = formatAgendamentoApiError(e, { context: 'bloqueio' });
@@ -1219,9 +1346,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       return false;
     } finally {
       setSubmittingBloqueio(false);
+      setBloqueioSubmitVerifying(false);
     }
   }, [
     bloqueioForm,
+    bloqueioConflitosCount,
     closeBloqueioModal,
     isNivel1,
     loadMonth,
@@ -1881,6 +2010,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     bloqueioForm,
     bloqueioFormErrors,
     bloqueioModalOpen,
+    bloqueioConflitosCount,
+    bloqueioConflitosLoading,
+    bloqueioConflitosFetchError,
+    bloqueioConflitosResyncMessage,
+    bloqueioSubmitVerifying,
     closeBloqueioModal,
     handleCancelar,
     handleRemoverBloqueio,
