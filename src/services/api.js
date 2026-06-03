@@ -810,6 +810,17 @@ export const agendasApi = {
     const qs = opts.forcar ? '?forcar=true' : '';
     return request(`/api/v1/agendas${qs}`, { method: 'POST', body: JSON.stringify(data) });
   },
+  /**
+   * Bloqueia período cancelando conflitos na mesma transação (N-cancel).
+   * @returns {Promise<{ bloqueio: object, quantidadeCancelada: number, idsCancelados: string[] }>}
+   */
+  bloquearPeriodo: (data, opts = {}) => {
+    const qs = opts.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas/bloquear-periodo${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
   update: (id, data, opts = {}) => {
     const qs = opts.forcar ? '?forcar=true' : '';
     return request(`/api/v1/agendas/${id}${qs}`, { method: 'PUT', body: JSON.stringify(data) });
