@@ -18,7 +18,7 @@ import { AgendaEntryCard } from './AgendaEntryCard.jsx';
 function SectionTitle({ label, count, suffix }) {
   const fullLabel = suffix ? `${label} · ${suffix}` : label;
   return (
-    <div className="mb-2 flex items-center gap-2">
+    <div className="mb-1.5 flex items-center gap-2">
       <span className="shrink-0 font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-500">
         {fullLabel}
       </span>
@@ -51,7 +51,7 @@ export function AgendaDayRailBody({
   onCancelar,
   onEdit,
   onRemoverBloqueio,
-  onNovoAgendamento,
+  onNovoClick,
   submittingRemoverBloqueioId,
 }) {
   const isToday = selectedDay === todayIso;
@@ -90,7 +90,7 @@ export function AgendaDayRailBody({
     <div
       ref={listRef}
       key={selectedDay}
-      className="custom-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-ink-50 px-4 pb-2 pt-4"
+      className={`custom-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-ink-50 pb-2 ${compact ? 'px-3 pt-2' : 'px-3.5 pt-2'}`}
     >
       {isToday && nextUpEntry ? (
         <AgendaEntryCard
@@ -117,7 +117,7 @@ export function AgendaDayRailBody({
           {!isNivel1 ? (
             <button
               type="button"
-              onClick={onNovoAgendamento}
+              onClick={onNovoClick}
               className="mt-4 inline-flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm font-semibold text-ink-700 hover:bg-ink-50"
             >
               Novo Agendamento
@@ -131,9 +131,9 @@ export function AgendaDayRailBody({
           const suffix = getPeriodSuffix(period, { selectedDay, todayIso, now });
 
           return (
-            <section key={period} className="mb-4">
+            <section key={period} className="mb-3 last:mb-0">
               <SectionTitle label={PERIOD_LABELS[period]} count={periodEntries.length} suffix={suffix} />
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {periodEntries.map((entry) => {
                   if (isEntryHiddenByNextUp(entry)) return null;
                   const domId = getEntryDomId(entry);

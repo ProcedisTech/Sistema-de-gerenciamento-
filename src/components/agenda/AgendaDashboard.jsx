@@ -6,6 +6,7 @@ import AgendaSlotActions from './AgendaSlotActions.jsx';
 import { AgendaSummaryEntryCard } from './AgendaSummaryEntryCard.jsx';
 import { AgendaWeekSlotDetailModal } from './AgendaWeekSlotDetailModal.jsx';
 import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
+import { AgendaNovoChoiceModal } from './AgendaNovoChoiceModal.jsx';
 import { AgendaTopbar } from './AgendaTopbar.jsx';
 import { AgendaControlStrip } from './AgendaControlStrip.jsx';
 import { AgendaCalendarGrid } from './AgendaCalendarGrid.jsx';
@@ -185,14 +186,33 @@ export function AgendaDashboard({
   const [listDaySummary, setListDaySummary] = React.useState(null);
   const [weekSlotDetail, setWeekSlotDetail] = React.useState(null);
   const [advancePending, setAdvancePending] = React.useState(null);
+  const [novoChoiceOpen, setNovoChoiceOpen] = React.useState(false);
   const [showEntrance, setShowEntrance] = React.useState(true);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const isWideDesktop = useMediaQuery('(min-width: 1440px)');
   const isMobile = !isDesktop;
   const toast = useToast();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
+  }, [agenda]);
+
+  const openNovoChoice = React.useCallback(() => {
+    if (agenda.isNivel1) return;
+    setNovoChoiceOpen(true);
+  }, [agenda.isNivel1]);
+
+  const closeNovoChoice = React.useCallback(() => {
+    setNovoChoiceOpen(false);
+  }, []);
+
+  const handleEscolherAgendamento = React.useCallback(() => {
+    setNovoChoiceOpen(false);
+    agenda.openCreateModal(agenda.selectedDay);
+  }, [agenda]);
+
+  const handleEscolherBloqueio = React.useCallback(() => {
+    setNovoChoiceOpen(false);
+    agenda.openBloqueioModal(agenda.selectedDay);
   }, [agenda]);
 
   const handleSelectDay = React.useCallback(
@@ -222,7 +242,8 @@ export function AgendaDashboard({
           agenda.foraDispModal ||
           listDaySummary ||
           weekSlotDetail ||
-          advancePending,
+          advancePending ||
+          novoChoiceOpen,
       ),
     [
       shortcutsBlockedExternal,
@@ -232,6 +253,7 @@ export function AgendaDashboard({
       listDaySummary,
       weekSlotDetail,
       advancePending,
+      novoChoiceOpen,
     ],
   );
 
@@ -243,7 +265,7 @@ export function AgendaDashboard({
     onToday: agenda.goToToday,
     onFocusFirstFilter: () => firstFilterRef.current?.focus(),
     onNewAppointment: () => {
-      if (!agenda.isNivel1) agenda.openCreateModal(agenda.selectedDay);
+      if (!agenda.isNivel1) openNovoChoice();
     },
   });
 
@@ -561,14 +583,13 @@ export function AgendaDashboard({
     todayIso: agenda.todayIso,
     showProfissional,
     isNivel1: agenda.isNivel1,
-    dense: isDesktop && !isWideDesktop,
-    compactActions: isDesktop && !isWideDesktop,
+    dense: isDesktop,
+    compactActions: isDesktop,
     listRef: panelListRef,
     cardRefs,
     advanceOfferByAgendaId,
     onAdvanceClick: agenda.isNivel1 ? null : handleAdvanceClick,
-    onBloquear: () => agenda.openBloqueioModal(agenda.selectedDay),
-    onNovoAgendamento: () => agenda.openCreateModal(agenda.selectedDay),
+    onNovoClick: openNovoChoice,
     onCheckIn: handleCheckIn,
     onConfirmar: handleRailConfirmar,
     onIniciarAtendimento: handleRailIniciarAtendimento,
@@ -664,6 +685,8 @@ export function AgendaDashboard({
                 agenda={agenda}
                 showEntrance={showEntrance}
                 onSelectDay={handleSelectDay}
+                onNovoClick={openNovoChoice}
+                showNovoButton={!agenda.isNivel1}
               />
             ) : agenda.viewMode === 'list' ? (
               <ListDayCards agenda={agenda} onOpenDaySummary={setListDaySummary} className="h-full" />
@@ -701,9 +724,9 @@ export function AgendaDashboard({
       {!agenda.isNivel1 && !agenda.daySheetOpen ? (
         <button
           type="button"
-          onClick={() => agenda.openCreateModal(agenda.todayIso)}
+          onClick={openNovoChoice}
           className="fixed bottom-24 right-4 z-[200] flex h-14 w-14 items-center justify-center rounded-full bg-brand-primary text-white shadow-lg transition-all duration-150 hover:bg-brand-primaryDark hover:shadow-xl active:scale-[0.98] motion-reduce:active:scale-100 lg:hidden"
-          aria-label="Novo agendamento"
+          aria-label="Novo"
         >
           <Plus className="h-6 w-6" />
         </button>
@@ -735,6 +758,13 @@ export function AgendaDashboard({
         onClose={() => setAdvancePending(null)}
         onConfirm={handleConfirmAdvance}
         isSubmitting={agenda.submittingReagendar}
+      />
+
+      <AgendaNovoChoiceModal
+        open={novoChoiceOpen}
+        onClose={closeNovoChoice}
+        onEscolherAgendamento={handleEscolherAgendamento}
+        onEscolherBloqueio={handleEscolherBloqueio}
       />
     </div>
   );

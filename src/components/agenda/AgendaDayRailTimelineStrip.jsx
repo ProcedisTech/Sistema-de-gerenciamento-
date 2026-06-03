@@ -20,12 +20,14 @@ function AgendaDayRailTimelineStripInner({
   const blocks = getTimelineBlocks(appointments);
   const nowLeft = getNowLineLeftPercent(now, selectedDay, todayIso);
   const useDense = dense && !compact;
-  const labelSizeClass = compact ? 'text-[9px]' : useDense ? 'text-[9px]' : 'text-[10px]';
-  const blockSizeClass = compact ? 'min-h-[28px] text-[9px]' : useDense ? 'text-[9px]' : 'text-[9.5px]';
+  const labelSizeClass = compact || useDense ? 'text-[9px]' : 'text-[10px]';
+  const blockSizeClass = compact || useDense ? 'text-[9px]' : 'text-[9.5px]';
+  const stripPaddingClass = compact || useDense ? 'px-3.5 pb-2 pt-2' : 'px-4 pb-2.5 pt-2.5';
+  const barHeightClass = compact || useDense ? 'h-7' : 'h-8';
 
   return (
-    <section className={`shrink-0 border-b border-ink-150 bg-white pb-3.5 pt-4 ${compact ? 'px-4' : useDense ? 'px-4' : 'px-5'}`}>
-      <div className={`relative mb-1.5 ${compact ? 'h-3' : 'h-3.5'}`}>
+    <section className={`shrink-0 border-b border-ink-150 bg-white ${stripPaddingClass}`}>
+      <div className={`relative mb-1 ${compact || useDense ? 'h-2.5' : 'h-3'}`}>
         {HOUR_LABELS.map((h) => {
           const left = ((h * 60 - TIMELINE_START_MIN) / TIMELINE_SPAN_MIN) * 100;
           return (
@@ -40,7 +42,7 @@ function AgendaDayRailTimelineStripInner({
         })}
       </div>
 
-      <div className={`relative overflow-hidden rounded-lg border border-ink-150 bg-ink-50 ${compact ? 'h-7' : 'h-9'}`}>
+      <div className={`relative overflow-hidden rounded-md border border-ink-150 bg-ink-50 ${barHeightClass}`}>
         <div
           className="absolute inset-0"
           style={{
