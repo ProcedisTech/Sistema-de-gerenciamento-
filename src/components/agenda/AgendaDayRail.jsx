@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTickInterval } from './hooks/useTickInterval.js';
 import { AgendaDayRailBody } from './AgendaDayRailBody.jsx';
-import { AgendaDayRailFooter } from './AgendaDayRailFooter.jsx';
 import { AgendaDayRailHero } from './AgendaDayRailHero.jsx';
 import { AgendaDayRailTimelineStrip } from './AgendaDayRailTimelineStrip.jsx';
 
@@ -20,8 +19,7 @@ export function AgendaDayRail({
   cardRefs,
   advanceOfferByAgendaId,
   onAdvanceClick,
-  onBloquear,
-  onNovoAgendamento,
+  onNovoClick,
   onCheckIn,
   onConfirmar,
   onIniciarAtendimento,
@@ -107,15 +105,8 @@ export function AgendaDayRail({
         onCancelar={onCancelar}
         onEdit={onEdit}
         onRemoverBloqueio={onRemoverBloqueio}
-        onNovoAgendamento={onNovoAgendamento}
+        onNovoClick={onNovoClick}
         submittingRemoverBloqueioId={submittingRemoverBloqueioId}
-      />
-
-      <AgendaDayRailFooter
-        isNivel1={isNivel1}
-        compact={compact}
-        onBloquear={onBloquear}
-        onNovoAgendamento={onNovoAgendamento}
       />
     </div>
   );
