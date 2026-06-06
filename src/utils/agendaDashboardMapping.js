@@ -172,6 +172,7 @@ export function buildAgendaCreateBody({
   pacienteId,
   catalogoProcedimentoSaudeId,
   agendaIdOrigem,
+  planejamentoItemId,
 }) {
   const hi = String(horaInicio || '09:00').slice(0, 5);
   const mins = Number(duracaoMin) || 45;
@@ -189,9 +190,14 @@ export function buildAgendaCreateBody({
     agendaIdOrigem != null && String(agendaIdOrigem).trim()
       ? { agendaIdOrigem: String(agendaIdOrigem).trim() }
       : {};
+  const planejamento =
+    planejamentoItemId != null && String(planejamentoItemId).trim()
+      ? { planejamentoItemId: String(planejamentoItemId).trim() }
+      : {};
   return {
     ...base,
     ...origem,
+    ...planejamento,
     observacao: observacao != null && String(observacao).trim() ? String(observacao).trim().slice(0, 500) : undefined,
   };
 }

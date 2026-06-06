@@ -335,6 +335,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [grupoReagendarMap, setGrupoReagendarMap] = useState({});
   /** Mapa {catalogoProcedimentoSaudeId → duracaoMin real} extraído de horaFim−horaInicio do DTO original. */
   const [grupoReagendarDuracoes, setGrupoReagendarDuracoes] = useState({});
+  /** Mapa {catalogoProcedimentoSaudeId → planejamentoItemId} para vincular POST de agenda ao item do plano. */
+  const [planejamentoItemIdPorCatalogo, setPlanejamentoItemIdPorCatalogo] = useState({});
   const [equipeList, setEquipeList] = useState([]);
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
@@ -1620,6 +1622,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (isNivel1) return;
       setEditingAppointment(null);
       setPatientSelectLocked(false);
+      setPlanejamentoItemIdPorCatalogo({});
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
       applyProfissionalPreselect();
@@ -1635,6 +1638,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const hi = String(horaHm || '').trim().slice(0, 5);
       setEditingAppointment(null);
       setPatientSelectLocked(false);
+      setPlanejamentoItemIdPorCatalogo({});
       setSelectedDay(date);
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -1650,10 +1654,14 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
   const openCreateModalForPatient = useCallback(
-    (patient) => {
+    (patient, opts = {}) => {
       if (isNivel1) return;
       if (!patient?.id) return;
       setEditingAppointment(null);
+      const mapaPlano = opts.planejamentoItemIdPorCatalogo;
+      setPlanejamentoItemIdPorCatalogo(
+        mapaPlano && typeof mapaPlano === 'object' && !Array.isArray(mapaPlano) ? mapaPlano : {}
+      );
       const date = todayIso;
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -1676,6 +1684,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     (appointment) => {
       if (isNivel1) return;
       setEditingAppointment(appointment);
+      setPlanejamentoItemIdPorCatalogo({});
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const currentIds = Array.isArray(appointment?.catalogoProcedimentoSaudeIds)
         ? appointment.catalogoProcedimentoSaudeIds.map((id) => String(id))
@@ -1715,6 +1724,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const catIds = grupo.map((a) => String(a.catalogoProcedimentoSaudeId || '').trim()).filter(Boolean);
       setEditingAppointment(appointment);
+      setPlanejamentoItemIdPorCatalogo({});
       setForm({
         ...base,
         pacienteId: appointment?.pacienteId || base.pacienteId,
@@ -1755,6 +1765,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setFormErrors({});
     setGrupoReagendarMap({});
     setGrupoReagendarDuracoes({});
+    setPlanejamentoItemIdPorCatalogo({});
     equipeFetchedRef.current = false;
     dispMonthCacheRef.current = {};
     setDispMonthDtos([]);
@@ -1854,6 +1865,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             duracoesPorProc?.find((d) => String(d.id) === catalogoProcedimentoSaudeId)?.duracaoSelecionada
             ?? (Number(form.duracaoMin) || 45);
 
+          const planejamentoItemId = planejamentoItemIdPorCatalogo[catalogoProcedimentoSaudeId] ?? null;
           const createBody = buildAgendaCreateBody({
             dataAgendamento: form.data,
             horaInicio: startHh,
@@ -1866,6 +1878,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             ...(modalMode === 'reagendar' && grupoReagendarMap[catalogoProcedimentoSaudeId]
               ? { agendaIdOrigem: grupoReagendarMap[catalogoProcedimentoSaudeId] }
               : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
           });
 
           try {
@@ -1924,6 +1937,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     isNivel1,
     loadMonth,
     modalMode,
+    planejamentoItemIdPorCatalogo,
     patientOptions,
     refreshWeekGrid,
     roleUserIdAgenda,
@@ -2038,6 +2052,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openEditModal,
     openReagendarModal,
     grupoReagendarDuracoes,
+    setPlanejamentoItemIdPorCatalogo,
     closeModal,
     patientSelectLocked,
     patientOptions,
