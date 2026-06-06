@@ -288,6 +288,9 @@ export default function App() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const anamneseRef = useRef(null);
+  /** Vista alvo ao confirmar foto da câmera no step 2 (mapeamento). */
+  const mapeamentoCaptureVistaRef = useRef(null);
+  const [pendingMapeamentoCapture, setPendingMapeamentoCapture] = React.useState(null);
   /** Id do preenchimento retornado por `createPaciente` (PATCH de observações ao finalizar). */
   const anamnesePreenchimentoIdRef = useRef(null);
   /** Último paciente resolvido na jornada — mantém header quando catálogo/search está temporariamente vazio. */
@@ -507,54 +510,18 @@ export default function App() {
     journeyState.setPaths([]);
   };
 
-  const handleDeleteCapturedPhoto = (idx) => {
-    const current = cameraState.evaluationCapturedPhotos;
-    if (!Array.isArray(current) || idx < 0 || idx >= current.length) return;
-
-    const removed = current[idx];
-    const next = current.filter((_, i) => i !== idx);
-
-    const previousSelected = cameraState.evaluationSelectedPhotoIndex;
-    let nextSelected = null;
-    if (next.length > 0) {
-      if (previousSelected === idx) nextSelected = Math.min(idx, next.length - 1);
-      else if (previousSelected > idx) nextSelected = previousSelected - 1;
-      else nextSelected = previousSelected;
-    }
-
-    cameraState.setEvaluationCapturedPhotos(next);
-    cameraState.setEvaluationSelectedPhotoIndex(nextSelected);
-
-    const nextImageSrc = nextSelected !== null ? next[nextSelected]?.url || null : null;
-    journeyState.setImageSrc(nextImageSrc);
-    journeyState.setPaths([]);
-    journeyState.setEvaluationAnnotatedPhotoUrl(null);
-
-    const targetCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-    if (targetCpf) {
-      setPatients((prev) =>
-        prev.map((p) => {
-          if (String(p?.cpf || '').trim() !== targetCpf) return p;
-          return {
-            ...p,
-            evaluationCapturedPhotos: next.map((ph) => ({
-              url: ph.url,
-              meta: ph.meta,
-            })),
-            evaluationSelectedPhotoIndex: nextSelected,
-          };
-        })
-      );
-    }
-
-    try {
-      if (removed?.url) URL.revokeObjectURL(removed.url);
-    } catch {
-      // ignore
-    }
-  };
-
   const handleConfirmProcedurePhoto = () => {
+    if (currentStep === 2 && mapeamentoCaptureVistaRef.current) {
+      const vista = mapeamentoCaptureVistaRef.current;
+      const blob = cameraState.photoPreviewBlob;
+      if (blob) {
+        setPendingMapeamentoCapture({ vista, blob });
+      }
+      mapeamentoCaptureVistaRef.current = null;
+      cameraState.closePhotoModal();
+      return;
+    }
+
     const previewUrl = cameraState.photoPreviewUrl;
     cameraState.confirmPhoto();
 
@@ -564,6 +531,10 @@ export default function App() {
       journeyState.setEvaluationAnnotatedPhotoUrl(null);
     }
   };
+
+  const handlePrepareMapeamentoCapture = React.useCallback((vistaCodigo) => {
+    mapeamentoCaptureVistaRef.current = vistaCodigo;
+  }, []);
 
   /** Editor fullscreen compartilhado (procedimento / resumo etapa 5). */
   const [photoAnnotationScope, setPhotoAnnotationScope] = React.useState(null);
@@ -1469,11 +1440,11 @@ export default function App() {
     patientState.setPatientView('list');
     setJourneyProcedureDateIso(toLocalISODate());
     setQueixaVisivel(true);
+    mapeamentoCaptureVistaRef.current = null;
+    setPendingMapeamentoCapture(null);
     cameraState.resetProcedureCapturedPhotos();
     cameraState.resetEvaluationPhotos();
   };
-
-  /** Enfileira JPEG anotado; o envio à API ocorre em finishJourney com procedimentoFeitoId e data iguais às fotos do procedimento. */
   const persistAnnotatedPhotoToGallery = React.useCallback(
     async (blob) => {
       if (!blob || !(blob instanceof Blob)) return { ok: false, skipped: true };
@@ -1648,46 +1619,39 @@ export default function App() {
 
                   {currentStep === 2 && (
                     <Step3Evaluation
+                      pacienteId={pacienteAtual?.id ?? null}
+                      roleUserId={roleUserId ?? null}
                       sidebarInsetPx={sidebarRailWidthPx}
-                      imageSrc={journeyState.imageSrc}
-                      setImageSrc={journeyState.setImageSrc}
-                      activeTool={journeyState.activeTool}
-                      setActiveTool={journeyState.setActiveTool}
-                      activeColor={journeyState.activeColor}
-                      setActiveColor={journeyState.setActiveColor}
-                      pointSize={journeyState.pointSize}
-                      setPointSize={journeyState.setPointSize}
-                      showPointNumbers={journeyState.showPointNumbers}
-                      setShowPointNumbers={journeyState.setShowPointNumbers}
-                      eraserSize={journeyState.eraserSize}
-                      setEraserSize={journeyState.setEraserSize}
-                      cursorPos={journeyState.cursorPos}
-                      setCursorPos={journeyState.setCursorPos}
-                      isHoveringCanvas={journeyState.isHoveringCanvas}
-                      setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                      paths={journeyState.paths}
-                      setPaths={journeyState.setPaths}
-                      isDrawing={journeyState.isDrawing}
-                      setIsDrawing={journeyState.setIsDrawing}
-                      canvasRef={canvasRef}
-                      containerRef={containerRef}
-                      evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                      setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                      selectedPatientCpf={selectedPatientCpf}
-                      cpf={pacienteAtual?.cpf || ''}
-                      patients={patients}
-                      setPatients={setPatients}
-                      evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos}
-                      evaluationSelectedPhotoIndex={cameraState.evaluationSelectedPhotoIndex}
-                      setEvaluationSelectedPhotoIndex={cameraState.setEvaluationSelectedPhotoIndex}
-                      onSelectCapturedPhoto={handleSelectCapturedPhoto}
-                      onDeleteCapturedPhoto={handleDeleteCapturedPhoto}
-                      onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
-                      persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
-                      evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                      onUploadFiles={cameraState.uploadPhotoFiles}
                       observacoes={journeyState.observacoes}
                       setObservacoes={journeyState.setObservacoes}
+                      pendingCapture={pendingMapeamentoCapture}
+                      onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
+                      onPrepareCapture={handlePrepareMapeamentoCapture}
+                      onStepComplete={() => setCurrentStep(3)}
+                      profissionalLogadoNome={perfilInfo?.nomeCompleto ?? ''}
+                      onAgendarPlanejamentoItem={(row, onSaved) => {
+                        if (!pacienteAtual?.id || !roleUserId) return;
+                        agendaSchedule.openCreateModalForPatient(
+                          {
+                            id: pacienteAtual.id,
+                            nome: pacienteAtual.nome,
+                            telefone:
+                              pacienteAtual.telefone ||
+                              pacienteAtual.phone ||
+                              pacienteAtual.telefoneNumero ||
+                              pacienteAtual.telefonePrincipal ||
+                              '',
+                          },
+                          {
+                            catalogoProcedimentoSaudeIds: [row.catalogoProcedimentoSaudeId],
+                            planejamentoItemIdPorCatalogo: {
+                              [row.catalogoProcedimentoSaudeId]: row.planejamentoItemId,
+                            },
+                            profissionalRoleUserId: roleUserId,
+                            onAgendaSaved: onSaved,
+                          }
+                        );
+                      }}
                     />
                   )}
 
