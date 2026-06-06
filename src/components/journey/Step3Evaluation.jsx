@@ -6,6 +6,8 @@ import {
   contaPontosProcedimento,
   somaQuantidadeProcedimento,
 } from '../../utils/mapeamentoQuantidade.js';
+import { planejamentosApi } from '../../services/api.js';
+import { sessoesMapFromDetalhe } from '../../utils/planejamentoSessoes.js';
 
 export function Step3Evaluation({
   observacoes = '',
@@ -18,8 +20,20 @@ export function Step3Evaluation({
   onPrepareCapture,
   onGerarPlanoSuccess,
   onStepComplete,
+  onAgendarPlanejamentoItem,
+  profissionalLogadoNome = '',
 }) {
   const [planoGeradoSnapshot, setPlanoGeradoSnapshot] = useState(null);
+  const [sessoesPorItemId, setSessoesPorItemId] = useState({});
+
+  const syncSessoesFromDetalhe = useCallback((planejamentoId) => {
+    const pid = String(planejamentoId ?? '').trim();
+    if (!pid) return Promise.resolve();
+    return planejamentosApi
+      .detalhe(pid)
+      .then((det) => setSessoesPorItemId(sessoesMapFromDetalhe(det)))
+      .catch((err) => console.warn('Falha ao sincronizar planejamento:', err));
+  }, []);
 
   const handleGerarPlanoSuccess = useCallback(
     (result) => {
@@ -34,23 +48,53 @@ export function Step3Evaluation({
             : [],
           partial: !!result.partial,
         });
+        syncSessoesFromDetalhe(result.planejamentoId);
       }
     },
-    [onGerarPlanoSuccess],
+    [onGerarPlanoSuccess, syncSessoesFromDetalhe],
   );
 
   const linhasTabela = useMemo(() => {
     if (!planoGeradoSnapshot) return [];
     const procs = planoGeradoSnapshot.procedimentosComPontos ?? [];
     const itemIdByCatalogo = planoGeradoSnapshot.itemIdByCatalogo ?? {};
-    return procs.map((proc) => ({
-      catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
-      nomeProcedimento: proc.nomeProcedimento,
-      pontosMapeados: contaPontosProcedimento(proc.pontosPorVista),
-      quantidadeTotal: somaQuantidadeProcedimento(proc.pontosPorVista),
-      planejamentoItemId: itemIdByCatalogo[proc.catalogoProcedimentoSaudeId] ?? null,
-    }));
-  }, [planoGeradoSnapshot]);
+    return procs.map((proc) => {
+      const planejamentoItemId =
+        itemIdByCatalogo[proc.catalogoProcedimentoSaudeId] ?? null;
+      return {
+        catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
+        nomeProcedimento: proc.nomeProcedimento,
+        pontosMapeados: contaPontosProcedimento(proc.pontosPorVista),
+        quantidadeTotal: somaQuantidadeProcedimento(proc.pontosPorVista),
+        planejamentoItemId,
+        sessao: planejamentoItemId
+          ? sessoesPorItemId[String(planejamentoItemId)] ?? null
+          : null,
+      };
+    });
+  }, [planoGeradoSnapshot, sessoesPorItemId]);
+
+  const handleAgendarLinha = useCallback(
+    (row) => {
+      if (!row?.planejamentoItemId) return;
+      const planejamentoId = planoGeradoSnapshot?.planejamentoId;
+      onAgendarPlanejamentoItem?.(row, (payload) => {
+        setSessoesPorItemId((prev) => ({
+          ...prev,
+          [String(row.planejamentoItemId)]: {
+            agendaId: payload.agendaId,
+            dataAgendamento: payload.dataAgendamento,
+            horaInicio: payload.horaInicio,
+            horaFim: payload.horaFim,
+            statusCodigo: payload.statusCodigo ?? 'AGENDADO',
+            profissionalRoleUserId: payload.profissionalRoleUserId,
+          },
+        }));
+        if (planejamentoId) syncSessoesFromDetalhe(planejamentoId);
+      });
+    },
+    [onAgendarPlanejamentoItem, planoGeradoSnapshot?.planejamentoId, syncSessoesFromDetalhe],
+  );
 
   const handleAvancarTermos = useCallback(() => {
     if (typeof onStepComplete === 'function') {
@@ -96,7 +140,12 @@ export function Step3Evaluation({
             </p>
           ) : null}
 
-          <PlanejamentoPacoteTabela linhas={linhasTabela} />
+          <PlanejamentoPacoteTabela
+            linhas={linhasTabela}
+            onAgendarLinha={handleAgendarLinha}
+            profissionalLogadoNome={profissionalLogadoNome}
+            roleUserIdLogado={roleUserId}
+          />
 
           <div className="flex justify-end pt-2">
             <button

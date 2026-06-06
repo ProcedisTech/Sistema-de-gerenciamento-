@@ -1628,6 +1628,30 @@ export default function App() {
                       onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
                       onPrepareCapture={handlePrepareMapeamentoCapture}
                       onStepComplete={() => setCurrentStep(3)}
+                      profissionalLogadoNome={perfilInfo?.nomeCompleto ?? ''}
+                      onAgendarPlanejamentoItem={(row, onSaved) => {
+                        if (!pacienteAtual?.id || !roleUserId) return;
+                        agendaSchedule.openCreateModalForPatient(
+                          {
+                            id: pacienteAtual.id,
+                            nome: pacienteAtual.nome,
+                            telefone:
+                              pacienteAtual.telefone ||
+                              pacienteAtual.phone ||
+                              pacienteAtual.telefoneNumero ||
+                              pacienteAtual.telefonePrincipal ||
+                              '',
+                          },
+                          {
+                            catalogoProcedimentoSaudeIds: [row.catalogoProcedimentoSaudeId],
+                            planejamentoItemIdPorCatalogo: {
+                              [row.catalogoProcedimentoSaudeId]: row.planejamentoItemId,
+                            },
+                            profissionalRoleUserId: roleUserId,
+                            onAgendaSaved: onSaved,
+                          }
+                        );
+                      }}
                     />
                   )}
 

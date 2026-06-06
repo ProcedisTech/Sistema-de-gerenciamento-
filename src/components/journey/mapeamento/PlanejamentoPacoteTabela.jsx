@@ -1,15 +1,49 @@
 import React from 'react';
 import { Calendar, Plus, Trash2 } from 'lucide-react';
 import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
+import { formatAgendaDateTimeCta } from '../../agenda/agendaFormModalUtils.js';
 
 /**
- * Tabela pós-geração do plano — agendamento e ações por linha vêm em fatias futuras.
- * @param {{ linhas: Array<{ catalogoProcedimentoSaudeId: string, nomeProcedimento: string, pontosMapeados: number, quantidadeTotal: number }> }} props
+ * Tabela pós-geração do plano — agendamento por linha via modal global.
+ * @param {{
+ *   linhas: Array<{
+ *     catalogoProcedimentoSaudeId: string,
+ *     nomeProcedimento: string,
+ *     pontosMapeados: number,
+ *     quantidadeTotal: number,
+ *     planejamentoItemId?: string | null,
+ *     sessao?: {
+ *       agendaId?: string,
+ *       dataAgendamento?: string,
+ *       horaInicio?: string,
+ *       horaFim?: string,
+ *       statusCodigo?: string,
+ *       profissionalRoleUserId?: string,
+ *     } | null,
+ *   }>,
+ *   onAgendarLinha?: (row: object) => void,
+ *   profissionalLogadoNome?: string,
+ *   roleUserIdLogado?: string | null,
+ * }} props
  */
-export function PlanejamentoPacoteTabela({ linhas = [] }) {
+export function PlanejamentoPacoteTabela({
+  linhas = [],
+  onAgendarLinha,
+  profissionalLogadoNome = '',
+  roleUserIdLogado = null,
+}) {
   const rows = Array.isArray(linhas) ? linhas : [];
   const total = rows.length;
-  const agendados = 0;
+  const agendados = rows.filter((r) => r.sessao?.dataAgendamento).length;
+
+  function labelProfissional(sessao) {
+    const rid = String(sessao?.profissionalRoleUserId ?? '').trim();
+    const logado = String(roleUserIdLogado ?? '').trim();
+    if (rid && logado && rid === logado && profissionalLogadoNome) {
+      return profissionalLogadoNome;
+    }
+    return 'Profissional agendado';
+  }
 
   return (
     <div className="rounded-xl border border-app-border bg-white shadow-app-card">
@@ -58,6 +92,12 @@ export function PlanejamentoPacoteTabela({ linhas = [] }) {
                 const cor = corParaProcedimento(row.catalogoProcedimentoSaudeId);
                 const nPontos = Number(row.pontosMapeados) || 0;
                 const labelPontos = nPontos === 1 ? '1 ponto mapeado' : `${nPontos} pontos mapeados`;
+                const temSessao = Boolean(row.sessao?.dataAgendamento);
+                const dataLabel = temSessao
+                  ? formatAgendaDateTimeCta(row.sessao.dataAgendamento, row.sessao.horaInicio)
+                  : '';
+                const podeAgendar = Boolean(row.planejamentoItemId);
+
                 return (
                   <tr
                     key={row.catalogoProcedimentoSaudeId}
@@ -82,15 +122,29 @@ export function PlanejamentoPacoteTabela({ linhas = [] }) {
                       </span>
                     </td>
                     <td className="px-5 py-4">
-                      <button
-                        type="button"
-                        disabled
-                        title="Agendamento disponível na próxima etapa"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-2 text-[12px] font-semibold text-[#94a3b8] disabled:cursor-not-allowed"
-                      >
-                        <Calendar className="h-3.5 w-3.5" strokeWidth={2} />
-                        Agendar
-                      </button>
+                      {temSessao ? (
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold text-app-ink">{dataLabel}</p>
+                          <p className="text-[12px] font-medium text-[#64748b]">
+                            {labelProfissional(row.sessao)}
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!podeAgendar}
+                          title={
+                            podeAgendar
+                              ? 'Agendar procedimento'
+                              : 'Item do plano indisponível — gere o plano novamente'
+                          }
+                          onClick={() => onAgendarLinha?.(row)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-2 text-[12px] font-semibold text-app-accent hover:border-app-accent hover:bg-[#f0fdfa] disabled:cursor-not-allowed disabled:text-[#94a3b8] disabled:hover:border-[#e2e8f0] disabled:hover:bg-white"
+                        >
+                          <Calendar className="h-3.5 w-3.5" strokeWidth={2} />
+                          Agendar
+                        </button>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-1">
