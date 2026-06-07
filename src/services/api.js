@@ -669,6 +669,43 @@ export const pacientesGaleriaApi = {
 };
 
 /**
+ * Plano de tratamento / mapeamento facial (PlanejamentoController).
+ * @see plataforma-procedimentos — /api/v1/planejamentos
+ */
+export const planejamentosApi = {
+  criar: (body) =>
+    request('/api/v1/planejamentos', { method: 'POST', body: JSON.stringify(body ?? {}) }),
+  listarPorPaciente: (pacienteId) =>
+    request(`/api/v1/planejamentos/paciente/${encodeURIComponent(String(pacienteId))}`),
+  detalhe: (planejamentoId) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}`),
+  ativar: (planejamentoId) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/ativar`, {
+      method: 'PUT',
+    }),
+  adicionarItem: (planejamentoId, body) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/itens`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
+  atualizarItem: (itemId, body) =>
+    request(`/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}`, {
+      method: 'PUT',
+      body: JSON.stringify(body ?? {}),
+    }),
+  removerItem: (itemId) =>
+    requestDelete(`/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}`),
+  salvarPontosVista: (itemId, vistaCodigo, pontos) =>
+    request(
+      `/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}/pontos?vista=${encodeURIComponent(String(vistaCodigo))}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ pontos: Array.isArray(pontos) ? pontos : [] }),
+      },
+    ),
+};
+
+/**
  * Alertas manuais do paciente (CRUD próprio ao cadastro manual).
  * Não confundir com alertas inferidos pela anamnese (somente front + anamneseApi).
  *

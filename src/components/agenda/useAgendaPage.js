@@ -335,6 +335,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [grupoReagendarMap, setGrupoReagendarMap] = useState({});
   /** Mapa {catalogoProcedimentoSaudeId → duracaoMin real} extraído de horaFim−horaInicio do DTO original. */
   const [grupoReagendarDuracoes, setGrupoReagendarDuracoes] = useState({});
+  /** Mapa {catalogoProcedimentoSaudeId → planejamentoItemId} para vincular POST de agenda ao item do plano. */
+  const [planejamentoItemIdPorCatalogo, setPlanejamentoItemIdPorCatalogo] = useState({});
   const [equipeList, setEquipeList] = useState([]);
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
@@ -342,6 +344,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const dispMonthCacheRef = useRef({});
   /** Evita double-fetch quando saveAppointment já chamou loadMonth com mês explícito. */
   const skipNextAutoLoadRef = useRef(false);
+  /** Callback one-shot após save bem-sucedido (fluxo planejamento Step3). */
+  const onAgendaSavedRef = useRef(null);
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
 
@@ -1620,6 +1624,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (isNivel1) return;
       setEditingAppointment(null);
       setPatientSelectLocked(false);
+      setPlanejamentoItemIdPorCatalogo({});
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
       applyProfissionalPreselect();
@@ -1635,6 +1640,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const hi = String(horaHm || '').trim().slice(0, 5);
       setEditingAppointment(null);
       setPatientSelectLocked(false);
+      setPlanejamentoItemIdPorCatalogo({});
       setSelectedDay(date);
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -1650,10 +1656,17 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
   const openCreateModalForPatient = useCallback(
-    (patient) => {
+    (patient, opts = {}) => {
       if (isNivel1) return;
       if (!patient?.id) return;
       setEditingAppointment(null);
+      const mapaPlano = opts.planejamentoItemIdPorCatalogo;
+      setPlanejamentoItemIdPorCatalogo(
+        mapaPlano && typeof mapaPlano === 'object' && !Array.isArray(mapaPlano) ? mapaPlano : {}
+      );
+      const catIds = Array.isArray(opts.catalogoProcedimentoSaudeIds)
+        ? opts.catalogoProcedimentoSaudeIds.map((id) => String(id).trim()).filter(Boolean)
+        : [];
       const date = todayIso;
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -1662,11 +1675,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         pacienteNome: patient.nome || '',
         telefone: patient.telefone || '',
         procedimentoNome: '',
-        catalogoProcedimentoSaudeIds: [],
+        catalogoProcedimentoSaudeIds: catIds,
       });
       setPatientSelectLocked(true);
       setFormErrors({});
       applyProfissionalPreselect();
+      const forcedProf = String(opts.profissionalRoleUserId ?? '').trim();
+      if (forcedProf) setRoleUserIdAgenda(forcedProf);
+      onAgendaSavedRef.current =
+        typeof opts.onAgendaSaved === 'function' ? opts.onAgendaSaved : null;
       setModalMode('create');
     },
     [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
@@ -1676,6 +1693,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     (appointment) => {
       if (isNivel1) return;
       setEditingAppointment(appointment);
+      setPlanejamentoItemIdPorCatalogo({});
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const currentIds = Array.isArray(appointment?.catalogoProcedimentoSaudeIds)
         ? appointment.catalogoProcedimentoSaudeIds.map((id) => String(id))
@@ -1715,6 +1733,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const catIds = grupo.map((a) => String(a.catalogoProcedimentoSaudeId || '').trim()).filter(Boolean);
       setEditingAppointment(appointment);
+      setPlanejamentoItemIdPorCatalogo({});
       setForm({
         ...base,
         pacienteId: appointment?.pacienteId || base.pacienteId,
@@ -1747,6 +1766,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const closeModal = useCallback(() => {
+    onAgendaSavedRef.current = null;
     setModalMode(null);
     setEditingAppointment(null);
     setPatientSelectLocked(false);
@@ -1755,6 +1775,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setFormErrors({});
     setGrupoReagendarMap({});
     setGrupoReagendarDuracoes({});
+    setPlanejamentoItemIdPorCatalogo({});
     equipeFetchedRef.current = false;
     dispMonthCacheRef.current = {};
     setDispMonthDtos([]);
@@ -1823,6 +1844,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       return false;
     }
 
+    let agendaSavedPayload = null;
+
     try {
       if (modalMode === 'edit' && editingAppointment?.agendaId) {
         const rawSlot = editingAppointment.rawSlot || {};
@@ -1854,6 +1877,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             duracoesPorProc?.find((d) => String(d.id) === catalogoProcedimentoSaudeId)?.duracaoSelecionada
             ?? (Number(form.duracaoMin) || 45);
 
+          const planejamentoItemId = planejamentoItemIdPorCatalogo[catalogoProcedimentoSaudeId] ?? null;
           const createBody = buildAgendaCreateBody({
             dataAgendamento: form.data,
             horaInicio: startHh,
@@ -1866,6 +1890,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             ...(modalMode === 'reagendar' && grupoReagendarMap[catalogoProcedimentoSaudeId]
               ? { agendaIdOrigem: grupoReagendarMap[catalogoProcedimentoSaudeId] }
               : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
           });
 
           try {
@@ -1879,7 +1904,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
               continue;
             }
             if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'ok' });
+            const horaInicioSlot = startHh;
+            resultados.push({
+              id: catalogoProcedimentoSaudeId,
+              status: 'ok',
+              agendaId: created?.id,
+              planejamentoItemId,
+              horaInicio: horaInicioSlot,
+              horaFim: addMinutesToTime(horaInicioSlot, dMin),
+            });
             startHh = addMinutesToTime(startHh, dMin);
           } catch (err) {
             if (isAgendaSlotOverlapError(err)) {
@@ -1895,6 +1928,20 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           onConflictResult?.(resultados);
           return false;
         }
+
+        const firstOk = resultados.find((r) => r.status === 'ok');
+        if (firstOk && onAgendaSavedRef.current) {
+          agendaSavedPayload = {
+            agendaId: firstOk.agendaId,
+            planejamentoItemId: firstOk.planejamentoItemId ?? null,
+            catalogoProcedimentoSaudeId: firstOk.id,
+            dataAgendamento: form.data,
+            horaInicio: firstOk.horaInicio,
+            horaFim: firstOk.horaFim,
+            profissionalRoleUserId: agendaRole,
+            statusCodigo: 'AGENDADO',
+          };
+        }
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
@@ -1907,6 +1954,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setMonthDate(nextMonthDate);
       await loadMonth(nextMonthDate);
       await refreshWeekGrid();
+      if (agendaSavedPayload && onAgendaSavedRef.current) {
+        const cb = onAgendaSavedRef.current;
+        onAgendaSavedRef.current = null;
+        cb(agendaSavedPayload);
+      }
       closeModal();
       setError('');
       toastSuccess(modalMode === 'reagendar' ? 'Agendamento reagendado.' : 'Agendamento salvo.');
@@ -1924,6 +1976,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     isNivel1,
     loadMonth,
     modalMode,
+    planejamentoItemIdPorCatalogo,
     patientOptions,
     refreshWeekGrid,
     roleUserIdAgenda,
@@ -2038,6 +2091,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openEditModal,
     openReagendarModal,
     grupoReagendarDuracoes,
+    setPlanejamentoItemIdPorCatalogo,
     closeModal,
     patientSelectLocked,
     patientOptions,
