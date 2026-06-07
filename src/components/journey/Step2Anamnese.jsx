@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Search,
   Check,
+  Stethoscope,
   X,
 } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
@@ -636,6 +637,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         ? 'data não registrada'
         : '';
 
+  const mostrarLinkAbrirUltima =
+    pacienteId && !loadingHistoricoPaciente && ultimaAnamnese && !preenchimentoAnterior;
+
   /** Select / novo preenchimento: só template; sem histórico; evita reidratar respostas do pai. */
   const selecionarFichaParaNovo = useCallback(async (id) => {
     const idStr = id === '' || id == null ? '' : String(id);
@@ -912,82 +916,62 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   return (
     <div className="min-w-0">
       <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
-        <ClipboardList className="h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+        <Stethoscope className="h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
         <div className="min-w-0">
-          <h3 className="text-[16px] font-semibold text-slate-800">Anamnese Completa</h3>
-          <p className="text-[12px] text-slate-500">Histórico médico e contraindicações</p>
+          <h3 className="text-[16px] font-semibold text-slate-800">Dados clínicos do paciente</h3>
+          <p className="text-[12px] text-slate-500">Perfil permanente e ficha desta consulta</p>
         </div>
       </div>
 
       {/* Bloco 1 — Perfil Clínico Persistente */}
       {pacienteId && (
-        <div className="mb-6">
-          <PerfilClinicoBloco
-            state={perfilClinico.state}
-            isLoading={perfilClinico.isLoading}
-            isSaving={perfilClinico.isSaving}
-            error={perfilClinico.error}
-            load={perfilClinico.load}
-            addItem={perfilClinico.addItem}
-            removeItem={perfilClinico.removeItem}
-            updateObservacao={perfilClinico.updateObservacao}
-            updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
-            buscarAlimentos={perfilClinico.buscarAlimentos}
-            buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
-            buscarMedicamentos={perfilClinico.buscarMedicamentos}
-            buscarAntecedentes={perfilClinico.buscarAntecedentes}
-          />
+        <div className="mb-6 min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+          <div className="border-b border-slate-200/80 bg-slate-100/60 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              Dados permanentes do paciente
+            </p>
+          </div>
+          <div className="min-w-0 px-3 py-4 sm:px-4">
+            <PerfilClinicoBloco
+              state={perfilClinico.state}
+              isLoading={perfilClinico.isLoading}
+              isSaving={perfilClinico.isSaving}
+              isDirty={perfilClinico.isDirty}
+              error={perfilClinico.error}
+              load={perfilClinico.load}
+              addItem={perfilClinico.addItem}
+              removeItem={perfilClinico.removeItem}
+              updateObservacao={perfilClinico.updateObservacao}
+              updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
+              buscarAlimentos={perfilClinico.buscarAlimentos}
+              buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
+              buscarMedicamentos={perfilClinico.buscarMedicamentos}
+              buscarAntecedentes={perfilClinico.buscarAntecedentes}
+            />
+          </div>
         </div>
       )}
 
-      <div className="mb-5 border-t border-slate-200 pt-5">
-        <p className="mb-4 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          ② Anamnese desta consulta
-        </p>
+      <div className="mb-5 mt-8 min-w-0 border-t-2 border-slate-300 pt-8">
+        <div className="mb-4 flex items-start gap-3">
+          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+          <div className="min-w-0 pb-1">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-800">
+              Ficha de anamnese desta consulta
+            </p>
+            <p className="mt-0.5 text-[12px] text-slate-500">
+              Perguntas específicas desta consulta
+            </p>
+          </div>
+        </div>
 
-      {/* Bloco 2 — Anamnese da visita (legado) */}
+      {/* Bloco 2 — Anamnese da visita */}
       {pacienteId && loadingHistoricoPaciente && (
         <div className="mb-6 flex items-center gap-2 text-[#64748b] text-[13px]">
           <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
           Carregando histórico de anamneses do paciente…
         </div>
       )}
-
-      {pacienteId && !loadingHistoricoPaciente && ultimaAnamnese && !fichaSelecionadaId ? (
-        <div className="mb-5">
-          <div className="flex min-h-[56px] flex-col gap-2 rounded-lg border border-[#e2e8f0] bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.5} aria-hidden />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="min-w-0 truncate text-[13px] font-bold text-[#0f172a]">{ultimaAnamnese.nome}</p>
-                  {estaAtualizadaUltima ? (
-                    <span className="shrink-0 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
-                      ✓ Atualizada
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full border border-[#fde68a] bg-[#fef9c3] px-2 py-0.5 text-[11px] font-bold text-[#b45309]">
-                      ⚠ Desatualizada
-                    </span>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-[#64748b]">{dataLinhaUltima}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => consultarUltimoPreenchimento(ultimaAnamnese.fichaId)}
-              className={`h-8 shrink-0 self-end rounded-lg px-3 text-[12px] font-semibold text-white transition-colors sm:self-center ${
-                estaAtualizadaUltima
-                  ? 'bg-[#00a88e] hover:bg-[#00967f]'
-                  : 'bg-[#f59e0b] hover:bg-[#d97706]'
-              }`}
-            >
-              Abrir
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {fichaSelecionadaId && preenchimentoAnterior && !estaAtualizadaUltima && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border-[2px] border-[#f59e0b]/50 bg-[#fffbeb] px-4 py-3">
@@ -1019,9 +1003,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      <div className="mb-5 border-t border-[#e2e8f0] pt-5" aria-hidden />
-
-      <div className="relative mb-6" ref={fichaMenuRef}>
+      <div className="relative mb-6 min-w-0" ref={fichaMenuRef}>
         <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
           {fichaSelecionadaId ? 'Ficha de anamnese' : 'Selecionar ficha de anamnese'}
         </p>
@@ -1073,6 +1055,30 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             />
           </div>
         </button>
+
+        {mostrarLinkAbrirUltima && !fichaMenuOpen ? (
+          <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium text-[#64748b]">
+                Este paciente já tem anamnese preenchida
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-[#94a3b8]">
+                {ultimaAnamnese.nome} · {dataLinhaUltima}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => consultarUltimoPreenchimento(ultimaAnamnese.fichaId)}
+              className={`h-8 shrink-0 self-start rounded-lg px-3 text-[12px] font-semibold text-white transition-colors sm:self-center ${
+                estaAtualizadaUltima
+                  ? 'bg-[#00a88e] hover:bg-[#00967f]'
+                  : 'bg-[#f59e0b] hover:bg-[#d97706]'
+              }`}
+            >
+              Abrir último preenchimento
+            </button>
+          </div>
+        ) : null}
 
         {fichaMenuOpen ? (
           <div className="flex max-h-[min(100dvh,100%)] flex-col overflow-hidden bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-150 max-sm:fixed max-sm:inset-0 max-sm:z-[200] sm:absolute sm:left-0 sm:right-0 sm:top-full sm:z-50 sm:mt-2 sm:max-h-none sm:rounded-xl sm:border sm:border-[#e2e8f0]">
