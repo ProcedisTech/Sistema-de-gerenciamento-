@@ -16,13 +16,32 @@ import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
-  if (!observacoes || typeof observacoes !== 'string') return null;
-  const marker = '. Expectativas:';
-  const idx = observacoes.indexOf(marker);
-  if (idx === -1) return null;
-  const queixa = observacoes.slice(0, idx).replace(/^Queixa:\s*/i, '').trim();
-  const expectativas = observacoes.slice(idx + marker.length).trim();
-  return { queixa: queixa || '', expectativas: expectativas || '' };
+  if (!observacoes || typeof observacoes !== 'string' || !observacoes.trim()) return null;
+  const expMarker = '. Expectativas:';
+  const expIdx = observacoes.indexOf(expMarker);
+  if (expIdx !== -1) {
+    const queixa = observacoes.slice(0, expIdx).replace(/^Queixa:\s*/i, '').trim();
+    const expectativas = observacoes.slice(expIdx + expMarker.length).trim();
+    return { queixa, expectativas };
+  }
+  if (/^Queixa:\s*/i.test(observacoes)) {
+    return { queixa: observacoes.replace(/^Queixa:\s*/i, '').trim(), expectativas: '' };
+  }
+  if (/^Expectativas:\s*/i.test(observacoes)) {
+    return { queixa: '', expectativas: observacoes.replace(/^Expectativas:\s*/i, '').trim() };
+  }
+  return null;
+}
+
+/** Mapa perguntaId → tipoResposta a partir do GET ficha (item.pergunta embutida). */
+function buildPerguntaTipoById(ficha) {
+  const map = {};
+  for (const item of ficha?.itens ?? []) {
+    const id = item.pergunta?.id ?? item.perguntaId;
+    const tipo = item.pergunta?.tipoResposta ?? item.pergunta?.tipo_resposta;
+    if (id != null && tipo) map[String(id)] = tipo;
+  }
+  return map;
 }
 
 function resolveFichaTemplateIdFromEntry(entry) {
@@ -96,7 +115,7 @@ function mapApiRespostaToEstado(r) {
  * Agrupa respostas da API por perguntaId.
  * Back devolve múltipla escolha como N linhas (perguntaOpcaoId cada) — evita sobrescrever no forEach.
  */
-function mergeApiRespostasToMap(respostasApi) {
+function mergeApiRespostasToMap(respostasApi, perguntaTipoById = {}) {
   const map = {};
   const opcaoAccum = new Map();
 
@@ -126,7 +145,13 @@ function mergeApiRespostasToMap(respostasApi) {
 
     if (mapped.perguntaOpcaoId != null && mapped.perguntaOpcaoId !== '') {
       if (!opcaoAccum.has(key)) {
-        opcaoAccum.set(key, { perguntaId: mapped.perguntaId, opcoes: [] });
+        const tipoResposta =
+          r.tipoResposta
+          ?? r.tipo_resposta
+          ?? r.pergunta?.tipoResposta
+          ?? r.pergunta?.tipo_resposta
+          ?? '';
+        opcaoAccum.set(key, { perguntaId: mapped.perguntaId, opcoes: [], tipoResposta });
       }
       const acc = opcaoAccum.get(key);
       const idStr = String(mapped.perguntaOpcaoId);
@@ -134,9 +159,12 @@ function mergeApiRespostasToMap(respostasApi) {
     }
   }
 
-  for (const [key, { perguntaId, opcoes }] of opcaoAccum) {
+  for (const [key, { perguntaId, opcoes, tipoResposta }] of opcaoAccum) {
     if (map[key]) continue;
-    if (opcoes.length === 1) {
+    const tipo = perguntaTipoById[key] ?? tipoResposta ?? '';
+    if (tipo === 'multipla_escolha') {
+      map[key] = { perguntaId, opcoesSelecionadas: opcoes };
+    } else if (opcoes.length === 1) {
       map[key] = { perguntaId, perguntaOpcaoId: opcoes[0] };
     } else if (opcoes.length > 1) {
       map[key] = { perguntaId, opcoesSelecionadas: opcoes };
@@ -711,7 +739,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
           if (preenchimento) {
             const detalhes = await anamneseApi.getPaciente(pacienteId, preenchimento.id);
-            const respostasCarregadas = mergeApiRespostasToMap(detalhes?.respostas);
+            const respostasCarregadas = mergeApiRespostasToMap(
+              detalhes?.respostas,
+              buildPerguntaTipoById(ficha),
+            );
             syncedRespostas = respostasCarregadas;
             const dh =
               preenchimento.dataHora
