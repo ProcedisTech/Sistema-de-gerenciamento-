@@ -1,17 +1,18 @@
 import React, { Fragment, useState, useEffect, useCallback, useImperativeHandle, forwardRef, useMemo, useRef } from 'react';
 import {
   ClipboardList,
-  Square,
-  CheckSquare,
   Loader2,
   CheckCircle,
   ChevronDown,
   ChevronRight,
   Search,
   Check,
+  Stethoscope,
   X,
 } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
+import { usePerfilClinico } from '../../hooks/usePerfilClinico';
+import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -91,22 +92,175 @@ function mapApiRespostaToEstado(r) {
   return row;
 }
 
-function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnly = false }) {
+/**
+ * Agrupa respostas da API por perguntaId.
+ * Back devolve múltipla escolha como N linhas (perguntaOpcaoId cada) — evita sobrescrever no forEach.
+ */
+function mergeApiRespostasToMap(respostasApi) {
+  const map = {};
+  const opcaoAccum = new Map();
+
+  for (const r of respostasApi || []) {
+    const mapped = mapApiRespostaToEstado(r);
+    if (!mapped) continue;
+    const key = String(mapped.perguntaId);
+
+    if (Array.isArray(mapped.opcoesSelecionadas) && mapped.opcoesSelecionadas.length > 0) {
+      const prev = map[key];
+      const ids = new Set((prev?.opcoesSelecionadas || []).map(String));
+      mapped.opcoesSelecionadas.forEach((id) => ids.add(String(id)));
+      map[key] = { perguntaId: mapped.perguntaId, opcoesSelecionadas: [...ids] };
+      continue;
+    }
+
+    const hasScalar =
+      (mapped.respostaTexto != null && mapped.respostaTexto !== '')
+      || (mapped.respostaNumero != null && mapped.respostaNumero !== '')
+      || mapped.respostaBoolean === true
+      || mapped.respostaBoolean === false;
+
+    if (hasScalar) {
+      map[key] = mapped;
+      continue;
+    }
+
+    if (mapped.perguntaOpcaoId != null && mapped.perguntaOpcaoId !== '') {
+      if (!opcaoAccum.has(key)) {
+        opcaoAccum.set(key, { perguntaId: mapped.perguntaId, opcoes: [] });
+      }
+      const acc = opcaoAccum.get(key);
+      const idStr = String(mapped.perguntaOpcaoId);
+      if (!acc.opcoes.includes(idStr)) acc.opcoes.push(idStr);
+    }
+  }
+
+  for (const [key, { perguntaId, opcoes }] of opcaoAccum) {
+    if (map[key]) continue;
+    if (opcoes.length === 1) {
+      map[key] = { perguntaId, perguntaOpcaoId: opcoes[0] };
+    } else if (opcoes.length > 1) {
+      map[key] = { perguntaId, opcoesSelecionadas: opcoes };
+    }
+  }
+
+  return map;
+}
+
+/** Monta uma linha do POST /anamnese/paciente conforme tipo da pergunta. */
+function buildRespostaApiRow(pergunta, resposta) {
+  if (!isRespostaPreenchida(pergunta, resposta)) return null;
+  const base = { perguntaId: resposta.perguntaId };
   const tipo = pergunta.tipoResposta;
-  const qLabel = `text-[13px] font-bold ml-1 ${alerta ? 'text-[#1f2937]' : 'text-[#0f766e]'}`;
-  const qTitle = 'text-[14px] font-bold text-[#1f2937]';
-  const fieldBase = 'w-full p-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]';
+
+  if (tipo === 'texto') {
+    return { ...base, respostaTexto: resposta.respostaTexto };
+  }
+  if (tipo === 'numero') {
+    return { ...base, respostaNumero: resposta.respostaNumero };
+  }
+  if (tipo === 'booleano') {
+    return { ...base, respostaBoolean: resposta.respostaBoolean };
+  }
+  if (tipo === 'escolha_unica') {
+    return { ...base, perguntaOpcaoId: resposta.perguntaOpcaoId };
+  }
+  if (tipo === 'multipla_escolha') {
+    return { ...base, opcoesSelecionadas: resposta.opcoesSelecionadas };
+  }
+  return null;
+}
+
+// ── Helpers de layout (Fase 1) ────────────────────────────
+
+/** Escolha única/múltipla compacta: ≤4 opções e labels ≤24 chars → meia coluna em md+. */
+function isCompactChoice(alternativas) {
+  if (!Array.isArray(alternativas) || alternativas.length === 0) return false;
+  return alternativas.length <= 4 && alternativas.every((a) => (a.alternativa || '').length <= 24);
+}
+
+/** true = pergunta ocupa largura total no grid md:2-cols (mobile sempre 1 coluna). */
+function isFullWidthItem(item) {
+  const tipo = item.pergunta?.tipoResposta;
+  if (tipo === 'texto') return true;
+  if (tipo === 'escolha_unica' || tipo === 'multipla_escolha') {
+    return !isCompactChoice(item.pergunta?.alternativas);
+  }
+  return false;
+}
+
+/** Agrupa itens por categoriaNome preservando a ordem interna. */
+function groupItensByCategoria(itens) {
+  const groups = [];
+  const seen = new Map();
+  for (const item of itens) {
+    const key = item.pergunta?.categoriaNome || '';
+    if (!seen.has(key)) {
+      const arr = [];
+      seen.set(key, arr);
+      groups.push({ categoriaNome: key, itens: arr });
+    }
+    seen.get(key).push(item);
+  }
+  return groups;
+}
+
+/** true se a resposta tem valor preenchido (critérios alinhados ao back sugerido). */
+function isRespostaPreenchida(pergunta, resposta) {
+  if (!pergunta || !resposta) return false;
+  const tipo = pergunta.tipoResposta;
+  if (tipo === 'texto') {
+    return Boolean(String(resposta.respostaTexto ?? '').trim());
+  }
+  if (tipo === 'numero') {
+    return resposta.respostaNumero != null && resposta.respostaNumero !== '';
+  }
+  if (tipo === 'booleano') {
+    return resposta.respostaBoolean === true || resposta.respostaBoolean === false;
+  }
+  if (tipo === 'escolha_unica') {
+    const po = resposta.perguntaOpcaoId;
+    return po != null && po !== '';
+  }
+  if (tipo === 'multipla_escolha') {
+    return Array.isArray(resposta.opcoesSelecionadas) && resposta.opcoesSelecionadas.length > 0;
+  }
+  return false;
+}
+
+/** Label da pergunta com numeração inline, obrigatório* e ícone de alerta. */
+function QuestionLabel({ numero, descricao, obrigatorio = false, alerta = false }) {
+  return (
+    <span className="mb-2 flex flex-wrap items-baseline gap-1.5">
+      {alerta && <span aria-hidden className="shrink-0 text-[12px] leading-none text-red-500">⚠</span>}
+      <span className={`text-[13px] font-semibold leading-snug ${alerta ? 'text-slate-800' : 'text-slate-700'}`}>
+        {numero != null && (
+          <span className="font-bold tabular-nums text-slate-600">{numero} – </span>
+        )}
+        {descricao}
+      </span>
+      {obrigatorio && (
+        <span className="text-[11px] font-semibold text-red-600" aria-label="obrigatório">obrigatório*</span>
+      )}
+    </span>
+  );
+}
+
+// ── DynamicQuestion refatorado (Fase 2) ───────────────────
+
+function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnly = false, obrigatorio = false, numero = null }) {
+  const tipo = pergunta.tipoResposta;
+  const fieldBase = `w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors${readOnly ? ' cursor-default bg-slate-50 opacity-90' : ''}`;
 
   if (tipo === 'texto') {
     return (
-      <div className="space-y-1.5">
-        <label className={qLabel}>{pergunta.descricao}</label>
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
         <textarea
           value={resposta?.respostaTexto || ''}
           onChange={(e) => onChange({ perguntaId: pergunta.id, respostaTexto: e.target.value })}
           rows={2}
           readOnly={readOnly}
-          className={`${fieldBase}${readOnly ? ' cursor-default opacity-90' : ''}`}
+          className={fieldBase}
           placeholder="Digite a resposta..."
         />
       </div>
@@ -115,14 +269,14 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
 
   if (tipo === 'numero') {
     return (
-      <div className="space-y-1.5">
-        <label className={qLabel}>{pergunta.descricao}</label>
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
         <input
           type="number"
           value={resposta?.respostaNumero ?? ''}
           onChange={(e) => onChange({ perguntaId: pergunta.id, respostaNumero: e.target.value === '' ? null : Number(e.target.value) })}
           readOnly={readOnly}
-          className={`${fieldBase}${readOnly ? ' cursor-default opacity-90' : ''}`}
+          className={fieldBase}
           placeholder="0"
         />
       </div>
@@ -132,29 +286,26 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
   if (tipo === 'booleano') {
     const valor = resposta?.respostaBoolean ?? null;
     return (
-      <div className="flex flex-col gap-2">
-        <span className={qTitle}>{pergunta.descricao}</span>
-        <div className="flex w-full gap-3 md:max-w-[480px]">
-          <button
-            type="button"
-            disabled={readOnly}
-            onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: true }); }}
-            className={`flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
-              valor === true ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-gray-200 text-gray-400 hover:border-[#00a88e]/50'
-            } md:min-w-[120px] md:max-w-[200px]`}
-          >
-            Sim
-          </button>
-          <button
-            type="button"
-            disabled={readOnly}
-            onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: false }); }}
-            className={`flex-1 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
-              valor === false ? 'border-red-400 bg-red-50 text-red-600' : 'border-gray-200 text-gray-400 hover:border-red-300'
-            } md:min-w-[120px] md:max-w-[200px]`}
-          >
-            Não
-          </button>
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
+        <div className="flex gap-2 flex-wrap">
+          {[{ label: 'Sim', value: true }, { label: 'Não', value: false }].map(({ label, value }) => {
+            const ativo = valor === value;
+            return (
+              <button
+                key={label}
+                type="button"
+                disabled={readOnly}
+                aria-pressed={ativo}
+                onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, respostaBoolean: ativo ? null : value }); }}
+                className={`flex-1 py-2 px-4 rounded-lg border text-[13px] font-medium transition-all max-w-[140px] ${
+                  readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
+                }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-500 hover:border-[#00a88e]/40'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -162,42 +313,35 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
 
   if (tipo === 'escolha_unica') {
     const selecionada = resposta?.perguntaOpcaoId || null;
+    const alts = [...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
     return (
-      <div className="space-y-2">
-        <label className={qLabel}>{pergunta.descricao}</label>
-        <div className="space-y-2">
-          {[...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map((alt) => {
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
+        <div className="flex w-full min-w-0 flex-col gap-0.5">
+          {alts.map((alt) => {
             const ativa = String(selecionada) === String(alt.id);
             return (
               <div
                 key={alt.id}
                 role="button"
                 tabIndex={readOnly ? -1 : 0}
-                onClick={() => {
-                  if (readOnly) return;
-                  onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id });
-                }}
+                aria-pressed={ativa}
+                onClick={() => { if (readOnly) return; onChange({ perguntaId: pergunta.id, perguntaOpcaoId: ativa ? null : alt.id }); }}
                 onKeyDown={(e) => {
                   if (readOnly) return;
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onChange({ perguntaId: pergunta.id, perguntaOpcaoId: alt.id });
+                    onChange({ perguntaId: pergunta.id, perguntaOpcaoId: ativa ? null : alt.id });
                   }
                 }}
-                className={`flex items-center gap-3 p-3 border rounded-xl transition-all ${
-                  readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
-                }${
-                  ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
-                }`}
+                className={`flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors ${
+                  readOnly ? 'cursor-default opacity-90' : 'cursor-pointer'
+                } ${ativa ? 'bg-[#e6f7f5]/60' : 'hover:bg-slate-50'}`}
               >
-                <div
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
-                    ativa ? 'border-[#00a88e]' : 'border-[#94a3b8]'
-                  }`}
-                >
-                  {ativa && <div className="w-2.5 h-2.5 rounded-full bg-[#00a88e]" />}
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${ativa ? 'border-[#00a88e]' : 'border-slate-300'}`}>
+                  {ativa && <div className="w-2 h-2 rounded-full bg-[#00a88e]" />}
                 </div>
-                <span className={`text-[14px] font-medium ${ativa ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{alt.alternativa}</span>
+                <span className={`text-[14px] ${ativa ? 'text-[#0f766e] font-medium' : 'text-slate-600'}`}>{alt.alternativa}</span>
               </div>
             );
           })}
@@ -208,18 +352,17 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
 
   if (tipo === 'multipla_escolha') {
     const selecionadas = (resposta?.opcoesSelecionadas || []).map((x) => String(x));
+    const alts = [...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
     return (
-      <div className="space-y-2">
-        <label className={qLabel}>{pergunta.descricao}</label>
-        <div className="space-y-2">
-          {[...(pergunta.alternativas || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map((alt) => {
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
+        <div className="flex w-full min-w-0 flex-col gap-0.5">
+          {alts.map((alt) => {
             const ativa = selecionadas.includes(String(alt.id));
             const toggle = () => {
               if (readOnly) return;
               const idStr = String(alt.id);
-              const next = ativa
-                ? selecionadas.filter((id) => id !== idStr)
-                : [...selecionadas, idStr];
+              const next = ativa ? selecionadas.filter((id) => id !== idStr) : [...selecionadas, idStr];
               onChange({ perguntaId: pergunta.id, opcoesSelecionadas: next });
             };
             return (
@@ -227,25 +370,20 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
                 key={alt.id}
                 role="button"
                 tabIndex={readOnly ? -1 : 0}
+                aria-pressed={ativa}
                 onClick={toggle}
                 onKeyDown={(e) => {
                   if (readOnly) return;
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    toggle();
-                  }
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
                 }}
-                className={`flex items-center gap-3 p-3 border rounded-xl transition-all ${
-                  readOnly ? 'cursor-default opacity-95 ' : 'cursor-pointer '
-                }${
-                  ativa ? 'border-[#00a88e] bg-[#e6f7f5]' : 'border-[#00a88e]/15 bg-white hover:bg-[#f8fbfb]'
-                }`}
+                className={`flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors ${
+                  readOnly ? 'cursor-default opacity-90' : 'cursor-pointer'
+                } ${ativa ? 'bg-[#e6f7f5]/60' : 'hover:bg-slate-50'}`}
               >
-                {ativa
-                  ? <CheckSquare className="w-5 h-5 text-[#00a88e]" strokeWidth={2.5} />
-                  : <Square className="w-5 h-5 text-[#94a3b8]" strokeWidth={2} />
-                }
-                <span className={`text-[14px] font-medium ${ativa ? 'text-[#0f766e]' : 'text-[#475569]'}`}>{alt.alternativa}</span>
+                <div className={`w-4 h-4 rounded-sm border-2 flex items-center justify-center shrink-0 ${ativa ? 'border-[#00a88e] bg-[#00a88e]' : 'border-slate-300'}`}>
+                  {ativa && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                </div>
+                <span className={`text-[14px] ${ativa ? 'text-[#0f766e] font-medium' : 'text-slate-600'}`}>{alt.alternativa}</span>
               </div>
             );
           })}
@@ -255,11 +393,7 @@ function DynamicQuestion({ pergunta, resposta, onChange, alerta = false, readOnl
   }
 
   return (
-    <div
-      className={`p-3 border rounded-xl text-[13px] ${
-        alerta ? 'bg-[#fff5f5] border-red-300 text-[#1f2937]' : 'bg-[#f8fbfb] border-[#e2e8f0] text-[#64748b]'
-      }`}
-    >
+    <div className="text-[13px] text-slate-400 italic">
       Tipo de resposta não suportado: {tipo}
     </div>
   );
@@ -269,6 +403,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   queixa, setQueixa,
   expectativas, setExpectativas,
   pacienteId = null,
+  pacienteSexo = null,
+  roleUserId = null,
   step2Errors = {},
   setStep2Errors = () => {},
   savedAnamneseState = null,
@@ -277,24 +413,36 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   salvarRespostaAnamnese = () => {},
   setRespostasAnamnese = () => {},
   onQueixaVisibilityChange,
+  perfilClinicoDraft = null,
+  onPerfilClinicoDraftChange = () => {},
 }, ref) {
   const [fichas, setFichas] = useState([]);
+  const draftValido = savedAnamneseState?.pacienteId === pacienteId;
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState(
-    () => savedAnamneseState?.fichaSelecionadaId || ''
+    () => (draftValido ? savedAnamneseState?.fichaSelecionadaId || '' : '')
   );
   const [fichaSelecionada, setFichaSelecionada] = useState(null);
   const [respostas, setRespostas] = useState(
-    () => mergeInitialRespostas(savedAnamneseState?.respostas, respostasAnamnese)
+    () => draftValido
+      ? mergeInitialRespostas(savedAnamneseState?.respostas, respostasAnamnese)
+      : {}
   );
   const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(
-    () => savedAnamneseState?.preenchimentoAnterior || null
+    () => (draftValido ? savedAnamneseState?.preenchimentoAnterior || null : null)
   );
   const [modoVisualizacao, setModoVisualizacao] = useState(
-    () => Boolean(savedAnamneseState?.modoVisualizacao)
+    () => Boolean(draftValido && savedAnamneseState?.modoVisualizacao)
   );
   const [fichaDropdownNovo, setFichaDropdownNovo] = useState(
-    () => savedAnamneseState?.fichaDropdownNovo ?? ''
+    () => (draftValido ? savedAnamneseState?.fichaDropdownNovo ?? '' : '')
   );
+  const [errosObrigatorias, setErrosObrigatorias] = useState(() => new Set());
+
+  // ── Perfil Clínico (Bloco 1) ─────────────────────────────
+  const perfilClinico = usePerfilClinico(pacienteId, roleUserId, pacienteSexo, {
+    draft: perfilClinicoDraft,
+    onDraftChange: onPerfilClinicoDraftChange,
+  });
 
   const itensOrdenados = useMemo(
     () =>
@@ -304,31 +452,64 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     [fichaSelecionada],
   );
 
+  const itensPorSecao = useMemo(() => groupItensByCategoria(itensOrdenados), [itensOrdenados]);
+
   const mostrarQueixaExpectativas = !fichaSelecionada || itensOrdenados.length === 0;
+  /** Ficha personalizada com perguntas: complemento opcional no final (motivo da visita). */
+  const mostrarComplementoVisita = Boolean(fichaSelecionada && itensOrdenados.length > 0);
 
   useImperativeHandle(ref, () => ({
     getAnamneseData: () => {
       if (!fichaSelecionadaId || !fichaSelecionada) return null;
+      const perguntaById = new Map(
+        itensOrdenados.map((item) => [String(item.pergunta?.id), item.pergunta]),
+      );
+      const rows = [];
+      for (const r of Object.values(respostas)) {
+        const pergunta = perguntaById.get(String(r.perguntaId));
+        if (!pergunta) continue;
+        const row = buildRespostaApiRow(pergunta, r);
+        if (row) rows.push(row);
+      }
       return {
         anamneseId: fichaSelecionadaId,
-        respostas: Object.values(respostas).map((r) => {
-          const row = {
-            perguntaId: r.perguntaId,
-            perguntaOpcaoId: r.perguntaOpcaoId || undefined,
-            respostaTexto: r.respostaTexto || undefined,
-            respostaNumero: r.respostaNumero ?? undefined,
-            respostaBoolean: r.respostaBoolean ?? undefined,
-          };
-          if (Array.isArray(r.opcoesSelecionadas) && r.opcoesSelecionadas.length > 0) {
-            row.opcoesSelecionadas = r.opcoesSelecionadas;
-          }
-          return row;
-        }),
+        respostas: rows,
       };
     },
     /** Modo leitura ou reaproveitando preenchimento anterior — queixa opcional no UI. */
     skipQueixaExpectativas: () => Boolean(modoVisualizacao || preenchimentoAnterior),
-  }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior]);
+    /** Valida perguntas obrigatórias da ficha (front-only; back não valida hoje). */
+    validateObrigatorias: () => {
+      if (modoVisualizacao || preenchimentoAnterior) return { ok: true, faltando: [] };
+      if (!fichaSelecionada || itensOrdenados.length === 0) return { ok: true, faltando: [] };
+
+      const faltando = [];
+      for (const item of itensOrdenados) {
+        if (!item.obrigatorio) continue;
+        const pid = item.pergunta?.id;
+        if (pid == null) continue;
+        const resposta = respostas[pid] ?? respostas[String(pid)];
+        if (!isRespostaPreenchida(item.pergunta, resposta)) faltando.push(pid);
+      }
+      setErrosObrigatorias(new Set(faltando.map(String)));
+      if (faltando.length > 0) {
+        const firstId = String(faltando[0]);
+        requestAnimationFrame(() => {
+          document.querySelector(`[data-pergunta-id="${firstId}"]`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        });
+      }
+      return { ok: faltando.length === 0, faltando };
+    },
+    /** Salva perfil clínico. Retorna { ok, error? }. */
+    savePerfilClinico: () => perfilClinico.save(),
+    /** Perfil tem edições não salvas. */
+    isPerfilDirty: () => perfilClinico.isDirty,
+    /** PUT perfil em andamento. */
+    isPerfilSaving: () => perfilClinico.isSaving,
+  }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior, perfilClinico, itensOrdenados]);
   const [loadingFichas, setLoadingFichas] = useState(true);
   const [loadingFicha, setLoadingFicha] = useState(false);
   const [historicoPaciente, setHistoricoPaciente] = useState([]);
@@ -386,6 +567,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       setLoadingHistoricoPaciente(false);
       return;
     }
+    console.debug('[Step2Anamnese] hydrate', {
+      pacienteId,
+      draftPacienteId: savedAnamneseState?.pacienteId,
+      draftValido: savedAnamneseState?.pacienteId === pacienteId,
+      historicoLen: historicoPaciente?.length,
+    });
     let cancelled = false;
     setLoadingHistoricoPaciente(true);
     anamneseApi
@@ -450,6 +637,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         ? 'data não registrada'
         : '';
 
+  const mostrarLinkAbrirUltima =
+    pacienteId && !loadingHistoricoPaciente && ultimaAnamnese && !preenchimentoAnterior;
+
   /** Select / novo preenchimento: só template; sem histórico; evita reidratar respostas do pai. */
   const selecionarFichaParaNovo = useCallback(async (id) => {
     const idStr = id === '' || id == null ? '' : String(id);
@@ -457,6 +647,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     setFichaDropdownNovo(idStr);
     onSavedAnamneseStateChange({
       ...(savedAnamneseState || {}),
+      pacienteId,
       fichaSelecionadaId: idStr,
       fichaDropdownNovo: idStr,
       respostas: {},
@@ -489,6 +680,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     setFichaDropdownNovo('');
     onSavedAnamneseStateChange({
       ...(savedAnamneseState || {}),
+      pacienteId,
       fichaSelecionadaId: id,
       fichaDropdownNovo: '',
       respostas: {},
@@ -519,11 +711,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
           if (preenchimento) {
             const detalhes = await anamneseApi.getPaciente(pacienteId, preenchimento.id);
-            const respostasCarregadas = {};
-            (detalhes?.respostas || []).forEach((r) => {
-              const mapped = mapApiRespostaToEstado(r);
-              if (mapped) respostasCarregadas[String(mapped.perguntaId)] = mapped;
-            });
+            const respostasCarregadas = mergeApiRespostasToMap(detalhes?.respostas);
             syncedRespostas = respostasCarregadas;
             const dh =
               preenchimento.dataHora
@@ -550,6 +738,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
       onSavedAnamneseStateChange({
         ...(savedDraftRef.current || {}),
+        pacienteId,
         fichaSelecionadaId: id,
         fichaDropdownNovo: '',
         respostas: syncedRespostas,
@@ -563,25 +752,21 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     }
   }, [onSavedAnamneseStateChange, pacienteId, setExpectativas, setQueixa]);
 
-  const autoOpenedRef = useRef(false);
-
+  // Reseta estado local ao trocar de paciente; na montagem inicial usa o draft se pacienteId bater
+  const prevPacienteIdRef = useRef(pacienteId);
   useEffect(() => {
-    if (
-      !pacienteId ||
-      loadingHistoricoPaciente ||
-      !ultimaAnamnese ||
-      fichaSelecionadaId ||
-      autoOpenedRef.current
-    ) return;
-    autoOpenedRef.current = true;
-    consultarUltimoPreenchimento(ultimaAnamnese.fichaId);
-  }, [
-    pacienteId,
-    loadingHistoricoPaciente,
-    ultimaAnamnese,
-    fichaSelecionadaId,
-    consultarUltimoPreenchimento,
-  ]);
+    const prev = prevPacienteIdRef.current;
+    prevPacienteIdRef.current = pacienteId;
+    if (prev === pacienteId) return; // mesmo paciente (inclui primeiro render)
+    setFichaSelecionadaId('');
+    setFichaSelecionada(null);
+    setRespostas({});
+    setPreenchimentoAnterior(null);
+    setModoVisualizacao(false);
+    setFichaDropdownNovo('');
+    respostasRef.current = {};
+    setErrosObrigatorias(new Set());
+  }, [pacienteId]);
 
   const handleRespostaChange = useCallback((resposta) => {
     if (modoVisualizacao) return;
@@ -590,8 +775,15 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     const next = { ...respostasRef.current, [key]: normalized };
     respostasRef.current = next;
     setRespostas(next);
+    setErrosObrigatorias((prev) => {
+      if (!prev.has(key)) return prev;
+      const cleared = new Set(prev);
+      cleared.delete(key);
+      return cleared;
+    });
     onSavedAnamneseStateChange({
       ...(savedDraftRef.current || {}),
+      pacienteId,
       fichaSelecionadaId,
       fichaDropdownNovo,
       respostas: next,
@@ -613,6 +805,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     setModoVisualizacao(next);
     onSavedAnamneseStateChange({
       ...(savedDraftRef.current || {}),
+      pacienteId,
       fichaSelecionadaId,
       fichaDropdownNovo,
       respostas: respostasRef.current,
@@ -653,13 +846,19 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     [fichas, fichaSearch],
   );
 
-  const selectedFichaLista = useMemo(
-    () => fichas.find((f) => String(f.id) === String(fichaDropdownNovo)),
-    [fichas, fichaDropdownNovo],
-  );
+  /** Ficha exibida no combobox — cobre seleção nova e abertura via histórico. */
+  const selectedFichaLista = useMemo(() => {
+    if (fichaDropdownNovo) {
+      return fichas.find((f) => String(f.id) === String(fichaDropdownNovo)) ?? null;
+    }
+    if (fichaSelecionadaId) {
+      return fichas.find((f) => String(f.id) === String(fichaSelecionadaId)) ?? fichaSelecionada ?? null;
+    }
+    return null;
+  }, [fichas, fichaDropdownNovo, fichaSelecionadaId, fichaSelecionada]);
 
   function renderFichaItem(f) {
-    const selected = String(fichaDropdownNovo) === String(f.id);
+    const selected = String(fichaSelecionadaId) === String(f.id);
     const esp = (f.especialidadeNome || f.especialidade?.nome || '').trim();
     const nPerg = Array.isArray(f.itens) ? f.itens.length : 0;
     let iconWrap = 'bg-[#f1f5f9]';
@@ -716,58 +915,63 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="bg-[#f3e8ff] p-3 rounded-2xl text-[#a855f7] border border-fuchsia-200">
-          <ClipboardList className="w-7 h-7" strokeWidth={2.5} />
-        </div>
-        <div>
-          <h3 className="text-[20px] font-bold text-[#0f172a]">Anamnese Completa</h3>
-          <p className="text-[#64748b] text-[14px] font-medium">Histórico médico e contraindicações</p>
+      <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+        <Stethoscope className="h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+        <div className="min-w-0">
+          <h3 className="text-[16px] font-semibold text-slate-800">Dados clínicos do paciente</h3>
+          <p className="text-[12px] text-slate-500">Perfil permanente e ficha desta consulta</p>
         </div>
       </div>
 
+      {/* Bloco 1 — Perfil Clínico Persistente */}
+      {pacienteId && (
+        <div className="mb-6 min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+          <div className="border-b border-slate-200/80 bg-slate-100/60 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              Dados permanentes do paciente
+            </p>
+          </div>
+          <div className="min-w-0 px-3 py-4 sm:px-4">
+            <PerfilClinicoBloco
+              state={perfilClinico.state}
+              isLoading={perfilClinico.isLoading}
+              isSaving={perfilClinico.isSaving}
+              isDirty={perfilClinico.isDirty}
+              error={perfilClinico.error}
+              load={perfilClinico.load}
+              addItem={perfilClinico.addItem}
+              removeItem={perfilClinico.removeItem}
+              updateObservacao={perfilClinico.updateObservacao}
+              updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
+              buscarAlimentos={perfilClinico.buscarAlimentos}
+              buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
+              buscarMedicamentos={perfilClinico.buscarMedicamentos}
+              buscarAntecedentes={perfilClinico.buscarAntecedentes}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="mb-5 mt-8 min-w-0 border-t-2 border-slate-300 pt-8">
+        <div className="mb-4 flex items-start gap-3">
+          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+          <div className="min-w-0 pb-1">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-800">
+              Ficha de anamnese desta consulta
+            </p>
+            <p className="mt-0.5 text-[12px] text-slate-500">
+              Perguntas específicas desta consulta
+            </p>
+          </div>
+        </div>
+
+      {/* Bloco 2 — Anamnese da visita */}
       {pacienteId && loadingHistoricoPaciente && (
         <div className="mb-6 flex items-center gap-2 text-[#64748b] text-[13px]">
           <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
           Carregando histórico de anamneses do paciente…
         </div>
       )}
-
-      {pacienteId && !loadingHistoricoPaciente && ultimaAnamnese && !fichaSelecionadaId ? (
-        <div className="mb-5">
-          <div className="flex min-h-[56px] flex-col gap-2 rounded-lg border border-[#e2e8f0] bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.5} aria-hidden />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="min-w-0 truncate text-[13px] font-bold text-[#0f172a]">{ultimaAnamnese.nome}</p>
-                  {estaAtualizadaUltima ? (
-                    <span className="shrink-0 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
-                      ✓ Atualizada
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full border border-[#fde68a] bg-[#fef9c3] px-2 py-0.5 text-[11px] font-bold text-[#b45309]">
-                      ⚠ Desatualizada
-                    </span>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-[#64748b]">{dataLinhaUltima}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => consultarUltimoPreenchimento(ultimaAnamnese.fichaId)}
-              className={`h-8 shrink-0 self-end rounded-lg px-3 text-[12px] font-semibold text-white transition-colors sm:self-center ${
-                estaAtualizadaUltima
-                  ? 'bg-[#00a88e] hover:bg-[#00967f]'
-                  : 'bg-[#f59e0b] hover:bg-[#d97706]'
-              }`}
-            >
-              Abrir
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {fichaSelecionadaId && preenchimentoAnterior && !estaAtualizadaUltima && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border-[2px] border-[#f59e0b]/50 bg-[#fffbeb] px-4 py-3">
@@ -784,6 +988,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               setModoVisualizacao(false);
               onSavedAnamneseStateChange({
                 ...(savedDraftRef.current || {}),
+                pacienteId,
                 fichaSelecionadaId,
                 fichaDropdownNovo,
                 respostas: respostasRef.current,
@@ -798,12 +1003,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      <div className="mb-5 border-t border-[#e2e8f0] pt-5" aria-hidden />
-
-      {!fichaSelecionadaId && (
-      <div className="relative mb-6" ref={fichaMenuRef}>
+      <div className="relative mb-6 min-w-0" ref={fichaMenuRef}>
         <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
-          Selecionar ficha de anamnese
+          {fichaSelecionadaId ? 'Ficha de anamnese' : 'Selecionar ficha de anamnese'}
         </p>
         <button
           type="button"
@@ -853,6 +1055,30 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             />
           </div>
         </button>
+
+        {mostrarLinkAbrirUltima && !fichaMenuOpen ? (
+          <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium text-[#64748b]">
+                Este paciente já tem anamnese preenchida
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-[#94a3b8]">
+                {ultimaAnamnese.nome} · {dataLinhaUltima}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => consultarUltimoPreenchimento(ultimaAnamnese.fichaId)}
+              className={`h-8 shrink-0 self-start rounded-lg px-3 text-[12px] font-semibold text-white transition-colors sm:self-center ${
+                estaAtualizadaUltima
+                  ? 'bg-[#00a88e] hover:bg-[#00967f]'
+                  : 'bg-[#f59e0b] hover:bg-[#d97706]'
+              }`}
+            >
+              Abrir último preenchimento
+            </button>
+          </div>
+        ) : null}
 
         {fichaMenuOpen ? (
           <div className="flex max-h-[min(100dvh,100%)] flex-col overflow-hidden bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-150 max-sm:fixed max-sm:inset-0 max-sm:z-[200] sm:absolute sm:left-0 sm:right-0 sm:top-full sm:z-50 sm:mt-2 sm:max-h-none sm:rounded-xl sm:border sm:border-[#e2e8f0]">
@@ -937,17 +1163,17 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </div>
         ) : null}
 
-        {fichaDropdownNovo &&
+        {fichaSelecionadaId &&
         fichaSelecionada &&
         !isConsultaBasicaFicha(fichaSelecionada) &&
-        (fichaSelecionada.itens?.length || 0) > 0 ? (
+        (fichaSelecionada.itens?.length || 0) > 0 &&
+        !fichaMenuOpen ? (
           <div className="mt-2 flex items-center gap-2 text-[12px] font-medium text-[#0f766e]">
             <CheckCircle className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
             Ficha selecionada — as perguntas aparecerão abaixo
           </div>
         ) : null}
       </div>
-      )}
 
       {preenchimentoAnterior && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-[#e6f7f5] border border-[#00a88e] rounded-xl px-4 py-3 mb-4">
@@ -979,49 +1205,53 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
-        <div className="mx-auto w-full max-w-3xl space-y-5 mb-6 p-6 bg-white border border-fuchsia-200 rounded-2xl">
-          <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">{fichaSelecionada.nome}</h4>
-          {itensOrdenados.map((item) => {
-            const isAlerta = item.pergunta?.prioridade === 'ALERTA';
-            const showObrigatorio = Boolean(item.obrigatorio);
-            return (
-              <div
-                key={item.id}
-                className={isAlerta
-                  ? 'rounded-xl border-[2px] border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] p-4'
-                  : 'rounded-xl border border-app-border bg-white p-4'}
-              >
-                {(isAlerta || showObrigatorio) && (
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    {isAlerta ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-red-700 bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                        <span aria-hidden>⚠</span>
-                        Alerta
-                      </span>
-                    ) : <span aria-hidden className="w-1" />}
-                    {showObrigatorio ? (
-                      <span className="inline-flex shrink-0 rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white whitespace-nowrap shadow-sm">
-                        obrigatório
-                      </span>
-                    ) : <span aria-hidden className="w-1" />}
-                  </div>
-                )}
-                <div>
-                  <DynamicQuestion
-                    pergunta={item.pergunta}
-                    resposta={
-                      respostas[item.pergunta?.id] ?? respostas[String(item.pergunta?.id)]
-                    }
-                    onChange={handleRespostaChange}
-                    alerta={isAlerta}
-                    readOnly={modoVisualizacao}
-                  />
+        <div className="mb-6 w-full min-w-0 max-w-5xl xl:max-w-6xl">
+          {/* Título da ficha — discreto */}
+          <p className="mb-5 text-[15px] font-semibold text-slate-700">{fichaSelecionada.nome}</p>
+
+          {/* Seções por categoriaNome */}
+          {itensPorSecao.map(({ categoriaNome, itens: secaoItens }, secIdx) => (
+            <div key={categoriaNome || `sec-${secIdx}`} className={secIdx > 0 ? 'mt-8' : ''}>
+              {categoriaNome ? (
+                <div className="mb-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{categoriaNome}</p>
+                  <div className="mt-1 border-b border-slate-100" />
                 </div>
+              ) : null}
+
+              {/* Grid responsivo */}
+              <div className="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2">
+                {secaoItens.map((item) => {
+                  const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+                  const showObrigatorio = Boolean(item.obrigatorio);
+                  const perguntaId = item.pergunta?.id;
+                  const hasError = perguntaId != null && errosObrigatorias.has(String(perguntaId));
+                  return (
+                    <div
+                      key={item.id}
+                      data-pergunta-id={perguntaId != null ? String(perguntaId) : undefined}
+                      className={`min-w-0 ${isFullWidthItem(item) ? 'md:col-span-2' : ''} ${
+                        isAlerta ? 'border-l-2 border-l-red-400 pl-3' : ''
+                      } ${hasError ? 'rounded-lg p-2 ring-1 ring-red-300' : ''}`}
+                    >
+                      <DynamicQuestion
+                        numero={item.ordem ?? (itensOrdenados.findIndex((i) => i.id === item.id) + 1)}
+                        pergunta={item.pergunta}
+                        resposta={respostas[item.pergunta?.id] ?? respostas[String(item.pergunta?.id)]}
+                        onChange={handleRespostaChange}
+                        alerta={isAlerta}
+                        obrigatorio={showObrigatorio}
+                        readOnly={modoVisualizacao}
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
+
           {preenchimentoAnterior && (
-            <div className="pt-4 border-t border-[#e2e8f0] flex items-center justify-between gap-3">
+            <div className="mt-8 pt-4 border-t border-[#e2e8f0] flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => selecionarFichaParaNovo('')}
@@ -1052,7 +1282,33 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       )}
 
-      {/* Queixa/expectativas: só ficha básica ou sem perguntas; ficha com itens usa só perguntas */}
+      {/* Complemento da visita — ficha personalizada: motivo opcional no final */}
+      {mostrarComplementoVisita ? (
+        <div className="mt-6 w-full min-w-0 max-w-5xl xl:max-w-6xl">
+          <div className="border-t border-slate-100 pt-5">
+            <label className="mb-2 block text-[13px] font-semibold text-slate-700" htmlFor="complemento-visita-queixa">
+              Motivo da consulta
+              <span className="ml-1.5 text-[12px] font-normal text-slate-400">(opcional)</span>
+            </label>
+            <textarea
+              id="complemento-visita-queixa"
+              value={queixa}
+              onChange={(e) => {
+                setQueixa(e.target.value);
+                setStep2Errors((prev) => ({ ...prev, queixa: false }));
+              }}
+              rows={3}
+              readOnly={modoVisualizacao}
+              className={`w-full rounded-lg border border-slate-200 px-3 py-2.5 text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors ${
+                modoVisualizacao ? 'cursor-default bg-slate-50 opacity-90' : 'bg-white'
+              }`}
+              placeholder="O que trouxe o paciente nesta consulta…"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Queixa/expectativas: só ficha básica ou sem perguntas */}
       {mostrarQueixaExpectativas ? (
         <form
           className={`space-y-6 bg-white border rounded-2xl p-6 ${
@@ -1113,6 +1369,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </div>
         </form>
       ) : null}
+      </div>
     </div>
   );
 });

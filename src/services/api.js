@@ -1347,3 +1347,74 @@ export const auditoriaApi = {
   },
 };
 
+// ── Perfil Clínico do Paciente ─────────────────────────────
+/**
+ * Perfil clínico persistente do paciente (alergias, medicamentos, antecedentes).
+ * Distinto de `perfilApi` (orientações pós-procedimento).
+ */
+export const perfilClinicoApi = {
+  /**
+   * Busca perfil clínico do paciente.
+   * @param {string} pacienteId
+   * @returns {Promise<PerfilClinicoResponseDTO>}
+   */
+  get: (pacienteId) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/perfil-clinico`),
+
+  /**
+   * Atualiza perfil clínico (replace-por-seção).
+   * Sempre enviar as 4 listas, mesmo vazias — omitir = back não atualiza; [] = back zera.
+   * @param {string} pacienteId
+   * @param {{ roleUserId: string, alergias: object[], alergiasPrincipioAtivo: object[], medicamentosEmUso: object[], antecedentes: object[] }} body
+   */
+  put: (pacienteId, body) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/perfil-clinico`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Catálogo Clínico (lookup global) ──────────────────────
+/**
+ * Catálogos para autocomplete no perfil clínico. Rotas globais (needsOrg: false).
+ * Sem `q` retorna lista completa de cada catálogo (sem paginação).
+ */
+export const catalogoClinicoApi = {
+  /** Alimentos para alergias alimentares. `q` opcional. */
+  alimentos: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/alimentos${qs}`, { needsOrg: false });
+  },
+
+  /** Princípios ativos para alergias a PA. `q` opcional. */
+  principiosAtivos: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/principios-ativos${qs}`, { needsOrg: false });
+  },
+
+  /** Medicamentos em uso. `q` opcional. */
+  medicamentos: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/medicamentos${qs}`, { needsOrg: false });
+  },
+
+  /**
+   * Antecedentes pessoais. `q` opcional; `sexo` opcional — omitir retorna todos.
+   * @param {string} q
+   * @param {'M'|'F'|null|undefined} sexo
+   */
+  antecedentesPessoais: (q = '', sexo) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (sexo && sexo !== 'N') params.set('sexo', sexo);
+    const qs = params.toString();
+    return request(`/api/v1/catalogo-clinico/antecedentes-pessoais${qs ? `?${qs}` : ''}`, { needsOrg: false });
+  },
+
+  /** Outras alergias (não alimentares e não por PA). `q` opcional. */
+  outrasAlergias: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/outras-alergias${qs}`, { needsOrg: false });
+  },
+};
+

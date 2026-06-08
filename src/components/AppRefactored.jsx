@@ -264,6 +264,7 @@ export default function App() {
   const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(() => toLocalISODate());
   /** Sincronizado com Step2: false quando a ficha tem perguntas (bloco queixa oculto). */
   const [queixaVisivel, setQueixaVisivel] = useState(true);
+  const [step1Busy, setStep1Busy] = useState(false);
   /** Procedimento já registrado no Step 4, quando existir (na etapa 3 costuma ser null). */
   const [ultimoProcedimentoId, setUltimoProcedimentoId] = React.useState(null);
   /** Array com IDs das assinaturas persistidas no Step 3 (para vincular ao procedimento no finalizar). */
@@ -297,6 +298,8 @@ export default function App() {
   const pacienteAtualRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
+  /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
+  const prevJourneyPacienteIdRef = useRef(undefined);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
   const pendingAnnotatedGalleryBlobsRef = useRef([]);
   const finishJourneyModalResolveRef = useRef(null);
@@ -474,6 +477,29 @@ export default function App() {
     pacienteAtualRef.current = null;
     return null;
   }, [patients, patientListItems, selectedPatientCpf]);
+
+  // Reseta estado de anamnese ao trocar de paciente para evitar vazamento de draft entre pacientes
+  React.useEffect(() => {
+    const newId = pacienteAtual?.id ?? null;
+    const prevId = prevJourneyPacienteIdRef.current;
+    prevJourneyPacienteIdRef.current = newId;
+    if (prevId === undefined) return; // primeiro mount — nao resetar
+    if (prevId === newId) return; // mesmo paciente (ex: lista atualizou)
+    journeyState.setQueixa('');
+    journeyState.setExpectativas('');
+    journeyState.setStep2AnamneseDraft({
+      pacienteId: newId,
+      fichaSelecionadaId: '',
+      fichaDropdownNovo: '',
+      respostas: {},
+      preenchimentoAnterior: null,
+      modoVisualizacao: false,
+    });
+    journeyState.setRespostasAnamnese({});
+    journeyState.setStep2Errors({});
+    journeyState.setStep2PerfilClinicoDraft(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pacienteAtual?.id]);
 
   const step5RetornoBloqueiaFinal = React.useMemo(
     () =>
@@ -1049,11 +1075,37 @@ export default function App() {
     if (currentStep === 5 && isFinishing) return;
 
     if (currentStep === 1) {
+      setStep1Busy(true);
+      try {
       if (!pacienteAtual) {
         toast.error('Selecione um paciente na aba Pacientes antes de continuar a jornada.');
         return;
       }
       upsertPatientLocal({ ensureSelected: true });
+
+      // Regra 4 do plano: PUT perfil ANTES da validação de queixa/ficha
+      if (anamneseRef.current?.isPerfilDirty?.()) {
+        if (!roleUserId) {
+          toast.error('Selecione o profissional responsável antes de salvar o perfil clínico.');
+          return;
+        }
+        const perfilResult = await anamneseRef.current.savePerfilClinico();
+        if (!perfilResult?.ok) {
+          toast.error(
+            getApiErrorToastMessage(
+              perfilResult?.error,
+              'Erro ao salvar o perfil clínico. Verifique a conexão e tente novamente.',
+            ),
+          );
+          return;
+        }
+      }
+
+      const validacaoObrigatorias = anamneseRef.current?.validateObrigatorias?.();
+      if (validacaoObrigatorias && !validacaoObrigatorias.ok) {
+        toast.error('Preencha todas as perguntas obrigatórias da ficha.');
+        return;
+      }
 
       const { queixa, expectativas } = journeyState;
       const skipQueixaExpectativas =
@@ -1103,11 +1155,16 @@ export default function App() {
         }
 
         if (paciente?.id && rid && anamneseId) {
-          const observacoes = `Queixa: ${queixa}. Expectativas: ${expectativas}`;
+          const q = queixa.trim();
+          const e = expectativas.trim();
+          let observacoes;
+          if (q && e) observacoes = `Queixa: ${q}. Expectativas: ${e}`;
+          else if (q) observacoes = `Queixa: ${q}`;
+          else if (e) observacoes = `Expectativas: ${e}`;
           try {
             const created = await anamneseApi.createPaciente(paciente.id, rid, {
               anamneseId,
-              observacoes,
+              ...(observacoes ? { observacoes } : {}),
               respostas: anamneseData?.respostas || [],
             });
             const pid = created?.id ?? created?.preenchimentoId;
@@ -1115,9 +1172,13 @@ export default function App() {
               anamnesePreenchimentoIdRef.current = String(pid);
             }
           } catch (err) {
-            console.warn('Erro ao salvar anamnese:', err.message);
+            toast.error(getApiErrorToastMessage(err, 'Erro ao salvar a anamnese.'));
+            return;
           }
         }
+      }
+      } finally {
+        setStep1Busy(false);
       }
     }
 
@@ -1408,6 +1469,7 @@ export default function App() {
     journeyState.setExpectativas('');
     journeyState.setObservacoes('');
     journeyState.setStep2AnamneseDraft({
+      pacienteId: null,
       fichaSelecionadaId: '',
       fichaDropdownNovo: '',
       respostas: {},
@@ -1415,6 +1477,7 @@ export default function App() {
       modoVisualizacao: false,
     });
     journeyState.setRespostasAnamnese({});
+    journeyState.setStep2PerfilClinicoDraft(null);
     journeyState.setImageSrc(null);
     journeyState.setPaths([]);
     journeyState.setTermoLido(false);
@@ -1596,7 +1659,11 @@ export default function App() {
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto w-full max-w-[1600px] p-3 pb-28 [-webkit-overflow-scrolling:touch] sm:p-6 md:px-8 md:pt-8 md:pb-28">
-                  <div className="rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6 md:pb-8">
+                  <div className={`rounded-[20px] border border-app-border bg-white shadow-app-card ${
+                    currentStep === 1
+                      ? 'p-3 pb-4 sm:p-5 sm:pb-5 md:p-6 md:pb-6'
+                      : 'p-4 pb-5 sm:p-8 sm:pb-6 md:pb-8'
+                  }`}>
                   <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
                   {currentStep === 1 && (
                     <Step2Anamnese
@@ -1606,6 +1673,8 @@ export default function App() {
                       expectativas={journeyState.expectativas}
                       setExpectativas={journeyState.setExpectativas}
                       pacienteId={pacienteAtual?.id || null}
+                      pacienteSexo={pacienteAtual?.sexo || null}
+                      roleUserId={roleUserId}
                       step2Errors={journeyState.step2Errors}
                       setStep2Errors={journeyState.setStep2Errors}
                       savedAnamneseState={journeyState.step2AnamneseDraft}
@@ -1614,6 +1683,8 @@ export default function App() {
                       salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
                       setRespostasAnamnese={journeyState.setRespostasAnamnese}
                       onQueixaVisibilityChange={setQueixaVisivel}
+                      perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
+                      onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => {})}
                     />
                   )}
 
@@ -1869,10 +1940,13 @@ export default function App() {
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        disabled={isFinishing}
+                        disabled={isFinishing || (currentStep === 1 && step1Busy)}
                         className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Próximo <ChevronRight className="h-4 w-4" strokeWidth={3} />
+                        {currentStep === 1 && step1Busy ? 'Salvando…' : 'Próximo'}{' '}
+                        {!(currentStep === 1 && step1Busy) && (
+                          <ChevronRight className="h-4 w-4" strokeWidth={3} />
+                        )}
                       </button>
                     ) : (
                       <button
@@ -1928,12 +2002,13 @@ export default function App() {
                 onClick={handleNextStep}
                 disabled={
                   isFinishing ||
+                  (currentStep === 1 && step1Busy) ||
                   (currentStep === 5 &&
                     (!journeyState.orientacoes || step5RetornoBloqueiaFinal))
                 }
                 className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${
                   currentStep < 5
-                    ? isFinishing
+                    ? isFinishing || (currentStep === 1 && step1Busy)
                       ? 'cursor-not-allowed bg-[#00a88e]/50'
                       : 'bg-[#00a88e] active:bg-[#00967f]'
                     : journeyState.orientacoes &&
@@ -1944,9 +2019,13 @@ export default function App() {
                 }`}
               >
                 {currentStep < 5 ? (
-                  <>
-                    Próximo <ChevronRight className="h-4 w-4" strokeWidth={3} aria-hidden />
-                  </>
+                  currentStep === 1 && step1Busy ? (
+                    'Salvando…'
+                  ) : (
+                    <>
+                      Próximo <ChevronRight className="h-4 w-4" strokeWidth={3} aria-hidden />
+                    </>
+                  )
                 ) : isFinishing ? (
                   'Salvando...'
                 ) : !journeyState.orientacoes ? (
