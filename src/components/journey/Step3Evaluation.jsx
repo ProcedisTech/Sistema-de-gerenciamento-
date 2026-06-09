@@ -22,6 +22,9 @@ export function Step3Evaluation({
   onStepComplete,
   onAgendarPlanejamentoItem,
   profissionalLogadoNome = '',
+  consultaMode = false,
+  onConcluirAvaliacao,
+  isConcluirAvaliacaoBusy = false,
 }) {
   const [planoGeradoSnapshot, setPlanoGeradoSnapshot] = useState(null);
   const [sessoesPorItemId, setSessoesPorItemId] = useState({});
@@ -102,6 +105,14 @@ export function Step3Evaluation({
     }
   }, [onStepComplete, planoGeradoSnapshot]);
 
+  const handleFooterAction = useCallback(() => {
+    if (consultaMode) {
+      onConcluirAvaliacao?.();
+      return;
+    }
+    handleAvancarTermos();
+  }, [consultaMode, onConcluirAvaliacao, handleAvancarTermos]);
+
   const mostrarTabela = planoGeradoSnapshot != null;
 
   return (
@@ -132,6 +143,19 @@ export function Step3Evaluation({
         onGerarPlanoSuccess={handleGerarPlanoSuccess}
       />
 
+      {consultaMode && !mostrarTabela ? (
+        <div className="mt-8 flex justify-end border-t border-app-border pt-6">
+          <button
+            type="button"
+            onClick={handleFooterAction}
+            disabled={isConcluirAvaliacaoBusy}
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-app-accent px-6 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isConcluirAvaliacaoBusy ? 'Salvando…' : 'Concluir Avaliação'}
+          </button>
+        </div>
+      ) : null}
+
       {mostrarTabela ? (
         <div className="mt-8 space-y-6 border-t border-app-border pt-8">
           {planoGeradoSnapshot.partial ? (
@@ -150,10 +174,15 @@ export function Step3Evaluation({
           <div className="flex justify-end pt-2">
             <button
               type="button"
-              onClick={handleAvancarTermos}
-              className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-app-accent px-6 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f]"
+              onClick={handleFooterAction}
+              disabled={consultaMode && isConcluirAvaliacaoBusy}
+              className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-app-accent px-6 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Avançar para Termos
+              {consultaMode
+                ? isConcluirAvaliacaoBusy
+                  ? 'Salvando…'
+                  : 'Concluir Avaliação'
+                : 'Avançar para Termos'}
             </button>
           </div>
         </div>

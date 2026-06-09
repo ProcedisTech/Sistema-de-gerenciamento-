@@ -5,7 +5,6 @@ import {
   Bell,
   Cake,
   Calendar,
-  CheckCircle2,
   ChevronDown,
   Clock,
   ClipboardList,
@@ -13,7 +12,6 @@ import {
   Image as ImageIcon,
   Loader2,
   Play,
-  Sparkles,
   StickyNote,
   Trash2,
   Pencil,
@@ -570,22 +568,6 @@ function ModuloFuturoBadge({ children }) {
   );
 }
 
-function monthsSinceDate(isoOrStr) {
-  const d = new Date(isoOrStr);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  let m = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-  if (now.getDate() < d.getDate()) m -= 1;
-  return Math.max(1, m);
-}
-
-function formatDataHoraPtBr(dataHora) {
-  if (!dataHora) return '—';
-  const t = new Date(dataHora);
-  if (Number.isNaN(t.getTime())) return String(dataHora);
-  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-}
-
 /** Data e hora para blocos de assinatura no prontuário (ex.: 16/04/2026, 14:32). */
 function formatDataHoraAssinaturaPtBr(iso) {
   if (!iso) return '—';
@@ -711,8 +693,6 @@ export function PatientProfileView({
   const [alertasAnamnese, setAlertasAnamnese] = useState([]);
   const [alertasAlergia, setAlertasAlergia] = useState([]);
   const [alertasAnamneseLoading, setAlertasAnamneseLoading] = useState(false);
-  /** Lista leve de anamneses (mesmo endpoint que AnamneseTab) para decisão na aba Atendimento. */
-  const [anamneseListSummary, setAnamneseListSummary] = useState([]);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [showAllProntuario, setShowAllProntuario] = useState(false);
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
@@ -823,7 +803,6 @@ export function PatientProfileView({
     setGaleriaFilterCategoria('all');
     setGaleriaFilterMes('all');
     setGaleriaFilterProcedimento('all');
-    setAnamneseListSummary([]);
     setProntuarioExpanded({});
     setSessoesExpandidas({});
     setCategoriasEmEdicao({});
@@ -1353,7 +1332,6 @@ export function PatientProfileView({
     if (!pacienteId) {
       setAlertasAnamnese([]);
       setAlertasAlergia([]);
-      setAnamneseListSummary([]);
       setAlertasAnamneseLoading(false);
       return undefined;
     }
@@ -1363,7 +1341,6 @@ export function PatientProfileView({
       try {
         const list = await anamneseApi.listPaciente(pacienteId);
         const arr = Array.isArray(list) ? list : [];
-        if (!cancelled) setAnamneseListSummary(arr);
 
         // Manter apenas o preenchimento mais recente por ficha (anamneseId/fichaId)
         const maisRecentePorFicha = new Map();
@@ -1492,30 +1469,6 @@ export function PatientProfileView({
     () => sortedApiProcedures.slice(0, 5),
     [sortedApiProcedures],
   );
-
-  const anamneseAtendimentoInfo = useMemo(() => {
-    const rows = (Array.isArray(anamneseListSummary) ? [...anamneseListSummary] : []).filter((r) => r?.dataHora);
-    rows.sort((a, b) => {
-      const ta = new Date(a.dataHora).getTime();
-      const tb = new Date(b.dataHora).getTime();
-      return tb - ta;
-    });
-    const latest = rows[0] || null;
-    if (!latest?.dataHora) return { status: 'nova', latest: null };
-    const t = new Date(latest.dataHora);
-    if (Number.isNaN(t.getTime())) return { status: 'nova', latest: null };
-    const lim = new Date();
-    lim.setMonth(lim.getMonth() - 6);
-    if (t >= lim) return { status: 'recente', latest };
-    return { status: 'vencida', latest };
-  }, [anamneseListSummary]);
-
-  const hasConsultasAnteriores = useMemo(() => {
-    if (detailLoading) return false;
-    const apiCount = Array.isArray(apiProcedures) ? apiProcedures.length : 0;
-    const localCount = Array.isArray(patient.procedures) ? patient.procedures.length : 0;
-    return apiCount > 0 || localCount > 0;
-  }, [detailLoading, apiProcedures, patient.procedures]);
 
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
@@ -2072,118 +2025,14 @@ export function PatientProfileView({
                       </p>
                     </div>
                   ) : (
-                    <>
-                      {!alertasAnamneseLoading && anamneseAtendimentoInfo.status === 'nova' ? (
-                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#6366f1] bg-[#eef2ff] p-4">
-                          <div className="flex items-start gap-3">
-                            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#6366f1]" strokeWidth={2.25} aria-hidden />
-                            <div className="min-w-0">
-                              <h4 className="text-[14px] font-bold text-[#0f172a]">Primeira consulta detectada</h4>
-                              <p className="mt-1 text-[13px] font-normal leading-snug text-[#64748b]">
-                                Recomendamos iniciar com anamnese
-                              </p>
-                            </div>
-                          </div>
-                          <div
-                            className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className={`flex h-10 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
-                                hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
-                              }`}
-                            >
-                              Iniciar com Anamnese
-                            </button>
-                            {hasConsultasAnteriores ? (
-                              <button
-                                type="button"
-                                onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                                className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                              >
-                                Pular para avaliação
-                              </button>
-                            ) : null}
-                          </div>
-                          {hasConsultasAnteriores ? (
-                            <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {anamneseAtendimentoInfo.status === 'recente' ? (
-                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#22c55e] bg-[#f0fdf4] p-4">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" strokeWidth={2.25} aria-hidden />
-                            <div className="min-w-0">
-                              <h4 className="text-[14px] font-bold text-[#0f172a]">Anamnese em dia</h4>
-                              <p className="mt-1 text-[13px] font-normal text-[#64748b]">
-                                Última: {formatDataHoraPtBr(anamneseAtendimentoInfo.latest?.dataHora)} ·{' '}
-                                {anamneseAtendimentoInfo.latest?.anamneseNome || 'Ficha'}
-                              </p>
-                            </div>
-                          </div>
-                          <div
-                            className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
-                                hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
-                              }`}
-                            >
-                              <Play className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                              Iniciar Atendimento
-                            </button>
-                            {hasConsultasAnteriores ? (
-                              <button
-                                type="button"
-                                onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                                className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                              >
-                                Pular para avaliação
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {anamneseAtendimentoInfo.status === 'vencida' ? (
-                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#f59e0b] bg-[#fffbeb] p-4">
-                          <div className="flex items-start gap-3">
-                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f59e0b]" strokeWidth={2.25} aria-hidden />
-                            <div className="min-w-0">
-                              <h4 className="text-[14px] font-bold text-[#0f172a]">
-                                Anamnese vencida (
-                                {(() => {
-                                  const m = monthsSinceDate(anamneseAtendimentoInfo.latest?.dataHora);
-                                  return m != null ? `${m} meses atrás` : 'há mais de 6 meses';
-                                })()}
-                                )
-                              </h4>
-                            </div>
-                          </div>
-                          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                            >
-                              Atualizar Anamnese
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                            >
-                              Iniciar sem atualizar
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => onStartAttendance?.(selectedPatient)}
+                      className="inline-flex h-10 w-full max-w-md items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                    >
+                      <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                      Iniciar Atendimento
+                    </button>
                   )}
 
                   <div>

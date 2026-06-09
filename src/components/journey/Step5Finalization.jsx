@@ -98,6 +98,7 @@ export function Step5Finalization({
   nomeUsuario = '',
   onAnnotateEvaluationPhoto,
   onAnnotateProcedurePhoto,
+  hideProximoRetorno = false,
 }) {
   const toast = useToast();
   const todayIso = useMemo(() => toLocalISODate(), []);
@@ -904,6 +905,7 @@ export function Step5Finalization({
           ) : null}
         </div>
 
+        {!hideProximoRetorno ? (
         <div className="space-y-1.5 border-t border-[#e2e8f0] pt-5">
           <label htmlFor="next-return-date" className="text-[13px] font-bold text-[#00a88e]">
             Data do próximo retorno (opcional)
@@ -932,6 +934,7 @@ export function Step5Finalization({
             </p>
           ) : null}
         </div>
+        ) : null}
 
       </div>
     </div>

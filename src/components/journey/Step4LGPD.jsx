@@ -263,6 +263,7 @@ export function Step3Termos({
   pacienteCtx,
   clinicaCtx,
   profissionalCtx,
+  onConcluir,
 }) {
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
@@ -1179,6 +1180,18 @@ export function Step3Termos({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {typeof onConcluir === 'function' ? (
+        <div className="mt-6 flex justify-end border-t border-[#e2e8f0] pt-5">
+          <button
+            type="button"
+            onClick={onConcluir}
+            className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[#00a88e] px-6 py-3 text-[14px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f]"
+          >
+            Concluir Termos
+          </button>
         </div>
       ) : null}
     </div>
