@@ -107,7 +107,7 @@ function SidebarSkeleton() {
 }
 
 function SectionHeader({
-  icon: Icon,
+  icon,
   title,
   count,
   onVerTodos,
@@ -115,6 +115,7 @@ function SectionHeader({
   iconBg = 'bg-[#e6f7f5]',
   iconColor = 'text-[#00a88e]',
 }) {
+  const Icon = icon;
   return (
     <div className="flex items-center gap-2 px-1 pb-2">
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
