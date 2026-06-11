@@ -2,16 +2,13 @@ import React from 'react';
 import { Plus, X } from 'lucide-react';
 import { gerarCorAvatar, iniciaisDoNome } from '../../utils/gerarCorAvatar.js';
 
-const DURACOES = [15, 30, 45, 60, 90, 120];
-
 function badgeTipo(tipoCodigo) {
   if (tipoCodigo === 'avaliacao') return 'Avaliação';
   if (tipoCodigo === 'retorno') return 'Retorno';
   return null;
 }
 
-export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDuracao, onAbrirPainelB, readOnly, showAdicionar = true }) {
-  const total = procedimentos.reduce((acc, p) => acc + (Number(p.duracaoSelecionada) || 0), 0);
+export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onAbrirPainelB, readOnly, showAdicionar = true }) {
   const podeAdicionar = !readOnly && showAdicionar && typeof onAbrirPainelB === 'function';
 
   if (!procedimentos || procedimentos.length === 0) {
@@ -42,14 +39,12 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDur
 
           return (
             <li key={proc.id} className="flex items-center gap-2 px-3 py-2">
-              {/* Avatar colorido */}
               <div
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${cor.bg} ${cor.fg}`}
               >
                 {iniciais}
               </div>
 
-              {/* Nome + badge */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 truncate">
                   <span className="truncate text-xs font-medium text-ink-800">{proc.nome}</span>
@@ -61,25 +56,6 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDur
                 </div>
               </div>
 
-              {/* Duração: select interativo ou texto estático em readOnly */}
-              {readOnly ? (
-                <span className="shrink-0 rounded-lg border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-xs text-ink-500">
-                  {proc.duracaoSelecionada} min
-                </span>
-              ) : (
-                <select
-                  value={proc.duracaoSelecionada}
-                  onChange={(e) => onMudarDuracao?.(proc.id, Number(e.target.value))}
-                  className="shrink-0 rounded-lg border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-xs text-ink-700 focus:outline-none focus:ring-1 focus:ring-vivid-teal-400"
-                  aria-label={`Duração de ${proc.nome}`}
-                >
-                  {DURACOES.map((d) => (
-                    <option key={d} value={d}>{d} min</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Botão remover — oculto em readOnly */}
               {!readOnly && (
                 <button
                   type="button"
@@ -95,12 +71,8 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDur
         })}
       </ul>
 
-      {/* Rodapé: total + adicionar (adicionar oculto em readOnly) */}
-      <div className="flex items-center justify-between border-t border-ink-100 px-3 py-2">
-        <span className="text-[11px] text-ink-500">
-          Total: <span className="font-semibold text-ink-700">{total} min</span>
-        </span>
-        {podeAdicionar && (
+      {podeAdicionar && (
+        <div className="flex items-center justify-end border-t border-ink-100 px-3 py-2">
           <button
             type="button"
             onClick={() => onAbrirPainelB?.()}
@@ -109,8 +81,8 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onMudarDur
             <Plus className="h-3 w-3" />
             Adicionar
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

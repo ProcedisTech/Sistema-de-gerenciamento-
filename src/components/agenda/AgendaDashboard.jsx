@@ -58,7 +58,7 @@ function ListDayCards({ agenda, onOpenDaySummary, className = '' }) {
 
   return (
     <div className={`custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 ${className}`}>
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 lg:gap-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 lg:gap-4">
       {agenda.groupedAppointments.map((group) => {
         const isToday = group.date === agenda.todayIso;
         const entries = groupConsecutiveAppointments(group.items);
@@ -114,7 +114,6 @@ function ListDayCards({ agenda, onOpenDaySummary, className = '' }) {
 function DaySummaryModal({
   group,
   onClose,
-  onEdit,
   onPrimary,
   renderSlotActions,
   isNivel1 = false,
@@ -150,12 +149,6 @@ function DaySummaryModal({
                 entry={entry}
                 onPrimary={(target) => {
                   onPrimary(target);
-                  onClose();
-                }}
-                onEdit={(target) => {
-                  onEdit(getEntryPrimaryAppointment(
-                    target?.kind === 'group' ? target : { kind: 'single', appointment: target },
-                  ) || target);
                   onClose();
                 }}
                 renderSlotActions={renderSlotActions}
@@ -455,14 +448,6 @@ export function AgendaDashboard({
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
   }, [agenda, onSlotReagendar, onStartAttendance, patients, toast]);
 
-  const handleEditAppointment = React.useCallback(
-    (appointment) => {
-      if (appointment?.tipo === 'bloqueio') return;
-      agenda.openEditModal(appointment);
-    },
-    [agenda]
-  );
-
   const resolveWeekTarget = React.useCallback(
     (appt) => {
       const dayRows = agenda.filteredWeekGridAppointments.filter(
@@ -483,19 +468,6 @@ export function AgendaDashboard({
   const closeWeekSlotDetail = React.useCallback(() => {
     setWeekSlotDetail(null);
   }, []);
-
-  const handleEditFromWeekDetail = React.useCallback(
-    (target) => {
-      closeWeekSlotDetail();
-      const entry =
-        target?.kind === 'group' || target?.kind === 'single'
-          ? target
-          : { kind: 'single', appointment: target };
-      const primary = getEntryPrimaryAppointment(entry);
-      if (primary) handleEditAppointment(primary);
-    },
-    [closeWeekSlotDetail, handleEditAppointment],
-  );
 
   const handleWeekPrimary = React.useCallback(
     (target) => {
@@ -628,7 +600,6 @@ export function AgendaDashboard({
     onWhatsApp: handleRailWhatsApp,
     onReagendar: handleRailReagendar,
     onCancelar: handleRailCancelar,
-    onEdit: handleEditAppointment,
     onRemoverBloqueio: agenda.handleRemoverBloqueio,
     submittingRemoverBloqueioId: agenda.submittingRemoverBloqueioId,
   };
@@ -671,7 +642,7 @@ export function AgendaDashboard({
         onSelectDay={(iso) => handleSelectDay(iso, true)}
       />
 
-      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:max-[1199px]:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] min-[1200px]:max-[1439px]:grid-cols-[minmax(0,1fr)_minmax(400px,440px)] min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(420px,480px)]">
+      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:max-[1199px]:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] min-[1200px]:max-[1439px]:grid-cols-[minmax(0,1fr)_minmax(400px,440px)] min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(420px,480px)] 2xl:grid-cols-[minmax(0,1fr)_440px]">
         <section
           className={`relative flex min-h-0 flex-col overflow-hidden md:max-lg:shrink-0 ${
             agenda.viewMode === 'grid'
@@ -767,7 +738,6 @@ export function AgendaDashboard({
       <DaySummaryModal
         group={listDaySummary}
         onClose={() => setListDaySummary(null)}
-        onEdit={agenda.openEditModal}
         onPrimary={handlePrimary}
         renderSlotActions={renderSlotActions}
         isNivel1={agenda.isNivel1}
@@ -779,7 +749,6 @@ export function AgendaDashboard({
         target={weekSlotDetail}
         onClose={closeWeekSlotDetail}
         onPrimary={handleWeekPrimary}
-        onEdit={handleEditFromWeekDetail}
         renderSlotActions={renderSlotActionsForWeek}
         isNivel1={agenda.isNivel1}
         advanceOfferByAgendaId={advanceOfferByAgendaId}

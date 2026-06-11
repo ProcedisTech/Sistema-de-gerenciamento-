@@ -916,13 +916,14 @@ function buildDisponibilidadeQuery(params) {
   if (params.mes != null) qs.set('mes', String(params.mes));
   if (params.roleUserId) qs.set('roleUserId', String(params.roleUserId));
   if (params.especialidadeId) qs.set('especialidadeId', String(params.especialidadeId));
+  if (params.duracaoMinutos != null) qs.set('duracaoMinutos', String(params.duracaoMinutos));
   return qs.toString();
 }
 
 /** Disponibilidade agregada de slots (Agenda V2 — granularidade 1h). */
 export const agendaDisponibilidadeApi = {
-  slotsDoDia: ({ data, roleUserId, especialidadeId } = {}) => {
-    const q = buildDisponibilidadeQuery({ data, roleUserId, especialidadeId });
+  slotsDoDia: ({ data, roleUserId, especialidadeId, duracaoMinutos = 30 } = {}) => {
+    const q = buildDisponibilidadeQuery({ data, roleUserId, especialidadeId, duracaoMinutos });
     return request(`/api/v1/agenda/disponibilidade/dia?${q}`);
   },
   diasDoMes: ({ ano, mes, roleUserId, especialidadeId } = {}) => {

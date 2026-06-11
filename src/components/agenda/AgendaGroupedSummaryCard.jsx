@@ -66,7 +66,6 @@ function hashGradient(name) {
 export function AgendaGroupedSummaryCard({
   group,
   onPrimary,
-  onEdit,
   renderSlotActions,
   isNivel1 = false,
   advanceOffer,
@@ -154,13 +153,6 @@ export function AgendaGroupedSummaryCard({
                   {panelActionLabel(statuses)}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => onEdit?.(primary)}
-                className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-[11px] font-bold text-[#64748b] transition-colors hover:bg-[#F5F6FA]`}
-              >
-                Editar
-              </button>
             </>
           )}
         </div>

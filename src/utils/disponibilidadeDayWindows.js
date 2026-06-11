@@ -32,6 +32,38 @@ export function getDayWindowsForIso(iso, disponibilidade) {
   return mergeMinuteWindows(windows);
 }
 
+/** Seg–Sex: 07:00–18:00 (visual apenas, profissional zerado). */
+export const COMMERCIAL_WEEKDAY_WINDOW = Object.freeze({ startMin: 7 * 60, endMin: 18 * 60 });
+
+/** Sábado: 08:00–14:00 (visual apenas). */
+export const COMMERCIAL_SATURDAY_WINDOW = Object.freeze({ startMin: 8 * 60, endMin: 14 * 60 });
+
+export function commercialWindowsForIso(iso) {
+  const date = parseIsoLocal(iso);
+  if (Number.isNaN(date.getTime())) return [];
+  const dow = date.getDay();
+  if (dow === 0) return [];
+  if (dow === 6) return [{ ...COMMERCIAL_SATURDAY_WINDOW }];
+  return [{ ...COMMERCIAL_WEEKDAY_WINDOW }];
+}
+
+/**
+ * Janelas do dia para renderização de slots.
+ * Se há disponibilidade real → retorna getDayWindowsForIso.
+ * Se zerado → janelas comerciais visuais (sem persistir).
+ *
+ * @param {string} iso YYYY-MM-DD
+ * @param {Array<{diaSemana: number, horaInicio: string, horaFim: string, ativo?: boolean}>} disponibilidade
+ * @returns {{ windows: Array<{startMin: number, endMin: number}>, isFallback: boolean }}
+ */
+export function getDayWindowsWithFallback(iso, disponibilidade) {
+  const real = getDayWindowsForIso(iso, disponibilidade);
+  if (real.length > 0) {
+    return { windows: real, isFallback: false };
+  }
+  return { windows: commercialWindowsForIso(iso), isFallback: true };
+}
+
 /** Une intervalos sobrepostos ou adjacentes. */
 export function mergeMinuteWindows(windows) {
   const list = (Array.isArray(windows) ? windows : [])

@@ -67,6 +67,7 @@ import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
 // ReagendarAgendaModal removido — substituído por AgendaFormModal em modo 'reagendar'.
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
+import { DisponibilidadeRevisionProvider } from '../contexts/DisponibilidadeRevisionProvider.jsx';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
@@ -124,7 +125,7 @@ function revokeBlobUrlIfAny(url) {
   }
 }
 
-export default function App() {
+function AppRefactoredInner() {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome } = useOrg();
   const {
     isAdmin: _isAdmin,
@@ -371,14 +372,6 @@ export default function App() {
   const [scheduleCancelSubmitting, setScheduleCancelSubmitting] = React.useState(false);
   const [iniciarTolModal, setIniciarTolModal] = React.useState(null);
   const [iniciarTolAdiantarSubmitting, setIniciarTolAdiantarSubmitting] = React.useState(false);
-
-  const handleScheduleExcluirFromEdit = React.useCallback(() => {
-    const row = agendaSchedule.editingAppointment;
-    if (row?.agendaId) {
-      setScheduleCancelRow({ agenda: row });
-      agendaSchedule.closeModal();
-    }
-  }, [agendaSchedule]);
 
   const handleScheduleConfirmCancelar = React.useCallback(
     async (payload) => {
@@ -2044,7 +2037,7 @@ export default function App() {
             activeView === 'configuracoes' || activeView === 'gestao-equipe'
               ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
               : isAgendaView
-                ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)]'
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)]'
                 : activeView === 'pacientes'
                   ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
                   : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
@@ -2134,13 +2127,16 @@ export default function App() {
                   }
                   onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
                   onPacientesCatalogRefresh={refreshPatientsAndPagedList}
+                  onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                 />
               </RoleGuard>
             )}
 
             {activeView === 'gestao-equipe' && (
               <RoleGuard minLevel="NIVEL_5" showError>
-                <GestaoUsuariosView />
+                <GestaoUsuariosView
+                  onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                />
               </RoleGuard>
             )}
 
@@ -2251,7 +2247,7 @@ export default function App() {
 
       {authSessionReady ? (
         <>
-          <AgendaFormModal agenda={agendaSchedule} onExcluirClick={handleScheduleExcluirFromEdit} />
+          <AgendaFormModal agenda={agendaSchedule} />
           <AgendaBloqueioModal agenda={agendaSchedule} />
           {agendaSchedule.foraDispModal}
           {scheduleCancelRow?.agenda ? (
@@ -2301,3 +2297,10 @@ export default function App() {
   );
 }
 
+export default function App() {
+  return (
+    <DisponibilidadeRevisionProvider>
+      <AppRefactoredInner />
+    </DisponibilidadeRevisionProvider>
+  );
+}

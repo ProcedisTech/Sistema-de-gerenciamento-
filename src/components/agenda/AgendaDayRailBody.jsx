@@ -49,7 +49,6 @@ export function AgendaDayRailBody({
   onWhatsApp,
   onReagendar,
   onCancelar,
-  onEdit,
   onRemoverBloqueio,
   onNovoClick,
   submittingRemoverBloqueioId,
@@ -157,7 +156,6 @@ export function AgendaDayRailBody({
                         onWhatsApp={onWhatsApp}
                         onReagendar={onReagendar}
                         onCancelar={onCancelar}
-                        onEdit={onEdit}
                         onRemoverBloqueio={onRemoverBloqueio}
                         submittingRemoverBloqueioId={submittingRemoverBloqueioId}
                       />

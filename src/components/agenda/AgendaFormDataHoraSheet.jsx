@@ -11,14 +11,16 @@ const BTN_ACTION =
  * AgendaFormModal. Renderiza os MESMOS componentes do corpo desktop
  * (CalendarioMensal + PainelA_SlotsHorario) — montados aqui SÓ no mobile com o
  * sheet aberto, garantindo instância única (sem duplo fetch). Casca de tokens
- * (z-[225], safe-area, scroll-lock) herdada do antigo AgendaDisponibilidadeMobileSheet.
+ * (z-[225], safe-area, scroll-lock) para o fluxo mobile de data/horário.
  */
 export function AgendaFormDataHoraSheet({
   open,
   diaSelecionado,
+  dayModel,
   roleUserIdFiltro,
-  duracaoTotalMin,
-  horaSelecionada,
+  horaInicio,
+  horaFimSlot,
+  rangePhase,
   profissionalFixado,
   heatmap,
   loading,
@@ -28,8 +30,10 @@ export function AgendaFormDataHoraSheet({
   onRetry,
   showDensityLegend = true,
   onSelecionarDia,
-  onSelecionarSlot,
+  onRangeSlotClick,
+  onClearRange,
   onCancel,
+  horaInicioError,
 }) {
   useEffect(() => {
     if (!open) return undefined;
@@ -83,12 +87,20 @@ export function AgendaFormDataHoraSheet({
           </p>
           <PainelA_SlotsHorario
             diaSelecionado={diaSelecionado}
+            dayModel={dayModel}
             roleUserIdFiltro={roleUserIdFiltro}
-            duracaoTotalMin={duracaoTotalMin}
-            horaSelecionada={horaSelecionada}
+            horaInicio={horaInicio}
+            horaFimSlot={horaFimSlot}
+            rangePhase={rangePhase}
             profissionalFixado={profissionalFixado}
-            onSelecionarSlot={onSelecionarSlot}
+            onRangeSlotClick={onRangeSlotClick}
+            onClearRange={onClearRange}
           />
+          {horaInicioError ? (
+            <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+              {horaInicioError}
+            </p>
+          ) : null}
         </div>
       </div>
 

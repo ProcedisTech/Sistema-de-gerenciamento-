@@ -19,7 +19,6 @@ export function ProcedimentoSearchInput({
   procedimentosSelecionados,
   onToggle,
   onRemover,
-  onMudarDuracao,
   readOnly = false,
 }) {
   const [query, setQuery] = useState('');
@@ -129,7 +128,6 @@ export function ProcedimentoSearchInput({
           <ProcedimentosMultiSeletor
             procedimentos={procedimentosSelecionados}
             onRemover={onRemover}
-            onMudarDuracao={onMudarDuracao}
             showAdicionar={false}
           />
         </div>

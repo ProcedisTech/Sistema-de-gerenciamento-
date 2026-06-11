@@ -1,6 +1,6 @@
 /**
  * Chips secundárias do card de agenda (Realizado / Não compareceu / WhatsApp / Reagendar / Cancelar).
- * Botões primários (Confirmar / Iniciar / Reagendar) e Editar ficam no AppointmentCard.
+ * Botões primários (Confirmar / Iniciar / Reagendar) ficam no AppointmentCard.
  * @param {string} status
  * @param {{ tipo?: string }} [opts]
  */
