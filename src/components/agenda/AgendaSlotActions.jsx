@@ -1,4 +1,4 @@
-import { Check, UserX, Calendar, XCircle, MessageCircle, Info } from 'lucide-react';
+import { Check, UserX, Calendar, XCircle, MessageCircle, Info, FileText } from 'lucide-react';
 import { getAgendaSlotActionVisibility } from '../../utils/agendaSlotActionVisibility.js';
 import {
   resolveMotivoCancelamentoFromRow,
@@ -21,6 +21,7 @@ export default function AgendaSlotActions({
   onReagendar,
   onCancelar,
   onEnviarWhatsApp,
+  onEnviarAnamnese,
   onRemoverBloqueio,
   disabled = false,
   compact = false,
@@ -33,6 +34,7 @@ export default function AgendaSlotActions({
     v.showRealizado ||
     v.showNaoCompareceu ||
     v.showWhatsApp ||
+    v.showAnamnese ||
     v.showReagendar ||
     v.showCancelar ||
     v.showRemoverBloqueio;
@@ -94,6 +96,18 @@ export default function AgendaSlotActions({
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 WhatsApp
+              </button>
+            ) : null}
+            {v.showAnamnese ? (
+              <button
+                type="button"
+                onClick={onEnviarAnamnese}
+                disabled={disabled}
+                title="Enviar link da Anamnese via WhatsApp"
+                className={`${CHIP_DEFAULT} bg-teal-50 text-teal-800 hover:bg-teal-100`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Anamnese
               </button>
             ) : null}
             {v.showReagendar ? (
@@ -185,6 +199,18 @@ export default function AgendaSlotActions({
             className={`${CHIP_COMPACT} bg-green-50 text-green-800 hover:bg-green-100`}
           >
             <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ) : null}
+        {v.showAnamnese ? (
+          <button
+            type="button"
+            onClick={onEnviarAnamnese}
+            disabled={disabled}
+            title="Enviar link da Anamnese via WhatsApp"
+            aria-label="Enviar link da Anamnese via WhatsApp"
+            className={`${CHIP_COMPACT} bg-teal-50 text-teal-800 hover:bg-teal-100`}
+          >
+            <FileText className="h-3.5 w-3.5" aria-hidden />
           </button>
         ) : null}
         {v.showReagendar ? (
@@ -280,6 +306,18 @@ export default function AgendaSlotActions({
             >
               <MessageCircle className="h-3.5 w-3.5" />
               WhatsApp
+            </button>
+          ) : null}
+          {v.showAnamnese ? (
+            <button
+              type="button"
+              onClick={onEnviarAnamnese}
+              disabled={disabled}
+              title="Enviar link da Anamnese via WhatsApp"
+              className={`${CHIP_DEFAULT} bg-teal-50 text-teal-800 hover:bg-teal-100`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Anamnese
             </button>
           ) : null}
           {v.showReagendar ? (

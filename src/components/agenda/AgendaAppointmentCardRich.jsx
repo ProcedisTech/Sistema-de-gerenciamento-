@@ -34,6 +34,7 @@ export function AgendaAppointmentCardRich({
   onWhatsApp,
   onReagendar,
   onCancelar,
+  onEnviarAnamnese,
   onRemoverBloqueio,
   submittingRemoverBloqueioId,
 }) {
@@ -142,6 +143,7 @@ export function AgendaAppointmentCardRich({
             onWhatsApp={onWhatsApp}
             onReagendar={onReagendar}
             onCancelar={onCancelar}
+            onEnviarAnamnese={onEnviarAnamnese}
           />
         ) : null}
         {isValidAdvanceOffer(appointment, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (

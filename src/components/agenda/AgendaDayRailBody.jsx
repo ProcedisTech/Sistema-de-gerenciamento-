@@ -47,6 +47,7 @@ export function AgendaDayRailBody({
   onConfirmar,
   onIniciarAtendimento,
   onWhatsApp,
+  onEnviarAnamnese,
   onReagendar,
   onCancelar,
   onRemoverBloqueio,
@@ -101,6 +102,7 @@ export function AgendaDayRailBody({
           compact={compact}
           onCheckIn={onCheckIn}
           onWhatsApp={onWhatsApp}
+          onEnviarAnamnese={onEnviarAnamnese}
           onReagendar={onReagendar}
           onCancelar={onCancelar}
         />
@@ -154,6 +156,7 @@ export function AgendaDayRailBody({
                         onConfirmar={onConfirmar}
                         onIniciarAtendimento={onIniciarAtendimento}
                         onWhatsApp={onWhatsApp}
+                        onEnviarAnamnese={onEnviarAnamnese}
                         onReagendar={onReagendar}
                         onCancelar={onCancelar}
                         onRemoverBloqueio={onRemoverBloqueio}

@@ -37,6 +37,7 @@ export function AgendaGroupedAppointmentCard({
   onWhatsApp,
   onReagendar,
   onCancelar,
+  onEnviarAnamnese,
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
@@ -101,6 +102,7 @@ export function AgendaGroupedAppointmentCard({
             onWhatsApp={() => onWhatsApp?.(group)}
             onReagendar={() => onReagendar?.(group)}
             onCancelar={() => onCancelar?.(group)}
+            onEnviarAnamnese={() => onEnviarAnamnese?.(group)}
           />
         ) : null}
 

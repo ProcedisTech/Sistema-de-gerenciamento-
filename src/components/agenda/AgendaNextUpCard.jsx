@@ -15,6 +15,7 @@ export function AgendaNextUpCard({
   compact = false,
   onCheckIn,
   onWhatsApp,
+  onEnviarAnamnese,
   onReagendar,
   onCancelar,
 }) {
@@ -69,6 +70,7 @@ export function AgendaNextUpCard({
             primaryIconClass="h-4 w-4"
             onPrimaryClick={onCheckIn}
             onWhatsApp={onWhatsApp}
+            onEnviarAnamnese={onEnviarAnamnese}
             onReagendar={onReagendar}
             onCancelar={onCancelar}
           />

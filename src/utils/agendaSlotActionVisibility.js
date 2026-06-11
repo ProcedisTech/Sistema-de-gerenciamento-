@@ -33,6 +33,7 @@ export function getAgendaSlotActionVisibility(status, opts = {}) {
       showRealizado: false,
       showNaoCompareceu: true,
       showWhatsApp: true,
+      showAnamnese: true,
       showReagendar: true,
       showCancelar: true,
       showRemoverBloqueio: false,
