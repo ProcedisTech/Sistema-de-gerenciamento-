@@ -13,9 +13,10 @@ import {
   CalendarDays,
   MessageCircle,
   Stethoscope,
+  Globe,
 } from 'lucide-react';
 import { AuditoriaView } from './AuditoriaView';
-import { AnamneseAdminView } from '../anamnese';
+import { AnamneseAdminView, AnamneseConfigPublicaPanel } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
@@ -38,6 +39,7 @@ const SECTION_SUBTITLE = {
   'agenda-feriados': 'Feriados em que a clínica não atende',
   'agenda-templates': 'Mensagens automáticas de WhatsApp',
   'pacientes-inativados': 'Pacientes fora da listagem principal',
+  'anamnese-publica': 'Configurações de acesso público',
 };
 
 function NavGroupLabel({ children }) {
@@ -118,6 +120,7 @@ export function ConfiguracoesView({
     canSeeAnamnese      && ['categorias', 'Categorias'],
     canSeeAnamnese      && ['perguntas', 'Perguntas'],
     canSeeAnamnese      && ['fichas', 'Fichas'],
+    canSeeAnamnese      && ['anamnese-publica', 'Acesso Público'],
     canSeePerfil        && ['perfil', 'Perfil'],
     canSeeClinica       && ['clinica', 'Clínica'],
     canSeeAgendaConfig  && ['horarios-funcionamento', 'Horários'],
@@ -210,6 +213,12 @@ export function ConfiguracoesView({
                 active={configSection === 'fichas'}
                 onClick={() => setConfigSection('fichas')}
               />
+              <SidebarNavItem
+                icon={Globe}
+                label="Acesso Público"
+                active={configSection === 'anamnese-publica'}
+                onClick={() => setConfigSection('anamnese-publica')}
+              />
             </>
           )}
 
@@ -287,6 +296,9 @@ export function ConfiguracoesView({
             canSeeAnamnese && (
               <AnamneseAdminView embeddedSection={configSection} />
             )}
+          {configSection === 'anamnese-publica' && canSeeAnamnese && (
+            <AnamneseConfigPublicaPanel />
+          )}
 
           {/* Perfil — N4+ */}
           {configSection === 'perfil' && canSeePerfil && (

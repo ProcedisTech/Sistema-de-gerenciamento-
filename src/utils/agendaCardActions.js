@@ -12,8 +12,8 @@ export function getRailCardActions(status) {
     primary: isPending ? 'confirmar' : isConfirmed ? 'iniciar' : null,
     secondary:
       isPending || isConfirmed
-        ? ['whatsapp', 'reagendar', 'cancelar']
-        : ['whatsapp', 'reagendar'],
+        ? ['anamnese', 'whatsapp', 'reagendar', 'cancelar']
+        : ['anamnese', 'whatsapp', 'reagendar'],
   };
 }
 
@@ -41,6 +41,6 @@ export function getGroupedRailCardActions(statuses = []) {
 
   return {
     primary,
-    secondary: anyActive ? ['whatsapp', 'reagendar', 'cancelar'] : ['whatsapp', 'reagendar'],
+    secondary: anyActive ? ['anamnese', 'whatsapp', 'reagendar', 'cancelar'] : ['anamnese', 'whatsapp', 'reagendar'],
   };
 }

@@ -8,6 +8,7 @@ export const VALID_SECTIONS = new Set([
   'categorias',
   'perguntas',
   'fichas',
+  'anamnese-publica',
   'perfil',
   'clinica',
   'gestao-equipe',

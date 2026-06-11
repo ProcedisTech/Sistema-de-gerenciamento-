@@ -59,6 +59,7 @@ import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
+import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -230,6 +231,7 @@ export default function App() {
                 endereco: endCompleto,
                 telefone: String(clinicaJson?.telefone ?? clinicaJson?.celular ?? '').trim(),
                 cnpj: String(clinicaJson?.cnpj ?? '').trim(),
+                slug: String(clinicaJson?.slug ?? '').trim(),
               }));
             }
           }
@@ -1509,10 +1511,15 @@ export default function App() {
   const isAgendaView = activeView === 'agenda';
   const isPaginaPublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
+  const isAnamnesePublica = 
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/anamnese');
 
   // ============ RENDERIZAÇÃO ============
   if (isPaginaPublica) {
     return <ConfirmacaoPublicaPage />;
+  }
+  if (isAnamnesePublica) {
+    return <AnamnesePage />;
   }
 
   if (!authReady) {
@@ -2122,6 +2129,7 @@ export default function App() {
                   patients={patients}
                   authEnabled={authSessionReady}
                   clinicaNome={clinicaInfo.nome}
+                  clinicaSlug={clinicaInfo.slug}
                   profissionalNome={perfilInfo.nomeCompleto || roleNome}
                   onStartAttendance={handleAgendaStartAttendance}
                   onSlotCancelar={(target) => {

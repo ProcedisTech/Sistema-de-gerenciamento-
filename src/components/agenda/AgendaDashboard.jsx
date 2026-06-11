@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { formatLongDate } from './useAgendaPage';
 import { WeekTimeGrid } from './WeekTimeGrid';
@@ -176,6 +176,7 @@ export function AgendaDashboard({
   onSlotCancelar,
   onSlotReagendar,
   clinicaNome = 'Procedi',
+  clinicaSlug = '',
   profissionalNome = '',
   shortcutsBlocked: shortcutsBlockedExternal = false,
 }) {
@@ -279,6 +280,33 @@ export function AgendaDashboard({
     setAdvancePending({ appointment, targetHoraInicio: offer.targetHoraInicio });
   }, [agenda.isNivel1]);
 
+  const handleEnviarAnamnese = React.useCallback(
+    (appointment) => {
+      const patient = patients.find((item) => samePatient(item, appointment));
+      const phone = patient?.whatsapp || patient?.telefone || appointment?.pacienteTelefone;
+      const name = patient?.nomeCompleto || patient?.nome || appointment?.pacienteNome || 'Paciente';
+      
+      if (!phone) {
+        toast.error('Paciente sem telefone cadastrado.');
+        return;
+      }
+      if (!clinicaSlug) {
+        toast.error('Para enviar a anamnese, primeiro configure o identificador (slug) da clínica em Configurações > Anamnese.');
+        return;
+      }
+
+      const link = `${window.location.origin}/anamnese?clinic=${clinicaSlug}`;
+      const text = `Olá ${name}, segue o link da sua ficha de anamnese: ${link}\n\n*Como preencher:*\n1. Clique no link acima\n2. Digite seu CPF para acessar\n3. Responda às perguntas com atenção\n4. Clique em "Finalizar Anamnese" no final\n\nPor favor, preencha a ficha antes da sua consulta para agilizar seu atendimento.`;
+      
+      const cleanPhone = phone.replace(/\D/g, '');
+      const finalPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+      
+      const url = `https://api.whatsapp.com/send?phone=${finalPhone}&text=${encodeURIComponent(text)}`;
+      window.open(url, '_blank');
+    },
+    [patients, clinicaSlug, toast]
+  );
+
   const handleConfirmAdvance = React.useCallback(async () => {
     const { appointment, targetHoraInicio } = advancePending || {};
     if (!appointment?.agendaId || !targetHoraInicio) return;
@@ -355,11 +383,12 @@ export function AgendaDashboard({
             }
             if (primary.agendaId) agenda.handleEnviarWhatsApp(primary.agendaId, 'confirmacao_24h');
           }}
+          onEnviarAnamnese={() => handleEnviarAnamnese(primary)}
           onRemoverBloqueio={() => agenda.handleRemoverBloqueio(primary)}
         />
       );
     },
-    [agenda, onSlotCancelar, onSlotReagendar, toast],
+    [agenda, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese],
   );
 
   const handlePrimary = React.useCallback((target) => {
@@ -446,11 +475,15 @@ export function AgendaDashboard({
             onSlotCancelar?.(appointment);
           }}
           onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h')}
+          onEnviarAnamnese={() => {
+            setWeekSlotDetail(null);
+            handleEnviarAnamnese(appointment);
+          }}
           onRemoverBloqueio={() => agenda.handleRemoverBloqueio(appointment)}
         />
       );
     },
-    [agenda, onSlotCancelar, onSlotReagendar]
+    [agenda, onSlotCancelar, onSlotReagendar, handleEnviarAnamnese]
   );
 
   const handlePrimaryFromWeekDetail = React.useCallback(
@@ -555,6 +588,16 @@ export function AgendaDashboard({
     [agenda, toast],
   );
 
+  const handleRailAnamnese = React.useCallback(
+    (target) => {
+      const items = resolveActionAppointments(target);
+      if (items.length > 0) {
+        handleEnviarAnamnese(items[0]);
+      }
+    },
+    [handleEnviarAnamnese]
+  );
+
   const railProps = {
     selectedDay: agenda.selectedDay,
     appointments: agenda.selectedDayAppointments,
@@ -573,6 +616,7 @@ export function AgendaDashboard({
     onConfirmar: handleRailConfirmar,
     onIniciarAtendimento: handleRailIniciarAtendimento,
     onWhatsApp: handleRailWhatsApp,
+    onEnviarAnamnese: handleRailAnamnese,
     onReagendar: handleRailReagendar,
     onCancelar: handleRailCancelar,
     onEdit: handleEditAppointment,
