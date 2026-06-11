@@ -84,6 +84,7 @@ import {
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { GaleriaTab } from './galeria/GaleriaTab.jsx';
+import { generateAnamnesePdf } from '../../utils/pdf/generateAnamnesePdf.js';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -389,7 +390,7 @@ function AnamneseRespostaRow({ resp, rowKey, expanded, onToggle, perguntaMap }) 
   );
 }
 
-function AnamneseTab({ pacienteId }) {
+function AnamneseTab({ pacienteId, paciente }) {
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
   const [loading, setLoading] = useState(true);
@@ -511,7 +512,7 @@ function AnamneseTab({ pacienteId }) {
                   <span className="text-[12px] text-[#64748b]">({respostas.length} respostas)</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748b]">
-                  {an.profissionalNome && <span>Por: {an.profissionalNome}</span>}
+                  {an.respondidoPeloPaciente ? <span>Por: Paciente (via Link Público)</span> : an.profissionalNome && <span>Por: {an.profissionalNome}</span>}
                   {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span>}
                   <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border-[2px] ${
                     an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO'
@@ -550,6 +551,84 @@ function AnamneseTab({ pacienteId }) {
                 ) : (
                   <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
                 )}
+
+                {detalhe.assinaturaPaciente && (
+                  <div className="mt-6 p-4 rounded-xl border-[2px] border-[#0f766e]/20 bg-[#f0fdfa]">
+                    <span className="text-[12px] font-bold text-[#0f766e] block mb-3">Assinatura do Paciente</span>
+                    <div className="bg-white rounded-lg border border-slate-200 p-2 inline-block">
+                      <img src={detalhe.assinaturaPaciente} alt="Assinatura" className="max-h-24 object-contain" />
+                    </div>
+                  </div>
+                )}
+                
+                {(detalhe.ipAddress || detalhe.userAgent) && (
+                  <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[12px] font-bold text-slate-700 block mb-2">Registro de Auditoria Digital</span>
+                    <div className="text-[11px] text-[#64748b] space-y-1">
+                      {detalhe.ipAddress && <p><strong>IP:</strong> {detalhe.ipAddress}</p>}
+                      {detalhe.userAgent && <p><strong>Dispositivo:</strong> {detalhe.userAgent}</p>}
+                      {detalhe.dataHora && <p><strong>Data/Hora:</strong> {new Date(detalhe.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>}
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-3 border-t border-app-border flex justify-end">
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      
+                      let clinicaCtx = {};
+                      let profissionalCtx = { nome: an.profissionalNome };
+
+                      try {
+                        const { clinicaApi, authHeadersForFetch } = await import('../../services/api.js');
+                        const { resolveApiUrl } = await import('../../config/apiEnv.js');
+                        
+                        try {
+                           const c = await clinicaApi.buscar();
+                           if (c) clinicaCtx = c;
+                        } catch (err) {
+                          console.warn(err);
+                        }
+                        
+                        try {
+                           const meRes = await fetch(resolveApiUrl('/api/auth/me'), {
+                             credentials: 'include',
+                             headers: authHeadersForFetch({ needsOrg: false }),
+                           });
+                           if (meRes.ok) {
+                             const meJson = await meRes.json();
+                             profissionalCtx = { 
+                               nome: an.profissionalNome || meJson.nomeCompleto || meJson.nome, 
+                               cpf: meJson.cpf, 
+                               crm: meJson.crm || meJson.registroProfissional 
+                             };
+                           }
+                        } catch (err) {
+                          console.warn(err);
+                        }
+                      } catch (err) {
+                        console.warn(err);
+                      }
+
+                      const respostasTratadas = respostas.map(r => ({
+                        pergunta: textoPerguntaResposta(r),
+                        resposta: renderRespostaValue(r)
+                      }));
+                      
+                      generateAnamnesePdf(
+                        { ...detalhe, respostasTratadas },
+                        clinicaCtx,
+                        paciente,
+                        profissionalCtx
+                      );
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-[13px] font-semibold rounded-lg shadow-sm transition-colors"
+                  >
+                    <FileText className="w-4 h-4 text-[#00a88e]" />
+                    Gerar PDF
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2386,7 +2465,7 @@ export function PatientProfileView({
               )}
 
               {patientDetailTab === 'anamnese' && (
-                <AnamneseTab pacienteId={selectedPatient.id} />
+                <AnamneseTab pacienteId={selectedPatient.id} paciente={selectedPatient} />
               )}
 
               {patientDetailTab === 'galeria' && (
