@@ -1,13 +1,15 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { ClipboardList, Tag, HelpCircle, FileText, X } from 'lucide-react';
+import { ClipboardList, Tag, HelpCircle, FileText, X, Settings } from 'lucide-react';
 import { CategoryManager } from './CategoryManager';
 import { QuestionManager } from './QuestionManager';
 import { FichaBuilder } from './FichaBuilder';
+import { AnamneseConfigPublicaPanel } from './AnamneseConfigPublicaPanel';
 
 const TABS = [
   { key: 'categorias', label: 'Categorias', icon: Tag },
   { key: 'perguntas', label: 'Banco de Perguntas', icon: HelpCircle },
   { key: 'fichas', label: 'Fichas', icon: FileText },
+  { key: 'config', label: 'Acesso Público', icon: Settings },
 ];
 
 function TabButton({ tabKey, label, icon, active, onSelect, variant }) {
@@ -185,6 +187,11 @@ export function AnamneseAdminView({ embeddedSection } = {}) {
         )}
         {activeTab === 'perguntas' && <QuestionManager />}
         {activeTab === 'fichas' && <FichaBuilder />}
+        {activeTab === 'config' && (
+          <div className="p-4 sm:p-6 lg:p-8">
+            <AnamneseConfigPublicaPanel />
+          </div>
+        )}
       </div>
     </div>
   );

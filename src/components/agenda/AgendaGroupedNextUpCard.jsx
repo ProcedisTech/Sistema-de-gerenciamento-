@@ -24,6 +24,7 @@ export function AgendaGroupedNextUpCard({
   compact = false,
   onCheckIn,
   onWhatsApp,
+  onEnviarAnamnese,
   onReagendar,
   onCancelar,
 }) {
@@ -94,6 +95,7 @@ export function AgendaGroupedNextUpCard({
             primaryIconClass="h-4 w-4"
             onPrimaryClick={() => onCheckIn?.(group)}
             onWhatsApp={() => onWhatsApp?.(group)}
+            onEnviarAnamnese={() => onEnviarAnamnese?.(group)}
             onReagendar={() => onReagendar?.(group)}
             onCancelar={() => onCancelar?.(group)}
           />

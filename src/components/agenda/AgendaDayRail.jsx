@@ -24,6 +24,7 @@ export function AgendaDayRail({
   onConfirmar,
   onIniciarAtendimento,
   onWhatsApp,
+  onEnviarAnamnese,
   onReagendar,
   onCancelar,
   onEdit,
@@ -101,6 +102,7 @@ export function AgendaDayRail({
         onConfirmar={onConfirmar}
         onIniciarAtendimento={onIniciarAtendimento}
         onWhatsApp={onWhatsApp}
+        onEnviarAnamnese={onEnviarAnamnese}
         onReagendar={onReagendar}
         onCancelar={onCancelar}
         onEdit={onEdit}

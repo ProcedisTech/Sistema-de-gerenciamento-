@@ -1,4 +1,4 @@
-import { Calendar, Check, MessageCircle, Play, XCircle } from 'lucide-react';
+import { Calendar, Check, MessageCircle, Play, XCircle, ClipboardList } from 'lucide-react';
 import { getRailPrimaryLabel } from '../../utils/agendaCardActions.js';
 
 const BTN_FOCUS =
@@ -35,6 +35,7 @@ export function AgendaRailCardActions({
   onConfirmar,
   onIniciarAtendimento,
   onWhatsApp,
+  onEnviarAnamnese,
   onReagendar,
   onCancelar,
 }) {
@@ -64,6 +65,18 @@ export function AgendaRailCardActions({
       ) : null}
       {secondary.length > 0 ? (
         <div className={secondaryRowClassName}>
+          {secondary.includes('anamnese') ? (
+            <button
+              type="button"
+              onClick={() => onEnviarAnamnese?.(appointment)}
+              className={compact ? BTN_SECONDARY_COMPACT : BTN_SECONDARY}
+              title="Anamnese"
+              aria-label="Enviar Anamnese"
+            >
+              <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
+              {compact ? null : 'Anamnese'}
+            </button>
+          ) : null}
           {secondary.includes('whatsapp') ? (
             <button
               type="button"

@@ -1058,6 +1058,7 @@ export const dimensoesApi = {
 // POST/PUT/DELETE sem X-Org-Id → 401 em muitos setups Spring multi-tenant.
 
 export const anamneseApi = {
+  listarFichas: () => request('/api/v1/anamnese/fichas'),
   listCategorias: () => request('/api/v1/anamnese/categorias'),
   createCategoria: (data) =>
     request('/api/v1/anamnese/categorias', { method: 'POST', body: JSON.stringify(data) }),
@@ -1186,6 +1187,17 @@ export const organizacaoApi = {
       body: JSON.stringify(patchDto != null && typeof patchDto === 'object' ? patchDto : {}),
     }),
 };
+
+// ── Clinica ────────────────────────────────────────────────
+export const clinicaApi = {
+  buscar: () => request('/api/v1/clinica'),
+  atualizar: (payload) =>
+    request('/api/v1/clinica', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+};
+
 
 // ── Configurações da Clínica ──────
 export const configuracoesClinicaApi = {
