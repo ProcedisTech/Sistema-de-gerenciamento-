@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
+import { SignatureFullscreenModal } from '../../components/journey/Step4LGPD';
+import { Check, Edit2 } from 'lucide-react';
 
 // Simple CPF formatter: 000.000.000-00
 const formatCPF = (val) => {
@@ -24,6 +26,10 @@ export const AnamnesePage = () => {
   const [lookupData, setLookupData] = useState(null);
   
   const [respostas, setRespostas] = useState({});
+  const [assinatura, setAssinatura] = useState('');
+  const [signingOpen, setSigningOpen] = useState(false);
+  const canvasRef = useRef(null);
+  const hasStrokeRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -121,6 +127,11 @@ export const AnamnesePage = () => {
       return;
     }
     
+    if (!assinatura) {
+      setErrorMsg('Por favor, assine a anamnese antes de enviar.');
+      return;
+    }
+    
     setLoading(true);
     setErrorMsg('');
     
@@ -136,7 +147,8 @@ export const AnamnesePage = () => {
         cpf: cpf.replace(/\D/g, ''),
         clinic: clinicSlug,
         anamneseId: modelo.anamneseId,
-        respostas: formattedRespostas
+        respostas: formattedRespostas,
+        assinaturaPaciente: assinatura
       };
 
       const res = await fetch(resolveApiUrl('/api/public/anamnese/responder'), {
@@ -268,15 +280,61 @@ export const AnamnesePage = () => {
           </div>
         ))}
 
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-2">
+          <h3 className="text-lg font-semibold text-slate-800 mb-2">Termo de Responsabilidade</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Declaro que as informações prestadas são verdadeiras e assumo inteira responsabilidade pelas mesmas.
+          </p>
+          
+          {!assinatura ? (
+            <button
+              type="button"
+              onClick={() => setSigningOpen(true)}
+              className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-teal-500 text-teal-600 font-semibold hover:bg-teal-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Edit2 className="w-4 h-4" />
+              Clique aqui para assinar
+            </button>
+          ) : (
+            <div className="flex flex-col items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                <Check className="w-5 h-5" />
+                Assinado com sucesso
+              </div>
+              <img src={assinatura} alt="Assinatura" className="h-16 object-contain mix-blend-multiply" />
+              <button
+                type="button"
+                onClick={() => setSigningOpen(true)}
+                className="text-sm text-emerald-600 underline hover:text-emerald-800"
+              >
+                Assinar novamente
+              </button>
+            </div>
+          )}
+        </div>
+
         <button 
           type="submit"
-          disabled={loading}
+          disabled={loading || !assinatura}
           className="w-full h-12 mt-4 rounded-xl bg-teal-600 text-white font-bold text-[15px] hover:bg-teal-700 active:bg-teal-800 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-md flex items-center justify-center gap-2"
         >
           {loading ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : 'Enviar Anamnese'}
         </button>
+
+        <SignatureFullscreenModal
+          open={signingOpen}
+          title="Assinatura do Paciente"
+          onClose={() => setSigningOpen(false)}
+          canvasRef={canvasRef}
+          hasStrokeRef={hasStrokeRef}
+          mobilePortrait={window.matchMedia('(max-width: 639px)').matches && window.matchMedia('(orientation: portrait)').matches}
+          onConfirm={(dataUrl) => {
+            setAssinatura(dataUrl);
+            setSigningOpen(false);
+          }}
+        />
       </form>
     );
   };
