@@ -204,24 +204,16 @@ export function AnamneseConfigPublicaPanel() {
 
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-2">
-                <label htmlFor="slugConfig" className="text-[13px] font-bold text-slate-700">
-                  Identificador da Clínica (Slug)
+                <label className="text-[13px] font-bold text-slate-700">
+                  Link de Acesso da Clínica
                 </label>
-                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-                  <div className="px-3 text-slate-400 text-[14px] select-none border-r border-slate-200 bg-slate-50">
-                    procedi.com.br/anamnese?clinic=
+                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden cursor-not-allowed">
+                  <div className="px-4 py-3 text-slate-500 text-[14px] select-none w-full truncate">
+                    procedi.com.br/anamnese?clinic=<strong className="text-slate-800">{config.slug}</strong>
                   </div>
-                  <input
-                    id="slugConfig"
-                    type="text"
-                    value={config.slug}
-                    onChange={(e) => setConfig({ ...config, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-                    placeholder="sua-clinica"
-                    className="flex-1 px-3 py-3 bg-white text-[14px] text-slate-800 focus:outline-none font-medium placeholder:text-slate-300"
-                  />
                 </div>
                 <p className="text-[12px] text-slate-500">
-                  Use letras minúsculas, números e traços. Exemplo: <strong>clinica-sorriso</strong>.
+                  O link de acesso público da sua clínica é gerado automaticamente a partir do nome fantasia.
                 </p>
               </div>
 
