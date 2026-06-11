@@ -14,7 +14,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
@@ -35,7 +35,6 @@ vi.mock('../../../services/api', () => ({
 }));
 
 import { useLgpdConsent } from './useLgpdConsent';
-import { termoAssinaturaApi } from '../../../services/api';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -261,7 +260,6 @@ describe('LgpdConsentStep — botão desabilitado quando assinaturas ausentes', 
   });
 
   it('não chama exportAndSign quando assinaturas estão ausentes', async () => {
-    const user = userEvent.setup();
     render(
       <LgpdConsentStep
         {...DEFAULT_PROPS}

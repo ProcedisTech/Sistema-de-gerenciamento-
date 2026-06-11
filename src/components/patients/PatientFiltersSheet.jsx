@@ -1,103 +1,21 @@
-import React from 'react';
-import { X, AlertTriangle, BadgeCheck, Cake, Clock3, FileX, UserPlus } from 'lucide-react';
-import { PatientFilterChip } from './PatientFilterChip.jsx';
-import { MinorAgeIcon } from './MinorAgeIcon.jsx';
-
-/**
- * Grupo de chips de filtro — reutilizado no desktop (inline) e no bottom sheet (mobile).
- */
-export function PatientListFilterChips({
-  isSearching,
-  isBirthdaySort,
-  statusPlanoFilter,
-  setStatusPlanoFilter,
-  anamneseDesatualizadaFilter,
-  setAnamneseDesatualizadaFilter,
-  semRetornoFilter,
-  setSemRetornoFilter,
-  ehNovoFilter,
-  setEhNovoFilter,
-  ehAniversarianteFilter,
-  setEhAniversarianteFilter,
-  quickFilter,
-  setQuickFilter,
-  showKpiFilters = false,
-  className = 'flex flex-wrap items-center gap-2',
-}) {
-  return (
-    <div className={className}>
-      <PatientFilterChip
-        label="Sem plano"
-        icon={FileX}
-        active={statusPlanoFilter === 'sem_plano'}
-        disabled={isSearching || !setStatusPlanoFilter}
-        onClick={() =>
-          setStatusPlanoFilter &&
-          setStatusPlanoFilter((prev) => (prev === 'sem_plano' ? '' : 'sem_plano'))
-        }
-      />
-      <PatientFilterChip
-        label="Com plano ativo"
-        icon={BadgeCheck}
-        active={statusPlanoFilter === 'plano_ativo'}
-        disabled={isSearching || !setStatusPlanoFilter}
-        onClick={() =>
-          setStatusPlanoFilter &&
-          setStatusPlanoFilter((prev) => (prev === 'plano_ativo' ? '' : 'plano_ativo'))
-        }
-      />
-      <PatientFilterChip
-        label="Anamnese vencida"
-        icon={AlertTriangle}
-        active={anamneseDesatualizadaFilter}
-        activeClass="bg-[#854d0e] text-white"
-        disabled={isSearching || !setAnamneseDesatualizadaFilter}
-        onClick={() => setAnamneseDesatualizadaFilter && setAnamneseDesatualizadaFilter((v) => !v)}
-      />
-      <PatientFilterChip
-        label="Sem retorno 60d"
-        icon={Clock3}
-        active={semRetornoFilter}
-        activeClass="bg-[#4338ca] text-white"
-        disabled={isSearching || isBirthdaySort || !setSemRetornoFilter}
-        title={isBirthdaySort ? 'Indisponível com ordenação por aniversário' : undefined}
-        onClick={() => setSemRetornoFilter && setSemRetornoFilter((v) => !v)}
-      />
-      {showKpiFilters ? (
-        <>
-          <PatientFilterChip
-            label="Novos"
-            icon={UserPlus}
-            active={ehNovoFilter}
-            activeClass="bg-[#047857] text-white"
-            disabled={isSearching || !setEhNovoFilter}
-            onClick={() => setEhNovoFilter && setEhNovoFilter((v) => !v)}
-          />
-          <PatientFilterChip
-            label="Aniversariantes (mês)"
-            icon={Cake}
-            active={ehAniversarianteFilter}
-            activeClass="bg-pink-600 text-white"
-            disabled={isSearching || !setEhAniversarianteFilter}
-            onClick={() => setEhAniversarianteFilter && setEhAniversarianteFilter((v) => !v)}
-          />
-        </>
-      ) : null}
-      <span className="hidden h-5 w-px bg-[#e2e8f0] lg:inline" aria-hidden />
-      <PatientFilterChip
-        label="Menor de idade"
-        icon={MinorAgeIcon}
-        active={quickFilter === 'menor'}
-        onClick={() => setQuickFilter((v) => (v === 'menor' ? 'todos' : 'menor'))}
-      />
-    </div>
-  );
-}
+import React, { useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
+import { PatientFilterPanel } from './PatientFilterPanel.jsx';
 
 /**
  * Bottom sheet de filtros — mobile only. Toggle imediato, sem botão Aplicar.
  */
-export function PatientFiltersSheet({ open, onClose, chipProps }) {
+export function PatientFiltersSheet({ open, onClose, ctx, onFilterChange }) {
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const raf = requestAnimationFrame(() => {
+      panelRef.current?.focusFirstEnabled();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -129,16 +47,7 @@ export function PatientFiltersSheet({ open, onClose, chipProps }) {
           </button>
         </div>
         <div className="px-4 py-4">
-          <PatientListFilterChips
-            {...chipProps}
-            showKpiFilters
-            className="flex flex-wrap items-center gap-2.5"
-          />
-          {chipProps.isSearching ? (
-            <p className="mt-4 text-[12px] text-[#94a3b8]">
-              Filtros de indicador ficam indisponíveis durante a busca por texto.
-            </p>
-          ) : null}
+          <PatientFilterPanel ref={panelRef} ctx={ctx} onFilterChange={onFilterChange} />
         </div>
       </div>
     </div>

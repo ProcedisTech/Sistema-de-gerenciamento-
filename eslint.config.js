@@ -32,6 +32,7 @@ export default defineConfig([
   {
     files: [
       '**/PatientProfileView.jsx',
+      '**/components/patients/galeria/**/*.jsx',
       '**/Step5Finalization.jsx',
       '**/components/agenda/MarcarCompromissoModal.jsx',
       '**/components/agenda/PacienteSearchInput.jsx',
@@ -64,8 +65,6 @@ export default defineConfig([
       '**/hooks/agenda/useDiasComDisponibilidade.js',
       '**/components/agenda/AgendaDashboard.jsx',
       '**/components/agenda/AgendaFormModal.jsx',
-      '**/components/agenda/modo-agendamento/ModoAgendamentoSeletores.jsx',
-      '**/components/agenda/modo-agendamento/ConfirmarAgendamentoBar.jsx',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',
@@ -80,6 +79,32 @@ export default defineConfig([
   },
   {
     files: ['**/OrgContext.jsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['**/*.{test,spec}.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['**/usePatientsKpi.js'],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    files: ['**/PatientListPagination.jsx'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },

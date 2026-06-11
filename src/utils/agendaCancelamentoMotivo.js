@@ -4,6 +4,10 @@ import { normalizeApiList } from './agendaDashboardMapping.js';
 export const NO_SHOW_MOTIVO_CODIGO = 'paciente_nao_compareceu';
 export const NO_SHOW_OBS_PREFIX = '[Não compareceu]';
 
+/** Motivo fixo ao cancelar agendamentos por bloqueio de período (POST bloquear-periodo). */
+export const BLOQUEIO_CANCEL_MOTIVO_CODIGO = 'profissional_indisponivel';
+export const BLOQUEIO_CANCEL_MOTIVO_TEXTO = 'Bloqueio de horário';
+
 let motivosCache = null;
 let motivosFetchPromise = null;
 

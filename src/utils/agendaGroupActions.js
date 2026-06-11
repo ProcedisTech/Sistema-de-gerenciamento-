@@ -1,5 +1,28 @@
 import { addMinutesToTime } from './agendaMapping.js';
 
+export { resolveActionTargetFromDayAppointments } from './agendaDayInsights.js';
+
+/**
+ * Contrato de ações em grupo (frontend, sem grupo_agenda_id no backend):
+ * - Linha clicada na grade → resolveActionTargetFromDayAppointments(dayRows, row)
+ * - PATCH em lote → resolveActionAppointments(target) + applyActionToAppointmentGroup
+ * - Modais cancelar/reagendar → scheduleRowFromTarget(target)
+ * - Reagendar: pool do dia → excludeInactiveForReagendarGroup antes de resolveActionTargetFromDayAppointments
+ */
+
+const INACTIVE_REAGENDAR_STATUSES = new Set(['cancelado', 'realizado', 'reagendado']);
+
+/**
+ * Remove linhas inativas do pool usado só para montar grupo de reagendar.
+ * Paridade com legado: statusCodigo ^(reagend|cancel|realiz|nao_compareceu).
+ * Dashboard rows usam `status` derivado por deriveAgendaSlotStatus (no-show = cancelado).
+ */
+export function excludeInactiveForReagendarGroup(rows) {
+  return (rows || []).filter(
+    (row) => row && !INACTIVE_REAGENDAR_STATUSES.has(row.status),
+  );
+}
+
 /**
  * Aplica uma ação sequencialmente a todas as agendas de um grupo.
  * Best-effort: para no primeiro erro se stopOnError=true (default).
@@ -25,6 +48,15 @@ export async function applyActionToAppointmentGroup(items, actionFn, { stopOnErr
     partial: succeeded.length > 0 && failed.length > 0,
     allOk: failed.length === 0 && succeeded.length > 0,
   };
+}
+
+/** Lote + um único refresh do dashboard quando houve pelo menos um sucesso. */
+export async function applyGroupActionAndRefresh(items, actionFn, refreshFn, opts = {}) {
+  const result = await applyActionToAppointmentGroup(items, actionFn, opts);
+  if (result.succeeded.length > 0 && typeof refreshFn === 'function') {
+    await refreshFn();
+  }
+  return result;
 }
 
 export function formatGroupActionResultMessage({ succeeded, failed }, { verb = 'processadas' } = {}) {
@@ -83,6 +115,7 @@ export async function reagendarAppointmentGroup(items, basePayload, handleReagen
         },
         {
           successToast: false,
+          skipDashboardRefresh: true,
         },
       );
       if (!ok) throw new Error('reagendar failed');

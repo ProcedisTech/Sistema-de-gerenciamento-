@@ -24,23 +24,35 @@ import {
   isKpiCountableAgendaDto,
 } from '../../utils/agendaKpiDrilldown';
 import {
-  buildAgendaBloqueioCreateBody,
+  buildAgendaBloquearPeriodoBody,
   buildAgendaCreateBody,
   buildAgendaUpdateBody,
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
-import { buildDaySlotList, buildMonthHeatmap } from '../../utils/agendaDisponibilidadeBuilder.js';
+import { countBloqueioPeriodoConflicts } from '../../utils/agendaBloqueioConflicts.js';
+import {
+  buildDaySlotList,
+  buildMonthHeatmap,
+  buildNeutralMonthHeatmap,
+} from '../../utils/agendaDisponibilidadeBuilder.js';
 import {
   findFirstConflictHhmm,
   findNextFreeSlotAcrossDays,
+  minutesToHhmm,
   occupiedIntervalsFromAgendaDtos,
   proposalOverlapsOccupied,
 } from '../../utils/agendaAvailability';
+import {
+  dayBoundsFromWindows,
+  getDayWindowsForIso,
+} from '../../utils/disponibilidadeDayWindows.js';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
 import {
+  BLOQUEIO_CANCEL_MOTIVO_CODIGO,
+  BLOQUEIO_CANCEL_MOTIVO_TEXTO,
   NO_SHOW_MOTIVO_CODIGO,
   NO_SHOW_OBS_PREFIX,
   resolveMotivoCancelamentoIdByCodigo,
@@ -138,9 +150,45 @@ function defaultBloqueioForm(selectedDay) {
     horaInicio: '09:00',
     horaFim: '10:00',
     duracaoMin: 60,
-    useCustomEnd: false,
+    diaInteiro: false,
     motivo: '',
   };
+}
+
+function bloqueioBoundsFromDisponibilidade(iso, disponibilidade) {
+  const windows = getDayWindowsForIso(iso, disponibilidade);
+  if (!windows.length) {
+    return { ok: false, error: 'Profissional não atende neste dia.' };
+  }
+  const { dayStartMin, dayEndMin } = dayBoundsFromWindows(windows);
+  return {
+    ok: true,
+    horaInicio: minutesToHhmm(dayStartMin),
+    horaFim: minutesToHhmm(dayEndMin),
+  };
+}
+
+function deriveBloqueioIntervalFromForm(bloqueioForm) {
+  const hi = String(bloqueioForm?.horaInicio || '').slice(0, 5);
+  const horaFim = bloqueioForm?.diaInteiro
+    ? String(bloqueioForm?.horaFim || '').slice(0, 5)
+    : addMinutesToTime(hi, Number(bloqueioForm?.duracaoMin) || 60);
+  return { horaInicio: hi, horaFim };
+}
+
+async function fetchBloqueioConflitosCount(prof, dataAgendamento, horaInicio, horaFim) {
+  try {
+    const raw = await agendasApi.byProfissional(prof, dataAgendamento);
+    const count = countBloqueioPeriodoConflicts(normalizeApiList(raw), {
+      profissionalRoleUserId: prof,
+      dataAgendamento,
+      horaInicio,
+      horaFim,
+    });
+    return { ok: true, count };
+  } catch {
+    return { ok: false, count: null };
+  }
 }
 
 function bloqueioTimeToMinutes(t) {
@@ -271,6 +319,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [bloqueioForm, setBloqueioForm] = useState(() => defaultBloqueioForm(todayIso));
   const [bloqueioFormErrors, setBloqueioFormErrors] = useState({});
   const [submittingBloqueio, setSubmittingBloqueio] = useState(false);
+  const [bloqueioSubmitVerifying, setBloqueioSubmitVerifying] = useState(false);
+  const [bloqueioConflitosCount, setBloqueioConflitosCount] = useState(null);
+  const [bloqueioConflitosLoading, setBloqueioConflitosLoading] = useState(false);
+  const [bloqueioConflitosFetchError, setBloqueioConflitosFetchError] = useState(false);
+  const [bloqueioConflitosResyncMessage, setBloqueioConflitosResyncMessage] = useState('');
   const [submittingRemoverBloqueioId, setSubmittingRemoverBloqueioId] = useState('');
   /** Create modal aberto pelo perfil: paciente não pode ser trocado. */
   const [patientSelectLocked, setPatientSelectLocked] = useState(false);
@@ -282,6 +335,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [grupoReagendarMap, setGrupoReagendarMap] = useState({});
   /** Mapa {catalogoProcedimentoSaudeId → duracaoMin real} extraído de horaFim−horaInicio do DTO original. */
   const [grupoReagendarDuracoes, setGrupoReagendarDuracoes] = useState({});
+  /** Mapa {catalogoProcedimentoSaudeId → planejamentoItemId} para vincular POST de agenda ao item do plano. */
+  const [planejamentoItemIdPorCatalogo, setPlanejamentoItemIdPorCatalogo] = useState({});
   const [equipeList, setEquipeList] = useState([]);
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
@@ -289,6 +344,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const dispMonthCacheRef = useRef({});
   /** Evita double-fetch quando saveAppointment já chamou loadMonth com mês explícito. */
   const skipNextAutoLoadRef = useRef(false);
+  /** Callback one-shot após save bem-sucedido (fluxo planejamento Step3). */
+  const onAgendaSavedRef = useRef(null);
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
 
@@ -529,6 +586,31 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
 
   useEffect(() => {
+    if (!bloqueioModalOpen) return undefined;
+    const iso = toDateKey(bloqueioForm.data) || todayIso;
+    setDispCalendarioDia(iso);
+    const [y, m] = iso.split('-').map(Number);
+    setDispMonthDate(new Date(y, m - 1, 1));
+    return undefined;
+    // Só ao abrir/fechar modal de bloqueio — não seguir bloqueioForm.data a cada clique.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bloqueioForm.data intencionalmente omitido
+  }, [bloqueioModalOpen, todayIso]);
+
+  useEffect(() => {
+    if (!authEnabled || !bloqueioModalOpen || !String(roleUserIdAgenda || '').trim()) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      await ensureDispMonthLoaded(dispMonthDate);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, bloqueioModalOpen, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
+
+  useEffect(() => {
     if (!authEnabled || !modalMode || !form.data) {
       setSlotsOcupados([]);
       setSlotsOcupadosLoading(false);
@@ -698,12 +780,55 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     form.data,
   ]);
 
+  const dispNeutralHeatmap = useMemo(() => {
+    if (!modalMode) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (role) return null;
+    return buildNeutralMonthHeatmap({
+      monthDate: dispMonthDate,
+      todayIso,
+      selectedIso: toDateKey(form.data) || dispCalendarioDia,
+    });
+  }, [modalMode, roleUserIdAgenda, dispMonthDate, todayIso, form.data, dispCalendarioDia]);
+
+  const dispCalendarioHeatmap = dispHeatmap ?? dispNeutralHeatmap;
+
+  const bloqueioCalendarioHeatmap = useMemo(() => {
+    if (!bloqueioModalOpen) return null;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return null;
+    return buildMonthHeatmap({
+      monthDate: dispMonthDate,
+      disponibilidade: dispProfissionalDisponibilidade,
+      dtos: dispMonthDtos,
+      todayIso,
+      profissionalRoleUserId: role,
+      selectedIso: toDateKey(bloqueioForm.data) || dispCalendarioDia,
+    });
+  }, [
+    bloqueioModalOpen,
+    dispMonthDate,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
+    todayIso,
+    roleUserIdAgenda,
+    dispCalendarioDia,
+    bloqueioForm.data,
+  ]);
+
   const retryDispMonth = useCallback(() => {
     if (!authEnabled || !modalMode) return;
     const role = String(roleUserIdAgenda || '').trim();
     if (!role) return;
     ensureDispMonthLoaded(dispMonthDate);
   }, [authEnabled, modalMode, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
+
+  const retryBloqueioDispMonth = useCallback(() => {
+    if (!authEnabled || !bloqueioModalOpen) return;
+    const role = String(roleUserIdAgenda || '').trim();
+    if (!role) return;
+    ensureDispMonthLoaded(dispMonthDate);
+  }, [authEnabled, bloqueioModalOpen, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
 
   const dispDaySlots = useMemo(() => {
     if (!modalMode) return null;
@@ -869,8 +994,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (opts.successToast !== false) {
           toastSuccess(opts.successToast || 'Agendamento cancelado');
         }
-        await loadMonth();
-        await refreshWeekGrid();
+        if (!opts.skipDashboardRefresh) {
+          await loadMonth();
+          await refreshWeekGrid();
+        }
         setError('');
         return true;
       } catch (e) {
@@ -884,7 +1011,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const handleMarcarNaoCompareceu = useCallback(
-    async (agendaId) => {
+    async (agendaId, opts = {}) => {
       if (isNivel1) return false;
       if (!agendaId) return false;
       try {
@@ -901,7 +1028,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             motivoCancelamentoId: motivoId,
             motivoCancelamentoTexto: NO_SHOW_OBS_PREFIX,
           },
-          { successToast: 'Paciente marcado como não compareceu' },
+          {
+            successToast:
+              opts.successToast !== undefined ? opts.successToast : 'Paciente marcado como não compareceu',
+            skipDashboardRefresh: opts.skipDashboardRefresh,
+          },
         );
       } catch (e) {
         toastError(e?.body?.message || formatAgendamentoApiError(e) || 'Erro ao marcar não compareceu');
@@ -911,10 +1042,19 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [isNivel1, handleCancelar, toastError],
   );
 
+  const resetBloqueioConflitosState = useCallback(() => {
+    setBloqueioConflitosCount(null);
+    setBloqueioConflitosLoading(false);
+    setBloqueioConflitosFetchError(false);
+    setBloqueioConflitosResyncMessage('');
+    setBloqueioSubmitVerifying(false);
+  }, []);
+
   const closeBloqueioModal = useCallback(() => {
     setBloqueioModalOpen(false);
     setBloqueioFormErrors({});
-  }, []);
+    resetBloqueioConflitosState();
+  }, [resetBloqueioConflitosState]);
 
   const openBloqueioModal = useCallback(
     (date = selectedDay, horaHm = '') => {
@@ -927,6 +1067,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         horaFim: addMinutesToTime(hi, 60),
       });
       setBloqueioFormErrors({});
+      resetBloqueioConflitosState();
       const sessionRole = String(roleUserId || '').trim();
       if (isRoleAgendaPreselect(roleNome) && sessionRole) {
         setRoleUserIdAgenda(sessionRole);
@@ -935,13 +1076,157 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       }
       setBloqueioModalOpen(true);
     },
-    [isNivel1, selectedDay, todayIso, roleUserId, roleNome]
+    [isNivel1, selectedDay, todayIso, roleUserId, roleNome, resetBloqueioConflitosState]
   );
 
-  const updateBloqueioForm = useCallback((field, value) => {
-    setBloqueioForm((prev) => ({ ...prev, [field]: value }));
-    setBloqueioFormErrors((prev) => ({ ...prev, [field]: undefined }));
-  }, []);
+  useEffect(() => {
+    if (!bloqueioModalOpen) {
+      resetBloqueioConflitosState();
+      return undefined;
+    }
+    const prof = String(roleUserIdAgenda || '').trim();
+    const data = toDateKey(bloqueioForm.data);
+    if (!prof || !data) {
+      setBloqueioConflitosCount(null);
+      setBloqueioConflitosLoading(false);
+      setBloqueioConflitosFetchError(false);
+      return undefined;
+    }
+    const { horaInicio, horaFim } = deriveBloqueioIntervalFromForm(bloqueioForm);
+    if (!horaInicio || !horaFim) {
+      setBloqueioConflitosCount(null);
+      setBloqueioConflitosLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      (async () => {
+        setBloqueioConflitosLoading(true);
+        setBloqueioConflitosResyncMessage('');
+        const result = await fetchBloqueioConflitosCount(prof, data, horaInicio, horaFim);
+        if (cancelled) return;
+        if (result.ok) {
+          setBloqueioConflitosCount(result.count);
+          setBloqueioConflitosFetchError(false);
+        } else {
+          setBloqueioConflitosCount(null);
+          setBloqueioConflitosFetchError(true);
+        }
+        setBloqueioConflitosLoading(false);
+      })();
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    bloqueioModalOpen,
+    roleUserIdAgenda,
+    bloqueioForm.data,
+    bloqueioForm.diaInteiro,
+    bloqueioForm.horaInicio,
+    bloqueioForm.horaFim,
+    bloqueioForm.duracaoMin,
+    resetBloqueioConflitosState,
+     
+  ]);
+
+  const selectBloqueioDia = useCallback(
+    (iso) => {
+      const prof = String(roleUserIdAgenda || '').trim();
+      setBloqueioForm((prev) => {
+        const next = { ...prev, data: iso };
+        if (!prev.diaInteiro) {
+          setBloqueioFormErrors((e) => ({ ...e, data: undefined }));
+          return next;
+        }
+        if (!prof) return next;
+        const disp = disponibilidades[prof];
+        const bounds = bloqueioBoundsFromDisponibilidade(iso, disp);
+        if (!bounds.ok) {
+          setBloqueioFormErrors((e) => ({
+            ...e,
+            data: bounds.error,
+            horaInicio: undefined,
+            horaFim: undefined,
+          }));
+          return next;
+        }
+        setBloqueioFormErrors((e) => ({
+          ...e,
+          data: undefined,
+          horaInicio: undefined,
+          horaFim: undefined,
+        }));
+        return {
+          ...next,
+          horaInicio: bounds.horaInicio,
+          horaFim: bounds.horaFim,
+        };
+      });
+    },
+    [roleUserIdAgenda, disponibilidades]
+  );
+
+  const updateBloqueioForm = useCallback(
+    (field, value) => {
+      if (field === 'diaInteiro') {
+        const checked = Boolean(value);
+        const prof = String(roleUserIdAgenda || '').trim();
+        setBloqueioForm((prev) => {
+          if (!checked) {
+            const hi = String(prev.horaInicio || '09:00').slice(0, 5);
+            const dur = Number(prev.duracaoMin) || 60;
+            return {
+              ...prev,
+              diaInteiro: false,
+              horaInicio: hi,
+              duracaoMin: DURACOES_PILL.includes(dur) ? dur : 60,
+              horaFim: addMinutesToTime(hi, DURACOES_PILL.includes(dur) ? dur : 60),
+            };
+          }
+          if (prev.data && prof) {
+            const disp = disponibilidades[prof];
+            const bounds = bloqueioBoundsFromDisponibilidade(prev.data, disp);
+            if (!bounds.ok) {
+              setBloqueioFormErrors((e) => ({ ...e, data: bounds.error }));
+              return { ...prev, diaInteiro: true };
+            }
+            setBloqueioFormErrors((e) => ({
+              ...e,
+              data: undefined,
+              horaInicio: undefined,
+              horaFim: undefined,
+              duracaoMin: undefined,
+            }));
+            return {
+              ...prev,
+              diaInteiro: true,
+              horaInicio: bounds.horaInicio,
+              horaFim: bounds.horaFim,
+            };
+          }
+          return { ...prev, diaInteiro: true };
+        });
+        return;
+      }
+      setBloqueioForm((prev) => {
+        const next = { ...prev, [field]: value };
+        if (field === 'horaInicio' && !prev.diaInteiro) {
+          next.horaFim = addMinutesToTime(String(value || '').slice(0, 5), Number(prev.duracaoMin) || 60);
+        }
+        if (field === 'duracaoMin' && !prev.diaInteiro) {
+          const hi = String(prev.horaInicio || '09:00').slice(0, 5);
+          next.horaFim = addMinutesToTime(hi, Number(value) || 60);
+        }
+        return next;
+      });
+      setBloqueioFormErrors((prev) => ({ ...prev, [field]: undefined }));
+    },
+    [roleUserIdAgenda, disponibilidades]
+  );
 
   const validateBloqueioForm = useCallback(() => {
     const nextErrors = {};
@@ -951,28 +1236,40 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     else if (bloqueioForm.data < todayIso) {
       nextErrors.data = 'Não é possível bloquear no passado.';
     }
-    const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
-    if (!hi) nextErrors.horaInicio = 'Informe o horário de início.';
-    let hfMin;
-    if (bloqueioForm.useCustomEnd) {
+
+    if (bloqueioForm.diaInteiro) {
+      const disp = disponibilidades[prof];
+      const bounds = bloqueioForm.data
+        ? bloqueioBoundsFromDisponibilidade(bloqueioForm.data, disp)
+        : { ok: false, error: 'Selecione a data.' };
+      if (!bounds.ok) {
+        nextErrors.data = bounds.error || 'Profissional não atende neste dia.';
+      }
+      const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
       const hf = String(bloqueioForm.horaFim || '').trim().slice(0, 5);
-      if (!hf) nextErrors.horaFim = 'Informe o horário de fim.';
-      hfMin = bloqueioTimeToMinutes(hf);
+      if (!hi || !hf) {
+        nextErrors.data = nextErrors.data || 'Não foi possível calcular o expediente do dia.';
+      } else if (bloqueioTimeToMinutes(hf) <= bloqueioTimeToMinutes(hi)) {
+        nextErrors.data = 'Expediente inválido para este dia.';
+      }
     } else {
+      const hi = String(bloqueioForm.horaInicio || '').trim().slice(0, 5);
+      if (!hi) nextErrors.horaInicio = 'Informe o horário de início.';
       const d = Number(bloqueioForm.duracaoMin);
       if (!DURACOES_PILL.includes(d)) nextErrors.duracaoMin = 'Selecione a duração.';
-      hfMin = bloqueioTimeToMinutes(hi) + (Number(bloqueioForm.duracaoMin) || 60);
+      const hfMin = bloqueioTimeToMinutes(hi) + (Number(bloqueioForm.duracaoMin) || 60);
+      const hiMin = bloqueioTimeToMinutes(hi);
+      if (hi && hfMin <= hiMin) {
+        nextErrors.horaFim = 'O horário de fim deve ser após o início.';
+      }
     }
-    const hiMin = bloqueioTimeToMinutes(hi);
-    if (hi && hfMin <= hiMin) {
-      nextErrors.horaFim = 'O horário de fim deve ser após o início.';
-    }
+
     if (!String(bloqueioForm.motivo || '').trim()) {
       nextErrors.motivo = 'Descreva o motivo do bloqueio.';
     }
     setBloqueioFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [bloqueioForm, roleUserIdAgenda, todayIso]);
+  }, [bloqueioForm, roleUserIdAgenda, todayIso, disponibilidades]);
 
   const saveBloqueio = useCallback(async () => {
     if (isNivel1) return false;
@@ -980,37 +1277,71 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     const prof = String(roleUserIdAgenda || '').trim();
     if (!prof) return false;
 
+    const data = toDateKey(bloqueioForm.data);
+    const { horaInicio: hi, horaFim } = deriveBloqueioIntervalFromForm(bloqueioForm);
+
     setSubmittingBloqueio(true);
+    setBloqueioSubmitVerifying(true);
     try {
+      const fresh = await fetchBloqueioConflitosCount(prof, data, hi, horaFim);
+      setBloqueioSubmitVerifying(false);
+
+      if (fresh.ok) {
+        const displayed = bloqueioConflitosCount;
+        if (fresh.count !== displayed) {
+          setBloqueioConflitosCount(fresh.count);
+          setBloqueioConflitosFetchError(false);
+          setBloqueioConflitosResyncMessage(
+            `O número de agendamentos mudou: agora isto cancelará ${fresh.count}. Confirme novamente.`,
+          );
+          return false;
+        }
+      }
+
       const tipoId = await resolveTipoProcedimentoIdByCodigo(BLOQUEIO_TIPO_CODIGO);
       if (!tipoId) {
         toastError('Tipo "bloqueio" não encontrado. Verifique se o backend está atualizado.');
         return false;
       }
-      const hi = String(bloqueioForm.horaInicio || '').slice(0, 5);
-      const horaFim = bloqueioForm.useCustomEnd
-        ? String(bloqueioForm.horaFim || '').slice(0, 5)
-        : addMinutesToTime(hi, Number(bloqueioForm.duracaoMin) || 60);
-      const body = buildAgendaBloqueioCreateBody({
-        dataAgendamento: bloqueioForm.data,
+      const motivoId = await resolveMotivoCancelamentoIdByCodigo(BLOQUEIO_CANCEL_MOTIVO_CODIGO);
+      if (!motivoId) {
+        toastError(
+          'Motivo "profissional indisponível" não encontrado. Verifique se o backend está atualizado.',
+        );
+        return false;
+      }
+
+      const body = buildAgendaBloquearPeriodoBody({
+        dataAgendamento: data,
         horaInicio: hi,
         horaFim,
         profissionalRoleUserId: prof,
         tipoProcedimentoId: tipoId,
-        observacao: String(bloqueioForm.motivo || '').trim(),
+        motivoCancelamentoId: motivoId,
+        motivoCancelamentoTexto: BLOQUEIO_CANCEL_MOTIVO_TEXTO,
+        observacaoBloqueio: String(bloqueioForm.motivo || '').trim(),
       });
-      await agendasApi.create(body);
-      setSelectedDay(bloqueioForm.data);
+      const res = await agendasApi.bloquearPeriodo(body);
+      const q = Number(res?.quantidadeCancelada) || 0;
+
       const nextMonthDate = new Date(
-        Number(bloqueioForm.data.slice(0, 4)),
-        Number(bloqueioForm.data.slice(5, 7)) - 1,
-        1
+        Number(data.slice(0, 4)),
+        Number(data.slice(5, 7)) - 1,
+        1,
       );
+      skipNextAutoLoadRef.current = true;
+      setSelectedDay(data);
       setMonthDate(nextMonthDate);
-      await refreshDashboard();
+      await loadMonth(nextMonthDate);
+      await refreshWeekGrid();
       closeBloqueioModal();
       setError('');
-      toastSuccess('Horário bloqueado');
+      setBloqueioConflitosResyncMessage('');
+      toastSuccess(
+        q > 0
+          ? `Bloqueio criado. ${q} agendamento(s) cancelado(s).`
+          : 'Horário bloqueado',
+      );
       return true;
     } catch (e) {
       const msg = formatAgendamentoApiError(e, { context: 'bloqueio' });
@@ -1019,12 +1350,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       return false;
     } finally {
       setSubmittingBloqueio(false);
+      setBloqueioSubmitVerifying(false);
     }
   }, [
     bloqueioForm,
+    bloqueioConflitosCount,
     closeBloqueioModal,
     isNivel1,
-    refreshDashboard,
+    loadMonth,
+    refreshWeekGrid,
     roleUserIdAgenda,
     toastError,
     toastSuccess,
@@ -1094,8 +1428,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
               (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
           );
         }
-        await loadMonth();
-        await refreshWeekGrid();
+        if (!opts.skipDashboardRefresh) {
+          await loadMonth();
+          await refreshWeekGrid();
+        }
         setError('');
         return true;
       } catch (e) {
@@ -1127,8 +1463,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (opts.successToast !== false) {
           toastSuccess(opts.successToast || 'Agendamento reagendado');
         }
-        await loadMonth();
-        await refreshWeekGrid();
+        if (!opts.skipDashboardRefresh) {
+          await loadMonth();
+          await refreshWeekGrid();
+        }
         setError('');
         return true;
       } catch (e) {
@@ -1286,6 +1624,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (isNivel1) return;
       setEditingAppointment(null);
       setPatientSelectLocked(false);
+      setPlanejamentoItemIdPorCatalogo({});
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
       applyProfissionalPreselect();
@@ -1301,6 +1640,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const hi = String(horaHm || '').trim().slice(0, 5);
       setEditingAppointment(null);
       setPatientSelectLocked(false);
+      setPlanejamentoItemIdPorCatalogo({});
       setSelectedDay(date);
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -1316,10 +1656,17 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   /** Abrir "Novo agendamento" a partir do perfil do paciente (data inicial = hoje). */
   const openCreateModalForPatient = useCallback(
-    (patient) => {
+    (patient, opts = {}) => {
       if (isNivel1) return;
       if (!patient?.id) return;
       setEditingAppointment(null);
+      const mapaPlano = opts.planejamentoItemIdPorCatalogo;
+      setPlanejamentoItemIdPorCatalogo(
+        mapaPlano && typeof mapaPlano === 'object' && !Array.isArray(mapaPlano) ? mapaPlano : {}
+      );
+      const catIds = Array.isArray(opts.catalogoProcedimentoSaudeIds)
+        ? opts.catalogoProcedimentoSaudeIds.map((id) => String(id).trim()).filter(Boolean)
+        : [];
       const date = todayIso;
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -1328,11 +1675,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         pacienteNome: patient.nome || '',
         telefone: patient.telefone || '',
         procedimentoNome: '',
-        catalogoProcedimentoSaudeIds: [],
+        catalogoProcedimentoSaudeIds: catIds,
       });
       setPatientSelectLocked(true);
       setFormErrors({});
       applyProfissionalPreselect();
+      const forcedProf = String(opts.profissionalRoleUserId ?? '').trim();
+      if (forcedProf) setRoleUserIdAgenda(forcedProf);
+      onAgendaSavedRef.current =
+        typeof opts.onAgendaSaved === 'function' ? opts.onAgendaSaved : null;
       setModalMode('create');
     },
     [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
@@ -1342,6 +1693,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     (appointment) => {
       if (isNivel1) return;
       setEditingAppointment(appointment);
+      setPlanejamentoItemIdPorCatalogo({});
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const currentIds = Array.isArray(appointment?.catalogoProcedimentoSaudeIds)
         ? appointment.catalogoProcedimentoSaudeIds.map((id) => String(id))
@@ -1381,6 +1733,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const catIds = grupo.map((a) => String(a.catalogoProcedimentoSaudeId || '').trim()).filter(Boolean);
       setEditingAppointment(appointment);
+      setPlanejamentoItemIdPorCatalogo({});
       setForm({
         ...base,
         pacienteId: appointment?.pacienteId || base.pacienteId,
@@ -1413,6 +1766,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   );
 
   const closeModal = useCallback(() => {
+    onAgendaSavedRef.current = null;
     setModalMode(null);
     setEditingAppointment(null);
     setPatientSelectLocked(false);
@@ -1421,6 +1775,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     setFormErrors({});
     setGrupoReagendarMap({});
     setGrupoReagendarDuracoes({});
+    setPlanejamentoItemIdPorCatalogo({});
     equipeFetchedRef.current = false;
     dispMonthCacheRef.current = {};
     setDispMonthDtos([]);
@@ -1489,6 +1844,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       return false;
     }
 
+    let agendaSavedPayload = null;
+
     try {
       if (modalMode === 'edit' && editingAppointment?.agendaId) {
         const rawSlot = editingAppointment.rawSlot || {};
@@ -1520,6 +1877,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             duracoesPorProc?.find((d) => String(d.id) === catalogoProcedimentoSaudeId)?.duracaoSelecionada
             ?? (Number(form.duracaoMin) || 45);
 
+          const planejamentoItemId = planejamentoItemIdPorCatalogo[catalogoProcedimentoSaudeId] ?? null;
           const createBody = buildAgendaCreateBody({
             dataAgendamento: form.data,
             horaInicio: startHh,
@@ -1532,6 +1890,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             ...(modalMode === 'reagendar' && grupoReagendarMap[catalogoProcedimentoSaudeId]
               ? { agendaIdOrigem: grupoReagendarMap[catalogoProcedimentoSaudeId] }
               : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
           });
 
           try {
@@ -1545,7 +1904,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
               continue;
             }
             if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'ok' });
+            const horaInicioSlot = startHh;
+            resultados.push({
+              id: catalogoProcedimentoSaudeId,
+              status: 'ok',
+              agendaId: created?.id,
+              planejamentoItemId,
+              horaInicio: horaInicioSlot,
+              horaFim: addMinutesToTime(horaInicioSlot, dMin),
+            });
             startHh = addMinutesToTime(startHh, dMin);
           } catch (err) {
             if (isAgendaSlotOverlapError(err)) {
@@ -1561,6 +1928,20 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           onConflictResult?.(resultados);
           return false;
         }
+
+        const firstOk = resultados.find((r) => r.status === 'ok');
+        if (firstOk && onAgendaSavedRef.current) {
+          agendaSavedPayload = {
+            agendaId: firstOk.agendaId,
+            planejamentoItemId: firstOk.planejamentoItemId ?? null,
+            catalogoProcedimentoSaudeId: firstOk.id,
+            dataAgendamento: form.data,
+            horaInicio: firstOk.horaInicio,
+            horaFim: firstOk.horaFim,
+            profissionalRoleUserId: agendaRole,
+            statusCodigo: 'AGENDADO',
+          };
+        }
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
@@ -1573,6 +1954,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setMonthDate(nextMonthDate);
       await loadMonth(nextMonthDate);
       await refreshWeekGrid();
+      if (agendaSavedPayload && onAgendaSavedRef.current) {
+        const cb = onAgendaSavedRef.current;
+        onAgendaSavedRef.current = null;
+        cb(agendaSavedPayload);
+      }
       closeModal();
       setError('');
       toastSuccess(modalMode === 'reagendar' ? 'Agendamento reagendado.' : 'Agendamento salvo.');
@@ -1590,6 +1976,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     isNivel1,
     loadMonth,
     modalMode,
+    planejamentoItemIdPorCatalogo,
     patientOptions,
     refreshWeekGrid,
     roleUserIdAgenda,
@@ -1672,9 +2059,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     groupedAppointments,
     handleAtualizarStatus,
     handleMarcarNaoCompareceu,
+    bloqueioCalendarioHeatmap,
     bloqueioForm,
     bloqueioFormErrors,
     bloqueioModalOpen,
+    bloqueioConflitosCount,
+    bloqueioConflitosLoading,
+    bloqueioConflitosFetchError,
+    bloqueioConflitosResyncMessage,
+    bloqueioSubmitVerifying,
     closeBloqueioModal,
     handleCancelar,
     handleRemoverBloqueio,
@@ -1698,6 +2091,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openEditModal,
     openReagendarModal,
     grupoReagendarDuracoes,
+    setPlanejamentoItemIdPorCatalogo,
     closeModal,
     patientSelectLocked,
     patientOptions,
@@ -1705,11 +2099,14 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispCalendarioDia,
     dispDaySlots,
     dispHeatmap,
+    dispCalendarioHeatmap,
     dispMonthError,
     dispMonthLoading,
     retryDispMonth,
+    retryBloqueioDispMonth,
     goDispNextMonth,
     goDispPrevMonth,
+    selectBloqueioDia,
     handleProximoHorarioLivre,
     refreshDashboard,
     selectDispCalendarioDia,

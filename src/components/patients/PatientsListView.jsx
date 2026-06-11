@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -19,8 +19,17 @@ import { getPatientCardStatuses } from './patientListStatusConfig.js';
 import { KpiCards } from './KpiCards.jsx';
 import { PulseSidebar } from './PulseSidebar.jsx';
 import { PatientsTodayStrip } from './PatientsTodayStrip.jsx';
-import { PatientFiltersSheet, PatientListFilterChips } from './PatientFiltersSheet.jsx';
-import { countActivePatientFilters, applyPatientQuickFilter } from './patientListFilters.js';
+import { PatientFiltersSheet } from './PatientFiltersSheet.jsx';
+import { PatientFiltersPopover } from './PatientFiltersPopover.jsx';
+import { PatientActiveFilterChips } from './PatientActiveFilterChips.jsx';
+import {
+  countActivePatientFilters,
+  applyPatientQuickFilter,
+  clearAllPatientFilters,
+  resolveActiveKpiCardFromFilters,
+  activateFilterByKpiCardId,
+  deactivateFilterByKpiCardId,
+} from './patientListFilters.js';
 import { PatientListPagination } from './PatientListPagination.jsx';
 import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
@@ -143,19 +152,6 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
   );
 }
 
-function previewHasExistingAnamneseFromList(list) {
-  const rows = (Array.isArray(list) ? [...list] : []).filter((r) => r?.dataHora);
-  rows.sort((a, b) => {
-    const ta = new Date(a.dataHora).getTime();
-    const tb = new Date(b.dataHora).getTime();
-    return tb - ta;
-  });
-  const latest = rows[0] || null;
-  if (!latest?.dataHora) return false;
-  const t = new Date(latest.dataHora);
-  return !Number.isNaN(t.getTime());
-}
-
 function PatientPreviewPanel({
   selectedPatient,
   detailTitleId,
@@ -167,11 +163,9 @@ function PatientPreviewPanel({
   previewProcedures = [],
   loadingPreviewProcedures = false,
   onStartAttendance,
-  previewHasExistingAnamnese = false,
   previewAnamneseLoading = false,
   captureProfileNavSnapshot,
 }) {
-  const [attendanceChoiceModalOpen, setAttendanceChoiceModalOpen] = useState(false);
   const { isNivel1 } = usePapel();
 
   /** Origem ordenada mais recentes primeiro — API ou legado `{ data, nome, … }`. */
@@ -217,75 +211,13 @@ function PatientPreviewPanel({
 
   const handleIniciarAtendimentoClick = () => {
     if (isNivel1 || previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
-    if (previewHasExistingAnamnese) {
-      setAttendanceChoiceModalOpen(true);
-      return;
-    }
     onStartAttendance(selectedPatient);
-  };
-
-  const runStartAttendance = (options = {}) => {
-    if (typeof onStartAttendance !== 'function') return;
-    setAttendanceChoiceModalOpen(false);
-    onStartAttendance(selectedPatient, options);
   };
 
   return (
     <div
       className={`relative flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-lg ${shellClassName}`}
     >
-      {attendanceChoiceModalOpen ? (
-        <div
-          className="fixed inset-0 z-[220] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setAttendanceChoiceModalOpen(false);
-          }}
-        >
-          <div
-            className="flex max-h-[min(90dvh,520px)] w-full max-w-md flex-col rounded-t-2xl border border-[#e2e8f0] bg-white shadow-xl sm:rounded-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="preview-attendance-choice-title"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-[#f1f5f9] p-4 pb-3 sm:p-5">
-              <h2 id="preview-attendance-choice-title" className="pr-2 text-[16px] font-bold leading-snug text-[#0f172a]">
-                Como deseja iniciar?
-              </h2>
-              <button
-                type="button"
-                onClick={() => setAttendanceChoiceModalOpen(false)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] transition-colors hover:border-[#cbd5e1] hover:text-[#0f172a]"
-                aria-label="Fechar"
-              >
-                <X className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            </div>
-            <div className="flex flex-col gap-3 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
-              <p className="text-[13px] font-normal leading-snug text-[#64748b]">
-                Este paciente já possui anamnese registrada. Escolha se deseja preencher uma nova ficha ou seguir direto para a avaliação.
-              </p>
-              <button
-                type="button"
-                onClick={() => runStartAttendance()}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] active:bg-[#00967f]"
-              >
-                <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                Fazer outra anamnese
-              </button>
-              <button
-                type="button"
-                onClick={() => runStartAttendance({ initialStep: 2 })}
-                className="flex min-h-[48px] w-full items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[14px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1] sm:min-h-[44px]"
-              >
-                Pular para avaliação
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <button
         type="button"
         onClick={closeDetail}
@@ -433,7 +365,6 @@ export function PatientsListView({
   const { isNivel1: _isNivel1, canCreatePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
   const isSearching = Boolean(patientSearchQuery?.trim());
-  const isBirthdaySort = patientListSortBy === 'birthday-asc';
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
   const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
   /** Paciente vindo da sidebar quando ainda não está na página atual da lista. */
@@ -442,15 +373,18 @@ export function PatientsListView({
   const setQuickFilter = setPatientQuickFilter ?? (() => {});
   const [activeKpiCard, setActiveKpiCard] = useState(null);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+  const filterButtonRef = useRef(null);
   const desktopTitleId = 'patient-detail-title';
   const [previewProcedures, setPreviewProcedures] = useState([]);
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
-  const [previewAnamneseList, setPreviewAnamneseList] = useState([]);
-  /** Paciente ao qual `previewAnamneseList` corresponde após o último fetch concluído; `null` = nenhum. */
+  /** Paciente cujo fetch de anamnese do preview terminou; `null` = nenhum / resetado. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
   const activeFiltersCount = useMemo(
     () =>
       countActivePatientFilters({
+        isSearching,
+        patientListSortBy,
         statusPlanoFilter,
         anamneseDesatualizadaFilter,
         semRetornoFilter,
@@ -459,6 +393,8 @@ export function PatientsListView({
         quickFilter,
       }),
     [
+      isSearching,
+      patientListSortBy,
       statusPlanoFilter,
       anamneseDesatualizadaFilter,
       semRetornoFilter,
@@ -467,41 +403,59 @@ export function PatientsListView({
       quickFilter,
     ]
   );
-  const filterChipProps = {
-    isSearching,
-    isBirthdaySort,
-    statusPlanoFilter,
-    setStatusPlanoFilter,
-    anamneseDesatualizadaFilter,
-    setAnamneseDesatualizadaFilter,
-    semRetornoFilter,
-    setSemRetornoFilter,
-    ehNovoFilter,
-    setEhNovoFilter,
-    ehAniversarianteFilter,
-    setEhAniversarianteFilter,
-    quickFilter,
-    setQuickFilter,
+  const filterCtx = useMemo(
+    () => ({
+      isSearching,
+      patientListSortBy,
+      statusPlanoFilter,
+      setStatusPlanoFilter,
+      anamneseDesatualizadaFilter,
+      setAnamneseDesatualizadaFilter,
+      semRetornoFilter,
+      setSemRetornoFilter,
+      ehNovoFilter,
+      setEhNovoFilter,
+      ehAniversarianteFilter,
+      setEhAniversarianteFilter,
+      quickFilter,
+      setQuickFilter,
+    }),
+    [
+      isSearching,
+      patientListSortBy,
+      statusPlanoFilter,
+      setStatusPlanoFilter,
+      anamneseDesatualizadaFilter,
+      setAnamneseDesatualizadaFilter,
+      semRetornoFilter,
+      setSemRetornoFilter,
+      ehNovoFilter,
+      setEhNovoFilter,
+      ehAniversarianteFilter,
+      setEhAniversarianteFilter,
+      quickFilter,
+      setQuickFilter,
+    ]
+  );
+
+  const onFilterChange = () => {
+    setActiveKpiCard(resolveActiveKpiCardFromFilters(filterCtx));
   };
 
   const handleActivateFilter = (cardId) => {
     if (activeKpiCard === cardId) {
       setActiveKpiCard(null);
-      if (cardId === 'risco') setSemRetornoFilter && setSemRetornoFilter(false);
-      if (cardId === 'planos') setStatusPlanoFilter && setStatusPlanoFilter('');
-      if (cardId === 'novos') setEhNovoFilter && setEhNovoFilter(false);
-      if (cardId === 'aniversariantes') setEhAniversarianteFilter && setEhAniversarianteFilter(false);
+      if (cardId === 'ativos') return;
+      deactivateFilterByKpiCardId(filterCtx, cardId);
       return;
     }
-    setSemRetornoFilter && setSemRetornoFilter(false);
-    setStatusPlanoFilter && setStatusPlanoFilter('');
-    setEhNovoFilter && setEhNovoFilter(false);
-    setEhAniversarianteFilter && setEhAniversarianteFilter(false);
+    if (cardId === 'ativos') {
+      clearAllPatientFilters(filterCtx);
+      setActiveKpiCard('ativos');
+      return;
+    }
+    activateFilterByKpiCardId(filterCtx, cardId);
     setActiveKpiCard(cardId);
-    if (cardId === 'risco') setSemRetornoFilter && setSemRetornoFilter(true);
-    if (cardId === 'planos') setStatusPlanoFilter && setStatusPlanoFilter('plano_ativo');
-    if (cardId === 'novos') setEhNovoFilter && setEhNovoFilter(true);
-    if (cardId === 'aniversariantes') setEhAniversarianteFilter && setEhAniversarianteFilter(true);
   };
 
   const meta = patientListMeta || {
@@ -549,19 +503,13 @@ export function PatientsListView({
   /* eslint-disable react-hooks/set-state-in-effect -- branch síncrono ao trocar paciente ou fechar */
   useEffect(() => {
     if (!previewPatientId) {
-      setPreviewAnamneseList([]);
       setPreviewAnamneseListOwnerId(null);
       return undefined;
     }
     let cancelled = false;
     anamneseApi
       .listPaciente(previewPatientId)
-      .then((list) => {
-        if (!cancelled) setPreviewAnamneseList(Array.isArray(list) ? list : []);
-      })
-      .catch(() => {
-        if (!cancelled) setPreviewAnamneseList([]);
-      })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setPreviewAnamneseListOwnerId(previewPatientId);
       });
@@ -576,10 +524,6 @@ export function PatientsListView({
   );
 
   const filteredPatientListItems = applyQuickFilter(patientListItems, quickFilter);
-
-  const previewHasExistingAnamnese =
-    Boolean(previewPatientId && previewAnamneseListOwnerId === previewPatientId) &&
-    previewHasExistingAnamneseFromList(previewAnamneseList);
 
   const closeDetail = () => {
     setPreviewPatientCpf(null);
@@ -626,32 +570,27 @@ export function PatientsListView({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <h1 className="min-w-0 text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
+          Pacientes
+        </h1>
+        {canCreatePacientes && (
+          <button
+            type="button"
+            onClick={onCreatePatient}
+            className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:w-auto sm:min-w-0 lg:hidden"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
+          </button>
+        )}
+      </div>
+
       <KpiCards
         kpi={kpi}
         loading={kpiLoading}
         activeCard={activeKpiCard}
         onActivateFilter={handleActivateFilter}
       />
-
-      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
-            Gestão de Pacientes
-          </h1>
-          <p className="mt-1 text-[14px] font-medium text-[#64748b]">
-            Histórico completo e dados protegidos
-          </p>
-        </div>
-        {canCreatePacientes && (
-          <button
-            type="button"
-            onClick={onCreatePatient}
-            className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:w-auto sm:min-w-0"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
-          </button>
-        )}
-      </div>
 
       <PatientsTodayStrip kpi={kpi} loading={kpiLoading} />
 
@@ -679,7 +618,7 @@ export function PatientsListView({
                 </div>
               </div>
 
-              {/* Desktop: busca + ordenação */}
+              {/* Desktop: busca + ordenação + filtros */}
               <div className="hidden w-full min-w-0 flex-row flex-nowrap items-center gap-3 px-4 pt-3 pb-2 lg:flex">
                 <div className="relative min-w-0 flex-1">
                   <Search
@@ -697,9 +636,9 @@ export function PatientsListView({
                   />
                 </div>
 
-                <div className="relative flex h-10 w-fit shrink-0 items-center">
+                <div className="relative flex h-10 shrink-0 items-center">
                   <ArrowUpDown
-                    className="pointer-events-none absolute left-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 text-[#94a3b8]"
+                    className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
                     aria-hidden
                   />
@@ -710,7 +649,7 @@ export function PatientsListView({
                     id="patient-sort"
                     value={patientListSortBy}
                     onChange={(e) => setPatientListSortBy(e.target.value)}
-                    className="h-10 min-w-[6.75rem] max-w-[10.75rem] cursor-pointer appearance-none rounded-lg border border-[#e2e8f0] bg-white px-1.5 py-1 pl-6 pr-2 text-[11px] font-medium leading-tight text-[#475569] outline-none focus:border-[#00a88e]/40"
+                    className="h-10 w-auto max-w-[11.5rem] shrink-0 cursor-pointer appearance-none truncate rounded-lg border border-[#e2e8f0] bg-white py-0 pl-7 pr-2.5 text-[13px] font-medium text-[#475569] outline-none focus:border-[#00a88e]/40"
                   >
                     {SORT_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -719,6 +658,46 @@ export function PatientsListView({
                     ))}
                   </select>
                 </div>
+
+                <div className="relative shrink-0">
+                  <button
+                    ref={filterButtonRef}
+                    type="button"
+                    onClick={() => setFilterPopoverOpen((v) => !v)}
+                    className="relative inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc]"
+                    aria-expanded={filterPopoverOpen}
+                    aria-haspopup="dialog"
+                    aria-label={
+                      activeFiltersCount > 0
+                        ? `Filtrar, ${activeFiltersCount} ativos`
+                        : 'Filtrar'
+                    }
+                  >
+                    <Filter className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
+                    Filtrar
+                    {activeFiltersCount > 0 ? (
+                      <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#00a88e] px-1 text-[11px] font-bold text-white">
+                        {activeFiltersCount}
+                      </span>
+                    ) : null}
+                  </button>
+                  <PatientFiltersPopover
+                    open={filterPopoverOpen}
+                    onClose={() => setFilterPopoverOpen(false)}
+                    anchorRef={filterButtonRef}
+                    ctx={filterCtx}
+                    onFilterChange={onFilterChange}
+                  />
+                </div>
+                {canCreatePacientes ? (
+                  <button
+                    type="button"
+                    onClick={onCreatePatient}
+                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
+                  </button>
+                ) : null}
               </div>
 
               {/* Mobile: sort compacto + Filtros */}
@@ -751,12 +730,12 @@ export function PatientsListView({
                   className="relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#475569] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc]"
                   aria-label={
                     activeFiltersCount > 0
-                      ? `Filtros, ${activeFiltersCount} ativos`
-                      : 'Filtros'
+                      ? `Filtrar, ${activeFiltersCount} ativos`
+                      : 'Filtrar'
                   }
                 >
                   <Filter className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-                  Filtros
+                  Filtrar
                   {activeFiltersCount > 0 ? (
                     <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#00a88e] px-1 text-[11px] font-bold text-white">
                       {activeFiltersCount}
@@ -765,10 +744,7 @@ export function PatientsListView({
                 </button>
               </div>
 
-              {/* Desktop: chips inline */}
-              <div className="hidden flex-wrap items-center gap-2 px-4 pb-3 lg:flex">
-                <PatientListFilterChips {...filterChipProps} />
-              </div>
+              <PatientActiveFilterChips ctx={filterCtx} onFilterChange={onFilterChange} />
             </div>
           </div>
 
@@ -852,7 +828,6 @@ export function PatientsListView({
                   previewProcedures={previewProcedures}
                   loadingPreviewProcedures={loadingPreviewProcedures}
                   onStartAttendance={onStartAttendance}
-                  previewHasExistingAnamnese={previewHasExistingAnamnese}
                   previewAnamneseLoading={previewAnamneseLoading}
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
                   shellClassName="patient-preview-sheet w-full border-0 shadow-none"
@@ -880,7 +855,6 @@ export function PatientsListView({
                   previewProcedures={previewProcedures}
                   loadingPreviewProcedures={loadingPreviewProcedures}
                   onStartAttendance={onStartAttendance}
-                  previewHasExistingAnamnese={previewHasExistingAnamnese}
                   previewAnamneseLoading={previewAnamneseLoading}
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
                   shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
@@ -905,7 +879,6 @@ export function PatientsListView({
                 previewProcedures={previewProcedures}
                 loadingPreviewProcedures={loadingPreviewProcedures}
                 onStartAttendance={onStartAttendance}
-                previewHasExistingAnamnese={previewHasExistingAnamnese}
                 previewAnamneseLoading={previewAnamneseLoading}
                 captureProfileNavSnapshot={captureProfileNavSnapshot}
                 shellClassName="w-full min-w-0"
@@ -927,7 +900,8 @@ export function PatientsListView({
       <PatientFiltersSheet
         open={filterSheetOpen}
         onClose={() => setFilterSheetOpen(false)}
-        chipProps={filterChipProps}
+        ctx={filterCtx}
+        onFilterChange={onFilterChange}
       />
     </div>
   );

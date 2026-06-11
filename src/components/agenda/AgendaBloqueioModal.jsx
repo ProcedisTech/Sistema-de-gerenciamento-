@@ -1,24 +1,24 @@
 import React from 'react';
 import { Loader2, X } from 'lucide-react';
-import { ProfissionalPills } from './ProfissionalPills.jsx';
+import { ProfissionalSearchInput } from './ProfissionalSearchInput.jsx';
+import { CalendarioMensal } from './CalendarioMensal.jsx';
 import { DuracaoPills } from './DuracaoPills.jsx';
-import { addMinutesToTime } from '../../utils/agendaMapping.js';
 
 function FieldWrap({ error, children }) {
   return (
     <div className="space-y-1">
       {children}
-      {error ? <p className="text-xs font-medium text-red-600">{error}</p> : null}
+      {error ? <p className="text-[11px] font-bold text-red-600">{error}</p> : null}
     </div>
   );
 }
 
 function FieldLabel({ children, required }) {
   return (
-    <label className="mb-1.5 block text-[12px] font-bold text-gray-700">
+    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
       {children}
       {required ? <span className="text-red-500"> *</span> : null}
-    </label>
+    </p>
   );
 }
 
@@ -40,114 +40,124 @@ export function AgendaBloqueioModal({ agenda }) {
   const form = agenda.bloqueioForm || {};
   const errors = agenda.bloqueioFormErrors || {};
   const saving = Boolean(agenda.submittingBloqueio);
+  const verifying = Boolean(agenda.bloqueioSubmitVerifying);
+  const conflictLoading = Boolean(agenda.bloqueioConflitosLoading);
+  const conflictCount = agenda.bloqueioConflitosCount;
+  const conflictFetchError = Boolean(agenda.bloqueioConflitosFetchError);
+  const resyncMessage = String(agenda.bloqueioConflitosResyncMessage || '').trim();
+  const roleId = String(agenda.roleUserIdAgenda || '').trim();
+  const diaInteiro = Boolean(form.diaInteiro);
 
-  const onDuracaoChange = (min) => {
-    agenda.updateBloqueioForm('duracaoMin', min);
-    const hi = String(form.horaInicio || '09:00').slice(0, 5);
-    agenda.updateBloqueioForm('horaFim', addMinutesToTime(hi, min));
-  };
+  const showConflictNotice = roleId && form.data;
+  const conflictKnown = typeof conflictCount === 'number' && !conflictLoading && !conflictFetchError;
+  const destructiveCount = conflictKnown && conflictCount > 0;
+  const primaryLabel =
+    destructiveCount && !saving && !verifying
+      ? `Cancelar ${conflictCount} e bloquear`
+      : 'Salvar';
+  const primaryBusyLabel = verifying ? 'Verificando…' : 'Salvando…';
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bloqueio-modal-title"
+    >
       <button
         type="button"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-black/50"
         onClick={agenda.closeBloqueioModal}
         aria-label="Fechar modal"
+        tabIndex={-1}
       />
-      <div
-        role="dialog"
-        aria-labelledby="bloqueio-modal-title"
-        className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-      >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 p-5">
+      <div className="relative flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-100 px-6 py-4">
           <div className="min-w-0">
-            <h3 id="bloqueio-modal-title" className="text-[18px] font-black text-gray-900">
+            <h2 id="bloqueio-modal-title" className="font-display text-lg font-black text-ink-900">
               Bloquear horário
-            </h3>
-            <p className="mt-1 text-[12px] font-medium text-gray-500">
+            </h2>
+            <p className="mt-1 text-sm text-ink-500">
               O horário ficará indisponível para novos agendamentos.
             </p>
           </div>
           <button
             type="button"
             onClick={agenda.closeBloqueioModal}
-            className="rounded-xl p-2 text-gray-500 hover:bg-gray-50"
+            className="rounded-xl p-2 text-ink-500 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500"
             aria-label="Fechar"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
           <FieldWrap error={errors.profissional}>
             <FieldLabel required>Profissional</FieldLabel>
-            <ProfissionalPills
-              profissionais={agenda.equipeList}
-              value={agenda.roleUserIdAgenda}
-              onChange={agenda.setRoleUserIdAgenda}
-              loading={agenda.equipeLoading}
-              error={agenda.equipeError}
+            <ProfissionalSearchInput
+              roleUserIdAgenda={agenda.roleUserIdAgenda}
+              equipeList={agenda.equipeList}
+              equipeLoading={agenda.equipeLoading}
+              equipeError={agenda.equipeError}
+              onSelecionar={(id) => agenda.setRoleUserIdAgenda(id)}
+              onClear={() => agenda.setRoleUserIdAgenda('')}
             />
           </FieldWrap>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-ink-700">
+            <input
+              type="checkbox"
+              checked={diaInteiro}
+              onChange={(e) => agenda.updateBloqueioForm('diaInteiro', e.target.checked)}
+              className="rounded border-ink-300 text-vivid-teal-600 focus:ring-vivid-teal-500"
+            />
+            Bloquear o dia inteiro
+          </label>
 
           <FieldWrap error={errors.data}>
             <FieldLabel required>Data</FieldLabel>
-            <input
-              type="date"
-              min={agenda.todayIso}
-              value={form.data || ''}
-              onChange={(e) => agenda.updateBloqueioForm('data', e.target.value)}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-            />
+            {roleId ? (
+              <div className="min-h-[280px]">
+                <CalendarioMensal
+                  heatmap={agenda.bloqueioCalendarioHeatmap}
+                  loading={agenda.dispMonthLoading}
+                  error={agenda.dispMonthError}
+                  onPrevMonth={agenda.goDispPrevMonth}
+                  onNextMonth={agenda.goDispNextMonth}
+                  onRetry={agenda.retryBloqueioDispMonth}
+                  diaSelecionado={form.data}
+                  onSelecionarDia={agenda.selectBloqueioDia}
+                  showDensityLegend
+                />
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-ink-200 bg-ink-50 px-4 py-8 text-center text-sm text-ink-500">
+                Selecione um profissional para ver o calendário.
+              </p>
+            )}
           </FieldWrap>
 
-          <FieldWrap error={errors.horaInicio}>
-            <FieldLabel required>Início</FieldLabel>
-            <input
-              type="time"
-              value={String(form.horaInicio || '').slice(0, 5)}
-              onChange={(e) => {
-                const hi = e.target.value;
-                agenda.updateBloqueioForm('horaInicio', hi);
-                if (!form.useCustomEnd) {
-                  agenda.updateBloqueioForm(
-                    'horaFim',
-                    addMinutesToTime(hi, Number(form.duracaoMin) || 60)
-                  );
-                }
-              }}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
-            />
-          </FieldWrap>
-
-          <div>
-            <label className="mb-2 flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-gray-700">
-              <input
-                type="checkbox"
-                checked={Boolean(form.useCustomEnd)}
-                onChange={(e) => agenda.updateBloqueioForm('useCustomEnd', e.target.checked)}
-                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-              />
-              Horário personalizado (informar fim)
-            </label>
-            {form.useCustomEnd ? (
-              <FieldWrap error={errors.horaFim}>
-                <FieldLabel required>Fim</FieldLabel>
+          {!diaInteiro ? (
+            <>
+              <FieldWrap error={errors.horaInicio}>
+                <FieldLabel required>Início</FieldLabel>
                 <input
                   type="time"
-                  value={String(form.horaFim || '').slice(0, 5)}
-                  onChange={(e) => agenda.updateBloqueioForm('horaFim', e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] font-medium text-gray-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+                  value={String(form.horaInicio || '').slice(0, 5)}
+                  onChange={(e) => agenda.updateBloqueioForm('horaInicio', e.target.value)}
+                  className="w-full rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-medium text-ink-900 outline-none focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
                 />
               </FieldWrap>
-            ) : (
+
               <FieldWrap error={errors.duracaoMin}>
                 <FieldLabel required>Duração</FieldLabel>
-                <DuracaoPills value={form.duracaoMin} onChange={onDuracaoChange} />
+                <DuracaoPills
+                  value={form.duracaoMin}
+                  onChange={(min) => agenda.updateBloqueioForm('duracaoMin', min)}
+                />
               </FieldWrap>
-            )}
-          </div>
+            </>
+          ) : null}
 
           <FieldWrap error={errors.motivo}>
             <FieldLabel required>Motivo</FieldLabel>
@@ -156,17 +166,45 @@ export function AgendaBloqueioModal({ agenda }) {
               value={form.motivo || ''}
               onChange={(e) => agenda.updateBloqueioForm('motivo', e.target.value)}
               placeholder="Ex.: almoço, consulta externa, férias"
-              className="w-full resize-y rounded-xl border border-gray-200 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              maxLength={500}
+              className="w-full resize-y rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-900 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
             />
           </FieldWrap>
+
+          {showConflictNotice ? (
+            <div className="space-y-2">
+              {conflictLoading ? (
+                <p className="text-sm text-ink-500">Calculando…</p>
+              ) : resyncMessage ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  {resyncMessage}
+                </p>
+              ) : conflictFetchError || conflictCount == null ? (
+                <p className="text-sm text-ink-500">
+                  Não foi possível estimar quantos agendamentos serão cancelados. O bloqueio ainda
+                  pode cancelar conflitos existentes.
+                </p>
+              ) : destructiveCount ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  Isto cancelará <strong>{conflictCount}</strong> agendamento
+                  {conflictCount === 1 ? '' : 's'} neste horário. Os pacientes serão notificados
+                  conforme o fluxo da clínica.
+                </p>
+              ) : (
+                <p className="text-sm text-ink-500">
+                  Nenhum agendamento será cancelado neste intervalo.
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 p-5">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-ink-100 px-6 py-4">
           <button
             type="button"
             onClick={agenda.closeBloqueioModal}
             disabled={saving}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-[13px] font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-bold text-ink-600 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-400 disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -174,14 +212,19 @@ export function AgendaBloqueioModal({ agenda }) {
             type="button"
             onClick={() => void agenda.saveBloqueio()}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-5 py-2.5 text-[13px] font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-vivid-teal-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-vivid-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Salvar
+            {saving || verifying ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {primaryBusyLabel}
+              </>
+            ) : (
+              primaryLabel
+            )}
           </button>
         </div>
       </div>
     </div>
   );
 }
-

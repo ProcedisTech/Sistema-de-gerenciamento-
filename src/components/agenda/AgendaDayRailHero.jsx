@@ -31,10 +31,11 @@ export function AgendaDayRailHero({ selectedDay, todayIso, appointments, compact
   const stats = getHeroStats(appointments);
   const useDense = dense && !compact;
 
-  const daySizeClass = compact ? 'text-[64px]' : useDense ? 'text-[72px]' : 'text-[96px]';
-  const glowSizeClass = compact ? 'h-[140px] w-[140px]' : useDense ? 'h-[180px] w-[180px]' : 'h-[220px] w-[220px]';
-  const paddingClass = compact ? 'px-4 pb-4 pt-4' : useDense ? 'px-5 pb-4 pt-5' : 'px-6 pb-5 pt-[22px]';
-  const indicatorClass = useDense ? 'text-[10px] px-2 py-1' : 'text-[11px] px-2.5 py-1.5';
+  const daySizeClass = compact ? 'text-[56px]' : useDense ? 'text-[52px]' : 'text-[64px]';
+  const glowSizeClass = compact ? 'h-[120px] w-[120px]' : useDense ? 'h-[130px] w-[130px]' : 'h-[160px] w-[160px]';
+  const paddingClass = compact ? 'px-4 pb-3 pt-3' : useDense ? 'px-4 pb-3 pt-3' : 'px-5 pb-3.5 pt-3.5';
+  const indicatorClass = useDense || compact ? 'text-[9px] px-1.5 py-0.5' : 'text-[10px] px-2 py-1';
+  const statsValueClass = useDense || compact ? 'text-[17px]' : 'text-[19px]';
 
   return (
     <header className="relative shrink-0 overflow-hidden text-white">
@@ -49,51 +50,53 @@ export function AgendaDayRailHero({ selectedDay, todayIso, appointments, compact
       />
 
       <div className={`relative z-[1] ${paddingClass}`}>
-        <div className="flex items-center gap-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-white/70">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-white/70">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full bg-vivid-teal-300 ${isToday ? 'animate-agenda-live-pulse' : ''}`}
+              aria-hidden
+            />
+            <span className="truncate">
+              {weekday}
+              {isToday ? ' · ao vivo' : ''}
+            </span>
+          </div>
           <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full bg-vivid-teal-300 ${isToday ? 'animate-agenda-live-pulse' : ''}`}
-            aria-hidden
-          />
-          <span>
-            {weekday}
-            {isToday ? ' · ao vivo' : ''}
+            className={`shrink-0 rounded-full border border-white/18 bg-white/12 font-mono text-white ${indicatorClass}`}
+          >
+            {indicator}
           </span>
         </div>
 
-        <div className="mt-3 flex items-end gap-3.5">
+        <div className="mt-1.5 flex items-end gap-2.5">
           <span
             className={`font-display font-extrabold leading-[0.86] text-white ${daySizeClass}`}
             style={{ fontVariationSettings: '"wdth" 90' }}
           >
             {Number(dayNum) || dayNum}
           </span>
-          <div className="mb-1 flex min-w-0 flex-col">
+          <div className="mb-0.5 flex min-w-0 flex-col">
             <span
-              className={`font-display font-bold leading-tight ${useDense ? 'text-[20px]' : 'text-[22px]'}`}
+              className={`font-display font-bold leading-tight ${useDense || compact ? 'text-base' : 'text-lg'}`}
               style={{ fontVariationSettings: '"wdth" 80' }}
             >
               {formatHeroMonth(selectedDay)}
             </span>
-            <span className={`font-mono text-white/60 ${useDense ? 'text-[12px]' : 'text-[13px]'}`}>
+            <span className={`font-mono text-white/60 ${useDense || compact ? 'text-[11px]' : 'text-[12px]'}`}>
               {formatHeroWeekLine(selectedDay)}
             </span>
           </div>
-          <span
-            className={`mb-2 ml-auto shrink-0 rounded-full border border-white/18 bg-white/12 font-mono text-white ${indicatorClass}`}
-          >
-            {indicator}
-          </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-4 border-t border-white/14 pt-2.5">
+        <div className="mt-2 grid grid-cols-2 gap-3 border-t border-white/14 pt-2">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/60">Agendados</p>
             <p
-              className="font-display text-[22px] font-bold text-white"
+              className={`font-display font-bold text-white ${statsValueClass}`}
               style={{ fontVariationSettings: '"wdth" 88' }}
             >
               {stats.agendados}
-              <small className="ml-1 font-sans text-[13px] font-normal text-white/62">
+              <small className="ml-1 font-sans text-[11px] font-normal text-white/62">
                 sess{stats.agendados === 1 ? 'ão' : 'ões'}
               </small>
             </p>
@@ -101,7 +104,7 @@ export function AgendaDayRailHero({ selectedDay, todayIso, appointments, compact
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/60">Cancelados</p>
             <p
-              className="font-display text-[22px] font-bold text-white"
+              className={`font-display font-bold text-white ${statsValueClass}`}
               style={{ fontVariationSettings: '"wdth" 88' }}
             >
               {stats.cancelados}

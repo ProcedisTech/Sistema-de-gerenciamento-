@@ -18,6 +18,11 @@ function primaryButtonClass(heightClass) {
   return `inline-flex ${heightClass} w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br from-vivid-teal-500 to-vivid-teal-600 px-3 text-[13px] font-medium text-white shadow-agenda-glow transition-all duration-150 ease-out motion-reduce:transition-none hover:-translate-y-px hover:brightness-[1.06] ${BTN_FOCUS}`;
 }
 
+/**
+ * Botões do rail. Em compromisso multi-procedimento, o pai deve passar callbacks que
+ * recebem o entry/group (ex.: onConfirmar={() => onConfirmar(group)}), não confiar
+ * no prop `appointment` sozinho.
+ */
 export function AgendaRailCardActions({
   appointment,
   actions,

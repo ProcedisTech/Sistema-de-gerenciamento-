@@ -106,6 +106,38 @@ export async function fetchDashboardAppointmentsForRange(startIso, endIso) {
   return sortByDateTime(rows);
 }
 
+/** POST bloquear-periodo — cancela conflitos + cria bloqueio (sem statusAgendaCodigo/diaInteiro). */
+export function buildAgendaBloquearPeriodoBody({
+  dataAgendamento,
+  horaInicio,
+  horaFim,
+  profissionalRoleUserId,
+  tipoProcedimentoId,
+  motivoCancelamentoId,
+  motivoCancelamentoTexto,
+  observacaoBloqueio,
+}) {
+  const hi = String(horaInicio || '09:00').slice(0, 5);
+  const hf = String(horaFim || addMinutesToTime(hi, 60)).slice(0, 5);
+  const obs =
+    observacaoBloqueio != null && String(observacaoBloqueio).trim()
+      ? String(observacaoBloqueio).trim().slice(0, 500)
+      : null;
+  return {
+    dataAgendamento,
+    horaInicio: hi.length === 5 ? `${hi}:00` : hi,
+    horaFim: hf.length === 5 ? `${hf}:00` : hf,
+    profissionalRoleUserId: String(profissionalRoleUserId || '').trim(),
+    tipoProcedimentoId: String(tipoProcedimentoId || '').trim(),
+    motivoCancelamentoId: String(motivoCancelamentoId || '').trim(),
+    motivoCancelamentoTexto:
+      motivoCancelamentoTexto != null && String(motivoCancelamentoTexto).trim()
+        ? String(motivoCancelamentoTexto).trim()
+        : null,
+    ...(obs ? { observacaoBloqueio: obs } : {}),
+  };
+}
+
 /** POST de bloqueio de horário (sem paciente/catálogo). */
 export function buildAgendaBloqueioCreateBody({
   dataAgendamento,
@@ -140,6 +172,7 @@ export function buildAgendaCreateBody({
   pacienteId,
   catalogoProcedimentoSaudeId,
   agendaIdOrigem,
+  planejamentoItemId,
 }) {
   const hi = String(horaInicio || '09:00').slice(0, 5);
   const mins = Number(duracaoMin) || 45;
@@ -157,9 +190,14 @@ export function buildAgendaCreateBody({
     agendaIdOrigem != null && String(agendaIdOrigem).trim()
       ? { agendaIdOrigem: String(agendaIdOrigem).trim() }
       : {};
+  const planejamento =
+    planejamentoItemId != null && String(planejamentoItemId).trim()
+      ? { planejamentoItemId: String(planejamentoItemId).trim() }
+      : {};
   return {
     ...base,
     ...origem,
+    ...planejamento,
     observacao: observacao != null && String(observacao).trim() ? String(observacao).trim().slice(0, 500) : undefined,
   };
 }

@@ -5,15 +5,10 @@ import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
 import { CalendarioMensal } from './CalendarioMensal.jsx';
 import { PainelA_SlotsHorario } from './PainelA_SlotsHorario.jsx';
-import { ProcedimentosMultiSeletor } from './ProcedimentosMultiSeletor.jsx';
-import { ProfissionalSeletor } from './ProfissionalSeletor.jsx';
-import { PainelB_SeletorProcedimento } from './PainelB_SeletorProcedimento.jsx';
-import { PainelC_SeletorProfissional } from './PainelC_SeletorProfissional.jsx';
+import { ProcedimentoSearchInput } from './ProcedimentoSearchInput.jsx';
+import { ProfissionalSearchInput } from './ProfissionalSearchInput.jsx';
 import { AgendaFormDataHoraSheet } from './AgendaFormDataHoraSheet.jsx';
 import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
-
-// painel ativo no lado direito: 'A' = slots, 'B' = procedimentos, 'C' = profissional
-const PAINEL = { A: 'A', B: 'B', C: 'C' };
 
 function resolveProfissionalNome(agenda) {
   const id = String(agenda.roleUserIdAgenda || '').trim();
@@ -44,9 +39,7 @@ function buildResumo({ form, agenda, duracaoTotalMin, procedimentosSelecionados 
 export function AgendaFormModal({ agenda, onExcluirClick }) {
   const { ehProfissionalClinico, roleUserId: roleLogadoId } = useUsuarioLogado();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const [painelAtivo, setPainelAtivo] = useState(PAINEL.A);
   const [dispSheetOpen, setDispSheetOpen] = useState(false);
-  const [horaPendentePainelC, setHoraPendentePainelC] = useState('');
   const [obsAberta, setObsAberta] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resultadosSalvar, setResultadosSalvar] = useState(null);
@@ -168,7 +161,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
       agenda.updateForm('data', iso);
       agenda.updateForm('horaInicio', '');
       setResultadosSalvar(null);
-      setPainelAtivo(PAINEL.A);
     },
     [agenda]
   );
@@ -180,7 +172,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
         agenda.setRoleUserIdAgenda(profissional.roleUserId);
       }
       setResultadosSalvar(null);
-      setPainelAtivo(PAINEL.A);
     },
     [agenda]
   );
@@ -192,30 +183,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
       setDispSheetOpen(false);
     },
     [handleSelecionarSlotDireto]
-  );
-
-  const handleAbrirPainelC = useCallback((hora) => {
-    setHoraPendentePainelC(hora);
-    setPainelAtivo(PAINEL.C);
-  }, []);
-
-  // No sheet mobile, abrir o PainelC significa fechar o sheet e mostrar o picker de
-  // profissional na área mobile do modal (o sheet só tem calendário + slots).
-  const handleSheetAbrirPainelC = useCallback((hora) => {
-    handleAbrirPainelC(hora);
-    setDispSheetOpen(false);
-  }, [handleAbrirPainelC]);
-
-  const handleSelecionarProfissional = useCallback(
-    ({ hora, profissional }) => {
-      if (hora) agenda.updateForm('horaInicio', hora);
-      if (profissional?.roleUserId) {
-        agenda.setRoleUserIdAgenda(profissional.roleUserId);
-      }
-      setHoraPendentePainelC('');
-      setPainelAtivo(PAINEL.A);
-    },
-    [agenda]
   );
 
   // ── Foco inicial ao abrir ───────────────────────────────────────────────────
@@ -257,16 +224,12 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (painelAtivo !== PAINEL.A) {
-          setPainelAtivo(PAINEL.A);
-        } else {
-          agenda.closeModal();
-        }
+        agenda.closeModal();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [agenda, painelAtivo]);
+  }, [agenda]);
 
   if (!agenda.modalMode) return null;
 
@@ -349,11 +312,12 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
                 Procedimentos <span className="text-red-500">*</span>
               </p>
-              <ProcedimentosMultiSeletor
-                procedimentos={procedimentosSelecionados}
+              <ProcedimentoSearchInput
+                procedimentoOptions={agenda.procedimentoOptions}
+                procedimentosSelecionados={procedimentosSelecionados}
+                onToggle={handleToggleProc}
                 onRemover={handleRemoverProc}
                 onMudarDuracao={handleMudarDuracao}
-                onAbrirPainelB={() => setPainelAtivo(PAINEL.B)}
                 readOnly={isReagendar}
               />
               {agenda.formErrors?.catalogoProcedimentoSaudeIds && (
@@ -366,16 +330,16 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             {/* Profissional */}
             <div>
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-                Profissional
+                Profissional <span className="text-red-500">*</span>
               </p>
-              <ProfissionalSeletor
+              <ProfissionalSearchInput
                 roleUserIdAgenda={agenda.roleUserIdAgenda}
                 equipeList={agenda.equipeList}
+                equipeLoading={agenda.equipeLoading}
+                equipeError={agenda.equipeError}
+                onSelecionar={(id) => agenda.setRoleUserIdAgenda(id)}
+                onClear={() => agenda.setRoleUserIdAgenda('')}
                 locked={isReagendar}
-                onAbrirPainelC={() => {
-                  setHoraPendentePainelC('');
-                  setPainelAtivo(PAINEL.C);
-                }}
               />
             </div>
           </div>
@@ -391,15 +355,15 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
             <div className="flex h-full min-h-0 flex-col overflow-hidden border-b border-ink-100 px-6 py-4 lg:border-b-0 lg:border-r lg:py-5">
               <div className="flex min-h-0 flex-1 flex-col">
                 <CalendarioMensal
-                  heatmap={agenda.dispHeatmap}
-                  loading={agenda.dispMonthLoading}
-                  error={agenda.dispMonthError}
+                  heatmap={agenda.dispCalendarioHeatmap}
+                  loading={Boolean(roleUserIdFiltro) && agenda.dispMonthLoading}
+                  error={roleUserIdFiltro ? agenda.dispMonthError : ''}
                   onPrevMonth={agenda.goDispPrevMonth}
                   onNextMonth={agenda.goDispNextMonth}
                   onRetry={agenda.retryDispMonth}
                   diaSelecionado={isReagendar ? undefined : agenda.form.data}
                   onSelecionarDia={handleSelecionarDia}
-                  noProfissional={!roleUserIdFiltro}
+                  showDensityLegend={Boolean(roleUserIdFiltro)}
                 />
               </div>
 
@@ -430,17 +394,13 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               </div>
             </div>
 
-            {/* Coluna direita: painéis A / B / C — scroll isolado, não afeta altura do calendário */}
+            {/* Coluna direita: exclusivamente horários disponíveis — scroll isolado, não afeta altura do calendário */}
             <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 py-5 lg:py-6">
-              {/* Rótulo do painel */}
               <p className="mb-3 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                {painelAtivo === PAINEL.A && 'Horários disponíveis'}
-                {painelAtivo === PAINEL.B && 'Selecionar procedimento'}
-                {painelAtivo === PAINEL.C && 'Escolher profissional'}
+                Horários disponíveis
               </p>
 
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-              {painelAtivo === PAINEL.A && (
                 <PainelA_SlotsHorario
                   diaSelecionado={agenda.form.data}
                   roleUserIdFiltro={roleUserIdFiltro}
@@ -448,99 +408,56 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                   horaSelecionada={agenda.form.horaInicio}
                   profissionalFixado={profissionalFixado}
                   onSelecionarSlot={handleSelecionarSlotDireto}
-                  onAbrirPainelC={handleAbrirPainelC}
                 />
-              )}
-
-              {painelAtivo === PAINEL.B && (
-                <PainelB_SeletorProcedimento
-                  procedimentoOptions={agenda.procedimentoOptions}
-                  procedimentosSelecionados={procedimentosSelecionados}
-                  onToggle={handleToggleProc}
-                  onVoltar={() => setPainelAtivo(PAINEL.A)}
-                />
-              )}
-
-              {painelAtivo === PAINEL.C && (
-                <PainelC_SeletorProfissional
-                  equipeList={agenda.equipeList}
-                  equipeLoading={agenda.equipeLoading}
-                  equipeError={agenda.equipeError}
-                  horaSelecionandoPendente={horaPendentePainelC}
-                  onSelecionarProfissional={handleSelecionarProfissional}
-                  onVoltar={() => setPainelAtivo(PAINEL.A)}
-                />
-              )}
               </div>
             </div>
           </div>
         </div>
         )}
 
-        {/* ── Corpo mobile (<lg): seletores já ficam acima; aqui vai o picker de
-            procedimento/profissional (quando aberto) OU o botão que abre o sheet de
-            data/horário. CalendarioMensal/PainelA NÃO montam aqui — só no sheet. ── */}
+        {/* ── Corpo mobile (<lg): seletores já ficam acima; aqui vai o botão que abre
+            o sheet de data/horário. CalendarioMensal/PainelA NÃO montam aqui — só no sheet. ── */}
         {!isDesktop && (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
-            {painelAtivo === PAINEL.B ? (
-              <PainelB_SeletorProcedimento
-                procedimentoOptions={agenda.procedimentoOptions}
-                procedimentosSelecionados={procedimentosSelecionados}
-                onToggle={handleToggleProc}
-                onVoltar={() => setPainelAtivo(PAINEL.A)}
-              />
-            ) : painelAtivo === PAINEL.C ? (
-              <PainelC_SeletorProfissional
-                equipeList={agenda.equipeList}
-                equipeLoading={agenda.equipeLoading}
-                equipeError={agenda.equipeError}
-                horaSelecionandoPendente={horaPendentePainelC}
-                onSelecionarProfissional={handleSelecionarProfissional}
-                onVoltar={() => setPainelAtivo(PAINEL.A)}
-              />
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setDispSheetOpen(true)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 ${
-                    ctaPreenchido
-                      ? 'border-vivid-teal-300 bg-vivid-teal-50'
-                      : 'border-ink-200 bg-white hover:border-vivid-teal-200 hover:bg-vivid-teal-50'
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Calendar className={`h-4 w-4 shrink-0 ${ctaPreenchido ? 'text-vivid-teal-600' : 'text-ink-400'}`} />
-                    <span className={`truncate text-sm font-semibold ${ctaPreenchido ? 'text-vivid-teal-700' : 'text-ink-600'}`}>
-                      {ctaLabel}
-                    </span>
-                  </span>
-                  <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-ink-400" />
-                </button>
+            <button
+              type="button"
+              onClick={() => setDispSheetOpen(true)}
+              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500 ${
+                ctaPreenchido
+                  ? 'border-vivid-teal-300 bg-vivid-teal-50'
+                  : 'border-ink-200 bg-white hover:border-vivid-teal-200 hover:bg-vivid-teal-50'
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Calendar className={`h-4 w-4 shrink-0 ${ctaPreenchido ? 'text-vivid-teal-600' : 'text-ink-400'}`} />
+                <span className={`truncate text-sm font-semibold ${ctaPreenchido ? 'text-vivid-teal-700' : 'text-ink-600'}`}>
+                  {ctaLabel}
+                </span>
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-ink-400" />
+            </button>
 
-                {/* Observações colapsável (mobile) */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setObsAberta((v) => !v)}
-                    className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
-                  >
-                    <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
-                    {obsAberta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  </button>
-                  {obsAberta && (
-                    <textarea
-                      value={agenda.form.observacao || ''}
-                      onChange={(e) => agenda.updateForm('observacao', e.target.value)}
-                      maxLength={500}
-                      rows={4}
-                      placeholder="Informações adicionais sobre o atendimento..."
-                      className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
-                    />
-                  )}
-                </div>
-              </>
-            )}
+            {/* Observações colapsável (mobile) */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setObsAberta((v) => !v)}
+                className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
+              >
+                <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
+                {obsAberta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {obsAberta && (
+                <textarea
+                  value={agenda.form.observacao || ''}
+                  onChange={(e) => agenda.updateForm('observacao', e.target.value)}
+                  maxLength={500}
+                  rows={4}
+                  placeholder="Informações adicionais sobre o atendimento..."
+                  className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
+                />
+              )}
+            </div>
           </div>
         )}
 
@@ -621,16 +538,15 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           duracaoTotalMin={duracaoTotalMin}
           horaSelecionada={agenda.form.horaInicio}
           profissionalFixado={profissionalFixado}
-          heatmap={agenda.dispHeatmap}
-          loading={agenda.dispMonthLoading}
-          error={agenda.dispMonthError}
+          heatmap={agenda.dispCalendarioHeatmap}
+          loading={Boolean(roleUserIdFiltro) && agenda.dispMonthLoading}
+          error={roleUserIdFiltro ? agenda.dispMonthError : ''}
           onPrevMonth={agenda.goDispPrevMonth}
           onNextMonth={agenda.goDispNextMonth}
           onRetry={agenda.retryDispMonth}
-          noProfissional={!roleUserIdFiltro}
+          showDensityLegend={Boolean(roleUserIdFiltro)}
           onSelecionarDia={handleSelecionarDia}
           onSelecionarSlot={handleSheetSelectSlot}
-          onAbrirPainelC={handleSheetAbrirPainelC}
           onCancel={() => setDispSheetOpen(false)}
         />
       )}

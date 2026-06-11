@@ -669,6 +669,43 @@ export const pacientesGaleriaApi = {
 };
 
 /**
+ * Plano de tratamento / mapeamento facial (PlanejamentoController).
+ * @see plataforma-procedimentos — /api/v1/planejamentos
+ */
+export const planejamentosApi = {
+  criar: (body) =>
+    request('/api/v1/planejamentos', { method: 'POST', body: JSON.stringify(body ?? {}) }),
+  listarPorPaciente: (pacienteId) =>
+    request(`/api/v1/planejamentos/paciente/${encodeURIComponent(String(pacienteId))}`),
+  detalhe: (planejamentoId) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}`),
+  ativar: (planejamentoId) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/ativar`, {
+      method: 'PUT',
+    }),
+  adicionarItem: (planejamentoId, body) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/itens`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
+  atualizarItem: (itemId, body) =>
+    request(`/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}`, {
+      method: 'PUT',
+      body: JSON.stringify(body ?? {}),
+    }),
+  removerItem: (itemId) =>
+    requestDelete(`/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}`),
+  salvarPontosVista: (itemId, vistaCodigo, pontos) =>
+    request(
+      `/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}/pontos?vista=${encodeURIComponent(String(vistaCodigo))}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ pontos: Array.isArray(pontos) ? pontos : [] }),
+      },
+    ),
+};
+
+/**
  * Alertas manuais do paciente (CRUD próprio ao cadastro manual).
  * Não confundir com alertas inferidos pela anamnese (somente front + anamneseApi).
  *
@@ -809,6 +846,17 @@ export const agendasApi = {
   create: (data, opts = {}) => {
     const qs = opts.forcar ? '?forcar=true' : '';
     return request(`/api/v1/agendas${qs}`, { method: 'POST', body: JSON.stringify(data) });
+  },
+  /**
+   * Bloqueia período cancelando conflitos na mesma transação (N-cancel).
+   * @returns {Promise<{ bloqueio: object, quantidadeCancelada: number, idsCancelados: string[] }>}
+   */
+  bloquearPeriodo: (data, opts = {}) => {
+    const qs = opts.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas/bloquear-periodo${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
   update: (id, data, opts = {}) => {
     const qs = opts.forcar ? '?forcar=true' : '';
@@ -1308,6 +1356,77 @@ export const auditoriaApi = {
     if (opts.suspeito !== undefined) params.set('suspeito', String(opts.suspeito));
     const qs = params.toString();
     return request(`/api/v1/auditoria${qs ? `?${qs}` : ''}`);
+  },
+};
+
+// ── Perfil Clínico do Paciente ─────────────────────────────
+/**
+ * Perfil clínico persistente do paciente (alergias, medicamentos, antecedentes).
+ * Distinto de `perfilApi` (orientações pós-procedimento).
+ */
+export const perfilClinicoApi = {
+  /**
+   * Busca perfil clínico do paciente.
+   * @param {string} pacienteId
+   * @returns {Promise<PerfilClinicoResponseDTO>}
+   */
+  get: (pacienteId) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/perfil-clinico`),
+
+  /**
+   * Atualiza perfil clínico (replace-por-seção).
+   * Sempre enviar as 4 listas, mesmo vazias — omitir = back não atualiza; [] = back zera.
+   * @param {string} pacienteId
+   * @param {{ roleUserId: string, alergias: object[], alergiasPrincipioAtivo: object[], medicamentosEmUso: object[], antecedentes: object[] }} body
+   */
+  put: (pacienteId, body) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/perfil-clinico`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+};
+
+// ── Catálogo Clínico (lookup global) ──────────────────────
+/**
+ * Catálogos para autocomplete no perfil clínico. Rotas globais (needsOrg: false).
+ * Sem `q` retorna lista completa de cada catálogo (sem paginação).
+ */
+export const catalogoClinicoApi = {
+  /** Alimentos para alergias alimentares. `q` opcional. */
+  alimentos: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/alimentos${qs}`, { needsOrg: false });
+  },
+
+  /** Princípios ativos para alergias a PA. `q` opcional. */
+  principiosAtivos: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/principios-ativos${qs}`, { needsOrg: false });
+  },
+
+  /** Medicamentos em uso. `q` opcional. */
+  medicamentos: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/medicamentos${qs}`, { needsOrg: false });
+  },
+
+  /**
+   * Antecedentes pessoais. `q` opcional; `sexo` opcional — omitir retorna todos.
+   * @param {string} q
+   * @param {'M'|'F'|null|undefined} sexo
+   */
+  antecedentesPessoais: (q = '', sexo) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (sexo && sexo !== 'N') params.set('sexo', sexo);
+    const qs = params.toString();
+    return request(`/api/v1/catalogo-clinico/antecedentes-pessoais${qs ? `?${qs}` : ''}`, { needsOrg: false });
+  },
+
+  /** Outras alergias (não alimentares e não por PA). `q` opcional. */
+  outrasAlergias: (q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request(`/api/v1/catalogo-clinico/outras-alergias${qs}`, { needsOrg: false });
   },
 };
 

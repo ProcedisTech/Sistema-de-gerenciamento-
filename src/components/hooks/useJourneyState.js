@@ -14,6 +14,7 @@ export const useJourneyState = () => {
   const [queixa, setQueixa] = useState('');
   const [expectativas, setExpectativas] = useState('');
   const [step2AnamneseDraft, setStep2AnamneseDraft] = useState({
+    pacienteId: null,
     fichaSelecionadaId: '',
     fichaDropdownNovo: '',
     respostas: {},
@@ -21,6 +22,12 @@ export const useJourneyState = () => {
     modoVisualizacao: false,
   });
   const [respostasAnamnese, setRespostasAnamnese] = useState({});
+
+  /**
+   * Draft do perfil clínico (Bloco 1) — separado do draft da anamnese da visita.
+   * Shape: { pacienteId: string|null, state: object, isDirty: boolean } | null
+   */
+  const [step2PerfilClinicoDraft, setStep2PerfilClinicoDraft] = useState(null);
 
   // ============ ETAPA 2: AVALIAÇÃO ============
   /** Observações clínicas e expectativas registradas durante a avaliação (antes do upload de fotos). */
@@ -126,6 +133,8 @@ export const useJourneyState = () => {
     setExpectativas,
     step2AnamneseDraft,
     setStep2AnamneseDraft,
+    step2PerfilClinicoDraft,
+    setStep2PerfilClinicoDraft,
     respostasAnamnese,
     setRespostasAnamnese,
     salvarRespostaAnamnese,

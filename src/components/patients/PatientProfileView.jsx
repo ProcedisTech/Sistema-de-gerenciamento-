@@ -5,16 +5,13 @@ import {
   Bell,
   Cake,
   Calendar,
-  CheckCircle2,
   ChevronDown,
   Clock,
   ClipboardList,
-  Filter,
   FileText,
   Image as ImageIcon,
   Loader2,
   Play,
-  Sparkles,
   StickyNote,
   Trash2,
   Pencil,
@@ -34,8 +31,8 @@ import {
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import { convertToWebP } from '../../utils/imageUtils.js';
 import {
   fetchNextAppointmentIsoForPaciente,
   latestProcedureOccurredInstantIso,
@@ -77,9 +74,8 @@ import {
   normalizePacienteGaleriaResponse,
   filterGaleriaItemsForUi,
   groupGaleriaItemsBySession,
-  GALERIA_CATEGORIA_LABELS,
+  formatGaleriaLegendaForUpload,
   itemMesReferenciaISO,
-  formatDataSessaoPtBr,
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
@@ -87,36 +83,7 @@ import {
 } from './GaleriaArquivoImage.jsx';
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
-
-const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'depois', 'outro'];
-
-const GALERIA_SESSAO_CATEGORIA_LABEL_CLASS = {
-  antes: 'text-[#f59e0b]',
-  planejamento: 'text-[#6366f1]',
-  avaliacao: 'text-[#0ea5e9]',
-  depois: 'text-[#22c55e]',
-  outro: 'text-[#94a3b8]',
-};
-
-function formatMesAno(isoDate) {
-  if (!isoDate || isoDate === 'sem-data') return 'Data desconhecida';
-  const [year, month] = isoDate.split('-');
-  const meses = [
-    'Jan',
-    'Fev',
-    'Mar',
-    'Abr',
-    'Mai',
-    'Jun',
-    'Jul',
-    'Ago',
-    'Set',
-    'Out',
-    'Nov',
-    'Dez',
-  ];
-  return `${meses[parseInt(month, 10) - 1]}/${year}`;
-}
+import { GaleriaTab } from './galeria/GaleriaTab.jsx';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -601,22 +568,6 @@ function ModuloFuturoBadge({ children }) {
   );
 }
 
-function monthsSinceDate(isoOrStr) {
-  const d = new Date(isoOrStr);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  let m = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-  if (now.getDate() < d.getDate()) m -= 1;
-  return Math.max(1, m);
-}
-
-function formatDataHoraPtBr(dataHora) {
-  if (!dataHora) return '—';
-  const t = new Date(dataHora);
-  if (Number.isNaN(t.getTime())) return String(dataHora);
-  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-}
-
 /** Data e hora para blocos de assinatura no prontuário (ex.: 16/04/2026, 14:32). */
 function formatDataHoraAssinaturaPtBr(iso) {
   if (!iso) return '—';
@@ -725,11 +676,7 @@ export function PatientProfileView({
   const [editing, setEditing] = useState(null);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
   const [galleryPreview, setGalleryPreview] = useState(null);
-  const [lightboxUrl, setLightboxUrl] = useState(null);
   const [sessoesExpandidas, setSessoesExpandidas] = useState({});
-  const [categoriasExpandidas, setCategoriasExpandidas] = useState({});
-  /** Por categoria na galeria por sessão (api): mostrar todas as fotos após "Ver mais". */
-  const [galeriaCategoriaShowAll, setGaleriaCategoriaShowAll] = useState({});
   const [categoriasEmEdicao, setCategoriasEmEdicao] = useState({});
   const [modoComparar, setModoComparar] = useState(false);
   const [compararSelecionadas, setCompararSelecionadas] = useState({ antes: null, depois: null });
@@ -741,12 +688,11 @@ export function PatientProfileView({
   const [galeriaFilterCategoria, setGaleriaFilterCategoria] = useState('all');
   const [galeriaFilterMes, setGaleriaFilterMes] = useState('all');
   const [galeriaFilterProcedimento, setGaleriaFilterProcedimento] = useState('all');
+  const [galeriaUploadBusy, setGaleriaUploadBusy] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [alertasAnamnese, setAlertasAnamnese] = useState([]);
   const [alertasAlergia, setAlertasAlergia] = useState([]);
   const [alertasAnamneseLoading, setAlertasAnamneseLoading] = useState(false);
-  /** Lista leve de anamneses (mesmo endpoint que AnamneseTab) para decisão na aba Atendimento. */
-  const [anamneseListSummary, setAnamneseListSummary] = useState([]);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [showAllProntuario, setShowAllProntuario] = useState(false);
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
@@ -821,53 +767,6 @@ export function PatientProfileView({
     return null;
   }, [proximoRetornoKpiDisplay]);
 
-  const galeriaSmUp = useMediaQuery('(min-width: 640px)');
-  const galeriaMdUp = useMediaQuery('(min-width: 768px)');
-  const galeriaColsPerRow = galeriaMdUp ? 6 : galeriaSmUp ? 5 : 4;
-
-  const toggleSessao = (sess) => {
-    const key = sess.key;
-    const willOpen = !sessoesExpandidas[key];
-    setSessoesExpandidas((prev) => ({ ...prev, [key]: !prev[key] }));
-    if (willOpen) {
-      const byCat = {};
-      sess.fotos.forEach((foto) => {
-        const c = foto.categoria || 'outro';
-        if (!byCat[c]) byCat[c] = [];
-        byCat[c].push(foto);
-      });
-      setCategoriasExpandidas((cPrev) => {
-        const next = { ...cPrev };
-        ORDEM_CATEGORIAS.forEach((cat) => {
-          if (byCat[cat]?.length) next[`${key}_${cat}`] = true;
-        });
-        return next;
-      });
-    } else {
-      setGaleriaCategoriaShowAll((prev) => {
-        const next = { ...prev };
-        for (const k of Object.keys(next)) {
-          if (k.startsWith(`${key}_`)) delete next[k];
-        }
-        return next;
-      });
-    }
-  };
-
-  const toggleCategoria = (sessKey, cat) => {
-    const key = `${sessKey}_${cat}`;
-    const wasOpen = categoriasExpandidas[key];
-    setCategoriasExpandidas((prev) => ({ ...prev, [key]: !prev[key] }));
-    if (wasOpen) {
-      setGaleriaCategoriaShowAll((prev) => {
-        if (!prev[key]) return prev;
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-    }
-  };
-
   const handleCompararFotoClick = (foto) => {
     const cat = foto.categoria || 'outro';
     if (cat === 'antes') {
@@ -876,6 +775,23 @@ export function PatientProfileView({
       setCompararSelecionadas((prev) => ({ ...prev, depois: foto }));
     }
   };
+
+  const refreshGaleriaFromApi = useCallback(async () => {
+    const id = selectedPatient?.id;
+    if (!id) return;
+    try {
+      const data = await pacientesGaleriaApi.list(id);
+      setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
+      setGaleriaBackend('api');
+    } catch (e) {
+      setApiGaleriaItems([]);
+      setGaleriaBackend('local');
+      const st = e?.status;
+      if (st != null && st !== 401 && st !== 403 && st !== 404) {
+        console.warn('[PatientProfileView] Galeria API:', e.message);
+      }
+    }
+  }, [selectedPatient?.id]);
 
   useEffect(() => {
     if (compararSelecionadas.antes && compararSelecionadas.depois) {
@@ -887,11 +803,8 @@ export function PatientProfileView({
     setGaleriaFilterCategoria('all');
     setGaleriaFilterMes('all');
     setGaleriaFilterProcedimento('all');
-    setAnamneseListSummary([]);
     setProntuarioExpanded({});
     setSessoesExpandidas({});
-    setCategoriasExpandidas({});
-    setGaleriaCategoriaShowAll({});
     setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
     setShowAllProntuario(false);
@@ -1419,7 +1332,6 @@ export function PatientProfileView({
     if (!pacienteId) {
       setAlertasAnamnese([]);
       setAlertasAlergia([]);
-      setAnamneseListSummary([]);
       setAlertasAnamneseLoading(false);
       return undefined;
     }
@@ -1429,7 +1341,6 @@ export function PatientProfileView({
       try {
         const list = await anamneseApi.listPaciente(pacienteId);
         const arr = Array.isArray(list) ? list : [];
-        if (!cancelled) setAnamneseListSummary(arr);
 
         // Manter apenas o preenchimento mais recente por ficha (anamneseId/fichaId)
         const maisRecentePorFicha = new Map();
@@ -1559,30 +1470,6 @@ export function PatientProfileView({
     [sortedApiProcedures],
   );
 
-  const anamneseAtendimentoInfo = useMemo(() => {
-    const rows = (Array.isArray(anamneseListSummary) ? [...anamneseListSummary] : []).filter((r) => r?.dataHora);
-    rows.sort((a, b) => {
-      const ta = new Date(a.dataHora).getTime();
-      const tb = new Date(b.dataHora).getTime();
-      return tb - ta;
-    });
-    const latest = rows[0] || null;
-    if (!latest?.dataHora) return { status: 'nova', latest: null };
-    const t = new Date(latest.dataHora);
-    if (Number.isNaN(t.getTime())) return { status: 'nova', latest: null };
-    const lim = new Date();
-    lim.setMonth(lim.getMonth() - 6);
-    if (t >= lim) return { status: 'recente', latest };
-    return { status: 'vencida', latest };
-  }, [anamneseListSummary]);
-
-  const hasConsultasAnteriores = useMemo(() => {
-    if (detailLoading) return false;
-    const apiCount = Array.isArray(apiProcedures) ? apiProcedures.length : 0;
-    const localCount = Array.isArray(patient.procedures) ? patient.procedures.length : 0;
-    return apiCount > 0 || localCount > 0;
-  }, [detailLoading, apiProcedures, patient.procedures]);
-
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
       const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
@@ -1627,6 +1514,47 @@ export function PatientProfileView({
     },
     [apiProcedures],
   );
+
+  const handleGaleriaUpload = useCallback(
+    async (sess, categoria, file) => {
+      const pacienteId = selectedPatient?.id;
+      if (!pacienteId || !file) return;
+      if (!roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
+        toast.warning(
+          'Selecione o profissional na barra de contexto para enviar fotos à galeria.',
+        );
+        return;
+      }
+      const procedimentoFeitoId = resolveProcedimentoFeitoIdForSessao(sess);
+      setGaleriaUploadBusy(true);
+      try {
+        const webp = await convertToWebP(file, 0.85, 1920);
+        await pacientesGaleriaApi.upload(pacienteId, webp, {
+          roleUserId,
+          procedimentoFeitoId: procedimentoFeitoId ?? undefined,
+          dataReferencia: sess.dataISO !== 'sem-data' ? sess.dataISO : undefined,
+          legenda: formatGaleriaLegendaForUpload(categoria, sess.nomeProcedimento || ''),
+        });
+        await refreshGaleriaFromApi();
+        toast.success('Foto adicionada à galeria.');
+      } catch (e) {
+        toast.error(formatPacienteGaleriaError(e));
+      } finally {
+        setGaleriaUploadBusy(false);
+      }
+    },
+    [selectedPatient?.id, roleUserId, resolveProcedimentoFeitoIdForSessao, refreshGaleriaFromApi, toast],
+  );
+
+  const galeriaUploadDisabled =
+    isNivel1 || galeriaUploadBusy || !roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId || ''));
+  const galeriaUploadDisabledTitle = isNivel1
+    ? 'Sem permissão'
+    : !roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId || ''))
+      ? 'Selecione o profissional na barra de contexto'
+      : galeriaUploadBusy
+        ? 'Enviando…'
+        : undefined;
 
   const toggleProntuarioRow = useCallback((rowKey) => {
     setProntuarioExpanded((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }));
@@ -2097,118 +2025,14 @@ export function PatientProfileView({
                       </p>
                     </div>
                   ) : (
-                    <>
-                      {!alertasAnamneseLoading && anamneseAtendimentoInfo.status === 'nova' ? (
-                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#6366f1] bg-[#eef2ff] p-4">
-                          <div className="flex items-start gap-3">
-                            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#6366f1]" strokeWidth={2.25} aria-hidden />
-                            <div className="min-w-0">
-                              <h4 className="text-[14px] font-bold text-[#0f172a]">Primeira consulta detectada</h4>
-                              <p className="mt-1 text-[13px] font-normal leading-snug text-[#64748b]">
-                                Recomendamos iniciar com anamnese
-                              </p>
-                            </div>
-                          </div>
-                          <div
-                            className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className={`flex h-10 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
-                                hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
-                              }`}
-                            >
-                              Iniciar com Anamnese
-                            </button>
-                            {hasConsultasAnteriores ? (
-                              <button
-                                type="button"
-                                onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                                className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                              >
-                                Pular para avaliação
-                              </button>
-                            ) : null}
-                          </div>
-                          {hasConsultasAnteriores ? (
-                            <p className="mt-1 text-center text-[11px] font-normal text-[#94a3b8]">não recomendado</p>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {anamneseAtendimentoInfo.status === 'recente' ? (
-                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#22c55e] bg-[#f0fdf4] p-4">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" strokeWidth={2.25} aria-hidden />
-                            <div className="min-w-0">
-                              <h4 className="text-[14px] font-bold text-[#0f172a]">Anamnese em dia</h4>
-                              <p className="mt-1 text-[13px] font-normal text-[#64748b]">
-                                Última: {formatDataHoraPtBr(anamneseAtendimentoInfo.latest?.dataHora)} ·{' '}
-                                {anamneseAtendimentoInfo.latest?.anamneseNome || 'Ficha'}
-                              </p>
-                            </div>
-                          </div>
-                          <div
-                            className={`mt-3 flex flex-col gap-2 ${hasConsultasAnteriores ? 'sm:flex-row' : 'items-center justify-center'}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f] ${
-                                hasConsultasAnteriores ? 'flex-1' : 'w-full max-w-md'
-                              }`}
-                            >
-                              <Play className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                              Iniciar Atendimento
-                            </button>
-                            {hasConsultasAnteriores ? (
-                              <button
-                                type="button"
-                                onClick={() => onStartAttendance?.(selectedPatient, { initialStep: 2 })}
-                                className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                              >
-                                Pular para avaliação
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {anamneseAtendimentoInfo.status === 'vencida' ? (
-                        <div className="rounded-xl border border-[#e2e8f0] border-l-4 border-l-[#f59e0b] bg-[#fffbeb] p-4">
-                          <div className="flex items-start gap-3">
-                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#f59e0b]" strokeWidth={2.25} aria-hidden />
-                            <div className="min-w-0">
-                              <h4 className="text-[14px] font-bold text-[#0f172a]">
-                                Anamnese vencida (
-                                {(() => {
-                                  const m = monthsSinceDate(anamneseAtendimentoInfo.latest?.dataHora);
-                                  return m != null ? `${m} meses atrás` : 'há mais de 6 meses';
-                                })()}
-                                )
-                              </h4>
-                            </div>
-                          </div>
-                          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                            >
-                              Atualizar Anamnese
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onStartAttendance?.(selectedPatient)}
-                              className="flex h-10 flex-1 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white px-4 text-[13px] font-medium text-[#475569] transition-colors hover:border-[#cbd5e1]"
-                            >
-                              Iniciar sem atualizar
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => onStartAttendance?.(selectedPatient)}
+                      className="inline-flex h-10 w-full max-w-md items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                    >
+                      <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                      Iniciar Atendimento
+                    </button>
                   )}
 
                   <div>
@@ -2566,496 +2390,46 @@ export function PatientProfileView({
               )}
 
               {patientDetailTab === 'galeria' && (
-                <div className="space-y-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <h4 className="text-[16px] font-bold text-[#0f172a]">Galeria de evolução</h4>
-                      {!isNivel1 && galeriaBackend === 'api' && galeriaSessionsForView.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setModoComparar((prev) => {
-                              if (prev) {
-                                setCompararSelecionadas({ antes: null, depois: null });
-                                setCompararModalOpen(false);
-                              }
-                              return !prev;
-                            });
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border-[2px] transition-all ${
-                            modoComparar
-                              ? 'bg-[#00a88e] text-white border-[#00a88e]'
-                              : 'bg-white text-[#00a88e] border-[#00a88e]/40 hover:border-[#00a88e]'
-                          }`}
-                        >
-                          {modoComparar ? '✕ Cancelar comparação' : '⇄ Comparar'}
-                        </button>
-                      )}
-                    </div>
-                    {!isNivel1 && galeriaBackend === 'loading' && selectedPatient?.id ? (
-                      <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
-                        <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
-                        Sincronizando galeria…
-                      </span>
-                    ) : !isNivel1 && galeriaBackend === 'api' ? (
-                      <span className="text-[11px] font-bold uppercase tracking-wide text-[#0f766e] bg-[#e6f7f5] border border-[#00a88e]/25 px-2 py-1 rounded-lg w-fit">
-                        Galeria no servidor
-                      </span>
-                    ) : !isNivel1 && selectedPatient?.id ? (
-                      <span className="text-[11px] font-medium text-[#94a3b8] w-fit max-w-md leading-snug">
-                        Galeria do servidor indisponível — exibindo fotos locais da jornada, se houver.
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {isNivel1 ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-[#e2e8f0] rounded-[18px]">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 mb-4 border border-rose-100/60 shadow-inner">
-                        <Shield className="h-6 w-6" />
-                      </div>
-                      <h3 className="text-base font-bold text-slate-800">Fotos Ocultas</h3>
-                      <p className="mt-2 text-xs text-slate-500 max-w-sm leading-relaxed">
-                        Por motivos de privacidade e conformidade médica, a visualização de fotos clínicas de evolução deste paciente está bloqueada para o seu nível de acesso (Nível 1).
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-
-                  {galeriaBackend === 'api' && selectedPatient?.id && galeriaBackend !== 'loading' ? (
-                    <>
-                      <div className="rounded-2xl border border-app-border bg-[#f8fbfb] p-4 space-y-3">
-                        <div className="flex items-center gap-2 text-[12px] font-bold text-[#0f766e]">
-                          <Filter className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                          Filtrar visualização
-                        </div>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-                          <label className="flex flex-col gap-1 min-w-[140px] flex-1">
-                            <span className="text-[11px] font-bold text-[#64748b]">Categoria</span>
-                            <select
-                              value={galeriaFilterCategoria}
-                              onChange={(e) => setGaleriaFilterCategoria(e.target.value)}
-                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
-                            >
-                              <option value="all">Todas</option>
-                              <option value="antes">{GALERIA_CATEGORIA_LABELS.antes}</option>
-                              <option value="planejamento">{GALERIA_CATEGORIA_LABELS.planejamento}</option>
-                              <option value="avaliacao">{GALERIA_CATEGORIA_LABELS.avaliacao}</option>
-                              <option value="depois">{GALERIA_CATEGORIA_LABELS.depois}</option>
-                              <option value="outro">{GALERIA_CATEGORIA_LABELS.outro}</option>
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 min-w-[160px] flex-1">
-                            <span className="text-[11px] font-bold text-[#64748b]">Mês</span>
-                            <select
-                              value={galeriaFilterMes}
-                              onChange={(e) => setGaleriaFilterMes(e.target.value)}
-                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
-                            >
-                              <option value="all">Todos</option>
-                              {galeriaMesesOpcoes.map((m) => (
-                                <option key={m} value={m}>
-                                  {new Date(`${m}-01T12:00:00`).toLocaleDateString('pt-BR', {
-                                    month: 'long',
-                                    year: 'numeric',
-                                  })}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="flex flex-col gap-1 min-w-[180px] flex-[1.2]">
-                            <span className="text-[11px] font-bold text-[#64748b]">Procedimento / texto</span>
-                            <select
-                              value={galeriaFilterProcedimento}
-                              onChange={(e) => setGaleriaFilterProcedimento(e.target.value)}
-                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-[#0f172a] outline-none focus:border-[#00a88e]"
-                            >
-                              <option value="all">Todos</option>
-                              {galeriaProcedimentosOpcoes.map((p) => (
-                                <option key={p} value={p}>
-                                  {p.length > 48 ? `${p.slice(0, 48)}…` : p}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
-
-                  {modoComparar && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/40 text-[13px] font-medium text-[#b45309]">
-                      <span>
-                        {!compararSelecionadas.antes && !compararSelecionadas.depois
-                          ? 'Clique em uma foto de Antes e uma foto de Depois para comparar.'
-                          : !compararSelecionadas.antes
-                          ? '✓ Depois selecionado — agora clique em uma foto de Antes.'
-                          : !compararSelecionadas.depois
-                          ? '✓ Antes selecionado — agora clique em uma foto de Depois.'
-                          : 'Abrindo comparação…'}
-                      </span>
-                    </div>
-                  )}
-
-                  {galeriaBackend === 'api' && galeriaSessionsForView.length > 0 ? (
-                    <div className="space-y-4">
-                      {galeriaSessionsForView.map((sess, idx) => {
-                        const procedimentoFeitoIdSessao = resolveProcedimentoFeitoIdForSessao(sess);
-                        const expandida = sessoesExpandidas[sess.key] ?? false;
-                        return (
-                          <div
-                            key={sess.key}
-                            className="rounded-[20px] border border-slate-200 bg-white shadow-app-card overflow-hidden"
-                          >
-                            <div
-                              className="flex items-center justify-between cursor-pointer select-none p-4 hover:bg-[#f8fafc] transition-colors rounded-xl"
-                              onClick={() => toggleSessao(sess)}
-                            >
-                              <div>
-                                <div className="text-[14px] font-bold text-[#0f172a]">
-                                  Sessão {galeriaSessionsForView.length - idx} — {formatMesAno(sess.dataISO)}
-                                </div>
-                                <div className="text-[12px] text-[#64748b] mt-0.5">
-                                  {sess.nomeProcedimento || 'Procedimento não informado'} · {sess.fotos.length}{' '}
-                                  foto(s)
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[11px] font-medium text-[#94a3b8]">
-                                  {expandida ? 'Recolher' : 'Ver fotos'}
-                                </span>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-[#94a3b8] transition-transform duration-200 ${
-                                    expandida ? 'rotate-180' : ''
-                                  }`}
-                                  strokeWidth={2}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-2 px-4 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                              <span className="text-[12px] font-bold text-[#64748b] tabular-nums">
-                                {formatDataSessaoPtBr(sess.dataISO)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRelatoModal({
-                                    open: true,
-                                    procedimentoFeitoId: procedimentoFeitoIdSessao,
-                                    pacienteId: selectedPatient?.id || null,
-                                  });
-                                }}
-                                disabled={!selectedPatient?.id}
-                                className="w-full rounded-lg border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] px-2.5 py-1 text-center text-[11px] font-bold text-[#0f766e] transition-colors hover:bg-[#d2f3ee] sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                Acompanhamento
-                              </button>
-                            </div>
-                            {expandida && (
-                              <div className="px-4 pb-4">
-                                <div className="space-y-2">
-                                  {(() => {
-                                    const fotosPorCategoria = {};
-                                    sess.fotos.forEach((foto) => {
-                                      const cat = foto.categoria || 'outro';
-                                      if (!fotosPorCategoria[cat]) fotosPorCategoria[cat] = [];
-                                      fotosPorCategoria[cat].push(foto);
-                                    });
-                                    return ORDEM_CATEGORIAS.map((cat) => {
-                                      const fotosCat = fotosPorCategoria[cat];
-                                      if (!fotosCat?.length) return null;
-                                      const labelText = GALERIA_CATEGORIA_LABELS[cat] || cat;
-                                      const labelColorClass =
-                                        GALERIA_SESSAO_CATEGORIA_LABEL_CLASS[cat] || 'text-[#94a3b8]';
-                                      const catKey = `${sess.key}_${cat}`;
-                                      const catExpandida = categoriasExpandidas[catKey] ?? false;
-                                      const mostrarTodasFotosCat = Boolean(galeriaCategoriaShowAll[catKey]);
-                                      const limiteLinhaGaleria = galeriaColsPerRow;
-                                      const fotosCatVisiveis =
-                                        mostrarTodasFotosCat || fotosCat.length <= limiteLinhaGaleria
-                                          ? fotosCat
-                                          : fotosCat.slice(0, limiteLinhaGaleria);
-                                      const temMaisFotosCat = fotosCat.length > limiteLinhaGaleria;
-                                      return (
-                                        <div
-                                          key={cat}
-                                          className="rounded-xl border border-slate-200 overflow-hidden"
-                                        >
-                                          <div className="w-full flex items-center justify-between px-4 py-3 bg-[#f8fafc]">
-                                            <button
-                                              type="button"
-                                              onClick={() => toggleCategoria(sess.key, cat)}
-                                              className="flex items-center gap-2 flex-1 text-left hover:opacity-80 transition-opacity"
-                                            >
-                                              <span className={`text-[12px] font-bold uppercase tracking-wide ${labelColorClass}`}>
-                                                {labelText}
-                                              </span>
-                                              <span className="text-[11px] font-medium text-[#94a3b8]">
-                                                {fotosCat.length} foto{fotosCat.length !== 1 ? 's' : ''}
-                                              </span>
-                                            </button>
-                                            <div className="flex items-center gap-2">
-                                              {catExpandida && (
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const editKey = `${sess.key}_${cat}`;
-                                                    setCategoriasEmEdicao((prev) => ({
-                                                      ...prev,
-                                                      [editKey]: !prev[editKey],
-                                                    }));
-                                                  }}
-                                                  className={`p-1.5 rounded-lg border-[2px] transition-all ${
-                                                    categoriasEmEdicao[`${sess.key}_${cat}`]
-                                                      ? 'bg-red-50 border-red-300 text-red-500'
-                                                      : 'bg-white border-[#e2e8f0] text-[#94a3b8] hover:border-[#00a88e] hover:text-[#00a88e]'
-                                                  }`}
-                                                  title={categoriasEmEdicao[`${sess.key}_${cat}`] ? 'Sair da edição' : 'Editar fotos'}
-                                                >
-                                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24"
-                                                    fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                                  </svg>
-                                                </button>
-                                              )}
-                                              <ChevronDown
-                                                className={`w-4 h-4 text-[#94a3b8] transition-transform duration-200 ${
-                                                  catExpandida ? 'rotate-180' : ''
-                                                }`}
-                                                strokeWidth={2}
-                                                onClick={() => toggleCategoria(sess.key, cat)}
-                                              />
-                                            </div>
-                                          </div>
-                                          {catExpandida && (
-                                            <div className="p-3">
-                                              <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
-                                                {fotosCatVisiveis.map((foto) => {
-                                                  const gridItem = {
-                                                    id: `api_${foto.serverId}`,
-                                                    url: foto.url,
-                                                    fileName: foto.fileName,
-                                                    serverId: foto.serverId,
-                                                    source: 'api',
-                                                    index: -1,
-                                                  };
-                                                  return (
-                                                    <div key={foto.serverId} className="relative min-w-0">
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          if (modoComparar) {
-                                                            handleCompararFotoClick(foto);
-                                                          } else {
-                                                            setLightboxUrl(foto.url ?? foto.src ?? foto.presignedUrl);
-                                                          }
-                                                        }}
-                                                        className={`aspect-square w-full rounded-xl overflow-hidden border cursor-pointer flex items-center justify-center transition-all ${
-                                                          modoComparar &&
-                                                          (compararSelecionadas.antes?.serverId === foto.serverId ||
-                                                            compararSelecionadas.depois?.serverId === foto.serverId)
-                                                            ? 'border border-[#00a88e] ring-2 ring-[#00a88e]/40'
-                                                            : 'border border-[#e2e8f0]'
-                                                        }`}
-                                                      >
-                                                        <GaleriaArquivoImage
-                                                          url={foto.url}
-                                                          alt=""
-                                                          className="h-full w-full"
-                                                          imgClassName="h-full w-full object-cover"
-                                                        />
-                                                      </button>
-                                                      {categoriasEmEdicao[`${sess.key}_${cat}`] && (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => handleRemoveGalleryItem(gridItem)}
-                                                          className="absolute -top-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border-[2px] border-white bg-red-500 text-[11px] font-bold text-white shadow-sm hover:bg-red-600"
-                                                          aria-label="Remover foto"
-                                                        >
-                                                          ×
-                                                        </button>
-                                                      )}
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                              {temMaisFotosCat ? (
-                                                <div className="mt-2 flex justify-center">
-                                                  {mostrarTodasFotosCat ? (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() =>
-                                                        setGaleriaCategoriaShowAll((prev) => {
-                                                          const next = { ...prev };
-                                                          delete next[catKey];
-                                                          return next;
-                                                        })
-                                                      }
-                                                      className="text-[12px] font-semibold text-[#00a88e] hover:underline"
-                                                    >
-                                                      Mostrar menos
-                                                    </button>
-                                                  ) : (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() =>
-                                                        setGaleriaCategoriaShowAll((prev) => ({
-                                                          ...prev,
-                                                          [catKey]: true,
-                                                        }))
-                                                      }
-                                                      className="text-[12px] font-semibold text-[#00a88e] hover:underline"
-                                                    >
-                                                      Ver mais (+{fotosCat.length - limiteLinhaGaleria})
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              ) : null}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    });
-                                  })()}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : galeriaBackend === 'api' && apiGaleriaItems.length > 0 && galeriaSessionsForView.length === 0 ? (
-                    <p className="text-center py-8 text-[#94a3b8] text-[13px] font-medium px-2">
-                      Nenhuma foto com estes filtros. Ajuste categoria, mês ou procedimento.
-                    </p>
-                  ) : galeriaBackend === 'api' && apiGaleriaItems.length === 0 ? (
-                    <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
-                  ) : galleryItemsForGrid.length ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {galleryItemsForGrid.map((item) => {
-                        const canDelete =
-                          item.source === 'api' || (item.source !== 'legacy' && item.index >= 0);
-                        return (
-                          <div key={item.id} className="relative">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setGalleryPreview({
-                                  url: item.url,
-                                  authFetch: item.source === 'api',
-                                  caption: item.fileName,
-                                })
-                              }
-                              className="aspect-square rounded-xl bg-[#e6f7f5] border border-app-border flex items-center justify-center overflow-hidden w-full"
-                            >
-                              {item.source === 'api' ? (
-                                <GaleriaArquivoImage
-                                  url={item.url}
-                                  alt=""
-                                  className="w-full h-full"
-                                  imgClassName="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <GaleriaLocalImage
-                                  url={item.url}
-                                  alt=""
-                                  imgClassName="w-full h-full object-cover"
-                                />
-                              )}
-                            </button>
-                            {canDelete ? (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveGalleryItem(item)}
-                                className="absolute top-1 right-1 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white border-[2px] border-white text-[11px] font-bold"
-                              >
-                                x
-                              </button>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
-                  )}
-
-                  {compararModalOpen && compararSelecionadas.antes && compararSelecionadas.depois && (
-                    <div
-                      className="fixed inset-0 z-[300] bg-black/90 flex flex-col items-center justify-center p-4 gap-4"
-                      onClick={() => {
-                        setCompararModalOpen(false);
-                        setCompararSelecionadas({ antes: null, depois: null });
-                        setModoComparar(false);
-                      }}
-                    >
-                      <div
-                        className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-5xl"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                          <span className="text-[12px] font-bold uppercase tracking-wide text-[#00a88e] bg-[#00a88e]/20 px-3 py-1 rounded-full">
-                            Antes
-                          </span>
-                          <img
-                            src={compararSelecionadas.antes.url}
-                            alt="Antes"
-                            className="max-h-[75dvh] max-w-full rounded-xl object-contain"
-                          />
-                        </div>
-                        <div className="w-px h-full bg-white/20 hidden sm:block" />
-                        <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                          <span className="text-[12px] font-bold uppercase tracking-wide text-[#f59e0b] bg-[#f59e0b]/20 px-3 py-1 rounded-full">
-                            Depois
-                          </span>
-                          <img
-                            src={compararSelecionadas.depois.url}
-                            alt="Depois"
-                            className="max-h-[75dvh] max-w-full rounded-xl object-contain"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCompararModalOpen(false);
-                          setCompararSelecionadas({ antes: null, depois: null });
-                          setModoComparar(false);
-                        }}
-                        className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
-                      >
-                        Fechar comparação
-                      </button>
-                    </div>
-                  )}
-
-                  {lightboxUrl && (
-                    <div
-                      className="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center p-4"
-                      onClick={() => setLightboxUrl(null)}
-                      role="presentation"
-                    >
-                      <img
-                        src={lightboxUrl}
-                        alt=""
-                        className="max-h-[90dvh] max-w-full rounded-xl object-contain"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setLightboxUrl(null)}
-                        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30"
-                        aria-label="Fechar"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                    </>
-                  )}
-                </div>
+                <GaleriaTab
+                  isNivel1={isNivel1}
+                  galeriaBackend={galeriaBackend}
+                  selectedPatientId={selectedPatient?.id}
+                  galeriaSessionsForView={galeriaSessionsForView}
+                  galeriaMesesOpcoes={galeriaMesesOpcoes}
+                  galeriaProcedimentosOpcoes={galeriaProcedimentosOpcoes}
+                  galeriaFilterCategoria={galeriaFilterCategoria}
+                  setGaleriaFilterCategoria={setGaleriaFilterCategoria}
+                  galeriaFilterMes={galeriaFilterMes}
+                  setGaleriaFilterMes={setGaleriaFilterMes}
+                  galeriaFilterProcedimento={galeriaFilterProcedimento}
+                  setGaleriaFilterProcedimento={setGaleriaFilterProcedimento}
+                  apiGaleriaItemsLength={apiGaleriaItems.length}
+                  galleryItemsForGrid={galleryItemsForGrid}
+                  sessoesExpandidas={sessoesExpandidas}
+                  setSessoesExpandidas={setSessoesExpandidas}
+                  categoriasEmEdicao={categoriasEmEdicao}
+                  setCategoriasEmEdicao={setCategoriasEmEdicao}
+                  modoComparar={modoComparar}
+                  setModoComparar={setModoComparar}
+                  compararSelecionadas={compararSelecionadas}
+                  setCompararSelecionadas={setCompararSelecionadas}
+                  compararModalOpen={compararModalOpen}
+                  setCompararModalOpen={setCompararModalOpen}
+                  onCompararFotoClick={handleCompararFotoClick}
+                  onRemoveGalleryItem={handleRemoveGalleryItem}
+                  onUploadCategoria={handleGaleriaUpload}
+                  resolveProcedimentoFeitoIdForSessao={resolveProcedimentoFeitoIdForSessao}
+                  onAcompanhamento={({ procedimentoFeitoId, pacienteId }) =>
+                    setRelatoModal({
+                      open: true,
+                      procedimentoFeitoId,
+                      pacienteId,
+                    })
+                  }
+                  onLocalPreview={setGalleryPreview}
+                  uploadDisabled={galeriaUploadDisabled}
+                  uploadDisabledTitle={galeriaUploadDisabledTitle}
+                />
               )}
 
             </div>

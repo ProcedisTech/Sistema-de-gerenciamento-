@@ -6,6 +6,7 @@ import AgendaSlotActions from './AgendaSlotActions.jsx';
 import { AgendaSummaryEntryCard } from './AgendaSummaryEntryCard.jsx';
 import { AgendaWeekSlotDetailModal } from './AgendaWeekSlotDetailModal.jsx';
 import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
+import { AgendaNovoChoiceModal } from './AgendaNovoChoiceModal.jsx';
 import { AgendaTopbar } from './AgendaTopbar.jsx';
 import { AgendaControlStrip } from './AgendaControlStrip.jsx';
 import { AgendaCalendarGrid } from './AgendaCalendarGrid.jsx';
@@ -27,10 +28,12 @@ import {
   getNextAppointmentEntry,
   groupConsecutiveAppointments,
 } from '../../utils/agendaDayInsights.js';
+import { toDateKey } from '../../utils/agendaDateUtils.js';
 import {
-  applyActionToAppointmentGroup,
+  applyGroupActionAndRefresh,
   formatGroupActionResultMessage,
   resolveActionAppointments,
+  resolveActionTargetFromDayAppointments,
   scheduleRowFromTarget,
 } from '../../utils/agendaGroupActions.js';
 import { getEntryDomId } from '../../utils/agendaRailHelpers.js';
@@ -186,14 +189,33 @@ export function AgendaDashboard({
   const [listDaySummary, setListDaySummary] = React.useState(null);
   const [weekSlotDetail, setWeekSlotDetail] = React.useState(null);
   const [advancePending, setAdvancePending] = React.useState(null);
+  const [novoChoiceOpen, setNovoChoiceOpen] = React.useState(false);
   const [showEntrance, setShowEntrance] = React.useState(true);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const isWideDesktop = useMediaQuery('(min-width: 1440px)');
   const isMobile = !isDesktop;
   const toast = useToast();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
+  }, [agenda]);
+
+  const openNovoChoice = React.useCallback(() => {
+    if (agenda.isNivel1) return;
+    setNovoChoiceOpen(true);
+  }, [agenda.isNivel1]);
+
+  const closeNovoChoice = React.useCallback(() => {
+    setNovoChoiceOpen(false);
+  }, []);
+
+  const handleEscolherAgendamento = React.useCallback(() => {
+    setNovoChoiceOpen(false);
+    agenda.openCreateModal(agenda.selectedDay);
+  }, [agenda]);
+
+  const handleEscolherBloqueio = React.useCallback(() => {
+    setNovoChoiceOpen(false);
+    agenda.openBloqueioModal(agenda.selectedDay);
   }, [agenda]);
 
   const handleSelectDay = React.useCallback(
@@ -223,7 +245,8 @@ export function AgendaDashboard({
           agenda.foraDispModal ||
           listDaySummary ||
           weekSlotDetail ||
-          advancePending,
+          advancePending ||
+          novoChoiceOpen,
       ),
     [
       shortcutsBlockedExternal,
@@ -233,6 +256,7 @@ export function AgendaDashboard({
       listDaySummary,
       weekSlotDetail,
       advancePending,
+      novoChoiceOpen,
     ],
   );
 
@@ -244,7 +268,7 @@ export function AgendaDashboard({
     onToday: agenda.goToToday,
     onFocusFirstFilter: () => firstFilterRef.current?.focus(),
     onNewAppointment: () => {
-      if (!agenda.isNivel1) agenda.openCreateModal(agenda.selectedDay);
+      if (!agenda.isNivel1) openNovoChoice();
     },
   });
 
@@ -333,13 +357,16 @@ export function AgendaDashboard({
     if (agenda.viewMode !== 'semana') setWeekSlotDetail(null);
   }, [agenda.viewMode]);
 
+  const batchRefresh = agenda.refreshDashboard;
+
   const renderSlotActions = React.useCallback(
-    (target) => {
+    (target, { closeOverlay } = {}) => {
       const items = resolveActionAppointments(target);
       const primary = items[0];
       if (!primary) return null;
       const disabled = Boolean(agenda.loading) || agenda.isNivel1;
       const isGroup = items.length > 1;
+      const batchOpts = { successToast: false, skipDashboardRefresh: true };
 
       return (
         <AgendaSlotActions
@@ -347,10 +374,13 @@ export function AgendaDashboard({
           disabled={disabled}
           onMarcarRealizado={async () => {
             if (isGroup) {
-              const result = await applyActionToAppointmentGroup(items, (item) =>
-                item.agendaId
-                  ? agenda.handleAtualizarStatus(item.agendaId, 'realizado', { successToast: false })
-                  : Promise.resolve(false),
+              const result = await applyGroupActionAndRefresh(
+                items,
+                (item) =>
+                  item.agendaId
+                    ? agenda.handleAtualizarStatus(item.agendaId, 'realizado', batchOpts)
+                    : Promise.resolve(false),
+                batchRefresh,
               );
               if (result.allOk) toast.success(`${items.length} agendamentos marcados como realizados`);
               else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'realizadas' }));
@@ -360,22 +390,37 @@ export function AgendaDashboard({
           }}
           onMarcarNaoCompareceu={async () => {
             if (isGroup) {
-              const result = await applyActionToAppointmentGroup(items, (item) =>
-                item.agendaId ? agenda.handleMarcarNaoCompareceu(item.agendaId) : Promise.resolve(false),
+              const result = await applyGroupActionAndRefresh(
+                items,
+                (item) =>
+                  item.agendaId
+                    ? agenda.handleMarcarNaoCompareceu(item.agendaId, batchOpts)
+                    : Promise.resolve(false),
+                batchRefresh,
               );
-              if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'marcadas' }));
+              if (result.allOk) toast.success(`${items.length} agendamentos marcados como não compareceu`);
+              else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'marcadas' }));
               return;
             }
             if (primary.agendaId) agenda.handleMarcarNaoCompareceu(primary.agendaId);
           }}
-          onReagendar={() => onSlotReagendar?.(items.length > 1 ? target : primary)}
-          onCancelar={() => onSlotCancelar?.(items.length > 1 ? target : primary)}
+          onReagendar={() => {
+            closeOverlay?.();
+            onSlotReagendar?.(items.length > 1 ? target : primary);
+          }}
+          onCancelar={() => {
+            closeOverlay?.();
+            onSlotCancelar?.(items.length > 1 ? target : primary);
+          }}
           onEnviarWhatsApp={async () => {
             if (isGroup) {
-              const result = await applyActionToAppointmentGroup(items, (item) =>
-                item.agendaId
-                  ? agenda.handleEnviarWhatsApp(item.agendaId, 'confirmacao_24h')
-                  : Promise.resolve(false),
+              const result = await applyGroupActionAndRefresh(
+                items,
+                (item) =>
+                  item.agendaId
+                    ? agenda.handleEnviarWhatsApp(item.agendaId, 'confirmacao_24h')
+                    : Promise.resolve(false),
+                batchRefresh,
               );
               if (result.allOk) toast.success(`WhatsApp gerado para ${items.length} agendamentos`);
               else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'enviadas' }));
@@ -388,7 +433,7 @@ export function AgendaDashboard({
         />
       );
     },
-    [agenda, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese],
+    [agenda, batchRefresh, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese],
   );
 
   const handlePrimary = React.useCallback((target) => {
@@ -408,8 +453,10 @@ export function AgendaDashboard({
           agenda.updateStatus(pending[0] || appointment, 'confirmado');
           return;
         }
-        const result = await applyActionToAppointmentGroup(pending, (item) =>
-          agenda.handleAtualizarStatus(item.agendaId, 'confirmado', { successToast: false }),
+        const result = await applyGroupActionAndRefresh(
+          pending,
+          (item) => agenda.handleAtualizarStatus(item.agendaId, 'confirmado', { successToast: false, skipDashboardRefresh: true }),
+          agenda.refreshDashboard,
         );
         if (result.allOk) toast.success(`${pending.length} agendamentos confirmados`);
         else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'confirmadas' }));
@@ -445,57 +492,55 @@ export function AgendaDashboard({
     [agenda]
   );
 
-  const handleEditFromWeekDetail = React.useCallback(
-    (appointment) => {
-      setWeekSlotDetail(null);
-      handleEditAppointment(appointment);
-    },
-    [handleEditAppointment]
-  );
-
-  const renderSlotActionsWeekDetail = React.useCallback(
-    (appointment) => {
-      const disabled = Boolean(agenda.loading) || agenda.isNivel1;
-      return (
-        <AgendaSlotActions
-          agenda={appointment}
-          disabled={disabled}
-          onMarcarRealizado={() => {
-            if (appointment.agendaId) agenda.handleAtualizarStatus(appointment.agendaId, 'realizado');
-          }}
-          onMarcarNaoCompareceu={() => {
-            if (appointment.agendaId) agenda.handleMarcarNaoCompareceu(appointment.agendaId);
-          }}
-          onReagendar={() => {
-            setWeekSlotDetail(null);
-            onSlotReagendar?.(appointment);
-          }}
-          onCancelar={() => {
-            setWeekSlotDetail(null);
-            onSlotCancelar?.(appointment);
-          }}
-          onEnviarWhatsApp={() => agenda.handleEnviarWhatsApp(appointment.agendaId, 'confirmacao_24h')}
-          onEnviarAnamnese={() => {
-            setWeekSlotDetail(null);
-            handleEnviarAnamnese(appointment);
-          }}
-          onRemoverBloqueio={() => agenda.handleRemoverBloqueio(appointment)}
-        />
+  const resolveWeekTarget = React.useCallback(
+    (appt) => {
+      const dayRows = agenda.filteredWeekGridAppointments.filter(
+        (r) => toDateKey(r.data) === toDateKey(appt.data),
       );
+      return resolveActionTargetFromDayAppointments(dayRows, appt);
     },
-    [agenda, onSlotCancelar, onSlotReagendar, handleEnviarAnamnese]
+    [agenda.filteredWeekGridAppointments],
   );
 
-  const handlePrimaryFromWeekDetail = React.useCallback(
-    (appointment) => {
-      if (appointment.status === 'pendente' || appointment.status === 'aguardando_confirmacao') {
-        handlePrimary(appointment);
-        return;
-      }
-      setWeekSlotDetail(null);
-      handlePrimary(appointment);
+  const onOpenWeekSlotDetail = React.useCallback(
+    (appt) => {
+      setWeekSlotDetail(resolveWeekTarget(appt));
     },
-    [handlePrimary]
+    [resolveWeekTarget],
+  );
+
+  const closeWeekSlotDetail = React.useCallback(() => {
+    setWeekSlotDetail(null);
+  }, []);
+
+  const handleEditFromWeekDetail = React.useCallback(
+    (target) => {
+      closeWeekSlotDetail();
+      const entry =
+        target?.kind === 'group' || target?.kind === 'single'
+          ? target
+          : { kind: 'single', appointment: target };
+      const primary = getEntryPrimaryAppointment(entry);
+      if (primary) handleEditAppointment(primary);
+    },
+    [closeWeekSlotDetail, handleEditAppointment],
+  );
+
+  const handleWeekPrimary = React.useCallback(
+    (target) => {
+      const items = resolveActionAppointments(target);
+      const hasPending = items.some(
+        (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
+      );
+      if (!hasPending) closeWeekSlotDetail();
+      handlePrimary(target);
+    },
+    [closeWeekSlotDetail, handlePrimary],
+  );
+
+  const renderSlotActionsForWeek = React.useCallback(
+    (target) => renderSlotActions(target, { closeOverlay: closeWeekSlotDetail }),
+    [closeWeekSlotDetail, renderSlotActions],
   );
 
   const openWeekCreateAtSlot = React.useCallback(
@@ -518,8 +563,10 @@ export function AgendaDashboard({
         if (a?.agendaId) agenda.handleAtualizarStatus(a.agendaId, 'confirmado');
         return;
       }
-      const result = await applyActionToAppointmentGroup(toConfirm, (item) =>
-        agenda.handleAtualizarStatus(item.agendaId, 'confirmado', { successToast: false }),
+      const result = await applyGroupActionAndRefresh(
+        toConfirm,
+        (item) => agenda.handleAtualizarStatus(item.agendaId, 'confirmado', { successToast: false, skipDashboardRefresh: true }),
+        agenda.refreshDashboard,
       );
       if (result.allOk) toast.success(`${toConfirm.length} agendamentos confirmados`);
       else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'confirmadas' }));
@@ -579,8 +626,11 @@ export function AgendaDashboard({
         if (a?.agendaId) agenda.handleEnviarWhatsApp(a.agendaId, 'confirmacao_24h');
         return;
       }
-      const result = await applyActionToAppointmentGroup(items, (item) =>
-        item.agendaId ? agenda.handleEnviarWhatsApp(item.agendaId, 'confirmacao_24h') : Promise.resolve(false),
+      const result = await applyGroupActionAndRefresh(
+        items,
+        (item) =>
+          item.agendaId ? agenda.handleEnviarWhatsApp(item.agendaId, 'confirmacao_24h') : Promise.resolve(false),
+        agenda.refreshDashboard,
       );
       if (result.allOk) toast.success(`WhatsApp gerado para ${items.length} agendamentos`);
       else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'enviadas' }));
@@ -604,14 +654,13 @@ export function AgendaDashboard({
     todayIso: agenda.todayIso,
     showProfissional,
     isNivel1: agenda.isNivel1,
-    dense: isDesktop && !isWideDesktop,
-    compactActions: isDesktop && !isWideDesktop,
+    dense: isDesktop,
+    compactActions: isDesktop,
     listRef: panelListRef,
     cardRefs,
     advanceOfferByAgendaId,
     onAdvanceClick: agenda.isNivel1 ? null : handleAdvanceClick,
-    onBloquear: () => agenda.openBloqueioModal(agenda.selectedDay),
-    onNovoAgendamento: () => agenda.openCreateModal(agenda.selectedDay),
+    onNovoClick: openNovoChoice,
     onCheckIn: handleCheckIn,
     onConfirmar: handleRailConfirmar,
     onIniciarAtendimento: handleRailIniciarAtendimento,
@@ -708,6 +757,8 @@ export function AgendaDashboard({
                 agenda={agenda}
                 showEntrance={showEntrance}
                 onSelectDay={handleSelectDay}
+                onNovoClick={openNovoChoice}
+                showNovoButton={!agenda.isNivel1}
               />
             ) : agenda.viewMode === 'list' ? (
               <ListDayCards agenda={agenda} onOpenDaySummary={setListDaySummary} className="h-full" />
@@ -717,7 +768,7 @@ export function AgendaDashboard({
                 weekDayIsos={agenda.weekDayIsos}
                 appointments={agenda.filteredWeekGridAppointments}
                 todayIso={agenda.todayIso}
-                onOpenSlotDetail={setWeekSlotDetail}
+                onOpenSlotDetail={onOpenWeekSlotDetail}
                 onClickEmptySlot={agenda.isNivel1 ? null : openWeekCreateAtSlot}
                 disponibilidades={agenda.disponibilidades}
                 advanceOfferByAgendaId={advanceOfferByAgendaId}
@@ -745,9 +796,9 @@ export function AgendaDashboard({
       {!agenda.isNivel1 && !agenda.daySheetOpen ? (
         <button
           type="button"
-          onClick={() => agenda.openCreateModal(agenda.todayIso)}
+          onClick={openNovoChoice}
           className="fixed bottom-24 right-4 z-[200] flex h-14 w-14 items-center justify-center rounded-full bg-brand-primary text-white shadow-lg transition-all duration-150 hover:bg-brand-primaryDark hover:shadow-xl active:scale-[0.98] motion-reduce:active:scale-100 lg:hidden"
-          aria-label="Novo agendamento"
+          aria-label="Novo"
         >
           <Plus className="h-6 w-6" />
         </button>
@@ -765,12 +816,14 @@ export function AgendaDashboard({
       />
 
       <AgendaWeekSlotDetailModal
-        appointment={weekSlotDetail}
-        onClose={() => setWeekSlotDetail(null)}
-        onPrimary={handlePrimaryFromWeekDetail}
+        target={weekSlotDetail}
+        onClose={closeWeekSlotDetail}
+        onPrimary={handleWeekPrimary}
         onEdit={handleEditFromWeekDetail}
-        renderSlotActions={renderSlotActionsWeekDetail}
+        renderSlotActions={renderSlotActionsForWeek}
         isNivel1={agenda.isNivel1}
+        advanceOfferByAgendaId={advanceOfferByAgendaId}
+        onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
       />
 
       <AgendaAdvanceConfirmModal
@@ -779,6 +832,13 @@ export function AgendaDashboard({
         onClose={() => setAdvancePending(null)}
         onConfirm={handleConfirmAdvance}
         isSubmitting={agenda.submittingReagendar}
+      />
+
+      <AgendaNovoChoiceModal
+        open={novoChoiceOpen}
+        onClose={closeNovoChoice}
+        onEscolherAgendamento={handleEscolherAgendamento}
+        onEscolherBloqueio={handleEscolherBloqueio}
       />
     </div>
   );

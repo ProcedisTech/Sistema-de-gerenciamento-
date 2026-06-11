@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Target, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Target, Users } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isDayEmptyByFilter } from '../../utils/agendaDayInsights.js';
 import { agendaEnterClass } from './agendaEnterClasses.js';
@@ -32,7 +32,13 @@ function useCanHover() {
   return canHover;
 }
 
-export function AgendaCalendarGrid({ agenda, showEntrance = false, onSelectDay }) {
+export function AgendaCalendarGrid({
+  agenda,
+  showEntrance = false,
+  onSelectDay,
+  onNovoClick,
+  showNovoButton = false,
+}) {
   const selectDay = onSelectDay ?? agenda.selectDay;
   const canHover = useCanHover();
   const gridRef = useRef(null);
@@ -111,18 +117,30 @@ export function AgendaCalendarGrid({ agenda, showEntrance = false, onSelectDay }
           >
             <ChevronRight className="h-4 w-4" />
           </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={agenda.goToToday}
-            className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2"
+            className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2"
           >
             <Target className="h-3.5 w-3.5 text-vivid-teal-600" aria-hidden />
             Hoje
           </button>
-        </div>
-        <div className="stat-pro flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-700">
-          <Users className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />
-          <span>{agenda.monthVisibleCount ?? 0} visíveis</span>
+          {showNovoButton && onNovoClick ? (
+            <button
+              type="button"
+              onClick={onNovoClick}
+              className="inline-flex h-[34px] items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-vivid-teal-500 to-vivid-teal-600 px-4 text-sm font-semibold text-white shadow-agenda-glow transition-all hover:brightness-[1.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Novo
+            </button>
+          ) : null}
+          <div className="stat-pro flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1.5 text-sm font-medium text-ink-700">
+            <Users className="h-4 w-4 shrink-0 text-ink-500" aria-hidden />
+            <span>{agenda.monthVisibleCount ?? 0} visíveis</span>
+          </div>
         </div>
       </header>
 
