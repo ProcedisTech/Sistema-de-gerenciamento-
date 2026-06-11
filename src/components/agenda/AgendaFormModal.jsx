@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { X, ChevronDown, Calendar } from 'lucide-react';
 import { useUsuarioLogado } from '../../hooks/useUsuarioLogado.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
@@ -9,6 +9,11 @@ import { ProcedimentoSearchInput } from './ProcedimentoSearchInput.jsx';
 import { ProfissionalSearchInput } from './ProfissionalSearchInput.jsx';
 import { AgendaFormDataHoraSheet } from './AgendaFormDataHoraSheet.jsx';
 import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
+import {
+  deriveDuracaoFromRange,
+  deriveHoraFimReal,
+  deriveRangePhase,
+} from '../../utils/agendaRangeSelection.js';
 
 function resolveProfissionalNome(agenda) {
   const id = String(agenda.roleUserIdAgenda || '').trim();
@@ -18,7 +23,7 @@ function resolveProfissionalNome(agenda) {
   return agenda.editingAppointment?.profissionalNome || '';
 }
 
-function buildResumo({ form, agenda, duracaoTotalMin, procedimentosSelecionados }) {
+function buildResumo({ form, agenda, rangePhase, duracaoTotalMin, horaFimReal, procedimentosSelecionados }) {
   const partes = [];
   if (form.pacienteNome) partes.push(form.pacienteNome);
   if (procedimentosSelecionados.length > 0) {
@@ -29,18 +34,46 @@ function buildResumo({ form, agenda, duracaoTotalMin, procedimentosSelecionados 
     const [y, m, d] = form.data.split('-');
     partes.push(`${d}/${m}/${y}`);
   }
-  if (form.horaInicio) partes.push(form.horaInicio);
-  if (duracaoTotalMin > 0) partes.push(`${duracaoTotalMin} min`);
+  if (rangePhase === 'complete') {
+    partes.push(`${form.horaInicio}–${horaFimReal} (${duracaoTotalMin} min)`);
+  } else if (form.horaInicio) {
+    partes.push(`${form.horaInicio} (selecione o término)`);
+  }
   const profNome = resolveProfissionalNome(agenda);
   if (profNome) partes.push(profNome);
   return partes.join(' · ');
 }
 
-export function AgendaFormModal({ agenda, onExcluirClick }) {
+const OBS_TEXTAREA_CLASS =
+  'mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none transition-[height] placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100';
+
+function ObservacoesField({ value, onChange, className = 'mt-4 shrink-0' }) {
+  const [focused, setFocused] = useState(false);
+  const hasText = Boolean(String(value || '').trim());
+
+  return (
+    <div className={className}>
+      <p className="py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+        Observações <span className="font-normal normal-case text-ink-400">(opcional)</span>
+      </p>
+      <textarea
+        value={value || ''}
+        onChange={onChange}
+        maxLength={500}
+        rows={focused || hasText ? 3 : 1}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder="Informações adicionais sobre o atendimento..."
+        className={OBS_TEXTAREA_CLASS}
+      />
+    </div>
+  );
+}
+
+export function AgendaFormModal({ agenda }) {
   const { ehProfissionalClinico, roleUserId: roleLogadoId } = useUsuarioLogado();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [dispSheetOpen, setDispSheetOpen] = useState(false);
-  const [obsAberta, setObsAberta] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resultadosSalvar, setResultadosSalvar] = useState(null);
 
@@ -102,19 +135,39 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
   const lockPatient = Boolean(agenda.patientSelectLocked);
   const profissionalFixado = ehProfissionalClinico || Boolean(agenda.roleUserIdAgenda);
   const roleUserIdFiltro = ehProfissionalClinico ? roleLogadoId : (agenda.roleUserIdAgenda || '');
-  const duracaoTotalMin = procedimentosSelecionados.reduce((acc, p) => acc + (Number(p.duracaoSelecionada) || 0), 0);
+  const rangePhase = deriveRangePhase(agenda.form.horaInicio, agenda.form.horaFimSlot);
+  const duracaoTotalMin =
+    rangePhase === 'complete'
+      ? deriveDuracaoFromRange(agenda.form.horaInicio, agenda.form.horaFimSlot)
+      : 0;
+  const horaFimReal =
+    rangePhase === 'complete' ? deriveHoraFimReal(agenda.form.horaFimSlot) : '';
+
+  const dayModelForSlots = agenda.form.data && agenda.dispDaySlots ? agenda.dispDaySlots : null;
 
   const confirmDisabled =
     !agenda.form.pacienteId ||
     !(agenda.form.catalogoProcedimentoSaudeIds?.length > 0) ||
     !agenda.form.data ||
     !agenda.form.horaInicio ||
+    !agenda.form.horaFimSlot ||
     !agenda.roleUserIdAgenda;
 
-  const resumoTexto = buildResumo({ form: agenda.form, agenda, duracaoTotalMin, procedimentosSelecionados });
+  const resumoTexto = buildResumo({
+    form: agenda.form,
+    agenda,
+    rangePhase,
+    duracaoTotalMin,
+    horaFimReal,
+    procedimentosSelecionados,
+  });
 
   // CTA mobile (botão que abre o sheet de data/horário)
-  const ctaLabelRaw = formatAgendaDateTimeCta(agenda.form.data, agenda.form.horaInicio);
+  const ctaLabelRaw = formatAgendaDateTimeCta(
+    agenda.form.data,
+    agenda.form.horaInicio,
+    horaFimReal || undefined
+  );
   const ctaPreenchido = Boolean(ctaLabelRaw);
   const ctaLabel = ctaLabelRaw || 'Escolher data e horário';
 
@@ -146,41 +199,34 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     [agenda]
   );
 
-  const handleMudarDuracao = useCallback((id, minutos) => {
-    setProcedimentosSelecionados((current) =>
-      current.map((p) => p.id === id ? { ...p, duracaoSelecionada: Number(minutos) } : p)
-    );
-    // duracaoSelecionada é estado local; não precisa sincronizar com o hook
-  }, []);
-
   // ── Handlers de calendário/slots/profissional ───────────────────────────────
 
   const handleSelecionarDia = useCallback(
     (iso) => {
       agenda.selectDispCalendarioDia(iso);
       agenda.updateForm('data', iso);
-      agenda.updateForm('horaInicio', '');
+      agenda.clearRangeSelection();
       setResultadosSalvar(null);
     },
     [agenda]
   );
 
   const handleSelecionarSlotDireto = useCallback(
-    ({ hora, profissional }) => {
-      agenda.updateForm('horaInicio', hora);
-      if (profissional?.roleUserId) {
-        agenda.setRoleUserIdAgenda(profissional.roleUserId);
-      }
+    (payload) => {
+      const result = agenda.handleRangeSlotClick(payload);
       setResultadosSalvar(null);
+      return result;
     },
     [agenda]
   );
 
-  // Wrapper de evento (não componente) que reusa o handler existente e fecha o sheet mobile.
+  // Fecha o sheet mobile somente quando o range fica completo (2º clique válido).
   const handleSheetSelectSlot = useCallback(
     (payload) => {
-      handleSelecionarSlotDireto(payload);
-      setDispSheetOpen(false);
+      const result = handleSelecionarSlotDireto(payload);
+      if (result?.rangeComplete) {
+        setDispSheetOpen(false);
+      }
     },
     [handleSelecionarSlotDireto]
   );
@@ -207,10 +253,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
     setResultadosSalvar(null);
     try {
       await agenda.saveAppointment({
-        duracoesPorProc: procedimentosSelecionados.map((p) => ({
-          id: p.id,
-          duracaoSelecionada: p.duracaoSelecionada,
-        })),
         onConflictResult: (resultados) => setResultadosSalvar(resultados),
       });
     } finally {
@@ -233,11 +275,10 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
   if (!agenda.modalMode) return null;
 
-  const isEdit = agenda.modalMode === 'edit';
   const nProcs = procedimentosSelecionados.length;
   const modalTitulo = isReagendar
     ? `Reagendar — ${nProcs} procedimento${nProcs !== 1 ? 's' : ''}`
-    : isEdit ? 'Editar agendamento' : 'Novo agendamento';
+    : 'Novo agendamento';
 
   return (
     <div
@@ -317,7 +358,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                 procedimentosSelecionados={procedimentosSelecionados}
                 onToggle={handleToggleProc}
                 onRemover={handleRemoverProc}
-                onMudarDuracao={handleMudarDuracao}
                 readOnly={isReagendar}
               />
               {agenda.formErrors?.catalogoProcedimentoSaudeIds && (
@@ -353,7 +393,7 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
             {/* Coluna esquerda: calendário + observações */}
             <div className="flex h-full min-h-0 flex-col overflow-hidden border-b border-ink-100 px-6 py-4 lg:border-b-0 lg:border-r lg:py-5">
-              <div className="flex min-h-0 flex-1 flex-col">
+              <div className="mx-auto flex min-h-0 w-full max-w-[min(100%,560px)] flex-1 flex-col">
                 <CalendarioMensal
                   heatmap={agenda.dispCalendarioHeatmap}
                   loading={Boolean(roleUserIdFiltro) && agenda.dispMonthLoading}
@@ -367,35 +407,14 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
                 />
               </div>
 
-              {/* Observações colapsável */}
-              <div className="mt-4 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setObsAberta((v) => !v)}
-                  className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
-                >
-                  <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
-                  {obsAberta ? (
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                {obsAberta && (
-                  <textarea
-                    value={agenda.form.observacao || ''}
-                    onChange={(e) => agenda.updateForm('observacao', e.target.value)}
-                    maxLength={500}
-                    rows={4}
-                    placeholder="Informações adicionais sobre o atendimento..."
-                    className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
-                  />
-                )}
-              </div>
+              <ObservacoesField
+                value={agenda.form.observacao}
+                onChange={(e) => agenda.updateForm('observacao', e.target.value)}
+              />
             </div>
 
             {/* Coluna direita: exclusivamente horários disponíveis — scroll isolado, não afeta altura do calendário */}
-            <div className="flex h-full min-h-0 flex-col overflow-hidden px-5 py-5 lg:py-6">
+            <div className="mx-auto flex h-full min-h-0 w-full max-w-[560px] flex-col overflow-hidden px-5 py-5 lg:py-6">
               <p className="mb-3 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
                 Horários disponíveis
               </p>
@@ -403,12 +422,20 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                 <PainelA_SlotsHorario
                   diaSelecionado={agenda.form.data}
+                  dayModel={dayModelForSlots}
                   roleUserIdFiltro={roleUserIdFiltro}
-                  duracaoTotalMin={duracaoTotalMin}
-                  horaSelecionada={agenda.form.horaInicio}
+                  horaInicio={agenda.form.horaInicio}
+                  horaFimSlot={agenda.form.horaFimSlot}
+                  rangePhase={rangePhase}
                   profissionalFixado={profissionalFixado}
-                  onSelecionarSlot={handleSelecionarSlotDireto}
+                  onRangeSlotClick={handleSelecionarSlotDireto}
+                  onClearRange={agenda.clearRangeSelection}
                 />
+                {agenda.formErrors?.horaInicio ? (
+                  <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+                    {agenda.formErrors.horaInicio}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -437,27 +464,11 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
               <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-ink-400" />
             </button>
 
-            {/* Observações colapsável (mobile) */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setObsAberta((v) => !v)}
-                className="flex w-full items-center justify-between py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-700 focus-visible:outline-none"
-              >
-                <span>Observações <span className="font-normal normal-case text-ink-400">(opcional)</span></span>
-                {obsAberta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              </button>
-              {obsAberta && (
-                <textarea
-                  value={agenda.form.observacao || ''}
-                  onChange={(e) => agenda.updateForm('observacao', e.target.value)}
-                  maxLength={500}
-                  rows={4}
-                  placeholder="Informações adicionais sobre o atendimento..."
-                  className="mt-2 w-full resize-none rounded-xl border border-ink-200 px-3 py-2.5 text-sm text-ink-800 outline-none placeholder:text-ink-300 focus:border-vivid-teal-400 focus:ring-2 focus:ring-vivid-teal-100"
-                />
-              )}
-            </div>
+            <ObservacoesField
+              value={agenda.form.observacao}
+              onChange={(e) => agenda.updateForm('observacao', e.target.value)}
+              className="shrink-0"
+            />
           </div>
         )}
 
@@ -494,15 +505,6 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
 
             {/* Ações */}
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {isEdit && typeof onExcluirClick === 'function' && (
-                <button
-                  type="button"
-                  onClick={onExcluirClick}
-                  className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                >
-                  Excluir
-                </button>
-              )}
               <button
                 type="button"
                 onClick={agenda.closeModal}
@@ -534,9 +536,11 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
         <AgendaFormDataHoraSheet
           open
           diaSelecionado={isReagendar ? undefined : agenda.form.data}
+          dayModel={dayModelForSlots}
           roleUserIdFiltro={roleUserIdFiltro}
-          duracaoTotalMin={duracaoTotalMin}
-          horaSelecionada={agenda.form.horaInicio}
+          horaInicio={agenda.form.horaInicio}
+          horaFimSlot={agenda.form.horaFimSlot}
+          rangePhase={rangePhase}
           profissionalFixado={profissionalFixado}
           heatmap={agenda.dispCalendarioHeatmap}
           loading={Boolean(roleUserIdFiltro) && agenda.dispMonthLoading}
@@ -546,8 +550,10 @@ export function AgendaFormModal({ agenda, onExcluirClick }) {
           onRetry={agenda.retryDispMonth}
           showDensityLegend={Boolean(roleUserIdFiltro)}
           onSelecionarDia={handleSelecionarDia}
-          onSelecionarSlot={handleSheetSelectSlot}
+          onRangeSlotClick={handleSheetSelectSlot}
+          onClearRange={agenda.clearRangeSelection}
           onCancel={() => setDispSheetOpen(false)}
+          horaInicioError={agenda.formErrors?.horaInicio}
         />
       )}
 

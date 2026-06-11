@@ -50,7 +50,6 @@ export function AgendaDayRailBody({
   onEnviarAnamnese,
   onReagendar,
   onCancelar,
-  onEdit,
   onRemoverBloqueio,
   onNovoClick,
   submittingRemoverBloqueioId,
@@ -160,7 +159,6 @@ export function AgendaDayRailBody({
                         onEnviarAnamnese={onEnviarAnamnese}
                         onReagendar={onReagendar}
                         onCancelar={onCancelar}
-                        onEdit={onEdit}
                         onRemoverBloqueio={onRemoverBloqueio}
                         submittingRemoverBloqueioId={submittingRemoverBloqueioId}
                       />

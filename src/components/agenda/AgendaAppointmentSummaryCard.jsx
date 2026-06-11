@@ -1,4 +1,4 @@
-import { Clock3, Lock, Pencil, UserRound } from 'lucide-react';
+import { Clock3, Lock, UserRound } from 'lucide-react';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
@@ -98,7 +98,6 @@ function panelActionLabel(status) {
 export function AgendaAppointmentSummaryCard({
   appointment,
   onPrimary,
-  onEdit,
   renderSlotActions,
   isNivel1 = false,
   advanceOffer,
@@ -261,13 +260,6 @@ export function AgendaAppointmentSummaryCard({
                     {panelActionLabel(appointment.status)}
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => onEdit(appointment)}
-                  className="rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-xs font-bold text-[#64748b] transition-colors duration-150 hover:bg-[#F5F6FA]"
-                >
-                  Editar
-                </button>
               </>
             )}
           </div>
@@ -341,15 +333,6 @@ export function AgendaAppointmentSummaryCard({
                     {compactActionLabel(appointment.status)}
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => onEdit(appointment)}
-                  className="inline-flex items-center justify-center rounded-md border border-[#E8E8E8] bg-white p-1.5 text-[#64748b] transition-colors hover:bg-[#F5F6FA]"
-                  aria-label="Editar agendamento"
-                  title="Editar agendamento"
-                >
-                  <Pencil className="h-4 w-4" aria-hidden />
-                </button>
                 {typeof renderSlotActions === 'function' ? (
                   <div className="flex flex-1 flex-wrap items-center justify-end gap-1">
                     {renderSlotActions(appointment)}
@@ -443,13 +426,6 @@ export function AgendaAppointmentSummaryCard({
                   {actionLabel(appointment.status)}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => onEdit(appointment)}
-                className={`${BTN_ACTION} rounded-lg border border-[#E8E8E8] bg-white px-3 py-2 text-[11px] font-bold text-[#64748b] transition-colors hover:bg-[#F5F6FA]`}
-              >
-                Editar
-              </button>
             </>
           )}
         </div>

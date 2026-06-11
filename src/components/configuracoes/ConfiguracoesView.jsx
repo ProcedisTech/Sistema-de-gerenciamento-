@@ -96,6 +96,7 @@ function SidebarNavItem({ icon, label, active, onClick, badge }) {
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada]
  * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
  * @param {() => void} [props.onPacientesCatalogRefresh]
+ * @param {(opts?: { roleUserId?: string, scope?: 'all' | 'role' }) => void | Promise<void>} [props.onDisponibilidadeInvalidate]
  */
 export function ConfiguracoesView({
   canSeeAnamnese = false,
@@ -108,6 +109,7 @@ export function ConfiguracoesView({
   onClinicaAtualizada,
   onPerfilAtualizado,
   onPacientesCatalogRefresh,
+  onDisponibilidadeInvalidate,
   configSection,
   setConfigSection,
 }) {
@@ -318,7 +320,9 @@ export function ConfiguracoesView({
 
 
           {/* Agenda — N5+ */}
-          {configSection === 'horarios-funcionamento' && canSeeAgendaConfig && <HorarioClinicaPanel />}
+          {configSection === 'horarios-funcionamento' && canSeeAgendaConfig && (
+            <HorarioClinicaPanel onDisponibilidadeInvalidate={onDisponibilidadeInvalidate} />
+          )}
           {configSection === 'agenda-feriados'        && canSeeAgendaConfig && <FeriadosPanel />}
           {configSection === 'agenda-templates'       && canSeeAgendaConfig && <TemplatesMensagemPanel />}
 

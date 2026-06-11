@@ -9,7 +9,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { HorarioIntervalosEditor } from './HorarioIntervalosEditor.jsx';
 
-export function HorarioClinicaPanel() {
+export function HorarioClinicaPanel({ onDisponibilidadeInvalidate }) {
   const { orgId } = useOrg();
   const [tipoOrg, setTipoOrg] = useState('clinica');
   const [horarios, setHorarios] = useState([]);
@@ -66,7 +66,8 @@ export function HorarioClinicaPanel() {
           }))
         );
       }
-      success('Configuracoes salvas');
+      success('Configurações salvas');
+      onDisponibilidadeInvalidate?.({ scope: 'all' });
     } catch (e) {
       toastError(getApiErrorToastMessage(e, 'Erro ao salvar'));
     } finally {

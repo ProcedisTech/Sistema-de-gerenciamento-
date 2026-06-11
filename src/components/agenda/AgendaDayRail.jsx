@@ -27,7 +27,6 @@ export function AgendaDayRail({
   onEnviarAnamnese,
   onReagendar,
   onCancelar,
-  onEdit,
   onRemoverBloqueio,
   submittingRemoverBloqueioId,
 }) {
@@ -105,7 +104,6 @@ export function AgendaDayRail({
         onEnviarAnamnese={onEnviarAnamnese}
         onReagendar={onReagendar}
         onCancelar={onCancelar}
-        onEdit={onEdit}
         onRemoverBloqueio={onRemoverBloqueio}
         onNovoClick={onNovoClick}
         submittingRemoverBloqueioId={submittingRemoverBloqueioId}

@@ -16,7 +16,6 @@ export function AgendaWeekSlotDetailModal({
   target,
   onClose,
   onPrimary,
-  onEdit,
   renderSlotActions,
   isNivel1 = false,
   advanceOfferByAgendaId,
@@ -62,7 +61,6 @@ export function AgendaWeekSlotDetailModal({
           <AgendaSummaryEntryCard
             entry={entry}
             onPrimary={onPrimary}
-            onEdit={onEdit}
             renderSlotActions={renderSlotActions}
             isNivel1={isNivel1}
             advanceOffer={advanceOffer}

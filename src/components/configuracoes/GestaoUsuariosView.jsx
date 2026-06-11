@@ -10,7 +10,7 @@ import { AuditoriaView } from './AuditoriaView';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 
-export function GestaoUsuariosView() {
+export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
   const { isAdmin } = usePapel();
   const { roleUserId: currentRoleUserId } = useOrg();
   const toast = useToast();
@@ -629,7 +629,12 @@ export function GestaoUsuariosView() {
               nome={selectedUsuario.nomeCompleto || selectedUsuario.usuarioNome}
               tipoOrg={null}
               onClose={() => { setShowDispModal(false); setSelectedUsuario(null); }}
-              onSaved={() => {}}
+              onSaved={() => {
+                onDisponibilidadeInvalidate?.({
+                  scope: 'role',
+                  roleUserId: selectedUsuario.id,
+                });
+              }}
             />
           )}
         </>

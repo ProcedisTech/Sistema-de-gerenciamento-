@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useDisponibilidadeRevision } from '../../contexts/useDisponibilidadeRevision.js';
 import { agendaDisponibilidadeApi } from '../../services/api.js';
 import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
 
@@ -6,6 +7,7 @@ import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
  * @param {{ data?: string, roleUserId?: string, especialidadeId?: string, enabled?: boolean }} opts
  */
 export function useDisponibilidadeDoDia({ data, roleUserId, especialidadeId, enabled = true }) {
+  const { revision } = useDisponibilidadeRevision();
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,7 +17,7 @@ export function useDisponibilidadeDoDia({ data, roleUserId, especialidadeId, ena
     setLoading(true);
     setError(null);
     agendaDisponibilidadeApi
-      .slotsDoDia({ data, roleUserId, especialidadeId })
+      .slotsDoDia({ data, roleUserId, especialidadeId, duracaoMinutos: 30 })
       .then((raw) => setSlots(normalizeApiList(raw)))
       .catch((e) => {
         setError(e);
@@ -30,7 +32,7 @@ export function useDisponibilidadeDoDia({ data, roleUserId, especialidadeId, ena
     setLoading(true);
     setError(null);
     agendaDisponibilidadeApi
-      .slotsDoDia({ data, roleUserId, especialidadeId })
+      .slotsDoDia({ data, roleUserId, especialidadeId, duracaoMinutos: 30 })
       .then((raw) => {
         if (!cancelled) setSlots(normalizeApiList(raw));
       })
@@ -46,7 +48,7 @@ export function useDisponibilidadeDoDia({ data, roleUserId, especialidadeId, ena
     return () => {
       cancelled = true;
     };
-  }, [data, roleUserId, especialidadeId, enabled]);
+  }, [data, roleUserId, especialidadeId, enabled, revision]);
 
   return { slots, loading, error, reload };
 }

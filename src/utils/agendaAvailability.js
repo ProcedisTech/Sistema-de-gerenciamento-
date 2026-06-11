@@ -8,7 +8,7 @@ import {
 /** Alinhar à grade semanal em WeekTimeGrid.jsx (comentário de sincronização). */
 export const AGENDA_DAY_START_MIN = 7 * 60;
 export const AGENDA_DAY_END_MIN = 20 * 60;
-export const AGENDA_SLOT_STEP_MIN = 15;
+export const AGENDA_SLOT_STEP_MIN = 30;
 
 const ACTIVE_OCCUPANCY_STATUSES = new Set(['pendente', 'confirmado', 'aguardando_confirmacao']);
 
@@ -248,6 +248,7 @@ export function findNextFreeSlotAcrossDays({
     if (iso < today) continue;
     if (iso < anchor) continue;
 
+    // TODO PR2: aplicar getDayWindowsWithFallback para respeitar janelas comerciais em prof zerado
     const windows = getDayWindowsForIso(iso, disponibilidade);
     if (!windows.length) continue;
 

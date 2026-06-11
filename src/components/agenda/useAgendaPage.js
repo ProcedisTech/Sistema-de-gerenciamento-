@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
+import { useDisponibilidadeRevision } from '../../contexts/useDisponibilidadeRevision.js';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
 import {
@@ -26,7 +27,6 @@ import {
 import {
   buildAgendaBloquearPeriodoBody,
   buildAgendaCreateBody,
-  buildAgendaUpdateBody,
   fetchDashboardAppointmentsForRange,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
@@ -41,8 +41,14 @@ import {
   findNextFreeSlotAcrossDays,
   minutesToHhmm,
   occupiedIntervalsFromAgendaDtos,
+  parseHhmmToMinutes,
   proposalOverlapsOccupied,
 } from '../../utils/agendaAvailability';
+import {
+  deriveDuracaoFromRange,
+  divideDuracaoEntreProcedimentos,
+  isRangeContiguous,
+} from '../../utils/agendaRangeSelection.js';
 import {
   dayBoundsFromWindows,
   getDayWindowsForIso,
@@ -58,7 +64,7 @@ import {
   resolveMotivoCancelamentoIdByCodigo,
 } from '../../utils/agendaCancelamentoMotivo.js';
 import { isRoleAgendaPreselect } from './agendaRoleConstants.js';
-import { DURACOES_PILL, snapDuracaoToPill } from '../../utils/agendaDuracaoPills.js';
+import { DURACOES_PILL } from '../../utils/agendaDuracaoPills.js';
 import {
   BLOQUEIO_TIPO_CODIGO,
   resolveTipoProcedimentoIdByCodigo,
@@ -210,7 +216,8 @@ function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
     catalogoProcedimentoSaudeIds: proc.id ? [String(proc.id)] : [],
     data: selectedDay || toLocalDateIso(),
     horaInicio: '',
-    duracaoMin: 60,
+    horaFimSlot: '',
+    duracaoMin: 30,
     observacao: '',
   };
 }
@@ -289,6 +296,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
 
 export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const { roleUserId, roleNome } = useOrg();
+  const { bumpRevision } = useDisponibilidadeRevision();
   const { isNivel1 } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
   const todayIso = toLocalDateIso();
@@ -306,7 +314,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const [editingAppointment, setEditingAppointment] = useState(null);
   const { options: procedimentosClinica } = useProcedimentosOptions({ enabled: authEnabled });
   const [form, setForm] = useState(() => defaultForm(todayIso, [], null));
+  const formRef = useRef(form);
+  formRef.current = form;
   const [formErrors, setFormErrors] = useState({});
+  /** Duração total para grade de slots (sync unidirecional do AgendaFormModal). */
+  const [slotDuracaoMin, setSlotDuracaoMinState] = useState(30);
   const [daySheetOpen, setDaySheetOpen] = useState(false);
   const [hojeCount, setHojeCount] = useState(0);
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
@@ -560,6 +572,50 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [authEnabled, dispCacheKey, roleUserIdAgenda]
   );
 
+  const invalidateDisponibilidade = useCallback(
+    async ({ roleUserId: roleToInvalidate, scope = 'role' } = {}) => {
+      dispMonthCacheRef.current = {};
+
+      const rolesToRefetch =
+        scope === 'all'
+          ? Object.keys(disponibilidadesRef.current).filter(Boolean)
+          : [String(roleToInvalidate || '').trim()].filter(Boolean);
+
+      if (rolesToRefetch.length > 0) {
+        // TODO (escala): scope 'all' faz N GETs paralelos (1 por profissional). A longo prazo,
+        // colapsar em 1 endpoint batch de disponibilidade da org, ou o PUT de horários da clínica
+        // retornar a disponibilidade já atualizada. Aceitável enquanto N for pequeno.
+        const pares = await Promise.all(
+          rolesToRefetch.map((id) =>
+            disponibilidadeApi
+              .buscar(id)
+              .then((d) => [id, d])
+              .catch(() => [id, null])
+          )
+        );
+        setDisponibilidades((prev) => {
+          const next = { ...prev };
+          for (const [id, d] of pares) {
+            if (d) next[id] = d;
+            else if (scope === 'role') delete next[id];
+          }
+          disponibilidadesRef.current = next;
+          return next;
+        });
+      } else if (scope === 'all') {
+        setDisponibilidades({});
+        disponibilidadesRef.current = {};
+      }
+
+      if (modalMode || bloqueioModalOpen) {
+        await ensureDispMonthLoaded(dispMonthDate);
+      }
+
+      bumpRevision();
+    },
+    [bumpRevision, modalMode, bloqueioModalOpen, dispMonthDate, ensureDispMonthLoaded]
+  );
+
   useEffect(() => {
     if (!modalMode) return undefined;
     const iso = toDateKey(form.data) || todayIso;
@@ -669,17 +725,28 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispCacheKey,
   ]);
 
+  const duracaoRangeEfetiva = useMemo(
+    () =>
+      deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot) ||
+      Number(form.duracaoMin) ||
+      30,
+    [form.horaInicio, form.horaFimSlot, form.duracaoMin]
+  );
+
   const horarioConflita = useMemo(
-    () => (modalMode ? proposalOverlapsOccupied(form.horaInicio, form.duracaoMin, slotsOcupados) : false),
-    [modalMode, form.horaInicio, form.duracaoMin, slotsOcupados]
+    () =>
+      modalMode
+        ? proposalOverlapsOccupied(form.horaInicio, duracaoRangeEfetiva, slotsOcupados)
+        : false,
+    [modalMode, form.horaInicio, duracaoRangeEfetiva, slotsOcupados]
   );
 
   const horarioConflitoCom = useMemo(
     () =>
       modalMode && horarioConflita
-        ? findFirstConflictHhmm(form.horaInicio, form.duracaoMin, slotsOcupados)
+        ? findFirstConflictHhmm(form.horaInicio, duracaoRangeEfetiva, slotsOcupados)
         : null,
-    [modalMode, horarioConflita, form.horaInicio, form.duracaoMin, slotsOcupados]
+    [modalMode, horarioConflita, form.horaInicio, duracaoRangeEfetiva, slotsOcupados]
   );
 
   const selectPaciente = useCallback((pacienteId, paciente) => {
@@ -830,30 +897,93 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     ensureDispMonthLoaded(dispMonthDate);
   }, [authEnabled, bloqueioModalOpen, roleUserIdAgenda, dispMonthDate, ensureDispMonthLoaded]);
 
+  const setSlotDuracaoMin = useCallback((min) => {
+    const next = Number(min) || 30;
+    setSlotDuracaoMinState((prev) => (prev === next ? prev : next));
+  }, []);
+
+  useEffect(() => {
+    const dur = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
+    if (dur > 0) setSlotDuracaoMin(dur);
+    else setSlotDuracaoMin(30);
+  }, [form.horaInicio, form.horaFimSlot, setSlotDuracaoMin]);
+
   const dispDaySlots = useMemo(() => {
     if (!modalMode) return null;
     const role = String(roleUserIdAgenda || '').trim();
+    const iso = String(form.data || '').slice(0, 10);
+    if (!iso) return null;
     return buildDaySlotList({
-      iso: dispCalendarioDia,
+      iso,
       disponibilidade: dispProfissionalDisponibilidade,
       dtos: dispMonthDtos,
-      duracaoMin: form.duracaoMin,
+      duracaoMin: 30,
       excludeAgendaId: editingAppointment?.agendaId,
       profissionalRoleUserId: role,
       selectedFormIso: form.data,
       selectedFormHora: form.horaInicio,
+      selectedRangeFimSlot: form.horaFimSlot,
     });
   }, [
     modalMode,
-    dispCalendarioDia,
-    dispProfissionalDisponibilidade,
-    dispMonthDtos,
-    form.duracaoMin,
     form.data,
     form.horaInicio,
+    form.horaFimSlot,
+    dispProfissionalDisponibilidade,
+    dispMonthDtos,
     editingAppointment?.agendaId,
     roleUserIdAgenda,
   ]);
+
+  const clearRangeSelection = useCallback(() => {
+    setForm((prev) => ({ ...prev, horaInicio: '', horaFimSlot: '', duracaoMin: 30 }));
+    setSlotDuracaoMinState(30);
+    setFormErrors((prev) => ({ ...prev, horaInicio: undefined }));
+  }, []);
+
+  const handleRangeSlotClick = useCallback(
+    ({ hora, profissional }) => {
+      if (profissional?.roleUserId) setRoleUserIdAgenda(profissional.roleUserId);
+
+      const hm = String(hora || '').slice(0, 5);
+      const clickMin = parseHhmmToMinutes(hm);
+      const { horaInicio: inicio, horaFimSlot: fimSlot } = formRef.current;
+      const slots = dispDaySlots?.slots ?? [];
+      const dayEndMin = dispDaySlots?.dayEndMin ?? 0;
+      const windows = dispDaySlots?.windows ?? [];
+
+      let nextForm = null;
+      let nextError;
+
+      if (fimSlot) {
+        nextForm = { horaInicio: hm, horaFimSlot: '', duracaoMin: 30 };
+      } else if (!inicio) {
+        nextForm = { horaInicio: hm, horaFimSlot: '' };
+      } else {
+        const inicioMin = parseHhmmToMinutes(inicio);
+        if (clickMin < inicioMin) {
+          nextForm = { horaInicio: hm, horaFimSlot: '' };
+        } else if (clickMin < inicioMin + 30) {
+          nextError = 'Selecione um horário de término após o início (mínimo 30 min).';
+        } else if (!isRangeContiguous(slots, inicioMin, clickMin, windows, dayEndMin)) {
+          nextError = 'O intervalo cruza horário ocupado ou indisponível.';
+        } else {
+          nextForm = { horaFimSlot: hm, duracaoMin: clickMin - inicioMin };
+        }
+      }
+
+      if (nextForm) {
+        setForm((prev) => ({ ...prev, ...nextForm }));
+        setFormErrors((prev) => ({ ...prev, horaInicio: nextError }));
+        return { rangeComplete: Boolean(nextForm.horaFimSlot) };
+      }
+      if (nextError) {
+        setFormErrors((prev) => ({ ...prev, horaInicio: nextError }));
+      }
+      return { rangeComplete: false };
+    },
+    [dispDaySlots]
+  );
 
   const selectDispCalendarioDia = useCallback((iso) => {
     setDispCalendarioDia(toDateKey(iso) || '');
@@ -863,7 +993,13 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     const day = toDateKey(iso) || '';
     const hi = String(hhmm || '').slice(0, 5);
     setDispCalendarioDia(day);
-    setForm((prev) => ({ ...prev, data: day, horaInicio: hi }));
+    setForm((prev) => ({
+      ...prev,
+      data: day,
+      horaInicio: hi,
+      horaFimSlot: '',
+      duracaoMin: 30,
+    }));
     setFormErrors((prev) => ({ ...prev, data: undefined, horaInicio: undefined }));
   }, []);
 
@@ -887,10 +1023,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         dispProfissionalDisponibilidade ||
         [];
 
+      const duracaoEfetiva =
+        deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot) ||
+        Number(form.duracaoMin) ||
+        30;
+
       const result = findNextFreeSlotAcrossDays({
         startIso: dispCalendarioDia || form.data || todayIso,
         startHora: form.horaInicio,
-        duracaoMin: form.duracaoMin,
+        duracaoMin: duracaoEfetiva,
         dtos,
         disponibilidade: disp,
         todayIso,
@@ -912,6 +1053,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           ...prev,
           data: result.iso,
           horaInicio: result.hhmm,
+          horaFimSlot: addMinutesToTime(result.hhmm, 30),
+          duracaoMin: 30,
         }));
         setFormErrors((prev) => ({ ...prev, data: undefined, horaInicio: undefined }));
         return;
@@ -925,6 +1068,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispCalendarioDia,
     form.data,
     form.horaInicio,
+    form.horaFimSlot,
     form.duracaoMin,
     todayIso,
     editingAppointment?.agendaId,
@@ -1689,41 +1833,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
   );
 
-  const openEditModal = useCallback(
-    (appointment) => {
-      if (isNivel1) return;
-      setEditingAppointment(appointment);
-      setPlanejamentoItemIdPorCatalogo({});
-      const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
-      const currentIds = Array.isArray(appointment?.catalogoProcedimentoSaudeIds)
-        ? appointment.catalogoProcedimentoSaudeIds.map((id) => String(id))
-        : appointment?.catalogoProcedimentoSaudeId
-          ? [String(appointment.catalogoProcedimentoSaudeId)]
-          : [];
-      setForm({
-        ...base,
-        pacienteId: appointment?.pacienteId || base.pacienteId,
-        pacienteNome: appointment?.pacienteNome || base.pacienteNome,
-        telefone: appointment?.telefone || base.telefone,
-        procedimentoNome: appointment?.procedimentoNome || base.procedimentoNome,
-        catalogoProcedimentoSaudeIds: currentIds,
-        data: appointment?.data || base.data,
-        horaInicio: appointment?.horaInicio || base.horaInicio,
-        duracaoMin: snapDuracaoToPill(appointment?.duracaoMin ?? base.duracaoMin),
-        observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
-      });
-      setFormErrors({});
-      setPatientSelectLocked(false);
-      setRoleUserIdAgenda(
-        String(
-          appointment?.profissionalRoleUserId ?? appointment?.roleUserId ?? roleUserId ?? ''
-        ).trim()
-      );
-      setModalMode('edit');
-    },
-    [isNivel1, patientOptions, selectedDay, roleUserId]
-  );
-
   const openReagendarModal = useCallback(
     (appointment, grupoAgendamentos) => {
       if (isNivel1) return;
@@ -1742,7 +1851,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         catalogoProcedimentoSaudeIds: catIds,
         data: '',        // usuário escolhe nova data no calendário
         horaInicio: '',  // usuário escolhe novo slot
-        duracaoMin: snapDuracaoToPill(appointment?.duracaoMin ?? base.duracaoMin),
+        horaFimSlot: '',
+        duracaoMin: 30,
         observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
       });
       setFormErrors({});
@@ -1789,19 +1899,19 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
       .map((id) => String(id).trim())
       .filter(Boolean);
-    if (modalMode === 'edit') {
-      if (procIds.length !== 1) nextErrors.catalogoProcedimentoSaudeIds = 'Selecione exatamente um procedimento.';
-    } else if (procIds.length === 0) {
+    if (procIds.length === 0) {
       nextErrors.catalogoProcedimentoSaudeIds = 'Selecione ao menos um procedimento.';
     }
     if (!form.data) nextErrors.data = 'Selecione um dia no calendário.';
     else if (form.data < todayIso) {
       nextErrors.data = 'Data inválida — não é possível agendar para o passado.';
     }
-    if (!form.horaInicio) nextErrors.horaInicio = 'Selecione um horário na lista.';
-    const d = Number(form.duracaoMin);
-    if (!DURACOES_PILL.includes(d)) {
-      nextErrors.duracaoMin = 'Selecione a duração.';
+    if (!form.horaInicio || !form.horaFimSlot) {
+      nextErrors.horaInicio = 'Selecione início e término do atendimento (2 cliques).';
+    }
+    const dur = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
+    if (dur < 30 || dur % 30 !== 0) {
+      nextErrors.horaInicio = 'Intervalo inválido — término deve ser pelo menos 30 min após o início.';
     }
     if (!String(roleUserIdAgenda || '').trim()) {
       nextErrors.profissional = 'Selecione um profissional.';
@@ -1810,7 +1920,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     return Object.keys(nextErrors).length === 0;
   }, [form, todayIso, modalMode, roleUserIdAgenda]);
 
-  const saveAppointment = useCallback(async ({ duracoesPorProc, onConflictResult } = {}) => {
+  const saveAppointment = useCallback(async ({ onConflictResult } = {}) => {
     if (isNivel1) return false;
     if (!validateForm()) return false;
     const agendaRole = String(roleUserIdAgenda || '').trim();
@@ -1847,101 +1957,79 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     let agendaSavedPayload = null;
 
     try {
-      if (modalMode === 'edit' && editingAppointment?.agendaId) {
-        const rawSlot = editingAppointment.rawSlot || {};
-        const catId = procIds[0];
-        if (!catId) {
-          setError('Selecione o procedimento.');
-          return false;
-        }
-        const baseBody = buildAgendaUpdateBody(editingAppointment.rawSlot, form, agendaRole);
-        const body = {
-          ...baseBody,
+      let startHh = String(form.horaInicio || '09:00').slice(0, 5);
+      const resultados = [];
+      const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
+      const divisao = divideDuracaoEntreProcedimentos(duracaoTotal, procIds.length);
+
+      for (let i = 0; i < procIds.length; i += 1) {
+        const catalogoProcedimentoSaudeId = procIds[i];
+        const dMin = divisao[i] ?? 30;
+
+        const planejamentoItemId = planejamentoItemIdPorCatalogo[catalogoProcedimentoSaudeId] ?? null;
+        const createBody = buildAgendaCreateBody({
+          dataAgendamento: form.data,
+          horaInicio: startHh,
+          duracaoMin: dMin,
+          profissionalRoleUserId: agendaRole,
+          observacao: String(form.observacao || '').trim(),
           pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-          catalogoProcedimentoSaudeId: catId,
-          observacao: String(form.observacao || rawSlot.observacao || '').trim() || undefined,
-        };
-        const resultadoUpdate = await executarComBypassDisp(
-          () => agendasApi.update(editingAppointment.agendaId, body),
-          () => agendasApi.update(editingAppointment.agendaId, body, { forcar: true }),
-          abrirConfirmacaoForaDisp
-        );
-        if (resultadoUpdate === null) return false;
-      } else {
-        let startHh = String(form.horaInicio || '09:00').slice(0, 5);
-        const resultados = [];
+          catalogoProcedimentoSaudeId,
+          // Resolve pelo ID do procedimento — robusto a reordenação/remoção de procs no modal.
+          ...(modalMode === 'reagendar' && grupoReagendarMap[catalogoProcedimentoSaudeId]
+            ? { agendaIdOrigem: grupoReagendarMap[catalogoProcedimentoSaudeId] }
+            : {}),
+          ...(planejamentoItemId ? { planejamentoItemId } : {}),
+        });
 
-        for (let i = 0; i < procIds.length; i += 1) {
-          const catalogoProcedimentoSaudeId = procIds[i];
-          const dMin =
-            duracoesPorProc?.find((d) => String(d.id) === catalogoProcedimentoSaudeId)?.duracaoSelecionada
-            ?? (Number(form.duracaoMin) || 45);
-
-          const planejamentoItemId = planejamentoItemIdPorCatalogo[catalogoProcedimentoSaudeId] ?? null;
-          const createBody = buildAgendaCreateBody({
-            dataAgendamento: form.data,
-            horaInicio: startHh,
-            duracaoMin: dMin,
-            profissionalRoleUserId: agendaRole,
-            observacao: String(form.observacao || '').trim(),
-            pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-            catalogoProcedimentoSaudeId,
-            // Resolve pelo ID do procedimento — robusto a reordenação/remoção de procs no modal.
-            ...(modalMode === 'reagendar' && grupoReagendarMap[catalogoProcedimentoSaudeId]
-              ? { agendaIdOrigem: grupoReagendarMap[catalogoProcedimentoSaudeId] }
-              : {}),
-            ...(planejamentoItemId ? { planejamentoItemId } : {}),
-          });
-
-          try {
-            const created = await executarComBypassDisp(
-              () => agendasApi.create(createBody),
-              () => agendasApi.create(createBody, { forcar: true }),
-              abrirConfirmacaoForaDisp
-            );
-            if (created === null) {
-              resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
-              continue;
-            }
-            if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-            const horaInicioSlot = startHh;
-            resultados.push({
-              id: catalogoProcedimentoSaudeId,
-              status: 'ok',
-              agendaId: created?.id,
-              planejamentoItemId,
-              horaInicio: horaInicioSlot,
-              horaFim: addMinutesToTime(horaInicioSlot, dMin),
-            });
-            startHh = addMinutesToTime(startHh, dMin);
-          } catch (err) {
-            if (isAgendaSlotOverlapError(err)) {
-              resultados.push({ id: catalogoProcedimentoSaudeId, status: 'conflito', mensagem: formatAgendamentoApiError(err) });
-              continue;
-            }
-            throw err;
+        try {
+          const created = await executarComBypassDisp(
+            () => agendasApi.create(createBody),
+            () => agendasApi.create(createBody, { forcar: true }),
+            abrirConfirmacaoForaDisp
+          );
+          if (created === null) {
+            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
+            continue;
           }
+          if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+          const horaInicioSlot = startHh;
+          resultados.push({
+            id: catalogoProcedimentoSaudeId,
+            status: 'ok',
+            agendaId: created?.id,
+            planejamentoItemId,
+            horaInicio: horaInicioSlot,
+            horaFim: addMinutesToTime(horaInicioSlot, dMin),
+          });
+          startHh = addMinutesToTime(startHh, dMin);
+        } catch (err) {
+          if (isAgendaSlotOverlapError(err)) {
+            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'conflito', mensagem: formatAgendamentoApiError(err) });
+            continue;
+          }
+          throw err;
         }
+      }
 
-        const algumFalhou = resultados.some((r) => r.status !== 'ok');
-        if (algumFalhou) {
-          onConflictResult?.(resultados);
-          return false;
-        }
+      const algumFalhou = resultados.some((r) => r.status !== 'ok');
+      if (algumFalhou) {
+        onConflictResult?.(resultados);
+        return false;
+      }
 
-        const firstOk = resultados.find((r) => r.status === 'ok');
-        if (firstOk && onAgendaSavedRef.current) {
-          agendaSavedPayload = {
-            agendaId: firstOk.agendaId,
-            planejamentoItemId: firstOk.planejamentoItemId ?? null,
-            catalogoProcedimentoSaudeId: firstOk.id,
-            dataAgendamento: form.data,
-            horaInicio: firstOk.horaInicio,
-            horaFim: firstOk.horaFim,
-            profissionalRoleUserId: agendaRole,
-            statusCodigo: 'AGENDADO',
-          };
-        }
+      const firstOk = resultados.find((r) => r.status === 'ok');
+      if (firstOk && onAgendaSavedRef.current) {
+        agendaSavedPayload = {
+          agendaId: firstOk.agendaId,
+          planejamentoItemId: firstOk.planejamentoItemId ?? null,
+          catalogoProcedimentoSaudeId: firstOk.id,
+          dataAgendamento: form.data,
+          horaInicio: firstOk.horaInicio,
+          horaFim: firstOk.horaFim,
+          profissionalRoleUserId: agendaRole,
+          statusCodigo: 'AGENDADO',
+        };
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
@@ -2045,6 +2133,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openDaySheet,
     closeDaySheet,
     disponibilidades,
+    invalidateDisponibilidade,
     editingAppointment,
     foraDispModal,
     abrirConfirmacaoForaDisp,
@@ -2088,7 +2177,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     openCreateModal,
     openCreateModalAtSlot,
     openCreateModalForPatient,
-    openEditModal,
     openReagendarModal,
     grupoReagendarDuracoes,
     setPlanejamentoItemIdPorCatalogo,
@@ -2098,6 +2186,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     procedimentoOptions,
     dispCalendarioDia,
     dispDaySlots,
+    slotDuracaoMin,
+    setSlotDuracaoMin,
     dispHeatmap,
     dispCalendarioHeatmap,
     dispMonthError,
@@ -2111,6 +2201,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     refreshDashboard,
     selectDispCalendarioDia,
     selectDispSlot,
+    handleRangeSlotClick,
+    clearRangeSelection,
     saveAppointment,
     saveBloqueio,
     selectDay,

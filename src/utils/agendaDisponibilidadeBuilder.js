@@ -7,6 +7,7 @@ import {
   segmentsForDayIso,
 } from './agendaAvailability.js';
 import {
+  commercialWindowsForIso,
   dayBoundsFromWindows,
   formatExpedienteLabel,
   getDayWindowsForIso,
@@ -126,7 +127,7 @@ export function buildNeutralMonthHeatmap({ monthDate, todayIso, selectedIso }) {
 }
 
 /**
- * @returns {{ headerTitle: string, expedienteLabel: string, dayStartMin: number, dayEndMin: number, slots: Array }}
+ * @returns {{ headerTitle: string, expedienteLabel: string, dayStartMin: number, dayEndMin: number, isFallback: boolean, windows: Array, slots: Array }}
  */
 export function buildDaySlotList({
   iso,
@@ -137,6 +138,7 @@ export function buildDaySlotList({
   profissionalRoleUserId,
   selectedFormIso,
   selectedFormHora,
+  selectedRangeFimSlot,
   stepMin = AGENDA_SLOT_STEP_MIN,
 }) {
   if (!iso) {
@@ -145,13 +147,21 @@ export function buildDaySlotList({
       expedienteLabel: '',
       dayStartMin: 0,
       dayEndMin: 0,
+      isFallback: false,
+      windows: [],
       slots: [],
     };
   }
 
-  const windows = getDayWindowsForIso(iso, disponibilidade);
+  const real = getDayWindowsForIso(iso, disponibilidade);
+  let isFallback = false;
+  let windows = real;
+  if (real.length === 0) {
+    windows = commercialWindowsForIso(iso);
+    isFallback = Boolean(profissionalRoleUserId);
+  }
   const { dayStartMin, dayEndMin } = dayBoundsFromWindows(windows);
-  const dur = Number(duracaoMin) || 45;
+  const dur = Number(duracaoMin) || AGENDA_SLOT_STEP_MIN;
   const step = Math.max(5, Number(stepMin) || AGENDA_SLOT_STEP_MIN);
   const segOpts = { profissionalRoleUserId, excludeAgendaId };
   const segments = segmentsForDayIso(dtos, iso, segOpts);
@@ -159,6 +169,9 @@ export function buildDaySlotList({
   const selectedHm = String(selectedFormHora || '').slice(0, 5);
   const selectedMin =
     selectedFormIso === iso && selectedHm ? parseHhmmToMinutes(selectedHm) : null;
+  const selectedFimHm = String(selectedRangeFimSlot || '').slice(0, 5);
+  const selectedFimMin =
+    selectedFormIso === iso && selectedFimHm ? parseHhmmToMinutes(selectedFimHm) : null;
 
   const slots = [];
 
@@ -179,7 +192,14 @@ export function buildDaySlotList({
     let observacao = '';
     let agendaId;
 
-    if (selectedMin != null && t === selectedMin) {
+    if (
+      selectedMin != null &&
+      selectedFimMin != null &&
+      t < selectedFimMin &&
+      t + step >= selectedMin
+    ) {
+      state = 'selecionado';
+    } else if (selectedMin != null && selectedFimMin == null && t === selectedMin) {
       state = 'selecionado';
     } else {
       const hit = segmentAtSlot(segments, t, blockEnd);
@@ -202,15 +222,6 @@ export function buildDaySlotList({
       }
     }
 
-    if (
-      state === 'livre' &&
-      selectedMin != null &&
-      t > selectedMin &&
-      t < selectedMin + dur
-    ) {
-      state = 'previewOcupacao';
-    }
-
     const clickable = state === 'selecionado' || (state === 'livre' && canStart);
 
     slots.push({
@@ -231,6 +242,8 @@ export function buildDaySlotList({
     expedienteLabel: formatExpedienteLabel(windows),
     dayStartMin,
     dayEndMin,
+    isFallback,
+    windows,
     slots,
   };
 }
