@@ -20,9 +20,19 @@ export function AnamneseConfigPublicaPanel() {
           anamneseApi.listarFichas()
         ]);
         if (isSubscribed) {
+          const generateSlug = (text) => {
+            if (!text) return '';
+            return text.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-z0-9- ]/g, '')
+              .trim()
+              .replace(/\s+/g, '-')
+              .replace(/-+/g, '-');
+          };
+          
           setFichas(fichasList || []);
           setConfig({
-            slug: clinica.slug || '',
+            slug: clinica.slug || generateSlug(clinica.nomeFantasia || clinica.razaoSocial) || '',
             validadeAnamneseDias: clinica.validadeAnamneseDias ?? 180,
             anamnesePadraoId: clinica.anamnesePadraoId || ''
           });
