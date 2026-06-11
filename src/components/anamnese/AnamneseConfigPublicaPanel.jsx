@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, ExternalLink, ShieldCheck, Clock, Globe, AlertCircle, Loader2, FileText, Printer } from 'lucide-react';
+import { Save, ExternalLink, ShieldCheck, Clock, Globe, AlertCircle, Loader2, FileText, Printer, Copy } from 'lucide-react';
 import { clinicaApi, anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
 import { QRCodeSVG } from 'qrcode.react';
@@ -207,10 +207,22 @@ export function AnamneseConfigPublicaPanel() {
                 <label className="text-[13px] font-bold text-slate-700">
                   Link de Acesso da Clínica
                 </label>
-                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden cursor-not-allowed">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden group hover:border-[#00a88e]/30 transition-colors">
                   <div className="px-4 py-3 text-slate-500 text-[14px] select-none w-full truncate">
                     procedi.com.br/anamnese?clinic=<strong className="text-slate-800">{config.slug}</strong>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const baseUrl = window.location.origin.includes('localhost') ? 'https://procedi.com.br' : window.location.origin;
+                      navigator.clipboard.writeText(`${baseUrl}/anamnese?clinic=${config.slug}`);
+                      toast.success('Link copiado com sucesso!');
+                    }}
+                    className="p-3 text-slate-400 hover:text-[#00a88e] hover:bg-emerald-50 transition-colors border-l border-slate-200 focus:outline-none focus:bg-emerald-50"
+                    title="Copiar link"
+                  >
+                    <Copy className="w-5 h-5" />
+                  </button>
                 </div>
                 <p className="text-[12px] text-slate-500">
                   O link de acesso público da sua clínica é gerado automaticamente a partir do nome fantasia.
