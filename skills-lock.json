@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "senior-fullstack": {
+      "computedHash": "460d09e61ba3d601196cd72b984733abab4b4d58050a77b15d41132e20b15102",
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/senior-fullstack/SKILL.md"
+    },
+    "api-patterns": {
+      "computedHash": "22301a7765eff9351673b12905d42d95e5acac96f8fb37680b87bfcae89cc825",
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/api-patterns/SKILL.md"
+    },
+    "database-design": {
+      "computedHash": "e3c13e7880f2feb6faca012c39d97b7dd331ba42dfe682ad66a0219008ea9863",
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/database-design/SKILL.md"
+    },
+    "backend-dev-guidelines": {
+      "computedHash": "b16c25945ae6b345f2f4f8f373b79dc8a45cd5c20044b189c5ee8bd76a2d070e",
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/backend-dev-guidelines/SKILL.md"
+    },
+    "stripe-integration": {
+      "computedHash": "04c2a0b57228f012e075c835602119734efa83c4d8954fba13dc78c090500f76",
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/stripe-integration/SKILL.md"
+    },
+    "frontend-developer": {
+      "computedHash": "210ad3a814862a0327c9c5a12b5b8c76551466d752f290442867ebd2a6f5063a",
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-developer/SKILL.md"
+    }
+  }
+}
