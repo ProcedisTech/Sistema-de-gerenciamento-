@@ -261,14 +261,13 @@ export function PulseSidebar({
     <aside className="hidden w-[min(100%,340px)] shrink-0 flex-col gap-4 lg:flex xl:w-[380px]">
       <div className="sticky top-4 flex max-h-[calc(100dvh-7rem)] flex-col gap-4 overflow-y-auto overflow-x-hidden rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-sm custom-scrollbar">
 
-        {/* Saudação */}
-        <div className="relative overflow-hidden rounded-xl border border-[#e2e8f0] bg-white p-4">
-          <div
-            className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-[radial-gradient(circle,#e6f7f5_0%,transparent_70%)] opacity-80"
-            aria-hidden
-          />
-          <div className="relative">
-            <p className="text-[15px] font-bold text-[#0f172a]">
+        {/* Saudação — shrink-0 evita compressão no flex com max-h; overflow só no decorativo */}
+        <div className="relative shrink-0 overflow-visible rounded-xl border border-[#e2e8f0] bg-white p-4">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl" aria-hidden>
+            <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-[radial-gradient(circle,#e6f7f5_0%,transparent_70%)] opacity-80" />
+          </div>
+          <div className="relative z-10 min-w-0">
+            <p className="min-w-0 break-words text-[15px] font-bold leading-snug text-[#0f172a]">
               {getSaudacao()}
               {nome ? `, ${nome}` : ''}{' '}
               <span aria-hidden="true">👋</span>
@@ -276,9 +275,11 @@ export function PulseSidebar({
             {loading ? (
               <div className="mt-1.5 h-4 w-3/4 animate-pulse rounded bg-[#e2e8f0]" />
             ) : welcomeResumo ? (
-              <p className="mt-1.5 text-[13px] leading-relaxed text-[#64748b]">{welcomeResumo}</p>
+              <p className="mt-1.5 min-w-0 break-words text-[13px] leading-relaxed text-[#64748b]">
+                {welcomeResumo}
+              </p>
             ) : resumoVazio ? (
-              <p className="mt-1.5 text-[13px] leading-relaxed text-[#64748b]">
+              <p className="mt-1.5 min-w-0 break-words text-[13px] leading-relaxed text-[#64748b]">
                 Nenhum compromisso ou pendência urgente para hoje.
               </p>
             ) : null}
@@ -286,7 +287,7 @@ export function PulseSidebar({
         </div>
 
         {/* Agendamentos de hoje */}
-        <div>
+        <div className="shrink-0">
           <SectionHeader
             icon={CalendarDays}
             title="Agendamentos de hoje"
@@ -320,7 +321,7 @@ export function PulseSidebar({
         </div>
 
         {/* Sem retorno marcado — atendido, sem próxima consulta, sem plano ativo */}
-        <div>
+        <div className="shrink-0">
           <SectionHeader
             icon={CalendarOff}
             title="Sem retorno marcado"
@@ -357,7 +358,7 @@ export function PulseSidebar({
         </div>
 
         {/* Próximos aniversários (por proximidade, não só do mês) */}
-        <div>
+        <div className="shrink-0">
           <SectionHeader
             icon={Cake}
             title="Próximos aniversários"
@@ -385,7 +386,7 @@ export function PulseSidebar({
           )}
         </div>
 
-        <p className="text-center text-[10px] text-[#cbd5e1]">
+        <p className="shrink-0 text-center text-[10px] text-[#cbd5e1]">
           <Clock className="mr-1 inline h-3 w-3" strokeWidth={2} aria-hidden />
           Atualizado ao carregar a página
         </p>
