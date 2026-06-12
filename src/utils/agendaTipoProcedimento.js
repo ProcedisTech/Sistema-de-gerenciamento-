@@ -2,6 +2,7 @@ import { dimensoesApi } from '../services/api.js';
 import { normalizeApiList } from './agendaDashboardMapping.js';
 
 export const BLOQUEIO_TIPO_CODIGO = 'bloqueio';
+export const RETORNO_TIPO_CODIGO = 'retorno';
 
 let tiposCache = null;
 let tiposFetchPromise = null;

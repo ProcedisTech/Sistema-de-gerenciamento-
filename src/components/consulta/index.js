@@ -4,5 +4,6 @@ export { ConsultaEncerrarFooter } from './ConsultaEncerrarFooter.jsx';
 export { ConsultaEncerrarConfirmModal } from './ConsultaEncerrarConfirmModal.jsx';
 export { CONSULTA_MODULE_LABELS, getEncerrarConsultaMessage } from './consultaModuleLabels.js';
 export { ConsultaViewShell } from './ConsultaViewShell.jsx';
-export { PlanejamentoPlaceholder } from './PlanejamentoPlaceholder.jsx';
+export { PlanosTab } from '../planos/PlanosTab.jsx';
 export { ConsultaProcedimentoFlow } from './ConsultaProcedimentoFlow.jsx';
+export { ConsultaAvaliacaoFlow } from './ConsultaAvaliacaoFlow.jsx';

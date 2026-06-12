@@ -49,11 +49,14 @@ import {
   orientacoesApi,
   pacientesGaleriaApi,
   perfilApi,
+  planejamentosApi,
   procedimentosApi,
   termoAssinaturaApi,
   termosApi,
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
+import { isRealUuid } from '../utils/planejamentoDraftUtils.js';
+import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
@@ -82,7 +85,17 @@ import {
   Step5Finalization,
   JourneyPatientContextHeader,
 } from './journey';
-import { ConsultaHub, ConsultaModuleHeader, ConsultaViewShell, ConsultaEncerrarFooter, ConsultaEncerrarConfirmModal, getEncerrarConsultaMessage, PlanejamentoPlaceholder, ConsultaProcedimentoFlow } from './consulta';
+import {
+  ConsultaHub,
+  ConsultaModuleHeader,
+  ConsultaViewShell,
+  ConsultaProcedimentoFlow,
+  ConsultaAvaliacaoFlow,
+  ConsultaEncerrarFooter,
+  ConsultaEncerrarConfirmModal,
+  getEncerrarConsultaMessage,
+} from './consulta';
+import { PlanosTab } from './planos';
 import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
 import {
   normalizeOrientacoesTemplateResponse,
@@ -376,6 +389,125 @@ function AppRefactoredInner() {
   const kpiState = usePatientsKpi({ authEnabled: authSessionReady, bump: patientListBump });
 
   const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
+
+  const buildAgendaPacienteFromRecord = React.useCallback((p) => {
+    if (!p?.id) return null;
+    return {
+      id: p.id,
+      nome: p.nome,
+      telefone:
+        p.telefone ||
+        p.phone ||
+        p.telefoneNumero ||
+        p.telefonePrincipal ||
+        '',
+    };
+  }, []);
+
+  const handleAgendarPlanoItem = React.useCallback(
+    (paciente, item, onSaved) => {
+      if (!paciente?.id || !roleUserId || !item?.catalogoProcedimentoSaudeId) return;
+      const catId = String(item.catalogoProcedimentoSaudeId).trim();
+      const planejamentoItemId = String(item.planejamentoItemId ?? item.id ?? '').trim();
+      if (!isRealUuid(planejamentoItemId)) {
+        toast.error('Salve o plano antes de agendar este procedimento.');
+        return;
+      }
+      agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
+        catalogoProcedimentoSaudeIds: [catId],
+        planejamentoItemId,
+        planejamentoItemIdPorCatalogo: {
+          [catId]: planejamentoItemId,
+        },
+        profissionalRoleUserId: roleUserId,
+        onAgendaSaved: onSaved,
+      });
+    },
+    [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, toast],
+  );
+
+  const handleAgendarRetornoPlanoItem = React.useCallback(
+    (paciente, item, onSaved) => {
+      if (!paciente?.id || !roleUserId) return;
+      const planejamentoItemId = String(item.planejamentoItemId ?? item.id ?? '').trim();
+      if (!isRealUuid(planejamentoItemId)) {
+        toast.error('Salve o plano antes de agendar retorno deste procedimento.');
+        return;
+      }
+      agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
+        modoRetorno: true,
+        planejamentoItemId,
+        profissionalRoleUserId: roleUserId,
+        onAgendaSaved: onSaved,
+      });
+    },
+    [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, toast],
+  );
+
+  const handleConcluirPlanoComRetorno = React.useCallback(
+    (paciente, plano, onPlanoRefresh) => {
+      if (!paciente?.id || !roleUserId || !plano?.id) return;
+      agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
+        modoRetorno: true,
+        profissionalRoleUserId: roleUserId,
+        onAgendaSaved: async () => {
+          await planejamentosApi.alterarStatus(plano.id, { codigo: 'concluido' });
+          await onPlanoRefresh?.();
+        },
+      });
+    },
+    [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId],
+  );
+
+  const handleReagendarPlanoItem = React.useCallback(
+    async (paciente, item, plano, onPlanoRefresh) => {
+      if (!paciente?.id || !plano?.id || !item?.id) return;
+      let sessao = item.sessaoAtiva;
+      if (!sessao?.agendaId) {
+        try {
+          const detalhe = await planejamentosApi.detalhe(plano.id);
+          const rawItem = (detalhe?.itens ?? []).find(
+            (i) => String(i.planejamentoItemId ?? i.id) === String(item.id),
+          );
+          sessao = pickSessaoAtiva(rawItem?.sessoes ?? []);
+        } catch (e) {
+          console.warn('[handleReagendarPlanoItem] Falha ao carregar detalhe do plano:', e);
+          return;
+        }
+      }
+      if (!sessao?.agendaId) return;
+      const catId = String(
+        item.catalogoId ??
+          item.catalogoProcedimentoSaudeId ??
+          sessao.catalogoProcedimentoSaudeId ??
+          '',
+      ).trim();
+      const appointment = {
+        agendaId: sessao.agendaId,
+        id: sessao.agendaId,
+        data: sessao.dataAgendamento ? String(sessao.dataAgendamento).slice(0, 10) : '',
+        horaInicio: sessao.horaInicio ? String(sessao.horaInicio).slice(0, 5) : '',
+        pacienteId: String(paciente.id),
+        pacienteNome: paciente.nome || '',
+        telefone:
+          paciente.telefone ||
+          paciente.phone ||
+          paciente.telefoneNumero ||
+          paciente.telefonePrincipal ||
+          '',
+        catalogoProcedimentoSaudeId: catId,
+        profissionalRoleUserId: sessao.profissionalRoleUserId ?? roleUserId,
+        planejamentoItemId: item.id,
+      };
+      agendaSchedule.openReagendarModal(appointment, [appointment], {
+        onAgendaSaved: async () => {
+          await onPlanoRefresh?.();
+        },
+      });
+    },
+    [agendaSchedule, roleUserId],
+  );
+
   const [scheduleCancelRow, setScheduleCancelRow] = React.useState(null);
   const [scheduleCancelSubmitting, setScheduleCancelSubmitting] = React.useState(false);
   const [iniciarTolModal, setIniciarTolModal] = React.useState(null);
@@ -538,7 +670,10 @@ function AppRefactoredInner() {
   };
 
   const handleConfirmProcedurePhoto = () => {
-    if (currentStep === 2 && mapeamentoCaptureVistaRef.current) {
+    const skipMapeamentoCapture =
+      activeView === 'consulta' && consultaModule === 'avaliacao';
+
+    if (currentStep === 2 && mapeamentoCaptureVistaRef.current && !skipMapeamentoCapture) {
       const vista = mapeamentoCaptureVistaRef.current;
       const blob = cameraState.photoPreviewBlob;
       if (blob) {
@@ -600,6 +735,14 @@ function AppRefactoredInner() {
       journeyState.setEvaluationAnnotatedPhotoUrl(null);
     },
     [cameraState.evaluationCapturedPhotos, cameraState, journeyState]
+  );
+
+  const openEvaluationPhotoAnnotationForConsulta = React.useCallback(
+    (idx) => {
+      journeyState.setShowPointNumbers(false);
+      openEvaluationPhotoAnnotationFromSummary(idx);
+    },
+    [journeyState, openEvaluationPhotoAnnotationFromSummary]
   );
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
@@ -1334,6 +1477,44 @@ function AppRefactoredInner() {
     [roleUserId, journeyState.nomeProcedimento]
   );
 
+  const uploadEvaluationCapturedPhotos = React.useCallback(
+    async ({ paciente, procIdOpt, dataRefSessao }) => {
+      const ridUpload = roleUserId;
+      const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
+      const fotosAvaliacao = cameraState.evaluationCapturedPhotos || [];
+      if (fotosAvaliacao.length > 0 && paciente?.id && ridOk) {
+        const uploads = fotosAvaliacao.map(async (foto) => {
+          try {
+            let fileToUpload = foto.blob;
+            if (!fileToUpload && foto.url) {
+              const resp = await fetch(foto.url);
+              const blob = await resp.blob();
+              fileToUpload = new File([blob], 'foto-avaliacao.jpg', {
+                type: blob.type || 'image/jpeg',
+              });
+            }
+            if (!fileToUpload) return;
+            const webp = await convertToWebP(fileToUpload, 0.85, 1920);
+            await pacientesGaleriaApi.upload(paciente.id, webp, {
+              roleUserId: ridUpload,
+              procedimentoFeitoId: procIdOpt,
+              legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.AVALIACAO),
+              dataReferencia: dataRefSessao,
+            });
+          } catch (e) {
+            console.warn('Erro ao salvar foto de avaliação na galeria:', e);
+          }
+        });
+        await Promise.allSettled(uploads);
+      } else if (fotosAvaliacao.length > 0 && paciente?.id && !ridOk) {
+        console.warn(
+          'Fotos de avaliação não enviadas: selecione o profissional (roleUserId) na barra de contexto.'
+        );
+      }
+    },
+    [cameraState.evaluationCapturedPhotos, roleUserId]
+  );
+
   const salvarFotosAvaliacao = React.useCallback(async () => {
     if (finishJourneyLockRef.current) return;
     finishJourneyLockRef.current = true;
@@ -1345,7 +1526,8 @@ function AppRefactoredInner() {
         : null;
       const dataRefSessao = new Date().toISOString().slice(0, 10);
       const procIdOpt = ultimoProcedimentoId ?? undefined;
-      await uploadPendingAnnotatedGalleryBlobs({ paciente, procIdOpt, dataRefSessao });
+      pendingAnnotatedGalleryBlobsRef.current = [];
+      await uploadEvaluationCapturedPhotos({ paciente, procIdOpt, dataRefSessao });
     } catch (error) {
       console.error('Erro ao salvar fotos de avaliação:', error);
       toast.error(error.message || 'Erro ao salvar fotos de avaliação.');
@@ -1360,7 +1542,7 @@ function AppRefactoredInner() {
     selectedPatientCpf,
     toast,
     ultimoProcedimentoId,
-    uploadPendingAnnotatedGalleryBlobs,
+    uploadEvaluationCapturedPhotos,
   ]);
 
   const handleConcluirAvaliacao = React.useCallback(async () => {
@@ -1955,9 +2137,13 @@ function AppRefactoredInner() {
                               '',
                           },
                           {
-                            catalogoProcedimentoSaudeIds: [row.catalogoProcedimentoSaudeId],
+                            catalogoProcedimentoSaudeIds: [
+                              String(row.catalogoProcedimentoSaudeId).trim(),
+                            ],
+                            planejamentoItemId: row.planejamentoItemId,
                             planejamentoItemIdPorCatalogo: {
-                              [row.catalogoProcedimentoSaudeId]: row.planejamentoItemId,
+                              [String(row.catalogoProcedimentoSaudeId).trim()]:
+                                row.planejamentoItemId,
                             },
                             profissionalRoleUserId: roleUserId,
                             onAgendaSaved: onSaved,
@@ -2325,47 +2511,36 @@ function AppRefactoredInner() {
                   />
                 ) : null}
                 {consultaModule === 'avaliacao' ? (
-                  <Step3Evaluation
-                    pacienteId={pacienteAtual?.id ?? null}
-                    roleUserId={roleUserId ?? null}
-                    sidebarInsetPx={sidebarRailWidthPx}
-                    observacoes={journeyState.observacoes}
-                    setObservacoes={journeyState.setObservacoes}
-                    pendingCapture={pendingMapeamentoCapture}
-                    onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
-                    onPrepareCapture={handlePrepareMapeamentoCapture}
-                    onStepComplete={() => setConsultaModule('termos')}
-                    profissionalLogadoNome={perfilInfo?.nomeCompleto ?? ''}
-                    consultaMode
+                  <ConsultaAvaliacaoFlow
+                    queixa={journeyState.queixa}
+                    setQueixa={journeyState.setQueixa}
+                    expectativas={journeyState.expectativas}
+                    setExpectativas={journeyState.setExpectativas}
+                    evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos ?? []}
+                    evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                    onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
+                    onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
+                    onAnnotatePhoto={openEvaluationPhotoAnnotationForConsulta}
                     onConcluirAvaliacao={handleConcluirAvaliacao}
-                    isConcluirAvaliacaoBusy={isSalvandoFotosAvaliacao}
-                    onAgendarPlanejamentoItem={(row, onSaved) => {
-                      if (!pacienteAtual?.id || !roleUserId) return;
-                      agendaSchedule.openCreateModalForPatient(
-                        {
-                          id: pacienteAtual.id,
-                          nome: pacienteAtual.nome,
-                          telefone:
-                            pacienteAtual.telefone ||
-                            pacienteAtual.phone ||
-                            pacienteAtual.telefoneNumero ||
-                            pacienteAtual.telefonePrincipal ||
-                            '',
-                        },
-                        {
-                          catalogoProcedimentoSaudeIds: [row.catalogoProcedimentoSaudeId],
-                          planejamentoItemIdPorCatalogo: {
-                            [row.catalogoProcedimentoSaudeId]: row.planejamentoItemId,
-                          },
-                          profissionalRoleUserId: roleUserId,
-                          onAgendaSaved: onSaved,
-                        }
-                      );
-                    }}
+                    isConcluirBusy={isSalvandoFotosAvaliacao}
                   />
                 ) : null}
                 {consultaModule === 'planejamento' ? (
-                  <PlanejamentoPlaceholder onVoltar={() => setConsultaModule('hub')} />
+                  <PlanosTab
+                    variant="consulta"
+                    pacienteId={pacienteAtual?.id ?? null}
+                    roleUserId={roleUserId ?? null}
+                    onVoltar={() => setConsultaModule('hub')}
+                    onAgendarItem={(item, onSaved) =>
+                      handleAgendarPlanoItem(pacienteAtual, item, onSaved)
+                    }
+                    onAgendarRetornoItem={(item, onSaved) =>
+                      handleAgendarRetornoPlanoItem(pacienteAtual, item, onSaved)
+                    }
+                    onConcluirComRetorno={(plano, refresh) =>
+                      handleConcluirPlanoComRetorno(pacienteAtual, plano, refresh)
+                    }
+                  />
                 ) : null}
                 {consultaModule === 'termos' ? (
                   <Step3Termos
@@ -2596,6 +2771,7 @@ function AppRefactoredInner() {
                   onCreatePatient={handleCreatePatientFromPatients}
                   onStartAttendance={handleStartAttendance}
                   onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
+                  onReagendarPlanoItem={handleReagendarPlanoItem}
                   onUpdatePatient={handleUpdatePatientProfile}
                   onAddGalleryFiles={handleAddGalleryFiles}
                   onDeleteGalleryPhoto={handleDeleteGalleryPhoto}

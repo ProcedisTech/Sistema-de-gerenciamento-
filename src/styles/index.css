@@ -255,3 +255,17 @@
     animation-name: patient-preview-sheet-desktop;
   }
 }
+
+/* AppDateInput — esconde ícone nativo do Chrome; picker permanece clicável na área do input */
+.app-date-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.app-date-input::-webkit-datetime-edit {
+  padding: 0;
+}

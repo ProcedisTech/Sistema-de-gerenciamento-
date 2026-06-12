@@ -6,8 +6,8 @@ import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
-  { id: 'avaliacao', label: 'Avaliação', description: 'Fotos, mapeamento e plano', icon: Eye },
-  { id: 'planejamento', label: 'Planejamento', description: 'Rascunho do plano de tratamento', icon: BookOpen },
+  { id: 'avaliacao', label: 'Avaliação', description: 'Fotos e desenho sobre as imagens', icon: Eye },
+  { id: 'planejamento', label: 'Planejamento', description: 'Planos de tratamento e procedimentos', icon: BookOpen },
   { id: 'termos', label: 'Termos', description: 'Consentimentos e assinaturas', icon: ClipboardList },
   { id: 'procedimento', label: 'Procedimento', description: 'Registro, fotos e finalização', icon: Syringe },
 ];

@@ -45,10 +45,16 @@ export function mapAgendaDtoToAppointment(dto) {
   const tipoCodigo = String(dto.tipoProcedimentoCodigo || '').toLowerCase();
   const tipo = tipoCodigo === 'bloqueio' ? 'bloqueio' : 'atendimento';
 
-  const procedure =
-    (dto.catalogoProcedimentoNome && String(dto.catalogoProcedimentoNome).trim()) ||
-    dto.observacao?.trim() ||
-    'Atendimento';
+  let procedure;
+  if (tipoCodigo === 'retorno') {
+    const cat = dto.catalogoProcedimentoNome?.trim();
+    procedure = cat ? `Retorno: ${cat}` : 'Retorno';
+  } else {
+    procedure =
+      (dto.catalogoProcedimentoNome && String(dto.catalogoProcedimentoNome).trim()) ||
+      dto.observacao?.trim() ||
+      'Atendimento';
+  }
 
   const compromissos = [];
   if (dto.pacienteId && tipo !== 'bloqueio') {
@@ -56,7 +62,7 @@ export function mapAgendaDtoToAppointment(dto) {
       id: dto.id,
       pacienteId: String(dto.pacienteId),
       pacienteNome: dto.pacienteNome || '',
-      procedimentoNome: dto.catalogoProcedimentoNome || procedure,
+      procedimentoNome: procedure,
       catalogoProcedimentoSaudeId:
         dto.catalogoProcedimentoSaudeId != null ? String(dto.catalogoProcedimentoSaudeId) : '',
       observacao: dto.observacao || '',
