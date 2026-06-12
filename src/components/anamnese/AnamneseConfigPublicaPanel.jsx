@@ -1,14 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Save, ExternalLink, ShieldCheck, Clock, Globe, AlertCircle, Loader2, FileText, Printer } from 'lucide-react';
+import { Save, ExternalLink, ShieldCheck, Clock, Globe, AlertCircle, Loader2, FileText, Printer, Copy, Check } from 'lucide-react';
 import { clinicaApi, anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
 import { QRCodeSVG } from 'qrcode.react';
+
+function slugify(text) {
+  if (!text) return '';
+  return text
+    .toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
 
 export function AnamneseConfigPublicaPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fichas, setFichas] = useState([]);
   const [config, setConfig] = useState({ slug: '', validadeAnamneseDias: 180, anamnesePadraoId: '' });
+  const [copied, setCopied] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -22,7 +36,7 @@ export function AnamneseConfigPublicaPanel() {
         if (isSubscribed) {
           setFichas(fichasList || []);
           setConfig({
-            slug: clinica.slug || '',
+            slug: clinica.slug || slugify(clinica.nome || ''),
             validadeAnamneseDias: clinica.validadeAnamneseDias ?? 180,
             anamnesePadraoId: clinica.anamnesePadraoId || ''
           });
@@ -64,17 +78,22 @@ export function AnamneseConfigPublicaPanel() {
     window.open(`/anamnese?clinic=${config.slug}`, '_blank');
   };
 
+  const handleCopyLink = () => {
+    if (!config.slug) return;
+    const url = `${window.location.origin}/anamnese?clinic=${config.slug}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast.success('Link copiado com sucesso!');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handlePrintQRCode = () => {
     if (!config.slug) {
       toast.error('É necessário salvar um identificador (slug) antes de imprimir o QR Code.');
       return;
     }
     
-    // Determine base URL dynamically or fallback
-    const baseUrl = window.location.origin.includes('localhost') 
-      ? 'https://procedi.com.br' 
-      : window.location.origin;
-    const url = `${baseUrl}/anamnese?clinic=${config.slug}`;
+    const url = `${window.location.origin}/anamnese?clinic=${config.slug}`;
     
     const svgElement = document.querySelector('#qr-code-container svg');
     if (!svgElement) return;
@@ -197,21 +216,32 @@ export function AnamneseConfigPublicaPanel() {
                 <label htmlFor="slugConfig" className="text-[13px] font-bold text-slate-700">
                   Identificador da Clínica (Slug)
                 </label>
-                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-                  <div className="px-3 text-slate-400 text-[14px] select-none border-r border-slate-200 bg-slate-50">
-                    procedi.com.br/anamnese?clinic=
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1 flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden transition-all focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-emerald-500/20">
+                    <div className="px-3 py-3 text-slate-400 text-[14px] select-none border-r border-slate-200 bg-slate-50">
+                      {window.location.host}/anamnese?clinic=
+                    </div>
+                    <input
+                      id="slugConfig"
+                      type="text"
+                      value={config.slug}
+                      disabled
+                      placeholder="sua-clinica"
+                      className="flex-1 px-3 py-3 bg-slate-50/50 text-[14px] text-slate-500 cursor-not-allowed focus:outline-none font-medium placeholder:text-slate-300"
+                    />
                   </div>
-                  <input
-                    id="slugConfig"
-                    type="text"
-                    value={config.slug}
-                    onChange={(e) => setConfig({ ...config, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-                    placeholder="sua-clinica"
-                    className="flex-1 px-3 py-3 bg-white text-[14px] text-slate-800 focus:outline-none font-medium placeholder:text-slate-300"
-                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    disabled={!config.slug}
+                    className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-[14px] font-bold text-white bg-[#00a88e] hover:bg-[#0f766e] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm"
+                  >
+                    {copied ? <Check className="w-4 h-4 animate-scale-in" /> : <Copy className="w-4 h-4" />}
+                    {copied ? 'Copiado!' : 'Copiar Link'}
+                  </button>
                 </div>
                 <p className="text-[12px] text-slate-500">
-                  Use letras minúsculas, números e traços. Exemplo: <strong>clinica-sorriso</strong>.
+                  O identificador da clínica é gerado automaticamente a partir do seu nome e não pode ser alterado para garantir a integridade dos acessos.
                 </p>
               </div>
 
@@ -324,7 +354,7 @@ export function AnamneseConfigPublicaPanel() {
               
               <div id="qr-code-container" className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm mb-5 hover:shadow-md transition-shadow">
                 <QRCodeSVG 
-                  value={window.location.origin.includes('localhost') ? `https://procedi.com.br/anamnese?clinic=${config.slug}` : `${window.location.origin}/anamnese?clinic=${config.slug}`}
+                  value={`${window.location.origin}/anamnese?clinic=${config.slug}`}
                   size={140}
                   level="H"
                   includeMargin={false}
