@@ -53,6 +53,9 @@ function ContactChip({ href, onClick, children, className = '', placeholder = fa
 const secondaryActionBtn =
   'inline-flex h-11 min-w-[calc(50%-0.25rem)] flex-1 items-center justify-center gap-1.5 rounded-xl border-0 bg-white px-2 text-[13px] font-semibold text-vivid-teal-800 transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[7rem] sm:flex-none sm:gap-2 sm:px-4 sm:text-[14px]';
 
+/** Reserva espaço para coluna lateral (prontuário/nav) — alinhada ao breakpoint sm:flex da coluna direita. */
+const heroSideColPad = 'sm:pr-[11.5rem]';
+
 export function ProfileHero({
   patient,
   getPatientInitials,
@@ -169,7 +172,7 @@ export function ProfileHero({
         </div>
 
         <div
-          className={`min-w-0 sm:pr-[11.5rem] ${showInativarPaciente ? 'pr-11' : ''}`}
+          className={`min-w-0 ${heroSideColPad} ${showInativarPaciente ? 'pr-11' : ''}`}
         >
           <div className="flex items-start gap-3 sm:gap-5">
             <div className="relative shrink-0">
@@ -257,7 +260,10 @@ export function ProfileHero({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-start justify-start gap-2" aria-label="Formas de contato">
+        <div
+          className={`mt-4 flex min-w-0 flex-wrap items-start justify-start gap-2 ${heroSideColPad}`}
+          aria-label="Formas de contato"
+        >
           {waDigits ? (
             <ContactChip href={`https://wa.me/${waDigits}`}>
               <Phone className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
@@ -291,7 +297,7 @@ export function ProfileHero({
         </div>
 
         {!isNivel1 ? (
-          <div className="mt-4 flex flex-wrap items-start justify-start gap-2">
+          <div className={`mt-4 flex flex-wrap items-start justify-start gap-2 ${heroSideColPad}`}>
             <button
               type="button"
               onClick={() => onStartAttendance?.(patient)}
