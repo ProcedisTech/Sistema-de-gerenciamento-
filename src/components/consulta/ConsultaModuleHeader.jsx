@@ -1,19 +1,11 @@
 import React from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
+import { CONSULTA_MODULE_LABELS } from './consultaModuleLabels.js';
 
-const MODULE_LABELS = {
-  hub: 'Consulta',
-  anamnese: 'Anamnese',
-  avaliacao: 'Avaliação',
-  planejamento: 'Planejamento',
-  termos: 'Termos',
-  procedimento: 'Procedimento',
-};
-
-export function ConsultaModuleHeader({ paciente, module, onBack, onSair, getPatientInitials }) {
+export function ConsultaModuleHeader({ paciente, module, onBack, getPatientInitials }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
-  const moduleLabel = MODULE_LABELS[module] ?? 'Consulta';
+  const moduleLabel = CONSULTA_MODULE_LABELS[module] ?? 'Consulta';
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
 
   return (
@@ -42,16 +34,6 @@ export function ConsultaModuleHeader({ paciente, module, onBack, onSair, getPati
           ) : null}
         </div>
       </div>
-
-      {typeof onSair === 'function' ? (
-        <button
-          type="button"
-          onClick={onSair}
-          className="shrink-0 rounded-lg px-3 py-2 text-[13px] font-semibold text-[#64748b] transition-colors hover:bg-app-nav-hover active:bg-app-nav-active"
-        >
-          Sair
-        </button>
-      ) : null}
     </div>
   );
 }

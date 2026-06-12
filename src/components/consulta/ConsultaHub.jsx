@@ -12,7 +12,7 @@ const MODULE_CARDS = [
   { id: 'procedimento', label: 'Procedimento', description: 'Registro, fotos e finalização', icon: Syringe },
 ];
 
-export function ConsultaHub({ paciente, onSelectModule, onSair, getPatientInitials }) {
+export function ConsultaHub({ paciente, onSelectModule, onEncerrarConsulta, getPatientInitials }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
 
@@ -30,13 +30,13 @@ export function ConsultaHub({ paciente, onSelectModule, onSair, getPatientInitia
             <p className="text-[13px] font-medium text-[#00a88e] sm:text-[14px]">Consulta em andamento</p>
           </div>
         </div>
-        {typeof onSair === 'function' ? (
+        {typeof onEncerrarConsulta === 'function' ? (
           <button
             type="button"
-            onClick={onSair}
+            onClick={onEncerrarConsulta}
             className="rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#64748b] transition-colors hover:bg-app-nav-hover active:bg-app-nav-active"
           >
-            Sair
+            Encerrar consulta
           </button>
         ) : null}
       </div>
