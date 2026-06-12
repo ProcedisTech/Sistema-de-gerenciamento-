@@ -443,6 +443,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   onQueixaVisibilityChange,
   perfilClinicoDraft = null,
   onPerfilClinicoDraftChange = () => {},
+  consultaMode = false,
+  onConcluirAnamnese,
+  isConcluirAnamneseBusy = false,
 }, ref) {
   const [fichas, setFichas] = useState([]);
   const draftValido = savedAnamneseState?.pacienteId === pacienteId;
@@ -1401,6 +1404,19 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </form>
       ) : null}
       </div>
+
+      {consultaMode ? (
+        <div className="mt-8 flex justify-end border-t border-app-border pt-6">
+          <button
+            type="button"
+            onClick={() => onConcluirAnamnese?.()}
+            disabled={isConcluirAnamneseBusy}
+            className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-app-accent px-6 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isConcluirAnamneseBusy ? 'Salvando…' : 'Concluir Anamnese'}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 });
