@@ -512,7 +512,14 @@ function AnamneseTab({ pacienteId }) {
                   <span className="text-[12px] text-[#64748b]">({respostas.length} respostas)</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748b]">
-                  {an.profissionalNome && <span>Por: {an.profissionalNome}</span>}
+                  {an.preenchidoPorPaciente ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0]">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                      Preenchido pelo paciente
+                    </span>
+                  ) : (
+                    an.profissionalNome && <span>Por: {an.profissionalNome}</span>
+                  )}
                   {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span>}
                   <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border-[2px] ${
                     an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO'
@@ -550,6 +557,49 @@ function AnamneseTab({ pacienteId }) {
                   </div>
                 ) : (
                   <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
+                )}
+
+                {an.preenchidoPorPaciente && an.assinaturaPaciente && (
+                  <div className="mt-6 border-t border-[#e2e8f0] pt-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      <h4 className="text-[14px] font-bold text-[#0f172a]">Assinatura e Termo do Paciente</h4>
+                    </div>
+                    
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row gap-6">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2 text-[12px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 w-fit">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Termo de consentimento aceito
+                        </div>
+                        <p className="text-[12px] text-slate-600 leading-relaxed">
+                          O paciente declarou que preencheu pessoalmente esta ficha com informações verdadeiras e completas sobre seu histórico de saúde.
+                        </p>
+                        {an.termoAceitoEm && (
+                          <div className="text-[11px] text-slate-500 font-medium">
+                            Aceito em {new Date(an.termoAceitoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às {new Date(an.termoAceitoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="w-full md:w-64 shrink-0 flex flex-col items-center gap-2">
+                        <div className="w-full bg-white border border-slate-200 rounded-xl p-2 flex items-center justify-center min-h-[80px]">
+                          <img 
+                            src={an.assinaturaPaciente} 
+                            alt="Assinatura do Paciente" 
+                            className="max-h-20 w-auto object-contain"
+                          />
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-medium text-center">
+                          Assinatura digital registrada
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

@@ -288,6 +288,7 @@ export function Step3Termos({
   const [savingPadraoPrompt, setSavingPadraoPrompt] = useState(false);
   const [pendingNextTermoId, setPendingNextTermoId] = useState(null);
   const [termoToCancel, setTermoToCancel] = useState(null);
+  const [showConcluirConfirm, setShowConcluirConfirm] = useState(false);
   const [autoSignatureApplied, setAutoSignatureApplied] = useState(false);
   const assinaturaProfRecenteRef = useRef('');
 
@@ -634,6 +635,29 @@ export function Step3Termos({
       setSavingPadraoPrompt(false);
     }
   };
+
+  const handleConcluirClick = () => {
+    if (typeof onConcluir !== 'function') return;
+    const nenhumAssinado = termosAssinados.length === 0;
+    const temPendentes = termosPendentesIds.length > 0;
+    if (nenhumAssinado || temPendentes) {
+      setShowConcluirConfirm(true);
+      return;
+    }
+    onConcluir();
+  };
+
+  const concluirConfirmMessage = (() => {
+    const nenhumAssinado = termosAssinados.length === 0;
+    const temPendentes = termosPendentesIds.length > 0;
+    if (nenhumAssinado && temPendentes) {
+      return `Nenhum termo foi assinado. Ainda há ${termosPendentesIds.length} termo(s) aguardando assinatura. Deseja sair mesmo assim?`;
+    }
+    if (nenhumAssinado) {
+      return 'Nenhum termo foi assinado. Deseja sair mesmo assim?';
+    }
+    return `Ainda há ${termosPendentesIds.length} termo(s) aguardando assinatura. Deseja sair mesmo assim?`;
+  })();
 
   return (
     <div className="min-w-0">
@@ -1183,11 +1207,39 @@ export function Step3Termos({
         </div>
       ) : null}
 
+      {showConcluirConfirm ? (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
+            <h4 className="text-[16px] font-bold text-[#0f172a]">Sair sem assinar?</h4>
+            <p className="mt-2 text-[14px] text-[#475569]">{concluirConfirmMessage}</p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConcluirConfirm(false)}
+                className="h-10 flex-1 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
+              >
+                Continuar assinando
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConcluirConfirm(false);
+                  onConcluir();
+                }}
+                className="h-10 flex-1 rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white hover:bg-[#00967f]"
+              >
+                Sim, sair
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {typeof onConcluir === 'function' ? (
         <div className="mt-6 flex justify-end border-t border-[#e2e8f0] pt-5">
           <button
             type="button"
-            onClick={onConcluir}
+            onClick={handleConcluirClick}
             className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[#00a88e] px-6 py-3 text-[14px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f]"
           >
             Concluir Termos

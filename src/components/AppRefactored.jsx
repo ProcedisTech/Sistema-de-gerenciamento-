@@ -91,6 +91,9 @@ import {
   ConsultaViewShell,
   ConsultaProcedimentoFlow,
   ConsultaAvaliacaoFlow,
+  ConsultaEncerrarFooter,
+  ConsultaEncerrarConfirmModal,
+  getEncerrarConsultaMessage,
 } from './consulta';
 import { PlanosTab } from './planos';
 import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
@@ -744,6 +747,7 @@ function AppRefactoredInner() {
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [consultaModule, setConsultaModule] = React.useState(null);
+  const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
 
   const [activeView, _setActiveView] = React.useState(() => {
@@ -1007,6 +1011,19 @@ function AppRefactoredInner() {
     setActiveView('pacientes');
   }, [setActiveView]);
 
+  const requestEncerrarConsulta = React.useCallback(() => {
+    setEncerrarConsultaOpen(true);
+  }, []);
+
+  const cancelEncerrarConsulta = React.useCallback(() => {
+    setEncerrarConsultaOpen(false);
+  }, []);
+
+  const confirmEncerrarConsulta = React.useCallback(() => {
+    setEncerrarConsultaOpen(false);
+    onSairConsulta();
+  }, [onSairConsulta]);
+
   const closeIniciarTolModal = React.useCallback(() => {
     setIniciarTolModal(null);
     setIniciarTolAdiantarSubmitting(false);
@@ -1235,112 +1252,127 @@ function AppRefactoredInner() {
     }
   };
 
+  const salvarAnamneseAntesDeAvancar = React.useCallback(async () => {
+    if (!pacienteAtual) {
+      toast.error('Selecione um paciente na aba Pacientes antes de continuar a jornada.');
+      return false;
+    }
+    upsertPatientLocal({ ensureSelected: true });
+
+    if (anamneseRef.current?.isPerfilDirty?.()) {
+      if (!roleUserId) {
+        toast.error('Selecione o profissional responsável antes de salvar o perfil clínico.');
+        return false;
+      }
+      const perfilResult = await anamneseRef.current.savePerfilClinico();
+      if (!perfilResult?.ok) {
+        toast.error(
+          getApiErrorToastMessage(
+            perfilResult?.error,
+            'Erro ao salvar o perfil clínico. Verifique a conexão e tente novamente.',
+          ),
+        );
+        return false;
+      }
+    }
+
+    const validacaoObrigatorias = anamneseRef.current?.validateObrigatorias?.();
+    if (validacaoObrigatorias && !validacaoObrigatorias.ok) {
+      toast.error('Preencha todas as perguntas obrigatórias da ficha.');
+      return false;
+    }
+
+    const { queixa, expectativas } = journeyState;
+    const skipQueixaExpectativas =
+      !queixaVisivel || anamneseRef.current?.skipQueixaExpectativas?.() === true;
+    if (!skipQueixaExpectativas) {
+      if (!queixa.trim() || !expectativas.trim()) {
+        const e2 = {};
+        if (!queixa.trim()) e2.queixa = true;
+        if (!expectativas.trim()) e2.expectativas = true;
+        journeyState.setStep2Errors(e2);
+        toast.error('Para prosseguir, preencha a queixa principal e as expectativas.');
+        return false;
+      }
+    }
+    journeyState.setStep2Errors({});
+
+    upsertPatientLocal({ ensureSelected: true });
+
+    const anamneseData = anamneseRef.current?.getAnamneseData?.();
+    const temFicha =
+      Boolean(anamneseData?.anamneseId) && (anamneseData?.respostas?.length ?? 0) > 0;
+    const temObservacoes = Boolean(queixa.trim() || expectativas.trim());
+
+    if (temFicha || temObservacoes) {
+      const paciente =
+        pacienteAtual ||
+        patients.find((p) => {
+          const pCpf = String(p?.cpf || '').trim();
+          const sCpf = String(selectedPatientCpf || '').trim();
+          return sCpf && pCpf === sCpf;
+        });
+      const rid = roleUserId;
+      if (!rid) {
+        console.warn('roleUserId ausente: faça login novamente para vincular o profissional.');
+      }
+
+      let anamneseId = anamneseData?.anamneseId;
+
+      if (!temFicha && temObservacoes) {
+        try {
+          const fichaBasica = await anamneseApi.getFichaBasica();
+          anamneseId = fichaBasica?.id ?? fichaBasica?.anamneseId;
+        } catch (err) {
+          console.warn('Erro ao obter ficha básica:', err.message);
+          anamneseId = undefined;
+        }
+      }
+
+      if (paciente?.id && rid && anamneseId) {
+        const q = queixa.trim();
+        const e = expectativas.trim();
+        let observacoes;
+        if (q && e) observacoes = `Queixa: ${q}. Expectativas: ${e}`;
+        else if (q) observacoes = `Queixa: ${q}`;
+        else if (e) observacoes = `Expectativas: ${e}`;
+        try {
+          const created = await anamneseApi.createPaciente(paciente.id, rid, {
+            anamneseId,
+            ...(observacoes ? { observacoes } : {}),
+            respostas: anamneseData?.respostas || [],
+          });
+          const pid = created?.id ?? created?.preenchimentoId;
+          if (pid != null && pid !== '') {
+            anamnesePreenchimentoIdRef.current = String(pid);
+          }
+        } catch (err) {
+          toast.error(getApiErrorToastMessage(err, 'Erro ao salvar a anamnese.'));
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }, [
+    journeyState,
+    pacienteAtual,
+    patients,
+    queixaVisivel,
+    roleUserId,
+    selectedPatientCpf,
+    toast,
+    upsertPatientLocal,
+  ]);
+
   const handleNextStep = async () => {
     if (currentStep === 5 && isFinishing) return;
 
     if (currentStep === 1) {
       setStep1Busy(true);
       try {
-      if (!pacienteAtual) {
-        toast.error('Selecione um paciente na aba Pacientes antes de continuar a jornada.');
-        return;
-      }
-      upsertPatientLocal({ ensureSelected: true });
-
-      // Regra 4 do plano: PUT perfil ANTES da validação de queixa/ficha
-      if (anamneseRef.current?.isPerfilDirty?.()) {
-        if (!roleUserId) {
-          toast.error('Selecione o profissional responsável antes de salvar o perfil clínico.');
-          return;
-        }
-        const perfilResult = await anamneseRef.current.savePerfilClinico();
-        if (!perfilResult?.ok) {
-          toast.error(
-            getApiErrorToastMessage(
-              perfilResult?.error,
-              'Erro ao salvar o perfil clínico. Verifique a conexão e tente novamente.',
-            ),
-          );
-          return;
-        }
-      }
-
-      const validacaoObrigatorias = anamneseRef.current?.validateObrigatorias?.();
-      if (validacaoObrigatorias && !validacaoObrigatorias.ok) {
-        toast.error('Preencha todas as perguntas obrigatórias da ficha.');
-        return;
-      }
-
-      const { queixa, expectativas } = journeyState;
-      const skipQueixaExpectativas =
-        !queixaVisivel || anamneseRef.current?.skipQueixaExpectativas?.() === true;
-      if (!skipQueixaExpectativas) {
-        if (!queixa.trim() || !expectativas.trim()) {
-          const e2 = {};
-          if (!queixa.trim()) e2.queixa = true;
-          if (!expectativas.trim()) e2.expectativas = true;
-          journeyState.setStep2Errors(e2);
-          toast.error('Para prosseguir, preencha a queixa principal e as expectativas.');
-          return;
-        }
-      }
-      journeyState.setStep2Errors({});
-
-      upsertPatientLocal({ ensureSelected: true });
-
-      const anamneseData = anamneseRef.current?.getAnamneseData?.();
-      const temFicha =
-        Boolean(anamneseData?.anamneseId) && (anamneseData?.respostas?.length ?? 0) > 0;
-      const temObservacoes = Boolean(queixa.trim() || expectativas.trim());
-
-      if (temFicha || temObservacoes) {
-        const paciente =
-          pacienteAtual ||
-          patients.find((p) => {
-            const pCpf = String(p?.cpf || '').trim();
-            const sCpf = String(selectedPatientCpf || '').trim();
-            return sCpf && pCpf === sCpf;
-          });
-        const rid = roleUserId;
-        if (!rid) {
-          console.warn('roleUserId ausente: faça login novamente para vincular o profissional.');
-        }
-
-        let anamneseId = anamneseData?.anamneseId;
-
-        if (!temFicha && temObservacoes) {
-          try {
-            const fichaBasica = await anamneseApi.getFichaBasica();
-            anamneseId = fichaBasica?.id ?? fichaBasica?.anamneseId;
-          } catch (err) {
-            console.warn('Erro ao obter ficha básica:', err.message);
-            anamneseId = undefined;
-          }
-        }
-
-        if (paciente?.id && rid && anamneseId) {
-          const q = queixa.trim();
-          const e = expectativas.trim();
-          let observacoes;
-          if (q && e) observacoes = `Queixa: ${q}. Expectativas: ${e}`;
-          else if (q) observacoes = `Queixa: ${q}`;
-          else if (e) observacoes = `Expectativas: ${e}`;
-          try {
-            const created = await anamneseApi.createPaciente(paciente.id, rid, {
-              anamneseId,
-              ...(observacoes ? { observacoes } : {}),
-              respostas: anamneseData?.respostas || [],
-            });
-            const pid = created?.id ?? created?.preenchimentoId;
-            if (pid != null && pid !== '') {
-              anamnesePreenchimentoIdRef.current = String(pid);
-            }
-          } catch (err) {
-            toast.error(getApiErrorToastMessage(err, 'Erro ao salvar a anamnese.'));
-            return;
-          }
-        }
-      }
+        const ok = await salvarAnamneseAntesDeAvancar();
+        if (!ok) return;
       } finally {
         setStep1Busy(false);
       }
@@ -1521,6 +1553,19 @@ function AppRefactoredInner() {
       /* toast já exibido em salvarFotosAvaliacao */
     }
   }, [salvarFotosAvaliacao]);
+
+  const handleConcluirAnamnese = React.useCallback(async () => {
+    setStep1Busy(true);
+    try {
+      const ok = await salvarAnamneseAntesDeAvancar();
+      if (ok) {
+        toast.success('Anamnese salva com sucesso.');
+        setConsultaModule('hub');
+      }
+    } finally {
+      setStep1Busy(false);
+    }
+  }, [salvarAnamneseAntesDeAvancar, toast]);
 
   const resetJourney = React.useCallback(() => {
     setPhotoAnnotationScope(null);
@@ -2427,7 +2472,6 @@ function AppRefactoredInner() {
                 paciente={pacienteAtual}
                 module={consultaModule}
                 onBack={consultaModule !== 'hub' ? () => setConsultaModule('hub') : undefined}
-                onSair={onSairConsulta}
                 getPatientInitials={getPatientInitials}
               />
             </header>
@@ -2437,7 +2481,7 @@ function AppRefactoredInner() {
                   <ConsultaHub
                     paciente={pacienteAtual}
                     onSelectModule={setConsultaModule}
-                    onSair={onSairConsulta}
+                    onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
                   />
                 ) : null}
@@ -2461,6 +2505,9 @@ function AppRefactoredInner() {
                     onQueixaVisibilityChange={setQueixaVisivel}
                     perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
                     onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => {})}
+                    consultaMode
+                    onConcluirAnamnese={handleConcluirAnamnese}
+                    isConcluirAnamneseBusy={step1Busy}
                   />
                 ) : null}
                 {consultaModule === 'avaliacao' ? (
@@ -2594,8 +2641,18 @@ function AppRefactoredInner() {
                     toast={toast}
                   />
                 ) : null}
+                {consultaModule !== 'hub' ? (
+                  <ConsultaEncerrarFooter onEncerrarConsulta={requestEncerrarConsulta} />
+                ) : null}
               </div>
             </ConsultaViewShell>
+
+            <ConsultaEncerrarConfirmModal
+              open={encerrarConsultaOpen}
+              message={getEncerrarConsultaMessage(consultaModule, pacienteAtual?.nome)}
+              onCancel={cancelEncerrarConsulta}
+              onConfirm={confirmEncerrarConsulta}
+            />
 
             {photoAnnotationScope != null &&
             photoAnnotationIndex != null &&
