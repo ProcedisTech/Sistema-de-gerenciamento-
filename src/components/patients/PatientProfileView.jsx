@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  BookOpen,
   Cake,
   Calendar,
   ChevronDown,
@@ -11,7 +12,6 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
-  Play,
   StickyNote,
   Trash2,
   Pencil,
@@ -84,6 +84,7 @@ import {
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { GaleriaTab } from './galeria/GaleriaTab.jsx';
+import { PlanosTab } from '../planos/PlanosTab.jsx';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -624,17 +625,6 @@ function profileProximoAgendamentoCard(p) {
   return leg && leg !== '-' && leg !== '—' ? leg : '-';
 }
 
-function profileProximoAgendamentoResumo(p) {
-  if (!p) return 'Nenhum agendamento';
-  if (p.proximoAgendamento != null && String(p.proximoAgendamento).trim() !== '') {
-    return formatCartaoDiaPtBr(p.proximoAgendamento);
-  }
-  const leg = String(p.proximoRetorno || '').trim();
-  const isoFmt = formatCartaoIfIsoString(leg);
-  if (isoFmt) return isoFmt;
-  return leg && leg !== '-' && leg !== '—' ? leg : 'Nenhum agendamento';
-}
-
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
@@ -644,6 +634,7 @@ export function PatientProfileView({
   getPatientInitials,
   onStartAttendance,
   onAgendarPaciente,
+  onReagendarPlanoItem,
   onUpdatePatient,
   onAddGalleryFiles: _onAddGalleryFiles,
   onDeleteGalleryPhoto,
@@ -727,12 +718,6 @@ export function PatientProfileView({
     const primary = profileProximoAgendamentoCard(selectedPatient);
     if (primary !== '-') return primary;
     return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : '-';
-  }, [selectedPatient, proximoAgendaIso]);
-
-  const proximoRetornoResumoDisplay = useMemo(() => {
-    const primary = profileProximoAgendamentoResumo(selectedPatient);
-    if (primary !== 'Nenhum agendamento') return primary;
-    return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : 'Nenhum agendamento';
   }, [selectedPatient, proximoAgendaIso]);
 
   const sortedApiProceduresEarly = useMemo(
@@ -832,8 +817,12 @@ export function PatientProfileView({
   }, [selectedPatient, onAgendarPaciente, toast]);
 
   useEffect(() => {
-    if (patientDetailTab === 'timeline' || patientDetailTab === 'cadastro') {
-      setPatientDetailTab('atendimento');
+    if (
+      patientDetailTab === 'timeline' ||
+      patientDetailTab === 'cadastro' ||
+      patientDetailTab === 'atendimento'
+    ) {
+      setPatientDetailTab('planos');
     }
   }, [patientDetailTab, setPatientDetailTab]);
 
@@ -1465,11 +1454,6 @@ export function PatientProfileView({
     ? sortedApiProcedures.slice(0, prontuarioListMax)
     : sortedApiProcedures;
 
-  const perfilRecentProcedures = useMemo(
-    () => sortedApiProcedures.slice(0, 5),
-    [sortedApiProcedures],
-  );
-
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
       const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
@@ -1747,7 +1731,7 @@ export function PatientProfileView({
       setInativarSenha('');
       setInativarSenhaErro('');
       setPatientView('list');
-      setPatientDetailTab('atendimento');
+      setPatientDetailTab('planos');
       setSelectedPatientCpf?.(null);
       refreshPatients?.();
     } catch (e) {
@@ -1785,7 +1769,7 @@ export function PatientProfileView({
         patientName={selectedPatient.nome}
         onBackToList={() => {
           setPatientView('list');
-          setPatientDetailTab('atendimento');
+          setPatientDetailTab('planos');
         }}
       />
 
@@ -1984,7 +1968,7 @@ export function PatientProfileView({
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
                 <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
-                { key: 'atendimento', label: 'Perfil', title: 'Perfil', icon: Play },
+                { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
                 { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
@@ -2012,132 +1996,6 @@ export function PatientProfileView({
             </div>
 
             <div className="p-5 sm:p-6">
-              {patientDetailTab === 'atendimento' && (
-                <div className="space-y-5">
-                  {isNivel1 ? (
-                    <div className="rounded-xl border border-rose-100/60 bg-rose-50/30 p-4 text-center">
-                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-500 border border-rose-100/60 shadow-sm">
-                        <Shield className="h-5 w-5" />
-                      </div>
-                      <p className="mt-2 text-xs font-semibold text-rose-700">Acesso Limitado</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Seu perfil (Nível 1) não possui permissão para iniciar ou gerenciar atendimentos.
-                      </p>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onStartAttendance?.(selectedPatient)}
-                      className="inline-flex h-10 w-full max-w-md items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                    >
-                      <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                      Iniciar Atendimento
-                    </button>
-                  )}
-
-                  <div>
-                    <h5 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-                      Resumo clínico
-                    </h5>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
-                        <div className="text-[11px] font-medium uppercase tracking-wide text-[#94a3b8]">
-                          Último procedimento realizado
-                        </div>
-                        <div
-                          className="mt-0.5 truncate text-[14px] font-semibold text-[#0f172a]"
-                          title={isNivel1 ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome)}
-                        >
-                          {isNivel1 ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome || '—')}
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
-                        <div className="text-[11px] font-medium uppercase tracking-wide text-[#94a3b8]">Próximo retorno</div>
-                        <div className="mt-0.5 text-[14px] font-semibold text-[#0f172a]">
-                          {proximoRetornoResumoDisplay}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-2 mt-5 flex flex-wrap items-center justify-between gap-2">
-                      <h5 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-                        Histórico recente
-                      </h5>
-                      {!isNivel1 && detailLoading ? (
-                        <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
-                          <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
-                          Carregando…
-                        </span>
-                      ) : null}
-                    </div>
-                    {isNivel1 ? (
-                      <p className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-4 py-6 text-center text-[13px] font-medium text-[#94a3b8]">
-                        Acesso restrito
-                      </p>
-                    ) : !sortedApiProcedures.length ? (
-                      <p className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-4 py-6 text-center text-[13px] font-medium text-[#94a3b8]">
-                        Nenhum procedimento registrado ainda.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        <ProcedureTimelineRail>
-                          {perfilRecentProcedures.map((proc, idx) => {
-                            const rowKey =
-                              proc.id != null && proc.id !== ''
-                                ? String(proc.id)
-                                : `perfil-proc-${idx}`;
-                            const criado = proc.criadoEm ? new Date(proc.criadoEm) : null;
-                            const dateLabel = criado
-                              ? criado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-                              : '—';
-                            const timeLabel = criado
-                              ? criado.toLocaleTimeString('pt-BR', {
-                                  timeZone: 'America/Sao_Paulo',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : '';
-                            const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
-                            const isLast = idx === perfilRecentProcedures.length - 1;
-                            const showVerMais =
-                              isLast && sortedApiProcedures.length > perfilRecentProcedures.length;
-                            return (
-                              <ProcedureTimelineEntry key={rowKey}>
-                                <ProcedureTimelinePreviewCard
-                                  dateLabel={dateLabel}
-                                  timeLabel={timeLabel}
-                                  procedureName={nomeProc}
-                                  professionalName={proc.profissionalNome || '—'}
-                                  onPress={
-                                    showVerMais
-                                      ? () => setPatientDetailTab('prontuario')
-                                      : undefined
-                                  }
-                                  fusedVerMais={showVerMais}
-                                  verMaisLabel="Ver prontuário completo"
-                                />
-                              </ProcedureTimelineEntry>
-                            );
-                          })}
-                        </ProcedureTimelineRail>
-                        {sortedApiProcedures.length <= perfilRecentProcedures.length ? (
-                          <button
-                            type="button"
-                            onClick={() => setPatientDetailTab('prontuario')}
-                            className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2.5 text-[13px] font-semibold text-[#00a88e] transition-colors hover:border-[#cbd5e1] hover:bg-[#f1f5f9]"
-                          >
-                            Ver prontuário completo
-                            <ChevronDown className="h-4 w-4 shrink-0 -rotate-90" strokeWidth={2.25} aria-hidden />
-                          </button>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {patientDetailTab === 'prontuario' && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2387,6 +2245,17 @@ export function PatientProfileView({
 
               {patientDetailTab === 'anamnese' && (
                 <AnamneseTab pacienteId={selectedPatient.id} />
+              )}
+
+              {patientDetailTab === 'planos' && (
+                <PlanosTab
+                  variant="profile"
+                  pacienteId={selectedPatient?.id ?? null}
+                  roleUserId={roleUserId ?? null}
+                  onReagendarItem={(item, plano, onSaved) =>
+                    onReagendarPlanoItem?.(selectedPatient, item, plano, onSaved)
+                  }
+                />
               )}
 
               {patientDetailTab === 'galeria' && (

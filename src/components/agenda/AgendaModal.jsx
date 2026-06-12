@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, X, Loader2 } from 'lucide-react';
+import { AppDateInput } from '../shared/AppDateInput.jsx';
 import { isCpfIncomplete } from '../utils/formatters';
 import { useToast } from '../../contexts/useToast.js';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
@@ -259,11 +260,9 @@ export function AgendaModal({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-[#00a88e]">Data</label>
-              <input
-                type="date"
+              <AppDateInput
                 value={agendaDate}
                 onChange={(e) => setAgendaDate(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border border-slate-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/10 focus:border-[#00a88e]"
               />
             </div>
             <div className="space-y-1.5">

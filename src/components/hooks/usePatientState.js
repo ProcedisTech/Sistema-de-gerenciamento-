@@ -25,6 +25,12 @@ function readSessionValue(key, fallback) {
   }
 }
 
+function normalizePatientDetailTab(value) {
+  const tab = String(value ?? '').trim();
+  if (tab === 'atendimento' || tab === 'timeline' || tab === 'cadastro') return 'planos';
+  return tab || 'planos';
+}
+
 function readSelectedPatientCpf() {
   const current = readSessionValue(ACTIVE_PATIENT_CPF_KEY, null);
   if (current != null && current !== '') return current;
@@ -152,7 +158,7 @@ export const usePatientState = (opts = {}) => {
     readSessionValue(PATIENT_VIEW_KEY, 'list'),
   );
   const [patientDetailTab, setPatientDetailTab] = useState(() =>
-    readSessionValue(PATIENT_DETAIL_TAB_KEY, 'atendimento'),
+    normalizePatientDetailTab(readSessionValue(PATIENT_DETAIL_TAB_KEY, 'planos')),
   );
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
@@ -400,7 +406,7 @@ export const usePatientState = (opts = {}) => {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(PATIENT_DETAIL_TAB_KEY, patientDetailTab || 'atendimento');
+      sessionStorage.setItem(PATIENT_DETAIL_TAB_KEY, patientDetailTab || 'planos');
     } catch {
       // ignore
     }
