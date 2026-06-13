@@ -47,8 +47,23 @@ async function uploadCaptureFoto(pacienteId, roleUserId, blob, vistaCodigo) {
 }
 
 /**
- * Persiste plano completo: POST plano → itens → pontos por vista → ativar.
+ * Persiste plano completo: POST plano (nasce ativo) → itens → pontos por vista.
  */
+
+function isPlanoAtivoExistenteError(e) {
+  const msg = String(e?.message || '');
+  const bodyMsg =
+    e?.body && typeof e.body === 'object'
+      ? String(e.body.message || e.body.detail || e.body.error || '')
+      : '';
+  return (
+    e?.status === 409 ||
+    msg.includes('PLANO_ATIVO_EXISTENTE') ||
+    msg.includes('PLANO_ATIVO_CONFLITO') ||
+    bodyMsg.includes('PLANO_ATIVO_EXISTENTE') ||
+    bodyMsg.includes('PLANO_ATIVO_CONFLITO')
+  );
+}
 export async function persistirPlanejamento({
   pacienteId,
   roleUserId,
@@ -84,6 +99,16 @@ export async function persistirPlanejamento({
       throw new Error('Resposta sem planejamentoId.');
     }
   } catch (e) {
+    if (isPlanoAtivoExistenteError(e)) {
+      return {
+        ok: false,
+        planejamentoId: null,
+        errosParciais: ['PLANO_ATIVO_EXISTENTE'],
+        etapaFalha: 'criar_plano',
+        conflitoAtivo: true,
+        ativado: false,
+      };
+    }
     return {
       ok: false,
       planejamentoId: null,
@@ -158,34 +183,12 @@ export async function persistirPlanejamento({
     }
   }
 
-  let ativado = true;
-  let conflitoAtivo = false;
-  try {
-    await planejamentosApi.ativar(planejamentoId);
-  } catch (e) {
-    ativado = false;
-    if (e?.status === 409 || String(e?.message || '').includes('PLANO_ATIVO_CONFLITO')) {
-      conflitoAtivo = true;
-      errosParciais.push('PLANO_ATIVO_CONFLITO');
-    } else {
-      errosParciais.push(`Ativar plano: ${e?.message || 'erro'}`);
-      return {
-        ok: false,
-        planejamentoId,
-        itemIdByCatalogo,
-        errosParciais,
-        etapaFalha: 'ativar',
-        conflitoAtivo,
-      };
-    }
-  }
-
   return {
     ok: true,
     planejamentoId,
     itemIdByCatalogo,
     errosParciais,
-    ativado,
-    conflitoAtivo,
+    ativado: true,
+    conflitoAtivo: false,
   };
 }

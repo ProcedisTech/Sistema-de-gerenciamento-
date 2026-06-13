@@ -312,7 +312,7 @@ function PatientPreviewPanel({
           type="button"
           onClick={() => {
             if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
-            setPatientDetailTab('atendimento');
+            setPatientDetailTab('planos');
             setPatientView('profile');
           }}
           className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
@@ -529,7 +529,7 @@ export function PatientsListView({
     setPreviewPatientCpf(null);
     setPreviewPatientSeed(null);
     setSelectedPatientCpf(null);
-    setPatientDetailTab('atendimento');
+    setPatientDetailTab('planos');
     setPreviewProcedures([]);
   };
 
@@ -547,7 +547,7 @@ export function PatientsListView({
         setPreviewPatientCpf(null);
         setPreviewPatientSeed(null);
         setSelectedPatientCpf(null);
-        setPatientDetailTab('atendimento');
+        setPatientDetailTab('planos');
       }
     };
     window.addEventListener('keydown', onKey);

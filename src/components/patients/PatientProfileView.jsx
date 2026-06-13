@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  BookOpen,
   Cake,
   Calendar,
   ChevronDown,
@@ -11,7 +12,6 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
-  Play,
   StickyNote,
   Trash2,
   Pencil,
@@ -87,6 +87,7 @@ import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.
 import { GaleriaTab } from './galeria/GaleriaTab.jsx';
 import { EnviarDocumentoAssinarModal } from './EnviarDocumentoAssinarModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
+import { PlanosTab } from '../planos/PlanosTab.jsx';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -677,17 +678,6 @@ function profileProximoAgendamentoCard(p) {
   return leg && leg !== '-' && leg !== '—' ? leg : '-';
 }
 
-function profileProximoAgendamentoResumo(p) {
-  if (!p) return 'Nenhum agendamento';
-  if (p.proximoAgendamento != null && String(p.proximoAgendamento).trim() !== '') {
-    return formatCartaoDiaPtBr(p.proximoAgendamento);
-  }
-  const leg = String(p.proximoRetorno || '').trim();
-  const isoFmt = formatCartaoIfIsoString(leg);
-  if (isoFmt) return isoFmt;
-  return leg && leg !== '-' && leg !== '—' ? leg : 'Nenhum agendamento';
-}
-
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
@@ -697,6 +687,7 @@ export function PatientProfileView({
   getPatientInitials,
   onStartAttendance,
   onAgendarPaciente,
+  onReagendarPlanoItem,
   onUpdatePatient,
   onAddGalleryFiles: _onAddGalleryFiles,
   onDeleteGalleryPhoto,
@@ -784,12 +775,6 @@ export function PatientProfileView({
     const primary = profileProximoAgendamentoCard(selectedPatient);
     if (primary !== '-') return primary;
     return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : '-';
-  }, [selectedPatient, proximoAgendaIso]);
-
-  const proximoRetornoResumoDisplay = useMemo(() => {
-    const primary = profileProximoAgendamentoResumo(selectedPatient);
-    if (primary !== 'Nenhum agendamento') return primary;
-    return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : 'Nenhum agendamento';
   }, [selectedPatient, proximoAgendaIso]);
 
   const sortedApiProceduresEarly = useMemo(
@@ -889,8 +874,12 @@ export function PatientProfileView({
   }, [selectedPatient, onAgendarPaciente, toast]);
 
   useEffect(() => {
-    if (patientDetailTab === 'timeline' || patientDetailTab === 'cadastro') {
-      setPatientDetailTab('atendimento');
+    if (
+      patientDetailTab === 'timeline' ||
+      patientDetailTab === 'cadastro' ||
+      patientDetailTab === 'atendimento'
+    ) {
+      setPatientDetailTab('planos');
     }
   }, [patientDetailTab, setPatientDetailTab]);
 
@@ -1522,11 +1511,6 @@ export function PatientProfileView({
     ? sortedApiProcedures.slice(0, prontuarioListMax)
     : sortedApiProcedures;
 
-  const perfilRecentProcedures = useMemo(
-    () => sortedApiProcedures.slice(0, 5),
-    [sortedApiProcedures],
-  );
-
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
       const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
@@ -1804,7 +1788,7 @@ export function PatientProfileView({
       setInativarSenha('');
       setInativarSenhaErro('');
       setPatientView('list');
-      setPatientDetailTab('atendimento');
+      setPatientDetailTab('planos');
       setSelectedPatientCpf?.(null);
       refreshPatients?.();
     } catch (e) {
@@ -1842,7 +1826,7 @@ export function PatientProfileView({
         patientName={selectedPatient.nome}
         onBackToList={() => {
           setPatientView('list');
-          setPatientDetailTab('atendimento');
+          setPatientDetailTab('planos');
         }}
       />
 
@@ -2041,7 +2025,7 @@ export function PatientProfileView({
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
                 <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
-                { key: 'atendimento', label: 'Perfil', title: 'Perfil', icon: Play },
+                { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
                 { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
@@ -2454,6 +2438,17 @@ export function PatientProfileView({
 
               {patientDetailTab === 'anamnese' && (
                 <AnamneseTab pacienteId={selectedPatient.id} />
+              )}
+
+              {patientDetailTab === 'planos' && (
+                <PlanosTab
+                  variant="profile"
+                  pacienteId={selectedPatient?.id ?? null}
+                  roleUserId={roleUserId ?? null}
+                  onReagendarItem={(item, plano, onSaved) =>
+                    onReagendarPlanoItem?.(selectedPatient, item, plano, onSaved)
+                  }
+                />
               )}
 
               {patientDetailTab === 'galeria' && (

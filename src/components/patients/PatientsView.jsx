@@ -45,6 +45,7 @@ export function PatientsView(props) {
         getPatientInitials={getPatientInitials}
         onStartAttendance={onStartAttendance}
         onAgendarPaciente={onAgendarPaciente}
+        onReagendarPlanoItem={props.onReagendarPlanoItem}
         onUpdatePatient={onUpdatePatient}
         onAddGalleryFiles={onAddGalleryFiles}
         onDeleteGalleryPhoto={onDeleteGalleryPhoto}

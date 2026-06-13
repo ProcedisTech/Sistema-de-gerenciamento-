@@ -369,6 +369,42 @@ export function useProcedureCamera({
     });
   }, []);
 
+  const removeEvaluationPhoto = useCallback(
+    (idx) => {
+      let nextSnapshot = null;
+      setEvaluationCapturedPhotos((prev) => {
+        if (!Array.isArray(prev) || idx < 0 || idx >= prev.length) return prev;
+        const row = prev[idx];
+        try {
+          if (row?.url) URL.revokeObjectURL(row.url);
+        } catch {
+          /* ignore */
+        }
+        nextSnapshot = prev.filter((_, i) => i !== idx);
+        return nextSnapshot;
+      });
+
+      if (!nextSnapshot) return;
+
+      const targetCpf = (selectedPatientCpf || cpf || '').trim();
+      if (targetCpf) {
+        setPatients((pPrev) =>
+          pPrev.map((p) => {
+            if ((p.cpf || '').trim() !== targetCpf) return p;
+            return {
+              ...p,
+              evaluationCapturedPhotos: nextSnapshot.map((ph) => ({
+                url: ph.url,
+                meta: ph.meta,
+              })),
+            };
+          })
+        );
+      }
+    },
+    [selectedPatientCpf, cpf, setPatients]
+  );
+
   /** Substitui um item da lista de fotos do procedimento pelo JPEG já com desenho. */
   const replaceProcedureCapturedPhotoAt = useCallback((index, entry) => {
     const newUrl = entry?.url;
@@ -497,6 +533,7 @@ export function useProcedureCamera({
     procedureFotoCategoria,
     setProcedureFotoCategoria,
     removeProcedurePhoto,
+    removeEvaluationPhoto,
     replaceProcedureCapturedPhotoAt,
     replaceEvaluationCapturedPhotoAt,
     preferredFacing,

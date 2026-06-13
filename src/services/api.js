@@ -21,6 +21,7 @@
  * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
  */
 
+import { STATUS_PROCEDIMENTO_FINALIZADO_ID } from '../constants/statusProcedimento.js';
 import { DEFAULT_ORG_ID, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 import { supabase } from '../lib/supabaseClient';
 
@@ -676,25 +677,42 @@ export const planejamentosApi = {
   criar: (body) =>
     request('/api/v1/planejamentos', { method: 'POST', body: JSON.stringify(body ?? {}) }),
   listarPorPaciente: (pacienteId) =>
-    request(`/api/v1/planejamentos/paciente/${encodeURIComponent(String(pacienteId))}`),
+    request(
+      `/api/v1/planejamentos?pacienteId=${encodeURIComponent(String(pacienteId))}`,
+    ),
   detalhe: (planejamentoId) =>
     request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}`),
-  ativar: (planejamentoId) =>
-    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/ativar`, {
+  salvar: (planejamentoId, body) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}`, {
       method: 'PUT',
+      body: JSON.stringify(body ?? {}),
+    }),
+  alterarStatus: (planejamentoId, { codigo }) =>
+    request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ codigo: String(codigo ?? '').trim() }),
     }),
   adicionarItem: (planejamentoId, body) =>
     request(`/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/itens`, {
       method: 'POST',
       body: JSON.stringify(body ?? {}),
     }),
-  atualizarItem: (itemId, body) =>
-    request(`/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}`, {
-      method: 'PUT',
-      body: JSON.stringify(body ?? {}),
+  atualizarItem: (planejamentoId, itemId, body) =>
+    request(
+      `/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/itens/${encodeURIComponent(String(itemId))}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(body ?? {}),
+      },
+    ),
+  removerItem: (planejamentoId, itemId) =>
+    requestDelete(
+      `/api/v1/planejamentos/${encodeURIComponent(String(planejamentoId))}/itens/${encodeURIComponent(String(itemId))}`,
+    ),
+  darBaixaItem: (planejamentoId, itemId) =>
+    planejamentosApi.atualizarItem(planejamentoId, itemId, {
+      statusProcedimentoId: STATUS_PROCEDIMENTO_FINALIZADO_ID,
     }),
-  removerItem: (itemId) =>
-    requestDelete(`/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}`),
   salvarPontosVista: (itemId, vistaCodigo, pontos) =>
     request(
       `/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}/pontos?vista=${encodeURIComponent(String(vistaCodigo))}`,

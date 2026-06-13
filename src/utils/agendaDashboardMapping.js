@@ -50,6 +50,20 @@ export function mapAgendaDtoToDashboardRow(dto) {
   const profissionalRoleUserId =
     dto.profissionalRoleUserId != null ? String(dto.profissionalRoleUserId) : roleUserIdFromDto(dto);
 
+  let procedimentoNome;
+  if (tipo === 'bloqueio') {
+    procedimentoNome =
+      (dto.observacao != null && String(dto.observacao).trim()) || 'Bloqueio';
+  } else if (tipoCodigo === 'retorno') {
+    const cat = dto.catalogoProcedimentoNome?.trim();
+    procedimentoNome = cat ? `Retorno: ${cat}` : 'Retorno';
+  } else {
+    procedimentoNome =
+      dto.catalogoProcedimentoNome?.trim() ||
+      (dto.observacao != null && String(dto.observacao).trim()) ||
+      'Sem procedimento informado';
+  }
+
   return {
     id: String(dto.id),
     agendaId: String(dto.id),
@@ -69,14 +83,11 @@ export function mapAgendaDtoToDashboardRow(dto) {
     pacienteNome: dto.pacienteNome || (tipo === 'bloqueio' ? '' : 'Sem paciente'),
     pacienteId,
     telefone: '',
-    procedimentoNome:
-      tipo === 'bloqueio'
-        ? (dto.observacao != null && String(dto.observacao).trim()) || 'Bloqueio'
-        : dto.catalogoProcedimentoNome?.trim() ||
-          (dto.observacao != null && String(dto.observacao).trim()) ||
-          'Sem procedimento informado',
+    procedimentoNome,
     catalogoProcedimentoSaudeId: catId,
     catalogoProcedimentoSaudeIds: catId ? [catId] : [],
+    planejamentoItemId:
+      dto.planejamentoItemId != null ? String(dto.planejamentoItemId).trim() : null,
     tipoProcedimentoId: dto.tipoProcedimentoId != null ? String(dto.tipoProcedimentoId) : '',
     tipoProcedimentoNome: dto.tipoProcedimentoNome || '',
     profissionalNome: dto.profissionalNome || '',
@@ -171,6 +182,7 @@ export function buildAgendaCreateBody({
   observacao,
   pacienteId,
   catalogoProcedimentoSaudeId,
+  tipoProcedimentoId,
   agendaIdOrigem,
   planejamentoItemId,
 }) {
@@ -178,6 +190,7 @@ export function buildAgendaCreateBody({
   const mins = Number(duracaoMin) || 45;
   const horaFim = addMinutesToTime(hi, mins);
   const cat = catalogoProcedimentoSaudeId != null ? String(catalogoProcedimentoSaudeId).trim() : '';
+  const tipoId = tipoProcedimentoId != null ? String(tipoProcedimentoId).trim() : '';
   const base = {
     dataAgendamento,
     horaInicio: hi.length === 5 ? `${hi}:00` : hi,
@@ -185,6 +198,7 @@ export function buildAgendaCreateBody({
     profissionalRoleUserId,
     pacienteId: String(pacienteId || '').trim(),
     ...(cat ? { catalogoProcedimentoSaudeId: cat } : {}),
+    ...(tipoId ? { tipoProcedimentoId: tipoId } : {}),
   };
   const origem =
     agendaIdOrigem != null && String(agendaIdOrigem).trim()
