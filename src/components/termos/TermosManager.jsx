@@ -411,17 +411,27 @@ export function TermosManager() {
                 </p>
                 {/* Banner de atalho para template LGPD — só aparece em novos termos sem conteúdo */}
                 {editingId == null && !conteudo && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTitulo((t) => t || 'Termo de Consentimento LGPD');
-                      setConteudo(LGPD_TEMPLATE_BRUTO);
-                    }}
-                    className="mt-2 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#00a88e]/50 bg-[#f0fdfa] px-4 py-2.5 text-left text-[13px] font-medium text-[#0f766e] transition-colors hover:bg-[#dcfce7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]"
-                  >
-                    <Shield className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                    Usar Template LGPD pronto — Lei nº 13.709/2018
-                  </button>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTitulo((t) => t || 'Termo de Consentimento LGPD');
+                        setConteudo(LGPD_TEMPLATE_BRUTO);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#00a88e]/50 bg-[#f0fdfa] px-4 py-2.5 text-left text-[13px] font-medium text-[#0f766e] transition-colors hover:bg-[#dcfce7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]"
+                    >
+                      <Shield className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                      Usar Template LGPD pronto — Lei nº 13.709/2018
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConteudo((prev) => `Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo...\n\n` + prev)}
+                      className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#3b82f6]/50 bg-[#eff6ff] px-4 py-2.5 text-left text-[13px] font-medium text-[#1d4ed8] transition-colors hover:bg-[#dbeafe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]"
+                    >
+                      <Plus className="h-4 w-4 shrink-0 text-[#3b82f6]" strokeWidth={2} aria-hidden />
+                      Inserir parágrafo inicial com dados do Paciente
+                    </button>
+                  </div>
                 )}
                 <textarea
                   value={conteudo}
@@ -436,15 +446,39 @@ export function TermosManager() {
                 ) : null}
                 <div className="mt-2 flex gap-3 rounded-lg border border-[#99f6e4] bg-[#f0fdfa] p-3">
                   <Lightbulb className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                  <div className="text-[12px] leading-relaxed text-[#0f766e]">
+                  <div className="text-[12px] leading-relaxed text-[#0f766e] w-full">
                     <p className="font-semibold mb-1">Campos Automáticos (Copie e cole no texto):</p>
-                    <ul className="list-disc pl-4 space-y-0.5">
+                    <ul className="list-disc pl-4 space-y-0.5 mb-3">
                       <li><strong className="font-semibold">{'[NOME DO PACIENTE]'}</strong> - Nome completo</li>
                       <li><strong className="font-semibold">{'[CPF DO PACIENTE]'}</strong> - CPF formatado</li>
                       <li><strong className="font-semibold">{'[NOME DA CLÍNICA]'}</strong> - Razão social ou nome</li>
                       <li><strong className="font-semibold">{'[CNPJ DA CLÍNICA]'}</strong> - CNPJ formatado</li>
                       <li><strong className="font-semibold">{'[NOME DO PROFISSIONAL]'}</strong> - Nome do atendente</li>
                     </ul>
+                    
+                    <p className="font-semibold mb-2 pt-2 border-t border-[#99f6e4]">Modelos Prontos de Introdução (com dados automáticos):</p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const intro = "Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste documento que compreendo e concordo com as informações aqui descritas:";
+                          setConteudo((prev) => (intro + "\n\n" + prev).trim());
+                        }}
+                        className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] hover:bg-[#ccfbf1] transition-colors"
+                      >
+                        Inserir Intro Básica
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const intro = "Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):";
+                          setConteudo((prev) => (intro + "\n\n" + prev).trim());
+                        }}
+                        className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] hover:bg-[#ccfbf1] transition-colors"
+                      >
+                        Inserir Intro LGPD
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

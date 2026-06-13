@@ -1150,7 +1150,17 @@ export const anamneseApi = {
     request(`/api/v1/anamnese/paciente/${pid}/${aid}/finalizar`, { method: 'PATCH' }),
 };
 
-// ── Termos LGPD ─────────────────────────────────────────────
+  // 🟨🟨 Configurações de Acesso Público 🟨🟨
+  export const acessoPublicoApi = {
+    buscar: () => request('/api/v1/configuracoes/acesso-publico'),
+    atualizar: (payload) =>
+      request('/api/v1/configuracoes/acesso-publico', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+  };
+
+  // 🟨🟨 Termos (LGPD e Outros) 🟨🟨─────────────────────────────────────────────
 export const termosApi = {
   list: () => request('/api/v1/termos'),
   create: (data) => request('/api/v1/termos', { method: 'POST', body: JSON.stringify(data) }),
