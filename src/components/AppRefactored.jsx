@@ -70,6 +70,7 @@ import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { DisponibilidadeRevisionProvider } from '../contexts/DisponibilidadeRevisionProvider.jsx';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
+import { DocumentoPublicoPage } from '../pages/DocumentoPublico/DocumentoPublicoPage';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -221,7 +222,7 @@ function AppRefactoredInner() {
         const arr = Array.isArray(list) ? list : [];
         if (arr.length === 1) {
           const id = arr[0]?.id ?? arr[0]?.organizacaoSaudeId;
-          if (id) setOrgId(String(id));
+          if (id) setOrgId(String(id), arr[0]?.slug || '');
           const clinicaRes = await fetch(resolveApiUrl('/api/v1/clinica'), {
             credentials: 'include',
             headers: { ...authHeadersForFetch({ needsOrg: true }) },
@@ -1766,6 +1767,8 @@ function AppRefactoredInner() {
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
   const isAnamnesePublica = 
     typeof window !== 'undefined' && window.location.pathname.startsWith('/anamnese');
+  const isDocumentoPublico =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/documento');
 
   // ============ RENDERIZAÇÃO ============
   if (isPaginaPublica) {
@@ -1773,6 +1776,9 @@ function AppRefactoredInner() {
   }
   if (isAnamnesePublica) {
     return <AnamnesePage />;
+  }
+  if (isDocumentoPublico) {
+    return <DocumentoPublicoPage />;
   }
 
   if (!authReady) {
@@ -1990,15 +1996,20 @@ function AppRefactoredInner() {
                       roleUserId={roleUserId ?? null}
                       onAssinaturaSalva={handleTermoAssinaturaSalva}
                       pacienteCtx={{
-                        nome: pacienteAtual?.nome,
+                        nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
                         cpf: pacienteAtual?.cpf,
-                        telefone: pacienteAtual?.telefone || pacienteAtual?.phone || pacienteAtual?.telefoneNumero || pacienteAtual?.telefonePrincipal
+                        telefone:
+                          pacienteAtual?.telefone ||
+                          pacienteAtual?.phone ||
+                          pacienteAtual?.telefoneNumero ||
+                          pacienteAtual?.telefonePrincipal,
                       }}
                       clinicaCtx={{
                         nome: clinicaInfo?.nome,
                         cnpj: clinicaInfo?.cnpj,
                         endereco: clinicaInfo?.endereco,
-                        telefone: clinicaInfo?.telefone
+                        telefone: clinicaInfo?.telefone,
+                        clinicSlug: clinicaInfo?.slug
                       }}
                       profissionalCtx={{
                         nome: perfilInfo?.nomeCompleto,
@@ -2043,7 +2054,7 @@ function AppRefactoredInner() {
                       setOrientacoesCarregadas={journeyState.setOrientacoesCarregadas}
                       step5Errors={journeyState.step5Errors}
                       setStep5Errors={journeyState.setStep5Errors}
-                      pacienteNome={pacienteAtual?.nome ?? ''}
+                      pacienteNome={pacienteAtual?.nomeCompleto ?? pacienteAtual?.nome ?? ''}
                       pacienteIdade={pacienteAtual?.idade ?? null}
                       pacienteCpf={pacienteAtual?.cpf ?? ''}
                       telefonePaciente={
@@ -2390,7 +2401,7 @@ function AppRefactoredInner() {
                     roleUserId={roleUserId ?? null}
                     onAssinaturaSalva={handleTermoAssinaturaSalva}
                     pacienteCtx={{
-                      nome: pacienteAtual?.nome,
+                      nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
                       cpf: pacienteAtual?.cpf,
                       telefone:
                         pacienteAtual?.telefone ||
@@ -2600,6 +2611,8 @@ function AppRefactoredInner() {
                   onAddGalleryFiles={handleAddGalleryFiles}
                   onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
                   onPatientCreated={refreshPatientsAndPagedList}
+                  clinicaInfo={clinicaInfo}
+                  perfilInfo={perfilInfo}
                   mergePatientById={mergePatientById}
                   refreshPatients={refreshPatientsAndPagedList}
                   patientListItems={patientListItems}
@@ -2630,6 +2643,7 @@ function AppRefactoredInner() {
                   navigateProfilePatient={navigateProfilePatient}
                   profileNav={profileNav}
                   clearProfileNavSnapshot={clearProfileNavSnapshot}
+                  clinicSlug={clinicaInfo.slug}
                 />
               </RoleGuard>
             )}

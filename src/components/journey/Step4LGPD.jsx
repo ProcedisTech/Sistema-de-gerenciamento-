@@ -12,9 +12,13 @@ import {
   PenLine,
   X,
   FileText,
-  Search,
   Calendar,
   Eye,
+  AlertTriangle,
+  MessageCircle,
+  Mail,
+  Link2,
+  QrCode,
 } from 'lucide-react';
 import {
   authHeadersForFetch,
@@ -284,10 +288,15 @@ export function Step3Termos({
   const [profAssinaturaTimestamp, setProfAssinaturaTimestamp] = useState(null);
   const [patAssinaturaTimestamp, setPatAssinaturaTimestamp] = useState(null);
   const [assinaturaPersistida, setAssinaturaPersistida] = useState(false);
+
+  const [pacienteRecusou, setPacienteRecusou] = useState(false);
+
   const [showSalvarPadraoPrompt, setShowSalvarPadraoPrompt] = useState(false);
   const [savingPadraoPrompt, setSavingPadraoPrompt] = useState(false);
   const [pendingNextTermoId, setPendingNextTermoId] = useState(null);
   const [termoToCancel, setTermoToCancel] = useState(null);
+  const [backendAssinaturaId, setBackendAssinaturaId] = useState(null);
+  const [showQr, setShowQr] = useState(false);
   const [showConcluirConfirm, setShowConcluirConfirm] = useState(false);
   const [autoSignatureApplied, setAutoSignatureApplied] = useState(false);
   const assinaturaProfRecenteRef = useRef('');
@@ -299,7 +308,7 @@ export function Step3Termos({
   useEffect(() => {
     if (
       !profissionalAssinaturaDataUrl ||
-      !termoAssinaturaDataUrl ||
+      (!termoAssinaturaDataUrl && !pacienteRecusou) ||
       !termoSelecionadoId ||
       !pacienteId ||
       assinaturaPersistida
@@ -335,7 +344,8 @@ export function Step3Termos({
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
           assinaturaProfissional: profissionalAssinaturaDataUrl,
-          assinaturaPaciente: termoAssinaturaDataUrl,
+          assinaturaPaciente: pacienteRecusou ? null : termoAssinaturaDataUrl,
+          pacienteRecusou: pacienteRecusou,
           profissionalAssinouEm:
             profAssinaturaTimestamp != null
               ? new Date(profAssinaturaTimestamp).toISOString()
@@ -348,6 +358,10 @@ export function Step3Termos({
           userAgent: navigator.userAgent,
           ipAddress,
         });
+
+        if (resultado?.id) {
+          setBackendAssinaturaId(resultado.id);
+        }
         toast.success('Termo assinado e salvo com sucesso.');
         onAssinaturaSalva?.(resultado);
 
@@ -373,6 +387,7 @@ export function Step3Termos({
         setTermoAssinaturaDataUrl('');
         setProfAssinaturaTimestamp(null);
         setPatAssinaturaTimestamp(null);
+        setPacienteRecusou(false);
         if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
         setTermoSelecionadoId(null);
         setTermoSelecionado(null);
@@ -517,6 +532,7 @@ export function Step3Termos({
       setProfAssinaturaTimestamp(null);
       setPatAssinaturaTimestamp(null);
       setAssinaturaPersistida(false);
+      setBackendAssinaturaId(null);
       
       if (typeof setStep4Errors === 'function') {
         setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
@@ -589,6 +605,43 @@ export function Step3Termos({
     setPatAssinaturaTimestamp(Date.now());
     setPatSigningOpen(false);
     toast.success('Assinatura do paciente registrada');
+  };
+
+  const linkUrl = useMemo(() => {
+    if (!clinicaCtx?.clinicSlug || !pacienteCtx?.cpf) return '';
+    if (!termoSelecionadoId && !backendAssinaturaId) return '';
+    const base = window.location.origin;
+    const cleanCpf = String(pacienteCtx.cpf).replace(/\D/g, '');
+    if (backendAssinaturaId) {
+      return `${base}/documento?cpf=${cleanCpf}&clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
+    } else {
+      return `${base}/documento?cpf=${cleanCpf}&clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO&documento_id=${termoSelecionadoId}`;
+    }
+  }, [termoSelecionadoId, backendAssinaturaId, clinicaCtx?.clinicSlug, pacienteCtx?.cpf]);
+
+  const qrUrl = useMemo(() => {
+    if (!linkUrl) return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(linkUrl)}&size=200x200`;
+  }, [linkUrl]);
+
+  const handleVerificarAssinaturaRemota = async () => {
+    if (!backendAssinaturaId) return;
+    try {
+      const res = await termoAssinaturaApi.buscar(backendAssinaturaId);
+      if (res && res.assinaturaPaciente) {
+        setTermoAssinaturaDataUrl(res.assinaturaPaciente);
+        setPatAssinaturaTimestamp(res.pacienteAssinouEm ? new Date(res.pacienteAssinouEm).getTime() : Date.now());
+        if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
+        toast.success('Assinatura do paciente recebida!');
+      } else if (res && res.recusado) {
+        setPacienteRecusou(true);
+        toast.error('O paciente recusou assinar o documento.');
+      } else {
+        toast.info('Aguardando assinatura. O paciente ainda não assinou.');
+      }
+    } catch (e) {
+      toast.error('Erro ao verificar assinatura remota.');
+    }
   };
 
   const podeExibirAssinaturas = Boolean(termoSelecionadoId);
@@ -1068,17 +1121,104 @@ export function Step3Termos({
                           Refazer assinatura
                         </button>
                       </div>
+                    ) : pacienteRecusou ? (
+                      <div className="flex flex-col items-center gap-3 py-5 text-center border-2 border-dashed border-red-300 rounded-xl bg-red-50">
+                        <AlertTriangle className="h-10 w-10 text-red-500" strokeWidth={1.5} />
+                        <p className="text-[13px] font-bold text-red-700">O paciente recusou assinar o documento.</p>
+                        <p className="text-[12px] text-red-600 max-w-[300px]">
+                          Como o consentimento não foi concedido, o procedimento não poderá ser realizado.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setPacienteRecusou(false)}
+                          className="mt-2 rounded-lg bg-white border border-red-300 px-4 py-2 text-[11px] font-bold text-red-700 transition-colors hover:bg-red-50 shadow-sm"
+                        >
+                          Mudar de ideia (Assinar)
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex flex-col items-center gap-4 py-6 text-center">
                         <PenLine className="h-12 w-12 text-[#94a3b8]" strokeWidth={1.75} aria-hidden />
-                        <p className="text-[13px] font-medium text-[#64748b]">Clique para assinar digitalmente</p>
-                        <button
-                          type="button"
-                          onClick={() => setPatSigningOpen(true)}
-                          className="rounded-lg bg-[#00a88e] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                        >
-                          Assinar como Paciente
-                        </button>
+                        <p className="text-[13px] font-medium text-[#64748b]">Disponibilize o dispositivo para o paciente</p>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setPatSigningOpen(true)}
+                            className="rounded-lg bg-[#0f172a] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#1e293b]"
+                          >
+                            Assinar no dispositivo
+                          </button>
+                          
+                          {linkUrl && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const msg = `Olá! Acesse o link abaixo para assinar o documento da clínica:\n${linkUrl}`;
+                                  const phone = pacienteCtx?.telefone?.replace(/\D/g, '') || '';
+                                  window.open(`https://wa.me/${phone ? `55${phone}` : ''}?text=${encodeURIComponent(msg)}`, '_blank');
+                                }}
+                                className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#1ebd5b]"
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                                WhatsApp
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const subject = 'Assinatura de Documento';
+                                  const body = `Olá!\n\nAcesse o link abaixo para assinar seu documento:\n${linkUrl}`;
+                                  const email = pacienteCtx?.email || '';
+                                  window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                }}
+                                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                              >
+                                <Mail className="h-4 w-4" />
+                                Email
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(linkUrl);
+                                    toast.success('Link copiado!');
+                                  }
+                                }}
+                                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                              >
+                                <Link2 className="h-4 w-4" />
+                                Copiar Link
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowQr(!showQr)}
+                                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                              >
+                                <QrCode className="h-4 w-4" />
+                                QR Code
+                              </button>
+                            </>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setPacienteRecusou(true)}
+                            className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-100"
+                          >
+                            Recusar a assinar
+                          </button>
+                        </div>
+                        {linkUrl && backendAssinaturaId && (
+                          <div className="mt-2 text-center">
+                            <button
+                              type="button"
+                              onClick={handleVerificarAssinaturaRemota}
+                              className="text-[13px] font-bold text-[#00a88e] hover:text-[#00967f] underline"
+                            >
+                              Atualizar status (Verificar assinatura remota)
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

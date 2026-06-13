@@ -4,10 +4,6 @@ import { Shield } from 'lucide-react';
 export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalCtx, clinicaCtx, children }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
 
-  // Se não houver texto, mostramos o texto padrão da LGPD
-  const conteudoTexto = String(conteudo || '').trim();
-  const temConteudoTexto = conteudoTexto.length > 0;
-
   // Fallbacks para quando os contextos não são passados (ex: preview do manager)
   const clinica = clinicaCtx || {};
   const prof = profissionalCtx || {};
@@ -16,6 +12,7 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
   const nomeClinica = clinica.nome || '[Nome da Clínica]';
   const enderecoClinica = clinica.endereco || '[Endereço da Clínica]';
   const contatoClinica = clinica.telefone || '[Telefone da Clínica]';
+  const cnpjClinica = clinica.cnpj || '[CNPJ da Clínica]';
 
   const nomeProfissional = prof.nome || '[Nome do Profissional]';
   const cpfCrmProfissional = prof.cpf || prof.crm || '[CPF/CRM do Profissional]';
@@ -23,6 +20,17 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
   const nomePaciente = pac.nome || '[Nome do Paciente]';
   const cpfPaciente = pac.cpf || '[CPF do Paciente]';
   const contatoPaciente = pac.telefone || '[Telefone do Paciente]';
+
+  let conteudoTexto = String(conteudo || '').trim();
+  // Substitui os placeholders pelos dados reais do contexto (se existirem e não forem os fallbacks padrão)
+  conteudoTexto = conteudoTexto
+    .replace(/\[NOME DO PACIENTE\]/gi, pac.nome ? pac.nome : '[NOME DO PACIENTE]')
+    .replace(/\[CPF DO PACIENTE\]/gi, pac.cpf ? pac.cpf : '[CPF DO PACIENTE]')
+    .replace(/\[NOME DA CLÍNICA\]/gi, clinica.nome ? clinica.nome : '[NOME DA CLÍNICA]')
+    .replace(/\[CNPJ DA CLÍNICA\]/gi, clinica.cnpj ? clinica.cnpj : '[CNPJ DA CLÍNICA]')
+    .replace(/\[NOME DO PROFISSIONAL\]/gi, prof.nome ? prof.nome : '[NOME DO PROFISSIONAL]');
+
+  const temConteudoTexto = conteudoTexto.length > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm ring-1 ring-[#e2e8f0]">

@@ -105,12 +105,20 @@ export const generateTermoPdf = async ({
     }
   };
 
-  // Conteúdo do Termo
+  // Substituir placeholders
+  let conteudoTexto = String(conteudo || '').trim();
+  conteudoTexto = conteudoTexto
+    .replace(/\[NOME DO PACIENTE\]/gi, nomePaciente)
+    .replace(/\[CPF DO PACIENTE\]/gi, cpfPaciente)
+    .replace(/\[NOME DA CLÍNICA\]/gi, nomeClinica)
+    .replace(/\[CNPJ DA CLÍNICA\]/gi, clinica.cnpj || '[CNPJ DA CLÍNICA]')
+    .replace(/\[NOME DO PROFISSIONAL\]/gi, nomeProfissional);
+
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
-  
-  const textLines = doc.splitTextToSize(conteudo || '', maxWidth);
+
+  const textLines = doc.splitTextToSize(conteudoTexto, maxWidth);
   
   // Imprimir linhas cuidando de page break
   textLines.forEach(line => {
@@ -129,12 +137,18 @@ export const generateTermoPdf = async ({
   const gap = 15;
   
   // Assinatura do Paciente
-  if (assinaturaPaciente) {
+  if (assinaturaPaciente && assinaturaPaciente.startsWith('data:image')) {
     try {
       doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight);
     } catch (e) {
       console.error('Erro ao adicionar img assinatura paciente', e);
     }
+  } else if (metadados?.recusado || assinaturaPaciente === 'RECUSADO') {
+    doc.setTextColor(220, 38, 38); // red-600
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('RECUSADO PELO PACIENTE', margin, y + sigHeight / 2);
+    doc.setTextColor(0, 0, 0);
   } else {
     // Linha em branco
     doc.line(margin, y + sigHeight, margin + sigWidth, y + sigHeight);

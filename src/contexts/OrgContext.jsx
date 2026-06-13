@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { DEFAULT_ORG_ID, ALT_ORG_ID } from '../config/apiEnv';
 
 const LS_ORG = 'procedi_org_id';
+const LS_SLUG = 'procedi_org_slug';
 /** v2: evita reaproveitar roleUserId de demo antigo no localStorage. */
 const LS_ROLE = 'procedi_role_user_id_v2';
 const LS_PAPEL = 'procedi_papel';
@@ -28,6 +29,7 @@ function readInitialOrgIdSynced() {
 
 export function OrgProvider({ children }) {
   const [orgId, setOrgIdState] = useState(readInitialOrgIdSynced);
+  const [orgSlug, setOrgSlugState] = useState(() => readLs(LS_SLUG, ''));
   const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, ''));
   const [papel, setPapelState] = useState(() => {
     try {
@@ -54,14 +56,17 @@ export function OrgProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const setOrgId = useCallback((id) => {
+  const setOrgId = useCallback((id, slug = '') => {
     if (!id) return;
     setOrgIdState(id);
     try {
       localStorage.setItem(LS_ORG, id);
+      if (slug) localStorage.setItem(LS_SLUG, slug);
+      else localStorage.removeItem(LS_SLUG);
     } catch {
       /* ignore */
     }
+    if (slug) setOrgSlugState(slug);
     apiSetOrgId(id);
   }, []);
 
@@ -94,6 +99,7 @@ export function OrgProvider({ children }) {
     () => ({
       orgId,
       setOrgId,
+      orgSlug,
       roleUserId,
       setRoleUserId,
       defaultOrgId: DEFAULT_ORG_ID,
@@ -103,7 +109,7 @@ export function OrgProvider({ children }) {
       roleNome,
       setRoleNome,
     }),
-    [orgId, setOrgId, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -115,6 +121,7 @@ export function useOrg() {
     return {
       orgId: apiGetOrgId(),
       setOrgId: apiSetOrgId,
+      orgSlug: '',
       roleUserId: '',
       setRoleUserId: () => {},
       defaultOrgId: DEFAULT_ORG_ID,

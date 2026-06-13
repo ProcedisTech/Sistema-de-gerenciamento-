@@ -18,6 +18,7 @@ import {
   Plus,
   User as   UserIcon,
   X,
+  Send,
 } from 'lucide-react';
 import {
   anamneseApi,
@@ -84,6 +85,8 @@ import {
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { GaleriaTab } from './galeria/GaleriaTab.jsx';
+import { EnviarDocumentoAssinarModal } from './EnviarDocumentoAssinarModal.jsx';
+import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -704,6 +707,9 @@ export function PatientProfileView({
   profileNav = null,
   onProfileNavigatePrev,
   onProfileNavigateNext,
+  clinicSlug,
+  clinicaInfo,
+  perfilInfo,
 }) {
   const toast = useToast();
   const { isNivel1, canEditPacientes, papel } = usePapel();
@@ -763,6 +769,7 @@ export function PatientProfileView({
     procedimentoFeitoId: null,
     pacienteId: null,
   });
+  const [documentoModalOpen, setDocumentoModalOpen] = useState(false);
   const profilePhotoInputRef = useRef(null);
   const alertasCardRef = useRef(null);
 
@@ -2038,6 +2045,7 @@ export function PatientProfileView({
                 { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
+                { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
               ].map(({ key, label, title, icon }) => {
                 const TabIcon = icon;
                 const active = patientDetailTab === key;
@@ -2084,6 +2092,15 @@ export function PatientProfileView({
                       Iniciar Atendimento
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => setDocumentoModalOpen(true)}
+                    className="mt-2 inline-flex h-10 w-full max-w-md items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Send className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2.5} aria-hidden />
+                    Enviar documento para assinar
+                  </button>
 
                   <div>
                     <h5 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
@@ -2479,6 +2496,16 @@ export function PatientProfileView({
                   onLocalPreview={setGalleryPreview}
                   uploadDisabled={galeriaUploadDisabled}
                   uploadDisabledTitle={galeriaUploadDisabledTitle}
+                />
+              )}
+
+              {patientDetailTab === 'documentos' && (
+                <DocumentosAssinadosTab 
+                  paciente={selectedPatient}
+                  pacienteId={selectedPatient?.id}
+                  clinicaInfo={clinicaInfo}
+                  perfilInfo={perfilInfo}
+                  onOpenDocumentoModal={() => setDocumentoModalOpen(true)}
                 />
               )}
 
@@ -3133,6 +3160,13 @@ export function PatientProfileView({
           closeRelatoModal();
           setPatientDetailTab('anamnese');
         }}
+      />
+
+      <EnviarDocumentoAssinarModal
+        open={documentoModalOpen}
+        onClose={() => setDocumentoModalOpen(false)}
+        paciente={selectedPatient}
+        clinicSlug={clinicSlug}
       />
     </div>
   );

@@ -1,27 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Save, ExternalLink, ShieldCheck, Clock, Globe, AlertCircle, Loader2, FileText, Printer, Copy, Check } from 'lucide-react';
-import { clinicaApi, anamneseApi } from '../../services/api';
+import { 
+  Save, 
+  ExternalLink, 
+  Link2, 
+  FormInput, 
+  Clock, 
+  QrCode, 
+  Bell, 
+  Loader2, 
+  Copy, 
+  Check, 
+  Download, 
+  Printer 
+} from 'lucide-react';
+import { acessoPublicoApi, anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
-import { QRCodeSVG } from 'qrcode.react';
-
-function slugify(text) {
-  if (!text) return '';
-  return text
-    .toString()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-}
 
 export function AnamneseConfigPublicaPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fichas, setFichas] = useState([]);
-  const [config, setConfig] = useState({ slug: '', validadeAnamneseDias: 180, anamnesePadraoId: '' });
+  const [config, setConfig] = useState({ 
+    slug: '', 
+    validadeAnamneseDias: 180, 
+    anamnesePadraoId: '',
+    notificarNovaFicha: true,
+    notificarVencimento: true
+  });
   const [copied, setCopied] = useState(false);
   const toast = useToast();
 
@@ -29,22 +34,24 @@ export function AnamneseConfigPublicaPanel() {
     let isSubscribed = true;
     const fetchConfig = async () => {
       try {
-        const [clinica, fichasList] = await Promise.all([
-          clinicaApi.buscar(),
+        const [acessoData, fichasList] = await Promise.all([
+          acessoPublicoApi.buscar(),
           anamneseApi.listarFichas()
         ]);
         if (isSubscribed) {
           setFichas(fichasList || []);
           setConfig({
-            slug: clinica.slug || slugify(clinica.nome || ''),
-            validadeAnamneseDias: clinica.validadeAnamneseDias ?? 180,
-            anamnesePadraoId: clinica.anamnesePadraoId || ''
+            slug: acessoData.slug || '',
+            validadeAnamneseDias: acessoData.validadeAnamneseDias ?? 180,
+            anamnesePadraoId: acessoData.anamnesePadraoId || '',
+            notificarNovaFicha: acessoData.notificarNovaFicha ?? true,
+            notificarVencimento: acessoData.notificarVencimento ?? true
           });
           setLoading(false);
         }
       } catch {
         if (isSubscribed) {
-          toast.error('Erro ao carregar configurações.');
+          toast.error('Erro ao carregar configurações de acesso público.');
           setLoading(false);
         }
       }
@@ -57,10 +64,12 @@ export function AnamneseConfigPublicaPanel() {
     e.preventDefault();
     setSaving(true);
     try {
-      await clinicaApi.atualizar({
+      await acessoPublicoApi.atualizar({
         slug: config.slug,
         validadeAnamneseDias: Number(config.validadeAnamneseDias),
         anamnesePadraoId: config.anamnesePadraoId || null,
+        notificarNovaFicha: config.notificarNovaFicha,
+        notificarVencimento: config.notificarVencimento
       });
       toast.success('Configurações salvas com sucesso!');
     } catch {
@@ -70,100 +79,62 @@ export function AnamneseConfigPublicaPanel() {
     }
   };
 
-  const handlePreview = () => {
+  const linkUrl = config.slug ? `${window.location.origin}/anamnese?clinic=${config.slug}` : '';
+  const qrUrl = linkUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(linkUrl)}&size=200x200&margin=2` : '';
+
+  const handleOpenPortal = () => {
     if (!config.slug) {
-      toast.error('É necessário salvar um identificador (slug) antes de testar.');
+      toast.error('É necessário ter um identificador (slug) configurado.');
       return;
     }
-    window.open(`/anamnese?clinic=${config.slug}`, '_blank');
+    window.open(linkUrl, '_blank');
   };
 
   const handleCopyLink = () => {
     if (!config.slug) return;
-    const url = `${window.location.origin}/anamnese?clinic=${config.slug}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(linkUrl);
     setCopied(true);
     toast.success('Link copiado com sucesso!');
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handlePrintQRCode = () => {
-    if (!config.slug) {
-      toast.error('É necessário salvar um identificador (slug) antes de imprimir o QR Code.');
-      return;
+  const handleDownloadQR = async () => {
+    if (!qrUrl) return;
+    try {
+      const response = await fetch(qrUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qrcode_${config.slug}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('Erro ao baixar o QR Code.');
     }
-    
-    const url = `${window.location.origin}/anamnese?clinic=${config.slug}`;
-    
-    const svgElement = document.querySelector('#qr-code-container svg');
-    if (!svgElement) return;
-    
-    // Clone the SVG to modify its size for printing
-    const clonedSvg = svgElement.cloneNode(true);
-    clonedSvg.setAttribute('width', '250');
-    clonedSvg.setAttribute('height', '250');
-    const svgData = new XMLSerializer().serializeToString(clonedSvg);
+  };
 
+  const handlePrintQR = () => {
+    if (!qrUrl) return;
     const printWindow = window.open('', '_blank', 'width=800,height=800');
     printWindow.document.write(`
       <html>
         <head>
-          <title>Imprimir QR Code - Procedi</title>
+          <title>Imprimir QR Code</title>
           <style>
-            body {
-              font-family: system-ui, -apple-system, sans-serif;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              height: 100vh;
-              margin: 0;
-              text-align: center;
-              color: #1e293b;
-            }
-            .container {
-              border: 2px dashed #cbd5e1;
-              padding: 40px;
-              border-radius: 24px;
-              max-width: 500px;
-              background: white;
-            }
-            h1 {
-              font-size: 28px;
-              margin-bottom: 12px;
-              color: #0f172a;
-            }
-            p {
-              font-size: 18px;
-              color: #64748b;
-              margin-bottom: 40px;
-              line-height: 1.5;
-            }
-            .qr-wrapper {
-              display: flex;
-              justify-content: center;
-              margin-bottom: 32px;
-            }
-            .url {
-              font-size: 15px;
-              color: #94a3b8;
-              word-break: break-all;
-            }
-            @media print {
-              body { height: auto; display: block; padding-top: 50px; }
-              .container { border: none; padding: 0; margin: 0 auto; }
-            }
+            body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+            img { max-width: 300px; margin-bottom: 20px; }
+            .url { font-size: 16px; color: #555; }
+            @media print { body { justify-content: flex-start; padding-top: 50px; } }
           </style>
         </head>
         <body>
-          <div class="container">
-            <h1>Ficha de Anamnese</h1>
-            <p>Aponte a câmera do seu celular para o código abaixo para preencher sua ficha médica.</p>
-            <div class="qr-wrapper">
-              ${svgData}
-            </div>
-            <div class="url">${url}</div>
-          </div>
+          <h1>Acesso ao Portal do Paciente</h1>
+          <p>Escaneie o QR Code abaixo com a câmera do seu celular.</p>
+          <img src="${qrUrl}" alt="QR Code" />
+          <div class="url">${linkUrl}</div>
           <script>
             window.onload = () => {
               window.print();
@@ -176,9 +147,17 @@ export function AnamneseConfigPublicaPanel() {
     printWindow.document.close();
   };
 
+  const chipsValidade = [
+    { label: '1 mês', value: 30 },
+    { label: '3 meses', value: 90 },
+    { label: '6 meses', value: 180 },
+    { label: '1 ano', value: 365 },
+    { label: 'Nunca', value: 0 },
+  ];
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center p-10 bg-white/50 rounded-3xl border border-[#e2e8f0]">
+      <div className="flex flex-col items-center justify-center py-20">
         <Loader2 className="w-8 h-8 text-[#00a88e] animate-spin mb-3" />
         <p className="text-[14px] text-slate-500 font-medium">Carregando configurações...</p>
       </div>
@@ -186,210 +165,239 @@ export function AnamneseConfigPublicaPanel() {
   }
 
   return (
-    <form onSubmit={handleSave} className="flex flex-col gap-6 max-w-4xl animate-fade-in-up">
+    <form onSubmit={handleSave} className="flex flex-col h-full bg-slate-50 relative pb-24 animate-fade-in">
       {/* HEADER EXPLICATIVO */}
-      <div className="mb-2">
-        <h2 className="text-[20px] font-bold text-slate-800 tracking-tight">Portal do Paciente</h2>
-        <p className="text-[14px] text-slate-500 mt-1">
-          Configure o link de acesso e as regras para que seus pacientes preencham a ficha de anamnese de casa.
-        </p>
+      <div className="px-8 py-6 bg-white border-b border-slate-200 flex justify-between items-start shrink-0">
+        <div>
+          <h2 className="text-[22px] font-bold text-slate-800 tracking-tight">Acesso público</h2>
+          <p className="text-[14px] text-slate-500 mt-1 max-w-2xl leading-relaxed">
+            Configure o portal onde seus pacientes preenchem a anamnese sem precisar de login.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleOpenPortal}
+          className="flex items-center gap-2 px-4 py-2 bg-[#00a88e] hover:bg-[#00967f] text-white text-[13px] font-bold rounded-lg transition-colors shadow-sm"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Abrir portal
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* COLUNA ESQUERDA: CONFIGURAÇÕES PRINCIPAIS */}
-        <div className="lg:col-span-3 flex flex-col gap-6">
-          <div className="bg-white rounded-3xl border border-slate-200/60 p-6 shadow-sm hover:shadow-md transition-shadow duration-300 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110 duration-500 opacity-50" />
-            
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-50 flex items-center justify-center shadow-inner border border-white">
-                <Globe className="w-6 h-6 text-[#00a88e]" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto py-8 px-8 flex flex-col gap-0 bg-white rounded-2xl border border-slate-200 shadow-sm my-6">
+          
+          {/* Seção 1 — Endereço público */}
+          <div className="py-6 border-b border-slate-100 flex flex-col md:flex-row gap-6 md:items-start">
+            <div className="flex gap-4 md:w-1/3 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                <Link2 className="w-5 h-5 text-slate-400" />
               </div>
               <div>
-                <h3 className="font-bold text-[17px] text-slate-800">Endereço Público</h3>
-                <p className="text-[13px] text-slate-500">Defina a URL que será enviada aos pacientes</p>
+                <h3 className="font-bold text-[15px] text-slate-800">Endereço público</h3>
+                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Link compartilhado com os pacientes</p>
               </div>
             </div>
-
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <label htmlFor="slugConfig" className="text-[13px] font-bold text-slate-700">
-                  Identificador da Clínica (Slug)
-                </label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1 flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden transition-all focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-emerald-500/20">
-                    <div className="px-3 py-3 text-slate-400 text-[14px] select-none border-r border-slate-200 bg-slate-50">
-                      {window.location.host}/anamnese?clinic=
-                    </div>
-                    <input
-                      id="slugConfig"
-                      type="text"
-                      value={config.slug}
-                      disabled
-                      placeholder="sua-clinica"
-                      className="flex-1 px-3 py-3 bg-slate-50/50 text-[14px] text-slate-500 cursor-not-allowed focus:outline-none font-medium placeholder:text-slate-300"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    disabled={!config.slug}
-                    className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-[14px] font-bold text-white bg-[#00a88e] hover:bg-[#0f766e] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm"
-                  >
-                    {copied ? <Check className="w-4 h-4 animate-scale-in" /> : <Copy className="w-4 h-4" />}
-                    {copied ? 'Copiado!' : 'Copiar Link'}
-                  </button>
-                </div>
-                <p className="text-[12px] text-slate-500">
-                  O identificador da clínica é gerado automaticamente a partir do seu nome e não pode ser alterado para garantir a integridade dos acessos.
-                </p>
+            <div className="flex-1 flex items-center gap-2">
+              <div className="flex-1 px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-[14px] text-slate-600 font-medium select-all">
+                {config.slug ? `procedi.app/a/${config.slug}` : 'Slug não configurado'}
               </div>
-
-              <div className="flex flex-col gap-2 pt-2">
-                <label htmlFor="anamnesePadrao" className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-slate-400" /> 
-                  Ficha de Anamnese Padrão
-                </label>
-                <div className="relative">
-                  <select
-                    id="anamnesePadrao"
-                    value={config.anamnesePadraoId}
-                    onChange={(e) => setConfig({ ...config, anamnesePadraoId: e.target.value })}
-                    className="w-full appearance-none px-4 py-3 bg-white border border-slate-200 rounded-xl text-[14px] text-slate-800 focus:outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
-                  >
-                    <option value="">-- Selecione uma ficha --</option>
-                    {fichas.map(ficha => (
-                      <option key={ficha.id} value={ficha.id}>{ficha.nome}</option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                    </svg>
-                  </div>
-                </div>
-                <p className="text-[12px] text-slate-500">
-                  Esta será a ficha exibida para preenchimento quando o paciente acessar o link público.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2 pt-2">
-                <label htmlFor="validadeConfig" className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-slate-400" /> 
-                  Validade da Ficha Preenchida
-                </label>
-                <div className="relative">
-                  <select
-                    id="validadeConfig"
-                    value={config.validadeAnamneseDias}
-                    onChange={(e) => setConfig({ ...config, validadeAnamneseDias: Number(e.target.value) })}
-                    className="w-full appearance-none px-4 py-3 bg-white border border-slate-200 rounded-xl text-[14px] text-slate-800 focus:outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
-                  >
-                    <option value="30">Requerer nova ficha a cada 30 dias</option>
-                    <option value="90">Requerer nova ficha a cada 3 meses</option>
-                    <option value="180">Requerer nova ficha a cada 6 meses</option>
-                    <option value="365">Requerer nova ficha anualmente (1 ano)</option>
-                    <option value="730">Requerer nova ficha a cada 2 anos</option>
-                    <option value="99999">Sempre válida (Nunca pedir novamente)</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                    </svg>
-                  </div>
-                </div>
-                <p className="text-[12px] text-slate-500">
-                  Se o paciente clicar no link após esse período, o sistema exigirá que ele preencha a anamnese novamente.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* COLUNA DIREITA: TESTE E PREVIEW & QR CODE */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          
-          {/* CARD: TESTAR ACESSO */}
-          <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-3xl p-6 shadow-lg text-white flex flex-col relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-bl-full -z-10" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/10 rounded-tr-full -z-10" />
-            
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              </div>
-              <h3 className="font-bold text-[16px]">Testar Acesso</h3>
-            </div>
-            
-            <div className="space-y-4 mb-6">
-              <p className="text-[13px] text-slate-300 leading-relaxed">
-                Para simular a visão do paciente, você precisará informar um CPF válido de um paciente que <strong className="text-emerald-300">já esteja cadastrado</strong> na sua clínica.
-              </p>
-              
-              <div className="bg-white/10 border border-white/10 rounded-xl p-3 flex gap-3 items-start">
-                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-[12px] text-slate-300 leading-relaxed">
-                  Se você usar um CPF que não existe no seu banco de pacientes, a página exibirá erro de segurança (Paciente não encontrado).
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handlePreview}
-              className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[14px] font-bold text-slate-900 bg-emerald-400 hover:bg-emerald-300 transition-colors shadow-lg shadow-emerald-500/20 mt-auto"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Abrir Portal do Paciente
-            </button>
-          </div>
-
-          {/* CARD: QR CODE */}
-          {config.slug && (
-            <div className="bg-white rounded-3xl border border-slate-200/60 p-6 shadow-sm flex flex-col items-center text-center animate-fade-in-up">
-              <h3 className="font-bold text-[16px] text-slate-800 mb-2">QR Code de Acesso</h3>
-              <p className="text-[13px] text-slate-500 mb-5 leading-relaxed">
-                Imprima e deixe na recepção para seus pacientes acessarem a ficha pelo celular.
-              </p>
-              
-              <div id="qr-code-container" className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm mb-5 hover:shadow-md transition-shadow">
-                <QRCodeSVG 
-                  value={`${window.location.origin}/anamnese?clinic=${config.slug}`}
-                  size={140}
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
-
               <button
                 type="button"
-                onClick={handlePrintQRCode}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[14px] font-bold text-[#00a88e] bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                onClick={handleCopyLink}
+                disabled={!config.slug}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[13px] font-bold rounded-lg transition-colors disabled:opacity-50"
               >
-                <Printer className="w-4 h-4" />
-                Imprimir QR Code
+                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                Copiar
               </button>
             </div>
-          )}
+          </div>
+
+          {/* Seção 2 — Ficha de anamnese */}
+          <div className="py-6 border-b border-slate-100 flex flex-col md:flex-row gap-6 md:items-start">
+            <div className="flex gap-4 md:w-1/3 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                <FormInput className="w-5 h-5 text-slate-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[15px] text-slate-800">Ficha de anamnese</h3>
+                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Modelo exibido quando nenhuma ficha específica foi vinculada</p>
+              </div>
+            </div>
+            <div className="flex-1">
+              <select
+                value={config.anamnesePadraoId}
+                onChange={(e) => setConfig({ ...config, anamnesePadraoId: e.target.value })}
+                className="w-full max-w-[320px] px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[14px] text-slate-700 focus:outline-none focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]"
+              >
+                <option value="">-- Selecione uma ficha --</option>
+                {fichas.map(ficha => (
+                  <option key={ficha.id} value={ficha.id}>{ficha.nome}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Seção 3 — Validade da ficha */}
+          <div className="py-6 border-b border-slate-100 flex flex-col md:flex-row gap-6 md:items-start">
+            <div className="flex gap-4 md:w-1/3 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5 text-slate-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[15px] text-slate-800">Validade da ficha</h3>
+                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Prazo antes de solicitar novo preenchimento</p>
+              </div>
+            </div>
+            <div className="flex-1 flex flex-wrap gap-2">
+              {chipsValidade.map(chip => {
+                const isActive = config.validadeAnamneseDias === chip.value;
+                return (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    onClick={() => setConfig({ ...config, validadeAnamneseDias: chip.value })}
+                    className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all border ${
+                      isActive 
+                        ? 'bg-[#E1F5EE] border-[#5DCAA5] text-[#085041]' 
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Seção 4 — QR Code */}
+          <div className="py-6 border-b border-slate-100 flex flex-col md:flex-row gap-6 md:items-start">
+            <div className="flex gap-4 md:w-1/3 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                <QrCode className="w-5 h-5 text-slate-400" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-[15px] text-slate-800">QR Code</h3>
+                  {config.slug && <span className="px-2 py-0.5 bg-[#E1F5EE] text-[#085041] text-[11px] font-bold uppercase tracking-wide rounded-md ml-auto">Ativo</span>}
+                </div>
+                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Para impressão na recepção</p>
+              </div>
+            </div>
+            <div className="flex-1">
+              {config.slug ? (
+                <div className="flex gap-5 items-center">
+                  <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200 shrink-0">
+                    <img src={qrUrl} alt="QR Code" className="w-[120px] h-[120px] rounded-lg" />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <h4 className="text-[14px] font-bold text-slate-800">QR Code de acesso ao portal</h4>
+                      <p className="text-[13px] text-slate-500 mt-1 max-w-[280px]">
+                        Imprima e coloque na recepção. O paciente escaneia, digita o CPF e preenche a ficha pelo celular.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadQR}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-[13px] font-bold rounded-lg transition-colors"
+                      >
+                        <Download className="w-4 h-4" /> Baixar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePrintQR}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-[13px] font-bold rounded-lg transition-colors"
+                      >
+                        <Printer className="w-4 h-4" /> Imprimir
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[13px] text-slate-500 italic mt-2">
+                  Nenhum identificador configurado para gerar o QR Code.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Seção 5 — Notificações */}
+          <div className="py-6 flex flex-col md:flex-row gap-6 md:items-start">
+            <div className="flex gap-4 md:w-1/3 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                <Bell className="w-5 h-5 text-slate-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[15px] text-slate-800">Notificações</h3>
+                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Alertas sobre atividade no portal</p>
+              </div>
+            </div>
+            <div className="flex-1 flex flex-col gap-5">
+              {/* Toggle Nova Ficha */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[14px] font-bold text-slate-800">Notificar ao receber nova ficha</div>
+                  <div className="text-[13px] text-slate-500 mt-0.5">Alerta no painel quando um paciente enviar a anamnese</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, notificarNovaFicha: !config.notificarNovaFicha })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    config.notificarNovaFicha ? 'bg-[#00a88e]' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      config.notificarNovaFicha ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              {/* Toggle Vencimento */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[14px] font-bold text-slate-800">Lembrete de fichas a vencer</div>
+                  <div className="text-[13px] text-slate-500 mt-0.5">Aviso 7 dias antes do prazo de validade expirar</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, notificarVencimento: !config.notificarVencimento })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    config.notificarVencimento ? 'bg-[#00a88e]' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      config.notificarVencimento ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
 
         </div>
       </div>
 
-      {/* FOOTER ACTIONS */}
-      <div className="flex items-center justify-end pt-2">
+      {/* FOOTER FIXED ACTION */}
+      <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-white border-t border-slate-200 px-8 py-4 flex justify-end z-20 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)]">
         <button
           type="submit"
           disabled={saving}
-          className="relative px-8 py-3 bg-[#00a88e] text-white rounded-xl text-[15px] font-bold shadow-sm hover:bg-[#0f766e] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 overflow-hidden group"
+          className="relative px-6 py-2.5 bg-[#00a88e] text-white rounded-lg text-[14px] font-bold shadow-sm hover:bg-[#00967f] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 overflow-hidden group"
         >
           {saving && (
-            <div className="absolute inset-0 bg-[#0f766e] flex items-center justify-center">
+            <div className="absolute inset-0 bg-[#00967f] flex items-center justify-center">
               <Loader2 className="w-5 h-5 animate-spin" />
             </div>
           )}
           <span className={`flex items-center gap-2 transition-opacity duration-200 ${saving ? 'opacity-0' : 'opacity-100'}`}>
             <Save className="w-4 h-4" />
-            Salvar Alterações
+            Salvar alterações
           </span>
         </button>
       </div>
