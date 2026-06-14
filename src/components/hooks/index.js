@@ -7,3 +7,4 @@ export { useProcedureCamera } from './useProcedureCamera';
 export { useJourneyController } from './useJourneyController';
 export { useCanvasController } from './useCanvasController';
 export { useMapeamentoFacialState } from './useMapeamentoFacialState';
+export { useMapaAplicacaoState } from './useMapaAplicacaoState';

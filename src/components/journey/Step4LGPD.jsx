@@ -31,6 +31,7 @@ import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
+import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
 
@@ -639,7 +640,7 @@ export function Step3Termos({
       } else {
         toast.info('Aguardando assinatura. O paciente ainda não assinou.');
       }
-    } catch (e) {
+    } catch {
       toast.error('Erro ao verificar assinatura remota.');
     }
   };
@@ -1195,7 +1196,7 @@ export function Step3Termos({
                                 className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                               >
                                 <QrCode className="h-4 w-4" />
-                                QR Code
+                                {showQr ? 'Ocultar QR Code' : 'Mostrar QR Code'}
                               </button>
                             </>
                           )}
@@ -1208,6 +1209,20 @@ export function Step3Termos({
                             Recusar a assinar
                           </button>
                         </div>
+                        {showQr && linkUrl && qrUrl ? (
+                          <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                            <img
+                              src={qrUrl}
+                              alt="QR Code do link"
+                              width={200}
+                              height={200}
+                              className="rounded-lg"
+                            />
+                            <p className="text-center text-[11px] text-slate-400">
+                              O paciente pode escanear este QR Code para acessar o documento
+                            </p>
+                          </div>
+                        ) : null}
                         {linkUrl && backendAssinaturaId && (
                           <div className="mt-2 text-center">
                             <button
@@ -1406,6 +1421,18 @@ export function Step4Procedimento({
   fotosAvaliacao = [],
   onProcedureFotoCategoriaSync = () => {},
   onProcedureAnnotatePhoto,
+  mapaState = null,
+  roleUserId = null,
+  procedimentoFeitoId = null,
+  catalogoId = null,
+  planejamentoItemId = null,
+  planejamentoId = null,
+  procedimentosComPontos = [],
+  sidebarInsetPx = 0,
+  pendingMapaCapture = null,
+  onMapaCaptureConsumed = () => {},
+  onPrepareMapaCapture = () => {},
+  onEnsureProcedimento = () => Promise.resolve(null),
 }) {
   const uploadInputRef = React.useRef(null);
   const { options: catalogoOptions } = useProcedimentosOptions();
@@ -1509,6 +1536,27 @@ export function Step4Procedimento({
           />
         </div>
       </div>
+
+      {mapaState ? (
+        <MapaAplicacaoPanel
+          mapaState={mapaState}
+          pacienteId={_pacienteIdForProcedures}
+          roleUserId={roleUserId}
+          procedimentoFeitoId={procedimentoFeitoId}
+          catalogoId={catalogoId}
+          nomeProcedimento={nomeProcedimento}
+          planejamentoItemId={planejamentoItemId}
+          planejamentoId={planejamentoId}
+          procedimentosComPontos={procedimentosComPontos}
+          sidebarInsetPx={sidebarInsetPx}
+          pendingCapture={pendingMapaCapture}
+          onCaptureConsumed={onMapaCaptureConsumed}
+          onPrepareCapture={onPrepareMapaCapture}
+          onEnsureProcedimento={onEnsureProcedimento}
+          disabled={!String(nomeProcedimento || '').trim() || !catalogoId}
+          disabledHint="Selecione o procedimento na lista do catálogo (autocomplete) para habilitar o mapa de aplicação."
+        />
+      ) : null}
 
       {fotosAvaliacao.length > 0 && (
         <div className="mb-4">

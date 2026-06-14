@@ -29,6 +29,10 @@ export const useJourneyState = () => {
    */
   const [step2PerfilClinicoDraft, setStep2PerfilClinicoDraft] = useState(null);
 
+  // ============ ETAPA 2: AVALIAÇÃO — contexto do plano (step 2 → 4) ============
+  /** { planejamentoId, itemIdByCatalogo, procedimentosComPontos? } */
+  const [journeyPlanejamentoCtx, setJourneyPlanejamentoCtx] = useState(null);
+
   // ============ ETAPA 2: AVALIAÇÃO ============
   /** Observações clínicas e expectativas registradas durante a avaliação (antes do upload de fotos). */
   const [observacoes, setObservacoes] = useState('');
@@ -138,6 +142,8 @@ export const useJourneyState = () => {
     respostasAnamnese,
     setRespostasAnamnese,
     salvarRespostaAnamnese,
+    journeyPlanejamentoCtx,
+    setJourneyPlanejamentoCtx,
     observacoes,
     setObservacoes,
     imageSrc,

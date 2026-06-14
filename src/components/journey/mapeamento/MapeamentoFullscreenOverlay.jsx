@@ -21,6 +21,11 @@ export function MapeamentoFullscreenOverlay({
   onRemovePonto,
   onDesfazerUltimo,
   onClose,
+  hideProcedimentoPicker = false,
+  unidadeMedida,
+  onUnidadeMedidaChange,
+  presets,
+  passo,
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -51,14 +56,20 @@ export function MapeamentoFullscreenOverlay({
           showToolbar={false}
           fillViewport
           className="h-full min-h-0 w-full flex-1"
+          unidadeMedida={unidadeMedida}
+          onUnidadeMedidaChange={onUnidadeMedidaChange}
+          presets={presets}
+          passo={passo}
         />
 
-        <MapeamentoFullscreenProcedimentoFloatingPanel
-          open={panelOpen}
-          procedimentoArmado={procedimentoArmado}
-          onArmar={onArmar}
-          procedimentosUsados={procedimentosUsados}
-        />
+        {!hideProcedimentoPicker ? (
+          <MapeamentoFullscreenProcedimentoFloatingPanel
+            open={panelOpen}
+            procedimentoArmado={procedimentoArmado}
+            onArmar={onArmar}
+            procedimentosUsados={procedimentosUsados}
+          />
+        ) : null}
       </main>
     </div>,
     document.body,
