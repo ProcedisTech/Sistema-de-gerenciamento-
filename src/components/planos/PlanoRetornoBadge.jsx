@@ -1,16 +1,17 @@
 import React from 'react';
+import { RefreshCw } from 'lucide-react';
 import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
 
-export function PlanoRetornoBadge({ catalogoNome, dataAgendamento, horaInicio }) {
+export function PlanoRetornoBadge({ dataAgendamento, horaInicio }) {
   if (!dataAgendamento) return null;
 
-  const nome = catalogoNome?.trim() || 'Procedimento';
   const dataLabel = formatDataPt(dataAgendamento);
   const hora = horaInicio ? ` ${String(horaInicio).slice(0, 5)}` : '';
 
   return (
-    <span className="mt-1.5 inline-flex w-fit rounded-lg border border-[#00a88e]/30 bg-[#e6f7f5] px-2 py-0.5 text-[10px] font-semibold text-[#0f766e]">
-      Retorno para {nome} · agendado para {dataLabel}
+    <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-lg border border-brand-primary/30 bg-brand-primaryGhost px-2 py-0.5 text-[10px] font-semibold tabular-nums text-brand-primaryDark">
+      <RefreshCw className="h-3 w-3 shrink-0" strokeWidth={2.2} aria-hidden />
+      Retorno · {dataLabel}
       {hora}
     </span>
   );

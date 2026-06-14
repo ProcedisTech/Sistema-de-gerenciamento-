@@ -9,13 +9,14 @@ import {
   Plus,
   Save,
   Trash2,
+  XCircle,
 } from 'lucide-react';
-import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
+import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
 import { useToast } from '../../contexts/useToast.js';
 import { getApiErrorDetail, planejamentosApi } from '../../services/api.js';
 import { enriquecerPlanosComCatalogo } from '../../utils/planejamentoNormalize.js';
-import { sortItensPorData } from '../../utils/planejamentoDraftUtils.js';
+import { sortItensPorData, calcResumoProtocolo, parseValorBrlInput } from '../../utils/planejamentoDraftUtils.js';
 import {
   canDarBaixaItem,
   canReagendarItem,
@@ -23,8 +24,12 @@ import {
   getPlanoStatusPresentation,
   isItemAgendado,
   isItemPendente,
-  planoProntoParaConcluir,
 } from '../../utils/planejamentoStatusUi.js';
+import {
+  calcSessoesPlano,
+  dataReferenciaHistorico,
+  motivoEncerramentoPlano,
+} from '../../utils/planejamentoProfileMetrics.js';
 import { usePlanosPaciente } from './usePlanosPaciente.js';
 import { usePlanoDraft } from './usePlanoDraft.js';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
@@ -32,6 +37,9 @@ import { PlanoRetornoBadge } from './PlanoRetornoBadge.jsx';
 import { PlanoItemIntervalo } from './PlanoItemIntervalo.jsx';
 import { PlanoProtocoloResumo } from './PlanoProtocoloResumo.jsx';
 import { PlanoItemEditModal } from './PlanoItemEditModal.jsx';
+import { PlanoConcluirRetornoConfirmModal } from './PlanoConcluirRetornoConfirmModal.jsx';
+import { PlanoEncerrarConfirmModal } from './PlanoEncerrarConfirmModal.jsx';
+import { ValorOrcadoInput } from './ValorOrcadoInput.jsx';
 
 function formatValorBrl(val) {
   if (val == null || val === '') return '—';
@@ -51,6 +59,12 @@ function itemReactKey(item) {
   return String(item?.id ?? item?.tempId ?? '');
 }
 
+function truncateObservacao(text, max = 60) {
+  const s = String(text ?? '').trim();
+  if (!s) return '';
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
 function ProgressBar({ progresso }) {
   if (progresso == null) return null;
   const pct = Math.round(Math.min(1, Math.max(0, progresso)) * 100);
@@ -62,7 +76,28 @@ function ProgressBar({ progresso }) {
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-[#e2e8f0]">
         <div
-          className="h-full rounded-full bg-[#00a88e] transition-all"
+          className="h-full rounded-full bg-brand-primary transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProgressBarProfileActive({ feitas, total }) {
+  const ratio = total > 0 ? feitas / total : 0;
+  const pct = Math.round(ratio * 100);
+  return (
+    <div className="mt-4">
+      <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-ink-500">
+        <span>
+          {feitas} de {total} sessões realizadas
+        </span>
+        <span className="tabular-nums font-semibold">{pct}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-ink-150">
+        <div
+          className="h-full rounded-full bg-brand-primary transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -246,6 +281,7 @@ function renderItensComIntervalo({
         onDarBaixa={onDarBaixa}
         onEdit={onEditItem}
         onRemover={onRemoverItem}
+        entranceDelayMs={index * 40}
       />,
     );
   });
@@ -270,7 +306,7 @@ function PlanoCard({
   onRemoverItem,
   onEncerrar,
   onConcluir,
-  onConcluirComRetorno,
+  onRequestConcluirRetorno,
   addItemForm,
   isConsultaDraft,
   draftItens,
@@ -281,14 +317,17 @@ function PlanoCard({
   onSalvar,
   onEditItem,
   onRemoverDraftItem,
+  cardEntranceDelayMs,
 }) {
   const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
   const isAtivo = plano.statusCodigo === 'ativo';
-  const sugerirConcluir = canConcluirRetorno && planoProntoParaConcluir(plano);
   const itens = isConsultaDraft ? (draftItens ?? []) : plano.itens;
 
   return (
-    <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-app-card">
+    <div
+      className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-app-card animate-agenda-rise"
+      style={cardEntranceDelayMs != null ? { animationDelay: `${cardEntranceDelayMs}ms` } : undefined}
+    >
       <div
         className="flex cursor-pointer select-none items-center justify-between p-4 transition-colors hover:bg-[#f8fafc]"
         onClick={onToggle}
@@ -310,17 +349,6 @@ function PlanoCard({
             >
               {statusUi.label}
             </span>
-            {isConsultaDraft && isAtivo ? (
-              <span
-                className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                  isDirty
-                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-                    : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                }`}
-              >
-                {isDirty ? 'Não salvo' : 'Salvo'}
-              </span>
-            ) : null}
           </div>
           <div className="mt-1 text-[12px] text-[#64748b]">
             {itens.length} item{itens.length !== 1 ? 's' : ''}
@@ -343,28 +371,7 @@ function PlanoCard({
       </div>
 
       {expandido ? (
-        <div className="space-y-2 border-t border-[#e2e8f0] px-4 pb-4 pt-3">
-          {isConsultaDraft && isAtivo ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={!isDirty || saving || mutating}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSalvar?.(plano.id);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} />
-                ) : (
-                  <Save className="h-3.5 w-3.5" strokeWidth={2.5} />
-                )}
-                Salvar plano
-              </button>
-            </div>
-          ) : null}
-
+        <div className="space-y-2 border-t border-[#e2e8f0] px-4 pb-4 pt-3 animate-agenda-rise">
           {isConsultaDraft && isAtivo ? (
             <textarea
               value={draftObservacao ?? ''}
@@ -423,61 +430,362 @@ function PlanoCard({
 
           {canCrud && isAtivo ? addItemForm(plano.id) : null}
 
-          {isConsultaDraft && itens.length > 0 ? <PlanoProtocoloResumo itens={itens} /> : null}
+          {isConsultaDraft && itens.length > 0 ? (
+            <PlanoProtocoloResumo itens={itens} plano={plano} />
+          ) : null}
 
-          {sugerirConcluir ? (
-            <div className="rounded-xl border border-[#00a88e]/25 bg-[#e6f7f5] px-3 py-2.5 text-[12px] text-[#0f766e]">
-              Todos os procedimentos foram concluídos. Você pode{' '}
-              <span className="font-bold">concluir o plano com retorno</span> abaixo.
+          {isConsultaDraft && isAtivo ? (
+            <div
+              className={`flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${
+                isDirty ? 'bg-brand-primaryGhost' : 'bg-ink-50'
+              }`}
+            >
+              <p
+                className={`text-[12px] font-medium ${
+                  isDirty ? 'text-brand-primaryDark' : 'text-ink-500'
+                }`}
+              >
+                {isDirty ? (
+                  <>
+                    <span className="text-brand-primary" aria-hidden>
+                      ●{' '}
+                    </span>
+                    Alterações não salvas — salve para não perder
+                  </>
+                ) : (
+                  <>✓ Tudo salvo</>
+                )}
+              </p>
+              <button
+                type="button"
+                disabled={!isDirty || saving || mutating}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSalvar?.(plano.id);
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed ${
+                  isDirty
+                    ? 'bg-brand-primary text-white hover:bg-brand-primaryDark disabled:opacity-50'
+                    : 'border border-ink-200 bg-white text-ink-400 opacity-50'
+                }`}
+              >
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} />
+                ) : (
+                  <Save className="h-3.5 w-3.5" strokeWidth={2.5} />
+                )}
+                Salvar plano
+              </button>
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2 pt-1">
-            {canConcluirRetorno && isAtivo ? (
-              <>
-                <button
-                  type="button"
-                  disabled={mutating || saving}
-                  onClick={() => onConcluirComRetorno?.(plano)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:opacity-60"
-                >
-                  <Calendar className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  Concluir com retorno
-                </button>
-                <button
-                  type="button"
-                  disabled={mutating || saving}
-                  onClick={() => onEncerrar?.(plano.id)}
-                  className="rounded-lg border border-app-border bg-white px-3 py-2 text-[12px] font-semibold text-[#64748b] transition-colors hover:bg-app-nav-hover disabled:opacity-60"
-                >
-                  Encerrar
-                </button>
-              </>
-            ) : null}
-            {!canCrud && !canConcluirRetorno && isAtivo ? (
-              <>
-                <button
-                  type="button"
-                  disabled={mutating}
-                  title="Plano concluído com sucesso"
-                  onClick={() => onConcluir?.(plano.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:opacity-60"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  Concluir
-                </button>
-                <button
-                  type="button"
-                  disabled={mutating}
-                  title="Interromper plano por intercorrência"
-                  onClick={() => onEncerrar?.(plano.id)}
-                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
-                >
-                  Encerrar
-                </button>
-              </>
-            ) : null}
+          {canConcluirRetorno && isAtivo ? (
+            <div className="rounded-xl border border-ink-200 bg-ink-50/50 p-3.5 animate-agenda-rise">
+              <p className="font-display text-[10px] font-extrabold uppercase tracking-wider text-ink-500">
+                Encerramento
+              </p>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-display text-[15px] font-extrabold leading-snug text-ink-900">
+                    Concluir tratamento com retorno
+                  </h3>
+                  <p className="mt-1 text-[12px] leading-relaxed text-ink-500">
+                    Encerre este plano e agende uma consulta de retorno para dar continuidade ao
+                    tratamento em nova fase.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={mutating || saving}
+                    onClick={() => onRequestConcluirRetorno?.(plano)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-ink-300 bg-white px-3 py-2 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-ink-100 disabled:opacity-60"
+                  >
+                    <Calendar className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                    Concluir com retorno
+                  </button>
+                  <button
+                    type="button"
+                    disabled={mutating || saving}
+                    onClick={() => onEncerrar?.(plano.id)}
+                    className="rounded-xl border border-transparent bg-transparent px-2.5 py-2 text-[12px] font-medium text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700 disabled:opacity-60"
+                  >
+                    Encerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {!canCrud && !canConcluirRetorno && isAtivo ? (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                disabled={mutating}
+                title="Plano concluído com sucesso"
+                onClick={() => onConcluir?.(plano.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+                Concluir
+              </button>
+              <button
+                type="button"
+                disabled={mutating}
+                title="Interromper plano por intercorrência"
+                onClick={() => onEncerrar?.(plano.id)}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
+              >
+                Encerrar
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PlanoAtivoProfileCard({
+  plano,
+  expandido,
+  onToggle,
+  canBaixa,
+  canReagendar,
+  canCrud,
+  canConcluirRetorno,
+  mutating,
+  onReagendarItem,
+  onDarBaixa,
+  onEncerrar,
+  onConcluir,
+}) {
+  const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
+  const isAtivo = plano.statusCodigo === 'ativo';
+  const itens = Array.isArray(plano.itens) ? plano.itens : [];
+  const { feitas, total } = calcSessoesPlano(itens);
+  const showAcoesPlano = !canCrud && !canConcluirRetorno && isAtivo;
+
+  return (
+    <div className="overflow-hidden rounded-xl border-2 border-brand-primary/25 bg-brand-primaryGhost shadow-app-card">
+      <div className="space-y-4 p-5">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-xl border-[2px] px-2.5 py-0.5 text-[11px] font-bold ${statusUi.pillClass}`}
+            >
+              {statusUi.label}
+            </span>
           </div>
+          {plano.criadoEm ? (
+            <p className="mt-2 text-[12px] font-medium text-ink-500">
+              Criado em {formatDataPt(plano.criadoEm)}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+              Procedimentos
+            </p>
+            <p className="mt-1 font-display text-[20px] font-extrabold tabular-nums text-ink-900">
+              {total}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+              Valor orçado
+            </p>
+            <p className="mt-1 font-display text-[20px] font-extrabold tabular-nums text-ink-900">
+              {formatValorBrl(plano.valorTotal)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+              Sessões feitas
+            </p>
+            <p className="mt-1 font-display text-[20px] font-extrabold tabular-nums text-ink-900">
+              {feitas}/{total}
+            </p>
+          </div>
+        </div>
+
+        <ProgressBarProfileActive feitas={feitas} total={total} />
+      </div>
+
+      {showAcoesPlano ? (
+        <div className="flex flex-wrap items-center gap-2 border-t border-brand-primary/15 bg-white/60 px-4 py-3">
+          <button
+            type="button"
+            disabled={mutating}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle?.();
+            }}
+            className="mr-auto inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-semibold text-brand-primary transition-colors hover:bg-brand-primaryGhost"
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-200 ${expandido ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+            />
+            {expandido ? 'Recolher' : 'Ver sessões'}
+          </button>
+          <button
+            type="button"
+            disabled={mutating}
+            title="Interromper plano por intercorrência"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEncerrar?.(plano.id);
+            }}
+            className="rounded-xl border border-status-danger/30 bg-white px-3 py-2 text-[12px] font-semibold text-status-danger-ink transition-colors hover:bg-status-danger-bg disabled:opacity-60"
+          >
+            Encerrar
+          </button>
+          <button
+            type="button"
+            disabled={mutating}
+            title="Plano concluído com sucesso"
+            onClick={(e) => {
+              e.stopPropagation();
+              onConcluir?.(plano.id);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-primary px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-brand-primaryDark disabled:opacity-60"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+            Concluir
+          </button>
+        </div>
+      ) : null}
+
+      {expandido ? (
+        <div className="space-y-2 border-t border-brand-primary/15 bg-white px-4 pb-4 pt-3">
+          {plano.observacao ? (
+            <p className="rounded-xl bg-brand-primaryGhost/50 px-3 py-2 text-[13px] text-ink-600">
+              {plano.observacao}
+            </p>
+          ) : null}
+          {itens.length === 0 ? (
+            <p className="text-[13px] font-medium text-ink-400">Nenhum item no plano.</p>
+          ) : (
+            <div className="space-y-2">
+              {itens.map((item) => (
+                <PlanoItemRow
+                  key={item.id}
+                  item={item}
+                  plano={plano}
+                  canCrud={false}
+                  canBaixa={canBaixa}
+                  canReagendar={canReagendar}
+                  canAgendar={false}
+                  mutating={mutating}
+                  onReagendarItem={onReagendarItem}
+                  onDarBaixa={onDarBaixa}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PlanoHistoricoProfileCard({
+  plano,
+  expandido,
+  onToggle,
+  canBaixa,
+  canReagendar,
+  mutating,
+  onReagendarItem,
+  onDarBaixa,
+}) {
+  const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
+  const itens = Array.isArray(plano.itens) ? plano.itens : [];
+  const { total } = calcSessoesPlano(itens);
+  const titulo =
+    truncateObservacao(plano.observacao) || 'Plano de tratamento';
+  const motivo = motivoEncerramentoPlano(plano);
+  const isEncerrado = plano.statusCodigo === 'encerrado';
+  const StatusIcon = plano.statusCodigo === 'concluido' ? CheckCircle2 : XCircle;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-ink-150 bg-white shadow-sm">
+      <div
+        className="flex cursor-pointer select-none items-center gap-3 px-4 py-3 transition-colors hover:bg-ink-50"
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle?.();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <StatusIcon
+          className={`h-5 w-5 shrink-0 ${
+            plano.statusCodigo === 'concluido' ? 'text-brand-primary' : 'text-ink-400'
+          }`}
+          strokeWidth={2}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-ink-900">{titulo}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-ink-500">
+            {formatDataPt(dataReferenciaHistorico(plano))} · {total} sessões ·{' '}
+            {formatValorBrl(plano.valorTotal)}
+          </p>
+        </div>
+        <span
+          className={`hidden shrink-0 rounded-xl border-[2px] px-2 py-0.5 text-[10px] font-bold sm:inline ${statusUi.pillClass}`}
+        >
+          {statusUi.label}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-ink-400 transition-transform duration-200 ${
+            expandido ? 'rotate-180' : ''
+          }`}
+          strokeWidth={2}
+        />
+      </div>
+
+      {expandido ? (
+        <div className="space-y-2 border-t border-ink-150 px-4 pb-4 pt-3">
+          <span
+            className={`inline-flex rounded-xl border-[2px] px-2 py-0.5 text-[10px] font-bold sm:hidden ${statusUi.pillClass}`}
+          >
+            {statusUi.label}
+          </span>
+          {isEncerrado && motivo ? (
+            <p className="rounded-xl bg-ink-50 px-3 py-2 text-[12px] text-ink-600">{motivo}</p>
+          ) : null}
+          {plano.observacao ? (
+            <p className="rounded-xl bg-ink-50 px-3 py-2 text-[13px] text-ink-600">
+              {plano.observacao}
+            </p>
+          ) : null}
+          {itens.length === 0 ? (
+            <p className="text-[13px] font-medium text-ink-400">Nenhum item no plano.</p>
+          ) : (
+            <div className="space-y-2">
+              {itens.map((item) => (
+                <PlanoItemRow
+                  key={item.id}
+                  item={item}
+                  plano={plano}
+                  canCrud={false}
+                  canBaixa={canBaixa}
+                  canReagendar={canReagendar}
+                  canAgendar={false}
+                  mutating={mutating}
+                  onReagendarItem={onReagendarItem}
+                  onDarBaixa={onDarBaixa}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -487,6 +795,7 @@ function PlanoCard({
 export function PlanosTab({
   pacienteId,
   roleUserId,
+  pacienteNome,
   onAgendarItem,
   onAgendarRetornoItem,
   onReagendarItem,
@@ -537,6 +846,19 @@ export function PlanosTab({
   const [actionError, setActionError] = useState('');
   const [savingPlanoId, setSavingPlanoId] = useState('');
   const [editItemState, setEditItemState] = useState(null);
+  const [concluirRetornoModal, setConcluirRetornoModal] = useState(null);
+  const [encerrarModalPlanoId, setEncerrarModalPlanoId] = useState(null);
+
+  const procedimentoSearchOptions = useMemo(
+    () =>
+      catalogoOptions.map((o) => ({
+        id: o.id,
+        nome: o.nomeProcedimento,
+        tipoCodigo: o.tipoCodigo,
+        duracaoMin: o.duracaoMin,
+      })),
+    [catalogoOptions],
+  );
 
   const planosEnriquecidos = useMemo(
     () => enriquecerPlanosComCatalogo(planos, catalogoOptions),
@@ -558,6 +880,21 @@ export function PlanosTab({
       isConsulta
         ? sortedPlanos.filter((p) => p.statusCodigo === 'ativo')
         : sortedPlanos,
+    [sortedPlanos, isConsulta],
+  );
+
+  const planosAtivos = useMemo(
+    () => (isConsulta ? [] : sortedPlanos.filter((p) => p.statusCodigo === 'ativo')),
+    [sortedPlanos, isConsulta],
+  );
+
+  const planosHistorico = useMemo(
+    () =>
+      isConsulta
+        ? []
+        : sortedPlanos.filter(
+            (p) => p.statusCodigo === 'concluido' || p.statusCodigo === 'encerrado',
+          ),
     [sortedPlanos, isConsulta],
   );
 
@@ -664,6 +1001,16 @@ export function PlanosTab({
     [alterarStatusPlano],
   );
 
+  const openEncerrarModal = useCallback((planoId) => {
+    setEncerrarModalPlanoId(planoId);
+  }, []);
+
+  const handleConfirmEncerrar = useCallback(() => {
+    const id = encerrarModalPlanoId;
+    setEncerrarModalPlanoId(null);
+    if (id) handleEncerrar(id);
+  }, [encerrarModalPlanoId, handleEncerrar]);
+
   const handleDarBaixa = useCallback(
     async (planoId, itemId) => {
       setActionError('');
@@ -733,6 +1080,27 @@ export function PlanosTab({
     [onConcluirComRetorno, refresh],
   );
 
+  const openConcluirRetornoModal = useCallback(
+    (plano) => {
+      const planoDraft = getDraft(plano.id);
+      const itens = planoDraft?.itens ?? plano.itens ?? [];
+      const resumo = calcResumoProtocolo(itens);
+      setConcluirRetornoModal({
+        plano,
+        totalItens: itens.length,
+        valorTotal: plano.valorTotal ?? resumo.valorTotal,
+      });
+    },
+    [getDraft],
+  );
+
+  const handleConfirmConcluirRetorno = useCallback(() => {
+    const plano = concluirRetornoModal?.plano;
+    if (!plano) return;
+    setConcluirRetornoModal(null);
+    handleConcluirComRetorno(plano);
+  }, [concluirRetornoModal, handleConcluirComRetorno]);
+
   const handleEditItemSave = useCallback(
     (patch) => {
       if (!editItemState) return;
@@ -748,7 +1116,7 @@ export function PlanosTab({
       const draftForm = novoItemPorPlano[planoId] ?? {
         nome: '',
         catalogoId: '',
-        valor: '',
+        valorDisplay: '',
       };
 
       const setDraftForm = (patch) =>
@@ -759,31 +1127,34 @@ export function PlanosTab({
 
       const disabled = mutating || savingPlanoId === planoId || catalogoLoading;
 
+      const selecionados =
+        draftForm.catalogoId && draftForm.nome
+          ? procedimentoSearchOptions.filter(
+              (p) => String(p.id).trim() === String(draftForm.catalogoId).trim(),
+            )
+          : [];
+
       return (
-        <div className="rounded-xl border border-dashed border-[#00a88e]/30 bg-[#f8fbfb] p-3">
+        <div className="rounded-xl border border-dashed border-[#00a88e]/30 bg-[#f8fbfb] p-3 animate-agenda-rise">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
             Adicionar procedimento
           </p>
           <div className="space-y-2">
-            <ProcedimentoAutocomplete
-              value={draftForm.nome}
-              catalogoOptions={catalogoOptions}
-              disabled={disabled}
-              onInputChange={(nome) => setDraftForm({ nome, catalogoId: '' })}
-              onCommit={(nome, catalogoId) =>
-                setDraftForm({ nome, catalogoId: catalogoId ? String(catalogoId) : '' })
+            <ProcedimentoSearchInput
+              selectionMode="single"
+              showDuracao={false}
+              procedimentoOptions={procedimentoSearchOptions}
+              procedimentosSelecionados={selecionados}
+              onSelect={(proc) =>
+                setDraftForm({ nome: proc.nome, catalogoId: String(proc.id) })
               }
-              placeholder="Buscar procedimento…"
+              onToggle={() => {}}
+              onRemover={() => setDraftForm({ nome: '', catalogoId: '' })}
             />
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Valor orçado (R$)"
-              value={draftForm.valor}
+            <ValorOrcadoInput
+              value={draftForm.valorDisplay}
               disabled={disabled}
-              onChange={(e) => setDraftForm({ valor: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[13px] outline-none focus:border-[#00a88e] focus:ring-4 focus:ring-[#00a88e]/10"
+              onChange={(valorDisplay) => setDraftForm({ valorDisplay })}
             />
             <button
               type="button"
@@ -799,7 +1170,7 @@ export function PlanosTab({
                       catalogoProcedimentoSaudeId: draftForm.catalogoId,
                       catalogoNome: draftForm.nome,
                       tipoCodigo: opt?.tipoCodigo ?? '',
-                      valorOrcado: draftForm.valor,
+                      valorOrcado: parseValorBrlInput(draftForm.valorDisplay),
                     },
                     catalogoOptions,
                   );
@@ -821,10 +1192,167 @@ export function PlanosTab({
         </div>
       );
     },
-    [addItem, catalogoLoading, catalogoOptions, isConsulta, mutating, novoItemPorPlano, savingPlanoId],
+    [
+      addItem,
+      catalogoLoading,
+      catalogoOptions,
+      isConsulta,
+      mutating,
+      novoItemPorPlano,
+      procedimentoSearchOptions,
+      savingPlanoId,
+    ],
   );
 
   const displayError = actionError || error;
+
+  const profileSemPlanos =
+    !loading && !isConsulta && planosAtivos.length === 0 && planosHistorico.length === 0;
+
+  const renderConsultaPlanosList = () => {
+    if (displayPlanos.length === 0) {
+      return (
+        <div className="rounded-xl border border-dashed border-[#cbd5e1] bg-[#f8fbfb] px-4 py-10 text-center">
+          <BookOpen className="mx-auto h-8 w-8 text-[#94a3b8]" strokeWidth={1.75} />
+          <p className="mt-2 text-[14px] font-semibold text-[#475569]">
+            {consultaSemPlanoAtivo ? 'Nenhum plano ativo' : 'Nenhum plano cadastrado'}
+          </p>
+          <p className="mt-1 text-[13px] text-[#94a3b8]">
+            {consultaSemPlanoAtivo
+              ? 'Este paciente possui planos encerrados ou concluídos. Crie um novo plano para o atendimento.'
+              : 'Crie um plano e adicione procedimentos do catálogo.'}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {displayPlanos.map((plano, index) => {
+          const planoDraft = getDraft(plano.id);
+          return (
+            <PlanoCard
+              key={plano.id}
+              cardEntranceDelayMs={index * 50}
+              plano={plano}
+              expandido={Boolean(expandidos[plano.id])}
+              onToggle={() => toggleExpandido(plano.id, plano)}
+              canCrud={canCrud}
+              canBaixa={canBaixa}
+              canReagendar={canReagendar}
+              canAgendar={canAgendar}
+              canConcluirRetorno={canConcluirRetorno}
+              mutating={mutating}
+              onAgendarItem={handleAgendarItem}
+              onAgendarRetornoItem={handleAgendarRetornoItem}
+              onReagendarItem={handleReagendarItem}
+              onDarBaixa={handleDarBaixa}
+              onRemoverItem={async (pid, iid) => {
+                setActionError('');
+                try {
+                  await removerItem(pid, iid);
+                } catch (e) {
+                  setActionError(
+                    getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.',
+                  );
+                }
+              }}
+              onEncerrar={openEncerrarModal}
+              onConcluir={handleConcluir}
+              onRequestConcluirRetorno={openConcluirRetornoModal}
+              addItemForm={renderAddItemForm}
+              isConsultaDraft={plano.statusCodigo === 'ativo'}
+              draftItens={planoDraft?.itens}
+              draftObservacao={planoDraft?.observacao}
+              onObservacaoChange={setObservacao}
+              isDirty={isDirty(plano.id)}
+              saving={savingPlanoId === plano.id}
+              onSalvar={handleSalvarPlano}
+              onEditItem={(item) =>
+                setEditItemState({
+                  planoId: plano.id,
+                  itemKey: itemReactKey(item),
+                  item,
+                })
+              }
+              onRemoverDraftItem={(item) => removeItem(plano.id, itemReactKey(item))}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderProfilePlanosList = () => (
+    <div className="flex flex-col gap-8">
+      <section className="space-y-3">
+        <h4 className="font-display text-xs font-extrabold uppercase tracking-wider text-ink-500">
+          Plano ativo
+        </h4>
+        {planosAtivos.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-ink-200 bg-brand-primaryGhost/30 px-4 py-10 text-center">
+            <BookOpen className="mx-auto h-8 w-8 text-ink-300" strokeWidth={1.75} />
+            <p className="mt-2 text-[14px] font-semibold text-ink-600">
+              {profileSemPlanos ? 'Nenhum plano cadastrado' : 'Nenhum plano ativo'}
+            </p>
+            <p className="mt-1 text-[13px] text-ink-400">
+              {profileSemPlanos
+                ? 'Planos são criados durante o atendimento.'
+                : 'Este paciente possui planos no histórico.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {planosAtivos.map((plano) => (
+              <PlanoAtivoProfileCard
+                key={plano.id}
+                plano={plano}
+                expandido={Boolean(expandidos[plano.id])}
+                onToggle={() => toggleExpandido(plano.id, plano)}
+                canBaixa={canBaixa}
+                canReagendar={canReagendar}
+                canCrud={canCrud}
+                canConcluirRetorno={canConcluirRetorno}
+                mutating={mutating}
+                onReagendarItem={handleReagendarItem}
+                onDarBaixa={handleDarBaixa}
+                onEncerrar={openEncerrarModal}
+                onConcluir={handleConcluir}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {planosHistorico.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h4 className="font-display text-xs font-extrabold uppercase tracking-wider text-ink-500">
+              Histórico de planos
+            </h4>
+            <span className="text-[11px] font-medium text-ink-400">
+              {planosHistorico.length} plano{planosHistorico.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {planosHistorico.map((plano) => (
+              <PlanoHistoricoProfileCard
+                key={plano.id}
+                plano={plano}
+                expandido={Boolean(expandidos[plano.id])}
+                onToggle={() => toggleExpandido(plano.id, plano)}
+                canBaixa={canBaixa}
+                canReagendar={canReagendar}
+                mutating={mutating}
+                onReagendarItem={handleReagendarItem}
+                onDarBaixa={handleDarBaixa}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -871,73 +1399,10 @@ export function PlanosTab({
           <Loader2 className="h-5 w-5 animate-spin text-[#00a88e]" />
           <span className="text-[13px] font-medium">Carregando planos…</span>
         </div>
-      ) : displayPlanos.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[#cbd5e1] bg-[#f8fbfb] px-4 py-10 text-center">
-          <BookOpen className="mx-auto h-8 w-8 text-[#94a3b8]" strokeWidth={1.75} />
-          <p className="mt-2 text-[14px] font-semibold text-[#475569]">
-            {consultaSemPlanoAtivo ? 'Nenhum plano ativo' : 'Nenhum plano cadastrado'}
-          </p>
-          <p className="mt-1 text-[13px] text-[#94a3b8]">
-            {consultaSemPlanoAtivo
-              ? 'Este paciente possui planos encerrados ou concluídos. Crie um novo plano para o atendimento.'
-              : isConsulta
-                ? 'Crie um plano e adicione procedimentos do catálogo.'
-                : 'Planos são criados durante o atendimento.'}
-          </p>
-        </div>
+      ) : isConsulta ? (
+        renderConsultaPlanosList()
       ) : (
-        <div className="space-y-3">
-          {displayPlanos.map((plano) => {
-            const planoDraft = isConsulta ? getDraft(plano.id) : null;
-            return (
-              <PlanoCard
-                key={plano.id}
-                plano={plano}
-                expandido={Boolean(expandidos[plano.id])}
-                onToggle={() => toggleExpandido(plano.id, plano)}
-                canCrud={canCrud}
-                canBaixa={canBaixa}
-                canReagendar={canReagendar}
-                canAgendar={canAgendar}
-                canConcluirRetorno={canConcluirRetorno}
-                mutating={mutating}
-                onAgendarItem={handleAgendarItem}
-                onAgendarRetornoItem={handleAgendarRetornoItem}
-                onReagendarItem={handleReagendarItem}
-                onDarBaixa={handleDarBaixa}
-                onRemoverItem={async (pid, iid) => {
-                  setActionError('');
-                  try {
-                    await removerItem(pid, iid);
-                  } catch (e) {
-                    setActionError(
-                      getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.',
-                    );
-                  }
-                }}
-                onEncerrar={handleEncerrar}
-                onConcluir={handleConcluir}
-                onConcluirComRetorno={handleConcluirComRetorno}
-                addItemForm={renderAddItemForm}
-                isConsultaDraft={isConsulta && plano.statusCodigo === 'ativo'}
-                draftItens={planoDraft?.itens}
-                draftObservacao={planoDraft?.observacao}
-                onObservacaoChange={setObservacao}
-                isDirty={isConsulta ? isDirty(plano.id) : false}
-                saving={savingPlanoId === plano.id}
-                onSalvar={handleSalvarPlano}
-                onEditItem={(item) =>
-                  setEditItemState({
-                    planoId: plano.id,
-                    itemKey: itemReactKey(item),
-                    item,
-                  })
-                }
-                onRemoverDraftItem={(item) => removeItem(plano.id, itemReactKey(item))}
-              />
-            );
-          })}
-        </div>
+        renderProfilePlanosList()
       )}
 
       <PlanoItemEditModal
@@ -948,6 +1413,22 @@ export function PlanosTab({
         mutating={mutating || Boolean(savingPlanoId)}
         onClose={() => setEditItemState(null)}
         onSave={handleEditItemSave}
+      />
+
+      <PlanoConcluirRetornoConfirmModal
+        open={Boolean(concluirRetornoModal)}
+        plano={concluirRetornoModal?.plano}
+        pacienteNome={pacienteNome}
+        totalItens={concluirRetornoModal?.totalItens}
+        valorTotal={concluirRetornoModal?.valorTotal}
+        onCancel={() => setConcluirRetornoModal(null)}
+        onConfirm={handleConfirmConcluirRetorno}
+      />
+
+      <PlanoEncerrarConfirmModal
+        open={Boolean(encerrarModalPlanoId)}
+        onCancel={() => setEncerrarModalPlanoId(null)}
+        onConfirm={handleConfirmEncerrar}
       />
     </div>
   );

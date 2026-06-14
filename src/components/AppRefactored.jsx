@@ -2736,6 +2736,7 @@ function AppRefactoredInner() {
                     variant="consulta"
                     pacienteId={pacienteAtual?.id ?? null}
                     roleUserId={roleUserId ?? null}
+                    pacienteNome={pacienteAtual?.nome ?? ''}
                     onVoltar={() => setConsultaModule('hub')}
                     onAgendarItem={(item, onSaved) =>
                       handleAgendarPlanoItem(pacienteAtual, item, onSaved)

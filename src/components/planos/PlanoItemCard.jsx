@@ -1,5 +1,16 @@
 import React from 'react';
-import { Calendar, CalendarClock, CalendarPlus, CheckCircle2, CircleDot, Pencil, Stethoscope, Syringe, Trash2 } from 'lucide-react';
+import {
+  Calendar,
+  CalendarClock,
+  CalendarPlus,
+  Check,
+  CheckCircle2,
+  CircleDot,
+  Pencil,
+  Stethoscope,
+  Syringe,
+  Trash2,
+} from 'lucide-react';
 import {
   formatDataPt,
   formatValorBrl,
@@ -9,6 +20,7 @@ import {
   canDarBaixaItem,
   canReagendarItem,
   getPlanoItemStatusPresentation,
+  isItemFinalizado,
 } from '../../utils/planejamentoStatusUi.js';
 import { PlanoRetornoBadge } from './PlanoRetornoBadge.jsx';
 
@@ -16,9 +28,12 @@ const ICON_BTN = 'h-3.5 w-3.5 shrink-0';
 const BTN_BASE =
   'inline-flex items-center justify-center gap-1 rounded-lg min-h-8 min-w-8 px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60';
 
-function ProcedimentoTipoIcon({ tipoCodigo }) {
-  const codigo = String(tipoCodigo ?? '').trim().toLowerCase();
+function ProcedimentoTipoIcon({ tipoCodigo, realizado }) {
   const className = 'h-4 w-4';
+  if (realizado) {
+    return <Check className={className} strokeWidth={2.2} aria-hidden />;
+  }
+  const codigo = String(tipoCodigo ?? '').trim().toLowerCase();
   if (codigo === 'seringa') {
     return <Syringe className={className} strokeWidth={2} aria-hidden />;
   }
@@ -46,19 +61,25 @@ export function PlanoItemCard({
   onDarBaixa,
   onEdit,
   onRemover,
+  entranceDelayMs,
 }) {
   const statusCodigo = item.statusItem ?? item.statusItemNome;
   const itemStatus = getPlanoItemStatusPresentation(statusCodigo);
   const isAtivo = plano.statusCodigo === 'ativo';
+  const isRealizado = isItemFinalizado(statusCodigo);
   const hasRealId = isRealUuid(item.id);
   const valorLabel = formatValorBrl(item.valorOrcado);
   const showValor = valorLabel !== '—';
 
   const showAgendar =
-    canAgendar && isAtivo && hasRealId && !item.sessaoAtiva?.agendaId;
+    !isRealizado && canAgendar && isAtivo && hasRealId && !item.sessaoAtiva?.agendaId;
   const agendarEnabled = showAgendar;
   const showRetorno =
-    canAgendar && isAtivo && hasRealId && !item.sessaoRetornoAtiva?.agendaId;
+    !isRealizado &&
+    canAgendar &&
+    isAtivo &&
+    hasRealId &&
+    !item.sessaoRetornoAtiva?.agendaId;
   const agendarTooltip = !hasRealId
     ? 'Salve o plano antes de agendar este procedimento'
     : !isAtivo
@@ -68,32 +89,50 @@ export function PlanoItemCard({
   const showBaixa = canBaixa && canDarBaixaItem(plano, item);
   const showReagendar = canReagendar && canReagendarItem(plano, item);
 
+  const cardClass = isRealizado
+    ? 'rounded-xl border border-ink-200 bg-ink-50/60 p-2.5 shadow-sm'
+    : 'rounded-xl border border-ink-200 bg-white p-2.5 shadow-sm';
+
+  const iconTileClass = isRealizado
+    ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-primaryGhost text-brand-primary'
+    : 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-ink-500';
+
+  const titleClass = isRealizado
+    ? 'min-w-0 flex-1 truncate text-[13px] font-bold leading-snug text-ink-500'
+    : 'min-w-0 flex-1 truncate text-[13px] font-bold leading-snug text-ink-900';
+
+  const valorClass = isRealizado
+    ? 'shrink-0 text-[13px] font-bold tabular-nums text-ink-500'
+    : 'shrink-0 text-[13px] font-bold tabular-nums text-ink-600';
+
+  const iconOnlyBtn = `${BTN_BASE} border border-transparent bg-transparent text-ink-400 hover:bg-ink-100 hover:text-ink-600 px-1.5`;
+
   return (
-    <div className="rounded-xl border border-[#e2e8f0] bg-white p-2.5 shadow-sm">
+    <div
+      className={`${cardClass}${
+        entranceDelayMs != null ? ' animate-agenda-rise' : ''
+      }`}
+      style={entranceDelayMs != null ? { animationDelay: `${entranceDelayMs}ms` } : undefined}
+    >
       <div className="flex items-start gap-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#e6f7f5] text-[#0f766e]">
-          <ProcedimentoTipoIcon tipoCodigo={item.tipoCodigo} />
+        <div className={iconTileClass}>
+          <ProcedimentoTipoIcon tipoCodigo={item.tipoCodigo} realizado={isRealizado} />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <h4
-                  className="min-w-0 flex-1 truncate text-[13px] font-bold leading-snug text-[#0f172a]"
-                  title={item.catalogoNome || 'Procedimento'}
-                >
+                <h4 className={titleClass} title={item.catalogoNome || 'Procedimento'}>
                   {item.catalogoNome || 'Procedimento'}
                 </h4>
-                {showValor ? (
-                  <span className="shrink-0 text-[13px] font-bold tabular-nums text-[#0f766e]">
-                    {valorLabel}
-                  </span>
-                ) : null}
+                {showValor ? <span className={valorClass}>{valorLabel}</span> : null}
               </div>
 
               {item.sessaoAtiva?.dataAgendamento ? (
-                <div className="mt-0.5 text-[11px] font-medium text-[#64748b]">
+                <div
+                  className={`mt-0.5 text-[11px] font-medium tabular-nums ${isRealizado ? 'text-ink-400' : 'text-ink-500'}`}
+                >
                   Agendado em {formatDataPt(item.sessaoAtiva.dataAgendamento)}
                   {item.sessaoAtiva.horaInicio
                     ? ` ${String(item.sessaoAtiva.horaInicio).slice(0, 5)}`
@@ -102,7 +141,6 @@ export function PlanoItemCard({
               ) : null}
               {item.sessaoRetornoAtiva?.dataAgendamento ? (
                 <PlanoRetornoBadge
-                  catalogoNome={item.catalogoNome}
                   dataAgendamento={item.sessaoRetornoAtiva.dataAgendamento}
                   horaInicio={item.sessaoRetornoAtiva.horaInicio}
                 />
@@ -138,7 +176,7 @@ export function PlanoItemCard({
                         )
                       : undefined
                   }
-                  className={`${BTN_BASE} border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] font-bold text-[#0f766e] hover:bg-[#d2f3ee]`}
+                  className={`${BTN_BASE} border border-ink-200 bg-white text-ink-600 hover:bg-ink-50`}
                 >
                   <Calendar className={ICON_BTN} strokeWidth={2.2} aria-hidden />
                   <ActionLabel>Agendar</ActionLabel>
@@ -161,7 +199,7 @@ export function PlanoItemCard({
                       plano.id,
                     )
                   }
-                  className={`${BTN_BASE} border-[2px] border-[#00a88e]/30 bg-white font-bold text-[#0f766e] hover:bg-[#e6f7f5]`}
+                  className={`${BTN_BASE} border-[2px] border-brand-primary/30 bg-white font-bold text-brand-primaryDark hover:bg-brand-primaryGhost`}
                 >
                   <CalendarPlus className={ICON_BTN} strokeWidth={2.2} aria-hidden />
                   <ActionLabel>+ Retorno</ActionLabel>
@@ -174,7 +212,7 @@ export function PlanoItemCard({
                   title="Reagendar procedimento"
                   aria-label="Reagendar procedimento"
                   onClick={() => onReagendarItem?.(item, plano, () => {})}
-                  className={`${BTN_BASE} border-[2px] border-[#00a88e]/30 bg-white font-bold text-[#0f766e] hover:bg-[#e6f7f5]`}
+                  className={`${BTN_BASE} border border-ink-200 bg-white text-ink-600 hover:bg-ink-50`}
                 >
                   <CalendarClock className={ICON_BTN} strokeWidth={2.2} aria-hidden />
                   <ActionLabel>Reagendar</ActionLabel>
@@ -187,7 +225,7 @@ export function PlanoItemCard({
                   title="Marcar procedimento como concluído"
                   aria-label="Marcar procedimento como concluído"
                   onClick={() => onDarBaixa?.(plano.id, item.id)}
-                  className={`${BTN_BASE} border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] font-bold text-[#0f766e] hover:bg-[#d2f3ee]`}
+                  className={`${BTN_BASE} border border-ink-200 bg-white text-ink-600 hover:bg-ink-50`}
                 >
                   <CheckCircle2 className={ICON_BTN} strokeWidth={2.2} aria-hidden />
                   <ActionLabel>Dar baixa</ActionLabel>
@@ -201,10 +239,14 @@ export function PlanoItemCard({
                     title="Editar procedimento"
                     aria-label="Editar procedimento"
                     onClick={() => onEdit?.(item)}
-                    className={`${BTN_BASE} border border-[#e2e8f0] bg-white text-[#475569] hover:bg-[#f8fafc]`}
+                    className={
+                      isRealizado
+                        ? iconOnlyBtn
+                        : `${BTN_BASE} border border-ink-200 bg-white text-ink-600 hover:bg-ink-50`
+                    }
                   >
                     <Pencil className={ICON_BTN} strokeWidth={2} aria-hidden />
-                    <ActionLabel>Editar</ActionLabel>
+                    {!isRealizado ? <ActionLabel>Editar</ActionLabel> : null}
                   </button>
                   <button
                     type="button"
@@ -212,10 +254,14 @@ export function PlanoItemCard({
                     title="Remover do plano"
                     aria-label="Remover do plano"
                     onClick={() => onRemover?.(item)}
-                    className={`${BTN_BASE} border border-[#fecaca] bg-white text-[#dc2626] hover:bg-[#fef2f2]`}
+                    className={
+                      isRealizado
+                        ? `${iconOnlyBtn} hover:text-status-danger-ink hover:bg-status-danger-bg/40`
+                        : `${BTN_BASE} border border-status-danger-bg bg-white text-status-danger-ink hover:bg-status-danger-bg/30`
+                    }
                   >
                     <Trash2 className={ICON_BTN} strokeWidth={2} aria-hidden />
-                    <ActionLabel>Remover</ActionLabel>
+                    {!isRealizado ? <ActionLabel>Remover</ActionLabel> : null}
                   </button>
                 </>
               ) : null}
