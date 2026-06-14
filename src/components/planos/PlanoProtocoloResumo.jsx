@@ -1,39 +1,67 @@
 import React, { useMemo } from 'react';
+import { Calendar } from 'lucide-react';
 import {
   calcResumoProtocolo,
   formatDataLongaPt,
   formatValorBrl,
 } from '../../utils/planejamentoDraftUtils.js';
 
-export function PlanoProtocoloResumo({ itens }) {
-  const resumo = useMemo(() => calcResumoProtocolo(itens), [itens]);
+function resolvePeriodoBackend(plano) {
+  const inicio =
+    plano?.periodoInicio ?? plano?.periodo?.inicio ?? plano?.dataInicio ?? null;
+  const fim = plano?.periodoFim ?? plano?.periodo?.fim ?? plano?.dataFim ?? null;
+  if (!inicio && !fim) return null;
+  return { inicio, fim };
+}
 
-  const periodoLabel =
-    resumo.periodo.inicio && resumo.periodo.fim
-      ? `${formatDataLongaPt(resumo.periodo.inicio)} → ${formatDataLongaPt(resumo.periodo.fim)}`
-      : '—';
+function PeriodoColuna({ plano }) {
+  const periodo = resolvePeriodoBackend(plano);
+
+  if (periodo?.inicio && periodo?.fim) {
+    return (
+      <p className="mt-0.5 text-[12px] font-semibold tabular-nums leading-snug text-ink-900">
+        {formatDataLongaPt(periodo.inicio)} → {formatDataLongaPt(periodo.fim)}
+      </p>
+    );
+  }
 
   return (
-    <div className="rounded-xl border border-[#e2e8f0] bg-[#f8fbfb] p-2.5">
-      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
+    <div className="mt-0.5 inline-flex max-w-full flex-col gap-0.5 rounded-xl border border-dashed border-ink-300 bg-white px-2.5 py-2">
+      <div className="flex items-center gap-1.5">
+        <Calendar className="h-3.5 w-3.5 shrink-0 text-ink-400" strokeWidth={2} aria-hidden />
+        <span className="text-[12px] font-semibold text-ink-700">A definir</span>
+      </div>
+      <span className="text-[10px] font-medium text-ink-500">Defina as datas dos procedimentos</span>
+    </div>
+  );
+}
+
+export function PlanoProtocoloResumo({ itens, plano }) {
+  const resumo = useMemo(() => calcResumoProtocolo(itens), [itens]);
+
+  return (
+    <div className="animate-agenda-rise rounded-xl border border-ink-200 bg-[#f8fbfb] p-2.5">
+      <p className="mb-2 font-display text-[11px] font-extrabold uppercase tracking-wider text-ink-500">
         Resumo do protocolo
       </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div>
-          <p className="text-[11px] font-medium text-[#94a3b8]">Total de Procedimentos</p>
-          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-[#0f172a]">
-            {resumo.total}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-0">
+        <div className="sm:border-r sm:border-ink-200 sm:pr-4">
+          <p className="font-display text-[11px] font-extrabold uppercase tracking-wider text-ink-500">
+            Total de procedimentos
           </p>
+          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-ink-900">{resumo.total}</p>
         </div>
-        <div>
-          <p className="text-[11px] font-medium text-[#94a3b8]">Período do Tratamento</p>
-          <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#0f172a]">
-            {periodoLabel}
+        <div className="sm:border-r sm:border-ink-200 sm:px-4">
+          <p className="font-display text-[11px] font-extrabold uppercase tracking-wider text-ink-500">
+            Período do tratamento
           </p>
+          <PeriodoColuna plano={plano} />
         </div>
-        <div>
-          <p className="text-[11px] font-medium text-[#94a3b8]">Valor Total</p>
-          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-[#0f766e]">
+        <div className="sm:pl-4">
+          <p className="font-display text-[11px] font-extrabold uppercase tracking-wider text-ink-500">
+            Valor total
+          </p>
+          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-brand-primary">
             {formatValorBrl(resumo.valorTotal)}
           </p>
         </div>

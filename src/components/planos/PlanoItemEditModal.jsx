@@ -2,6 +2,8 @@ import React, { useCallback, useState } from 'react';
 import { X } from 'lucide-react';
 import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
 import { AppDateInput } from '../shared/AppDateInput.jsx';
+import { ValorOrcadoInput } from './ValorOrcadoInput.jsx';
+import { parseValorBrlInput, valorBrlDisplayFromNumber } from '../../utils/planejamentoDraftUtils.js';
 
 function PlanoItemEditForm({
   item,
@@ -15,7 +17,7 @@ function PlanoItemEditForm({
   const [catalogoId, setCatalogoId] = useState(
     String(item.catalogoProcedimentoSaudeId ?? '').trim(),
   );
-  const [valor, setValor] = useState(item.valorOrcado != null ? String(item.valorOrcado) : '');
+  const [valorDisplay, setValorDisplay] = useState(valorBrlDisplayFromNumber(item.valorOrcado));
   const [data, setData] = useState(item.dataPlanejada ? String(item.dataPlanejada).slice(0, 10) : '');
 
   const handleSave = useCallback(() => {
@@ -23,10 +25,10 @@ function PlanoItemEditForm({
     onSave?.({
       catalogoProcedimentoSaudeId: catalogoId,
       catalogoNome: nome,
-      valorOrcado: valor,
+      valorOrcado: parseValorBrlInput(valorDisplay),
       dataPlanejada: data || null,
     });
-  }, [catalogoId, data, nome, onSave, valor]);
+  }, [catalogoId, data, nome, onSave, valorDisplay]);
 
   return (
     <>
@@ -59,14 +61,10 @@ function PlanoItemEditForm({
           }}
           placeholder="Buscar procedimento…"
         />
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Valor orçado (R$)"
-          value={valor}
+        <ValorOrcadoInput
+          value={valorDisplay}
           disabled={mutating}
-          onChange={(e) => setValor(e.target.value)}
+          onChange={setValorDisplay}
           className="w-full rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-2.5 text-[13px] font-medium outline-none focus:border-[#00a88e] focus:ring-4 focus:ring-[#00a88e]/10"
         />
         <AppDateInput value={data} disabled={mutating} onChange={(e) => setData(e.target.value)} />

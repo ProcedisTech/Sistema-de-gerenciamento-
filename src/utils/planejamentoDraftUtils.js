@@ -74,6 +74,29 @@ export function formatValorBrl(val) {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/** Máscara pt-BR para input de valor (centavos implícitos, ex.: 150000 → 1.500,00). */
+export function maskValorBrlInput(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '').slice(0, 15);
+  if (!digits) return '';
+  const n = Number(digits) / 100;
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Converte string mascarada em número para envio ao backend. */
+export function parseValorBrlInput(display) {
+  const digits = String(display ?? '').replace(/\D/g, '');
+  if (!digits) return null;
+  return Number(digits) / 100;
+}
+
+/** Inicializa campo mascarado a partir de valor numérico existente. */
+export function valorBrlDisplayFromNumber(val) {
+  if (val == null || val === '') return '';
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '';
+  return maskValorBrlInput(String(Math.round(n * 100)));
+}
+
 export function parseIsoDateOnly(iso) {
   if (!iso) return null;
   const s = String(iso).slice(0, 10);
