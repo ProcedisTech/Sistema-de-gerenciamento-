@@ -1010,6 +1010,20 @@ export const procedimentosApi = {
     }),
   finalizar: (id) => request(`/api/v1/procedimentos/${id}/finalizar`, { method: 'PATCH' }),
   deletar: (id) => request(`/api/v1/procedimentos/${id}`, { method: 'DELETE' }),
+  getPontos: (procedimentoFeitoId, { vista } = {}) => {
+    const pid = encodeURIComponent(String(procedimentoFeitoId));
+    const v = vista != null && String(vista).trim() ? String(vista).trim() : '';
+    const qs = v ? `?vista=${encodeURIComponent(v)}` : '';
+    return request(`/api/v1/procedimentos/${pid}/pontos${qs}`);
+  },
+  salvarPontos: (procedimentoFeitoId, vistaCodigo, body) => {
+    const pid = encodeURIComponent(String(procedimentoFeitoId));
+    const vista = encodeURIComponent(String(vistaCodigo || '').trim());
+    return request(`/api/v1/procedimentos/${pid}/pontos?vista=${vista}`, {
+      method: 'PUT',
+      body: JSON.stringify(body ?? {}),
+    });
+  },
 };
 
 export const criarRelatoAcompanhamento = (dados) =>

@@ -3,10 +3,12 @@ import { MapPin } from 'lucide-react';
 import { getVistaLabel } from '../../../constants/vistasMapeamento.js';
 import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 import { somaQuantidadeListaPontos } from '../../../utils/mapeamentoQuantidade.js';
+import { normalizeUnidadeMedida } from '../../../constants/quantidadePresets.js';
 
-export function PontosResumoPanel({ vistaAtual, gruposPontos }) {
+export function PontosResumoPanel({ vistaAtual, gruposPontos, unidadeMedida }) {
   const label = vistaAtual ? getVistaLabel(vistaAtual) : '—';
   const grupos = Array.isArray(gruposPontos) ? gruposPontos : [];
+  const unitSuffix = unidadeMedida ? ` ${normalizeUnidadeMedida(unidadeMedida)}` : '';
 
   const totalVista = grupos.reduce(
     (acc, g) => acc + somaQuantidadeListaPontos(g.pontos),
@@ -44,13 +46,13 @@ export function PontosResumoPanel({ vistaAtual, gruposPontos }) {
                   />
                   <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-app-ink">{g.nomeProcedimento}</span>
                   <span className="shrink-0 rounded-md bg-[#e6f7f5] px-2 py-0.5 text-[11px] font-semibold text-[#00a88e]">
-                    Σ {subtotal}
+                    Σ {subtotal}{unitSuffix}
                   </span>
                 </div>
                 <ul className="space-y-1 pl-5">
                   {(g.pontos || []).map((p) => (
                     <li key={p.localId} className="text-[12px] font-medium text-[#64748b]">
-                      #{p.ordem} · qty {p.quantidade}
+                      #{p.ordem} · {p.quantidade}{unitSuffix}
                     </li>
                   ))}
                 </ul>
@@ -62,7 +64,7 @@ export function PontosResumoPanel({ vistaAtual, gruposPontos }) {
 
       {grupos.length > 0 ? (
         <p className="mt-4 border-t border-[#e2e8f0] pt-3 text-[12px] font-semibold text-[#475569]">
-          Total da vista: {totalVista}
+          Total da vista: {totalVista}{unitSuffix}
         </p>
       ) : null}
     </div>

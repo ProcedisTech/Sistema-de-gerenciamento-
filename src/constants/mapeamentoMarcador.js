@@ -23,10 +23,11 @@ export function markerSizePx(tamanho) {
 /** Sufixo de unidade na etiqueta do marcador (catálogo futuro pode substituir). */
 export const UNIDADE_PADRAO = 'u';
 
-/** Ex.: 1.5 → "1.5u", 2 → "2u". Sufixo vem só de UNIDADE_PADRAO. */
-export function formatQuantidadeEtiqueta(quantidade) {
+/** Ex.: 1.5 → "1.5 UI", 2 → "2u". Unidade opcional (catálogo). */
+export function formatQuantidadeEtiqueta(quantidade, unidadeMedida = UNIDADE_PADRAO) {
   const n = Number(quantidade);
-  if (!Number.isFinite(n) || n <= 0) return `0${UNIDADE_PADRAO}`;
+  const unit = String(unidadeMedida || UNIDADE_PADRAO).trim() || UNIDADE_PADRAO;
+  if (!Number.isFinite(n) || n <= 0) return `0 ${unit}`;
   const texto = Number.isInteger(n) ? String(n) : String(n);
-  return `${texto}${UNIDADE_PADRAO}`;
+  return `${texto} ${unit}`;
 }

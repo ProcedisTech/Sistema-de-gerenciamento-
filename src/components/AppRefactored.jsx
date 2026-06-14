@@ -7,7 +7,9 @@ import {
   usePatientState,
   useJourneyState,
   useProcedureCamera,
+  useMapaAplicacaoState,
 } from './hooks';
+import { persistirMapaAplicacao } from '../utils/persistirMapaAplicacao.js';
 import { usePatientsKpi } from './hooks/usePatientsKpi.js';
 
 // Componentes de Autenticação
@@ -281,6 +283,7 @@ function AppRefactoredInner() {
   }, [authState.isLoggedIn, authState.authUser, authState.authReady, setOrgId]);
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
+  const mapaAplicacaoState = useMapaAplicacaoState();
   /** Data local (YYYY-MM-DD) do início do atendimento — limite mínimo para “próximo retorno”. */
   const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(() => toLocalISODate());
   /** Sincronizado com Step2: false quando a ficha tem perguntas (bloco queixa oculto). */
@@ -313,6 +316,9 @@ function AppRefactoredInner() {
   /** Vista alvo ao confirmar foto da câmera no step 2 (mapeamento). */
   const mapeamentoCaptureVistaRef = useRef(null);
   const [pendingMapeamentoCapture, setPendingMapeamentoCapture] = React.useState(null);
+  /** Vista alvo ao confirmar foto da câmera no step 4 (mapa de aplicação). */
+  const mapaAplicacaoCaptureVistaRef = useRef(null);
+  const [pendingMapaAplicacaoCapture, setPendingMapaAplicacaoCapture] = React.useState(null);
   /** Id do preenchimento retornado por `createPaciente` (PATCH de observações ao finalizar). */
   const anamnesePreenchimentoIdRef = useRef(null);
   /** Último paciente resolvido na jornada — mantém header quando catálogo/search está temporariamente vazio. */
@@ -685,6 +691,30 @@ function AppRefactoredInner() {
       return;
     }
 
+    if (currentStep === 4 && mapaAplicacaoCaptureVistaRef.current) {
+      const vista = mapaAplicacaoCaptureVistaRef.current;
+      const blob = cameraState.photoPreviewBlob;
+      if (blob) {
+        setPendingMapaAplicacaoCapture({ vista, blob });
+      }
+      mapaAplicacaoCaptureVistaRef.current = null;
+      cameraState.closePhotoModal();
+      return;
+    }
+
+    const isConsultaProcedimento =
+      activeView === 'consulta' && consultaModule === 'procedimento';
+    if (isConsultaProcedimento && mapaAplicacaoCaptureVistaRef.current) {
+      const vista = mapaAplicacaoCaptureVistaRef.current;
+      const blob = cameraState.photoPreviewBlob;
+      if (blob) {
+        setPendingMapaAplicacaoCapture({ vista, blob });
+      }
+      mapaAplicacaoCaptureVistaRef.current = null;
+      cameraState.closePhotoModal();
+      return;
+    }
+
     const previewUrl = cameraState.photoPreviewUrl;
     cameraState.confirmPhoto();
 
@@ -698,6 +728,53 @@ function AppRefactoredInner() {
   const handlePrepareMapeamentoCapture = React.useCallback((vistaCodigo) => {
     mapeamentoCaptureVistaRef.current = vistaCodigo;
   }, []);
+
+  const handlePrepareMapaAplicacaoCapture = React.useCallback((vistaCodigo) => {
+    mapaAplicacaoCaptureVistaRef.current = vistaCodigo;
+  }, []);
+
+  const resolvePlanejamentoItemId = React.useCallback(
+    (catalogoId) => {
+      const cat = catalogoId != null ? String(catalogoId).trim() : '';
+      if (!cat) return null;
+      const ctx = journeyState.journeyPlanejamentoCtx;
+      return ctx?.itemIdByCatalogo?.[cat] ?? null;
+    },
+    [journeyState.journeyPlanejamentoCtx],
+  );
+
+  const persistirMapaAplicacaoAtual = React.useCallback(
+    async (procedimentoFeitoId, paciente) => {
+      if (!procedimentoFeitoId || !paciente?.id) return { ok: true, erros: [] };
+      const snapshot = mapaAplicacaoState.getSnapshotForPersist();
+      const hasDirty =
+        Array.isArray(snapshot.dirtyVistas) && snapshot.dirtyVistas.length > 0;
+      const hasContent =
+        Object.keys(snapshot.fotosPorVista || {}).length > 0 ||
+        Object.values(snapshot.pontosPorVista || {}).some((l) => Array.isArray(l) && l.length > 0);
+      if (!hasDirty && !hasContent) return { ok: true, erros: [] };
+
+      const resultado = await persistirMapaAplicacao({
+        pacienteId: paciente.id,
+        roleUserId,
+        procedimentoFeitoId,
+        catalogoProcedimentoSaudeId: journeyState.nomeProcedimentoCatalogoId,
+        snapshot,
+      });
+      if (resultado.ok) {
+        mapaAplicacaoState.clearAllDirty();
+      } else if (resultado.erros?.length) {
+        toast.warning(`Mapa de aplicação: ${resultado.erros.join(' · ')}`);
+      }
+      return resultado;
+    },
+    [
+      journeyState.nomeProcedimentoCatalogoId,
+      mapaAplicacaoState,
+      roleUserId,
+      toast,
+    ],
+  );
 
   /** Editor fullscreen compartilhado (procedimento / resumo etapa 5). */
   const [photoAnnotationScope, setPhotoAnnotationScope] = React.useState(null);
@@ -1612,6 +1689,10 @@ function AppRefactoredInner() {
     setQueixaVisivel(true);
     mapeamentoCaptureVistaRef.current = null;
     setPendingMapeamentoCapture(null);
+    mapaAplicacaoCaptureVistaRef.current = null;
+    setPendingMapaAplicacaoCapture(null);
+    journeyState.setJourneyPlanejamentoCtx(null);
+    mapaAplicacaoState.resetMapa();
     cameraState.resetProcedureCapturedPhotos();
     cameraState.resetEvaluationPhotos();
   }, [
@@ -1625,7 +1706,75 @@ function AppRefactoredInner() {
     setPhotoAnnotationScope,
     setQueixaVisivel,
     setUltimoProcedimentoId,
+    mapaAplicacaoState,
   ]);
+
+  const ensureProcedimentoFeitoForMapa = React.useCallback(
+    async (paciente) => {
+      if (ultimoProcedimentoId) return ultimoProcedimentoId;
+
+      const nome = String(journeyState.nomeProcedimento || '').trim();
+      const catalogoId =
+        journeyState.nomeProcedimentoCatalogoId != null &&
+        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+          : null;
+
+      if (!nome || !paciente?.id || !roleUserId) return null;
+
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const agendaIdValido =
+        journeyState.agendaId && UUID_REGEX.test(journeyState.agendaId)
+          ? journeyState.agendaId
+          : null;
+      const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
+
+      if (agendaIdValido && catalogoId) {
+        try {
+          const body = {
+            agendaId: agendaIdValido,
+            catalogoProcedimentoSaudeId: catalogoId,
+            roleUserId,
+          };
+          if (planejamentoItemId) body.planejamentoItemId = planejamentoItemId;
+          const res = await procedimentosApi.iniciar(body);
+          const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+          if (pid != null && pid !== '') {
+            const idStr = String(pid);
+            setUltimoProcedimentoId(idStr);
+            return idStr;
+          }
+        } catch (e) {
+          console.warn('iniciar procedimento falhou, tentando manual:', e);
+        }
+      }
+
+      const resultado = await procedimentosApi.registrarManual(paciente.id, {
+        nome,
+        roleUserId,
+        observacao: String(journeyState.observacoesExecucao || '').trim() || null,
+        agendaId: agendaIdValido,
+        catalogoProcedimentoSaudeId: catalogoId,
+        ...(planejamentoItemId ? { planejamentoItemId } : {}),
+      });
+      const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
+      if (pid != null && pid !== '') {
+        const idStr = String(pid);
+        setUltimoProcedimentoId(idStr);
+        return idStr;
+      }
+      return null;
+    },
+    [
+      journeyState.agendaId,
+      journeyState.nomeProcedimento,
+      journeyState.nomeProcedimentoCatalogoId,
+      journeyState.observacoesExecucao,
+      resolvePlanejamentoItemId,
+      roleUserId,
+      ultimoProcedimentoId,
+    ],
+  );
 
   const registrarProcedimentoManual = React.useCallback(
     async (paciente) => {
@@ -1642,12 +1791,14 @@ function AppRefactoredInner() {
           journeyState.agendaId && UUID_REGEX.test(journeyState.agendaId)
             ? journeyState.agendaId
             : null;
+        const planejamentoItemId = resolvePlanejamentoItemId(snapshotCatalogoId);
         const resultado = await procedimentosApi.registrarManual(paciente.id, {
           nome: journeyState.nomeProcedimento.trim(),
           roleUserId,
           observacao: String(journeyState.observacoesExecucao || '').trim() || null,
           agendaId: agendaIdValido,
           catalogoProcedimentoSaudeId: snapshotCatalogoId,
+          ...(planejamentoItemId ? { planejamentoItemId } : {}),
         });
         const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
         if (pid != null && pid !== '') {
@@ -1662,6 +1813,7 @@ function AppRefactoredInner() {
       journeyState.nomeProcedimento,
       journeyState.nomeProcedimentoCatalogoId,
       journeyState.observacoesExecucao,
+      resolvePlanejamentoItemId,
       roleUserId,
       ultimoProcedimentoId,
     ]
@@ -1850,6 +2002,7 @@ function AppRefactoredInner() {
     try {
       const paciente = resolvePacienteAtendimento();
       const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
+      await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
       const dataRefSessao = new Date().toISOString().slice(0, 10);
       const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
       await uploadProcedureCapturedPhotos(paciente, procIdOpt, dataRefSessao);
@@ -1862,6 +2015,7 @@ function AppRefactoredInner() {
       setIsSalvandoProcedimento(false);
     }
   }, [
+    persistirMapaAplicacaoAtual,
     registrarProcedimentoManual,
     resolvePacienteAtendimento,
     toast,
@@ -1904,6 +2058,7 @@ function AppRefactoredInner() {
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
       const paciente = resolvePacienteAtendimento();
       const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
+      await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
       await persistirEncerramentoConsulta(procedimentoFeitoIdParaVinculo);
       const dataRefSessao = new Date().toISOString().slice(0, 10);
       const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
@@ -2127,7 +2282,29 @@ function AppRefactoredInner() {
                       pendingCapture={pendingMapeamentoCapture}
                       onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
                       onPrepareCapture={handlePrepareMapeamentoCapture}
-                      onStepComplete={() => setCurrentStep(3)}
+                      onGerarPlanoSuccess={(result) => {
+                        if (result?.planejamentoId) {
+                          journeyState.setJourneyPlanejamentoCtx({
+                            planejamentoId: result.planejamentoId,
+                            itemIdByCatalogo: result.itemIdByCatalogo ?? {},
+                            procedimentosComPontos: Array.isArray(result.procedimentosComPontos)
+                              ? result.procedimentosComPontos
+                              : [],
+                          });
+                        }
+                      }}
+                      onStepComplete={(planoSnapshot) => {
+                        if (planoSnapshot?.planejamentoId) {
+                          journeyState.setJourneyPlanejamentoCtx({
+                            planejamentoId: planoSnapshot.planejamentoId,
+                            itemIdByCatalogo: planoSnapshot.itemIdByCatalogo ?? {},
+                            procedimentosComPontos: Array.isArray(planoSnapshot.procedimentosComPontos)
+                              ? planoSnapshot.procedimentosComPontos
+                              : [],
+                          });
+                        }
+                        setCurrentStep(3);
+                      }}
                       profissionalLogadoNome={perfilInfo?.nomeCompleto ?? ''}
                       onAgendarPlanejamentoItem={(row, onSaved) => {
                         if (!pacienteAtual?.id || !roleUserId) return;
@@ -2224,6 +2401,24 @@ function AppRefactoredInner() {
                       fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
                       onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                       onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
+                      mapaState={mapaAplicacaoState}
+                      roleUserId={roleUserId}
+                      procedimentoFeitoId={ultimoProcedimentoId}
+                      catalogoId={journeyState.nomeProcedimentoCatalogoId}
+                      planejamentoItemId={resolvePlanejamentoItemId(
+                        journeyState.nomeProcedimentoCatalogoId,
+                      )}
+                      planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
+                      procedimentosComPontos={
+                        journeyState.journeyPlanejamentoCtx?.procedimentosComPontos ?? []
+                      }
+                      sidebarInsetPx={sidebarRailWidthPx}
+                      pendingMapaCapture={pendingMapaAplicacaoCapture}
+                      onMapaCaptureConsumed={() => setPendingMapaAplicacaoCapture(null)}
+                      onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
+                      onEnsureProcedimento={() =>
+                        ensureProcedimentoFeitoForMapa(pacienteAtual)
+                      }
                     />
                   )}
 
@@ -2615,6 +2810,24 @@ function AppRefactoredInner() {
                     fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
                     onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                     onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
+                    mapaState={mapaAplicacaoState}
+                    roleUserId={roleUserId}
+                    procedimentoFeitoId={ultimoProcedimentoId}
+                    catalogoId={journeyState.nomeProcedimentoCatalogoId}
+                    planejamentoItemId={resolvePlanejamentoItemId(
+                      journeyState.nomeProcedimentoCatalogoId,
+                    )}
+                    planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
+                    procedimentosComPontos={
+                      journeyState.journeyPlanejamentoCtx?.procedimentosComPontos ?? []
+                    }
+                    sidebarInsetPx={sidebarRailWidthPx}
+                    pendingMapaCapture={pendingMapaAplicacaoCapture}
+                    onMapaCaptureConsumed={() => setPendingMapaAplicacaoCapture(null)}
+                    onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
+                    onEnsureProcedimento={() =>
+                      ensureProcedimentoFeitoForMapa(pacienteAtual)
+                    }
                     procedureDateIso={journeyProcedureDateIso}
                     proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
                     setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}

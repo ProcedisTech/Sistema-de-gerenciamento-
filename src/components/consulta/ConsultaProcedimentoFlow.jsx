@@ -20,6 +20,18 @@ export function ConsultaProcedimentoFlow({
   fotosAvaliacao,
   onProcedureFotoCategoriaSync,
   onProcedureAnnotatePhoto,
+  mapaState = null,
+  roleUserId = null,
+  procedimentoFeitoId = null,
+  catalogoId = null,
+  planejamentoItemId = null,
+  planejamentoId = null,
+  procedimentosComPontos = [],
+  sidebarInsetPx = 0,
+  pendingMapaCapture = null,
+  onMapaCaptureConsumed = () => {},
+  onPrepareMapaCapture = () => {},
+  onEnsureProcedimento = () => Promise.resolve(null),
   // Step5
   procedureDateIso,
   proximoRetornoDisplay,
@@ -109,6 +121,18 @@ export function ConsultaProcedimentoFlow({
           fotosAvaliacao={fotosAvaliacao}
           onProcedureFotoCategoriaSync={onProcedureFotoCategoriaSync}
           onProcedureAnnotatePhoto={onProcedureAnnotatePhoto}
+          mapaState={mapaState}
+          roleUserId={roleUserId}
+          procedimentoFeitoId={procedimentoFeitoId}
+          catalogoId={catalogoId}
+          planejamentoItemId={planejamentoItemId}
+          planejamentoId={planejamentoId}
+          procedimentosComPontos={procedimentosComPontos}
+          sidebarInsetPx={sidebarInsetPx}
+          pendingMapaCapture={pendingMapaCapture}
+          onMapaCaptureConsumed={onMapaCaptureConsumed}
+          onPrepareMapaCapture={onPrepareMapaCapture}
+          onEnsureProcedimento={onEnsureProcedimento}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button

@@ -102,6 +102,14 @@ export function FotoVistaCanvasCore({
 
   emptySubtitle = 'Escolha da galeria, capture ou faça upload do dispositivo.',
 
+  unidadeMedida,
+
+  onUnidadeMedidaChange,
+
+  presets,
+
+  passo,
+
 }) {
 
   const containerRef = useRef(null);
@@ -487,7 +495,7 @@ export function FotoVistaCanvasCore({
 
                       >
 
-                        {formatQuantidadeEtiqueta(p.quantidade)}
+                        {formatQuantidadeEtiqueta(p.quantidade, unidadeMedida)}
 
                       </span>
 
@@ -564,6 +572,14 @@ export function FotoVistaCanvasCore({
                 onRemove={handleRemovePonto}
 
                 onCancel={() => setPontoSelecionado(null)}
+
+                unidadeMedida={unidadeMedida}
+
+                onUnidadeMedidaChange={onUnidadeMedidaChange}
+
+                presets={presets}
+
+                passo={passo}
 
               />
 
@@ -662,6 +678,14 @@ export function FotoVistaCanvasCore({
         onConfirm={handleConfirmQty}
 
         onCancel={() => setPendingClick(null)}
+
+        unidadeMedida={unidadeMedida}
+
+        onUnidadeMedidaChange={onUnidadeMedidaChange}
+
+        presets={presets}
+
+        passo={passo}
 
       />
 

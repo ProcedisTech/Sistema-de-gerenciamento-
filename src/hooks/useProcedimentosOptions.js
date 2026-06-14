@@ -30,7 +30,14 @@ export function useProcedimentosOptions({ enabled = true } = {}) {
         const arr = Array.isArray(data) ? data : [];
         const normalized = arr
           .map((v) => ({
-            id: String(v.id || v.catalogoProcedimentoSaudeId || '').trim(),
+            /** ID do catálogo (GET /catalogos/{id}) — não confundir com id do vínculo clínica. */
+            id: String(
+              v.catalogoProcedimentoSaudeId ??
+                v.procedimento?.catalogoProcedimentoSaudeId ??
+                v.procedimento?.id ??
+                v.id ??
+                '',
+            ).trim(),
             nomeProcedimento: String(
               v.procedimento?.nomeProcedimento ||
               v.procedimento?.nome ||

@@ -6,6 +6,7 @@ export const GALERIA_CATEGORIA = {
   PLANEJAMENTO: 'planejamento',
   DEPOIS: 'depois',
   AVALIACAO: 'avaliacao',
+  MODELO: 'modelo',
   OUTRO: 'outro',
 };
 
@@ -14,10 +15,11 @@ export const GALERIA_CATEGORIA_LABELS = {
   planejamento: 'Planejamento',
   depois: 'Depois',
   avaliacao: 'Avaliação',
+  modelo: 'Modelo',
   outro: 'Outros',
 };
 
-const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o)\]\s*(.*)$/i;
+const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o|modelo)\]\s*(.*)$/i;
 
 /**
  * Lê categoria e texto livre da legenda enviada/recuperada da API.
@@ -31,7 +33,12 @@ export function parseGaleriaLegenda(legenda) {
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
-    const catNorm = catRaw === 'avaliacao' ? GALERIA_CATEGORIA.AVALIACAO : catRaw;
+    const catNorm =
+      catRaw === 'avaliacao'
+        ? GALERIA_CATEGORIA.AVALIACAO
+        : catRaw === 'modelo'
+          ? GALERIA_CATEGORIA.MODELO
+          : catRaw;
     return {
       categoria: catNorm,
       descricao: m[2].trim() || null,
