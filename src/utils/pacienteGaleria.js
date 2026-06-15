@@ -5,6 +5,7 @@ export const GALERIA_CATEGORIA = {
   ANTES: 'antes',
   PLANEJAMENTO: 'planejamento',
   DEPOIS: 'depois',
+  MAPA: 'mapa',
   AVALIACAO: 'avaliacao',
   MODELO: 'modelo',
   OUTRO: 'outro',
@@ -14,12 +15,13 @@ export const GALERIA_CATEGORIA_LABELS = {
   antes: 'Antes',
   planejamento: 'Planejamento',
   depois: 'Depois',
+  mapa: 'Mapa de Aplicação',
   avaliacao: 'Avaliação',
   modelo: 'Modelo',
   outro: 'Outros',
 };
 
-const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o|modelo)\]\s*(.*)$/i;
+const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o|modelo|mapa)\]\s*(.*)$/i;
 
 /**
  * Lê categoria e texto livre da legenda enviada/recuperada da API.
@@ -142,7 +144,7 @@ export function groupGaleriaItemsBySession(items) {
     g.fotos.push(it);
   }
 
-  const order = { antes: 0, planejamento: 1, avaliacao: 2, depois: 3, outro: 4 };
+  const order = { antes: 0, planejamento: 1, avaliacao: 2, mapa: 3, depois: 4, outro: 5 };
   for (const g of groups.values()) {
     g.fotos.sort((a, b) => {
       const da = order[a.categoria] ?? 99;

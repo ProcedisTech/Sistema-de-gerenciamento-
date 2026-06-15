@@ -32,6 +32,19 @@ import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
+import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
+
+const STEP4_FOTO_CATEGORIAS = [
+  GALERIA_CATEGORIA.ANTES,
+  GALERIA_CATEGORIA.MAPA,
+  GALERIA_CATEGORIA.DEPOIS,
+];
+
+const STEP4_FOTO_OVERLAY_BADGE = {
+  [GALERIA_CATEGORIA.ANTES]: 'bg-[#f59e0b]',
+  [GALERIA_CATEGORIA.MAPA]: 'bg-[#a855f7]',
+  [GALERIA_CATEGORIA.DEPOIS]: 'bg-[#22c55e]',
+};
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
 
@@ -1438,7 +1451,7 @@ export function Step4Procedimento({
   const { options: catalogoOptions } = useProcedimentosOptions();
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
-  const [fotoCategoria, setFotoCategoria] = React.useState('antes');
+  const [fotoCategoria, setFotoCategoria] = React.useState(GALERIA_CATEGORIA.ANTES);
   /** Lightbox somente leitura para fotos da avaliação (referência). */
   const [referencePreviewUrl, setReferencePreviewUrl] = React.useState(null);
 
@@ -1591,29 +1604,21 @@ export function Step4Procedimento({
 
       <div className="mb-3 flex items-center gap-3">
         <span className="text-[13px] font-semibold text-[#64748b]">Categoria das fotos:</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setFotoCategoria('antes')}
-            className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-colors ${
-              fotoCategoria === 'antes'
-                ? 'border-[#00a88e] bg-[#e6f7f5] text-[#00a88e]'
-                : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/40'
-            }`}
-          >
-            Antes
-          </button>
-          <button
-            type="button"
-            onClick={() => setFotoCategoria('depois')}
-            className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-colors ${
-              fotoCategoria === 'depois'
-                ? 'border-[#00a88e] bg-[#e6f7f5] text-[#00a88e]'
-                : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/40'
-            }`}
-          >
-            Depois
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {STEP4_FOTO_CATEGORIAS.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setFotoCategoria(cat)}
+              className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-colors ${
+                fotoCategoria === cat
+                  ? 'border-[#00a88e] bg-[#e6f7f5] text-[#00a88e]'
+                  : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/40'
+              }`}
+            >
+              {GALERIA_CATEGORIA_LABELS[cat]}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -1639,10 +1644,10 @@ export function Step4Procedimento({
             <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
               <div
                 className={`absolute left-1 top-1 z-10 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
-                  ph.meta?.categoria === 'depois' ? 'bg-[#22c55e]' : 'bg-[#f59e0b]'
+                  STEP4_FOTO_OVERLAY_BADGE[ph.meta?.categoria] || STEP4_FOTO_OVERLAY_BADGE[GALERIA_CATEGORIA.ANTES]
                 }`}
               >
-                {ph.meta?.categoria === 'depois' ? 'Depois' : 'Antes'}
+                {GALERIA_CATEGORIA_LABELS[ph.meta?.categoria] || GALERIA_CATEGORIA_LABELS.antes}
               </div>
               <img src={ph.url} alt="" className="h-full w-full object-cover" />
               {typeof onProcedureAnnotatePhoto === 'function' ? (

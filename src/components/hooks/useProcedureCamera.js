@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { generateJourneyId } from '../utils';
+import { GALERIA_CATEGORIA } from '../../utils/pacienteGaleria.js';
+
+const STEP4_FOTO_CATEGORIAS = new Set([
+  GALERIA_CATEGORIA.ANTES,
+  GALERIA_CATEGORIA.DEPOIS,
+  GALERIA_CATEGORIA.MAPA,
+]);
+
+function normalizeStep4FotoCategoria(categoria) {
+  return STEP4_FOTO_CATEGORIAS.has(categoria) ? categoria : GALERIA_CATEGORIA.ANTES;
+}
 
 export function useProcedureCamera({
   currentStep,
@@ -23,8 +34,8 @@ export function useProcedureCamera({
   const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
   const [procedureCapturedPhotos, setProcedureCapturedPhotos] = useState([]);
-  /** 'antes' | 'depois' — alinhado ao seletor do Step 4 e à câmera flutuante. */
-  const [procedureFotoCategoria, setProcedureFotoCategoria] = useState('antes');
+  /** 'antes' | 'depois' | 'mapa' — alinhado ao seletor do Step 4 e à câmera flutuante. */
+  const [procedureFotoCategoria, setProcedureFotoCategoria] = useState(GALERIA_CATEGORIA.ANTES);
   const [evaluationSelectedPhotoIndex, setEvaluationSelectedPhotoIndex] = useState(null);
   const [evaluationAnnotatedPhotoUrl, setEvaluationAnnotatedPhotoUrl] = useState(null);
 
@@ -194,7 +205,7 @@ export function useProcedureCamera({
         capturedAt: new Date().toISOString(),
         stepCaptured: 4,
         source: 'camera',
-        categoria: procedureFotoCategoria === 'depois' ? 'depois' : 'antes',
+        categoria: normalizeStep4FotoCategoria(procedureFotoCategoria),
       };
 
       const newEntry = { url: photoPreviewUrl, blob: photoPreviewBlob, meta };
@@ -322,7 +333,7 @@ export function useProcedureCamera({
     const files = Array.from(fileList || []).filter((f) => f && String(f.type || '').startsWith('image/'));
     if (!files.length) return;
 
-    const cat = categoria === 'depois' ? 'depois' : 'antes';
+    const cat = normalizeStep4FotoCategoria(categoria);
 
     setProcedureCapturedPhotos((prev) => {
       const remaining = Math.max(0, EVALUATION_PHOTO_MAX - prev.length);
