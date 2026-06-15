@@ -280,7 +280,7 @@ function AppRefactoredInner() {
     return () => {
       cancelled = true;
     };
-  }, [authState.isLoggedIn, authState.authUser, authState.authReady, setOrgId]);
+  }, [authState.isLoggedIn, authState.authUser?.id, authState.authReady, setOrgId]);
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   const mapaAplicacaoState = useMapaAplicacaoState();
