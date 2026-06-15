@@ -4,6 +4,7 @@ import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { GroupedDurationBlock } from './GroupedRailTimeColumn.jsx';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 
 function statusDotClass(appointment) {
   const bucket = getAppointmentStatusBucket(appointment);
@@ -32,8 +33,9 @@ export function AgendaGroupedNextUpCard({
   const primary = appointments[0];
   if (!primary) return null;
 
+  const { canStartAnamnese } = usePapel();
   const countdown = formatCountdown(group.horaInicio || primary.horaInicio, now);
-  const actions = getGroupedRailCardActions(appointments.map((a) => a.status));
+  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese);
 
   return (
     <article className="relative mb-3 grid grid-cols-[1fr_auto] gap-3 rounded-2xl border-2 border-vivid-teal-500 bg-white p-4 shadow-agenda-glow">

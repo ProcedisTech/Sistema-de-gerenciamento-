@@ -40,6 +40,8 @@ export function OrgProvider({ children }) {
   });
   /** Nome da role vindo do /me (antes de resolverPapel). */
   const [roleNome, setRoleNomeState] = useState('');
+  /** Permissões customizadas ou do perfil, vindas do /me. */
+  const [permissoes, setPermissoesState] = useState([]);
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -95,6 +97,10 @@ export function OrgProvider({ children }) {
     setRoleNomeState(nome == null ? '' : String(nome).trim());
   }, []);
 
+  const setPermissoes = useCallback((perms) => {
+    setPermissoesState(Array.isArray(perms) ? perms : []);
+  }, []);
+
   const value = useMemo(
     () => ({
       orgId,
@@ -108,8 +114,10 @@ export function OrgProvider({ children }) {
       setPapel,
       roleNome,
       setRoleNome,
+      permissoes,
+      setPermissoes,
     }),
-    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -130,6 +138,8 @@ export function useOrg() {
       setPapel: () => {},
       roleNome: '',
       setRoleNome: () => {},
+      permissoes: [],
+      setPermissoes: () => {},
     };
   }
   return ctx;

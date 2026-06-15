@@ -621,7 +621,7 @@ export function PatientProfileView({
   perfilInfo,
 }) {
   const toast = useToast();
-  const { isNivel1, canEditPacientes, papel } = usePapel();
+  const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const perfilClinicoMain = usePerfilClinico(selectedPatient?.id, null, patient.sexo);
   const birthParts = useMemo(
@@ -1805,8 +1805,8 @@ export function PatientProfileView({
               patient={patient}
               getPatientInitials={getPatientInitials}
               isPerfilAtivo={isPerfilAtivo}
-              isNivel1={isNivel1}
               canEditPacientes={canEditPacientes}
+              canStartAnamnese={canStartAnamnese}
               showInativarPaciente={showInativarPaciente}
               profilePhotoInputRef={profilePhotoInputRef}
               profilePhotoBusy={profilePhotoBusy}
@@ -1994,11 +1994,11 @@ export function PatientProfileView({
                 <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
                 { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
-                { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
-                { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
-                { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
-                { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
-              ].map(({ key, label, title, icon }) => {
+                canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
+                canStartAnamnese && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
+                canSeeGaleria && { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
+                canSeeDocumentos && { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
+              ].filter(Boolean).map(({ key, label, title, icon }) => {
                 const TabIcon = icon;
                 const active = patientDetailTab === key;
                 return (
@@ -2024,14 +2024,14 @@ export function PatientProfileView({
             <div className="p-5 sm:p-6">
               {patientDetailTab === 'atendimento' && (
                 <div className="space-y-5">
-                  {isNivel1 ? (
+                  {!canStartAnamnese ? (
                     <div className="rounded-xl border border-rose-100/60 bg-rose-50/30 p-4 text-center">
                       <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-500 border border-rose-100/60 shadow-sm">
                         <Shield className="h-5 w-5" />
                       </div>
                       <p className="mt-2 text-xs font-semibold text-rose-700">Acesso Limitado</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Seu perfil (Nível 1) não possui permissão para iniciar ou gerenciar atendimentos.
+                        Seu perfil não possui permissão para iniciar atendimentos.
                       </p>
                     </div>
                   ) : (
@@ -2065,9 +2065,9 @@ export function PatientProfileView({
                         </div>
                         <div
                           className="mt-0.5 truncate text-[14px] font-semibold text-[#0f172a]"
-                          title={isNivel1 ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome)}
+                          title={!canSeeProntuario ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome)}
                         >
-                          {isNivel1 ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome || '—')}
+                          {!canSeeProntuario ? 'Acesso restrito' : (sortedApiProcedures[0]?.procedimentoNome || sortedApiProcedures[0]?.nome || '—')}
                         </div>
                       </div>
                       <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
@@ -2084,14 +2084,14 @@ export function PatientProfileView({
                       <h5 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
                         Histórico recente
                       </h5>
-                      {!isNivel1 && detailLoading ? (
+                      {canSeeProntuario && detailLoading ? (
                         <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
                           <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
                           Carregando…
                         </span>
                       ) : null}
                     </div>
-                    {isNivel1 ? (
+                    {!canSeeProntuario ? (
                       <p className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] px-4 py-6 text-center text-[13px] font-medium text-[#94a3b8]">
                         Acesso restrito
                       </p>
@@ -2161,21 +2161,21 @@ export function PatientProfileView({
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <ProcedureTimelineHeading title="Prontuário eletrônico" />
-                    {!isNivel1 && detailLoading ? (
+                    {canSeeProntuario && detailLoading ? (
                       <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[#64748b]">
                         <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" aria-hidden />
                         Carregando procedimentos…
                       </span>
                     ) : null}
                   </div>
-                  {isNivel1 ? (
+                  {!canSeeProntuario ? (
                     <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-[#e2e8f0] rounded-[18px]">
                       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 mb-4 border border-rose-100/60 shadow-inner">
                         <Shield className="h-6 w-6" />
                       </div>
                       <h3 className="text-base font-bold text-slate-800">Procedimentos Ocultos</h3>
                       <p className="mt-2 text-xs text-slate-500 max-w-sm leading-relaxed">
-                        Os procedimentos clínicos e históricos de sessões deste paciente estão ocultos para o seu nível de acesso (Nível 1).
+                        Os procedimentos clínicos e históricos de sessões deste paciente estão ocultos devido à sua permissão de acesso.
                       </p>
                     </div>
                   ) : (
@@ -2493,7 +2493,7 @@ export function PatientProfileView({
                   <span className="text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
                     Alertas manuais
                   </span>
-                  {!isNivel1 && (
+                  {canCreateNotaPaciente && (
                     <button
                       type="button"
                       disabled={!selectedPatient?.id}
@@ -2532,7 +2532,7 @@ export function PatientProfileView({
                               {ma.descricao}
                             </p>
                           </div>
-                          {!isNivel1 && (
+                          {canCreateNotaPaciente && (
                             <div className="flex shrink-0 gap-0.5">
                               <button
                                 type="button"
@@ -2669,7 +2669,7 @@ export function PatientProfileView({
               <h5 className="text-[12px] font-bold text-[#0f172a]">Notas Rápidas</h5>
             </div>
             <div className="space-y-2 bg-white p-2.5">
-              {!isNivel1 && (
+              {canCreateNotaPaciente && (
                 <>
                   <textarea
                     value={quickNoteText}
@@ -2707,7 +2707,7 @@ export function PatientProfileView({
                         </span>
                         <div className="flex shrink-0 items-center gap-2">
                           <span className="text-[11px] text-[#94a3b8]">{nota.data}</span>
-                          {!isNivel1 && nota._fromApi ? (
+                          {canCreateNotaPaciente && nota._fromApi ? (
                             <button
                               type="button"
                               onClick={() => handleDeleteNote(nota.id)}

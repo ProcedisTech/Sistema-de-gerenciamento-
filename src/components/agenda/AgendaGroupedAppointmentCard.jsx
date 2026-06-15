@@ -9,6 +9,7 @@ import {
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { GroupedRailTimeColumn } from './GroupedRailTimeColumn.jsx';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 
 const BTN_FOCUS =
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 focus-visible:ring-offset-2';
@@ -45,7 +46,8 @@ export function AgendaGroupedAppointmentCard({
 
   const badge = getGroupedStatusBadgePresentation(appointments);
   const stripe = getGroupedRailStripeClass(appointments);
-  const actions = getGroupedRailCardActions(appointments.map((a) => a.status));
+  const { canStartAnamnese } = usePapel();
+  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese);
   const idsLabel = appointments
     .map((a) => formatAgendaShortId(a.agendaId || a.id))
     .join(' ');

@@ -60,8 +60,8 @@ export function ProfileHero({
   patient,
   getPatientInitials,
   isPerfilAtivo,
-  isNivel1,
   canEditPacientes,
+  canStartAnamnese,
   showInativarPaciente,
   profilePhotoInputRef,
   profilePhotoBusy,
@@ -296,8 +296,8 @@ export function ProfileHero({
           ) : null}
         </div>
 
-        {!isNivel1 ? (
-          <div className={`mt-4 flex flex-wrap items-start justify-start gap-2 ${heroSideColPad}`}>
+        <div className={`mt-4 flex flex-wrap items-start justify-start gap-2 ${heroSideColPad}`}>
+          {canStartAnamnese && (
             <button
               type="button"
               onClick={() => onStartAttendance?.(patient)}
@@ -308,40 +308,33 @@ export function ProfileHero({
               </span>
               <span className="truncate">Iniciar atendimento</span>
             </button>
-            <button
-              type="button"
-              onClick={onAgendar}
-              disabled={!isPerfilAtivo || !patient?.id}
-              className={secondaryActionBtn}
-            >
-              <Calendar className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-              <span className="truncate">Agendar</span>
-            </button>
-            {canEditPacientes ? (
-              <>
-                <button type="button" onClick={onCadastro} className={secondaryActionBtn}>
-                  <FileText className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                  <span className="truncate">Cadastro</span>
-                </button>
-                <button type="button" onClick={onEdit} className={secondaryActionBtn}>
-                  <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                  <span className="truncate">Editar</span>
-                </button>
-              </>
-            ) : null}
-            <button type="button" disabled className={`${secondaryActionBtn} opacity-60`}>
-              <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-              <span className="truncate">Gerar PDF</span>
-            </button>
-          </div>
-        ) : (
-          <div className="mt-4 rounded-xl border border-white/25 bg-white/[0.12] p-4 text-left">
-            <p className="text-sm font-bold text-white">Acesso limitado</p>
-            <p className="mt-1 text-xs leading-relaxed text-white/80">
-              Seu nível de permissão (Nível 1) permite apenas visualizar dados cadastrais básicos.
-            </p>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            onClick={onAgendar}
+            disabled={!isPerfilAtivo || !patient?.id}
+            className={secondaryActionBtn}
+          >
+            <Calendar className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+            <span className="truncate">Agendar</span>
+          </button>
+          {canEditPacientes ? (
+            <>
+              <button type="button" onClick={onCadastro} className={secondaryActionBtn}>
+                <FileText className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                <span className="truncate">Cadastro</span>
+              </button>
+              <button type="button" onClick={onEdit} className={secondaryActionBtn}>
+                <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                <span className="truncate">Editar</span>
+              </button>
+            </>
+          ) : null}
+          <button type="button" disabled className={`${secondaryActionBtn} opacity-60`}>
+            <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+            <span className="truncate">Gerar PDF</span>
+          </button>
+        </div>
       </div>
     </section>
   );

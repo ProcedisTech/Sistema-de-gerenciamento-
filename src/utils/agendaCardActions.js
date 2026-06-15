@@ -3,13 +3,13 @@
  * @param {string} status
  * @returns {{ primary: 'confirmar' | 'iniciar' | null, secondary: Array<'whatsapp' | 'reagendar' | 'cancelar'> }}
  */
-export function getRailCardActions(status) {
+export function getRailCardActions(status, canStartAnamnese = true) {
   const s = String(status || '');
   const isPending = s === 'pendente' || s === 'aguardando_confirmacao';
   const isConfirmed = s === 'confirmado';
 
   return {
-    primary: isPending ? 'confirmar' : isConfirmed ? 'iniciar' : null,
+    primary: isPending ? 'confirmar' : (isConfirmed && canStartAnamnese) ? 'iniciar' : null,
     secondary:
       isPending || isConfirmed
         ? ['anamnese', 'whatsapp', 'reagendar', 'cancelar']
@@ -27,7 +27,7 @@ export function getRailPrimaryLabel(primary) {
  * Matriz de ações para card agrupado (status misto ou uniforme).
  * @param {string[]} statuses — status bruto de cada agenda do grupo
  */
-export function getGroupedRailCardActions(statuses = []) {
+export function getGroupedRailCardActions(statuses = [], canStartAnamnese = true) {
   const list = (statuses || []).map((s) => String(s || ''));
   const hasPending = list.some((s) => s === 'pendente' || s === 'aguardando_confirmacao');
   const allConfirmed = list.length > 0 && list.every((s) => s === 'confirmado');
@@ -37,7 +37,7 @@ export function getGroupedRailCardActions(statuses = []) {
 
   let primary = null;
   if (hasPending) primary = 'confirmar';
-  else if (allConfirmed) primary = 'iniciar';
+  else if (allConfirmed && canStartAnamnese) primary = 'iniciar';
 
   return {
     primary,

@@ -1,4 +1,5 @@
 import { Clock3, Lock, UserRound } from 'lucide-react';
+import { usePapel } from '../../hooks/usePapel.js';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
@@ -78,8 +79,11 @@ function compactActionLabel(status) {
   return 'Iniciar';
 }
 
-function showPrimaryActionButton(status) {
+function showPrimaryActionButton(status, canStartAnamnese = true) {
   if (status === 'realizado' || status === 'reagendado') return false;
+  if (!canStartAnamnese && status !== 'pendente' && status !== 'aguardando_confirmacao' && status !== 'cancelado') {
+    return false;
+  }
   return true;
 }
 
@@ -109,6 +113,7 @@ export function AgendaAppointmentSummaryCard({
   const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
   const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
+  const { canStartAnamnese } = usePapel();
 
   if (isBloqueio) {
     const motivo = bloqueioMotivoLabel(appointment);
@@ -251,7 +256,7 @@ export function AgendaAppointmentSummaryCard({
               </div>
             ) : (
               <>
-                {showPrimaryActionButton(appointment.status) ? (
+                {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
                   <button
                     type="button"
                     onClick={() => onPrimary(appointment)}
@@ -324,7 +329,7 @@ export function AgendaAppointmentSummaryCard({
               </div>
             ) : (
               <>
-                {showPrimaryActionButton(appointment.status) ? (
+                {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
                   <button
                     type="button"
                     onClick={() => onPrimary(appointment)}
@@ -417,7 +422,7 @@ export function AgendaAppointmentSummaryCard({
             </div>
           ) : (
             <>
-              {showPrimaryActionButton(appointment.status) ? (
+              {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
                 <button
                   type="button"
                   onClick={() => onPrimary(appointment)}
