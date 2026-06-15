@@ -70,34 +70,42 @@ export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pd
   function body(txt) {
     if (!txt) return;
     checkPage(8);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
     const lines = doc.splitTextToSize(txt, W);
-    lines.forEach((ln) => { checkPage(5); doc.text(ln, M, y); y += 4.5; });
+    lines.forEach((ln) => { 
+      checkPage(5); 
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+      doc.text(ln, M, y); 
+      y += 4.5; 
+    });
     y += 1;
   }
 
   function metaLine(txt) {
     if (!txt) return;
     checkPage(6);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
     const lines = doc.splitTextToSize(txt, W);
-    lines.forEach((ln) => { checkPage(5); doc.text(ln, M, y); y += 4.2; });
+    lines.forEach((ln) => { 
+      checkPage(5); 
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(GRAY[0], GRAY[1], GRAY[2]);
+      doc.text(ln, M, y); 
+      y += 4.2; 
+    });
   }
 
   function listItem(txt) {
     if (!txt) return;
     checkPage(5);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
     const full  = '- ' + txt;
     const lines = doc.splitTextToSize(full, W - 3);
     lines.forEach((ln, i) => {
       checkPage(5);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(DARK[0], DARK[1], DARK[2]);
       doc.text(ln, M + (i === 0 ? 0 : 3), y);
       y += 4.5;
     });

@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
 
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { Download, Eraser, CheckCircle, PenLine, AlertTriangle } from 'lucide-react';
 import { TermoVisualizacao } from '../../components/termos/TermoVisualizacao';
 import { SignatureFullscreenModal } from '../../components/journey/Step4LGPD.jsx';
@@ -129,10 +127,6 @@ export const DocumentoPublicoPage = () => {
     }
   };
 
-  const handleClearSignature = () => {
-    setSignatureBase64('');
-  };
-
   const handleAssinar = async () => {
     if (recusado) {
       setErrorMsg('O documento foi recusado. Não é possível enviá-lo.');
@@ -218,7 +212,7 @@ export const DocumentoPublicoPage = () => {
         const errorData = await res.json().catch(() => ({}));
         setErrorMsg(errorData.message || 'Erro ao registrar recusa. Tente novamente.');
       }
-    } catch (err) {
+    } catch {
       setErrorMsg('Erro de conexão ao tentar recusar.');
     } finally {
       setLoading(false);
@@ -226,26 +220,35 @@ export const DocumentoPublicoPage = () => {
   };
 
   const handleDownloadPDF = async () => {
-    if (!pdfContainerRef.current) return;
     setLoading(true);
     try {
-      const canvas = await html2canvas(pdfContainerRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false
+      const { generateTermoPdf } = await import('../../utils/pdfGenerator.js');
+      generateTermoPdf({
+        titulo: lookupData.documento?.titulo || 'Documento',
+        conteudo: lookupData.documento?.conteudo,
+        assinaturaPaciente: lookupData.assinaturaBase64,
+        metadados: {
+          pacienteNome: lookupData.pacienteNome,
+          dataHora: lookupData.dataAssinatura ? new Date(lookupData.dataAssinatura).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : new Date().toLocaleString(),
+          ipAddress: lookupData.ipOrigem,
+          recusado: lookupData.recusado
+        },
+        fileName: `documento_${(lookupData.pacienteNome || 'paciente').replace(/\s+/g, '_')}.pdf`,
+        pacienteCtx: {
+          nome: lookupData.pacienteNome,
+          cpf: lookupData.pacienteCpf || formatCPF(cpf),
+          telefone: lookupData.pacienteTelefone
+        },
+        clinicaCtx: {
+          nome: lookupData.clinicaNome,
+          endereco: lookupData.clinicaEndereco,
+          telefone: lookupData.clinicaTelefone
+        },
+        profissionalCtx: {
+          nome: lookupData.profissionalNome,
+          cpf: lookupData.profissionalCpfCrm
+        }
       });
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'pt',
-        format: 'a4'
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`documento_${lookupData.pacienteNome.replace(/\\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error(err);
       setErrorMsg('Erro ao gerar o PDF. Tente novamente.');
