@@ -60,7 +60,12 @@ export const useAuthState = (options = {}) => {
       }
       if (session?.access_token) {
         setAccessToken(session.access_token);
-        setAuthUser({ id: session.user.id, email: session.user.email });
+        setAuthUser((prev) => {
+          const nextId = session.user.id;
+          const nextEmail = session.user.email;
+          if (prev && prev.id === nextId && prev.email === nextEmail) return prev;
+          return { id: nextId, email: nextEmail };
+        });
         setIsLoggedIn(true);
       }
     });
