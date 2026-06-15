@@ -31,6 +31,7 @@ export function PerfilClinicoBloco({
   buscarPrincipiosAtivos,
   buscarMedicamentos,
   buscarAntecedentes,
+  readOnly = false,
 }) {
   const errorMessage = useMemo(
     () => (error ? classifyPerfilError(error) : ''),
@@ -128,7 +129,9 @@ export function PerfilClinicoBloco({
               Perfil clínico
             </h3>
             <p className="mt-0.5 text-[12px] text-slate-500">
-              Registro permanente — independente da ficha
+              {readOnly
+                ? 'Registro permanente atual do paciente'
+                : 'Registro permanente — independente da ficha'}
             </p>
           </div>
         </div>
@@ -136,18 +139,18 @@ export function PerfilClinicoBloco({
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
             {secoesPreenchidas} de 4 áreas
           </span>
-          {isDirty && (
+          {isDirty && !readOnly && (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
               Alterações não salvas
             </span>
           )}
-          {isSaving && (
+          {isSaving && !readOnly && (
             <span className="flex items-center gap-1 text-[11px] text-slate-500">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
               Salvando…
             </span>
           )}
-          {error && (
+          {error && !readOnly && (
             <button
               type="button"
               onClick={load}
@@ -193,6 +196,7 @@ export function PerfilClinicoBloco({
               onUpdateObservacao={(id, texto) => updateObservacao('alergias', id, texto)}
               searchFn={buscarAlimentos}
               placeholder="Buscar alimento (ex.: amendoim, glúten…)"
+              readOnly={readOnly}
             />
 
             <CatalogoChipSection
@@ -203,6 +207,7 @@ export function PerfilClinicoBloco({
               onUpdateObservacao={(id, texto) => updateObservacao('alergiasPrincipioAtivo', id, texto)}
               searchFn={buscarPrincipiosAtivos}
               placeholder="Buscar princípio ativo (ex.: dipirona, penicilina…)"
+              readOnly={readOnly}
             />
           </div>
         </section>
@@ -217,7 +222,8 @@ export function PerfilClinicoBloco({
               onUpdateObservacao={(id, texto) => updateObservacao('medicamentosEmUso', id, texto)}
               searchFn={buscarMedicamentos}
               placeholder="Buscar medicamento…"
-              renderChipExtra={(item, _onChange) => (
+              readOnly={readOnly}
+              renderChipExtra={readOnly ? undefined : (item, _onChange) => (
                 <MedicamentoExtra
                   item={item}
                   onChange={(fields) => updateMedicamentoExtra(item.id, fields)}
@@ -233,6 +239,7 @@ export function PerfilClinicoBloco({
               onUpdateObservacao={(id, texto) => updateObservacao('antecedentes', id, texto)}
               searchFn={buscarAntecedentes}
               placeholder="Buscar antecedente (ex.: hipertensão, diabetes…)"
+              readOnly={readOnly}
             />
           </div>
         </section>

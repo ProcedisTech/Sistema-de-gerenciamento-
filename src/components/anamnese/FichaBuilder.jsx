@@ -295,22 +295,22 @@ export function FichaBuilder() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 xl:gap-8 xl:grid-cols-[1fr_1fr] min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 xl:gap-8 min-h-0">
             {/* Perguntas na ficha */}
             <div className="space-y-3 min-h-0 min-w-0 flex flex-col">
-              <h5 className="text-[14px] font-bold text-[#0f172a]">Perguntas na ficha ({fichaItens.length})</h5>
+              <h5 className="text-[14px] font-bold text-[#0f172a] shrink-0">Perguntas na ficha ({fichaItens.length})</h5>
               {fichaItens.length === 0 ? (
                 <div className="text-center py-8 text-[#94a3b8] bg-[#f8fbfb] border border-dashed border-slate-200 rounded-xl">
                   <p className="text-[13px]">Selecione perguntas do banco ao lado</p>
                 </div>
               ) : (
-                <div className="space-y-2 lg:max-h-[min(520px,calc(100vh-22rem))] overflow-y-auto pr-1 custom-scrollbar">
+                <div className="space-y-2 max-h-[min(520px,calc(100vh-22rem))] min-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
                   {fichaItens.map((item, idx) => {
                     const itemAlerta = item.prioridade === 'ALERTA';
                     return (
                     <div
                       key={item.perguntaId}
-                      className={`flex flex-col gap-2 p-3 rounded-xl border cursor-pointer transition-all sm:flex-row sm:items-center sm:gap-2 ${
+                      className={`flex flex-col gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
                         itemAlerta
                           ? 'border-red-300 border-l-[4px] border-l-red-500 bg-[#fff5f5] hover:border-red-400'
                           : 'border-[#00a88e]/15 bg-white hover:border-[#00a88e]/30'
@@ -320,8 +320,7 @@ export function FichaBuilder() {
                         if (pergunta) setEditingPerguntaInBuilder(pergunta);
                       }}
                     >
-                      {/* Row 1: reorder arrows + order badge + text */}
-                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <div className="flex items-start gap-2 min-w-0">
                         <div className="flex flex-col gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button type="button" onClick={() => moverItem(idx, -1)} disabled={idx === 0} className="text-[#94a3b8] hover:text-[#00a88e] disabled:opacity-30">
                             <ChevronUp className="w-4 h-4" />
@@ -332,7 +331,7 @@ export function FichaBuilder() {
                         </div>
                         <span className="w-6 h-6 rounded-full bg-[#00a88e] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{item.ordem}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-bold text-[#0f172a] break-words leading-snug">{item.descricao}</p>
+                          <p className="text-[13px] font-bold text-[#0f172a] break-words [overflow-wrap:anywhere] leading-snug">{item.descricao}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             <span className="text-[11px] text-[#64748b]">{item.categoriaNome}</span>
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] bg-blue-50 text-blue-700 border-blue-200">
@@ -351,8 +350,7 @@ export function FichaBuilder() {
                         </div>
                       </div>
 
-                      {/* Row 2 (stacks below on mobile, inline on sm+): action buttons */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0 pl-8 sm:pl-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap items-center gap-1.5 pl-8" onClick={(e) => e.stopPropagation()}>
                         {/* Toggle obrigatório */}
                         <button
                           type="button"
@@ -409,8 +407,8 @@ export function FichaBuilder() {
             </div>
 
             {/* Banco de perguntas */}
-            <div className="space-y-3 min-h-0 flex flex-col">
-              <div className="flex items-center justify-between gap-2 flex-shrink-0">
+            <div className="space-y-3 min-h-0 min-w-0 flex flex-col">
+              <div className="flex items-center justify-between gap-2 shrink-0">
                 <h5 className="text-[14px] font-bold text-[#0f172a]">Banco de Perguntas</h5>
                 <select
                   value={filtroCategoria}
@@ -424,7 +422,7 @@ export function FichaBuilder() {
                 </select>
               </div>
 
-              <div className="max-h-[400px] lg:max-h-[min(520px,calc(100vh-22rem))] flex-1 min-h-[200px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              <div className="space-y-2 max-h-[min(520px,calc(100vh-22rem))] min-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
                 {perguntasDisponiveis.length === 0 ? (
                   <p className="text-center py-6 text-[#94a3b8] text-[13px]">Nenhuma pergunta disponível</p>
                 ) : (
@@ -441,7 +439,7 @@ export function FichaBuilder() {
                           : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/30 hover:bg-[#f0fdfa]'
                       }`}
                     >
-                      <p className="text-[13px] font-bold text-[#0f766e]">{p.descricao}</p>
+                      <p className="text-[13px] font-bold text-[#0f766e] break-words [overflow-wrap:anywhere]">{p.descricao}</p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                         <span className="text-[11px] text-[#64748b]">{p.categoriaNome}</span>
                         <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border-[2px] bg-blue-50 text-blue-700 border-blue-200">

@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Loader2,
   StickyNote,
+  Stethoscope,
   Trash2,
   Pencil,
   Plus,
@@ -88,6 +89,9 @@ import { GaleriaTab } from './galeria/GaleriaTab.jsx';
 import { EnviarDocumentoAssinarModal } from './EnviarDocumentoAssinarModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
+import { AnamneseFichaReadonlyView } from '../anamnese/AnamneseFichaReadonlyView.jsx';
+import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
+import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -213,60 +217,8 @@ function parseQueixaExpectativas(observacoes) {
   return { queixa: queixa || '—', expectativas: expectativas || '—' };
 }
 
-function buildPerguntaMapFromFicha(ficha) {
-  const map = {};
-  const itens = ficha?.itens || [];
-  itens.forEach((item) => {
-    const p = item.pergunta || item;
-    const pid = p.id ?? item.perguntaId;
-    if (pid == null) return;
-    const alts = Array.isArray(p.alternativas) ? [...p.alternativas] : [];
-    alts.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-    map[String(pid)] = {
-      tipoResposta: p.tipoResposta || p.tipo_resposta || '',
-      alternativas: alts,
-    };
-  });
-  return map;
-}
-
 function getPerguntaIdFromResp(resp) {
   return resp.perguntaId ?? resp.pergunta?.id ?? null;
-}
-
-function getEmbeddedAlternativas(resp) {
-  if (Array.isArray(resp.alternativas) && resp.alternativas.length > 0) {
-    return [...resp.alternativas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-  }
-  const p = resp.pergunta;
-  if (p && Array.isArray(p.alternativas) && p.alternativas.length > 0) {
-    return [...p.alternativas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-  }
-  return [];
-}
-
-function resolveTipoResposta(resp, perguntaMap) {
-  const pid = getPerguntaIdFromResp(resp);
-  if (pid != null && perguntaMap?.[String(pid)]?.tipoResposta) {
-    return perguntaMap[String(pid)].tipoResposta;
-  }
-  return (
-    resp.tipoResposta ||
-    resp.tipo_resposta ||
-    resp.pergunta?.tipoResposta ||
-    resp.pergunta?.tipo_resposta ||
-    ''
-  );
-}
-
-function alternativasForResp(resp, perguntaMap) {
-  const embedded = getEmbeddedAlternativas(resp);
-  if (embedded.length > 0) return embedded;
-  const pid = getPerguntaIdFromResp(resp);
-  if (pid != null && perguntaMap?.[String(pid)]?.alternativas?.length) {
-    return perguntaMap[String(pid)].alternativas;
-  }
-  return [];
 }
 
 function AnamneseObservacoesBlock({ texto }) {
@@ -296,110 +248,26 @@ function AnamneseObservacoesBlock({ texto }) {
   );
 }
 
-const BOOLEAN_ALTS = [
-  { id: '__sim', alternativa: 'Sim' },
-  { id: '__nao', alternativa: 'Não' },
-];
-
-function AnamneseRespostaRow({ resp, rowKey, expanded, onToggle, perguntaMap }) {
-  const tipo = resolveTipoResposta(resp, perguntaMap);
-  let alternativas = alternativasForResp(resp, perguntaMap);
-  const isBoolean =
-    tipo === 'booleano' ||
-    resp.respostaBoolean === true ||
-    resp.respostaBoolean === false;
-  if (isBoolean) {
-    alternativas = BOOLEAN_ALTS;
-  }
-  const expandable =
-    isBoolean ||
-    ((tipo === 'escolha_unica' || tipo === 'multipla_escolha') && alternativas.length > 0);
-
-  const isAltSelected = (alt) => {
-    if (isBoolean) {
-      if (alt.alternativa === 'Sim') return resp.respostaBoolean === true;
-      if (alt.alternativa === 'Não') return resp.respostaBoolean === false;
-      return false;
-    }
-    if (tipo === 'multipla_escolha') {
-      const ids = resp.opcoesSelecionadas || resp.opcoes_selecionadas || [];
-      return ids.map(String).includes(String(alt.id));
-    }
-    if (resp.perguntaOpcaoId != null && resp.perguntaOpcaoId !== '') {
-      return String(resp.perguntaOpcaoId) === String(alt.id);
-    }
-    if (resp.opcaoSelecionada && alt.alternativa) {
-      return String(resp.opcaoSelecionada).trim() === String(alt.alternativa).trim();
-    }
-    return false;
-  };
-
-  const header = (
-    <>
-      <div className="flex-1 min-w-0">
-        <span className="text-[14px] text-[#0f766e] font-medium">{resp.perguntaDescricao || 'Pergunta'}</span>
-        <p className="text-[15px] font-semibold text-[#0f172a] mt-2">{renderRespostaValue(resp)}</p>
-      </div>
-      {expandable ? (
-        <ChevronDown
-          className={`w-5 h-5 text-[#00a88e] flex-shrink-0 mt-0.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          aria-hidden
-        />
-      ) : null}
-    </>
-  );
-
-  const shellClass =
-    'rounded-xl border-[2px] border-[#00a88e]/25 bg-[#f0fdfa] overflow-hidden';
-
-  if (!expandable) {
-    return <div className={`${shellClass} p-4`}>{header}</div>;
-  }
-
-  return (
-    <div className={shellClass}>
-      <button
-        type="button"
-        className="w-full text-left p-4 flex items-start gap-3 hover:bg-[#e6f7f5]/50 transition-colors"
-        onClick={() => onToggle(rowKey)}
-        aria-expanded={expanded}
-      >
-        {header}
-      </button>
-      {expanded ? (
-        <div className="px-4 pb-4 pt-2 space-y-3 border-t border-[#00a88e]/15">
-          {alternativas.map((alt) => {
-            const selected = isAltSelected(alt);
-            return (
-              <div
-                key={alt.id ?? alt.alternativa}
-                className={`flex items-center gap-3 p-3 rounded-xl border-[2px] transition-all ${
-                  selected
-                    ? 'border-[#00a88e] bg-[#e6f7f5] shadow-sm'
-                    : 'border-[#00a88e]/15 bg-white/90 text-[#64748b]'
-                }`}
-              >
-                <span
-                  className={`text-[15px] flex-1 ${selected ? 'font-bold text-[#0f766e]' : 'font-medium text-[#475569]'}`}
-                >
-                  {alt.alternativa}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
+function resolveFichaTemplateId(detalhe, an) {
+  const v =
+    detalhe?.anamneseId
+    ?? detalhe?.fichaId
+    ?? detalhe?.anamneseFichaId
+    ?? an?.anamneseId
+    ?? an?.fichaId
+    ?? an?.anamneseFichaId;
+  return v != null && v !== '' ? String(v) : null;
 }
 
-function AnamneseTab({ pacienteId }) {
+function AnamneseTab({ pacienteId, pacienteSexo = null }) {
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
-  const [expandedRespKeys, setExpandedRespKeys] = useState(() => new Set());
-  const [perguntaMapByAnId, setPerguntaMapByAnId] = useState({});
+  const [fichaByAnId, setFichaByAnId] = useState({});
+  const [fichaLoadingId, setFichaLoadingId] = useState(null);
+
+  const perfilClinico = usePerfilClinico(pacienteId, null, pacienteSexo);
 
   useEffect(() => {
     if (!pacienteId) return;
@@ -427,50 +295,33 @@ function AnamneseTab({ pacienteId }) {
   }, [pacienteId]);
 
   useEffect(() => {
-    setExpandedRespKeys(new Set());
-  }, [expandedId]);
-
-  useEffect(() => {
     if (!expandedId) return;
 
     const targetId = expandedId;
+    if (fichaByAnId[targetId]) return;
+
     const detalhe = detalhes[targetId];
     const an = anamneses.find((a) => a.id === targetId);
-    const fichaTemplateId =
-      detalhe?.anamneseId ??
-      detalhe?.fichaId ??
-      detalhe?.anamneseFichaId ??
-      an?.anamneseId ??
-      an?.fichaId ??
-      an?.anamneseFichaId;
-
+    const fichaTemplateId = resolveFichaTemplateId(detalhe, an);
     if (!fichaTemplateId) return;
 
     let cancelled = false;
+    setFichaLoadingId(targetId);
     anamneseApi
       .getFicha(fichaTemplateId)
       .then((ficha) => {
         if (cancelled || !ficha) return;
-        setPerguntaMapByAnId((prev) => {
-          if (prev[targetId]) return prev;
-          return { ...prev, [targetId]: buildPerguntaMapFromFicha(ficha) };
-        });
+        setFichaByAnId((prev) => ({ ...prev, [targetId]: ficha }));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setFichaLoadingId((cur) => (cur === targetId ? null : cur));
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [expandedId, detalhes, anamneses]);
-
-  const toggleRespKey = useCallback((rowKey) => {
-    setExpandedRespKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowKey)) next.delete(rowKey);
-      else next.add(rowKey);
-      return next;
-    });
-  }, []);
+  }, [expandedId, detalhes, anamneses, fichaByAnId]);
 
   if (loading) {
     return (
@@ -483,17 +334,92 @@ function AnamneseTab({ pacienteId }) {
 
   if (anamneses.length === 0) {
     return (
-      <div className="text-center py-12 text-[#94a3b8]">
-        <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-30" />
-        <p className="text-[14px] font-medium">Nenhuma anamnese preenchida</p>
-        <p className="text-[12px] mt-1">Preencha uma ficha na jornada do paciente</p>
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+          <Stethoscope className="h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+          <div className="min-w-0">
+            <h4 className="text-[16px] font-bold text-[#0f172a]">Dados clínicos do paciente</h4>
+            <p className="text-[12px] text-slate-500">Perfil permanente atual e histórico de fichas</p>
+          </div>
+        </div>
+
+        {pacienteId ? (
+          <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+            <div className="border-b border-slate-200/80 bg-slate-100/60 px-4 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                Perfil clínico atual
+              </p>
+            </div>
+            <div className="min-w-0 px-3 py-4 sm:px-4">
+              <PerfilClinicoBloco
+                state={perfilClinico.state}
+                isLoading={perfilClinico.isLoading}
+                error={perfilClinico.error}
+                load={perfilClinico.load}
+                addItem={perfilClinico.addItem}
+                removeItem={perfilClinico.removeItem}
+                updateObservacao={perfilClinico.updateObservacao}
+                updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
+                buscarAlimentos={perfilClinico.buscarAlimentos}
+                buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
+                buscarMedicamentos={perfilClinico.buscarMedicamentos}
+                buscarAntecedentes={perfilClinico.buscarAntecedentes}
+                readOnly
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="text-center py-12 text-[#94a3b8]">
+          <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p className="text-[14px] font-medium">Nenhuma anamnese preenchida</p>
+          <p className="text-[12px] mt-1">Preencha uma ficha na jornada do paciente</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <h4 className="text-[16px] font-bold text-[#0f172a] mb-2">Anamneses Preenchidas ({anamneses.length})</h4>
+    <div className="space-y-5">
+      <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+        <Stethoscope className="h-5 w-5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+        <div className="min-w-0">
+          <h4 className="text-[16px] font-bold text-[#0f172a]">Dados clínicos do paciente</h4>
+          <p className="text-[12px] text-slate-500">Perfil permanente atual e histórico de fichas</p>
+        </div>
+      </div>
+
+      {pacienteId ? (
+        <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+          <div className="border-b border-slate-200/80 bg-slate-100/60 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              Perfil clínico atual
+            </p>
+          </div>
+          <div className="min-w-0 px-3 py-4 sm:px-4">
+            <PerfilClinicoBloco
+              state={perfilClinico.state}
+              isLoading={perfilClinico.isLoading}
+              error={perfilClinico.error}
+              load={perfilClinico.load}
+              addItem={perfilClinico.addItem}
+              removeItem={perfilClinico.removeItem}
+              updateObservacao={perfilClinico.updateObservacao}
+              updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
+              buscarAlimentos={perfilClinico.buscarAlimentos}
+              buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
+              buscarMedicamentos={perfilClinico.buscarMedicamentos}
+              buscarAntecedentes={perfilClinico.buscarAntecedentes}
+              readOnly
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="border-t-2 border-slate-200 pt-5">
+        <h4 className="text-[16px] font-bold text-[#0f172a] mb-3">
+          Anamneses preenchidas ({anamneses.length})
+        </h4>
       {anamneses.map((an) => {
         const isOpen = expandedId === an.id;
         const detalhe = detalhes[an.id] || an;
@@ -543,21 +469,12 @@ function AnamneseTab({ pacienteId }) {
                 ) : null}
 
                 {respostas.length > 0 ? (
-                  <div className="space-y-4">
-                    {respostas.map((resp, rIdx) => {
-                      const rowKey = `${an.id}:${resp.id ?? rIdx}`;
-                      return (
-                        <AnamneseRespostaRow
-                          key={resp.id ?? `r-${rIdx}`}
-                          resp={resp}
-                          rowKey={rowKey}
-                          expanded={expandedRespKeys.has(rowKey)}
-                          onToggle={toggleRespKey}
-                          perguntaMap={perguntaMapByAnId[an.id]}
-                        />
-                      );
-                    })}
-                  </div>
+                  <AnamneseFichaReadonlyView
+                    ficha={fichaByAnId[an.id]}
+                    respostasApi={respostas}
+                    loading={fichaLoadingId === an.id && !fichaByAnId[an.id]}
+                    className="max-w-5xl xl:max-w-6xl"
+                  />
                 ) : (
                   <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
                 )}
@@ -609,6 +526,7 @@ function AnamneseTab({ pacienteId }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -705,6 +623,7 @@ export function PatientProfileView({
   const toast = useToast();
   const { isNivel1, canEditPacientes, papel } = usePapel();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
+  const perfilClinicoMain = usePerfilClinico(selectedPatient?.id, null, patient.sexo);
   const birthParts = useMemo(
     () => parsePatientBirthDate(patient.dataNascimento),
     [patient.dataNascimento],
@@ -1457,11 +1376,10 @@ export function PatientProfileView({
         if (!cancelled) setAlertasAlergia(itemsAlergia);
         if (!cancelled) setAlertasAnamnese(merged);
 
-        if (pacienteId) {
+        if (pacienteId && alergiasDetectadas.length > 0) {
           mergePatientById?.(pacienteId, (prev) => ({
             ...prev,
-            ...(alergiasDetectadas.length > 0 ? { alergias: alergiasDetectadas.join(' · ') } : {}),
-            alertasClinicosAtivos: merged.map((a) => ({ titulo: a.titulo, valor: a.valor })),
+            alergias: alergiasDetectadas.join(' · '),
           }));
         }
       } catch {
@@ -1483,6 +1401,48 @@ export function PatientProfileView({
     return alertasAnamnese.filter((row) => !keys.has(row.key));
   }, [alertasAnamnese, alertasAlergia]);
 
+  const alertasPerfil = useMemo(() => {
+    const s = perfilClinicoMain.state;
+    if (!s) return [];
+    const items = [];
+    (s.alergias ?? []).forEach((chip) => {
+      if (!chip.nome) return;
+      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
+      items.push({ key: `perfil-alergia-${chip.id ?? chip.nome}`, titulo: 'Alergia alimentar', valor: val, secao: 'alergias', origem: 'perfil' });
+    });
+    (s.alergiasPrincipioAtivo ?? []).forEach((chip) => {
+      if (!chip.nome) return;
+      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
+      items.push({ key: `perfil-pa-${chip.id ?? chip.nome}`, titulo: 'Alergia a princípio ativo', valor: val, secao: 'alergiasPrincipioAtivo', origem: 'perfil' });
+    });
+    (s.medicamentosEmUso ?? []).forEach((chip) => {
+      if (!chip.nome) return;
+      const parts = [chip.nome];
+      if (chip.dose) parts.push(chip.dose);
+      if (chip.frequencia) parts.push(chip.frequencia);
+      if (chip.observacao) parts.push(chip.observacao);
+      items.push({ key: `perfil-med-${chip.id ?? chip.nome}`, titulo: 'Medicamento em uso', valor: parts.join(' · '), secao: 'medicamentos', origem: 'perfil' });
+    });
+    (s.antecedentes ?? []).forEach((chip) => {
+      if (!chip.nome) return;
+      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
+      items.push({ key: `perfil-ant-${chip.id ?? chip.nome}`, titulo: 'Antecedente', valor: val, secao: 'antecedentes', origem: 'perfil' });
+    });
+    return items;
+  }, [perfilClinicoMain.state]);
+
+  useEffect(() => {
+    const pacienteId = selectedPatient?.id;
+    if (!pacienteId) return;
+    mergePatientById?.(pacienteId, (prev) => ({
+      ...prev,
+      alertasClinicosAtivos: [
+        ...alertasPerfil.map((a) => ({ titulo: a.titulo, valor: a.valor, origem: 'perfil' })),
+        ...alertasAnamnese.map((a) => ({ titulo: a.titulo, valor: a.valor, origem: 'anamnese' })),
+      ],
+    }));
+  }, [alertasPerfil, alertasAnamnese, selectedPatient?.id, mergePatientById]);
+
   const displayNotes = useMemo(() => {
     const fromApi = (apiNotes || []).map((n) => ({
       id: n.id,
@@ -1503,6 +1463,14 @@ export function PatientProfileView({
     () => sortProcedimentosPorCriadoEmDesc(apiProcedures || []),
     [apiProcedures],
   );
+
+  const perfilRecentMax = 3;
+  const perfilRecentProcedures = useMemo(
+    () => sortedApiProcedures.slice(0, perfilRecentMax),
+    [sortedApiProcedures],
+  );
+
+  const proximoRetornoResumoDisplay = proximoRetornoKpiDisplay;
 
   const prontuarioListMax = 3;
   const prontuarioListTruncated =
@@ -2437,7 +2405,7 @@ export function PatientProfileView({
               )}
 
               {patientDetailTab === 'anamnese' && (
-                <AnamneseTab pacienteId={selectedPatient.id} />
+                <AnamneseTab pacienteId={selectedPatient.id} pacienteSexo={selectedPatient.sexo} />
               )}
 
               {patientDetailTab === 'planos' && (
@@ -2593,55 +2561,82 @@ export function PatientProfileView({
                 )}
               </div>
 
-              {/* Alertas da anamnese (somente leitura — mesma lógica de merge que antes) */}
+              {/* Alertas clínicos: perfil clínico + anamnese */}
               <div className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
-                  Alertas da anamnese
+                  Alertas clínicos
                 </span>
-                {alertasAnamneseLoading ? (
+                {alertasAnamneseLoading || perfilClinicoMain.isLoading ? (
                   <div className="flex items-center gap-2 text-[11px] font-medium text-[#64748b]">
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
-                    Carregando alertas da anamnese…
+                    Carregando alertas…
                   </div>
-                ) : alertasAnamnese.length === 0 ? (
+                ) : alertasPerfil.length === 0 && alertasAnamnese.length === 0 ? (
                   <p className="text-[11px] font-medium leading-snug text-[#64748b]">
-                    Nenhuma pergunta em alerta nas anamneses preenchidas.
+                    Nenhum alerta clínico registrado.
                   </p>
                 ) : (
                   <>
-                    {alertasAlergia.length > 0 ? (
-                      <div className="mb-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
-                          Alergias registradas
+                    {alertasPerfil.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
+                          Perfil clínico
                         </span>
-                        {alertasAlergia.map((item) => (
+                        {alertasPerfil.map((item) => (
                           <div
                             key={item.key}
-                            className="mt-1 rounded-md border border-[#fecaca] bg-[#fef2f2] px-2 py-1.5"
+                            className="rounded-md border border-[#fecaca] bg-[#fef2f2] px-2 py-1.5"
                           >
-                            <p className="line-clamp-2 text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
-                            <p className="line-clamp-3 text-[12px] font-semibold text-[#0f172a]">{item.valor}</p>
+                            <p className="line-clamp-1 text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
+                              {item.titulo}
+                            </p>
+                            <p className="line-clamp-2 text-[12px] font-semibold text-[#0f172a]">{item.valor}</p>
                           </div>
                         ))}
                       </div>
-                    ) : null}
-                    {alertasSidebarGeral.slice(0, 3).map((row) => (
-                      <div key={row.key} className="rounded-md border border-[#fecaca] bg-[#fef2f2]/80 px-2 py-1.5">
-                        <p className="line-clamp-2 text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">
-                          {row.titulo}
-                        </p>
-                        <p className="mt-0.5 line-clamp-3 break-words text-[12px] font-semibold text-[#0f172a]">
-                          {row.valor}
-                        </p>
+                    )}
+                    {alertasAnamnese.length > 0 && (
+                      <div className="space-y-1">
+                        {alertasPerfil.length > 0 && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
+                            Anamnese
+                          </span>
+                        )}
+                        {alertasAlergia.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
+                              Alergias registradas
+                            </span>
+                            {alertasAlergia.map((item) => (
+                              <div
+                                key={item.key}
+                                className="rounded-md border border-[#fecaca] bg-[#fef2f2] px-2 py-1.5"
+                              >
+                                <p className="line-clamp-2 text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
+                                <p className="line-clamp-3 text-[12px] font-semibold text-[#0f172a]">{item.valor}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {alertasSidebarGeral.slice(0, 3).map((row) => (
+                          <div key={row.key} className="rounded-md border border-[#fecaca] bg-[#fef2f2]/80 px-2 py-1.5">
+                            <p className="line-clamp-2 text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">
+                              {row.titulo}
+                            </p>
+                            <p className="mt-0.5 line-clamp-3 break-words text-[12px] font-semibold text-[#0f172a]">
+                              {row.valor}
+                            </p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    {alertasAnamnese.length > 3 ? (
+                    )}
+                    {(alertasPerfil.length + alertasAnamnese.length) > 3 ? (
                       <button
                         type="button"
                         onClick={() => setAlertasModalOpen(true)}
                         className="mt-1 flex h-7 w-full items-center justify-center rounded-md border border-[#fecaca] text-[11px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
                       >
-                        Ver todos ({alertasAnamnese.length})
+                        Ver todos ({alertasPerfil.length + alertasAnamnese.length})
                       </button>
                     ) : null}
                   </>
@@ -3026,38 +3021,66 @@ export function PatientProfileView({
               <X className="h-4 w-4" strokeWidth={2.5} />
             </button>
             <h3 id="alertas-modal-title" className="pr-10 text-[18px] font-bold text-[#0f172a]">
-              Todos os alertas
+              Todos os alertas clínicos
             </h3>
             <p className="mt-1 text-[12px] font-medium text-[#64748b]">
-              Perguntas marcadas como alerta nas fichas, com as respostas registradas.
+              Itens do perfil clínico e perguntas em alerta nas fichas de anamnese.
             </p>
             <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 [-webkit-overflow-scrolling:touch]">
-              {alertasAnamnese.map((row) => (
-                <div
-                  key={row.key}
-                  className="rounded-xl border-[2px] border-red-200 bg-red-50/60 p-4 shadow-sm"
-                >
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-bold leading-snug text-red-950">{row.titulo}</p>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
-                        {row.valor}
-                      </p>
-                      {(row.fichaNome || row.dataHora) && (
-                        <p className="mt-2 text-[11px] font-medium text-[#64748b]">
-                          {row.fichaNome || 'Anamnese'}
-                          {row.dataHora
-                            ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
-                                timeZone: 'America/Sao_Paulo',
-                              })}`
-                            : ''}
-                        </p>
-                      )}
+              {alertasPerfil.length > 0 && (
+                <>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Perfil clínico</p>
+                  {alertasPerfil.map((row) => (
+                    <div
+                      key={row.key}
+                      className="rounded-xl border-[2px] border-red-200 bg-red-50/60 p-4 shadow-sm"
+                    >
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-red-600">{row.titulo}</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
+                            {row.valor}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  ))}
+                </>
+              )}
+              {alertasAnamnese.length > 0 && (
+                <>
+                  {alertasPerfil.length > 0 && (
+                    <p className="pt-1 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Anamnese</p>
+                  )}
+                  {alertasAnamnese.map((row) => (
+                    <div
+                      key={row.key}
+                      className="rounded-xl border-[2px] border-red-200 bg-red-50/60 p-4 shadow-sm"
+                    >
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold leading-snug text-red-950">{row.titulo}</p>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
+                            {row.valor}
+                          </p>
+                          {(row.fichaNome || row.dataHora) && (
+                            <p className="mt-2 text-[11px] font-medium text-[#64748b]">
+                              {row.fichaNome || 'Anamnese'}
+                              {row.dataHora
+                                ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
+                                    timeZone: 'America/Sao_Paulo',
+                                  })}`
+                                : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
             <button
               type="button"
