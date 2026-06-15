@@ -25,6 +25,7 @@ export function CatalogoChipSection({
   searchFn,
   renderChipExtra,
   placeholder = 'Buscar…',
+  readOnly = false,
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -89,6 +90,39 @@ export function CatalogoChipSection({
   }, [onAdd]);
 
   const selectedIds = new Set(selected.map((s) => s.id));
+
+  if (readOnly) {
+    return (
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="text-[12px] font-bold text-slate-700">{titulo}</p>
+        {selected.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {selected.map((item) => {
+              const extras = [
+                item.observacao?.trim() || null,
+                item.dose?.trim() ? `Dose: ${item.dose.trim()}` : null,
+                item.frequencia?.trim() ? `Freq.: ${item.frequencia.trim()}` : null,
+                item.usoContinuo === false ? 'Uso não contínuo' : null,
+              ].filter(Boolean);
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5"
+                >
+                  <span className="text-[12px] font-medium text-slate-700">{item.nome}</span>
+                  {extras.length > 0 ? (
+                    <p className="mt-0.5 text-[11px] text-slate-500">{extras.join(' · ')}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-400">Nenhum item registrado</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
