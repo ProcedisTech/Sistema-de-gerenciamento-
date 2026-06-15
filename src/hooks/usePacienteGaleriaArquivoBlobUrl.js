@@ -4,9 +4,11 @@ import { pacientesGaleriaApi } from '../services/api.js';
 /**
  * GET /api/v1/pacientes/{id}/galeria/{fotoId}/arquivo exige X-Org-Id (como a foto de perfil).
  * `url` deve ser o path ou URL já resolvido (ex.: /api/v1/.../arquivo?v=… ou absoluta com VITE_API_BASE_URL).
- * URLs presigned AWS/R2 (https + query com X-Amz-Signature) vão direto no <img src>, sem fetch/blob.
+ * URLs presigned AWS/R2 (https + query com X-Amz-Signature) normalmente vão direto no <img src>, sem fetch/blob.
+ * `forceBlob=true` suprime esse atalho e sempre faz fetch→blob — necessário para canvas (crossOrigin='anonymous')
+ * onde o cache HTTP sem CORS causaria falha de taint.
  */
-export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
+export function usePacienteGaleriaArquivoBlobUrl(url, enabled, forceBlob = false) {
   const [blobSrc, setBlobSrc] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -32,7 +34,7 @@ export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
     const isPresigned =
       typeof url === 'string' && trimmed.startsWith('https://') && trimmed.includes('X-Amz-Signature');
 
-    if (isPresigned) {
+    if (isPresigned && !forceBlob) {
       revoke();
       setBlobSrc(trimmed);
       setLoading(false);
@@ -68,7 +70,7 @@ export function usePacienteGaleriaArquivoBlobUrl(url, enabled) {
       cancelled = true;
       revoke();
     };
-  }, [enabled, url]);
+  }, [enabled, url, forceBlob]);
 
   return { src: blobSrc, loading, error };
 }

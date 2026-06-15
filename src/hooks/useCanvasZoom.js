@@ -37,11 +37,18 @@ function firstTwoPointers(map) {
   return values.length >= 2 ? [values[0], values[1]] : null;
 }
 
+/** @param {HTMLElement | null} el */
+function getTargetSize(el) {
+  if (!el) return { width: 0, height: 0 };
+  const rect = el.getBoundingClientRect();
+  return { width: rect.width, height: rect.height };
+}
+
 /**
  * Vista 2D: `ctx.translate(offsetX,offsetY); ctx.scale(scale)`.
  * Zoom 1x–10x, pan (meio ou Espaço+arrastar), roda com âncara no ponteiro.
  *
- * @param {{ current: HTMLCanvasElement | null }} targetRef
+ * @param {{ current: HTMLElement | null }} targetRef
  */
 export function useCanvasZoom(targetRef) {
   const [view, setView] = useState(initialView);
@@ -82,16 +89,16 @@ export function useCanvasZoom(targetRef) {
   );
 
   const zoomIn = useCallback(() => {
-    const c = targetRef?.current;
-    if (!c) return;
-    applyZoomByFactor(ZOOM_BUTTON_STEP, c.width / 2, c.height / 2);
+    const { width, height } = getTargetSize(targetRef?.current ?? null);
+    if (!width || !height) return;
+    applyZoomByFactor(ZOOM_BUTTON_STEP, width / 2, height / 2);
   }, [applyZoomByFactor, targetRef]);
 
   const zoomOut = useCallback(() => {
     if (scale <= ZOOM_MIN) return;
-    const c = targetRef?.current;
-    if (!c) return;
-    applyZoomByFactor(1 / ZOOM_BUTTON_STEP, c.width / 2, c.height / 2);
+    const { width, height } = getTargetSize(targetRef?.current ?? null);
+    if (!width || !height) return;
+    applyZoomByFactor(1 / ZOOM_BUTTON_STEP, width / 2, height / 2);
   }, [applyZoomByFactor, targetRef, scale]);
 
   const fitToScreen = useCallback(() => {
@@ -156,11 +163,11 @@ export function useCanvasZoom(targetRef) {
 
   const onWheel = useCallback(
     (e) => {
-      const canvas = e.currentTarget;
-      if (!canvas || canvas.nodeName !== 'CANVAS') return;
+      const target = e.currentTarget;
+      if (!target) return;
       e.preventDefault();
       e.stopPropagation();
-      const rect = canvas.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
       const anchorX = e.clientX - rect.left;
       const anchorY = e.clientY - rect.top;
       const factor = e.deltaY < 0 ? ZOOM_WHEEL_STEP : 1 / ZOOM_WHEEL_STEP;

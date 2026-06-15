@@ -632,6 +632,22 @@ export const pacientesGaleriaApi = {
   fetchArquivoBlob: (pathOrUrl) => {
     const raw = typeof pathOrUrl === 'string' ? pathOrUrl.trim() : '';
     if (!raw) return Promise.reject(new Error('URL da imagem vazia.'));
+
+    // URL presigned R2/S3: fetch limpo, sem headers de auth, sem cookie.
+    // X-Amz-SignedHeaders=host — qualquer header extra quebra a assinatura e dispara CORS.
+    const isPresignedExternal =
+      (raw.startsWith('https://') || raw.startsWith('http://')) && raw.includes('X-Amz-Signature');
+    if (isPresignedExternal) {
+      return fetch(raw, { method: 'GET', credentials: 'omit' }).then((res) => {
+        if (!res.ok) {
+          const err = new Error(`[HTTP ${res.status}]`);
+          err.status = res.status;
+          throw err;
+        }
+        return res.blob();
+      });
+    }
+
     if (raw.startsWith('http://') || raw.startsWith('https://')) {
       return requestBlob(raw, { needsOrg: true });
     }
