@@ -30,14 +30,8 @@ export function useProcedimentosOptions({ enabled = true } = {}) {
         const arr = Array.isArray(data) ? data : [];
         const normalized = arr
           .map((v) => ({
-            /** ID do catálogo (GET /catalogos/{id}) — não confundir com id do vínculo clínica. */
-            id: String(
-              v.catalogoProcedimentoSaudeId ??
-                v.procedimento?.catalogoProcedimentoSaudeId ??
-                v.procedimento?.id ??
-                v.id ??
-                '',
-            ).trim(),
+            /** ID do vínculo clínica (tb_catalogo_procedimento_saude). Não usar procedimento.id (catálogo global). */
+            id: String(v.id ?? v.catalogoProcedimentoSaudeId ?? '').trim(),
             nomeProcedimento: String(
               v.procedimento?.nomeProcedimento ||
               v.procedimento?.nome ||
