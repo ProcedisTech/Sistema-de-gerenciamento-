@@ -770,6 +770,35 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [telefoneTouched, setTelefoneTouched] = useState(false);
+  const [showSenha, setShowSenha] = useState(false);
+
+  const handleCepChange = async (e) => {
+    const rawValue = e.target.value.replace(/\D/g, '');
+    let formattedCep = rawValue;
+    if (rawValue.length > 5) {
+      formattedCep = rawValue.replace(/^(\d{5})(\d)/, '$1-$2');
+    }
+    setForm(prev => ({...prev, cep: formattedCep}));
+
+    if (rawValue.length === 8) {
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${rawValue}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setForm(prev => ({
+            ...prev,
+            logradouro: data.logradouro || '',
+            bairro: data.bairro || '',
+            cidade: data.localidade || '',
+            uf: data.uf || ''
+          }));
+          document.getElementById('invite-numero')?.focus();
+        }
+      } catch (error) {
+        console.error('Erro ao buscar CEP:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
@@ -1139,7 +1168,7 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">CEP</label>
                   <input 
                     value={form.cep}
-                    onChange={e => setForm({...form, cep: e.target.value})}
+                    onChange={handleCepChange}
                     placeholder="00000-000"
                     maxLength={9}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
@@ -1157,6 +1186,7 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Número</label>
                   <input 
+                    id="invite-numero"
                     value={form.numero}
                     onChange={e => setForm({...form, numero: e.target.value})}
                     placeholder="Ex: 123"
@@ -1215,10 +1245,19 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
               </div>
               <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Senha Temporária</label>
+                  <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
+                    <span>Senha Temporária</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowSenha(!showSenha)}
+                      className="text-teal-600 hover:text-teal-700 p-0.5 transition-colors focus:outline-none"
+                    >
+                      {showSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </label>
                   <input 
                     required
-                    type="password"
+                    type={showSenha ? "text" : "password"}
                     minLength={8}
                     value={form.senha}
                     onChange={e => setForm({...form, senha: e.target.value})}
@@ -1364,7 +1403,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
   const [saving, setSaving] = useState(false);
   const [selectedFuncs, setSelectedFuncs] = useState(usuario.customizouPermissoes ? (usuario.permissoes || []) : []);
   const [hasUserChangedLevel, setHasUserChangedLevel] = useState(false);
-  const initialPerfilRef = React.useRef(usuario.perfilAcessoId || '');
   const isCustomizedRef = React.useRef(usuario.customizouPermissoes);
 
   const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
@@ -1435,7 +1473,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
     } else {
       setSelectedFuncs([]);
     }
-  }, [perfilAcessoId, perfisAcesso, isUserOwner]);
+  }, [perfilAcessoId, perfisAcesso, isUserOwner, hasUserChangedLevel]);
 
   const handleRoleChangeEdit = (selectedRoleId) => {
     setRoleId(selectedRoleId);
