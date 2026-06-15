@@ -1,16 +1,23 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useCanvasZoom } from '../../hooks/useCanvasZoom.js';
-import { usePacienteGaleriaArquivoBlobUrl } from '../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
-import { drawLetterboxedImage } from '../../utils/canvasAnnotationDraw.js';
+import { getLetterboxLayout } from '../../utils/canvasAnnotationDraw.js';
 
+const EMPTY_LAYOUT = { drawW: 0, drawH: 0, dx: 0, dy: 0 };
+
+/** Fullscreen com zoom/pan via CSS transform; `url` presigned direta no `<img>` (como o grid). */
 export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetch = false }) {
-  const canvasRef = useRef(null);
+  void authFetch;
+
   const containerRef = useRef(null);
-  const imageRef = useRef(/** @type {HTMLImageElement | null} */ (null));
+  const imgRef = useRef(/** @type {HTMLImageElement | null} */ (null));
+  const imageSrc = typeof url === 'string' ? url.trim() : '';
   const [loadedSrc, setLoadedSrc] = useState('');
-  const { src: authSrc, loading: authLoading, error: authError } = usePacienteGaleriaArquivoBlobUrl(url, authFetch);
-  const imageSrc = authFetch ? authSrc : url;
+  const [errorSrc, setErrorSrc] = useState('');
+  const [layout, setLayout] = useState(EMPTY_LAYOUT);
+
+  const imageReady = Boolean(imageSrc) && loadedSrc === imageSrc;
+  const imageError = Boolean(imageSrc) && errorSrc === imageSrc;
 
   const {
     scale,
@@ -28,77 +35,36 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
     onPointerDown,
     onPointerMove,
     onPointerUp,
-  } = useCanvasZoom(canvasRef);
+  } = useCanvasZoom(containerRef);
 
-  const redrawCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const image = imageRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, w, h);
-    if (!image?.complete || !image.naturalWidth) return;
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
-    ctx.scale(scale, scale);
-    drawLetterboxedImage(ctx, image, w, h, image.naturalWidth, image.naturalHeight);
-    ctx.restore();
-  }, [offsetX, offsetY, scale]);
-
-  const redrawRef = useRef(redrawCanvas);
-  useLayoutEffect(() => {
-    redrawRef.current = redrawCanvas;
-  }, [redrawCanvas]);
-
-  useEffect(() => {
-    if (!imageSrc) {
-      imageRef.current = null;
-      return;
-    }
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.onload = () => {
-      imageRef.current = image;
-      setLoadedSrc(image.src);
-      fitToScreen();
-      redrawRef.current();
-    };
-    image.onerror = () => {
-      imageRef.current = null;
-      setLoadedSrc('');
-    };
-    image.src = imageSrc;
-    return () => {
-      image.onload = null;
-      image.onerror = null;
-    };
-  }, [fitToScreen, imageSrc]);
-
-  useEffect(() => {
-    const updateCanvasSize = () => {
-      const canvas = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) return;
-      const { width, height } = container.getBoundingClientRect();
-      canvas.width = width;
-      canvas.height = height;
-      redrawRef.current();
-    };
-    updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
-    return () => window.removeEventListener('resize', updateCanvasSize);
+  const syncLayout = useCallback(() => {
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img?.naturalWidth) return;
+    const { width, height } = container.getBoundingClientRect();
+    setLayout(getLetterboxLayout(width, height, img.naturalWidth, img.naturalHeight));
   }, []);
 
-  useEffect(() => {
-    redrawCanvas();
-  }, [redrawCanvas, loadedSrc]);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    syncLayout();
+    const ro = new ResizeObserver(syncLayout);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [syncLayout, imageSrc]);
 
-  const imageReady = Boolean(imageSrc) && loadedSrc === imageSrc;
+  const handleImgLoad = useCallback(() => {
+    setLoadedSrc(imageSrc);
+    setErrorSrc('');
+    fitToScreen();
+    syncLayout();
+  }, [fitToScreen, imageSrc, syncLayout]);
+
+  const handleImgError = useCallback(() => {
+    setLoadedSrc('');
+    setErrorSrc(imageSrc);
+  }, [imageSrc]);
 
   const cursorClass = isPanning
     ? 'cursor-grabbing'
@@ -108,7 +74,11 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
         ? 'cursor-grab'
         : 'cursor-default';
 
-  if (authError) {
+  if (!imageSrc) {
+    return <p className="px-4 text-center text-[14px] font-medium text-white">Não foi possível carregar a imagem.</p>;
+  }
+
+  if (imageError) {
     return <p className="px-4 text-center text-[14px] font-medium text-white">Não foi possível carregar a imagem.</p>;
   }
 
@@ -147,30 +117,52 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
           Encaixar
         </button>
       </div>
-      <div ref={containerRef} className="relative h-[78vh] w-[90vw] max-w-[90vw] overflow-hidden rounded-xl border border-white/30 bg-slate-950">
-        {(authLoading || !imageReady) && (
+      <div
+        ref={containerRef}
+        aria-label={alt}
+        onPointerDown={(e) => {
+          if (!onPointerDown(e)) {
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+              // ignore
+            }
+          }
+        }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
+        className={`relative h-[78vh] w-[90vw] max-w-[90vw] overflow-hidden rounded-xl border border-white/30 bg-slate-950 touch-none ${cursorClass}`}
+      >
+        {(!imageReady || !layout.drawW) && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950">
             <Loader2 className="h-10 w-10 animate-spin text-white" aria-label="Carregando" />
           </div>
         )}
-        <canvas
-          ref={canvasRef}
-          aria-label={alt}
-          onPointerDown={(e) => {
-            if (!onPointerDown(e)) {
-              try {
-                e.currentTarget.setPointerCapture(e.pointerId);
-              } catch {
-                // ignore
-              }
-            }
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+            transformOrigin: '0 0',
           }}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onLostPointerCapture={onPointerUp}
-          className={`h-full w-full touch-none ${cursorClass}`}
-        />
+        >
+          <img
+            ref={imgRef}
+            src={imageSrc}
+            alt={alt}
+            draggable={false}
+            className="absolute pointer-events-none select-none"
+            style={{
+              left: layout.dx,
+              top: layout.dy,
+              width: layout.drawW,
+              height: layout.drawH,
+            }}
+            onLoad={handleImgLoad}
+            onError={handleImgError}
+          />
+        </div>
       </div>
     </div>
   );
