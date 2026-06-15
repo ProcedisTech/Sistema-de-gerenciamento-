@@ -101,7 +101,9 @@ export const generateTermoPdf = async ({
       doc.setTextColor(255, 255, 255);
       doc.text(`Procedi - ${(titulo || 'Termo de Consentimento').substring(0, 50)} (continuação)`, margin, 7);
       y = margin;
+      // Restore the text settings for the main content
       doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
     }
   };
 

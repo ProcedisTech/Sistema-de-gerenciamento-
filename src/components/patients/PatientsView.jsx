@@ -57,7 +57,7 @@ export function PatientsView(props) {
         profileNav={props.profileNav}
         onProfileNavigatePrev={() => props.navigateProfilePatient?.(-1)}
         onProfileNavigateNext={() => props.navigateProfilePatient?.(1)}
-        clinicSlug={clinicSlug}
+        clinicSlug={clinicSlug || clinicaInfo?.slug}
         clinicaInfo={clinicaInfo}
         perfilInfo={perfilInfo}
       />
