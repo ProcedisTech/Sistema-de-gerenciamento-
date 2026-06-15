@@ -1017,7 +1017,7 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
                     required
                     maxLength={80}
                     value={form.nome}
-                    onChange={e => setForm({...form, nome: e.target.value})}
+                    onChange={e => setForm({...form, nome: e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '')})}
                     placeholder="Ex: João da Silva"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
@@ -1037,8 +1037,12 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Data de Nascimento <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
                   <input 
                     type="date"
+                    max={new Date().toISOString().split("T")[0]}
+                    min="1900-01-01"
                     value={form.dataNascimento}
-                    onChange={e => setForm({...form, dataNascimento: e.target.value})}
+                    onChange={e => {
+                      if (e.target.value.length <= 10) setForm({...form, dataNascimento: e.target.value});
+                    }}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
@@ -1573,7 +1577,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
                     disabled={readOnly}
                     maxLength={80}
                     value={nome}
-                    onChange={e => setNome(e.target.value)}
+                    onChange={e => setNome(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))}
                     className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
                 </div>
@@ -1602,9 +1606,13 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Data de Nascimento</label>
                   <input 
                     type="date"
+                    max={new Date().toISOString().split("T")[0]}
+                    min="1900-01-01"
                     disabled={readOnly}
                     value={dataNascimento}
-                    onChange={e => setDataNascimento(e.target.value)}
+                    onChange={e => {
+                      if (e.target.value.length <= 10) setDataNascimento(e.target.value);
+                    }}
                     className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
                   />
                 </div>
