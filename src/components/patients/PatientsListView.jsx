@@ -166,7 +166,7 @@ function PatientPreviewPanel({
   previewAnamneseLoading = false,
   captureProfileNavSnapshot,
 }) {
-  const { isNivel1 } = usePapel();
+  const { isNivel1, canSeeProntuario, canStartAnamnese } = usePapel();
 
   /** Origem ordenada mais recentes primeiro — API ou legado `{ data, nome, … }`. */
   const procedureSourceSorted = useMemo(() => {
@@ -203,14 +203,14 @@ function PatientPreviewPanel({
   const previewTimelineTruncated = timelineRows.length > PREVIEW_TIMELINE_MAX;
 
   const goToPacienteProntuario = () => {
-    if (isNivel1) return;
+    if (!canSeeProntuario) return;
     if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
     setPatientDetailTab('prontuario');
     setPatientView('profile');
   };
 
   const handleIniciarAtendimentoClick = () => {
-    if (isNivel1 || previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
+    if (!canStartAnamnese || previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
     onStartAttendance(selectedPatient);
   };
 
@@ -246,7 +246,7 @@ function PatientPreviewPanel({
             {selectedPatient.telefone || '—'}
           </p>
         </div>
-        {!isNivel1 && (
+        {canStartAnamnese && (
           <div className="flex w-full shrink-0 flex-col items-stretch justify-start sm:ml-auto sm:w-auto sm:max-w-[13rem] sm:items-end">
             <button
               type="button"
@@ -267,14 +267,14 @@ function PatientPreviewPanel({
 
       <div className="min-w-0">
         <ProcedureTimelineHeading title="Linha do Tempo de Procedimentos" />
-        {isNivel1 ? (
+        {!canSeeProntuario ? (
           <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-center">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600">
               <Shield className="h-5 w-5" />
             </div>
             <h4 className="mt-2 text-sm font-bold text-slate-800">Visualização Limitada</h4>
             <p className="mt-1 text-xs text-slate-500 max-w-[280px] mx-auto leading-relaxed">
-              Seu nível de permissão (Nível 1) permite apenas visualizar os dados cadastrais básicos deste paciente.
+              Você não possui permissão para ver os procedimentos deste paciente.
             </p>
           </div>
         ) : loadingPreviewProcedures ? (

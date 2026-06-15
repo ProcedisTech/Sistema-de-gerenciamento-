@@ -649,41 +649,41 @@ const FUNCOES_SISTEMA = [
   {
     categoria: 'Agenda',
     itens: [
-      { id: 'agenda_ver', label: 'Visualizar Agenda', minNivel: 1, descricao: 'Permite visualizar os horários e agendamentos.' },
-      { id: 'agenda_criar', label: 'Criar Agendamento', minNivel: 2, descricao: 'Permite cadastrar novos agendamentos na agenda da clínica.' },
-      { id: 'agenda_editar', label: 'Editar/Cancelar Agendamento', minNivel: 2, descricao: 'Permite alterar horários, status ou cancelar agendamentos.' },
-      { id: 'agenda_config', label: 'Configurar Agenda', minNivel: 5, descricao: 'Permite configurar horários de funcionamento, feriados e templates.' }
+      { id: 'AGENDA_VER', label: 'Visualizar Agenda', minNivel: 1, descricao: 'Permite visualizar os horários e agendamentos.' },
+      { id: 'AGENDA_CRIAR', label: 'Criar Agendamento', minNivel: 2, descricao: 'Permite cadastrar novos agendamentos na agenda da clínica.' },
+      { id: 'AGENDA_EDITAR', label: 'Editar/Cancelar Agendamento', minNivel: 2, descricao: 'Permite alterar horários, status ou cancelar agendamentos.' },
+      { id: 'HORARIO_EDITAR', label: 'Configurar Agenda', minNivel: 5, descricao: 'Permite configurar horários de funcionamento, feriados e templates.' }
     ]
   },
   {
     categoria: 'Pacientes',
     itens: [
-      { id: 'pacientes_ver', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e os dados cadastrais dos pacientes.' },
-      { id: 'pacientes_criar', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes no sistema.' },
-      { id: 'pacientes_editar', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente (nome, telefone, endereço, etc).' },
-      { id: 'pacientes_excluir', label: 'Inativar / Excluir Pacientes', minNivel: 3, descricao: 'Permite inativar ou excluir o cadastro de um paciente. Requer confirmação de senha.' },
-      { id: 'pacientes_reativar', label: 'Reativar Pacientes', minNivel: 3, descricao: 'Permite reativar o cadastro de um paciente inativo. Requer confirmação de senha.' }
+      { id: 'PACIENTE_VER', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e os dados cadastrais dos pacientes.' },
+      { id: 'PACIENTE_CRIAR', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes no sistema.' },
+      { id: 'PACIENTE_EDITAR', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente (nome, telefone, endereço, etc).' },
+      { id: 'PACIENTE_EXCLUIR', label: 'Inativar / Excluir Pacientes', minNivel: 3, descricao: 'Permite inativar ou excluir o cadastro de um paciente. Requer confirmação de senha.' }
     ]
   },
   {
     categoria: 'Atendimento e Prontuário',
     itens: [
-      { id: 'atendimento_iniciar', label: 'Iniciar Atendimento (Anamnese)', minNivel: 2, descricao: 'Permite iniciar um atendimento e preencher a anamnese do paciente.' },
-      { id: 'prontuario_ver', label: 'Ver Prontuário Completo', minNivel: 2, descricao: 'Permite acessar o prontuário e o histórico de procedimentos do paciente.' },
-      { id: 'prontuario_escrever', label: 'Criar/Editar Notas no Prontuário', minNivel: 2, descricao: 'Permite adicionar e editar notas rápidas no prontuário do paciente.' },
-      { id: 'prontuario_procedimentos', label: 'Registrar Procedimentos', minNivel: 3, descricao: 'Permite lançar procedimentos realizados no prontuário do paciente.' }
+      { id: 'ANAMNESE_PREENCHIMENTO_CRIAR', label: 'Iniciar Atendimento (Anamnese)', minNivel: 3, descricao: 'Permite iniciar um atendimento e preencher a anamnese do paciente.' },
+      { id: 'PRONTUARIO_VER', label: 'Ver Prontuário Completo', minNivel: 3, descricao: 'Permite acessar o prontuário e o histórico de procedimentos do paciente.' },
+      { id: 'PACIENTE_NOTA_CRIAR', label: 'Criar/Editar Notas no Prontuário', minNivel: 3, descricao: 'Permite adicionar e editar notas rápidas no prontuário do paciente.' },
+      { id: 'PRONTUARIO_CRIAR', label: 'Registrar Procedimentos', minNivel: 2, descricao: 'Permite lançar procedimentos realizados no prontuário do paciente.' },
+      { id: 'PACIENTE_GALERIA_VER', label: 'Acessar Galeria de Imagens', minNivel: 3, descricao: 'Permite acessar a galeria de fotos e arquivos anexados do paciente.' },
+      { id: 'PACIENTE_DOCUMENTO_VER', label: 'Gerenciar Documentos Assinados', minNivel: 2, descricao: 'Permite acessar, enviar e gerenciar os documentos do paciente.' }
     ]
   },
   {
     categoria: 'Configurações e Sistema',
     itens: [
-      { id: 'config_anamnese', label: 'Configurar Modelos de Anamnese', minNivel: 3, descricao: 'Permite gerenciar categorias e perguntas de anamnese.' },
-      { id: 'config_procedimentos', label: 'Configurar Catálogo de Procedimentos', minNivel: 4, descricao: 'Permite gerenciar os procedimentos oferecidos.' },
-      { id: 'config_termos', label: 'Configurar Termos e Documentos', minNivel: 4, descricao: 'Permite gerenciar termos de consentimento e contratos.' },
-      { id: 'config_perfil', label: 'Configurar Perfil do Profissional', minNivel: 4, descricao: 'Permite ajustar o perfil de atendimento.' },
-      { id: 'config_clinica', label: 'Configurar Dados da Clínica', minNivel: 5, descricao: 'Permite gerenciar dados institucionais da clínica.' },
-      { id: 'config_equipe', label: 'Gerenciar Equipe e Permissões', minNivel: 5, descricao: 'Permite criar, editar e desativar acessos da equipe.' },
-      { id: 'config_auditoria', label: 'Visualizar Logs de Auditoria', minNivel: 5, descricao: 'Permite visualizar o histórico de ações do sistema.' }
+      { id: 'ANAMNESE_MODELO_VER', label: 'Configurar Modelos de Anamnese', minNivel: 3, descricao: 'Permite gerenciar categorias e perguntas de anamnese.' },
+      { id: 'CATALOGO_VER', label: 'Configurar Catálogo de Procedimentos', minNivel: 4, descricao: 'Permite gerenciar os procedimentos oferecidos.' },
+      { id: 'DOC_MODELO_VER', label: 'Configurar Termos e Documentos', minNivel: 4, descricao: 'Permite gerenciar termos de consentimento e contratos.' },
+      { id: 'CLINICA_EDITAR', label: 'Configurar Dados da Clínica', minNivel: 5, descricao: 'Permite gerenciar dados institucionais da clínica.' },
+      { id: 'USUARIO_VER', label: 'Gerenciar Equipe e Permissões', minNivel: 5, descricao: 'Permite criar, editar e desativar acessos da equipe.' },
+      { id: 'AUDITORIA_VER', label: 'Visualizar Logs de Auditoria', minNivel: 5, descricao: 'Permite visualizar o histórico de ações do sistema.' }
     ]
   }
 ];
@@ -922,7 +922,9 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
         await equipeApi.create({
           usuarioId,
           roleId: form.roleId,
-          perfilAcessoId: form.perfilAcessoId
+          perfilAcessoId: form.perfilAcessoId,
+          customizouPermissoes: true,
+          permissoesCustomizadas: selectedFuncs
         });
       } catch (err) {
         throw new Error(getApiErrorToastMessage(err) || 'Perfil completado, mas erro ao vincular à equipe.');
@@ -1360,7 +1362,10 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
   const [uf, setUf] = useState(usuario.uf || '');
   const [especialidades, setEspecialidades] = useState(usuario.especialidades || []);
   const [saving, setSaving] = useState(false);
-  const [selectedFuncs, setSelectedFuncs] = useState([]);
+  const [selectedFuncs, setSelectedFuncs] = useState(usuario.customizouPermissoes ? (usuario.permissoes || []) : []);
+  const [hasUserChangedLevel, setHasUserChangedLevel] = useState(false);
+  const initialPerfilRef = React.useRef(usuario.perfilAcessoId || '');
+  const isCustomizedRef = React.useRef(usuario.customizouPermissoes);
 
   const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
   const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
@@ -1405,6 +1410,11 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
   }, []);
 
   useEffect(() => {
+    // Se o usuário tinha permissões customizadas E o dropdown de nível nunca foi tocado, manter os dados do BD
+    if (isCustomizedRef.current && !hasUserChangedLevel) {
+      return;
+    }
+    
     let level = 0;
     if (isUserOwner) {
       level = 5; // DONO sempre tem nível máximo de funções
@@ -1435,6 +1445,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
     if (selectedRole) {
       const presetId = getPresetProfileId(selectedRole.nome, perfisAcesso);
       if (presetId) {
+        setHasUserChangedLevel(true);
         setPerfilAcessoId(presetId);
       }
     }
@@ -1460,7 +1471,9 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
         bairro: bairro || "",
         cidade: cidade || "",
         uf: uf || "",
-        especialidades: especialidades
+        especialidades: especialidades,
+        customizouPermissoes: true,
+        permissoesCustomizadas: selectedFuncs
       });
       toast.success('Acesso atualizado com sucesso.');
       onSuccess();
@@ -1825,7 +1838,10 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
                       required
                       value={perfilAcessoId}
                       disabled={readOnly}
-                      onChange={e => setPerfilAcessoId(e.target.value)}
+                      onChange={e => {
+                        setHasUserChangedLevel(true);
+                        setPerfilAcessoId(e.target.value);
+                      }}
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                     >
                       <option value="">Selecione...</option>

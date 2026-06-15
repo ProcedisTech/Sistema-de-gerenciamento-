@@ -1,7 +1,7 @@
 import { useOrg } from '../contexts/OrgContext';
 
 export function usePapel() {
-  const { papel } = useOrg();
+  const { papel, permissoes = [] } = useOrg();
 
   // ── Hierarquia de pesos ──────────────────────────────────────────────────
   const pesos = {
@@ -26,6 +26,16 @@ export function usePapel() {
    */
   const isAtLeast = (nivel) => meuPeso >= getPeso(nivel);
 
+  // Helper para verificar a permissão no array ou fazer fallback no peso
+  const hasPerm = (code, fallbackLevel) => {
+    if (permissoes && permissoes.length > 0) {
+      // Dono sempre pode tudo, mesmo se array estiver incompleto (por segurança)
+      if (papel === 'DONO') return true;
+      return permissoes.includes(code);
+    }
+    return isAtLeast(fallbackLevel);
+  };
+
   // ── Flags legadas (mantidas para não quebrar código existente) ───────────
   const isDono          = papel === 'DONO';
   const isAdmin         = papel === 'ADMIN' || isDono || papel === 'NIVEL_5';
@@ -34,66 +44,40 @@ export function usePapel() {
   const isNivel1        = papel === 'NIVEL_1' || meuPeso <= 10;
 
   // ── Navegação principal ──────────────────────────────────────────────────
-  /** Todos os níveis podem ver Pacientes e Agenda */
-  const canSeePacientes = true;
-  const canSeeAgenda    = true;
-  /** Configurações: N3 ou superior */
-  const canSeeConfig    = isAtLeast('NIVEL_3');
-
+  const canSeePacientes = hasPerm('PACIENTE_VER', 'NIVEL_1');
+  const canSeeAgenda    = hasPerm('AGENDA_VER', 'NIVEL_1');
+  
   // ── Ações dentro de Pacientes ────────────────────────────────────────────
-  /** N1 = apenas leitura; N2+ = criação/edição */
-  const canWritePacientes   = isAtLeast('NIVEL_2'); // alias legado
-  const canCreatePacientes  = isAtLeast('NIVEL_2'); // cadastrar novo paciente
-  const canEditPacientes    = isAtLeast('NIVEL_2'); // editar ficha do paciente
-  /** Inativar/excluir é ação mais destrutiva — requer N3+ */
-  const canInativarPacientes = isAtLeast('NIVEL_3');
-  /** Reativar pacientes inativos — requer N3+ */
-  const canReativarPacientes = isAtLeast('NIVEL_3');
+  const canWritePacientes   = hasPerm('PACIENTE_EDITAR', 'NIVEL_2'); // alias legado
+  const canCreatePacientes  = hasPerm('PACIENTE_CRIAR', 'NIVEL_2');
+  const canEditPacientes    = hasPerm('PACIENTE_EDITAR', 'NIVEL_2');
+  const canInativarPacientes = hasPerm('PACIENTE_EXCLUIR', 'NIVEL_3');
+  const canReativarPacientes = hasPerm('PACIENTE_EXCLUIR', 'NIVEL_3');
 
   // ── Ações dentro de Agenda ───────────────────────────────────────────────
-  /** N1 = apenas leitura; N2+ = criar/editar/cancelar agendamentos */
-  const canWriteAgenda = isAtLeast('NIVEL_2');
+  const canWriteAgenda = hasPerm('AGENDA_CRIAR', 'NIVEL_2') || hasPerm('AGENDA_EDITAR', 'NIVEL_2');
+
+  // ── Ações de Atendimento e Prontuário ────────────────────────────────────
+  const canSeeProntuario = hasPerm('PRONTUARIO_VER', 'NIVEL_3');
+  const canStartAnamnese = hasPerm('ANAMNESE_PREENCHIMENTO_CRIAR', 'NIVEL_3');
+  const canCreateNotaPaciente = hasPerm('PACIENTE_NOTA_CRIAR', 'NIVEL_2');
+  const canSeeGaleria = hasPerm('PACIENTE_GALERIA_VER', 'NIVEL_3');
+  const canSeeDocumentos = hasPerm('PACIENTE_DOCUMENTO_VER', 'NIVEL_3');
 
   // ── Seções de Configurações ──────────────────────────────────────────────
-  /**
-   * Anamnese (categorias, perguntas, fichas): N3+
-   * Único grupo visível para N3.
-   */
-  const canSeeConfigAnamnese = isAtLeast('NIVEL_3');
+  const canSeeConfigAnamnese = hasPerm('ANAMNESE_MODELO_VER', 'NIVEL_3');
+  const canSeeConfigProcedimentos = hasPerm('CATALOGO_VER', 'NIVEL_4');
+  const canSeeConfigTermos        = hasPerm('DOC_MODELO_VER', 'NIVEL_4');
+  const canSeeConfigPerfil = hasPerm('PERFIL_ACESSO_VER', 'NIVEL_4') || isAtLeast('NIVEL_4');
+  const canSeeConfigClinica = hasPerm('CLINICA_EDITAR', 'NIVEL_5');
+  const canSeeConfigAgenda = hasPerm('HORARIO_EDITAR', 'NIVEL_5') || hasPerm('FERIADO_EDITAR', 'NIVEL_5') || isAtLeast('NIVEL_5');
+  const canSeeConfigEquipe = hasPerm('USUARIO_VER', 'NIVEL_5');
+  const canSeeConfigAuditoria = hasPerm('AUDITORIA_VER', 'NIVEL_5');
 
-  /**
-   * Procedimentos + Termos de Consentimento: N4+
-   */
-  const canSeeConfigProcedimentos = isAtLeast('NIVEL_4');
-  const canSeeConfigTermos        = isAtLeast('NIVEL_4');
+  const canSeeConfig = canSeeConfigAnamnese || canSeeConfigProcedimentos || canSeeConfigTermos || canSeeConfigPerfil || canSeeConfigClinica || canSeeConfigAgenda || canSeeConfigEquipe || canSeeConfigAuditoria || isAtLeast('NIVEL_3');
 
-  /**
-   * Perfil do Profissional: N4+
-   */
-  const canSeeConfigPerfil = isAtLeast('NIVEL_4');
-
-  /**
-   * Dados da Clínica (grupo "Sistema"): N5+
-   */
-  const canSeeConfigClinica = isAtLeast('NIVEL_5');
-
-  /**
-   * Agenda — horários, feriados, templates: N5+
-   */
-  const canSeeConfigAgenda = isAtLeast('NIVEL_5');
-
-  /**
-   * Equipe — usuários e acessos, pacientes inativados: N5+
-   */
-  const canSeeConfigEquipe = isAtLeast('NIVEL_5');
-
-  /** Auditoria: apenas Dono ou N5 */
-  const canSeeConfigAuditoria = isAtLeast('NIVEL_5');
-
-  /**
-   * Gerenciar usuários (criar / editar nível e cargo): Dono ou N5
-   */
-  const canManageUsers = isDono || isAtLeast('NIVEL_5');
+  // Gerenciar usuários (criar / editar nível e cargo): Dono ou quem tem USUARIO_EDITAR
+  const canManageUsers = isDono || hasPerm('USUARIO_EDITAR', 'NIVEL_5');
 
   return {
     papel,
@@ -130,6 +114,12 @@ export function usePapel() {
     canSeeConfigAgenda,
     canSeeConfigEquipe,
     canSeeConfigAuditoria,
+
+    canSeeProntuario,
+    canStartAnamnese,
+    canCreateNotaPaciente,
+    canSeeGaleria,
+    canSeeDocumentos,
 
     // Gerência
     canManageUsers,

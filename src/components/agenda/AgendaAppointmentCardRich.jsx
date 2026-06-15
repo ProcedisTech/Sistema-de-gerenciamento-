@@ -7,6 +7,7 @@ import {
   getStatusBadgePresentation,
 } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
@@ -38,6 +39,7 @@ export function AgendaAppointmentCardRich({
   onRemoverBloqueio,
   submittingRemoverBloqueioId,
 }) {
+  const { canStartAnamnese } = usePapel();
   const isBloqueio = appointment?.tipo === 'bloqueio' && appointment.status !== 'cancelado';
 
   if (isBloqueio) {
@@ -100,7 +102,7 @@ export function AgendaAppointmentCardRich({
 
   const badge = getStatusBadgePresentation(appointment);
   const stripe = getRailStripeClass(appointment);
-  const actions = getRailCardActions(appointment.status);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese);
 
   return (
     <article

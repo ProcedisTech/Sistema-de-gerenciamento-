@@ -3,6 +3,7 @@ import { getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
 import { getAppointmentStatusBucket } from '../../utils/agendaDayInsights.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { getGroupedStatusBadgePresentation } from '../../utils/agendaRailHelpers.js';
+import { usePapel } from '../../hooks/usePapel.js';
 
 const BTN_ACTION =
   'inline-flex max-w-[min(100%,14rem)] shrink-0 justify-center whitespace-normal text-center leading-tight';
@@ -34,8 +35,8 @@ function showPrimaryActionButton(statuses) {
   return statuses.some((s) => !['realizado', 'reagendado'].includes(s));
 }
 
-function panelActionLabel(statuses) {
-  const actions = getGroupedRailCardActions(statuses);
+function panelActionLabel(statuses, canStartAnamnese = true) {
+  const actions = getGroupedRailCardActions(statuses, canStartAnamnese);
   if (actions.primary === 'confirmar') return 'Confirmar';
   if (actions.primary === 'iniciar') return 'Iniciar';
   return 'Reagendar';
@@ -77,7 +78,8 @@ export function AgendaGroupedSummaryCard({
 
   const statuses = appointments.map((a) => a.status);
   const badge = getGroupedStatusBadgePresentation(appointments);
-  const actions = getGroupedRailCardActions(statuses);
+  const { canStartAnamnese } = usePapel();
+  const actions = getGroupedRailCardActions(statuses, canStartAnamnese);
   const styles = STATUS_STYLES[actions.primary === 'confirmar' ? 'pendente' : 'confirmado'] || STATUS_STYLES.pendente;
   const grad = hashGradient(group.pacienteNome);
   const avatarStyle = { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
@@ -150,7 +152,7 @@ export function AgendaGroupedSummaryCard({
                   onClick={() => onPrimary?.(group)}
                   className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
                 >
-                  {panelActionLabel(statuses)}
+                  {panelActionLabel(statuses, canStartAnamnese)}
                 </button>
               ) : null}
             </>

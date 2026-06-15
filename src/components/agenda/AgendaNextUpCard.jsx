@@ -2,6 +2,7 @@ import { getRailCardActions } from '../../utils/agendaCardActions.js';
 import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 
 function formatHmDisplay(hm) {
   return String(hm || '').slice(0, 5);
@@ -21,8 +22,9 @@ export function AgendaNextUpCard({
 }) {
   if (!appointment) return null;
 
+  const { canStartAnamnese } = usePapel();
   const countdown = formatCountdown(appointment.horaInicio, now);
-  const actions = getRailCardActions(appointment.status);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese);
 
   return (
     <article className="relative mb-3 grid grid-cols-[1fr_auto] gap-3 rounded-2xl border-2 border-vivid-teal-500 bg-white p-4 shadow-agenda-glow">

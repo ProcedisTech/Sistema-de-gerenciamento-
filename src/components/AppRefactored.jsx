@@ -145,7 +145,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 function AppRefactoredInner() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -224,6 +224,9 @@ function AppRefactoredInner() {
         }
         if (typeof setPapel === 'function') {
           setPapel(resolverPapel(roleNome));
+        }
+        if (typeof setPermissoes === 'function') {
+          setPermissoes(meJson?.permissoes || []);
         }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
