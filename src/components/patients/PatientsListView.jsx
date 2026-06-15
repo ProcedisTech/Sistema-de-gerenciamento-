@@ -62,10 +62,15 @@ function applyQuickFilter(items, filter) {
   return applyPatientQuickFilter(items, filter);
 }
 
+const PATIENT_CARD_MAX_STATUS_BADGES = 3;
+
 function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
   const clinical = hasClinicalAlert(patient);
   const lastProc = lastProcedureLabel(patient);
   const lastProcDate = lastProcedureDateForCard(patient);
+  const cardStatuses = getPatientCardStatuses(patient);
+  const visibleStatuses = cardStatuses.slice(0, PATIENT_CARD_MAX_STATUS_BADGES);
+  const hiddenStatusCount = Math.max(0, cardStatuses.length - visibleStatuses.length);
 
   const mutedInfoParts = [
     patient.idade != null ? `${patient.idade} anos` : null,
@@ -92,8 +97,11 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
         initialsClassName="text-[12px] font-bold sm:text-[13px] lg:text-sm"
         spinnerClassName="h-4 w-4 lg:h-[18px] lg:w-[18px]"
       />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[14px] font-semibold leading-snug text-[#0f172a] sm:text-[15px] md:text-[16px]">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <p
+          className="min-w-0 w-full truncate text-[14px] font-semibold leading-snug text-[#0f172a] sm:text-[15px] md:text-[16px]"
+          title={patient.nome}
+        >
           {patient.nome}
         </p>
         {mutedInfoParts.length > 0 || hasLastVisitDate ? (
@@ -116,11 +124,19 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
         {/* Ícones de status (ordem por importância, definida em patientListStatusConfig) */}
-        {getPatientCardStatuses(patient).length > 0 ? (
+        {visibleStatuses.length > 0 ? (
           <div className="flex items-center gap-1 sm:gap-1.5">
-            {getPatientCardStatuses(patient).map((statusId) => (
+            {visibleStatuses.map((statusId) => (
               <PatientStatusIconBadge key={statusId} statusId={statusId} />
             ))}
+            {hiddenStatusCount > 0 ? (
+              <span
+                className="inline-flex h-7 min-w-[1.75rem] shrink-0 items-center justify-center rounded-full bg-[#f1f5f9] px-1.5 text-[11px] font-bold text-[#64748b] sm:h-8 sm:min-w-[2rem] sm:text-[12px]"
+                title={`Mais ${hiddenStatusCount} status`}
+              >
+                +{hiddenStatusCount}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {/* Alerta clínico: alergias / condições de saúde — sinal independente dos status acima */}
@@ -134,7 +150,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
           </span>
         ) : null}
         <span
-          className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] lg:text-[13px] md:inline-flex ${
+          className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] lg:inline-flex lg:text-[13px] ${
             selected
               ? 'border-[#6ee7c8] bg-emerald-50 text-[#047857]'
               : 'border-[#99f6e4] bg-[#f0fdfa] text-[#0f766e]'
@@ -574,15 +590,6 @@ export function PatientsListView({
         <h1 className="min-w-0 text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
           Pacientes
         </h1>
-        {canCreatePacientes && (
-          <button
-            type="button"
-            onClick={onCreatePatient}
-            className="flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] sm:w-auto sm:min-w-0 lg:hidden"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
-          </button>
-        )}
       </div>
 
       <KpiCards
@@ -596,11 +603,11 @@ export function PatientsListView({
 
       <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
         <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
-          <div className="flex min-w-0 flex-col overflow-x-hidden">
+          <div className="flex min-w-0 flex-col">
             {/* Header: search + chips + sort */}
             <div className="sticky top-0 z-10 bg-transparent">
-              {/* Mobile: busca full-width */}
-              <div className="px-4 pt-3 pb-2 lg:hidden">
+              {/* < xl: busca full-width (coluna estreita com PulseSidebar/preview) */}
+              <div className="px-4 pt-3 pb-2 xl:hidden">
                 <div className="relative min-h-[44px] min-w-0">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
@@ -618,9 +625,9 @@ export function PatientsListView({
                 </div>
               </div>
 
-              {/* Desktop: busca + ordenação + filtros */}
-              <div className="hidden w-full min-w-0 flex-row flex-nowrap items-center gap-3 px-4 pt-3 pb-2 lg:flex">
-                <div className="relative min-w-0 flex-1">
+              {/* xl+: busca + ordenação + filtros (wrap quando a coluna aperta) */}
+              <div className="hidden w-full min-w-0 flex-row flex-wrap items-center gap-3 px-4 pt-3 pb-2 xl:flex">
+                <div className="relative min-h-10 min-w-[12rem] w-full flex-1 basis-[min(100%,20rem)]">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -631,12 +638,13 @@ export function PatientsListView({
                     value={patientSearchQuery}
                     onChange={(e) => setPatientSearchQuery(e.target.value)}
                     placeholder="Buscar por nome, CPF ou telefone…"
-                    className="h-10 w-full min-w-0 rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[14px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50"
+                    className="h-10 w-full min-w-[12rem] rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[14px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50"
                     autoComplete="off"
                   />
                 </div>
 
-                <div className="relative flex h-10 shrink-0 items-center">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
+                  <div className="relative flex h-10 shrink-0 items-center">
                   <ArrowUpDown
                     className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -657,9 +665,9 @@ export function PatientsListView({
                       </option>
                     ))}
                   </select>
-                </div>
+                  </div>
 
-                <div className="relative shrink-0">
+                  <div className="relative shrink-0">
                   <button
                     ref={filterButtonRef}
                     type="button"
@@ -688,21 +696,22 @@ export function PatientsListView({
                     ctx={filterCtx}
                     onFilterChange={onFilterChange}
                   />
+                  </div>
+                  {canCreatePacientes ? (
+                    <button
+                      type="button"
+                      onClick={onCreatePatient}
+                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
+                    >
+                      <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
+                    </button>
+                  ) : null}
                 </div>
-                {canCreatePacientes ? (
-                  <button
-                    type="button"
-                    onClick={onCreatePatient}
-                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                  >
-                    <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
-                  </button>
-                ) : null}
               </div>
 
-              {/* Mobile: sort compacto + Filtros */}
-              <div className="flex gap-2 px-4 pb-2 lg:hidden">
-                <div className="relative flex h-9 min-w-0 flex-1 items-center">
+              {/* < xl: ordenação + filtros + novo paciente (sticky) */}
+              <div className="flex flex-wrap gap-2 px-4 pb-2 xl:hidden">
+                <div className="relative flex h-9 min-w-[8.5rem] flex-1 items-center">
                   <ArrowUpDown
                     className="pointer-events-none absolute left-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 text-[#94a3b8]"
                     strokeWidth={2.25}
@@ -742,6 +751,16 @@ export function PatientsListView({
                     </span>
                   ) : null}
                 </button>
+                {canCreatePacientes ? (
+                  <button
+                    type="button"
+                    onClick={onCreatePatient}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f] sm:px-4"
+                  >
+                    <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                    <span className="whitespace-nowrap">Novo Paciente</span>
+                  </button>
+                ) : null}
               </div>
 
               <PatientActiveFilterChips ctx={filterCtx} onFilterChange={onFilterChange} />
