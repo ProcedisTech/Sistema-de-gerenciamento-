@@ -91,14 +91,14 @@ export function KpiCards({ kpi, loading, activeCard, onActivateFilter }) {
             key={card.id}
             type="button"
             onClick={() => onActivateFilter && onActivateFilter(card.id)}
-            className={`flex flex-col gap-2 rounded-xl border bg-white p-4 text-left transition-all hover:border-[#cbd5e1] hover:shadow-sm ${
+            className={`flex flex-col gap-2 rounded-xl border bg-white lg:p-3 xl:p-4 text-left transition-all hover:border-[#cbd5e1] hover:shadow-sm ${
               isActive
                 ? `border-[#00a88e]/40 shadow-sm ${card.activeBorder}`
                 : 'border-[#e2e8f0]'
             }`}
           >
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <p className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
                 {card.label}
               </p>
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
