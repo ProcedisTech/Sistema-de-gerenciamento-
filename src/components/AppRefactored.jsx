@@ -787,6 +787,9 @@ function AppRefactoredInner() {
     setPhotoAnnotationScope(null);
     setPhotoAnnotationIndex(null);
     journeyState.setPaths([]);
+    journeyState.setIsHoveringCanvas(false);
+    journeyState.setCursorPos({ x: -100, y: -100 });
+    journeyState.setIsDrawing(false);
   }, [journeyState]);
 
   const openProcedurePhotoAnnotation = React.useCallback(
