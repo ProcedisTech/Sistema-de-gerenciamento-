@@ -1,0 +1,13 @@
+# Cache busting: index.html e HTML de entrada sem cache; bundles Vite em /assets com hash.
+# Ordem importa: regra mais específica (/assets/*) antes do catch-all (/*).
+# SPA fallback permanece em public/_redirects (copiado para dist/ no build).
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
