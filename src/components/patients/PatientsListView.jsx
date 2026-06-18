@@ -84,7 +84,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-0 px-4 py-3 text-left shadow-none transition-colors duration-100 sm:min-h-[72px] sm:gap-4 sm:px-5 sm:py-3.5 md:gap-5 md:min-h-[76px] lg:min-h-[80px] lg:px-6 lg:py-4 ${
+      className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-0 px-4 py-3 text-left shadow-none transition-colors duration-100 sm:min-h-[72px] sm:gap-4 sm:px-5 sm:py-3.5 md:gap-5 md:min-h-[76px] lg:min-h-[80px] lg:gap-3 lg:px-4 lg:py-3 ${
         selected
           ? 'bg-emerald-50/70 ring-2 ring-inset ring-[#00a88e]/35 hover:bg-emerald-50/70'
           : 'bg-white hover:bg-slate-50'
@@ -150,7 +150,7 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
           </span>
         ) : null}
         <span
-          className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] lg:inline-flex lg:text-[13px] ${
+          className={`hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px] xl:inline-flex xl:text-[13px] ${
             selected
               ? 'border-[#6ee7c8] bg-emerald-50 text-[#047857]'
               : 'border-[#99f6e4] bg-[#f0fdfa] text-[#0f766e]'
@@ -572,14 +572,8 @@ export function PatientsListView({
 
   useEffect(() => {
     if (!previewPatient) return undefined;
-    const mq = window.matchMedia('(max-width: 1023px)');
-    const syncBodyScroll = () => {
-      document.body.style.overflow = mq.matches ? 'hidden' : '';
-    };
-    syncBodyScroll();
-    mq.addEventListener('change', syncBodyScroll);
+    document.body.style.overflow = 'hidden';
     return () => {
-      mq.removeEventListener('change', syncBodyScroll);
       document.body.style.overflow = '';
     };
   }, [previewPatient]);
@@ -816,7 +810,7 @@ export function PatientsListView({
             />
           </div>
         </div>
-        {/* ─── Coluna direita: PulseSidebar (sem preview) ou painel de preview (desktop) ─── */}
+        {/* ─── Coluna direita: PulseSidebar (sem preview) ou drawer overlay (com preview) ─── */}
         {previewPatient ? (
           <>
             {/* Mobile (<640px): bottom sheet */}
@@ -854,19 +848,19 @@ export function PatientsListView({
               </div>
             </div>
 
-            {/* Tablet (640px–1023px): drawer direita */}
-            <div className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex lg:hidden" role="dialog" aria-modal="true" aria-label="Resumo do paciente">
+            {/* sm+: drawer direita (overlay em todas as larguras) */}
+            <div className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex" role="dialog" aria-modal="true" aria-label="Resumo do paciente">
               <button
                 type="button"
                 className="absolute inset-0 bg-black/30"
                 aria-label="Fechar resumo do paciente"
                 onClick={closeDetail}
               />
-              <aside className="relative ml-auto flex h-full w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
+              <aside className="relative ml-auto flex h-[100dvh] w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
                 <PatientPreviewPanel
                   key={previewPatient.cpf || String(previewPatient.id || '')}
                   selectedPatient={previewPatient}
-                  detailTitleId={undefined}
+                  detailTitleId={desktopTitleId}
                   closeDetail={closeDetail}
                   getPatientInitials={getPatientInitials}
                   setPatientDetailTab={setPatientDetailTab}
@@ -880,29 +874,6 @@ export function PatientsListView({
                 />
               </aside>
             </div>
-
-            {/* Desktop (lg+): painel lateral — irmão de flex-1 no flex-row */}
-            <aside
-              className="patient-preview-sheet relative z-10 mt-0 hidden w-full shrink-0 flex-col gap-0 lg:flex lg:min-w-[17rem] lg:max-w-full lg:w-[min(52rem,min(48vw,calc(100%-19rem)))] lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),920px)] lg:overflow-y-auto lg:overflow-x-hidden lg:p-0 custom-scrollbar"
-              aria-labelledby={desktopTitleId}
-              aria-label="Resumo do paciente"
-            >
-              <PatientPreviewPanel
-                key={previewPatient.cpf || String(previewPatient.id || '')}
-                selectedPatient={previewPatient}
-                detailTitleId={desktopTitleId}
-                closeDetail={closeDetail}
-                getPatientInitials={getPatientInitials}
-                setPatientDetailTab={setPatientDetailTab}
-                setPatientView={setPatientView}
-                previewProcedures={previewProcedures}
-                loadingPreviewProcedures={loadingPreviewProcedures}
-                onStartAttendance={onStartAttendance}
-                previewAnamneseLoading={previewAnamneseLoading}
-                captureProfileNavSnapshot={captureProfileNavSnapshot}
-                shellClassName="w-full min-w-0"
-              />
-            </aside>
           </>
         ) : (
           <PulseSidebar
