@@ -1846,7 +1846,7 @@ function AppRefactoredInner() {
                 type: blob.type || 'image/jpeg',
               });
             }
-            if (!fileToUpload) return;
+            if (!fileToUpload) return false;
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
             await pacientesGaleriaApi.upload(paciente.id, webp, {
               roleUserId: ridUpload,
@@ -1857,18 +1857,27 @@ function AppRefactoredInner() {
               ),
               dataReferencia: dataRefSessao,
             });
+            return true;
           } catch (e) {
             console.warn('Erro ao salvar foto do procedimento:', e);
+            return false;
           }
         });
-        await Promise.allSettled(uploads);
+        const results = await Promise.allSettled(uploads);
+        const attempted = results.length;
+        const succeeded = results.filter(
+          (r) => r.status === 'fulfilled' && r.value === true
+        ).length;
+        if (attempted > 0 && succeeded > 0) {
+          cameraState.resetProcedureCapturedPhotos();
+        }
       } else if (fotosProcedimento.length > 0 && paciente?.id && !ridOk) {
         console.warn(
           'Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.'
         );
       }
     },
-    [cameraState.procedureCapturedPhotos, journeyState.nomeProcedimento, roleUserId]
+    [cameraState, journeyState.nomeProcedimento, roleUserId]
   );
 
   const persistirEncerramentoConsulta = React.useCallback(

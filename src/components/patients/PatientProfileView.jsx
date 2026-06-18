@@ -1485,7 +1485,14 @@ export function PatientProfileView({
       const pid = proc?.id != null && proc?.id !== '' ? String(proc.id) : '';
       return (apiGaleriaItems || []).filter((it) => {
         if (pid && it.procedimentoFeitoId != null && String(it.procedimentoFeitoId) === pid) return true;
-        if (nome && it.nomeProcedimento && String(it.nomeProcedimento).trim() === nome) return true;
+        if (
+          nome &&
+          (it.procedimentoFeitoId == null || String(it.procedimentoFeitoId).trim() === '') &&
+          it.nomeProcedimento &&
+          String(it.nomeProcedimento).trim() === nome
+        ) {
+          return true;
+        }
         return false;
       });
     },
