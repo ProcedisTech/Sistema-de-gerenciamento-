@@ -145,7 +145,7 @@ export function useCanvasZoom(targetRef) {
   }, []);
 
   useEffect(() => {
-    const onWinPointerUp = () => {
+    const onWinPointerEnd = () => {
       if (isPanningRef.current) {
         isPanningRef.current = false;
         setIsPanning(false);
@@ -157,8 +157,12 @@ export function useCanvasZoom(targetRef) {
         setIsPinching(false);
       }
     };
-    window.addEventListener('pointerup', onWinPointerUp);
-    return () => window.removeEventListener('pointerup', onWinPointerUp);
+    window.addEventListener('pointerup', onWinPointerEnd);
+    window.addEventListener('pointercancel', onWinPointerEnd);
+    return () => {
+      window.removeEventListener('pointerup', onWinPointerEnd);
+      window.removeEventListener('pointercancel', onWinPointerEnd);
+    };
   }, []);
 
   const onWheel = useCallback(
@@ -305,6 +309,11 @@ export function useCanvasZoom(targetRef) {
         setIsPinching(false);
       } else {
         startPinchIfPossible();
+      }
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
       }
       return true;
     }

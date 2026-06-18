@@ -245,6 +245,16 @@ export function JourneyPhotoAnnotationEditor({
     return toCanvasCoordsFromEvent(event, c, offsetX, offsetY, scale);
   };
 
+  const releaseCanvasPointerCapture = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
   const startDrawing = (e) => {
     if (e.button != null && e.button !== 0) return;
     if (onPanPointerDown(e)) {
@@ -253,6 +263,13 @@ export function JourneyPhotoAnnotationEditor({
     }
     const p = getContentPoint(e);
     if (!p) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      canvasRef.current?.setPointerCapture?.(e.pointerId);
+    } catch {
+      // ignore
+    }
     setIsDrawing(true);
     if (activeTool === 'point') {
       setPaths((prev) => [
@@ -282,6 +299,8 @@ export function JourneyPhotoAnnotationEditor({
     setCursorPos(contentToLocalScreen(p.x, p.y, offsetX, offsetY, scale));
     if (!isDrawingRef.current) return;
     if (activeTool === 'point') return;
+    e.preventDefault();
+    e.stopPropagation();
     setPaths((prev) => {
       const newPaths = [...prev];
       if (newPaths.length > 0) {
@@ -293,7 +312,15 @@ export function JourneyPhotoAnnotationEditor({
   };
 
   const handlePointerUp = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    releaseCanvasPointerCapture(e);
     onPanPointerUp(e);
+    setIsDrawing(false);
+  };
+
+  const handleLostPointerCapture = (e) => {
+    releaseCanvasPointerCapture(e);
     setIsDrawing(false);
   };
 
@@ -479,7 +506,7 @@ export function JourneyPhotoAnnotationEditor({
               onPointerCancel={handlePointerUp}
               onPointerLeave={handlePointerLeave}
               onPointerEnter={handlePointerEnter}
-              onLostPointerCapture={handlePointerUp}
+              onLostPointerCapture={handleLostPointerCapture}
               className={`absolute inset-0 h-full w-full touch-none ${cursorClass}`}
               style={{ zIndex: 10 }}
             />

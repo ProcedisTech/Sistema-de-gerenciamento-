@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { XCircle } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock.js';
 import { useBottomSheetDragToClose } from '../../hooks/useBottomSheetDragToClose.js';
@@ -35,9 +36,9 @@ export function AgendaDaySheet({ open, onClose, children, titleId = 'agenda-day-
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  return (
+  return createPortal(
     <div
-      className={`fixed inset-0 z-50 lg:hidden ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
+      className={`fixed inset-0 z-[215] flex items-end lg:hidden ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
       aria-hidden={!open}
     >
       <button
@@ -56,7 +57,7 @@ export function AgendaDaySheet({ open, onClose, children, titleId = 'agenda-day-
         aria-modal="true"
         aria-labelledby={titleId}
         style={sheetStyle}
-        className={`fixed bottom-0 left-0 right-0 flex max-h-[88vh] flex-col rounded-t-3xl bg-white shadow-agenda-lg transition-transform duration-300 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${
+        className={`relative flex w-full max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-bottom)-4rem))] flex-col rounded-t-3xl bg-white shadow-agenda-lg transition-transform duration-300 ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${
           useInlineTransform ? '' : open ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
@@ -84,6 +85,7 @@ export function AgendaDaySheet({ open, onClose, children, titleId = 'agenda-day-
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
