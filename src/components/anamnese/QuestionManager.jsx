@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, HelpCircle, Loader2, ChevronDown, ChevronUp,
-  X, ListChecks, Pencil, Trash2, GripVertical, Check,
+  X, ListChecks, Pencil, Trash2, GripVertical, Check, AlertTriangle,
 } from 'lucide-react';
 import {
   DndContext,
@@ -22,9 +22,37 @@ import { anamneseApi, dimensoesApi, getApiErrorDetail } from '../../services/api
 const TIPOS_COM_ALTERNATIVAS = ['escolha_unica', 'multipla_escolha'];
 const DESCRICAO_MAX_CHARS = 300;
 
+// ── Duplicate detection helper ────────────────────────────────────────────────
+
+function hasDuplicateAlt(text, existingAlts) {
+  const norm = (text || '').trim().toLowerCase();
+  if (!norm) return { isDuplicate: false, duplicateId: null };
+  for (const alt of existingAlts) {
+    const altNorm = (alt.alternativa || '').trim().toLowerCase();
+    if (altNorm === norm) return { isDuplicate: true, duplicateId: alt.id ?? null };
+  }
+  return { isDuplicate: false, duplicateId: null };
+}
+
+function findDuplicateIndices(alts) {
+  const seen = new Map();
+  const dupes = new Set();
+  alts.forEach((a, i) => {
+    const norm = (a.alternativa || '').trim().toLowerCase();
+    if (!norm) return;
+    if (seen.has(norm)) {
+      dupes.add(seen.get(norm));
+      dupes.add(i);
+    } else {
+      seen.set(norm, i);
+    }
+  });
+  return dupes;
+}
+
 // ── Sortable alternative row (used in edit modal) ─────────────────────────────
 
-function SortableAlt({ alt, onRemove }) {
+function SortableAlt({ alt, onRemove, isDuplicate, isShaking }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: alt.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
@@ -32,7 +60,9 @@ function SortableAlt({ alt, onRemove }) {
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 bg-white border-[2px] border-[#a855f7]/15 rounded-lg px-3 py-2"
+      className={`flex items-center gap-2 bg-white border-[2px] rounded-lg px-3 py-2 transition-colors ${
+        isDuplicate ? 'border-red-400 bg-red-50' : 'border-[#a855f7]/15'
+      } ${isShaking ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
     >
       <button
         type="button"
@@ -46,6 +76,11 @@ function SortableAlt({ alt, onRemove }) {
         {alt.ordem}
       </span>
       <span className="flex-1 text-[13px] font-medium text-[#0f172a]">{alt.alternativa}</span>
+      {isDuplicate && (
+        <span title="Alternativa duplicada" className="flex-shrink-0 text-red-500">
+          <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
+        </span>
+      )}
       {onRemove && (
         <button
           type="button"
@@ -113,6 +148,8 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
   const [prioridade, setPrioridade] = useState(() => pergunta.prioridade ?? 'NORMAL');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [dupWarning, setDupWarning] = useState('');
+  const [shakingAltId, setShakingAltId] = useState(null);
 
   const tipoStrOriginal = pergunta.tipoResposta || pergunta.tipo_resposta || '';
 
@@ -142,6 +179,17 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
   const handleAdicionarAlt = () => {
     const texto = novaAlt.trim();
     if (!texto) return;
+    const { isDuplicate, duplicateId } = hasDuplicateAlt(texto, alternativas);
+    if (isDuplicate) {
+      setDupWarning('Essa alternativa já existe.');
+      if (duplicateId != null) {
+        setShakingAltId(duplicateId);
+        setTimeout(() => setShakingAltId(null), 450);
+      }
+      setTimeout(() => setDupWarning(''), 3000);
+      return;
+    }
+    setDupWarning('');
     setAlternativas((prev) => [
       ...prev,
       { id: `new-${Date.now()}`, alternativa: texto, ordem: prev.length + 1 },
@@ -289,35 +337,52 @@ export function EditModal({ pergunta, categorias, tiposResposta, tipoLabel, onCl
             />
           </div>
 
-          {mostrarAlternativas && (
-            <div className="space-y-3 p-4 bg-[#f8fbfb] border border-fuchsia-200 rounded-xl">
-              <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas (arraste para reordenar)</label>
+          {mostrarAlternativas && (() => {
+            const editDupeIndices = findDuplicateIndices(alternativas);
+            return (
+              <div className="space-y-3 p-4 bg-[#f8fbfb] border border-fuchsia-200 rounded-xl">
+                <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas (arraste para reordenar)</label>
 
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={alternativas.map((a) => a.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-1.5">
-                    {alternativas.map((alt) => (
-                      <SortableAlt key={alt.id} alt={alt} onRemove={handleRemoverAlt} />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={alternativas.map((a) => a.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-1.5">
+                      {alternativas.map((alt, idx) => (
+                        <SortableAlt
+                          key={alt.id}
+                          alt={alt}
+                          onRemove={handleRemoverAlt}
+                          isDuplicate={editDupeIndices.has(idx)}
+                          isShaking={shakingAltId === alt.id}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={novaAlt}
-                  onChange={(e) => setNovaAlt(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdicionarAlt(); } }}
-                  placeholder="Nova alternativa..."
-                  className="flex-1 px-3 py-2 bg-white border-[2px] border-[#a855f7]/20 rounded-lg text-[13px] font-medium focus:outline-none focus:border-[#a855f7]"
-                />
-                <button type="button" onClick={handleAdicionarAlt} className="px-3 py-2 rounded-lg bg-[#a855f7] text-white text-[12px] font-bold">
-                  <Plus className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={novaAlt}
+                    onChange={(e) => { setNovaAlt(e.target.value); setDupWarning(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdicionarAlt(); } }}
+                    placeholder="Nova alternativa..."
+                    className={`flex-1 px-3 py-2 bg-white border-[2px] rounded-lg text-[13px] font-medium focus:outline-none ${
+                      dupWarning ? 'border-red-400 focus:border-red-500' : 'border-[#a855f7]/20 focus:border-[#a855f7]'
+                    }`}
+                  />
+                  <button type="button" onClick={handleAdicionarAlt} className="px-3 py-2 rounded-lg bg-[#a855f7] text-white text-[12px] font-bold">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                {dupWarning && (
+                  <p className="text-[12px] font-bold text-red-600 flex items-center gap-1.5 ml-1">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {dupWarning}
+                  </p>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="flex items-center gap-3 pt-2">
             <button
@@ -389,6 +454,8 @@ export function QuestionManager({
   const [erro, setErro] = useState('');
   const [showRequiredFieldHighlights, setShowRequiredFieldHighlights] = useState(false);
   const [validationBannerDismissed, setValidationBannerDismissed] = useState(false);
+  const [createDupWarning, setCreateDupWarning] = useState('');
+  const [createShakingIdx, setCreateShakingIdx] = useState(null);
 
   // edit
   const [editingPergunta, setEditingPergunta] = useState(null);
@@ -466,6 +533,16 @@ export function QuestionManager({
   const handleAdicionarAlternativa = () => {
     const texto = novaAlternativa.trim();
     if (!texto) return;
+    const normTexto = texto.toLowerCase();
+    const existingIdx = alternativas.findIndex((a) => (a.alternativa || '').trim().toLowerCase() === normTexto);
+    if (existingIdx !== -1) {
+      setCreateDupWarning('Essa alternativa já existe.');
+      setCreateShakingIdx(existingIdx);
+      setTimeout(() => setCreateShakingIdx(null), 450);
+      setTimeout(() => setCreateDupWarning(''), 3000);
+      return;
+    }
+    setCreateDupWarning('');
     setAlternativas((prev) => [...prev, { alternativa: texto, ordem: prev.length + 1 }]);
     setNovaAlternativa('');
   };
@@ -500,6 +577,13 @@ export function QuestionManager({
     if (precisaAlternativas && alternativas.length < 2) {
       setErro('Adicione pelo menos 2 alternativas para perguntas de escolha.');
       return;
+    }
+    if (precisaAlternativas && alternativas.length > 0) {
+      const textosNorm = alternativas.map((a) => (a.alternativa || '').trim().toLowerCase());
+      if (new Set(textosNorm).size !== textosNorm.length) {
+        setErro('Remova alternativas duplicadas antes de salvar.');
+        return;
+      }
     }
     setErro('');
     setCriando(true);
@@ -843,29 +927,50 @@ export function QuestionManager({
             <div className="space-y-3 p-4 bg-white border border-fuchsia-200 rounded-xl">
               <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas *</label>
 
-              {alternativas.map((alt, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[#a855f7]/10 text-[#a855f7] text-[11px] font-bold flex items-center justify-center flex-shrink-0">{alt.ordem}</span>
-                  <span className="flex-1 text-[14px] font-medium text-[#0f172a]">{alt.alternativa}</span>
-                  <button type="button" onClick={() => handleRemoverAlternativa(idx)} className="w-7 h-7 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 flex items-center justify-center">
-                    <X className="w-4 h-4" strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))}
+              {(() => {
+                const createDupeIndices = findDuplicateIndices(alternativas);
+                return alternativas.map((alt, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-1 transition-colors ${
+                      createDupeIndices.has(idx) ? 'bg-red-50 ring-1 ring-red-300' : ''
+                    } ${createShakingIdx === idx ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
+                  >
+                    <span className="w-6 h-6 rounded-full bg-[#a855f7]/10 text-[#a855f7] text-[11px] font-bold flex items-center justify-center flex-shrink-0">{alt.ordem}</span>
+                    <span className="flex-1 text-[14px] font-medium text-[#0f172a]">{alt.alternativa}</span>
+                    {createDupeIndices.has(idx) && (
+                      <span title="Alternativa duplicada" className="flex-shrink-0 text-red-500">
+                        <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      </span>
+                    )}
+                    <button type="button" onClick={() => handleRemoverAlternativa(idx)} className="w-7 h-7 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 flex items-center justify-center">
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ));
+              })()}
 
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={novaAlternativa}
-                  onChange={(e) => setNovaAlternativa(e.target.value)}
+                  onChange={(e) => { setNovaAlternativa(e.target.value); setCreateDupWarning(''); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdicionarAlternativa(); } }}
                   placeholder="Digitar alternativa e pressionar Enter..."
-                  className="flex-1 px-3 py-2 bg-[#f8fbfb] border-[2px] border-[#a855f7]/20 rounded-lg text-[13px] font-medium focus:outline-none focus:border-[#a855f7]"
+                  className={`flex-1 px-3 py-2 bg-[#f8fbfb] border-[2px] rounded-lg text-[13px] font-medium focus:outline-none ${
+                    createDupWarning ? 'border-red-400 focus:border-red-500' : 'border-[#a855f7]/20 focus:border-[#a855f7]'
+                  }`}
                 />
                 <button type="button" onClick={handleAdicionarAlternativa} className="px-3 py-2 rounded-lg bg-[#a855f7] text-white text-[12px] font-bold">
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
+              {createDupWarning && (
+                <p className="text-[12px] font-bold text-red-600 flex items-center gap-1.5 ml-1">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  {createDupWarning}
+                </p>
+              )}
             </div>
           )}
 

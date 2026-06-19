@@ -1,4 +1,5 @@
 export const CONFIG_SECTION_KEY = 'procedi_config_section';
+const CONFIG_COLLAPSED_KEY = 'procedi_config_collapsed_groups';
 
 const LEGACY_TAB_KEY = 'procedi_config_tab';
 
@@ -36,6 +37,24 @@ export function readStoredSection() {
 export function persistSection(s) {
   try {
     sessionStorage.setItem(CONFIG_SECTION_KEY, s);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readCollapsedGroups() {
+  try {
+    const v = sessionStorage.getItem(CONFIG_COLLAPSED_KEY);
+    if (v) return new Set(JSON.parse(v));
+  } catch {
+    /* ignore */
+  }
+  return new Set();
+}
+
+export function persistCollapsedGroups(set) {
+  try {
+    sessionStorage.setItem(CONFIG_COLLAPSED_KEY, JSON.stringify([...set]));
   } catch {
     /* ignore */
   }
