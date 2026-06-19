@@ -42,11 +42,11 @@ export function AgendaGroupedAppointmentCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
+  const { canStartAnamnese } = usePapel();
   if (!primary) return null;
 
   const badge = getGroupedStatusBadgePresentation(appointments);
   const stripe = getGroupedRailStripeClass(appointments);
-  const { canStartAnamnese } = usePapel();
   const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese);
   const idsLabel = appointments
     .map((a) => formatAgendaShortId(a.agendaId || a.id))

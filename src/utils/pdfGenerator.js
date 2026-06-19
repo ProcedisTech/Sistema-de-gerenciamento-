@@ -246,7 +246,7 @@ export const generateTermoPdf = async ({
   const gap = 15;
   
   if (assinaturaPaciente && assinaturaPaciente.startsWith('data:image')) {
-    try { doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight); } catch (e) {}
+    try { doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight); } catch { /* ignore */ }
   } else if (metadados?.recusado || assinaturaPaciente === 'RECUSADO') {
     doc.setTextColor(220, 38, 38);
     doc.setFont('helvetica', 'bold');
@@ -258,7 +258,7 @@ export const generateTermoPdf = async ({
   }
 
   if (assinaturaProfissional && assinaturaProfissional.startsWith('data:image')) {
-    try { doc.addImage(assinaturaProfissional, 'PNG', margin + sigWidth + gap, y, sigWidth, sigHeight); } catch (e) {}
+    try { doc.addImage(assinaturaProfissional, 'PNG', margin + sigWidth + gap, y, sigWidth, sigHeight); } catch { /* ignore */ }
   } else {
     doc.line(margin + sigWidth + gap, y + sigHeight, margin + sigWidth * 2 + gap, y + sigHeight);
   }

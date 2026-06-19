@@ -74,11 +74,11 @@ export function AgendaGroupedSummaryCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
+  const { canStartAnamnese } = usePapel();
   if (!primary) return null;
 
   const statuses = appointments.map((a) => a.status);
   const badge = getGroupedStatusBadgePresentation(appointments);
-  const { canStartAnamnese } = usePapel();
   const actions = getGroupedRailCardActions(statuses, canStartAnamnese);
   const styles = STATUS_STYLES[actions.primary === 'confirmar' ? 'pendente' : 'confirmado'] || STATUS_STYLES.pendente;
   const grad = hashGradient(group.pacienteNome);

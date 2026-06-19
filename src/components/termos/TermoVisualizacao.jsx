@@ -12,7 +12,7 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
   const nomeClinica = clinica.nome || '[Nome da Clínica]';
   const enderecoClinica = clinica.endereco || '[Endereço da Clínica]';
   const contatoClinica = clinica.telefone || '[Telefone da Clínica]';
-  const cnpjClinica = clinica.cnpj || '[CNPJ da Clínica]';
+
 
   const nomeProfissional = prof.nome || '[Nome do Profissional]';
   const cpfCrmProfissional = prof.cpf || prof.crm || '[CPF/CRM do Profissional]';

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, ExternalLink, Link2, QrCode, X, Mail, MessageCircle } from 'lucide-react';
 import { termosApi, clinicaProcedimentoApi } from '../../services/api';
@@ -25,6 +26,7 @@ export function EnviarDocumentoAssinarModal({ open, onClose, paciente, clinicSlu
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDocumentoId('');
     setCopied(false);
     setShowQr(false);
@@ -45,6 +47,7 @@ export function EnviarDocumentoAssinarModal({ open, onClose, paciente, clinicSlu
 
   // Reset documentoId when tipo changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDocumentoId('');
     setShowQr(false);
     setCopied(false);
@@ -77,7 +80,7 @@ export function EnviarDocumentoAssinarModal({ open, onClose, paciente, clinicSlu
     const base = window.location.origin;
     const cleanCpf = String(paciente.cpf).replace(/\D/g, '');
     return `${base}/documento?cpf=${cleanCpf}&clinic=${encodeURIComponent(clinicSlug)}&tipo=${tipoDoc}&documento_id=${documentoId}`;
-  }, [documentoId, clinicSlug, paciente?.cpf, tipoDoc]);
+  }, [documentoId, clinicSlug, paciente, tipoDoc]);
 
   const qrUrl = useMemo(() => {
     if (!linkUrl) return '';

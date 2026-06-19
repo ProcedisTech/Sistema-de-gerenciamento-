@@ -31,9 +31,9 @@ export function AgendaGroupedNextUpCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
+  const { canStartAnamnese } = usePapel();
   if (!primary) return null;
 
-  const { canStartAnamnese } = usePapel();
   const countdown = formatCountdown(group.horaInicio || primary.horaInicio, now);
   const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese);
 

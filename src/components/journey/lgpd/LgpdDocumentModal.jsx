@@ -13,7 +13,7 @@ import { Shield, X, AlertTriangle } from 'lucide-react';
 import { TermoVisualizacao } from '../../termos/TermoVisualizacao';
 
 /* ─── Paleta de cores (mesma do Resumo de Atendimento) ──────────────────── */
-export const TERMO_COLORS = {
+const TERMO_COLORS = {
   teal:   '#00a88e',
   dark:   '#0f172a',
   gray:   '#64748b',
@@ -23,7 +23,7 @@ export const TERMO_COLORS = {
 };
 
 /* ─── Parser do texto do termo em seções renderizáveis ──────────────────── */
-export function parseTermoSections(text) {
+function parseTermoSections(text) {
   const rawLines = (text || '').split('\n');
   const sections = [];
   let current = null;
