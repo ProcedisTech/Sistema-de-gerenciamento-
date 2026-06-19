@@ -28,12 +28,18 @@ jobs:
 
     - name: Run Vitest Unit/Component Tests
       run: npm run test:run
+      env:
+        VITE_SUPABASE_URL: "https://mock.supabase.co"
+        VITE_SUPABASE_PUBLISHABLE_KEY: "mock_key"
 
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps chromium
 
     - name: Run Playwright E2E Tests
       run: npx playwright test
+      env:
+        VITE_SUPABASE_URL: "https://mock.supabase.co"
+        VITE_SUPABASE_PUBLISHABLE_KEY: "mock_key"
 
     - name: Upload Playwright Report
       if: always()
