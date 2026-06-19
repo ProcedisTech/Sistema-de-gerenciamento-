@@ -20,9 +20,9 @@ export function AgendaNextUpCard({
   onReagendar,
   onCancelar,
 }) {
+  const { canStartAnamnese } = usePapel();
   if (!appointment) return null;
 
-  const { canStartAnamnese } = usePapel();
   const countdown = formatCountdown(appointment.horaInicio, now);
   const actions = getRailCardActions(appointment.status, canStartAnamnese);
 

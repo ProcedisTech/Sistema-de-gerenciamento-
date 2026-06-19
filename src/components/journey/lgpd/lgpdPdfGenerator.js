@@ -186,7 +186,12 @@ export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pd
   y = 30;
 
   /* ── Parse do texto por seções ───────────────────────────────────────── */
-  const rawLines = text.split('\n');
+  // Strip HTML caso o texto venha do editor rico
+  let tempDiv = document.createElement("div");
+  tempDiv.innerHTML = text || '';
+  const cleanText = tempDiv.innerText || tempDiv.textContent || '';
+  
+  const rawLines = cleanText.split('\n');
   let buf       = [];
   let firstLine = true;
   let inSection = false;

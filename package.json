@@ -21,6 +21,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.104.0",
+    "@tailwindcss/typography": "^0.5.20",
     "dompurify": "^3.4.10",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
@@ -30,10 +31,12 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-quill-new": "^3.8.3",
     "react-signature-canvas": "^1.1.0-alpha.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.61.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

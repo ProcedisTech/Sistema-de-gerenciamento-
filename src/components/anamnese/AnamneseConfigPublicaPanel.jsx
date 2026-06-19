@@ -111,7 +111,7 @@ export function AnamneseConfigPublicaPanel() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    } catch (e) {
+    } catch {
       toast.error('Erro ao baixar o QR Code.');
     }
   };

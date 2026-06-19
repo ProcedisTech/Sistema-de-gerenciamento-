@@ -15,6 +15,15 @@ import { termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
 import { TermoVisualizacao } from './TermoVisualizacao';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+
+function stripHtml(html) {
+  if (!html) return '';
+  const tmp = document.createElement("DIV");
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || "";
+}
 
 function normalizeList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -46,6 +55,17 @@ export function TermosManager() {
   const [viewingRow, setViewingRow] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState(null);
+
+  const modules = useMemo(() => ({
+    toolbar: [
+      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'align': [] }],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      ['blockquote', 'link'],
+      ['clean']
+    ]
+  }), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,7 +108,8 @@ export function TermosManager() {
   const openNewWithLgpdTemplate = () => {
     setEditingId(null);
     setTitulo('Termo de Consentimento LGPD');
-    setConteudo(LGPD_TEMPLATE_BRUTO);
+    const html = LGPD_TEMPLATE_BRUTO.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '').join('');
+    setConteudo(html);
     setAutoAssinarProfissional(true);
     setFormErrors({});
     setFormOpen(true);
@@ -319,7 +340,7 @@ export function TermosManager() {
               </div>
 
               <p className="text-[15px] font-semibold text-[#0f172a]">{row.titulo ?? row.title ?? '—'}</p>
-              <p className="mt-1 line-clamp-2 text-[13px] text-[#64748b]">{row.conteudo ?? row.content ?? ''}</p>
+              <p className="mt-1 line-clamp-2 text-[13px] text-[#64748b]">{stripHtml(row.conteudo ?? row.content)}</p>
 
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-4">
                 <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
@@ -365,7 +386,7 @@ export function TermosManager() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="termo-form-title"
-            className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-2xl bg-white"
+            className="flex h-[98dvh] w-[98vw] max-w-[1600px] flex-col rounded-2xl bg-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
@@ -416,7 +437,8 @@ export function TermosManager() {
                       type="button"
                       onClick={() => {
                         setTitulo((t) => t || 'Termo de Consentimento LGPD');
-                        setConteudo(LGPD_TEMPLATE_BRUTO);
+                        const html = LGPD_TEMPLATE_BRUTO.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '').join('');
+                        setConteudo(html);
                       }}
                       className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#00a88e]/50 bg-[#f0fdfa] px-4 py-2.5 text-left text-[13px] font-medium text-[#0f766e] transition-colors hover:bg-[#dcfce7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]"
                     >
@@ -425,7 +447,7 @@ export function TermosManager() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setConteudo((prev) => `Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo...\n\n` + prev)}
+                      onClick={() => setConteudo((prev) => `<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo...</p>` + prev)}
                       className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#3b82f6]/50 bg-[#eff6ff] px-4 py-2.5 text-left text-[13px] font-medium text-[#1d4ed8] transition-colors hover:bg-[#dbeafe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]"
                     >
                       <Plus className="h-4 w-4 shrink-0 text-[#3b82f6]" strokeWidth={2} aria-hidden />
@@ -433,14 +455,16 @@ export function TermosManager() {
                     </button>
                   </div>
                 )}
-                <textarea
-                  value={conteudo}
-                  onChange={(e) => setConteudo(e.target.value)}
-                  rows={12}
-                  className={`mt-2 w-full resize-none rounded-xl border px-4 py-3 text-[14px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10 ${
-                    formErrors.conteudo ? 'border-[#dc2626]' : 'border-[#e2e8f0]'
-                  }`}
-                />
+                <div id="termo-editor-wrapper" className={`mt-2 rounded-xl border relative ${formErrors.conteudo ? 'border-[#dc2626]' : 'border-[#e2e8f0] hover:border-[#00a88e]/30 transition-colors focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-[#00a88e]/10'}`}>
+                  <ReactQuill
+                    theme="snow"
+                    value={conteudo}
+                    onChange={setConteudo}
+                    modules={modules}
+                    bounds="#termo-editor-wrapper"
+                    className="bg-white rounded-xl [&_.ql-container]:min-h-[50dvh] [&_.ql-container]:border-0 [&_.ql-container]:rounded-b-xl [&_.ql-container]:text-[14px] [&_.ql-editor]:p-4 [&_.ql-editor]:min-h-[50dvh] [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-b-[#e2e8f0] [&_.ql-toolbar]:bg-slate-50 [&_.ql-toolbar]:rounded-t-xl"
+                  />
+                </div>
                 {formErrors.conteudo ? (
                   <p className="mt-1 text-[12px] text-[#dc2626]">Conteúdo obrigatório</p>
                 ) : null}
@@ -461,8 +485,8 @@ export function TermosManager() {
                       <button
                         type="button"
                         onClick={() => {
-                          const intro = "Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste documento que compreendo e concordo com as informações aqui descritas:";
-                          setConteudo((prev) => (intro + "\n\n" + prev).trim());
+                          const intro = "<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste documento que compreendo e concordo com as informações aqui descritas:</p>";
+                          setConteudo((prev) => intro + prev);
                         }}
                         className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] hover:bg-[#ccfbf1] transition-colors"
                       >
@@ -471,8 +495,8 @@ export function TermosManager() {
                       <button
                         type="button"
                         onClick={() => {
-                          const intro = "Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):";
-                          setConteudo((prev) => (intro + "\n\n" + prev).trim());
+                          const intro = "<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):</p>";
+                          setConteudo((prev) => intro + prev);
                         }}
                         className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] hover:bg-[#ccfbf1] transition-colors"
                       >
@@ -533,7 +557,7 @@ export function TermosManager() {
           <div
             role="dialog"
             aria-modal="true"
-            className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-2xl bg-white"
+            className="flex h-[98dvh] w-[98vw] max-w-[1600px] flex-col rounded-2xl bg-white"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2e8f0] px-6 py-4">
