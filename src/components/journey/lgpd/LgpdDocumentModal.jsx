@@ -208,6 +208,7 @@ export function LgpdDocumentModal({ open, onClose, consentText, missingFields = 
         aria-labelledby="lgpd-modal-title"
         className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-slate-100 shadow-2xl sm:rounded-2xl relative"
       >
+        <h2 id="lgpd-modal-title" className="sr-only">Termo de Consentimento LGPD</h2>
         <button
           ref={closeButtonRef}
           type="button"
@@ -243,12 +244,12 @@ export function LgpdDocumentModal({ open, onClose, consentText, missingFields = 
         </div>
 
         {/* ── Footer ── */}
-        <footer className="shrink-0 border-t px-5 py-4" style={{ borderColor: C.lgray }}>
+        <footer className="shrink-0 border-t px-5 py-4" style={{ borderColor: TERMO_COLORS.lgray }}>
           <button
             type="button"
             onClick={onClose}
             className="h-11 w-full rounded-xl text-[14px] font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-            style={{ backgroundColor: C.teal }}
+            style={{ backgroundColor: TERMO_COLORS.teal }}
           >
             Entendi — Fechar
           </button>

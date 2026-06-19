@@ -36,6 +36,12 @@
       "source": "sickn33/antigravity-awesome-skills",
       "sourceType": "github",
       "skillPath": "skills/frontend-developer/SKILL.md"
+    },
+    "test-orchestrator": {
+      "computedHash": "local",
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/test-orchestrator/SKILL.md"
     }
   }
 }

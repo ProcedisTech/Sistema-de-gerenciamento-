@@ -3,17 +3,15 @@ import { jsPDF } from 'jspdf';
 export const generateTermoPdf = async ({
   titulo,
   conteudo,
-  assinaturaPaciente, // dataUrl
-  assinaturaProfissional, // dataUrl
-  metadados, // { pacienteNome, profissionalNome, ipAddress, dataHora }
+  assinaturaPaciente,
+  assinaturaProfissional,
+  metadados,
   fileName = 'termo_de_consentimento.pdf',
   pacienteCtx,
   clinicaCtx,
   profissionalCtx
 }) => {
-  // Inicializa o jsPDF (retrato, mm, A4)
   const doc = new jsPDF('p', 'mm', 'a4');
-  
   const margin = 20;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -22,12 +20,11 @@ export const generateTermoPdf = async ({
   
   let y = margin;
 
-  // Cabeçalho (Header) Teal
+  // Cabeçalho Teal
   const headerHeight = 26;
   doc.setFillColor(TEAL[0], TEAL[1], TEAL[2]);
   doc.rect(0, 0, pageWidth, headerHeight, 'F');
 
-  // Qualificação (Extração de Dados)
   const clinica = clinicaCtx || {};
   const prof = profissionalCtx || {};
   const pac = pacienteCtx || {};
@@ -43,12 +40,11 @@ export const generateTermoPdf = async ({
   const cpfPaciente = pac.cpf || '[CPF do Paciente]';
   const contatoPaciente = pac.telefone || pac.phone || pac.telefoneNumero || '[Telefone do Paciente]';
 
-  // Logo (Escudo simulado)
+  // Logo Quadrado Branco
   doc.setDrawColor(255, 255, 255);
   doc.setLineWidth(0.5);
   doc.roundedRect(margin, 8, 10, 10, 1.5, 1.5, 'D');
 
-  // Textos de Qualificação (Brancos dentro do Teal)
   const startX = margin + 14;
   let yQualif = 10;
   doc.setTextColor(255, 255, 255);
@@ -71,25 +67,22 @@ export const generateTermoPdf = async ({
   doc.setFont('helvetica', 'normal');
   doc.text(`${nomePaciente} — CPF: ${cpfPaciente} — Contato: ${contatoPaciente}`, startX + 16, yQualif);
 
-  // Faixa do Título (Light Cyan)
+  // Faixa Cyan
   const bannerHeight = 12;
-  doc.setFillColor(240, 253, 250); // #f0fdfa
+  doc.setFillColor(240, 253, 250); 
   doc.rect(0, headerHeight, pageWidth, bannerHeight, 'F');
-
-  // Borda inferior da faixa
-  doc.setDrawColor(226, 232, 240); // #e2e8f0
+  doc.setDrawColor(226, 232, 240); 
   doc.setLineWidth(0.3);
   doc.line(0, headerHeight + bannerHeight, pageWidth, headerHeight + bannerHeight);
 
-  // Texto do Título Centralizado
-  doc.setTextColor(15, 23, 42); // #0f172a
+  doc.setTextColor(15, 23, 42); 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   const titleText = (titulo || 'Termo de Consentimento LGPD').toUpperCase();
   const titleWidth = doc.getTextWidth(titleText);
   doc.text(titleText, (pageWidth - titleWidth) / 2, headerHeight + 7.5);
 
-  y = headerHeight + bannerHeight + 10; // Espaço inicial do conteúdo
+  y = headerHeight + bannerHeight + 10; 
 
   const checkPage = (needed = 10) => {
     if (y + needed > pageHeight - margin) {
@@ -101,97 +94,191 @@ export const generateTermoPdf = async ({
       doc.setTextColor(255, 255, 255);
       doc.text(`Procedi - ${(titulo || 'Termo de Consentimento').substring(0, 50)} (continuação)`, margin, 7);
       y = margin;
-      // Restore the text settings for the main content
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(11);
     }
   };
 
-  // Substituir placeholders
-  let conteudoTexto = String(conteudo || '').trim();
-  conteudoTexto = conteudoTexto
+  // Processar HTML rico e placeholders
+  let html = String(conteudo || '').trim();
+  html = html
     .replace(/\[NOME DO PACIENTE\]/gi, nomePaciente)
     .replace(/\[CPF DO PACIENTE\]/gi, cpfPaciente)
     .replace(/\[NOME DA CLÍNICA\]/gi, nomeClinica)
     .replace(/\[CNPJ DA CLÍNICA\]/gi, clinica.cnpj || '[CNPJ DA CLÍNICA]')
     .replace(/\[NOME DO PROFISSIONAL\]/gi, nomeProfissional);
 
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-
-  const textLines = doc.splitTextToSize(conteudoTexto, maxWidth);
+  // Parse Inteligente de HTML para Array de Parágrafos (Preservando Alinhamento, Indentação e Headings)
+  const tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html;
   
-  // Imprimir linhas cuidando de page break
-  textLines.forEach(line => {
-    checkPage(6);
-    doc.text(line, margin, y);
-    y += 6;
+  let paragraphs = [];
+  let currentLine = { text: '', align: 'left', indent: 0, isHeading: false, forceEmpty: false };
+  
+  const flushLine = () => {
+    const trimmed = currentLine.text.trim();
+    if (trimmed || currentLine.forceEmpty) {
+      paragraphs.push({ ...currentLine });
+    }
+    currentLine = { text: '', align: 'left', indent: 0, isHeading: false, forceEmpty: false };
+  };
+
+  const traverse = (node, indentLevel = 0, align = 'left', listContext = { type: null, index: 0 }) => {
+    if (node.nodeType === 3) {
+      const text = node.nodeValue;
+      if (text.trim()) {
+         currentLine.text += text.replace(/\n/g, ' ');
+      } else if (text.includes(' ') && currentLine.text.length > 0 && !currentLine.text.endsWith(' ')) {
+         currentLine.text += ' ';
+      }
+      return;
+    }
+    
+    if (node.nodeType === 1) {
+      const tag = node.tagName.toLowerCase();
+      let extraIndent = 0;
+      let currentAlign = align;
+      
+      if (node.className && typeof node.className === 'string') {
+        const match = node.className.match(/ql-indent-(\d+)/);
+        if (match) extraIndent = parseInt(match[1], 10);
+        
+        if (node.className.includes('ql-align-center')) currentAlign = 'center';
+        else if (node.className.includes('ql-align-right')) currentAlign = 'right';
+        else if (node.className.includes('ql-align-justify')) currentAlign = 'justify';
+      }
+      
+      const totalIndent = indentLevel + extraIndent;
+      const isBlock = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'].includes(tag);
+      
+      if (isBlock && currentLine.text.length > 0) flushLine();
+      
+      currentLine.align = currentAlign;
+      currentLine.indent = totalIndent;
+      if (['h1', 'h2', 'h3'].includes(tag)) currentLine.isHeading = true;
+      
+      if (tag === 'br') {
+        currentLine.forceEmpty = true;
+        flushLine();
+        currentLine.align = currentAlign;
+        currentLine.indent = totalIndent;
+      } else if (tag === 'ul') {
+        listContext = { type: 'ul', index: 0 };
+        if (currentLine.text.length > 0) flushLine();
+      } else if (tag === 'ol') {
+        listContext = { type: 'ol', index: 1 };
+        if (currentLine.text.length > 0) flushLine();
+      } else if (tag === 'li') {
+        const prefix = listContext.type === 'ol' ? `${listContext.index++}. ` : '• ';
+        currentLine.text += prefix;
+        currentLine.indent = totalIndent + 1; // Recuo extra visual para itens de lista
+      }
+      
+      node.childNodes.forEach(child => {
+        traverse(child, totalIndent, currentAlign, listContext);
+      });
+      
+      if (isBlock || tag === 'ul' || tag === 'ol') {
+        flushLine();
+      }
+    }
+  };
+
+  traverse(tempDiv);
+  
+  // Limpar quebras de linha múltiplas consecutivas
+  const finalParagraphs = [];
+  let emptyCount = 0;
+  for (const p of paragraphs) {
+    if (!p.text.trim()) {
+      emptyCount++;
+      if (emptyCount > 1) continue; 
+    } else {
+      emptyCount = 0;
+    }
+    finalParagraphs.push(p);
+  }
+
+  // Renderizar o texto extraído no PDF aplicando propriedades dinâmicas
+  doc.setTextColor(0, 0, 0);
+
+  finalParagraphs.forEach(p => {
+    // Calculamos o x real e a largura máxima permitida para essa linha
+    const indentOffset = p.indent * 8; // 8mm por nível de indentação
+    let availableWidth = maxWidth - indentOffset;
+    if (availableWidth < 50) availableWidth = 50; // limite de segurança
+    
+    // Configurar fonte caso seja um cabeçalho
+    doc.setFont('helvetica', p.isHeading ? 'bold' : 'normal');
+    doc.setFontSize(p.isHeading ? 13 : 11);
+    
+    // Quebrar o texto considerando o espaço livre
+    const wrappedLines = doc.splitTextToSize(p.text, availableWidth);
+    
+    wrappedLines.forEach(wLine => {
+      checkPage(7);
+      
+      let xPos = margin + indentOffset;
+      let alignOption = 'left';
+      
+      if (p.align === 'center') {
+        xPos = pageWidth / 2;
+        alignOption = 'center';
+      } else if (p.align === 'right') {
+        xPos = pageWidth - margin;
+        alignOption = 'right';
+      }
+      
+      // Renderizar linha vazia ou texto
+      if (wLine.trim() || p.forceEmpty) {
+        if (wLine.trim()) doc.text(wLine, xPos, y, { align: alignOption });
+        y += p.isHeading ? 8 : 6;
+      }
+    });
   });
 
   y += 10;
-
-  // Assinaturas
   checkPage(50);
 
+  // Assinaturas
   const sigWidth = 80;
   const sigHeight = 35;
   const gap = 15;
   
-  // Assinatura do Paciente
   if (assinaturaPaciente && assinaturaPaciente.startsWith('data:image')) {
-    try {
-      doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight);
-    } catch (e) {
-      console.error('Erro ao adicionar img assinatura paciente', e);
-    }
+    try { doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight); } catch (e) {}
   } else if (metadados?.recusado || assinaturaPaciente === 'RECUSADO') {
-    doc.setTextColor(220, 38, 38); // red-600
+    doc.setTextColor(220, 38, 38);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text('RECUSADO PELO PACIENTE', margin, y + sigHeight / 2);
     doc.setTextColor(0, 0, 0);
   } else {
-    // Linha em branco
     doc.line(margin, y + sigHeight, margin + sigWidth, y + sigHeight);
   }
 
-  // Assinatura do Profissional
-  if (assinaturaProfissional) {
-    try {
-      doc.addImage(assinaturaProfissional, 'PNG', margin + sigWidth + gap, y, sigWidth, sigHeight);
-    } catch (e) {
-      console.error('Erro ao adicionar img assinatura profissional', e);
-    }
+  if (assinaturaProfissional && assinaturaProfissional.startsWith('data:image')) {
+    try { doc.addImage(assinaturaProfissional, 'PNG', margin + sigWidth + gap, y, sigWidth, sigHeight); } catch (e) {}
   } else {
-    // Linha em branco
     doc.line(margin + sigWidth + gap, y + sigHeight, margin + sigWidth * 2 + gap, y + sigHeight);
   }
 
   y += sigHeight + 5;
-
-  // Labels das assinaturas
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  
   doc.text(`Paciente: ${metadados?.pacienteNome || '____________________'}`, margin, y);
   doc.text(`Profissional: ${metadados?.profissionalNome || '____________________'}`, margin + sigWidth + gap, y);
   
   y += 15;
-
-  // Metadados Jurídicos (Auditoria)
   if (metadados?.dataHora || metadados?.ipAddress) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
     doc.setTextColor(100);
-    
     let footerText = 'Documento assinado digitalmente.';
     if (metadados?.dataHora) footerText += ` Data/Hora: ${metadados.dataHora}.`;
     if (metadados?.ipAddress) footerText += ` IP: ${metadados.ipAddress}.`;
-    
     doc.text(footerText, margin, y);
   }
 
-  // Baixa o arquivo
   doc.save(fileName);
 };

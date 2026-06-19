@@ -68,9 +68,10 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
       <div className="bg-[#f8fafc] p-6">
         <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
           {temConteudoTexto ? (
-            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[#334155]">
-              {conteudoTexto}
-            </div>
+            <div 
+              className="prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
+              dangerouslySetInnerHTML={{ __html: conteudoTexto }}
+            />
           ) : (
             <>
               <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">
