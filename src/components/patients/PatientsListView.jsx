@@ -22,6 +22,8 @@ import { PatientsTodayStrip } from './PatientsTodayStrip.jsx';
 import { PatientFiltersSheet } from './PatientFiltersSheet.jsx';
 import { PatientFiltersPopover } from './PatientFiltersPopover.jsx';
 import { PatientActiveFilterChips } from './PatientActiveFilterChips.jsx';
+import { getRailCardActions } from '../../utils/agendaCardActions.js';
+import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
 import {
   countActivePatientFilters,
   applyPatientQuickFilter,
@@ -181,6 +183,8 @@ function PatientPreviewPanel({
   onStartAttendance,
   previewAnamneseLoading = false,
   captureProfileNavSnapshot,
+  agendaSchedule,
+  previewAgendaSlot,
 }) {
   const { isNivel1, canSeeProntuario, canStartAnamnese } = usePapel();
 
@@ -281,6 +285,24 @@ function PatientPreviewPanel({
         )}
       </div>
 
+      {previewAgendaSlot && !isNivel1 ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
+          <h4 className="text-[13px] font-bold text-[#0f172a]">Agendamento de Hoje</h4>
+          <AgendaRailCardActions
+            appointment={previewAgendaSlot}
+            actions={getRailCardActions(previewAgendaSlot.status, canStartAnamnese)}
+            compact={false}
+            onConfirmar={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'confirmado')}
+            onCheckIn={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'paciente_chegou')}
+            onIniciarAtendimento={() => onStartAttendance?.(previewAgendaSlot.pacienteId, previewAgendaSlot.agendaId, previewAgendaSlot)}
+            onWhatsApp={() => agendaSchedule?.handleEnviarWhatsApp(previewAgendaSlot.agendaId)}
+            onEnviarAnamnese={() => agendaSchedule?.openDaySheet(previewAgendaSlot.data, previewAgendaSlot)}
+            onReagendar={() => agendaSchedule?.openReagendarModal(previewAgendaSlot, [previewAgendaSlot])}
+            onCancelar={() => agendaSchedule?.handleCancelar(previewAgendaSlot.agendaId)}
+          />
+        </div>
+      ) : null}
+
       <div className="min-w-0">
         <ProcedureTimelineHeading title="Linha do Tempo de Procedimentos" />
         {!canSeeProntuario ? (
@@ -377,6 +399,7 @@ export function PatientsListView({
   patientQuickFilter = 'todos',
   setPatientQuickFilter,
   captureProfileNavSnapshot,
+  agendaSchedule,
 }) {
   const { isNivel1: _isNivel1, canCreatePacientes } = usePapel();
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
@@ -393,6 +416,7 @@ export function PatientsListView({
   const filterButtonRef = useRef(null);
   const desktopTitleId = 'patient-detail-title';
   const [previewProcedures, setPreviewProcedures] = useState([]);
+  const [previewAgendaSlot, setPreviewAgendaSlot] = useState(null);
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
   /** Paciente cujo fetch de anamnese do preview terminou; `null` = nenhum / resetado. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
@@ -547,13 +571,15 @@ export function PatientsListView({
     setSelectedPatientCpf(null);
     setPatientDetailTab('planos');
     setPreviewProcedures([]);
+    setPreviewAgendaSlot(null);
   };
 
-  const openPatientPreview = (patient, { fromSidebar = false } = {}) => {
+  const openPatientPreview = (patient, { fromSidebar = false, agendaSlot = null } = {}) => {
     if (!patient?.cpf) return;
     setSelectedPatientCpf(patient.cpf);
     setPreviewPatientCpf(patient.cpf);
     setPreviewPatientSeed(fromSidebar ? patient : null);
+    setPreviewAgendaSlot(agendaSlot);
   };
 
   useEffect(() => {
@@ -593,7 +619,20 @@ export function PatientsListView({
         onActivateFilter={handleActivateFilter}
       />
 
-      <PatientsTodayStrip kpi={kpi} loading={kpiLoading} />
+      <PatientsTodayStrip
+        kpi={kpi}
+        loading={kpiLoading}
+        onSelectPatient={(agendaSlot) => {
+          if (!agendaSlot?.pacienteId) return;
+          const pid = String(agendaSlot.pacienteId);
+          const fullPatient =
+            patients.find((p) => String(p.id) === pid) ||
+            patientListItems.find((p) => String(p.id) === pid);
+          if (fullPatient) {
+            openPatientPreview(fullPatient, { fromSidebar: true, agendaSlot });
+          }
+        }}
+      />
 
       <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
         <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
@@ -870,6 +909,8 @@ export function PatientsListView({
                   onStartAttendance={onStartAttendance}
                   previewAnamneseLoading={previewAnamneseLoading}
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
+                  agendaSchedule={agendaSchedule}
+                  previewAgendaSlot={previewAgendaSlot}
                   shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
                 />
               </aside>
@@ -883,6 +924,8 @@ export function PatientsListView({
             onNavigateToAgenda={onNavigateToAgenda}
             onSelectPatient={(patient) => openPatientPreview(patient, { fromSidebar: true })}
             getPatientInitials={getPatientInitials}
+            agendaSchedule={agendaSchedule}
+            onStartAttendance={onStartAttendance}
           />
         )}
       </div>

@@ -15,7 +15,7 @@ function DotSep() {
  * Faixa compacta "Hoje" — mobile only (lg:hidden).
  * Reaproveita dados do usePatientsKpi (mesma fonte da PulseSidebar).
  */
-export function PatientsTodayStrip({ kpi, loading = false }) {
+export function PatientsTodayStrip({ kpi, loading = false, onSelectPatient }) {
   const agendamentos = kpi?.agendamentosHoje ?? [];
   const proximo = agendamentos[0] ?? null;
   const restantes = agendamentos.length > 1 ? agendamentos.length - 1 : 0;
@@ -50,19 +50,33 @@ export function PatientsTodayStrip({ kpi, loading = false }) {
       role="region"
       aria-label="Resumo de hoje"
     >
-      <div className="flex shrink-0 items-center gap-1.5">
-        <CalendarDays className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.2} aria-hidden />
-        {temAgenda ? (
-          <>
-            <span className="font-medium text-[#0f172a]">{proximo.pacienteNome || 'Paciente'}</span>
-            <span className="text-[#64748b]">
-              {proximo.horaInicio ? String(proximo.horaInicio).slice(0, 5) : ''}
-            </span>
-          </>
-        ) : (
-          <span className="text-[#64748b]">Nenhum agendamento hoje</span>
-        )}
-      </div>
+      {temAgenda && onSelectPatient && proximo?.pacienteId ? (
+        <button
+          type="button"
+          onClick={() => onSelectPatient(proximo)}
+          className="flex shrink-0 items-center gap-1.5 hover:opacity-80 transition-opacity focus:outline-none"
+        >
+          <CalendarDays className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.2} aria-hidden />
+          <span className="font-medium text-[#0f172a] hover:underline">{proximo.pacienteNome || 'Paciente'}</span>
+          <span className="text-[#64748b]">
+            {proximo.horaInicio ? String(proximo.horaInicio).slice(0, 5) : ''}
+          </span>
+        </button>
+      ) : (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <CalendarDays className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2.2} aria-hidden />
+          {temAgenda ? (
+            <>
+              <span className="font-medium text-[#0f172a]">{proximo.pacienteNome || 'Paciente'}</span>
+              <span className="text-[#64748b]">
+                {proximo.horaInicio ? String(proximo.horaInicio).slice(0, 5) : ''}
+              </span>
+            </>
+          ) : (
+            <span className="text-[#64748b]">Nenhum agendamento hoje</span>
+          )}
+        </div>
+      )}
 
       {restantes > 0 ? (
         <>
