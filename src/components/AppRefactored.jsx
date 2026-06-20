@@ -600,6 +600,12 @@ function AppRefactoredInner() {
     bumpPatientList();
   }, [fetchPatientsCatalog, bumpPatientList]);
 
+  // Sincroniza Pacientes quando agenda muda (criar/cancelar/reagendar)
+  React.useEffect(() => {
+    if (!authSessionReady) return;
+    refreshPatientsAndPagedList();
+  }, [agendaSchedule.appointments, authSessionReady, refreshPatientsAndPagedList]);
+
   const pacienteAtual = React.useMemo(() => {
     const sCpf = String(selectedPatientCpf || '').trim();
     if (!sCpf) {
@@ -3049,6 +3055,7 @@ function AppRefactoredInner() {
                   profileNav={profileNav}
                   clearProfileNavSnapshot={clearProfileNavSnapshot}
                   clinicSlug={clinicaInfo.slug}
+                  agendaSchedule={agendaSchedule}
                 />
               </RoleGuard>
             )}

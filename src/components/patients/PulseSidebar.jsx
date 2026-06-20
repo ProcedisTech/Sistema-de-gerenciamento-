@@ -6,6 +6,9 @@ import {
   formatBirthdayCountdown,
   getPatientNextBirthdayInfo,
 } from '../../utils/patientBirthdayList.js';
+import { getRailCardActions } from '../../utils/agendaCardActions.js';
+import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 
 function getSaudacao() {
   const h = new Date().getHours();
@@ -140,25 +143,45 @@ function SectionHeader({
   );
 }
 
-function AgendaRow({ slot }) {
+function AgendaRow({ slot, agendaSchedule, onStartAttendance }) {
+  const { isNivel1, canStartAnamnese } = usePapel();
   const nome = slot?.pacienteNome || 'Paciente';
   const hora = slot?.horaInicio ? String(slot.horaInicio).slice(0, 5) : '';
   const procedimento = slot?.procedimentoNome || '';
 
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#e6f7f5] text-[11px] font-bold text-[#00a88e]">
-        {nome.charAt(0).toUpperCase()}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold leading-snug text-[#0f172a]">{nome}</p>
-        {procedimento ? (
-          <p className="truncate text-[11px] text-[#64748b]">{procedimento}</p>
+    <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#e6f7f5] text-[11px] font-bold text-[#00a88e]">
+          {nome.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold leading-snug text-[#0f172a]">{nome}</p>
+          {procedimento ? (
+            <p className="truncate text-[11px] text-[#64748b]">{procedimento}</p>
+          ) : null}
+        </div>
+        {hora ? (
+          <span className="shrink-0 text-[11px] font-semibold text-[#64748b]">{hora}</span>
         ) : null}
       </div>
-      {hora ? (
-        <span className="shrink-0 text-[11px] font-semibold text-[#64748b]">{hora}</span>
-      ) : null}
+      
+      {agendaSchedule && !isNivel1 && (
+        <div className="border-t border-[#f1f5f9] pt-2">
+          <AgendaRailCardActions
+            appointment={slot}
+            actions={getRailCardActions(slot.status, canStartAnamnese)}
+            compact={true}
+            onConfirmar={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'confirmado')}
+            onCheckIn={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'paciente_chegou')}
+            onIniciarAtendimento={() => onStartAttendance?.(slot.pacienteId, slot.agendaId, slot)}
+            onWhatsApp={() => agendaSchedule.handleEnviarWhatsApp(slot.agendaId)}
+            onEnviarAnamnese={() => agendaSchedule.openDaySheet(slot.data, slot)}
+            onReagendar={() => agendaSchedule.openReagendarModal(slot, [slot])}
+            onCancelar={() => agendaSchedule.handleCancelar(slot.agendaId)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -243,6 +266,8 @@ export function PulseSidebar({
   onNavigateToAgenda,
   onSelectPatient,
   getPatientInitials,
+  agendaSchedule,
+  onStartAttendance,
 }) {
   const nome = primeiroNome(nomeUsuario);
 
@@ -304,7 +329,7 @@ export function PulseSidebar({
           ) : (
             <div className="flex flex-col gap-2">
               {agendamentos.slice(0, 5).map((slot) => (
-                <AgendaRow key={slot.id} slot={slot} />
+                <AgendaRow key={slot.id} slot={slot} agendaSchedule={agendaSchedule} onStartAttendance={onStartAttendance} />
               ))}
               {agendamentos.length > 5 ? (
                 <button
