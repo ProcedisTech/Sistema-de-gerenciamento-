@@ -1178,6 +1178,11 @@ export const anamneseApi = {
     }),
   finalizarPaciente: (pid, aid) =>
     request(`/api/v1/anamnese/paciente/${pid}/${aid}/finalizar`, { method: 'PATCH' }),
+  editPaciente: (pid, aid, roleId, data) =>
+    request(`/api/v1/anamnese/paciente/${pid}/${aid}?roleUserId=${roleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
   // 🟨🟨 Configurações de Acesso Público 🟨🟨
