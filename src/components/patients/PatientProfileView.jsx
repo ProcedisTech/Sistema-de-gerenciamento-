@@ -90,6 +90,15 @@ import { EnviarDocumentoAssinarModal } from './EnviarDocumentoAssinarModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
 import { AnamneseFichaReadonlyView } from '../anamnese/AnamneseFichaReadonlyView.jsx';
+import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
+import {
+  mergeApiRespostasToMap,
+  buildPerguntaTipoById,
+  buildRespostaApiRow,
+  sortFichaItens,
+  groupItensByCategoria,
+  isFullWidthItem,
+} from '../anamnese/anamneseFichaUtils.js';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 
@@ -259,13 +268,21 @@ function resolveFichaTemplateId(detalhe, an) {
   return v != null && v !== '' ? String(v) : null;
 }
 
-function AnamneseTab({ pacienteId, pacienteSexo = null }) {
+function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
+  const toast = useToast();
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [fichaByAnId, setFichaByAnId] = useState({});
   const [fichaLoadingId, setFichaLoadingId] = useState(null);
+
+  // Estados para edição
+  const [editingAnamneseId, setEditingAnamneseId] = useState(null);
+  const [editingRespostas, setEditingRespostas] = useState({});
+  const [editingObservacoes, setEditingObservacoes] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [errosObrigatorias, setErrosObrigatorias] = useState(new Set());
 
   const perfilClinico = usePerfilClinico(pacienteId, null, pacienteSexo);
 
@@ -313,7 +330,10 @@ function AnamneseTab({ pacienteId, pacienteSexo = null }) {
         if (cancelled || !ficha) return;
         setFichaByAnId((prev) => ({ ...prev, [targetId]: ficha }));
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.warn('Erro ao carregar ficha da anamnese:', err?.message);
+        toast.error('Não foi possível carregar o template da ficha. O botão Editar ficará indisponível.');
+      })
       .finally(() => {
         if (!cancelled) setFichaLoadingId((cur) => (cur === targetId ? null : cur));
       });
@@ -322,6 +342,83 @@ function AnamneseTab({ pacienteId, pacienteSexo = null }) {
       cancelled = true;
     };
   }, [expandedId, detalhes, anamneses, fichaByAnId]);
+
+  const handleStartEditAnamnese = useCallback((anId, detalhe) => {
+    const ficha = fichaByAnId[anId];
+    if (!ficha) return;
+
+    setEditingAnamneseId(anId);
+    setEditingObservacoes(detalhe.observacoes || '');
+
+    const mapTipos = buildPerguntaTipoById(ficha);
+    const carregadas = mergeApiRespostasToMap(detalhe.respostas, mapTipos);
+    setEditingRespostas(carregadas);
+    setErrosObrigatorias(new Set());
+  }, [fichaByAnId]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingAnamneseId(null);
+    setEditingRespostas({});
+    setEditingObservacoes('');
+    setErrosObrigatorias(new Set());
+  }, []);
+
+  const handleRespostaChange = useCallback((resposta) => {
+    const key = String(resposta.perguntaId);
+    setEditingRespostas((prev) => ({ ...prev, [key]: { ...resposta, perguntaId: resposta.perguntaId } }));
+    setErrosObrigatorias((prev) => {
+      if (!prev.has(key)) return prev;
+      const cleared = new Set(prev);
+      cleared.delete(key);
+      return cleared;
+    });
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    const ficha = fichaByAnId[editingAnamneseId];
+    if (!ficha || !roleUserId) {
+      toast.error('Não é possível salvar: roleUserId ausente ou ficha não carregada.');
+      return;
+    }
+
+    const orderedItens = sortFichaItens(ficha);
+    const errors = new Set();
+    const rowsApi = [];
+
+    for (const item of orderedItens) {
+      const pid = item.pergunta?.id;
+      if (!pid) continue;
+      const r = editingRespostas[pid] ?? editingRespostas[String(pid)];
+      const row = buildRespostaApiRow(item.pergunta, r);
+      if (row) {
+        rowsApi.push(row);
+      } else if (item.obrigatorio) {
+        errors.add(String(pid));
+      }
+    }
+
+    if (errors.size > 0) {
+      setErrosObrigatorias(errors);
+      toast.error('Preencha todas as perguntas obrigatórias.');
+      return;
+    }
+
+    try {
+      setEditSaving(true);
+      const payload = { respostas: rowsApi, observacoes: editingObservacoes };
+      const updated = await anamneseApi.editPaciente(pacienteId, editingAnamneseId, roleUserId, payload);
+      
+      setDetalhes((prev) => ({ ...prev, [editingAnamneseId]: updated }));
+      setAnamneses((prev) => prev.map((a) => (a.id === editingAnamneseId ? updated : a)));
+      
+      toast.success('Anamnese atualizada com sucesso!');
+      handleCancelEdit();
+    } catch (e) {
+      toast.error(e.message || 'Erro ao salvar anamnese.');
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editingAnamneseId, fichaByAnId, roleUserId, editingRespostas, editingObservacoes, toast, handleCancelEdit, pacienteId]);
 
   if (loading) {
     return (
@@ -464,19 +561,108 @@ function AnamneseTab({ pacienteId, pacienteSexo = null }) {
 
             {isOpen && (
               <div className="p-4 border-t border-app-border space-y-3">
-                {detalhe.observacoes ? (
-                  <AnamneseObservacoesBlock texto={detalhe.observacoes} />
-                ) : null}
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[14px] font-bold text-[#0f172a]">Respostas</h4>
+                  {!an.preenchidoPorPaciente ? (
+                    editingAnamneseId !== an.id ? (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditAnamnese(an.id, detalhe)}
+                        disabled={editSaving || !fichaByAnId[an.id]}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0f172a] hover:bg-[#f8fafc] hover:border-[#cbd5e1] transition-colors disabled:opacity-50"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-[#00a88e]" strokeWidth={2} />
+                        Editar Respostas
+                      </button>
+                    ) : null
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f1f5f9] px-3 py-1.5 text-[12px] font-medium text-[#94a3b8] cursor-not-allowed"
+                      title="Anamnese preenchida pelo paciente — edição bloqueada (LGPD)"
+                    >
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                      Editar Respostas
+                    </span>
+                  )}
+                </div>
 
-                {respostas.length > 0 ? (
-                  <AnamneseFichaReadonlyView
-                    ficha={fichaByAnId[an.id]}
-                    respostasApi={respostas}
-                    loading={fichaLoadingId === an.id && !fichaByAnId[an.id]}
-                    className="max-w-5xl xl:max-w-6xl"
-                  />
+                {editingAnamneseId === an.id ? (
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <div className="mb-4">
+                      <label className="text-[12px] font-bold text-slate-700">Observações da Anamnese</label>
+                      <textarea
+                        value={editingObservacoes}
+                        onChange={(e) => setEditingObservacoes(e.target.value)}
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+                        placeholder="Observações ou queixa principal..."
+                      />
+                    </div>
+                    {groupItensByCategoria(sortFichaItens(fichaByAnId[an.id])).map(({ categoriaNome, itens }, secIdx) => (
+                      <div key={categoriaNome || `sec-${secIdx}`} className={secIdx > 0 ? 'mt-6' : ''}>
+                        {categoriaNome && (
+                          <div className="mb-3 border-b border-slate-100 pb-1">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{categoriaNome}</p>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                          {itens.map((item) => {
+                            const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+                            const pid = item.pergunta?.id;
+                            const hasErr = pid && errosObrigatorias.has(String(pid));
+                            return (
+                              <div key={item.id} className={`min-w-0 ${isFullWidthItem(item) ? 'md:col-span-2' : ''} ${hasErr ? 'rounded-lg p-2 ring-1 ring-red-300' : ''}`}>
+                                <DynamicQuestion
+                                  numero={item.ordem}
+                                  pergunta={item.pergunta}
+                                  resposta={editingRespostas[pid] ?? editingRespostas[String(pid)]}
+                                  onChange={handleRespostaChange}
+                                  alerta={isAlerta}
+                                  obrigatorio={item.obrigatorio}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        disabled={editSaving}
+                        className="rounded-lg px-4 py-2 text-[13px] font-semibold text-slate-600 hover:bg-slate-50 border border-slate-200"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveEdit}
+                        disabled={editSaving}
+                        className="rounded-lg bg-[#00a88e] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#00967f] disabled:opacity-50"
+                      >
+                        {editSaving ? 'Salvando...' : 'Salvar Alterações'}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
+                  <>
+                    {detalhe.observacoes ? (
+                      <AnamneseObservacoesBlock texto={detalhe.observacoes} />
+                    ) : null}
+
+                    {respostas.length > 0 ? (
+                      <AnamneseFichaReadonlyView
+                        ficha={fichaByAnId[an.id]}
+                        respostasApi={respostas}
+                        loading={fichaLoadingId === an.id && !fichaByAnId[an.id]}
+                        className="max-w-5xl xl:max-w-6xl"
+                      />
+                    ) : (
+                      <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
+                    )}
+                  </>
                 )}
 
                 {an.preenchidoPorPaciente && an.assinaturaPaciente && (
@@ -2412,7 +2598,11 @@ export function PatientProfileView({
               )}
 
               {patientDetailTab === 'anamnese' && (
-                <AnamneseTab pacienteId={selectedPatient.id} pacienteSexo={selectedPatient.sexo} />
+                <AnamneseTab 
+                  pacienteId={selectedPatient.id} 
+                  pacienteSexo={selectedPatient.sexo} 
+                  roleUserId={roleUserId} 
+                />
               )}
 
               {patientDetailTab === 'planos' && (
