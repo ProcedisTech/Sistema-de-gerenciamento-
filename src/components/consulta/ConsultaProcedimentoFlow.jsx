@@ -32,6 +32,8 @@ export function ConsultaProcedimentoFlow({
   onMapaCaptureConsumed = () => {},
   onPrepareMapaCapture = () => {},
   onEnsureProcedimento = () => Promise.resolve(null),
+  sugestaoProcedimentoEnviada = false,
+  onSugestaoEnviada = () => {},
   // Step5
   procedureDateIso,
   proximoRetornoDisplay,
@@ -67,12 +69,17 @@ export function ConsultaProcedimentoFlow({
   const handleContinuar = async () => {
     const nomeP = String(nomeProcedimento || '').trim();
     const obsP = String(observacoesExecucao || '').trim();
-    if (!nomeP || !obsP) {
+    const catId =
+      catalogoId != null && String(catalogoId).trim() !== ''
+        ? String(catalogoId).trim()
+        : null;
+    if (!nomeP || !obsP || (!catId && !sugestaoProcedimentoEnviada)) {
       setStep4Errors({
-        nomeProcedimento: !nomeP,
+        nomeProcedimento: !nomeP || (!catId && !sugestaoProcedimentoEnviada),
+        catalogoId: !catId && !sugestaoProcedimentoEnviada,
         observacoesExecucao: !obsP,
       });
-      toast.error('Preencha o nome do procedimento e as observações da execução para continuar.');
+      toast.error('Selecione o procedimento no catálogo e preencha as observações para continuar.');
       return;
     }
     setStep4Errors({});
@@ -133,6 +140,7 @@ export function ConsultaProcedimentoFlow({
           onMapaCaptureConsumed={onMapaCaptureConsumed}
           onPrepareMapaCapture={onPrepareMapaCapture}
           onEnsureProcedimento={onEnsureProcedimento}
+          onSugestaoEnviada={onSugestaoEnviada}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button

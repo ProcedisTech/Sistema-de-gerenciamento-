@@ -330,6 +330,7 @@ function AppRefactoredInner() {
   const finishJourneyLockRef = useRef(false);
   const [isSalvandoFotosAvaliacao, setIsSalvandoFotosAvaliacao] = React.useState(false);
   const [isSalvandoProcedimento, setIsSalvandoProcedimento] = React.useState(false);
+  const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
   const prevJourneyPacienteIdRef = useRef(undefined);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
@@ -1482,12 +1483,18 @@ function AppRefactoredInner() {
     if (currentStep === 4) {
       const nomeP = String(journeyState.nomeProcedimento || '').trim();
       const obsP = String(journeyState.observacoesExecucao || '').trim();
-      if (!nomeP || !obsP) {
+      const catId =
+        journeyState.nomeProcedimentoCatalogoId != null &&
+        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+          : null;
+      if (!nomeP || !obsP || (!catId && !sugestaoProcedimentoEnviada)) {
         journeyState.setStep4Errors({
-          nomeProcedimento: !nomeP,
+          nomeProcedimento: !nomeP || (!catId && !sugestaoProcedimentoEnviada),
+          catalogoId: !catId && !sugestaoProcedimentoEnviada,
           observacoesExecucao: !obsP,
         });
-        toast.error('Preencha o nome do procedimento e as observações da execução para continuar.');
+        toast.error('Selecione o procedimento no catálogo e preencha as observações para continuar.');
         return;
       }
       journeyState.setStep4Errors({});
@@ -1686,6 +1693,7 @@ function AppRefactoredInner() {
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
     journeyState.setNomeProcedimentoCatalogoId(null);
+    setSugestaoProcedimentoEnviada(false);
     journeyState.setAgendaId(null);
     journeyState.setStep2Errors({});
     journeyState.setStep4Errors({});
@@ -2440,6 +2448,7 @@ function AppRefactoredInner() {
                       onEnsureProcedimento={() =>
                         ensureProcedimentoFeitoForMapa(pacienteAtual)
                       }
+                      onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                     />
                   )}
 
@@ -2850,6 +2859,8 @@ function AppRefactoredInner() {
                     onEnsureProcedimento={() =>
                       ensureProcedimentoFeitoForMapa(pacienteAtual)
                     }
+                    sugestaoProcedimentoEnviada={sugestaoProcedimentoEnviada}
+                    onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                     procedureDateIso={journeyProcedureDateIso}
                     proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
                     setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
