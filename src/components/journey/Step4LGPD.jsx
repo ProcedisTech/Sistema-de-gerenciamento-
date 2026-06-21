@@ -24,8 +24,10 @@ import {
   authHeadersForFetch,
   termoAssinaturaApi,
   termosApi,
+  notificacoesApi,
+  getApiErrorToastMessage,
 } from '../../services/api';
-import { ProcedimentoAutocomplete } from '../shared/ProcedimentoAutocomplete.jsx';
+import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
@@ -1446,14 +1448,36 @@ export function Step4Procedimento({
   onMapaCaptureConsumed = () => {},
   onPrepareMapaCapture = () => {},
   onEnsureProcedimento = () => Promise.resolve(null),
+  onSugestaoEnviada = () => {},
 }) {
   const uploadInputRef = React.useRef(null);
+  const toast = useToast();
   const { options: catalogoOptions } = useProcedimentosOptions();
+  const procedimentoSearchOptions = useMemo(
+    () =>
+      catalogoOptions.map((o) => ({
+        id: o.id,
+        nome: o.nomeProcedimento,
+        tipoCodigo: o.tipoCodigo,
+        duracaoMin: o.duracaoMin,
+      })),
+    [catalogoOptions],
+  );
+  const procedimentosSelecionados =
+    catalogoId && nomeProcedimento
+      ? procedimentoSearchOptions.filter(
+          (p) => String(p.id).trim() === String(catalogoId).trim(),
+        )
+      : [];
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState(GALERIA_CATEGORIA.ANTES);
   /** Lightbox somente leitura para fotos da avaliação (referência). */
   const [referencePreviewUrl, setReferencePreviewUrl] = React.useState(null);
+  const [sugestaoAberta, setSugestaoAberta] = React.useState(false);
+  const [sugestaoTexto, setSugestaoTexto] = React.useState('');
+  const [sugestaoEnviada, setSugestaoEnviada] = React.useState(false);
+  const [sugestaoEnviando, setSugestaoEnviando] = React.useState(false);
 
   React.useEffect(() => {
     onProcedureFotoCategoriaSync(fotoCategoria);
@@ -1493,6 +1517,27 @@ export function Step4Procedimento({
 
   const photos = procedureCapturedPhotos || [];
 
+  const handleEnviarSugestao = async () => {
+    const nome = String(sugestaoTexto || '').trim();
+    if (!nome || sugestaoEnviando || sugestaoEnviada) return;
+    setSugestaoEnviando(true);
+    try {
+      const apiResult = await notificacoesApi.sugerirProcedimento(nome);
+      if (!apiResult || Number(apiResult.criadas) <= 0) {
+        toast.error('Nenhum administrador da clínica está disponível para receber a sugestão.');
+        return;
+      }
+      setNomeProcedimento(nome);
+      setSugestaoEnviada(true);
+      onSugestaoEnviada(true);
+      toast.success('Sugestão enviada aos administradores da clínica ✓');
+    } catch (e) {
+      toast.error(getApiErrorToastMessage(e, 'Não foi possível enviar a sugestão.'));
+    } finally {
+      setSugestaoEnviando(false);
+    }
+  };
+
   return (
     <div className="min-w-0">
       <div className="mb-6 flex items-center gap-4">
@@ -1507,29 +1552,70 @@ export function Step4Procedimento({
 
       <div
         className={`mb-6 space-y-5 rounded-2xl border bg-white p-4 sm:p-6 ${
-          step4Errors.nomeProcedimento || step4Errors.observacoesExecucao ? 'border-red-300' : 'border-[#00a88e]/25'
+          step4Errors.nomeProcedimento || step4Errors.catalogoId || step4Errors.observacoesExecucao
+            ? 'border-red-300'
+            : 'border-[#00a88e]/25'
         }`}
       >
         <div className="space-y-1.5">
           <label className="text-[13px] font-bold text-[#00a88e]">
             Nome do procedimento <span className="text-red-500">*</span>
           </label>
-          <ProcedimentoAutocomplete
-            value={nomeProcedimento}
-            onInputChange={(nome) => {
-              setNomeProcedimento(nome);
-              setNomeProcedimentoCatalogoId(null);
-              setStep4Errors((prev) => ({ ...prev, nomeProcedimento: false }));
-            }}
-            onCommit={(nome, catalogoId) => {
-              setNomeProcedimento(nome);
-              setNomeProcedimentoCatalogoId(catalogoId);
-              setStep4Errors((prev) => ({ ...prev, nomeProcedimento: false }));
-            }}
-            placeholder="Nome do procedimento realizado"
-            catalogoOptions={catalogoOptions}
-            error={Boolean(step4Errors.nomeProcedimento)}
-          />
+          <div className="space-y-2">
+            <ProcedimentoSearchInput
+              selectionMode="single"
+              showDuracao={false}
+              procedimentoOptions={procedimentoSearchOptions}
+              procedimentosSelecionados={procedimentosSelecionados}
+              onSelect={(proc) => {
+                setNomeProcedimento(proc.nome);
+                setNomeProcedimentoCatalogoId(String(proc.id));
+                setStep4Errors((prev) => ({
+                  ...prev,
+                  nomeProcedimento: false,
+                  catalogoId: false,
+                }));
+              }}
+              onToggle={() => {}}
+              onRemover={() => {
+                setNomeProcedimento('');
+                setNomeProcedimentoCatalogoId(null);
+              }}
+            />
+            {sugestaoEnviada ? (
+              <p className="text-[12px] font-semibold text-[#64748b]">✓ Sugestão enviada</p>
+            ) : (
+              <>
+                {!sugestaoAberta ? (
+                  <button
+                    type="button"
+                    onClick={() => setSugestaoAberta(true)}
+                    className="text-[12px] font-medium text-[#64748b] hover:text-[#00a88e]"
+                  >
+                    Não achou o procedimento específico?
+                  </button>
+                ) : (
+                  <div className="rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-3 space-y-2">
+                    <input
+                      type="text"
+                      value={sugestaoTexto}
+                      onChange={(e) => setSugestaoTexto(e.target.value)}
+                      placeholder="Descreva o procedimento que não encontrou..."
+                      className="w-full rounded-lg border border-[#e2e8f0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#00a88e]"
+                    />
+                    <button
+                      type="button"
+                      disabled={!String(sugestaoTexto || '').trim() || sugestaoEnviando}
+                      onClick={handleEnviarSugestao}
+                      className="rounded-lg border border-[#00a88e]/30 bg-white px-3 py-2 text-[12px] font-semibold text-[#00a88e] hover:bg-[#f0fdf9] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Enviar sugestão
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
         <div className="space-y-1.5">
           <label className="text-[13px] font-bold text-[#00a88e]">
@@ -1567,7 +1653,7 @@ export function Step4Procedimento({
           onPrepareCapture={onPrepareMapaCapture}
           onEnsureProcedimento={onEnsureProcedimento}
           disabled={!String(nomeProcedimento || '').trim() || !catalogoId}
-          disabledHint="Selecione o procedimento na lista do catálogo (autocomplete) para habilitar o mapa de aplicação."
+          disabledHint="Selecione um procedimento do catálogo para habilitar o mapa de aplicação."
         />
       ) : null}
 

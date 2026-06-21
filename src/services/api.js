@@ -1386,6 +1386,17 @@ export const notificacoesApi = {
    */
   marcarTodasLidas: () =>
     request('/api/v1/notificacoes/marcar-todas-lidas', { method: 'PATCH' }),
+
+  /**
+   * Sugere inclusão de procedimento no catálogo (notifica admins da org).
+   * @param {string} nome
+   * @returns {Promise<{ criadas: number }>}
+   */
+  sugerirProcedimento: (nome) =>
+    request('/api/v1/notificacoes/sugestao-procedimento', {
+      method: 'POST',
+      body: JSON.stringify({ nomeSugerido: String(nome).trim() }),
+    }),
 };
 
 // ── Disponibilidade do Profissional ───────────────────────
