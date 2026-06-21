@@ -68,18 +68,16 @@ export function ConsultaProcedimentoFlow({
 
   const handleContinuar = async () => {
     const nomeP = String(nomeProcedimento || '').trim();
-    const obsP = String(observacoesExecucao || '').trim();
     const catId =
       catalogoId != null && String(catalogoId).trim() !== ''
         ? String(catalogoId).trim()
         : null;
-    if (!nomeP || !obsP || (!catId && !sugestaoProcedimentoEnviada)) {
+    if (!nomeP || (!catId && !sugestaoProcedimentoEnviada)) {
       setStep4Errors({
         nomeProcedimento: !nomeP || (!catId && !sugestaoProcedimentoEnviada),
         catalogoId: !catId && !sugestaoProcedimentoEnviada,
-        observacoesExecucao: !obsP,
       });
-      toast.error('Selecione o procedimento no catálogo e preencha as observações para continuar.');
+      toast.error('Selecione o procedimento no catálogo para continuar.');
       return;
     }
     setStep4Errors({});

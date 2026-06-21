@@ -1482,19 +1482,17 @@ function AppRefactoredInner() {
 
     if (currentStep === 4) {
       const nomeP = String(journeyState.nomeProcedimento || '').trim();
-      const obsP = String(journeyState.observacoesExecucao || '').trim();
       const catId =
         journeyState.nomeProcedimentoCatalogoId != null &&
         String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
-      if (!nomeP || !obsP || (!catId && !sugestaoProcedimentoEnviada)) {
+      if (!nomeP || (!catId && !sugestaoProcedimentoEnviada)) {
         journeyState.setStep4Errors({
           nomeProcedimento: !nomeP || (!catId && !sugestaoProcedimentoEnviada),
           catalogoId: !catId && !sugestaoProcedimentoEnviada,
-          observacoesExecucao: !obsP,
         });
-        toast.error('Selecione o procedimento no catálogo e preencha as observações para continuar.');
+        toast.error('Selecione o procedimento no catálogo para continuar.');
         return;
       }
       journeyState.setStep4Errors({});
