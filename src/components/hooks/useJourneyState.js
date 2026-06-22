@@ -49,10 +49,46 @@ export const useJourneyState = () => {
   const [isDrawing, setIsDrawing] = useState(false);
 
   // ============ ETAPA 4: PROCEDIMENTO (campos gravados no passo 4) ============
-  const [observacoesExecucao, setObservacoesExecucao] = useState('');
-  const [nomeProcedimento, setNomeProcedimentoState] = useState('');
-  /** UUID do item do catálogo quando o profissional escolhe da lista (evita modal duplicado no finish). */
-  const [nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoId] = useState(null);
+  const [procedimentosSessao, setProcedimentosSessao] = useState([]);
+  const [activeProcedureIndex, setActiveProcedureIndex] = useState(0);
+
+  // Derivados para manter compatibilidade temporária com chamadas antigas se existirem
+  const currentProc = procedimentosSessao[activeProcedureIndex] || {};
+  const observacoesExecucao = currentProc.observacoesExecucao || '';
+  const nomeProcedimento = currentProc.nomeProcedimento || currentProc.procedimentoNome || '';
+  const nomeProcedimentoCatalogoId = currentProc.nomeProcedimentoCatalogoId || currentProc.catalogoProcedimentoSaudeId || null;
+
+  const updateActiveProcedure = useCallback((patch) => {
+    setProcedimentosSessao((prev) => {
+      const next = [...prev];
+      if (!next[activeProcedureIndex]) {
+        next[activeProcedureIndex] = {};
+      }
+      next[activeProcedureIndex] = {
+        ...next[activeProcedureIndex],
+        ...(typeof patch === 'function' ? patch(next[activeProcedureIndex]) : patch)
+      };
+      return next;
+    });
+  }, [activeProcedureIndex]);
+
+  const updateProcedureByIndex = useCallback((index, patch) => {
+    setProcedimentosSessao((prev) => {
+      const next = [...prev];
+      if (!next[index]) {
+        next[index] = {};
+      }
+      next[index] = {
+        ...next[index],
+        ...(typeof patch === 'function' ? patch(next[index]) : patch)
+      };
+      return next;
+    });
+  }, []);
+
+  const setObservacoesExecucao = useCallback((val) => updateActiveProcedure({ observacoesExecucao: val }), [updateActiveProcedure]);
+  const setNomeProcedimentoCatalogoId = useCallback((val) => updateActiveProcedure({ nomeProcedimentoCatalogoId: val }), [updateActiveProcedure]);
+
 
   // ============ ETAPA 3: TERMOS / LGPD ============
   const [termoLido, setTermoLido] = useState(false);
@@ -83,19 +119,25 @@ export const useJourneyState = () => {
 
   /** Ao mudar o nome (trim), permite novo fetch de template no Step 5 e evita lista desalinhada. */
   const setNomeProcedimento = useCallback((value) => {
-    setNomeProcedimentoState((prev) => {
-      const next = typeof value === 'function' ? value(prev) : value;
-      const prevTrim = String(prev ?? '').trim();
-      const nextTrim = String(next ?? '').trim();
+    setProcedimentosSessao((prev) => {
+      const nextArr = [...prev];
+      const cur = nextArr[activeProcedureIndex] || {};
+      const prevVal = cur.nomeProcedimento || '';
+      const nextVal = typeof value === 'function' ? value(prevVal) : value;
+      const prevTrim = String(prevVal ?? '').trim();
+      const nextTrim = String(nextVal ?? '').trim();
+
       if (prevTrim !== nextTrim) {
         queueMicrotask(() => {
           setOrientacoesCarregadas(false);
           setOrientacoesItens([]);
         });
       }
-      return next;
+      
+      nextArr[activeProcedureIndex] = { ...cur, nomeProcedimento: nextVal };
+      return nextArr;
     });
-  }, []);
+  }, [activeProcedureIndex]);
 
   // ============ FOTOS ============
   const EVALUATION_PHOTO_MAX = 30;
@@ -131,6 +173,8 @@ export const useJourneyState = () => {
     setStep4Errors,
     step5Errors,
     setStep5Errors,
+    activeProcedureIndex,
+    setActiveProcedureIndex,
     queixa,
     setQueixa,
     expectativas,
@@ -167,6 +211,11 @@ export const useJourneyState = () => {
     setPaths,
     isDrawing,
     setIsDrawing,
+    procedimentosSessao,
+    setProcedimentosSessao,
+
+    updateActiveProcedure,
+    updateProcedureByIndex,
     observacoesExecucao,
     setObservacoesExecucao,
     nomeProcedimento,

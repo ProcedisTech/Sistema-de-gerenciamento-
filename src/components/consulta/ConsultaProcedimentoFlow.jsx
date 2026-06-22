@@ -15,6 +15,8 @@ export function ConsultaProcedimentoFlow({
   observacoesExecucao,
   setObservacoesExecucao,
   procedureCapturedPhotos,
+  setProcedureCapturedPhotos,
+  updateProcedureByIndex,
   procedurePhotoMax,
   onProcedureUploadFiles,
   onProcedureRemovePhoto,
@@ -60,7 +62,7 @@ export function ConsultaProcedimentoFlow({
   onAnnotateEvaluationPhoto,
   onAnnotateProcedurePhoto,
   // Ações
-  salvarProcedimentoEFotos,
+
   encerrarAtendimento,
   isSalvandoProcedimento = false,
   isFinishing = false,
@@ -69,7 +71,34 @@ export function ConsultaProcedimentoFlow({
 }) {
   const [phase, setPhase] = useState('registro');
 
-  const handleContinuar = async () => {
+  const oldIndexRef = React.useRef(activeProcedimentoIndex);
+
+  React.useEffect(() => {
+    if (oldIndexRef.current !== activeProcedimentoIndex) {
+      const oldIndex = oldIndexRef.current;
+      
+      // Salvar snapshot da aba antiga
+      if (typeof updateProcedureByIndex === 'function') {
+        updateProcedureByIndex(oldIndex, {
+          mapaSnapshot: mapaState?.getSnapshotForPersist(),
+          fotosSnapshot: procedureCapturedPhotos
+        });
+      }
+
+      // Restaurar snapshot da nova aba
+      const newProc = procedimentosLote[activeProcedimentoIndex] || {};
+      if (mapaState?.restoreSnapshot) {
+        mapaState.restoreSnapshot(newProc.mapaSnapshot);
+      }
+      if (typeof setProcedureCapturedPhotos === 'function') {
+        setProcedureCapturedPhotos(newProc.fotosSnapshot || []);
+      }
+
+      oldIndexRef.current = activeProcedimentoIndex;
+    }
+  }, [activeProcedimentoIndex, procedimentosLote, mapaState, procedureCapturedPhotos, setProcedureCapturedPhotos, updateProcedureByIndex]);
+
+  const handleContinuar = () => {
     const nomeP = String(nomeProcedimento || '').trim();
     const catId =
       catalogoId != null && String(catalogoId).trim() !== ''
@@ -84,51 +113,33 @@ export function ConsultaProcedimentoFlow({
       return;
     }
     setStep4Errors({});
-    try {
-      await salvarProcedimentoEFotos();
+    
+    if (procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1) {
+      // Tem mais procedimentos, vai para o próximo
+      const nextIndex = activeProcedimentoIndex + 1;
+      setActiveProcedimentoIndex(nextIndex);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // É o último (ou o único), vai para orientações
       setPhase('orientacoes');
-    } catch {
-      // Erro já tratado em salvarProcedimentoEFotos
     }
   };
 
   const handleFinalizar = async () => {
     try {
-      const hasNext = procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1;
+      if (!orientacoes) {
+        setStep5Errors({ orientacoes: !orientacoes });
+        toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
+        return;
+      }
+      if (step5RetornoBloqueiaFinal) {
+        toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
+        return;
+      }
+      setStep5Errors({});
       
-      if (hasNext) {
-        if (typeof salvarProcedimentoEFotos === 'function') {
-           const success = await salvarProcedimentoEFotos();
-           if (!success) {
-             return;
-           }
-        }
-        
-        toast.success('Procedimento salvo com sucesso! Preencha o próximo.');
-        setObservacoesExecucao('');
-        const nextIndex = activeProcedimentoIndex + 1;
-        setActiveProcedimentoIndex(nextIndex);
-        if (procedimentosLote && procedimentosLote[nextIndex]) {
-          setNomeProcedimento(procedimentosLote[nextIndex].procedimentoNome || '');
-          setNomeProcedimentoCatalogoId(procedimentosLote[nextIndex].catalogoProcedimentoSaudeId || null);
-        }
-        setPhase('registro');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        if (!orientacoes) {
-          setStep5Errors({ orientacoes: !orientacoes });
-          toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
-          return;
-        }
-        if (step5RetornoBloqueiaFinal) {
-          toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
-          return;
-        }
-        setStep5Errors({});
-        
-        if (typeof encerrarAtendimento === 'function') {
-          await encerrarAtendimento();
-        }
+      if (typeof encerrarAtendimento === 'function') {
+        await encerrarAtendimento();
       }
     } catch (e) {
       toast.error('Erro ao finalizar atendimento. Verifique os dados.');
@@ -139,7 +150,25 @@ export function ConsultaProcedimentoFlow({
   if (phase === 'registro') {
     return (
       <>
-        {/* The tabs were removed as requested by the user, because the procedure is selected in the form itself. */}
+        {procedimentosLote && procedimentosLote.length > 1 && (
+          <div className="flex border-b border-[#e2e8f0] mb-6 overflow-x-auto">
+            {procedimentosLote.map((proc, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  setActiveProcedimentoIndex(index);
+                }}
+                className={`px-5 py-3 font-semibold text-[13px] whitespace-nowrap border-b-2 transition-colors ${
+                  activeProcedimentoIndex === index
+                    ? 'border-[#00a88e] text-[#00a88e]'
+                    : 'border-transparent text-[#64748b] hover:text-[#334155] hover:border-[#cbd5e1]'
+                }`}
+              >
+                {index + 1}. {proc.procedimentoNome || proc.nomeProcedimento || 'Procedimento'}
+              </button>
+            ))}
+          </div>
+        )}
         <Step4Procedimento
           pacienteIdForProcedures={pacienteIdForProcedures}
           nomeProcedimento={procedimentosLote?.[activeProcedimentoIndex]?.procedimentoNome || nomeProcedimento}
@@ -177,7 +206,11 @@ export function ConsultaProcedimentoFlow({
             disabled={isSalvandoProcedimento}
             className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSalvandoProcedimento ? 'Salvando…' : 'Continuar'}
+            {isSalvandoProcedimento 
+              ? 'Salvando…' 
+              : procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1
+                ? 'Próximo Procedimento ➔'
+                : 'Ir para Finalização e Orientações'}
           </button>
         </div>
       </>
@@ -188,6 +221,7 @@ export function ConsultaProcedimentoFlow({
     <>
       <Step5Finalization
         key={String(nomeProcedimento || '')}
+        procedimentosLote={procedimentosLote}
         procedureDateIso={procedureDateIso}
         proximoRetornoDisplay={proximoRetornoDisplay}
         setProximoRetornoDisplay={setProximoRetornoDisplay}
@@ -236,9 +270,7 @@ export function ConsultaProcedimentoFlow({
               ? 'Confirme as orientações para finalizar'
               : step5RetornoBloqueiaFinal
                 ? 'Corrija a data de retorno'
-                : procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1
-                  ? 'Salvar e Próximo Procedimento ➔'
-                  : 'Finalizar Atendimento ✓'}
+                : 'Finalizar Atendimento ✓'}
         </button>
       </div>
     </>

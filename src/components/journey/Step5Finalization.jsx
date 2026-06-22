@@ -113,12 +113,31 @@ export function Step5Finalization({
   const resumoRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
 
+  const allObservacoes = useMemo(() => {
+    if (procedimentosLote && procedimentosLote.length > 0) {
+      const obs = procedimentosLote.map(p => p.observacoesExecucao).filter(Boolean).join('\n\n');
+      if (obs) return obs;
+    }
+    return observacoesProcedimento;
+  }, [procedimentosLote, observacoesProcedimento]);
+
+  const allFotosProcedimento = useMemo(() => {
+    if (procedimentosLote && procedimentosLote.length > 0) {
+      const photos = [];
+      procedimentosLote.forEach(p => {
+        if (Array.isArray(p.fotosSnapshot)) photos.push(...p.fotosSnapshot);
+      });
+      if (photos.length > 0) return photos;
+    }
+    return fotosProcedimento || [];
+  }, [procedimentosLote, fotosProcedimento]);
+
   useEffect(() => {
     if (orientacoesCarregadas) return;
     let cancelled = false;
     
     const nomesArray = procedimentosLote && procedimentosLote.length > 0
-      ? procedimentosLote.map(p => String(p.procedimentoNome || '').trim()).filter(Boolean)
+      ? procedimentosLote.map(p => String(p.nomeProcedimento || p.procedimentoNome || '').trim()).filter(Boolean)
       : [String(nomeProcedimento || '').trim()].filter(Boolean);
       
     const nomesUnicos = [...new Set(nomesArray)];
@@ -368,10 +387,16 @@ export function Step5Finalization({
       if (nomeUsuario) drawSubtext(`Profissional: ${nomeUsuario}`);
       drawLine();
 
-      if (nomeProcedimento) {
+      const nomesProcedimentosRender = (procedimentosLote && procedimentosLote.length > 0)
+        ? procedimentosLote.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
+        : [nomeProcedimento].filter(Boolean);
+
+      if (nomesProcedimentosRender.length > 0) {
         drawLabel('Procedimento Realizado');
-        drawValue(nomeProcedimento);
-        if (observacoesProcedimento) drawSubtext(observacoesProcedimento);
+        nomesProcedimentosRender.forEach(nome => {
+          drawValue(nome);
+        });
+        if (allObservacoes) drawSubtext(allObservacoes);
         drawLine();
       }
 
@@ -632,17 +657,23 @@ export function Step5Finalization({
 
           <div className="border-b border-[#f1f5f9]" />
 
-          {nomeProcedimento ? (
+          {((procedimentosLote && procedimentosLote.length > 0) || nomeProcedimento) ? (
             <>
               <div className="flex items-start gap-4 py-1">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdfa]">
                   <Stethoscope className="h-4 w-4 text-[#00a88e]" strokeWidth={2} />
                 </div>
                 <div>
-                  <div className="text-[12px] font-bold uppercase tracking-widest text-[#94a3b8]">Procedimento</div>
-                  <div className="text-[15px] font-semibold text-[#0f172a]">{nomeProcedimento}</div>
-                  {observacoesProcedimento ? (
-                    <div className="mt-1 text-[13px] leading-relaxed text-[#475569]">{observacoesProcedimento}</div>
+                  <div className="text-[12px] font-bold uppercase tracking-widest text-[#94a3b8]">Procedimento{procedimentosLote?.length > 1 ? 's' : ''}</div>
+                  <div className="text-[15px] font-semibold text-[#0f172a]">
+                    {(procedimentosLote && procedimentosLote.length > 0)
+                      ? procedimentosLote.map((p, idx) => (
+                          <div key={idx}>{p.procedimentoNome || p.nomeProcedimento}</div>
+                        ))
+                      : nomeProcedimento}
+                  </div>
+                  {allObservacoes ? (
+                    <div className="mt-1 text-[13px] leading-relaxed text-[#475569] whitespace-pre-wrap">{allObservacoes}</div>
                   ) : null}
                 </div>
               </div>
@@ -694,7 +725,7 @@ export function Step5Finalization({
             </>
           ) : null}
 
-          {fotosAvaliacao.length > 0 || fotosProcedimento.length > 0 ? (
+          {fotosAvaliacao.length > 0 || allFotosProcedimento.length > 0 ? (
             <>
               <div className="flex items-start gap-4 py-1">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdfa]">
@@ -705,7 +736,7 @@ export function Step5Finalization({
                     Registro Fotográfico
                   </div>
                   <div className="mt-0.5 text-[13px] text-[#64748b]">
-                    {fotosAvaliacao.length + fotosProcedimento.length} foto(s) registrada(s)
+                    {fotosAvaliacao.length + allFotosProcedimento.length} foto(s) registrada(s)
                   </div>
 
                   {fotosAvaliacao.length > 0 ? (
@@ -745,13 +776,13 @@ export function Step5Finalization({
                     </div>
                   ) : null}
 
-                  {fotosProcedimento.length > 0 ? (
+                  {allFotosProcedimento.length > 0 ? (
                     <div className="mt-3">
                       <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
-                        Procedimento ({fotosProcedimento.length})
+                        Procedimento ({allFotosProcedimento.length})
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        {fotosProcedimento.map((foto, idx) => (
+                        {allFotosProcedimento.map((foto, idx) => (
                           <div
                             key={idx}
                             className="group relative aspect-square overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f1f5f9]"
