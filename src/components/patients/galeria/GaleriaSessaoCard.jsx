@@ -10,9 +10,6 @@ export function GaleriaSessaoCard({
   totalSessions,
   expandida,
   onToggle,
-  procedimentoFeitoId,
-  pacienteId,
-  onAcompanhamento,
   categoriasEmEdicao,
   onToggleEdicao,
   modoComparar,
@@ -25,6 +22,7 @@ export function GaleriaSessaoCard({
   uploadDisabledTitle,
 }) {
   const fotosPorCategoria = groupFotosByCategoria(sess.fotos);
+  const tituloSessao = sess.nomeProcedimento || 'Consulta / Avaliação';
 
   return (
     <div className="rounded-[20px] border border-slate-200 bg-white shadow-app-card overflow-hidden">
@@ -40,14 +38,17 @@ export function GaleriaSessaoCard({
         role="button"
         tabIndex={0}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="text-[14px] font-bold text-[#0f172a]">
             Sessão {totalSessions - sessionIndex} — {formatMesAnoSessao(sess.dataISO)}
           </div>
-          <div className="text-[12px] text-[#64748b] mt-0.5">
-            {sess.nomeProcedimento || 'Procedimento não informado'} · {sess.fotos.length} foto
+          <p
+            className="text-[12px] text-[#64748b] mt-0.5 line-clamp-2"
+            title={tituloSessao}
+          >
+            {tituloSessao} · {sess.fotos.length} foto
             {sess.fotos.length !== 1 ? 's' : ''}
-          </div>
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[11px] font-medium text-[#94a3b8]">
@@ -62,21 +63,10 @@ export function GaleriaSessaoCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 px-4 pb-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="px-4 pb-3">
         <span className="text-[12px] font-bold text-[#64748b] tabular-nums">
           {formatDataSessaoPtBr(sess.dataISO)}
         </span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onAcompanhamento?.({ procedimentoFeitoId, pacienteId });
-          }}
-          disabled={!pacienteId}
-          className="w-full rounded-lg border-[2px] border-[#00a88e]/30 bg-[#e6f7f5] px-2.5 py-1 text-center text-[11px] font-bold text-[#0f766e] transition-colors hover:bg-[#d2f3ee] sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Acompanhamento
-        </button>
       </div>
 
       {expandida ? (

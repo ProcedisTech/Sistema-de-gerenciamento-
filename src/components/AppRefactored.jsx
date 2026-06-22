@@ -1619,7 +1619,7 @@ function AppRefactoredInner() {
       const paciente = sCpf
         ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
         : null;
-      const dataRefSessao = new Date().toISOString().slice(0, 10);
+      const dataRefSessao = toLocalISODate(new Date());
       const procIdOpt = ultimoProcedimentoId ?? undefined;
       pendingAnnotatedGalleryBlobsRef.current = [];
       await uploadEvaluationCapturedPhotos({ paciente, procIdOpt, dataRefSessao });
@@ -2030,7 +2030,7 @@ function AppRefactoredInner() {
       const paciente = resolvePacienteAtendimento();
       const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
       await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
-      const dataRefSessao = new Date().toISOString().slice(0, 10);
+      const dataRefSessao = toLocalISODate(new Date());
       const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
       await uploadProcedureCapturedPhotos(paciente, procIdOpt, dataRefSessao);
     } catch (error) {
@@ -2087,7 +2087,7 @@ function AppRefactoredInner() {
       const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
       await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
       await persistirEncerramentoConsulta(procedimentoFeitoIdParaVinculo);
-      const dataRefSessao = new Date().toISOString().slice(0, 10);
+      const dataRefSessao = toLocalISODate(new Date());
       const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
       await uploadPendingAnnotatedGalleryBlobs({ paciente, procIdOpt, dataRefSessao });
       await uploadProcedureCapturedPhotos(paciente, procIdOpt, dataRefSessao);

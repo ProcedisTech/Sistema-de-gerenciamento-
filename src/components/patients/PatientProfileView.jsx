@@ -93,6 +93,23 @@ import { AnamneseFichaReadonlyView } from '../anamnese/AnamneseFichaReadonlyView
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 
+function resolveProcedimentoFeitoIdForUpload(sess, categoria) {
+  const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
+  const inCat = fotos.filter((f) => (f.categoria || 'outro') === categoria);
+  const fromCat = inCat.find((f) => f?.procedimentoFeitoId)?.procedimentoFeitoId;
+  if (fromCat) return String(fromCat).trim();
+  const any = fotos.find((f) => f?.procedimentoFeitoId)?.procedimentoFeitoId;
+  return any != null ? String(any).trim() : null;
+}
+
+function resolveNomeProcedimentoForUpload(sess, categoria) {
+  const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
+  const inCat = fotos.filter((f) => (f.categoria || 'outro') === categoria);
+  const nomeCat = inCat.map((f) => (f.nomeProcedimento || '').trim()).find(Boolean);
+  if (nomeCat) return nomeCat;
+  return (fotos.map((f) => (f.nomeProcedimento || '').trim()).find(Boolean)) || '';
+}
+
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
   if (alert.isToday) return 'Aniversário hoje — celebre com o paciente!';
@@ -1499,38 +1516,6 @@ export function PatientProfileView({
     [apiGaleriaItems],
   );
 
-  const resolveProcedimentoFeitoIdForSessao = useCallback(
-    (sess) => {
-      const direct = sess?.procedimentoFeitoId;
-      if (direct != null && String(direct).trim() !== '') return String(direct);
-
-      const fotoId = Array.isArray(sess?.fotos)
-        ? sess.fotos.find((f) => f?.procedimentoFeitoId != null && String(f.procedimentoFeitoId).trim() !== '')
-            ?.procedimentoFeitoId
-        : null;
-      if (fotoId != null && String(fotoId).trim() !== '') return String(fotoId);
-
-      const nomeSessao = (
-        sess?.nomeProcedimento ||
-        (Array.isArray(sess?.fotos) ? sess.fotos.map((f) => f?.nomeProcedimento).find(Boolean) : '') ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
-      if (!nomeSessao) return null;
-
-      const match = (apiProcedures || []).find((proc) => {
-        const nomeProc = (proc?.procedimentoNome || proc?.nome || '').trim().toLowerCase();
-        if (!nomeProc) return false;
-        return nomeProc === nomeSessao || nomeProc.includes(nomeSessao) || nomeSessao.includes(nomeProc);
-      });
-
-      const matchId = match?.id ?? match?.procedimentoFeitoId ?? match?.procedimentoId ?? null;
-      return matchId != null && String(matchId).trim() !== '' ? String(matchId) : null;
-    },
-    [apiProcedures],
-  );
-
   const handleGaleriaUpload = useCallback(
     async (sess, categoria, file) => {
       const pacienteId = selectedPatient?.id;
@@ -1541,7 +1526,7 @@ export function PatientProfileView({
         );
         return;
       }
-      const procedimentoFeitoId = resolveProcedimentoFeitoIdForSessao(sess);
+      const procedimentoFeitoId = resolveProcedimentoFeitoIdForUpload(sess, categoria);
       setGaleriaUploadBusy(true);
       try {
         const webp = await convertToWebP(file, 0.85, 1920);
@@ -1549,7 +1534,10 @@ export function PatientProfileView({
           roleUserId,
           procedimentoFeitoId: procedimentoFeitoId ?? undefined,
           dataReferencia: sess.dataISO !== 'sem-data' ? sess.dataISO : undefined,
-          legenda: formatGaleriaLegendaForUpload(categoria, sess.nomeProcedimento || ''),
+          legenda: formatGaleriaLegendaForUpload(
+            categoria,
+            resolveNomeProcedimentoForUpload(sess, categoria),
+          ),
         });
         await refreshGaleriaFromApi();
         toast.success('Foto adicionada à galeria.');
@@ -1559,7 +1547,7 @@ export function PatientProfileView({
         setGaleriaUploadBusy(false);
       }
     },
-    [selectedPatient?.id, roleUserId, resolveProcedimentoFeitoIdForSessao, refreshGaleriaFromApi, toast],
+    [selectedPatient?.id, roleUserId, refreshGaleriaFromApi, toast],
   );
 
   const galeriaUploadDisabled =
@@ -2455,14 +2443,6 @@ export function PatientProfileView({
                   onCompararFotoClick={handleCompararFotoClick}
                   onRemoveGalleryItem={handleRemoveGalleryItem}
                   onUploadCategoria={handleGaleriaUpload}
-                  resolveProcedimentoFeitoIdForSessao={resolveProcedimentoFeitoIdForSessao}
-                  onAcompanhamento={({ procedimentoFeitoId, pacienteId }) =>
-                    setRelatoModal({
-                      open: true,
-                      procedimentoFeitoId,
-                      pacienteId,
-                    })
-                  }
                   onLocalPreview={setGalleryPreview}
                   uploadDisabled={galeriaUploadDisabled}
                   uploadDisabledTitle={galeriaUploadDisabledTitle}
