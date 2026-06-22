@@ -1,4 +1,5 @@
 import { resolveApiUrl } from '../config/apiEnv.js';
+import { toLocalISODate } from './dateLimits.js';
 
 /** Chaves persistidas no prefixo da legenda: `[antes] …` (sem mudança no backend). */
 export const GALERIA_CATEGORIA = {
@@ -70,7 +71,7 @@ export function itemDataReferenciaISO(item) {
   }
   if (item?.createdAt) {
     const t = new Date(item.createdAt);
-    if (!Number.isNaN(t.getTime())) return t.toISOString().slice(0, 10);
+    if (!Number.isNaN(t.getTime())) return toLocalISODate(t);
   }
   return null;
 }
@@ -119,29 +120,31 @@ export function filterGaleriaItemsForUi(items, filters) {
 }
 
 /**
- * Agrupa fotos em “sessões” (data de referência + opcional procedimento), ordena fotos Antes → Planejamento/Avaliação → Depois.
+ * Agrupa fotos em “sessões” (data de referência), ordena fotos Antes → Planejamento/Avaliação → Depois.
  */
 export function groupGaleriaItemsBySession(items) {
   const groups = new Map();
   for (const it of items || []) {
     const dataISO = itemDataReferenciaISO(it) || 'sem-data';
-    const procId =
-      it.procedimentoFeitoId != null && String(it.procedimentoFeitoId).trim() !== ''
-        ? String(it.procedimentoFeitoId).trim()
-        : null;
-    const key = `${dataISO}|${procId || '—'}`;
+    const key = dataISO;
     if (!groups.has(key)) {
       groups.set(key, {
         key,
         dataISO,
-        procedimentoFeitoId: procId,
-        nomeProcedimento: it.nomeProcedimento || null,
         fotos: [],
+        _nomesSet: new Set(),
       });
     }
     const g = groups.get(key);
-    if (!g.nomeProcedimento && it.nomeProcedimento) g.nomeProcedimento = it.nomeProcedimento;
+    const nome = (it.nomeProcedimento || '').trim();
+    if (nome) g._nomesSet.add(nome);
     g.fotos.push(it);
+  }
+
+  for (const g of groups.values()) {
+    g.nomeProcedimento =
+      Array.from(g._nomesSet).join(', ') || 'Consulta / Avaliação';
+    delete g._nomesSet;
   }
 
   const order = { antes: 0, planejamento: 1, avaliacao: 2, mapa: 3, depois: 4, outro: 5 };

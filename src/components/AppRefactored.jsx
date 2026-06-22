@@ -1660,7 +1660,7 @@ function AppRefactoredInner() {
       const paciente = sCpf
         ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
         : null;
-      const dataRefSessao = new Date().toISOString().slice(0, 10);
+      const dataRefSessao = toLocalISODate(new Date());
       const procIdOpt = loteProcedimentosFeitosIds[0] ?? undefined;
       pendingAnnotatedGalleryBlobsRef.current = [];
       await uploadEvaluationCapturedPhotos({ paciente, procIdOpt, dataRefSessao });
@@ -2069,7 +2069,7 @@ function AppRefactoredInner() {
     try {
       const paciente = resolvePacienteAtendimento();
       const novosIds = [];
-      
+
       if (procedimentosLote && procedimentosLote.length > 0) {
         for (const proc of procedimentosLote) {
            const body = {
@@ -2094,12 +2094,12 @@ function AppRefactoredInner() {
         const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
         if (procedimentoFeitoIdParaVinculo) novosIds.push(procedimentoFeitoIdParaVinculo);
       }
-      
+
       if (novosIds.length > 0) {
         setLoteProcedimentosFeitosIds(novosIds);
         // Usa o primeiro ID para vincular mapas e fotos (limitação do UI atual)
         await persistirMapaAplicacaoAtual(novosIds[0], paciente);
-        const dataRefSessao = new Date().toISOString().slice(0, 10);
+        const dataRefSessao = toLocalISODate(new Date());
         await uploadProcedureCapturedPhotos(paciente, novosIds[0], dataRefSessao);
       }
     } catch (error) {
@@ -2164,7 +2164,7 @@ function AppRefactoredInner() {
       const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
       await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
       await persistirEncerramentoConsulta(procedimentoFeitoIdParaVinculo);
-      const dataRefSessao = new Date().toISOString().slice(0, 10);
+      const dataRefSessao = toLocalISODate(new Date());
       const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
       await uploadPendingAnnotatedGalleryBlobs({ paciente, procIdOpt, dataRefSessao });
       await uploadProcedureCapturedPhotos(paciente, procIdOpt, dataRefSessao);

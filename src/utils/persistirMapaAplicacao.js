@@ -1,5 +1,6 @@
 import { pacientesGaleriaApi, procedimentosApi } from '../services/api.js';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGaleria.js';
+import { toLocalISODate } from './dateLimits.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
 
@@ -33,7 +34,7 @@ async function uploadModeloFoto({
       : new File([blob], `modelo_${vistaCodigo}_${Date.now()}.jpg`, {
           type: blob?.type || 'image/jpeg',
         });
-  const dataRef = new Date().toISOString().slice(0, 10);
+  const dataRef = toLocalISODate(new Date());
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(

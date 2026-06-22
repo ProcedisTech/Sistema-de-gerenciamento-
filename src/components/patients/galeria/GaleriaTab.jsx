@@ -35,8 +35,6 @@ export function GaleriaTab({
   onCompararFotoClick,
   onRemoveGalleryItem,
   onUploadCategoria,
-  resolveProcedimentoFeitoIdForSessao,
-  onAcompanhamento,
   onLocalPreview,
   uploadDisabled,
   uploadDisabledTitle,
@@ -193,9 +191,6 @@ export function GaleriaTab({
                   totalSessions={galeriaSessionsForView.length}
                   expandida={sessoesExpandidas[sess.key] ?? false}
                   onToggle={() => toggleSessao(sess)}
-                  procedimentoFeitoId={resolveProcedimentoFeitoIdForSessao(sess)}
-                  pacienteId={selectedPatientId}
-                  onAcompanhamento={onAcompanhamento}
                   categoriasEmEdicao={categoriasEmEdicao}
                   onToggleEdicao={handleToggleEdicao}
                   modoComparar={modoComparar}

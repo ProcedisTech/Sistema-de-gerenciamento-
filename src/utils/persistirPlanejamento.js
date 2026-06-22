@@ -4,6 +4,7 @@ import {
   formatGaleriaLegendaForUpload,
   GALERIA_CATEGORIA,
 } from './pacienteGaleria.js';
+import { toLocalISODate } from './dateLimits.js';
 
 function toApiPonto(p, fotoGaleriaId) {
   const row = {
@@ -28,7 +29,7 @@ async function uploadCaptureFoto(pacienteId, roleUserId, blob, vistaCodigo) {
       : new File([blob], `mapeamento_${vistaCodigo}_${Date.now()}.jpg`, {
           type: blob?.type || 'image/jpeg',
         });
-  const dataRef = new Date().toISOString().slice(0, 10);
+  const dataRef = toLocalISODate(new Date());
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.PLANEJAMENTO, vistaCodigo),
