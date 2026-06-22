@@ -9,6 +9,9 @@ export function ConsultaProcedimentoFlow({
   nomeProcedimento,
   setNomeProcedimento,
   setNomeProcedimentoCatalogoId,
+  procedimentosLote = [],
+  activeProcedimentoIndex = 0,
+  setActiveProcedimentoIndex = () => {},
   observacoesExecucao,
   setObservacoesExecucao,
   procedureCapturedPhotos,
@@ -92,29 +95,56 @@ export function ConsultaProcedimentoFlow({
   };
 
   const handleFinalizar = async () => {
-    if (!orientacoes) {
-      setStep5Errors({ orientacoes: !orientacoes });
-      toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
-      return;
-    }
-    if (step5RetornoBloqueiaFinal) {
-      toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
-      return;
-    }
-    setStep5Errors({});
     try {
-      await encerrarAtendimento();
-    } catch {
-      // Erro já tratado em encerrarAtendimento
+      const hasNext = procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1;
+      
+      if (hasNext) {
+        if (typeof salvarProcedimentoEFotos === 'function') {
+           const success = await salvarProcedimentoEFotos();
+           if (!success) {
+             return;
+           }
+        }
+        
+        toast.success('Procedimento salvo com sucesso! Preencha o próximo.');
+        setObservacoesExecucao('');
+        const nextIndex = activeProcedimentoIndex + 1;
+        setActiveProcedimentoIndex(nextIndex);
+        if (procedimentosLote && procedimentosLote[nextIndex]) {
+          setNomeProcedimento(procedimentosLote[nextIndex].procedimentoNome || '');
+          setNomeProcedimentoCatalogoId(procedimentosLote[nextIndex].catalogoProcedimentoSaudeId || null);
+        }
+        setPhase('registro');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        if (!orientacoes) {
+          setStep5Errors({ orientacoes: !orientacoes });
+          toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
+          return;
+        }
+        if (step5RetornoBloqueiaFinal) {
+          toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
+          return;
+        }
+        setStep5Errors({});
+        
+        if (typeof encerrarAtendimento === 'function') {
+          await encerrarAtendimento();
+        }
+      }
+    } catch (e) {
+      toast.error('Erro ao finalizar atendimento. Verifique os dados.');
+      console.error(e);
     }
   };
 
   if (phase === 'registro') {
     return (
       <>
+        {/* The tabs were removed as requested by the user, because the procedure is selected in the form itself. */}
         <Step4Procedimento
           pacienteIdForProcedures={pacienteIdForProcedures}
-          nomeProcedimento={nomeProcedimento}
+          nomeProcedimento={procedimentosLote?.[activeProcedimentoIndex]?.procedimentoNome || nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
           setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoId}
           observacoesExecucao={observacoesExecucao}
@@ -208,7 +238,9 @@ export function ConsultaProcedimentoFlow({
               ? 'Confirme as orientações para finalizar'
               : step5RetornoBloqueiaFinal
                 ? 'Corrija a data de retorno'
-                : 'Finalizar Atendimento ✓'}
+                : procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1
+                  ? 'Salvar e Próximo Procedimento ➔'
+                  : 'Finalizar Atendimento ✓'}
         </button>
       </div>
     </>

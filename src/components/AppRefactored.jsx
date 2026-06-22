@@ -293,7 +293,7 @@ function AppRefactoredInner() {
   const [queixaVisivel, setQueixaVisivel] = useState(true);
   const [step1Busy, setStep1Busy] = useState(false);
   /** Procedimento já registrado no Step 4, quando existir (na etapa 3 costuma ser null). */
-  const [ultimoProcedimentoId, setUltimoProcedimentoId] = React.useState(null);
+  const [loteProcedimentosFeitosIds, setLoteProcedimentosFeitosIds] = React.useState([]);
   /** Array com IDs das assinaturas persistidas no Step 3 (para vincular ao procedimento no finalizar). */
   const [assinaturasRealizadasIds, setAssinaturasRealizadasIds] = React.useState([]);
 
@@ -839,6 +839,11 @@ function AppRefactoredInner() {
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [consultaModule, setConsultaModule] = React.useState(null);
   const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
+  
+  // --- Lote de Procedimentos ---
+  const [procedimentosLote, setProcedimentosLote] = React.useState([]);
+  const [activeProcedimentoIndex, setActiveProcedimentoIndex] = React.useState(0);
+  
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
 
   const [activeView, _setActiveView] = React.useState(() => {
@@ -1034,6 +1039,10 @@ function AppRefactoredInner() {
   const handleStartAttendance = (patient, options = {}) => {
     if (!patient) return;
 
+    if (!options.fromAgendaSlot) {
+      setProcedimentosLote([]);
+    }
+
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     const cpfKey = cpf != null ? String(cpf).trim() : '';
     const todayIso = toLocalISODate();
@@ -1100,6 +1109,7 @@ function AppRefactoredInner() {
   const onSairConsulta = React.useCallback(() => {
     setConsultaModule(null);
     setActiveView('pacientes');
+    setProcedimentosLote([]);
   }, [setActiveView]);
 
   const requestEncerrarConsulta = React.useCallback(() => {
@@ -1127,6 +1137,37 @@ function AppRefactoredInner() {
     const fromSlot = opt.fromAgendaSlot === true;
     const dataRaw = opt.data;
     const horaRaw = opt.horaInicio;
+    
+    if (opt.lote && Array.isArray(opt.lote) && opt.lote.length > 0) {
+      setProcedimentosLote(opt.lote);
+      setActiveProcedimentoIndex(0);
+    } else {
+      if (fromSlot && agendaId && dataRaw) {
+        const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw);
+        if (scheduledAt || !scheduledAt) { // Keep indenting/logic simple
+          const agendamentosDoDia = agendaSchedule.appointments
+            .filter(i => {
+              const sameId = String(i?.paciente?.id || '') === String(patient.id || '') || String(i?.pacienteId || '') === String(patient.id || '');
+              const sameName = String(i?.pacienteNome || '').trim().toLowerCase() === String(patient?.nome || patient?.nomeCompleto || '').trim().toLowerCase();
+              const isSamePatient = (patient.id && sameId) || sameName;
+              return isSamePatient && toDateKey(i?.data) === toDateKey(dataRaw);
+            })
+            .sort((a,b) => String(a?.horaInicio).localeCompare(String(b?.horaInicio)));
+          
+          const lote = agendamentosDoDia.map(a => ({
+            agendaId: a.id,
+            procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
+            catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+          }));
+          
+          setProcedimentosLote(lote);
+          setActiveProcedimentoIndex(0);
+        }
+      } else {
+        setProcedimentosLote([]);
+        setActiveProcedimentoIndex(0);
+      }
+    }
 
     const proceedDirect = () => {
       handleStartAttendance(patient, opt);
@@ -1622,7 +1663,7 @@ function AppRefactoredInner() {
         ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
         : null;
       const dataRefSessao = new Date().toISOString().slice(0, 10);
-      const procIdOpt = ultimoProcedimentoId ?? undefined;
+      const procIdOpt = loteProcedimentosFeitosIds[0] ?? undefined;
       pendingAnnotatedGalleryBlobsRef.current = [];
       await uploadEvaluationCapturedPhotos({ paciente, procIdOpt, dataRefSessao });
     } catch (error) {
@@ -1638,7 +1679,7 @@ function AppRefactoredInner() {
     patients,
     selectedPatientCpf,
     toast,
-    ultimoProcedimentoId,
+    loteProcedimentosFeitosIds[0],
     uploadEvaluationCapturedPhotos,
   ]);
 
@@ -1701,7 +1742,7 @@ function AppRefactoredInner() {
     anamnesePreenchimentoIdRef.current = null;
     pendingAnnotatedGalleryBlobsRef.current = [];
     journeyState.setTermoSelecionadoId(null);
-    setUltimoProcedimentoId(null);
+    setLoteProcedimentosFeitosIds([]);
     setAssinaturasRealizadasIds([]);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
@@ -1725,13 +1766,12 @@ function AppRefactoredInner() {
     setPhotoAnnotationIndex,
     setPhotoAnnotationScope,
     setQueixaVisivel,
-    setUltimoProcedimentoId,
     mapaAplicacaoState,
   ]);
 
   const ensureProcedimentoFeitoForMapa = React.useCallback(
     async (paciente) => {
-      if (ultimoProcedimentoId) return ultimoProcedimentoId;
+      if (loteProcedimentosFeitosIds[0]) return loteProcedimentosFeitosIds[0];
 
       const nome = String(journeyState.nomeProcedimento || '').trim();
       const catalogoId =
@@ -1761,7 +1801,7 @@ function AppRefactoredInner() {
           const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
           if (pid != null && pid !== '') {
             const idStr = String(pid);
-            setUltimoProcedimentoId(idStr);
+            setLoteProcedimentosFeitosIds([idStr]);
             return idStr;
           }
         } catch (e) {
@@ -1780,7 +1820,7 @@ function AppRefactoredInner() {
       const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
       if (pid != null && pid !== '') {
         const idStr = String(pid);
-        setUltimoProcedimentoId(idStr);
+        setLoteProcedimentosFeitosIds([idStr]);
         return idStr;
       }
       return null;
@@ -1792,13 +1832,13 @@ function AppRefactoredInner() {
       journeyState.observacoesExecucao,
       resolvePlanejamentoItemId,
       roleUserId,
-      ultimoProcedimentoId,
+      loteProcedimentosFeitosIds[0],
     ],
   );
 
   const registrarProcedimentoManual = React.useCallback(
     async (paciente) => {
-      let procedimentoFeitoIdParaVinculo = ultimoProcedimentoId;
+      let procedimentoFeitoIdParaVinculo = loteProcedimentosFeitosIds[0];
       const snapshotCatalogoId =
         journeyState.nomeProcedimentoCatalogoId != null &&
         String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
@@ -1823,7 +1863,7 @@ function AppRefactoredInner() {
         const pid = resultado?.id ?? resultado?.procedimentoId ?? resultado?.procedimentoFeitoId;
         if (pid != null && pid !== '') {
           procedimentoFeitoIdParaVinculo = String(pid);
-          setUltimoProcedimentoId(String(pid));
+          setLoteProcedimentosFeitosIds([String(pid)]);
         }
       }
       return procedimentoFeitoIdParaVinculo;
@@ -1835,7 +1875,7 @@ function AppRefactoredInner() {
       journeyState.observacoesExecucao,
       resolvePlanejamentoItemId,
       roleUserId,
-      ultimoProcedimentoId,
+      loteProcedimentosFeitosIds[0],
     ]
   );
 
@@ -2030,11 +2070,40 @@ function AppRefactoredInner() {
     setIsSalvandoProcedimento(true);
     try {
       const paciente = resolvePacienteAtendimento();
-      const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
-      await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
-      const dataRefSessao = new Date().toISOString().slice(0, 10);
-      const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
-      await uploadProcedureCapturedPhotos(paciente, procIdOpt, dataRefSessao);
+      const novosIds = [];
+      
+      if (procedimentosLote && procedimentosLote.length > 0) {
+        for (const proc of procedimentosLote) {
+           const body = {
+             nome: proc.procedimentoNome,
+             roleUserId,
+             observacao: null,
+             agendaId: proc.agendaId,
+             catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
+             ...(resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) ? { planejamentoItemId: resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) } : {}),
+           };
+           let pid = null;
+           try {
+             const res = await procedimentosApi.iniciar(body);
+             pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+           } catch {
+             const res = await procedimentosApi.registrarManual(paciente.id, body);
+             pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+           }
+           if (pid) novosIds.push(String(pid));
+        }
+      } else {
+        const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
+        if (procedimentoFeitoIdParaVinculo) novosIds.push(procedimentoFeitoIdParaVinculo);
+      }
+      
+      if (novosIds.length > 0) {
+        setLoteProcedimentosFeitosIds(novosIds);
+        // Usa o primeiro ID para vincular mapas e fotos (limitação do UI atual)
+        await persistirMapaAplicacaoAtual(novosIds[0], paciente);
+        const dataRefSessao = new Date().toISOString().slice(0, 10);
+        await uploadProcedureCapturedPhotos(paciente, novosIds[0], dataRefSessao);
+      }
     } catch (error) {
       console.error('Erro ao salvar procedimento e fotos:', error);
       toast.error(error.message || 'Erro ao salvar procedimento e fotos.');
@@ -2044,9 +2113,12 @@ function AppRefactoredInner() {
       setIsSalvandoProcedimento(false);
     }
   }, [
+    procedimentosLote,
+    roleUserId,
     persistirMapaAplicacaoAtual,
     registrarProcedimentoManual,
     resolvePacienteAtendimento,
+    resolvePlanejamentoItemId,
     toast,
     uploadProcedureCapturedPhotos,
   ]);
@@ -2057,7 +2129,12 @@ function AppRefactoredInner() {
     setIsFinishing(true);
     try {
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      const procedimentoFeitoIdParaVinculo = ultimoProcedimentoId;
+      const procedimentoFeitoIdParaVinculo = loteProcedimentosFeitosIds[0];
+      
+      if (loteProcedimentosFeitosIds && loteProcedimentosFeitosIds.length > 0) {
+        await procedimentosApi.iniciarLote(loteProcedimentosFeitosIds.map(id => ({ procedimentoFeitoId: id })));
+      }
+
       await persistirEncerramentoConsulta(procedimentoFeitoIdParaVinculo);
       setConsultaModule(null);
       await finalizarAtendimentoNavegacao(sCpf);
@@ -2076,7 +2153,7 @@ function AppRefactoredInner() {
     selectedPatientCpf,
     setIsFinishing,
     toast,
-    ultimoProcedimentoId,
+    loteProcedimentosFeitosIds[0],
   ]);
 
   const finishJourney = async () => {
@@ -2384,7 +2461,7 @@ function AppRefactoredInner() {
                       termoConteudo={journeyTermoConteudo || undefined}
                       onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
                       pacienteId={pacienteAtual?.id ?? null}
-                      procedimentoFeitoId={ultimoProcedimentoId ?? null}
+                      procedimentoFeitoId={loteProcedimentosFeitosIds[0] ?? null}
                       roleUserId={roleUserId ?? null}
                       onAssinaturaSalva={handleTermoAssinaturaSalva}
                       pacienteCtx={{
@@ -2432,7 +2509,7 @@ function AppRefactoredInner() {
                       onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
                       mapaState={mapaAplicacaoState}
                       roleUserId={roleUserId}
-                      procedimentoFeitoId={ultimoProcedimentoId}
+                      procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
                       catalogoId={journeyState.nomeProcedimentoCatalogoId}
                       planejamentoItemId={resolvePlanejamentoItemId(
                         journeyState.nomeProcedimentoCatalogoId,
@@ -2798,7 +2875,7 @@ function AppRefactoredInner() {
                     termoConteudo={journeyTermoConteudo || undefined}
                     onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
                     pacienteId={pacienteAtual?.id ?? null}
-                    procedimentoFeitoId={ultimoProcedimentoId ?? null}
+                    procedimentoFeitoId={loteProcedimentosFeitosIds[0] ?? null}
                     roleUserId={roleUserId ?? null}
                     onAssinaturaSalva={handleTermoAssinaturaSalva}
                     pacienteCtx={{
@@ -2830,6 +2907,9 @@ function AppRefactoredInner() {
                     nomeProcedimento={journeyState.nomeProcedimento}
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
+                    procedimentosLote={procedimentosLote}
+                    activeProcedimentoIndex={activeProcedimentoIndex}
+                    setActiveProcedimentoIndex={setActiveProcedimentoIndex}
                     observacoesExecucao={journeyState.observacoesExecucao}
                     setObservacoesExecucao={journeyState.setObservacoesExecucao}
                     procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
@@ -2843,7 +2923,7 @@ function AppRefactoredInner() {
                     onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
                     mapaState={mapaAplicacaoState}
                     roleUserId={roleUserId}
-                    procedimentoFeitoId={ultimoProcedimentoId}
+                    procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
                     catalogoId={journeyState.nomeProcedimentoCatalogoId}
                     planejamentoItemId={resolvePlanejamentoItemId(
                       journeyState.nomeProcedimentoCatalogoId,

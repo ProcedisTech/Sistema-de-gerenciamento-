@@ -471,6 +471,11 @@ export function AgendaDashboard({
         data: appointment.data,
         horaInicio: appointment.horaInicio,
         fromAgendaSlot: true,
+        lote: items.map(a => ({
+          agendaId: a.id || a.agendaId,
+          procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
+          catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+        })),
       });
       return;
     }
