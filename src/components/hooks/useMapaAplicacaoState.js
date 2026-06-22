@@ -236,6 +236,17 @@ export function useMapaAplicacaoState() {
     setDirtyVistas(new Set());
   }, []);
 
+  const restoreSnapshot = useCallback((snapshot) => {
+    if (!snapshot) {
+      resetMapa();
+      return;
+    }
+    setFotosPorVista(snapshot.fotosPorVista || {});
+    setPontosPorVista(snapshot.pontosPorVista || {});
+    setFotoGaleriaIdPorVista(snapshot.fotoGaleriaIdPorVista || {});
+    setDirtyVistas(new Set(snapshot.dirtyVistas || []));
+  }, [resetMapa]);
+
   return {
     vistaAtual,
     setVistaAtual,
@@ -258,5 +269,6 @@ export function useMapaAplicacaoState() {
     clearAllDirty,
     markDirty,
     resetMapa,
+    restoreSnapshot,
   };
 }
