@@ -1015,6 +1015,7 @@ export const procedimentosApi = {
   byPaciente: (pid) => request(`/api/v1/procedimentos/paciente/${pid}`),
   create: (data) => request('/api/v1/procedimentos', { method: 'POST', body: JSON.stringify(data) }),
   iniciar: (data) => request('/api/v1/procedimentos/iniciar', { method: 'POST', body: JSON.stringify(data) }),
+  iniciarLote: (dtos) => request('/api/v1/procedimentos/lote', { method: 'POST', body: JSON.stringify(dtos) }),
   registrarManual: (pacienteId, data) =>
     request(`/api/v1/procedimentos/paciente/${pacienteId}/manual`, {
       method: 'POST',
@@ -1178,6 +1179,11 @@ export const anamneseApi = {
     }),
   finalizarPaciente: (pid, aid) =>
     request(`/api/v1/anamnese/paciente/${pid}/${aid}/finalizar`, { method: 'PATCH' }),
+  editPaciente: (pid, aid, roleId, data) =>
+    request(`/api/v1/anamnese/paciente/${pid}/${aid}?roleUserId=${roleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
   // 🟨🟨 Configurações de Acesso Público 🟨🟨
