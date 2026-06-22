@@ -2080,7 +2080,9 @@ function AppRefactoredInner() {
         : procedimentosLote;
 
       if (listaParaSalvar && listaParaSalvar.length > 0) {
-        const promises = listaParaSalvar.map(async (proc) => {
+        const payloadLote = { procedimentos: [] };
+        
+        for (const proc of listaParaSalvar) {
            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
            const body = {
              nome: proc.nomeProcedimento || proc.procedimentoNome,
@@ -2090,19 +2092,23 @@ function AppRefactoredInner() {
              catalogoProcedimentoSaudeId: catId,
              ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
            };
-           let pid = null;
-           try {
-             const res = await procedimentosApi.iniciar(body);
-             pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-           } catch {
-             const res = await procedimentosApi.registrarManual(paciente.id, body);
-             pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-           }
-           return pid;
-        });
+           payloadLote.procedimentos.push(body);
+        }
 
-        const results = await Promise.all(promises);
-        novosIds.push(...results.filter(Boolean).map(String));
+        try {
+          const resArray = await procedimentosApi.iniciarLote(payloadLote);
+          if (Array.isArray(resArray)) {
+            novosIds.push(...resArray.map(r => String(r?.id ?? r?.procedimentoId ?? r?.procedimentoFeitoId)).filter(id => id !== 'undefined' && id !== 'null'));
+          }
+        } catch {
+          // Fallback para registrar manual se a API do lote falhar ou não suportar algum fluxo
+          for (const body of payloadLote.procedimentos) {
+             const res = await procedimentosApi.registrarManual(paciente.id, body);
+             const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+             if (pid) novosIds.push(String(pid));
+          }
+        }
+
       } else {
         const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
         if (procedimentoFeitoIdParaVinculo) novosIds.push(procedimentoFeitoIdParaVinculo);
