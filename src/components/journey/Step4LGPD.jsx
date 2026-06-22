@@ -1552,7 +1552,7 @@ export function Step4Procedimento({
 
       <div
         className={`mb-6 space-y-5 rounded-2xl border bg-white p-4 sm:p-6 ${
-          step4Errors.nomeProcedimento || step4Errors.catalogoId || step4Errors.observacoesExecucao
+          step4Errors.nomeProcedimento || step4Errors.catalogoId
             ? 'border-red-300'
             : 'border-[#00a88e]/25'
         }`}
@@ -1619,19 +1619,14 @@ export function Step4Procedimento({
         </div>
         <div className="space-y-1.5">
           <label className="text-[13px] font-bold text-[#00a88e]">
-            Descrição detalhada do que foi realizado <span className="text-red-500">*</span>
+            Descrição detalhada do que foi realizado
           </label>
           <textarea
             value={observacoesExecucao}
-            onChange={(e) => {
-              setObservacoesExecucao(e.target.value);
-              setStep4Errors((prev) => ({ ...prev, observacoesExecucao: false }));
-            }}
+            onChange={(e) => setObservacoesExecucao(e.target.value)}
             placeholder="Ex: Aplicação de 20U de toxina botulínica na glabela, 10U nas linhas frontais. Produto: Dysport lote #XXXX. Paciente tolerou bem..."
             rows={5}
-            className={`w-full resize-none rounded-xl border-[2px] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px] ${
-              step4Errors.observacoesExecucao ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'
-            }`}
+            className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px]"
           />
         </div>
       </div>
