@@ -2530,6 +2530,7 @@ function AppRefactoredInner() {
                   {currentStep === 5 && (
                     <Step5Finalization
                       key={String(journeyState.nomeProcedimento || '')}
+                      procedimentosLote={journeyState.procedimentosLote ?? []}
                       procedureDateIso={journeyProcedureDateIso}
                       proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
                       setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}

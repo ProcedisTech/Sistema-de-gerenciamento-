@@ -99,6 +99,7 @@ export function Step5Finalization({
   onAnnotateEvaluationPhoto,
   onAnnotateProcedurePhoto,
   hideProximoRetorno = false,
+  procedimentosLote = [],
 }) {
   const toast = useToast();
   const todayIso = useMemo(() => toLocalISODate(), []);
@@ -115,25 +116,59 @@ export function Step5Finalization({
   useEffect(() => {
     if (orientacoesCarregadas) return;
     let cancelled = false;
-    const nome = String(nomeProcedimento || '').trim();
+    
+    const nomesArray = procedimentosLote && procedimentosLote.length > 0
+      ? procedimentosLote.map(p => String(p.procedimentoNome || '').trim()).filter(Boolean)
+      : [String(nomeProcedimento || '').trim()].filter(Boolean);
+      
+    const nomesUnicos = [...new Set(nomesArray)];
 
     (async () => {
-      if (nome) {
-        try {
-          const raw = await perfilApi.getOrientacoesTemplate(nome);
+      try {
+        let allParsed = [];
+        if (nomesUnicos.length > 0) {
+          const promises = nomesUnicos.map(n => 
+             perfilApi.getOrientacoesTemplate(n).catch(e => {
+               if (e?.status !== 404 && e?.status !== 400) {
+                 console.warn(`orientacoes-template (${n}):`, e?.message || e);
+               }
+               return null;
+             })
+          );
+          
+          const results = await Promise.all(promises);
           if (cancelled) return;
-          const parsed = normalizeOrientacoesTemplateResponse(raw);
-          if (parsed.length > 0) {
-            setOrientacoesItens(parsed);
-            setOrientacoesCarregadas(true);
-            return;
-          }
-        } catch (e) {
-          if (e?.status !== 404 && e?.status !== 400) {
-            console.warn('orientacoes-template:', e?.message || e);
+          
+          for (const raw of results) {
+            if (raw) {
+               const parsed = normalizeOrientacoesTemplateResponse(raw);
+               allParsed.push(...parsed);
+            }
           }
         }
+        
+        if (allParsed.length > 0) {
+          const uniqueTexts = new Set();
+          const uniqueParsed = [];
+          
+          allParsed.forEach(item => {
+             const textKey = String(item.descricao || '').trim().toLowerCase();
+             if (!uniqueTexts.has(textKey)) {
+                uniqueTexts.add(textKey);
+                uniqueParsed.push({ ...item, id: newOrientacaoId() });
+             }
+          });
+          
+          const finalParsed = uniqueParsed.map((item, idx) => ({ ...item, ordem: idx }));
+          
+          setOrientacoesItens(finalParsed);
+          setOrientacoesCarregadas(true);
+          return;
+        }
+      } catch (e) {
+        console.warn('orientacoes-template batch:', e?.message || e);
       }
+
       if (!cancelled) {
         setOrientacoesItens(fallbackOrientacoesFromDefaults());
         setOrientacoesCarregadas(true);
@@ -143,7 +178,7 @@ export function Step5Finalization({
     return () => {
       cancelled = true;
     };
-  }, [nomeProcedimento, orientacoesCarregadas, setOrientacoesItens, setOrientacoesCarregadas]);
+  }, [nomeProcedimento, procedimentosLote, orientacoesCarregadas, setOrientacoesItens, setOrientacoesCarregadas]);
 
   const sortedItens = useMemo(
     () => [...(Array.isArray(orientacoesItens) ? orientacoesItens : [])].sort((a, b) => a.ordem - b.ordem),
