@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { Shield, Loader2, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
-import { SignatureModal } from '../../components/journey/Step4LGPD';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
 
 export function PublicSignatureFlow() {
