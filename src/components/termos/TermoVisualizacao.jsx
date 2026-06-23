@@ -1,5 +1,6 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
+import { replaceTermVariables } from '../../utils/replaceTermVariables';
 
 export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalCtx, clinicaCtx, children }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
@@ -22,13 +23,9 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
   const contatoPaciente = pac.telefone || '[Telefone do Paciente]';
 
   let conteudoTexto = String(conteudo || '').trim();
-  // Substitui os placeholders pelos dados reais do contexto (se existirem e não forem os fallbacks padrão)
-  conteudoTexto = conteudoTexto
-    .replace(/\[NOME DO PACIENTE\]/gi, pac.nome ? pac.nome : '[NOME DO PACIENTE]')
-    .replace(/\[CPF DO PACIENTE\]/gi, pac.cpf ? pac.cpf : '[CPF DO PACIENTE]')
-    .replace(/\[NOME DA CLÍNICA\]/gi, clinica.nome ? clinica.nome : '[NOME DA CLÍNICA]')
-    .replace(/\[CNPJ DA CLÍNICA\]/gi, clinica.cnpj ? clinica.cnpj : '[CNPJ DA CLÍNICA]')
-    .replace(/\[NOME DO PROFISSIONAL\]/gi, prof.nome ? prof.nome : '[NOME DO PROFISSIONAL]');
+  
+  // Substitui os placeholders pelos dados reais do contexto usando o utility centralizado
+  conteudoTexto = replaceTermVariables(conteudoTexto, { pac, clinica, prof });
 
   const temConteudoTexto = conteudoTexto.length > 0;
 

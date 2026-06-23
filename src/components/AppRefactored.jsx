@@ -76,6 +76,7 @@ import { DisponibilidadeRevisionProvider } from '../contexts/DisponibilidadeRevi
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { DocumentoPublicoPage } from '../pages/DocumentoPublico/DocumentoPublicoPage';
+import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -2211,6 +2212,8 @@ function AppRefactoredInner() {
     typeof window !== 'undefined' && window.location.pathname.startsWith('/anamnese');
   const isDocumentoPublico =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/documento');
+  const isAssinaturaPublica =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/assinar');
 
   // ============ RENDERIZAÇÃO ============
   if (isPaginaPublica) {
@@ -2221,6 +2224,9 @@ function AppRefactoredInner() {
   }
   if (isDocumentoPublico) {
     return <DocumentoPublicoPage />;
+  }
+  if (isAssinaturaPublica) {
+    return <PublicSignatureFlow />;
   }
 
   if (!authReady) {

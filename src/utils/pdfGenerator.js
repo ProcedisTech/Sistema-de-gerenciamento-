@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { replaceTermVariables } from './replaceTermVariables';
 
 export const generateTermoPdf = async ({
   titulo,
@@ -99,14 +100,7 @@ export const generateTermoPdf = async ({
     }
   };
 
-  // Processar HTML rico e placeholders
-  let html = String(conteudo || '').trim();
-  html = html
-    .replace(/\[NOME DO PACIENTE\]/gi, nomePaciente)
-    .replace(/\[CPF DO PACIENTE\]/gi, cpfPaciente)
-    .replace(/\[NOME DA CLÍNICA\]/gi, nomeClinica)
-    .replace(/\[CNPJ DA CLÍNICA\]/gi, clinica.cnpj || '[CNPJ DA CLÍNICA]')
-    .replace(/\[NOME DO PROFISSIONAL\]/gi, nomeProfissional);
+  let html = replaceTermVariables(String(conteudo || '').trim(), { pac: pacienteCtx, clinica: clinicaCtx, prof: profissionalCtx });
 
   // Parse Inteligente de HTML para Array de Parágrafos (Preservando Alinhamento, Indentação e Headings)
   const tempDiv = document.createElement("div");

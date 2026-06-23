@@ -14,10 +14,12 @@ import {
   Stethoscope,
   Globe,
   ChevronDown,
+  PenLine,
 } from 'lucide-react';
 import { AuditoriaView } from './AuditoriaView';
 import { AnamneseAdminView, AnamneseConfigPublicaPanel } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
+import { MetodosAssinaturaPanel } from './MetodosAssinaturaPanel';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
 import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
 import { HorarioClinicaPanel } from './HorarioClinicaPanel';
@@ -41,12 +43,14 @@ const SECTION_SUBTITLE = {
   'agenda-templates': 'Mensagens automáticas de WhatsApp',
   'pacientes-inativados': 'Pacientes fora da listagem principal',
   'anamnese-publica': 'Configurações de acesso público',
+  'metodos-assinatura': 'Métodos de assinatura disponíveis para o paciente',
 };
 
 // ── Map each section to its group key (used for auto-expand) ─────────────────
 const SECTION_TO_GROUP = {
   procedimentos: 'clinica-group',
   termos: 'clinica-group',
+  'metodos-assinatura': 'clinica-group',
   categorias: 'anamnese',
   perguntas: 'anamnese',
   fichas: 'anamnese',
@@ -296,7 +300,10 @@ export function ConfiguracoesView({
     if (canSeeProcedimentos || canSeeTermos) {
       const items = [];
       if (canSeeProcedimentos) items.push({ id: 'procedimentos', label: 'Procedimentos', icon: Stethoscope });
-      if (canSeeTermos) items.push({ id: 'termos', label: 'Termos de Consentimento', icon: FileText });
+      if (canSeeTermos) {
+        items.push({ id: 'termos', label: 'Termos de Consentimento', icon: FileText });
+        items.push({ id: 'metodos-assinatura', label: 'Métodos de Assinatura', icon: PenLine });
+      }
       groups.push({ key: 'clinica-group', label: 'Clínica', items });
     }
 
@@ -397,13 +404,22 @@ export function ConfiguracoesView({
                 />
               )}
               {canSeeTermos && (
-                <SidebarNavItem
-                  icon={FileText}
-                  label={<>Termos de{' '}<wbr />Consentimento</>}
-                  subtitle="Documentos legais"
-                  active={configSection === 'termos'}
-                  onClick={() => setConfigSection('termos')}
-                />
+                <>
+                  <SidebarNavItem
+                    icon={FileText}
+                    label={<>Termos de{' '}<wbr />Consentimento</>}
+                    subtitle="Documentos legais"
+                    active={configSection === 'termos'}
+                    onClick={() => setConfigSection('termos')}
+                  />
+                  <SidebarNavItem
+                    icon={PenLine}
+                    label="Métodos de Assinatura"
+                    subtitle="QR Code, Tablet, Link"
+                    active={configSection === 'metodos-assinatura'}
+                    onClick={() => setConfigSection('metodos-assinatura')}
+                  />
+                </>
               )}
             </CollapsibleNavGroup>
           )}
@@ -532,8 +548,9 @@ export function ConfiguracoesView({
           {/* Procedimentos — N4+ */}
           {configSection === 'procedimentos' && canSeeProcedimentos && <BancoProcedimentosPanel />}
 
-          {/* Termos — N4+ */}
+          {/* Termos e Assinaturas — N4+ */}
           {configSection === 'termos' && canSeeTermos && <TermosManager />}
+          {configSection === 'metodos-assinatura' && canSeeTermos && <MetodosAssinaturaPanel />}
 
           {/* Anamnese — N3+ */}
           {(configSection === 'categorias' || configSection === 'perguntas' || configSection === 'fichas') &&

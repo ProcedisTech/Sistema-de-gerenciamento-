@@ -358,7 +358,11 @@ export function JourneyView({
           termoTitulo={termoTitulo}
           termoConteudo={termoConteudo}
           onTermoChange={(id) => setTermoSelecionadoId(id)}
-          pacienteCtx={{ nome: pacienteAtual?.nome, cpf: pacienteAtual?.cpf ?? cpf }}
+          pacienteId={pacienteId ?? pacienteAtual?.id ?? null}
+          pacienteCtx={{ 
+            nome: pacienteAtual?.nome || pacienteAtual?.nomeCompleto || '', 
+            cpf: pacienteAtual?.cpf ?? cpf 
+          }}
           clinicaCtx={{}}
           profissionalCtx={{}}
         />
