@@ -3099,7 +3099,7 @@ function AppRefactoredInner() {
           >
 
             {activeView === 'pacientes' && (
-              <RoleGuard minLevel="NIVEL_1" showError>
+              <RoleGuard requiredPermission="PACIENTE_VER" minLevel="NIVEL_1" showError>
                 <PatientsView
                   isRecepcionista={isRecepcionista}
                   patients={patients}
@@ -3159,7 +3159,7 @@ function AppRefactoredInner() {
             )}
 
             {activeView === 'configuracoes' && (
-              <RoleGuard minLevel="NIVEL_3" showError>
+              <RoleGuard condition={canSeeConfig} showError>
                 <ConfiguracoesView
                   canSeeAnamnese={canSeeConfigAnamnese}
                   canSeeProcedimentos={canSeeConfigProcedimentos}
@@ -3181,7 +3181,7 @@ function AppRefactoredInner() {
             )}
 
             {activeView === 'gestao-equipe' && (
-              <RoleGuard minLevel="NIVEL_5" showError>
+              <RoleGuard requiredPermission="USUARIO_VER" minLevel="NIVEL_5" showError>
                 <GestaoUsuariosView
                   onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                 />
@@ -3189,7 +3189,7 @@ function AppRefactoredInner() {
             )}
 
             {activeView === 'agenda' && (
-              <RoleGuard minLevel="NIVEL_1" showError>
+              <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
                 <div className="flex min-h-0 flex-1 flex-col">
                 <AgendaDashboard
                   agenda={agendaSchedule}

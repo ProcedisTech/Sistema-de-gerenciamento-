@@ -14,11 +14,13 @@ import { ShieldAlert } from 'lucide-react';
 export function RoleGuard({ 
   allowedRoles, 
   minLevel, 
+  requiredPermission,
+  condition,
   fallback = null, 
   showError = false, 
   children 
 }) {
-  const { papel, isAtLeast } = usePapel();
+  const { papel, isAtLeast, hasPerm } = usePapel();
 
   let isAuthorized = true;
 
@@ -26,7 +28,18 @@ export function RoleGuard({
     isAuthorized = false;
   }
 
-  if (minLevel && !isAtLeast(minLevel)) {
+  // Verifica condicao booleana explicita primeiro
+  if (condition !== undefined) {
+    if (!condition) {
+      isAuthorized = false;
+    }
+  } else if (requiredPermission) {
+    // Se exige permissao especifica, checa se tem a permissao OU o nivel de fallback
+    if (!hasPerm(requiredPermission, minLevel)) {
+      isAuthorized = false;
+    }
+  } else if (minLevel && !isAtLeast(minLevel)) {
+    // Modo legado apenas por nivel (falha para CST_)
     isAuthorized = false;
   }
 
