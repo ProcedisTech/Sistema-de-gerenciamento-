@@ -7,11 +7,13 @@ import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import DisponibilidadeProfissionalModal from './DisponibilidadeProfissionalModal';
 import { AuditoriaView } from './AuditoriaView';
+import { GestaoPerfisTab } from './GestaoPerfisTab';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 
 export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
-  const { isAdmin } = usePapel();
+  // eslint-disable-next-line no-unused-vars
+  const { isAdmin, canSeeConfigEquipe } = usePapel();
   const { roleUserId: currentRoleUserId } = useOrg();
   const toast = useToast();
   
@@ -49,7 +51,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           headers: fetchHeaders(),
           credentials: 'include'
         }),
-        fetch(resolveApiUrl('/api/v1/dimensoes/perfis-acesso'), {
+        fetch(resolveApiUrl('/api/v1/perfis-acesso'), {
           headers: fetchHeaders(),
           credentials: 'include'
         }),
@@ -83,13 +85,13 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
   }, [fetchHeaders, toast]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canSeeConfigEquipe) {
       loadData();
     }
-  }, [isAdmin, loadData]);
+  }, [canSeeConfigEquipe, loadData]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canSeeConfigEquipe) return;
     let alive = true;
     (async () => {
       try {
@@ -102,7 +104,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
     return () => {
       alive = false;
     };
-  }, [isAdmin]);
+  }, [canSeeConfigEquipe]);
 
   // Lógica de aniversários e tempo de casa
   const [aniversariantesHoje, setAniversariantesHoje] = useState([]);
@@ -208,7 +210,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
     }
   };
 
-  if (!isAdmin) {
+  if (!canSeeConfigEquipe) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Shield className="h-12 w-12 text-slate-300" />
@@ -272,6 +274,17 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
         >
           <Shield className="h-5 w-5 sm:h-4 sm:w-4" />
           <span className="text-center leading-tight">Histórico <span className="hidden sm:inline">de Ações</span></span>
+        </button>
+        <button
+          onClick={() => setActiveTab('perfis')}
+          className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${
+            activeTab === 'perfis' 
+              ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5' 
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+          }`}
+        >
+          <Settings2 className="h-5 w-5 sm:h-4 sm:w-4" />
+          <span className="text-center leading-tight">Perfis <span className="hidden sm:inline">de Acesso</span></span>
         </button>
       </div>
 
@@ -638,57 +651,24 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
             />
           )}
         </>
-      ) : (
+      ) : activeTab === 'auditoria' ? (
         <AuditoriaView />
+      ) : (
+        <GestaoPerfisTab 
+          perfisAcesso={perfisAcesso} 
+          onReload={loadData} 
+          fetchHeaders={fetchHeaders}
+          tipoOrg={tipoOrg} 
+        />
       )}
     </div>
   );
 }
 
-const FUNCOES_SISTEMA = [
-  {
-    categoria: 'Agenda',
-    itens: [
-      { id: 'AGENDA_VER', label: 'Visualizar Agenda', minNivel: 1, descricao: 'Permite visualizar os horários e agendamentos.' },
-      { id: 'AGENDA_CRIAR', label: 'Criar Agendamento', minNivel: 2, descricao: 'Permite cadastrar novos agendamentos na agenda da clínica.' },
-      { id: 'AGENDA_EDITAR', label: 'Editar/Cancelar Agendamento', minNivel: 2, descricao: 'Permite alterar horários, status ou cancelar agendamentos.' },
-      { id: 'HORARIO_EDITAR', label: 'Configurar Agenda', minNivel: 5, descricao: 'Permite configurar horários de funcionamento, feriados e templates.' }
-    ]
-  },
-  {
-    categoria: 'Pacientes',
-    itens: [
-      { id: 'PACIENTE_VER', label: 'Visualizar Pacientes', minNivel: 1, descricao: 'Permite visualizar a lista e os dados cadastrais dos pacientes.' },
-      { id: 'PACIENTE_CRIAR', label: 'Cadastrar Novos Pacientes', minNivel: 2, descricao: 'Permite cadastrar novos pacientes no sistema.' },
-      { id: 'PACIENTE_EDITAR', label: 'Editar Dados de Pacientes', minNivel: 2, descricao: 'Permite alterar informações na ficha do paciente (nome, telefone, endereço, etc).' },
-      { id: 'PACIENTE_EXCLUIR', label: 'Inativar / Excluir Pacientes', minNivel: 3, descricao: 'Permite inativar ou excluir o cadastro de um paciente. Requer confirmação de senha.' }
-    ]
-  },
-  {
-    categoria: 'Atendimento e Prontuário',
-    itens: [
-      { id: 'ANAMNESE_PREENCHIMENTO_CRIAR', label: 'Iniciar Atendimento (Anamnese)', minNivel: 3, descricao: 'Permite iniciar um atendimento e preencher a anamnese do paciente.' },
-      { id: 'PRONTUARIO_VER', label: 'Ver Prontuário Completo', minNivel: 3, descricao: 'Permite acessar o prontuário e o histórico de procedimentos do paciente.' },
-      { id: 'PACIENTE_NOTA_CRIAR', label: 'Criar/Editar Notas no Prontuário', minNivel: 3, descricao: 'Permite adicionar e editar notas rápidas no prontuário do paciente.' },
-      { id: 'PRONTUARIO_CRIAR', label: 'Registrar Procedimentos', minNivel: 2, descricao: 'Permite lançar procedimentos realizados no prontuário do paciente.' },
-      { id: 'PACIENTE_GALERIA_VER', label: 'Acessar Galeria de Imagens', minNivel: 3, descricao: 'Permite acessar a galeria de fotos e arquivos anexados do paciente.' },
-      { id: 'PACIENTE_DOCUMENTO_VER', label: 'Gerenciar Documentos Assinados', minNivel: 2, descricao: 'Permite acessar, enviar e gerenciar os documentos do paciente.' }
-    ]
-  },
-  {
-    categoria: 'Configurações e Sistema',
-    itens: [
-      { id: 'ANAMNESE_MODELO_VER', label: 'Configurar Modelos de Anamnese', minNivel: 3, descricao: 'Permite gerenciar categorias e perguntas de anamnese.' },
-      { id: 'CATALOGO_VER', label: 'Configurar Catálogo de Procedimentos', minNivel: 4, descricao: 'Permite gerenciar os procedimentos oferecidos.' },
-      { id: 'DOC_MODELO_VER', label: 'Configurar Termos e Documentos', minNivel: 4, descricao: 'Permite gerenciar termos de consentimento e contratos.' },
-      { id: 'CLINICA_EDITAR', label: 'Configurar Dados da Clínica', minNivel: 5, descricao: 'Permite gerenciar dados institucionais da clínica.' },
-      { id: 'USUARIO_VER', label: 'Gerenciar Equipe e Permissões', minNivel: 5, descricao: 'Permite criar, editar e desativar acessos da equipe.' },
-      { id: 'AUDITORIA_VER', label: 'Visualizar Logs de Auditoria', minNivel: 5, descricao: 'Permite visualizar o histórico de ações do sistema.' }
-    ]
-  }
-];
 
 
+
+// eslint-disable-next-line no-unused-vars
 const getLevelFromPerfilAcessoId = (perfilId, perfis) => {
   if (!perfilId || !perfis) return 0;
   const perfil = perfis.find(p => String(p.id) === String(perfilId));
@@ -766,7 +746,6 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
     dataNascimento: '', estadoCivil: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', especialidades: []
   });
   const [saving, setSaving] = useState(false);
-  const [selectedFuncs, setSelectedFuncs] = useState([]);
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [telefoneTouched, setTelefoneTouched] = useState(false);
@@ -818,35 +797,10 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
       }
     }
     setForm({ ...form, roleId: selectedRoleId, perfilAcessoId: nextPerfilAcessoId });
-    
-    if (nextPerfilAcessoId) {
-      const level = getLevelFromPerfilAcessoId(nextPerfilAcessoId, perfisAcesso);
-      const defaultFuncs = [];
-      FUNCOES_SISTEMA.forEach(cat => {
-        cat.itens.forEach(item => {
-          if (item.minNivel <= level) {
-            defaultFuncs.push(item.id);
-          }
-        });
-      });
-      setSelectedFuncs(defaultFuncs);
-    }
   };
 
   const handlePerfilChangeInvite = (selectedPerfilId) => {
     setForm({ ...form, perfilAcessoId: selectedPerfilId });
-    if (selectedPerfilId) {
-      const level = getLevelFromPerfilAcessoId(selectedPerfilId, perfisAcesso);
-      const defaultFuncs = [];
-      FUNCOES_SISTEMA.forEach(cat => {
-        cat.itens.forEach(item => {
-          if (item.minNivel <= level) {
-            defaultFuncs.push(item.id);
-          }
-        });
-      });
-      setSelectedFuncs(defaultFuncs);
-    }
   };
 
   const maskCPF = (value) => {
@@ -951,9 +905,7 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
         await equipeApi.create({
           usuarioId,
           roleId: form.roleId,
-          perfilAcessoId: form.perfilAcessoId,
-          customizouPermissoes: true,
-          permissoesCustomizadas: selectedFuncs
+          perfilAcessoId: form.perfilAcessoId
         });
       } catch (err) {
         throw new Error(getApiErrorToastMessage(err) || 'Perfil completado, mas erro ao vincular à equipe.');
@@ -1304,57 +1256,6 @@ function InviteModal({ roles, perfisAcesso, especialidadesList, onClose, onSucce
                 </div>
               </div>
             </div>
-            
-            {/* Seção 4: Personalização de Funções */}
-            <div className={sectionCardCls(false, 'rounded-2xl border border-amber-200 bg-white p-6')}>
-              <div className={`flex items-center gap-3 ${sectionMb}`}>
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
-                  4
-                </div>
-                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#d97706]')}>Personalizar Funções</h4>
-              </div>
-              <p className="text-xs text-slate-500 mb-5 leading-relaxed max-w-2xl">
-                O nível de permissão selecionado preenche as funções recomendadas abaixo, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {FUNCOES_SISTEMA.map(cat => (
-                        <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block mb-2 border-b border-slate-200/60 pb-1">
-                            {cat.categoria}
-                          </span>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                            {cat.itens.map(item => {
-                              const isChecked = selectedFuncs.includes(item.id);
-                              return (
-                                <label key={item.id} className="flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg cursor-pointer hover:bg-slate-100/50 transition">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => {
-                                      setSelectedFuncs(prev =>
-                                        prev.includes(item.id)
-                                          ? prev.filter(id => id !== item.id)
-                                          : [...prev, item.id]
-                                      );
-                                    }}
-                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                                  />
-                                  <div className="flex-1">
-                                    <span className="text-xs font-semibold text-slate-700 block leading-snug">
-                                      {item.label}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 block mt-0.5 leading-snug">
-                                      {item.descricao}
-                                    </span>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-              </div>
-            </div>
           </div>
           
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end border-t border-slate-100 pt-5 shrink-0 bg-white md:bg-transparent">
@@ -1405,9 +1306,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
   const [uf, setUf] = useState(usuario.uf || '');
   const [especialidades, setEspecialidades] = useState(usuario.especialidades || []);
   const [saving, setSaving] = useState(false);
-  const [selectedFuncs, setSelectedFuncs] = useState(usuario.customizouPermissoes ? (usuario.permissoes || []) : []);
-  const [hasUserChangedLevel, setHasUserChangedLevel] = useState(false);
-  const isCustomizedRef = React.useRef(usuario.customizouPermissoes);
 
   const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
   const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
@@ -1451,33 +1349,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
     };
   }, []);
 
-  useEffect(() => {
-    // Se o usuário tinha permissões customizadas E o dropdown de nível nunca foi tocado, manter os dados do BD
-    if (isCustomizedRef.current && !hasUserChangedLevel) {
-      return;
-    }
-    
-    let level = 0;
-    if (isUserOwner) {
-      level = 5; // DONO sempre tem nível máximo de funções
-    } else if (perfilAcessoId) {
-      level = getLevelFromPerfilAcessoId(perfilAcessoId, perfisAcesso);
-    }
-    
-    if (level > 0) {
-      const defaultFuncs = [];
-      FUNCOES_SISTEMA.forEach(cat => {
-        cat.itens.forEach(item => {
-          if (item.minNivel <= level) {
-            defaultFuncs.push(item.id);
-          }
-        });
-      });
-      setSelectedFuncs(defaultFuncs);
-    } else {
-      setSelectedFuncs([]);
-    }
-  }, [perfilAcessoId, perfisAcesso, isUserOwner, hasUserChangedLevel]);
 
   const handleRoleChangeEdit = (selectedRoleId) => {
     setRoleId(selectedRoleId);
@@ -1487,7 +1358,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
     if (selectedRole) {
       const presetId = getPresetProfileId(selectedRole.nome, perfisAcesso);
       if (presetId) {
-        setHasUserChangedLevel(true);
         setPerfilAcessoId(presetId);
       }
     }
@@ -1513,9 +1383,7 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
         bairro: bairro || "",
         cidade: cidade || "",
         uf: uf || "",
-        especialidades: especialidades,
-        customizouPermissoes: true,
-        permissoesCustomizadas: selectedFuncs
+        especialidades: especialidades
       });
       toast.success('Acesso atualizado com sucesso.');
       onSuccess();
@@ -1885,7 +1753,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
                       value={perfilAcessoId}
                       disabled={readOnly}
                       onChange={e => {
-                        setHasUserChangedLevel(true);
                         setPerfilAcessoId(e.target.value);
                       }}
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
@@ -1901,71 +1768,6 @@ function EditRoleModal({ usuario, roles, perfisAcesso, especialidadesList, onClo
                     </select>
                   )}
                 </div>
-              </div>
-            </div>
-              
-            {/* Seção 4: Personalização de Funções */}
-            <div className={sectionCardCls(false, 'rounded-2xl border border-amber-200 bg-white p-6')}>
-              <div className={`flex items-center gap-3 ${sectionMb}`}>
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
-                  <Settings2 className="h-4 w-4" />
-                </div>
-                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#d97706]')}>Personalizar Funções</h4>
-              </div>
-              <p className="text-xs text-slate-500 mb-5 leading-relaxed max-w-2xl">
-                {isUserOwner 
-                  ? 'O Dono possui acesso total ao sistema. As funções abaixo são apenas informativas.' 
-                  : 'O nível de permissão selecionado preenche as funções recomendadas abaixo, mas você pode marcar ou desmarcar livremente sem alterar o nível oficial.'
-                }
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {FUNCOES_SISTEMA.map(cat => (
-                        <div key={cat.categoria} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block mb-2 border-b border-slate-200/60 pb-1">
-                            {cat.categoria}
-                          </span>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                            {cat.itens.map(item => {
-                              const isChecked = selectedFuncs.includes(item.id);
-                              return (
-                                <label 
-                                  key={item.id} 
-                                  className={`flex items-start gap-2.5 p-2 sm:p-1.5 rounded-lg transition ${
-                                    isUserOwner || readOnly
-                                      ? 'cursor-not-allowed opacity-60' 
-                                      : 'cursor-pointer hover:bg-slate-100/50'
-                                  }`}
-                                >
-                                  <input 
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    disabled={isUserOwner || readOnly}
-                                    onChange={() => {
-                                      if (isUserOwner || readOnly) return;
-                                      setSelectedFuncs(prev => 
-                                        prev.includes(item.id) 
-                                          ? prev.filter(id => id !== item.id) 
-                                          : [...prev, item.id]
-                                      );
-                                    }}
-                                    className={`mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 ${
-                                      isUserOwner || readOnly ? 'cursor-not-allowed' : 'cursor-pointer'
-                                    }`}
-                                  />
-                                  <div className="flex-1">
-                                    <span className="text-xs font-semibold text-slate-700 block leading-snug">
-                                      {item.label}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 block mt-0.5 leading-snug">
-                                      {item.descricao}
-                                    </span>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
               </div>
             </div>
           </div>

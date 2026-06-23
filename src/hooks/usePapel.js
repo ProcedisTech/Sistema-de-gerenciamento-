@@ -41,7 +41,8 @@ export function usePapel() {
   const isAdmin         = papel === 'ADMIN' || isDono || papel === 'NIVEL_5';
   const isProfissional  = papel === 'PROFISSIONAL' || isAtLeast('NIVEL_3');
   const isRecepcionista = papel === 'RECEPCIONISTA' || isAtLeast('NIVEL_2');
-  const isNivel1        = papel === 'NIVEL_1' || meuPeso <= 10;
+  const isCustomProfile = typeof papel === 'string' && papel.startsWith('CST_');
+  const isNivel1        = papel === 'NIVEL_1' || (!isCustomProfile && meuPeso <= 10);
 
   // ── Navegação principal ──────────────────────────────────────────────────
   const canSeePacientes = hasPerm('PACIENTE_VER', 'NIVEL_1');
@@ -87,6 +88,7 @@ export function usePapel() {
     isProfissional,
     isRecepcionista,
     isAtLeast,
+    hasPerm,
 
     // Identidade
     isDono,
