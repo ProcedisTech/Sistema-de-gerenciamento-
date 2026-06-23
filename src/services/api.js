@@ -1248,7 +1248,7 @@ export const organizacaoApi = {
     }),
   atualizar: (id, patchDto) =>
     request(`/api/v1/organizacoes/${encodeURIComponent(String(id))}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(patchDto != null && typeof patchDto === 'object' ? patchDto : {}),
     }),
 };
