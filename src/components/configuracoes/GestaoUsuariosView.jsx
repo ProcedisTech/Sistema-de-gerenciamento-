@@ -12,6 +12,7 @@ import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
 
 export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
+  // eslint-disable-next-line no-unused-vars
   const { isAdmin, canSeeConfigEquipe } = usePapel();
   const { roleUserId: currentRoleUserId } = useOrg();
   const toast = useToast();
@@ -667,6 +668,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
 
 
 
+// eslint-disable-next-line no-unused-vars
 const getLevelFromPerfilAcessoId = (perfilId, perfis) => {
   if (!perfilId || !perfis) return 0;
   const perfil = perfis.find(p => String(p.id) === String(perfilId));

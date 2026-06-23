@@ -4,7 +4,7 @@ import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorDetail } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 
-export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders, tipoOrg }) {
+export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders }) {
   const toast = useToast();
   const [showModal, setShowModal] = useState(false);
   const [editingPerfil, setEditingPerfil] = useState(null);
@@ -56,7 +56,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders, tipoOrg 
       if (res.ok) {
         setSelectedPermissoes(await res.json());
       }
-    } catch (e) {
+    } catch {
       toast.error('Erro ao buscar permissões do perfil.');
     } finally {
       setLoadingPermissoes(false);
@@ -88,7 +88,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders, tipoOrg 
         const body = await res.json().catch(() => ({}));
         toast.error(getApiErrorDetail({ body }) || 'Erro ao excluir perfil.');
       }
-    } catch (e) {
+    } catch {
       toast.error('Falha de rede ao excluir perfil.');
     }
   };
@@ -135,7 +135,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders, tipoOrg 
         const body = await res.json().catch(() => ({}));
         toast.error(getApiErrorDetail({ body }) || 'Erro ao salvar perfil.');
       }
-    } catch (e) {
+    } catch {
       toast.error('Falha de rede ao salvar perfil.');
     } finally {
       setSaving(false);
