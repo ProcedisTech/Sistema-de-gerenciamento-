@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { Shield, Loader2, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { SignatureModal } from '../../components/journey/Step4LGPD';
-import { generateTermoPdf } from '../../utils/pdfGenerator';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
 
 export function PublicSignatureFlow() {
@@ -153,7 +152,7 @@ export function PublicSignatureFlow() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-    } catch (err) {
+    } catch {
       setCameraError('Não foi possível acessar a câmera. Verifique as permissões do seu navegador.');
     }
   };
@@ -235,7 +234,7 @@ export function PublicSignatureFlow() {
           navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 });
         });
         geo = `Lat: ${pos.coords.latitude}, Lng: ${pos.coords.longitude}`;
-      } catch (e) { console.warn('Sem geo'); }
+      } catch { console.warn('Sem geo'); }
 
       // Pegar IP
       try {
@@ -245,7 +244,7 @@ export function PublicSignatureFlow() {
           ip = data.ip;
           setAssinaturaIp(ip); // Salva o IP para a impressão
         }
-      } catch (e) { console.warn('Sem ip'); }
+      } catch { console.warn('Sem ip'); }
 
       const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/assinar`), {
         method: 'POST',

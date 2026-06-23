@@ -359,7 +359,7 @@ export function Step3Termos({
             const data = await res.json();
             ipAddress = data.ip;
           }
-        } catch (e) {
+        } catch {
           // ignore
         }
 
