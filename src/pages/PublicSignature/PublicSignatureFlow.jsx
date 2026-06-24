@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { Shield, Loader2, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
+import { generateTermoPdf } from '../../utils/pdfGenerator';
+import 'react-quill-new/dist/quill.snow.css';
 
 export function PublicSignatureFlow() {
   const [sessaoData, setSessaoData] = useState(null);
@@ -267,7 +269,6 @@ export function PublicSignatureFlow() {
 
   const handleDownloadPdf = async () => {
     try {
-      const { generateTermoPdf } = await import('../../utils/pdfGenerator.js');
       const metadados = {
         pacienteNome: sessaoData?.pacienteNome,
         profissionalNome: sessaoData?.profissionalNome,
@@ -367,7 +368,9 @@ export function PublicSignatureFlow() {
               <div className="text-center mb-6 pb-4 border-b border-slate-200">
                 <h2 className="text-xl font-bold uppercase">{documentoTitulo}</h2>
               </div>
-              <div dangerouslySetInnerHTML={{ __html: documentoConteudo || '<p>Nenhum conteúdo disponível.</p>' }} />
+              <div className="ql-snow">
+                <div className="ql-editor p-0" dangerouslySetInnerHTML={{ __html: documentoConteudo || '<p>Nenhum conteúdo disponível.</p>' }} />
+              </div>
               <br/><br/>
               <p className="text-center font-bold">(Fim do documento)</p>
             </div>
@@ -549,10 +552,12 @@ export function PublicSignatureFlow() {
               </div>
               
               <div className="max-w-4xl mx-auto px-8">
-                <div 
-                  className="leading-relaxed text-[12pt] text-justify"
-                  dangerouslySetInnerHTML={{ __html: documentoConteudo || '' }} 
-                />
+                <div className="ql-snow">
+                  <div 
+                    className="ql-editor leading-relaxed text-[12pt] text-justify p-0"
+                    dangerouslySetInnerHTML={{ __html: documentoConteudo || '' }} 
+                  />
+                </div>
               
                 <div className="mt-20 pt-8 flex items-end justify-between px-8 text-center break-inside-avoid">
                   {/* Assinatura do Paciente */}

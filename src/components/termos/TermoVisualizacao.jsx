@@ -1,6 +1,7 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
+import 'react-quill-new/dist/quill.snow.css';
 
 export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalCtx, clinicaCtx, children }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
@@ -65,10 +66,12 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
       <div className="bg-[#f8fafc] p-6">
         <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
           {temConteudoTexto ? (
-            <div 
-              className="prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
-              dangerouslySetInnerHTML={{ __html: conteudoTexto }}
-            />
+            <div className="ql-snow">
+              <div 
+                className="ql-editor p-0 prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
+                dangerouslySetInnerHTML={{ __html: conteudoTexto }}
+              />
+            </div>
           ) : (
             <>
               <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">

@@ -107,23 +107,26 @@ export const generateTermoPdf = async ({
   tempDiv.innerHTML = html;
   
   let paragraphs = [];
-  let currentLine = { text: '', align: 'left', indent: 0, isHeading: false, forceEmpty: false };
+  let currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, forceEmpty: false };
   
   const flushLine = () => {
-    const trimmed = currentLine.text.trim();
-    if (trimmed || currentLine.forceEmpty) {
+    const hasText = currentLine.segments.some(s => s.text.trim().length > 0);
+    if (hasText || currentLine.forceEmpty) {
       paragraphs.push({ ...currentLine });
     }
-    currentLine = { text: '', align: 'left', indent: 0, isHeading: false, forceEmpty: false };
+    currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, forceEmpty: false };
   };
 
-  const traverse = (node, indentLevel = 0, align = 'left', listContext = { type: null, index: 0 }) => {
+  const traverse = (node, indentLevel = 0, align = 'left', format = { isBold: false, isItalic: false }, listContext = { type: null, index: 0 }) => {
     if (node.nodeType === 3) {
-      const text = node.nodeValue;
-      if (text.trim()) {
-         currentLine.text += text.replace(/\n/g, ' ');
-      } else if (text.includes(' ') && currentLine.text.length > 0 && !currentLine.text.endsWith(' ')) {
-         currentLine.text += ' ';
+      let text = node.nodeValue.replace(/\n/g, ' ').replace(/\u00A0/g, ' ').replace(/&nbsp;/g, ' ');
+      if (text.trim() || text.includes(' ')) {
+         if (!text.trim() && currentLine.segments.length > 0) {
+            const lastSeg = currentLine.segments[currentLine.segments.length - 1];
+            if (lastSeg.text.endsWith(' ')) return;
+            text = ' ';
+         }
+         currentLine.segments.push({ text, isBold: format.isBold, isItalic: format.isItalic });
       }
       return;
     }
@@ -145,11 +148,16 @@ export const generateTermoPdf = async ({
       const totalIndent = indentLevel + extraIndent;
       const isBlock = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'].includes(tag);
       
-      if (isBlock && currentLine.text.length > 0) flushLine();
+      if (isBlock && currentLine.segments.length > 0) flushLine();
       
       currentLine.align = currentAlign;
       currentLine.indent = totalIndent;
       if (['h1', 'h2', 'h3'].includes(tag)) currentLine.isHeading = true;
+      
+      const nextFormat = { ...format };
+      if (['strong', 'b'].includes(tag)) nextFormat.isBold = true;
+      if (['em', 'i'].includes(tag)) nextFormat.isItalic = true;
+      if (tag === 'u') nextFormat.isUnderline = true;
       
       if (tag === 'br') {
         currentLine.forceEmpty = true;
@@ -158,18 +166,18 @@ export const generateTermoPdf = async ({
         currentLine.indent = totalIndent;
       } else if (tag === 'ul') {
         listContext = { type: 'ul', index: 0 };
-        if (currentLine.text.length > 0) flushLine();
+        if (currentLine.segments.length > 0) flushLine();
       } else if (tag === 'ol') {
         listContext = { type: 'ol', index: 1 };
-        if (currentLine.text.length > 0) flushLine();
+        if (currentLine.segments.length > 0) flushLine();
       } else if (tag === 'li') {
         const prefix = listContext.type === 'ol' ? `${listContext.index++}. ` : '• ';
-        currentLine.text += prefix;
-        currentLine.indent = totalIndent + 1; // Recuo extra visual para itens de lista
+        currentLine.segments.push({ text: prefix, isBold: nextFormat.isBold, isItalic: nextFormat.isItalic });
+        currentLine.indent = totalIndent + 1;
       }
       
       node.childNodes.forEach(child => {
-        traverse(child, totalIndent, currentAlign, listContext);
+        traverse(child, totalIndent, currentAlign, nextFormat, listContext);
       });
       
       if (isBlock || tag === 'ul' || tag === 'ol') {
@@ -180,11 +188,11 @@ export const generateTermoPdf = async ({
 
   traverse(tempDiv);
   
-  // Limpar quebras de linha múltiplas consecutivas
   const finalParagraphs = [];
   let emptyCount = 0;
   for (const p of paragraphs) {
-    if (!p.text.trim()) {
+    const fullText = p.segments.map(s => s.text).join('').trim();
+    if (!fullText) {
       emptyCount++;
       if (emptyCount > 1) continue; 
     } else {
@@ -193,39 +201,71 @@ export const generateTermoPdf = async ({
     finalParagraphs.push(p);
   }
 
-  // Renderizar o texto extraído no PDF aplicando propriedades dinâmicas
   doc.setTextColor(0, 0, 0);
 
   finalParagraphs.forEach(p => {
-    // Calculamos o x real e a largura máxima permitida para essa linha
-    const indentOffset = p.indent * 8; // 8mm por nível de indentação
+    const indentOffset = p.indent * 8;
     let availableWidth = maxWidth - indentOffset;
-    if (availableWidth < 50) availableWidth = 50; // limite de segurança
+    if (availableWidth < 50) availableWidth = 50;
     
-    // Configurar fonte caso seja um cabeçalho
+    const fullText = p.segments.map(s => s.text).join('');
+    
     doc.setFont('helvetica', p.isHeading ? 'bold' : 'normal');
     doc.setFontSize(p.isHeading ? 13 : 11);
     
-    // Quebrar o texto considerando o espaço livre
-    const wrappedLines = doc.splitTextToSize(p.text, availableWidth);
+    const wrappedLines = doc.splitTextToSize(fullText, availableWidth);
     
-    wrappedLines.forEach(wLine => {
+    let globalCharIndex = 0;
+    
+    wrappedLines.forEach((wLine, lineIdx) => {
       checkPage(7);
       
       let xPos = margin + indentOffset;
-      let alignOption = 'left';
+      const lineWidth = doc.getTextWidth(wLine);
       
       if (p.align === 'center') {
-        xPos = pageWidth / 2;
-        alignOption = 'center';
+        xPos = (pageWidth - lineWidth) / 2;
       } else if (p.align === 'right') {
-        xPos = pageWidth - margin;
-        alignOption = 'right';
+        xPos = pageWidth - margin - lineWidth;
       }
       
-      // Renderizar linha vazia ou texto
       if (wLine.trim() || p.forceEmpty) {
-        if (wLine.trim()) doc.text(wLine, xPos, y, { align: alignOption });
+        let lineCharsRemaining = wLine.length;
+        
+        while (lineCharsRemaining > 0 && globalCharIndex < fullText.length) {
+          let segIndex = 0;
+          let charsBeforeSeg = 0;
+          for (let i = 0; i < p.segments.length; i++) {
+            if (globalCharIndex < charsBeforeSeg + p.segments[i].text.length) {
+              segIndex = i;
+              break;
+            }
+            charsBeforeSeg += p.segments[i].text.length;
+          }
+          
+          const seg = p.segments[segIndex];
+          if (!seg) break;
+          
+          const offsetInSeg = globalCharIndex - charsBeforeSeg;
+          const charsFromSeg = Math.min(lineCharsRemaining, seg.text.length - offsetInSeg);
+          const textToDraw = seg.text.substr(offsetInSeg, charsFromSeg);
+          
+          doc.setFont('helvetica', seg.isBold || p.isHeading ? 'bold' : (seg.isItalic ? 'italic' : 'normal'));
+          doc.text(textToDraw, xPos, y);
+          xPos += doc.getTextWidth(textToDraw);
+          
+          globalCharIndex += charsFromSeg;
+          lineCharsRemaining -= charsFromSeg;
+        }
+        
+        const nextWLine = wrappedLines[lineIdx + 1];
+        if (nextWLine) {
+           const nextIdx = fullText.indexOf(nextWLine, globalCharIndex);
+           if (nextIdx !== -1 && nextIdx - globalCharIndex <= 5) {
+              globalCharIndex = nextIdx;
+           }
+        }
+
         y += p.isHeading ? 8 : 6;
       }
     });
