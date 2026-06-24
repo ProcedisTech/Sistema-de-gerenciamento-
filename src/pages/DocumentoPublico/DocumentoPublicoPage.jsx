@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
+import { generateTermoPdf } from '../../utils/pdfGenerator';
 
 import { Download, Eraser, CheckCircle, PenLine, AlertTriangle } from 'lucide-react';
 import { TermoVisualizacao } from '../../components/termos/TermoVisualizacao';
@@ -222,7 +223,6 @@ export const DocumentoPublicoPage = () => {
   const handleDownloadPDF = async () => {
     setLoading(true);
     try {
-      const { generateTermoPdf } = await import('../../utils/pdfGenerator.js');
       generateTermoPdf({
         titulo: lookupData.documento?.titulo || 'Documento',
         conteudo: lookupData.documento?.conteudo,

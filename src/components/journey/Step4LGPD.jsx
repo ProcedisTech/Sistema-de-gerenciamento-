@@ -40,6 +40,7 @@ import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacient
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
 import { useOrg } from '../../contexts/OrgContext.jsx';
+import { generateTermoPdf } from '../../utils/pdfGenerator';
 
 const STEP4_FOTO_CATEGORIAS = [
   GALERIA_CATEGORIA.ANTES,
@@ -298,6 +299,7 @@ export function Step3Termos({
   const [termoMenuOpen, setTermoMenuOpen] = useState(false);
   const termoMenuRef = useRef(null);
   const [termoSearch, setTermoSearch] = useState('');
+  const [showConfirmRecusa, setShowConfirmRecusa] = useState(false);
   const termoSearchInputRef = useRef(null);
   const [profSigningOpen, setProfSigningOpen] = useState(false);
   const [patSigningOpen, setPatSigningOpen] = useState(false);
@@ -432,7 +434,7 @@ export function Step3Termos({
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
           assinaturaProfissional: profissionalAssinaturaDataUrl,
-          assinaturaPaciente: pacienteRecusou ? null : termoAssinaturaDataUrl,
+          assinaturaPaciente: pacienteRecusou ? 'RECUSADO' : termoAssinaturaDataUrl,
           pacienteRecusou: pacienteRecusou,
           profissionalAssinouEm:
             profAssinaturaTimestamp != null
@@ -497,6 +499,7 @@ export function Step3Termos({
     roleUserId,
     profAssinaturaTimestamp,
     patAssinaturaTimestamp,
+    pacienteRecusou,
     onAssinaturaSalva,
     toast,
   ]);
@@ -1131,7 +1134,7 @@ export function Step3Termos({
                           <button
                             type="button"
                             onClick={() => {
-                              import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                              try {
                                 generateTermoPdf({
                                   titulo: tituloExibicao,
                                   conteudo: conteudoExibicao,
@@ -1144,7 +1147,9 @@ export function Step3Termos({
                                   },
                                   fileName: `termo_assinado_${new Date().getTime()}.pdf`
                                 });
-                              });
+                              } catch (e) {
+                                console.error(e);
+                              }
                             }}
                             className="flex items-center gap-1.5 rounded-lg bg-[#0f172a] px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-[#1e293b] transition-colors"
                           >
@@ -1287,7 +1292,11 @@ export function Step3Termos({
 
                           <button
                             type="button"
-                            onClick={() => setPacienteRecusou(true)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setShowConfirmRecusa(true);
+                            }}
                             className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-100"
                           >
                             Recusar a assinar
@@ -1522,6 +1531,39 @@ export function Step3Termos({
           </button>
         </div>
       ) : null}
+
+      {showConfirmRecusa && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3 text-red-600">
+              <AlertTriangle className="h-6 w-6 shrink-0" strokeWidth={2} />
+              <h3 className="text-[16px] font-bold">Confirmar recusa</h3>
+            </div>
+            <p className="mb-6 text-[14px] text-slate-600">
+              Tem certeza de que o paciente se recusa a assinar o documento? O registro ficará salvo e o procedimento não poderá prosseguir sem o consentimento.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmRecusa(false)}
+                className="rounded-lg px-4 py-2.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmRecusa(false);
+                  setPacienteRecusou(true);
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Sim, registrar recusa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
