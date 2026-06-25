@@ -247,6 +247,12 @@ export function normalizePlano(raw) {
 
     progresso: Number.isFinite(progresso) ? progresso : null,
 
+    periodoTratamentoInicio: raw.periodoTratamentoInicio ?? null,
+    periodoTratamentoFim: raw.periodoTratamentoFim ?? null,
+    periodoTratamentoDias: raw.periodoTratamentoDias ?? null,
+    periodoTratamentoMeses: raw.periodoTratamentoMeses ?? null,
+    periodoTratamentoTexto: raw.periodoTratamentoTexto ?? null,
+
     itens,
 
   };

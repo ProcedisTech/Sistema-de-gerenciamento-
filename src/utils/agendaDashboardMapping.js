@@ -88,6 +88,9 @@ export function mapAgendaDtoToDashboardRow(dto) {
     catalogoProcedimentoSaudeIds: catId ? [catId] : [],
     planejamentoItemId:
       dto.planejamentoItemId != null ? String(dto.planejamentoItemId).trim() : null,
+    tipoProcedimentoCodigo: tipoCodigo,
+    procedimentoFeitoOrigemId:
+      dto.procedimentoFeitoOrigemId != null ? String(dto.procedimentoFeitoOrigemId).trim() : null,
     tipoProcedimentoId: dto.tipoProcedimentoId != null ? String(dto.tipoProcedimentoId) : '',
     tipoProcedimentoNome: dto.tipoProcedimentoNome || '',
     profissionalNome: dto.profissionalNome || '',
@@ -185,6 +188,7 @@ export function buildAgendaCreateBody({
   tipoProcedimentoId,
   agendaIdOrigem,
   planejamentoItemId,
+  procedimentoFeitoOrigemId,
 }) {
   const hi = String(horaInicio || '09:00').slice(0, 5);
   const mins = Number(duracaoMin) || 45;
@@ -208,10 +212,13 @@ export function buildAgendaCreateBody({
     planejamentoItemId != null && String(planejamentoItemId).trim()
       ? { planejamentoItemId: String(planejamentoItemId).trim() }
       : {};
+  const paiId =
+    procedimentoFeitoOrigemId != null ? String(procedimentoFeitoOrigemId).trim() : '';
   return {
     ...base,
     ...origem,
     ...planejamento,
+    ...(paiId ? { procedimentoFeitoOrigemId: paiId } : {}),
     observacao: observacao != null && String(observacao).trim() ? String(observacao).trim().slice(0, 500) : undefined,
   };
 }

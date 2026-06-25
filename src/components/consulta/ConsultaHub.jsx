@@ -1,8 +1,6 @@
 import React from 'react';
-import { BookOpen, ClipboardList, Eye, FileText, Syringe } from 'lucide-react';
+import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
-
-// TODO: badges — PacienteIndicadores não existe; conectar quando criado
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -10,11 +8,40 @@ const MODULE_CARDS = [
   { id: 'planejamento', label: 'Planejamento', description: 'Planos de tratamento e procedimentos', icon: BookOpen },
   { id: 'termos', label: 'Termos', description: 'Consentimentos e assinaturas', icon: ClipboardList },
   { id: 'procedimento', label: 'Procedimento', description: 'Registro, fotos e finalização', icon: Syringe },
+  {
+    id: 'retorno-avulso',
+    label: 'Retorno',
+    description: 'Avaliar retorno de procedimento anterior',
+    icon: RotateCcw,
+  },
 ];
 
-export function ConsultaHub({ paciente, onSelectModule, onEncerrarConsulta, getPatientInitials }) {
+function buildModuleCards(isRetorno) {
+  if (isRetorno) {
+    return [
+      {
+        id: 'retorno',
+        label: 'Retorno',
+        description: 'Avaliação do resultado, foto e retoque',
+        icon: RotateCcw,
+      },
+      { id: 'termos', label: 'Termos', description: 'Consentimentos', icon: ClipboardList },
+    ];
+  }
+  return MODULE_CARDS;
+}
+
+export function ConsultaHub({
+  paciente,
+  isRetorno = false,
+  onSelectModule,
+  onIniciarRetornoAvulso,
+  onEncerrarConsulta,
+  getPatientInitials,
+}) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
+  const cards = buildModuleCards(isRetorno);
 
   return (
     <div className="flex flex-col gap-6">
@@ -27,7 +54,16 @@ export function ConsultaHub({ paciente, onSelectModule, onEncerrarConsulta, getP
             <h2 className="truncate text-[18px] font-bold text-[#0f172a] sm:text-[20px]">
               {paciente?.nome || 'Paciente'}
             </h2>
-            <p className="text-[13px] font-medium text-[#00a88e] sm:text-[14px]">Consulta em andamento</p>
+            {isRetorno ? (
+              <p className="inline-flex flex-wrap items-center gap-1.5 text-[13px] font-medium text-[#00a88e] sm:text-[14px]">
+                <span className="rounded-full bg-[#e6f7f5] px-2.5 py-0.5 text-[11px] font-bold uppercase text-[#0f766e]">
+                  Retorno
+                </span>
+                Retorno em andamento
+              </p>
+            ) : (
+              <p className="text-[13px] font-medium text-[#00a88e] sm:text-[14px]">Consulta em andamento</p>
+            )}
           </div>
         </div>
         {typeof onEncerrarConsulta === 'function' ? (
@@ -42,23 +78,29 @@ export function ConsultaHub({ paciente, onSelectModule, onEncerrarConsulta, getP
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {MODULE_CARDS.map((card) => {
+        {cards.map((card) => {
           const ModuleIcon = card.icon;
           return (
-          <button
-            key={card.id}
-            type="button"
-            onClick={() => onSelectModule?.(card.id)}
-            className="flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e6f7f5] text-[#00a88e]">
-              <ModuleIcon className="h-5 w-5" strokeWidth={2.2} aria-hidden />
-            </span>
-            <span>
-              <span className="block text-[15px] font-bold text-[#0f172a] sm:text-[16px]">{card.label}</span>
-              <span className="mt-1 block text-[13px] leading-snug text-[#64748b]">{card.description}</span>
-            </span>
-          </button>
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => {
+                if (card.id === 'retorno-avulso') {
+                  onIniciarRetornoAvulso?.();
+                  return;
+                }
+                onSelectModule?.(card.id);
+              }}
+              className="flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e6f7f5] text-[#00a88e]">
+                <ModuleIcon className="h-5 w-5" strokeWidth={2.2} aria-hidden />
+              </span>
+              <span>
+                <span className="block text-[15px] font-bold text-[#0f172a] sm:text-[16px]">{card.label}</span>
+                <span className="mt-1 block text-[13px] leading-snug text-[#64748b]">{card.description}</span>
+              </span>
+            </button>
           );
         })}
       </div>

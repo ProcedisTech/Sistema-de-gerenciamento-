@@ -431,7 +431,9 @@ function PlanoCard({
           {canCrud && isAtivo ? addItemForm(plano.id) : null}
 
           {isConsultaDraft && itens.length > 0 ? (
-            <PlanoProtocoloResumo itens={itens} plano={plano} />
+            <div className="relative z-0">
+              <PlanoProtocoloResumo itens={itens} plano={plano} />
+            </div>
           ) : null}
 
           {isConsultaDraft && isAtivo ? (
@@ -1135,7 +1137,7 @@ export function PlanosTab({
           : [];
 
       return (
-        <div className="rounded-xl border border-dashed border-[#00a88e]/30 bg-[#f8fbfb] p-3 animate-agenda-rise">
+        <div className="rounded-xl border border-dashed border-[#00a88e]/30 bg-[#f8fbfb] p-3 animate-agenda-rise relative z-20">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
             Adicionar procedimento
           </p>

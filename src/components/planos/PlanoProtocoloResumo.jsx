@@ -2,25 +2,19 @@ import React, { useMemo } from 'react';
 import { Calendar } from 'lucide-react';
 import {
   calcResumoProtocolo,
-  formatDataLongaPt,
   formatValorBrl,
 } from '../../utils/planejamentoDraftUtils.js';
 
-function resolvePeriodoBackend(plano) {
-  const inicio =
-    plano?.periodoInicio ?? plano?.periodo?.inicio ?? plano?.dataInicio ?? null;
-  const fim = plano?.periodoFim ?? plano?.periodo?.fim ?? plano?.dataFim ?? null;
-  if (!inicio && !fim) return null;
-  return { inicio, fim };
-}
-
 function PeriodoColuna({ plano }) {
-  const periodo = resolvePeriodoBackend(plano);
+  const texto =
+    plano?.periodoTratamentoTexto != null
+      ? String(plano.periodoTratamentoTexto).trim()
+      : '';
 
-  if (periodo?.inicio && periodo?.fim) {
+  if (texto) {
     return (
-      <p className="mt-0.5 text-[12px] font-semibold tabular-nums leading-snug text-ink-900">
-        {formatDataLongaPt(periodo.inicio)} → {formatDataLongaPt(periodo.fim)}
+      <p className="mt-0.5 text-[12px] font-semibold leading-snug text-ink-900">
+        {texto}
       </p>
     );
   }

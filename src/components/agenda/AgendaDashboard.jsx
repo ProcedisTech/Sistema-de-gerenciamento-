@@ -471,6 +471,13 @@ export function AgendaDashboard({
         data: appointment.data,
         horaInicio: appointment.horaInicio,
         fromAgendaSlot: true,
+        tipoProcedimentoCodigo:
+          appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '',
+        procedimentoFeitoOrigemId:
+          appointment.procedimentoFeitoOrigemId ?? appointment.rawSlot?.procedimentoFeitoOrigemId ?? null,
+        isAgendaRetorno:
+          String(appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '')
+            .toLowerCase() === 'retorno',
         lote: items.map(a => ({
           agendaId: a.id || a.agendaId,
           procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,

@@ -194,6 +194,7 @@ export function PlanoItemCard({
                         planejamentoItemId: item.id,
                         catalogoProcedimentoSaudeId: item.catalogoProcedimentoSaudeId,
                         catalogoNome: item.catalogoNome,
+                        dataPlanejada: item.dataPlanejada ?? null,
                       },
                       () => {},
                       plano.id,
