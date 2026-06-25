@@ -76,6 +76,7 @@ import { DisponibilidadeRevisionProvider } from '../contexts/DisponibilidadeRevi
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { DocumentoPublicoPage } from '../pages/DocumentoPublico/DocumentoPublicoPage';
+import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -333,7 +334,7 @@ function AppRefactoredInner() {
   const finishJourneyLockRef = useRef(false);
   const [isSalvandoFotosAvaliacao, setIsSalvandoFotosAvaliacao] = React.useState(false);
   const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
-  const [isSalvandoProcedimento, setIsSalvandoProcedimento] = React.useState(false);
+  const [isSalvandoProcedimento] = React.useState(false);
   const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
   const prevJourneyPacienteIdRef = useRef(undefined);
@@ -760,21 +761,25 @@ function AppRefactoredInner() {
   );
 
   const persistirMapaAplicacaoAtual = React.useCallback(
-    async (procedimentoFeitoId, paciente) => {
-      if (!procedimentoFeitoId || !paciente?.id) return { ok: true, erros: [] };
-      const snapshot = mapaAplicacaoState.getSnapshotForPersist();
+    async (procedimentoFeitoId, paciente, explicitSnapshot = null, explicitFotos = null, explicitCatalogoId = null) => {
+      const pid = String(procedimentoFeitoId || '').trim();
+      if (!pid) return { ok: false };
+      const snapshot = explicitSnapshot || mapaAplicacaoState.getSnapshotForPersist();
+      const fotosPorVista = explicitFotos || snapshot.fotosPorVista || {};
       const hasDirty =
         Array.isArray(snapshot.dirtyVistas) && snapshot.dirtyVistas.length > 0;
       const hasContent =
-        Object.keys(snapshot.fotosPorVista || {}).length > 0 ||
+        Object.keys(fotosPorVista || {}).length > 0 ||
         Object.values(snapshot.pontosPorVista || {}).some((l) => Array.isArray(l) && l.length > 0);
       if (!hasDirty && !hasContent) return { ok: true, erros: [] };
+
+      const catId = explicitCatalogoId || journeyState.nomeProcedimentoCatalogoId;
 
       const resultado = await persistirMapaAplicacao({
         pacienteId: paciente.id,
         roleUserId,
         procedimentoFeitoId,
-        catalogoProcedimentoSaudeId: journeyState.nomeProcedimentoCatalogoId,
+        catalogoProcedimentoSaudeId: catId,
         snapshot,
       });
       if (resultado.ok) {
@@ -849,7 +854,7 @@ function AppRefactoredInner() {
   
   // --- Lote de Procedimentos ---
   const [procedimentosLote, setProcedimentosLote] = React.useState([]);
-  const [activeProcedimentoIndex, setActiveProcedimentoIndex] = React.useState(0);
+  // O índice do procedimento ativo foi movido para o useJourneyState para manter tudo em sincronia.
   
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
 
@@ -1200,7 +1205,8 @@ function AppRefactoredInner() {
     
     if (opt.lote && Array.isArray(opt.lote) && opt.lote.length > 0) {
       setProcedimentosLote(opt.lote);
-      setActiveProcedimentoIndex(0);
+      journeyState.setProcedimentosSessao(opt.lote);
+      journeyState.setActiveProcedureIndex(0);
     } else {
       if (fromSlot && agendaId && dataRaw) {
         const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw);
@@ -1224,11 +1230,13 @@ function AppRefactoredInner() {
           }));
           
           setProcedimentosLote(lote);
-          setActiveProcedimentoIndex(0);
+          journeyState.setProcedimentosSessao(lote);
+          journeyState.setActiveProcedureIndex(0);
         }
       } else {
         setProcedimentosLote([]);
-        setActiveProcedimentoIndex(0);
+        journeyState.setProcedimentosSessao([]);
+        journeyState.setActiveProcedureIndex(0);
       }
     }
 
@@ -1646,35 +1654,7 @@ function AppRefactoredInner() {
     return sCpf ? patients.find((p) => String(p?.cpf || '').trim() === sCpf) : null;
   }, [selectedPatientCpf, pacienteAtual?.cpf, patients]);
 
-  const uploadPendingAnnotatedGalleryBlobs = React.useCallback(
-    async ({ paciente, procIdOpt, dataRefSessao }) => {
-      const ridUpload = roleUserId;
-      const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
-      const queuedAnnotated =
-        ridOk && paciente?.id ? pendingAnnotatedGalleryBlobsRef.current.splice(0) : [];
 
-      if (queuedAnnotated.length > 0 && paciente?.id && ridOk) {
-        const uploadsAval = queuedAnnotated.map(async (blob, idx) => {
-          try {
-            const file = new File([blob], `avaliacao_${Date.now()}_${idx}.jpg`, { type: 'image/jpeg' });
-            await pacientesGaleriaApi.upload(paciente.id, file, {
-              roleUserId: ridUpload,
-              procedimentoFeitoId: procIdOpt,
-              legenda: formatGaleriaLegendaForUpload(
-                GALERIA_CATEGORIA.PLANEJAMENTO,
-                journeyState.nomeProcedimento.trim() || 'Mapeamento'
-              ),
-              dataReferencia: dataRefSessao,
-            });
-          } catch (e) {
-            console.warn('Erro ao salvar foto de avaliação na galeria:', e);
-          }
-        });
-        await Promise.allSettled(uploadsAval);
-      }
-    },
-    [roleUserId, journeyState.nomeProcedimento]
-  );
 
   const uploadEvaluationCapturedPhotos = React.useCallback(
     async ({ paciente, procIdOpt, dataRefSessao }) => {
@@ -2037,10 +2017,13 @@ function AppRefactoredInner() {
   );
 
   const uploadProcedureCapturedPhotos = React.useCallback(
-    async (paciente, procIdOpt, dataRefSessao) => {
+    async (paciente, pidsArray, dataRefSessao, explicitFotos = null) => {
+      const ids = Array.isArray(pidsArray) ? pidsArray : [pidsArray].filter(Boolean);
+      if (!ids.length) return;
+
       const ridUpload = roleUserId;
       const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
-      const fotosProcedimento = cameraState.procedureCapturedPhotos || [];
+      const fotosProcedimento = explicitFotos || cameraState.procedureCapturedPhotos || [];
       if (fotosProcedimento.length > 0 && paciente?.id && ridOk) {
         const uploads = fotosProcedimento.map(async (foto) => {
           try {
@@ -2059,18 +2042,27 @@ function AppRefactoredInner() {
             }
             if (!fileToUpload) return false;
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
-            await pacientesGaleriaApi.upload(paciente.id, webp, {
-              roleUserId: ridUpload,
-              procedimentoFeitoId: procIdOpt,
-              legenda: formatGaleriaLegendaForUpload(
-                foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS,
-                journeyState.nomeProcedimento.trim() || 'Foto do procedimento'
-              ),
-              dataReferencia: dataRefSessao,
+            const uploadsForThisPhoto = ids.map(async (pid) => {
+              try {
+                await pacientesGaleriaApi.upload(paciente.id, webp, {
+                  roleUserId: ridUpload,
+                  procedimentoFeitoId: pid,
+                  legenda: formatGaleriaLegendaForUpload(
+                    foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS,
+                    journeyState.nomeProcedimento.trim() || 'Foto do procedimento'
+                  ),
+                  dataReferencia: dataRefSessao,
+                });
+                return true;
+              } catch (e) {
+                console.warn('Erro ao salvar foto para procedimento:', pid, e);
+                return false;
+              }
             });
-            return true;
+            const photoResults = await Promise.all(uploadsForThisPhoto);
+            return photoResults.every(Boolean);
           } catch (e) {
-            console.warn('Erro ao salvar foto do procedimento:', e);
+            console.warn('Erro ao preparar foto:', e);
             return false;
           }
         });
@@ -2092,23 +2084,26 @@ function AppRefactoredInner() {
   );
 
   const persistirEncerramentoConsulta = React.useCallback(
-    async (procedimentoFeitoIdParaVinculo) => {
-      if (assinaturasRealizadasIds.length > 0 && procedimentoFeitoIdParaVinculo) {
-        for (const assinaturaId of assinaturasRealizadasIds) {
-          try {
-            await termoAssinaturaApi.vincularProcedimento(assinaturaId, procedimentoFeitoIdParaVinculo);
-          } catch (e) {
-            console.warn(`Não foi possível vincular assinatura ${assinaturaId} ao procedimento:`, e);
+    async (pidsInput) => {
+      const ids = Array.isArray(pidsInput) ? pidsInput : [pidsInput].filter(Boolean);
+
+      if (assinaturasRealizadasIds.length > 0 && ids.length > 0) {
+        for (const pid of ids) {
+          for (const assinaturaId of assinaturasRealizadasIds) {
+            try {
+              await termoAssinaturaApi.vincularProcedimento(assinaturaId, pid);
+            } catch (e) {
+              console.warn(`Não foi possível vincular assinatura ${assinaturaId} ao procedimento ${pid}:`, e);
+            }
           }
         }
       }
 
-      const snapshotNome = String(journeyState.nomeProcedimento || '').trim();
-      const snapshotCatalogoId =
-        journeyState.nomeProcedimentoCatalogoId != null &&
-        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
-          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
-          : null;
+      const nomesArray = journeyState.procedimentosSessao?.length > 0
+        ? journeyState.procedimentosSessao.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
+        : [String(journeyState.nomeProcedimento || '').trim()].filter(Boolean);
+      const nomesUnicos = [...new Set(nomesArray)];
+
       const snapshotItens = Array.isArray(journeyState.orientacoesItens)
         ? journeyState.orientacoesItens.map((i) => ({ ...i }))
         : [];
@@ -2121,12 +2116,15 @@ function AppRefactoredInner() {
         }))
         .filter((x) => x.descricao);
 
-      if (procedimentoFeitoIdParaVinculo && orientacoesPayload.length > 0) {
-        await orientacoesApi.salvar(procedimentoFeitoIdParaVinculo, orientacoesPayload);
+      if (ids.length > 0 && orientacoesPayload.length > 0) {
+        for (const pid of ids) {
+          await orientacoesApi.salvar(pid, orientacoesPayload);
+        }
       }
 
-      let tplSig = '';
-      if (snapshotNome) {
+      const nomesParaTemplate = [];
+      for (const snapshotNome of nomesUnicos) {
+        let tplSig = '';
         try {
           const tplRaw = await perfilApi.getOrientacoesTemplate(snapshotNome);
           const tplList = normalizeOrientacoesTemplateResponse(tplRaw);
@@ -2137,50 +2135,57 @@ function AppRefactoredInner() {
           if (e?.status !== 404 && e?.status !== 400) {
             console.warn('getOrientacoesTemplate:', e);
           }
-          tplSig = '';
+        }
+        const curSig = orientacoesTemplateSignature(orientacoesPayload);
+        if (orientacoesPayload.length > 0 && (tplSig === '' || tplSig !== curSig)) {
+          nomesParaTemplate.push(snapshotNome);
         }
       }
-      const curSig = orientacoesTemplateSignature(orientacoesPayload);
-      const shouldOfferTemplate = Boolean(
-        snapshotNome && orientacoesPayload.length > 0 && (tplSig === '' || tplSig !== curSig)
-      );
-      if (shouldOfferTemplate) {
+
+      if (nomesParaTemplate.length > 0) {
+        const nomesStr = nomesParaTemplate.map(n => `"${n}"`).join(' e ');
         const saveTpl = await askFinishJourneyConfirm({
           title: 'Salvar como padrão?',
-          message: `Salvar estas orientações como padrão para "${snapshotNome}"?`,
+          message: `Salvar estas orientações como padrão para ${nomesStr}?`,
         });
         if (saveTpl) {
-          try {
-            await perfilApi.salvarOrientacoesTemplate(snapshotNome, orientacoesPayload);
-          } catch (e) {
-            toast.error(getApiErrorDetail(e) || 'Não foi possível salvar o template de orientações.');
+          for (const snapshotNome of nomesParaTemplate) {
+            try {
+              await perfilApi.salvarOrientacoesTemplate(snapshotNome, orientacoesPayload);
+            } catch {
+              toast.error(`Não foi possível salvar o template de orientações para ${snapshotNome}.`);
+            }
           }
         }
       }
 
-      if (snapshotNome && !snapshotCatalogoId) {
-        let catalogNames = [];
-        try {
-          const cats = await catalogosApi.list();
-          const arr = Array.isArray(cats) ? cats : cats?.content || [];
-          catalogNames = (Array.isArray(arr) ? arr : [])
-            .map((c) => String(c.nomeProcedimento || c.nome || '').trim())
-            .filter(Boolean);
-        } catch (e) {
-          console.warn('catalogos list:', e);
-        }
-        const hit = catalogNames.some((n) => n.toLowerCase() === snapshotNome.toLowerCase());
+      let catalogNames = [];
+      try {
+        const cats = await catalogosApi.list();
+        const arr = Array.isArray(cats) ? cats : cats?.content || [];
+        catalogNames = (Array.isArray(arr) ? arr : [])
+          .map((c) => String(c.nomeProcedimento || c.nome || '').trim().toLowerCase())
+          .filter(Boolean);
+      } catch (e) {
+        console.warn('catalogos list:', e);
+      }
+
+      for (const snapshotNome of nomesUnicos) {
+        // No batch, we don't have easy access to each procedure's catalogoId from here easily if it was empty.
+        // We'll just check if the name exists in the catalog.
+        const hit = catalogNames.includes(snapshotNome.toLowerCase());
         if (!hit) {
           const add = await askFinishJourneyConfirm({
             title: 'Catálogo',
-            message: `Procedimento não cadastrado no catálogo. Deseja cadastrá-lo como "${snapshotNome}"?`,
+            message: `O procedimento "${snapshotNome}" não está no catálogo. Deseja cadastrá-lo?`,
           });
           if (add) {
             try {
               await catalogosApi.criar({ nomeProcedimento: snapshotNome });
-              toast.success('Procedimento adicionado ao catálogo.');
-            } catch (e) {
-              toast.error(getApiErrorDetail(e) || 'Não foi possível cadastrar no catálogo.');
+              toast.success(`"${snapshotNome}" adicionado ao catálogo.`);
+              catalogNames.push(snapshotNome.toLowerCase());
+            } catch {
+              toast.error(`Não foi possível cadastrar "${snapshotNome}" no catálogo.`);
             }
           }
         }
@@ -2221,92 +2226,86 @@ function AppRefactoredInner() {
     ]
   );
 
-  const salvarProcedimentoEFotos = React.useCallback(async () => {
-    if (finishJourneyLockRef.current) return;
-    finishJourneyLockRef.current = true;
-    setIsSalvandoProcedimento(true);
-    try {
-      const paciente = resolvePacienteAtendimento();
-      const novosIds = [];
-
-      if (procedimentosLote && procedimentosLote.length > 0) {
-        for (const proc of procedimentosLote) {
-          const body = {
-            pacienteId: paciente.id,
-            roleUserId,
-            agendaId: proc.agendaId,
-            ...(proc.catalogoProcedimentoSaudeId
-              ? { catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId }
-              : {}),
-            ...(proc.isAgendaRetorno ? { isRetoque: proc.isRetoque ?? false } : {}),
-            ...(resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId)
-              ? { planejamentoItemId: resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) }
-              : {}),
-          };
-          let pid = null;
-          try {
-            const res = await procedimentosApi.iniciar(body);
-            pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-          } catch {
-            const manualBody = {
-              nome: proc.procedimentoNome,
-              roleUserId,
-              observacao: null,
-              agendaId: proc.agendaId,
-              catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
-              ...(resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId)
-                ? { planejamentoItemId: resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) }
-                : {}),
-            };
-            const res = await procedimentosApi.registrarManual(paciente.id, manualBody);
-            pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-          }
-          if (pid) novosIds.push(String(pid));
-        }
-      } else {
-        const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
-        if (procedimentoFeitoIdParaVinculo) novosIds.push(procedimentoFeitoIdParaVinculo);
-      }
-
-      if (novosIds.length > 0) {
-        setLoteProcedimentosFeitosIds(novosIds);
-        // Usa o primeiro ID para vincular mapas e fotos (limitação do UI atual)
-        await persistirMapaAplicacaoAtual(novosIds[0], paciente);
-        const dataRefSessao = toLocalISODate(new Date());
-        await uploadProcedureCapturedPhotos(paciente, novosIds[0], dataRefSessao);
-      }
-    } catch (error) {
-      console.error('Erro ao salvar procedimento e fotos:', error);
-      toast.error(error.message || 'Erro ao salvar procedimento e fotos.');
-      throw error;
-    } finally {
-      finishJourneyLockRef.current = false;
-      setIsSalvandoProcedimento(false);
-    }
-  }, [
-    procedimentosLote,
-    roleUserId,
-    persistirMapaAplicacaoAtual,
-    registrarProcedimentoManual,
-    resolvePacienteAtendimento,
-    resolvePlanejamentoItemId,
-    toast,
-    uploadProcedureCapturedPhotos,
-  ]);
-
   const encerrarAtendimento = React.useCallback(async () => {
     if (finishJourneyLockRef.current) return;
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      const procedimentoFeitoIdParaVinculo = loteProcedimentosFeitosIds[0];
-      
-      if (loteProcedimentosFeitosIds && loteProcedimentosFeitosIds.length > 0) {
-        await procedimentosApi.iniciarLote(loteProcedimentosFeitosIds.map(id => ({ procedimentoFeitoId: id })));
+      const paciente = resolvePacienteAtendimento();
+      const novosIds = [];
+
+      const listaParaSalvar = journeyState.procedimentosSessao && journeyState.procedimentosSessao.length > 0 
+        ? journeyState.procedimentosSessao 
+        : procedimentosLote;
+
+      if (listaParaSalvar && listaParaSalvar.length > 0) {
+        const payloadLote = { procedimentos: [] };
+        
+        for (const proc of listaParaSalvar) {
+           const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+           const body = {
+             nome: proc.nomeProcedimento || proc.procedimentoNome,
+             roleUserId,
+             observacao: proc.observacoesExecucao || null,
+             agendaId: proc.agendaId || journeyState.agendaId,
+             catalogoProcedimentoSaudeId: catId,
+             ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
+           };
+           payloadLote.procedimentos.push(body);
+        }
+
+        try {
+          const resArray = await procedimentosApi.iniciarLote(payloadLote);
+          if (Array.isArray(resArray)) {
+            novosIds.push(...resArray.map(r => String(r?.id ?? r?.procedimentoId ?? r?.procedimentoFeitoId)).filter(id => id !== 'undefined' && id !== 'null'));
+          }
+        } catch {
+          // Fallback para registrar manual se a API do lote falhar ou não suportar algum fluxo
+          for (const body of payloadLote.procedimentos) {
+             const res = await procedimentosApi.registrarManual(paciente.id, body);
+             const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+             if (pid) novosIds.push(String(pid));
+          }
+        }
+
+      } else {
+        const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
+        if (procedimentoFeitoIdParaVinculo) novosIds.push(procedimentoFeitoIdParaVinculo);
       }
 
-      await persistirEncerramentoConsulta(procedimentoFeitoIdParaVinculo);
+      // Salva o snapshot final da aba atual no state antes de persistir
+      journeyState.updateProcedureByIndex(journeyState.activeProcedureIndex, {
+        mapaSnapshot: mapaAplicacaoState.getSnapshotForPersist(),
+        fotosSnapshot: cameraState.procedureCapturedPhotos
+      });
+
+
+      if (novosIds.length > 0) {
+        setLoteProcedimentosFeitosIds(novosIds);
+        const dataRefSessao = toLocalISODate(new Date());
+
+        for (let i = 0; i < novosIds.length; i++) {
+          const pid = novosIds[i];
+          const proc = journeyState.procedimentosSessao[i] || {};
+          
+          const snap = proc.mapaSnapshot || (i === journeyState.activeProcedureIndex ? mapaAplicacaoState.getSnapshotForPersist() : null);
+          if (snap) {
+            await persistirMapaAplicacaoAtual(pid, paciente, snap, null, proc.nomeProcedimentoCatalogoId);
+          }
+          
+          const photos = proc.fotosSnapshot || (i === journeyState.activeProcedureIndex ? cameraState.procedureCapturedPhotos : []);
+          if (photos.length > 0) {
+            await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
+          }
+        }
+        
+        // Finaliza todos os procedimentos criados (muda status para finalizado e agenda para realizado)
+        const finalizarPromises = novosIds.map(id => procedimentosApi.finalizar(id).catch(e => console.warn('Erro ao finalizar proc', id, e)));
+        await Promise.all(finalizarPromises);
+      }
+
+      await persistirEncerramentoConsulta(novosIds);
       setConsultaModule(null);
       await finalizarAtendimentoNavegacao(sCpf);
     } catch (error) {
@@ -2318,37 +2317,26 @@ function AppRefactoredInner() {
       setIsFinishing(false);
     }
   }, [
+    journeyState.procedimentosSessao,
+    procedimentosLote,
+    roleUserId,
+    journeyState.agendaId,
+    resolvePlanejamentoItemId,
+    registrarProcedimentoManual,
+    resolvePacienteAtendimento,
+    persistirMapaAplicacaoAtual,
+    uploadProcedureCapturedPhotos,
     finalizarAtendimentoNavegacao,
     pacienteAtual?.cpf,
     persistirEncerramentoConsulta,
     selectedPatientCpf,
     setIsFinishing,
     toast,
-    loteProcedimentosFeitosIds[0],
   ]);
 
   const finishJourney = async () => {
-    if (finishJourneyLockRef.current) return;
-    finishJourneyLockRef.current = true;
-    setIsFinishing(true);
-    try {
-      const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      const paciente = resolvePacienteAtendimento();
-      const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
-      await persistirMapaAplicacaoAtual(procedimentoFeitoIdParaVinculo, paciente);
-      await persistirEncerramentoConsulta(procedimentoFeitoIdParaVinculo);
-      const dataRefSessao = toLocalISODate(new Date());
-      const procIdOpt = procedimentoFeitoIdParaVinculo ?? undefined;
-      await uploadPendingAnnotatedGalleryBlobs({ paciente, procIdOpt, dataRefSessao });
-      await uploadProcedureCapturedPhotos(paciente, procIdOpt, dataRefSessao);
-      await finalizarAtendimentoNavegacao(sCpf);
-    } catch (error) {
-      console.error('Erro ao finalizar jornada:', error);
-      toast.error(error.message || 'Erro ao finalizar jornada.');
-    } finally {
-      finishJourneyLockRef.current = false;
-      setIsFinishing(false);
-    }
+    // Agora o finishJourney (chamado por outros botões de finalizar antigos) apenas delega para encerrarAtendimento
+    await encerrarAtendimento();
   };
 
   const handleUploadDocumentFiles = () => {
@@ -2383,6 +2371,8 @@ function AppRefactoredInner() {
     typeof window !== 'undefined' && window.location.pathname.startsWith('/anamnese');
   const isDocumentoPublico =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/documento');
+  const isAssinaturaPublica =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/assinar');
 
   // ============ RENDERIZAÇÃO ============
   if (isPaginaPublica) {
@@ -2393,6 +2383,9 @@ function AppRefactoredInner() {
   }
   if (isDocumentoPublico) {
     return <DocumentoPublicoPage />;
+  }
+  if (isAssinaturaPublica) {
+    return <PublicSignatureFlow />;
   }
 
   if (!authReady) {
@@ -2703,7 +2696,7 @@ function AppRefactoredInner() {
                   {currentStep === 5 && (
                     <Step5Finalization
                       key={String(journeyState.nomeProcedimento || '')}
-                      procedimentosLote={journeyState.procedimentosLote ?? []}
+                      procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
                       procedureDateIso={journeyProcedureDateIso}
                       proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
                       setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
@@ -3096,12 +3089,14 @@ function AppRefactoredInner() {
                     nomeProcedimento={journeyState.nomeProcedimento}
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
-                    procedimentosLote={procedimentosLote}
-                    activeProcedimentoIndex={activeProcedimentoIndex}
-                    setActiveProcedimentoIndex={setActiveProcedimentoIndex}
+                    procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
+                    activeProcedimentoIndex={journeyState.activeProcedureIndex}
+                    setActiveProcedimentoIndex={journeyState.setActiveProcedureIndex}
+                    updateProcedureByIndex={journeyState.updateProcedureByIndex}
                     observacoesExecucao={journeyState.observacoesExecucao}
                     setObservacoesExecucao={journeyState.setObservacoesExecucao}
                     procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
+                    setProcedureCapturedPhotos={cameraState.setProcedureCapturedPhotos}
                     procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
                     onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
@@ -3159,7 +3154,6 @@ function AppRefactoredInner() {
                     }
                     onAnnotateEvaluationPhoto={openEvaluationPhotoAnnotationFromSummary}
                     onAnnotateProcedurePhoto={openProcedurePhotoAnnotation}
-                    salvarProcedimentoEFotos={salvarProcedimentoEFotos}
                     encerrarAtendimento={encerrarAtendimento}
                     isSalvandoProcedimento={isSalvandoProcedimento}
                     isFinishing={isFinishing}
@@ -3289,7 +3283,7 @@ function AppRefactoredInner() {
           >
 
             {activeView === 'pacientes' && (
-              <RoleGuard minLevel="NIVEL_1" showError>
+              <RoleGuard requiredPermission="PACIENTE_VER" minLevel="NIVEL_1" showError>
                 <PatientsView
                   isRecepcionista={isRecepcionista}
                   patients={patients}
@@ -3349,7 +3343,7 @@ function AppRefactoredInner() {
             )}
 
             {activeView === 'configuracoes' && (
-              <RoleGuard minLevel="NIVEL_3" showError>
+              <RoleGuard condition={canSeeConfig} showError>
                 <ConfiguracoesView
                   canSeeAnamnese={canSeeConfigAnamnese}
                   canSeeProcedimentos={canSeeConfigProcedimentos}
@@ -3371,7 +3365,7 @@ function AppRefactoredInner() {
             )}
 
             {activeView === 'gestao-equipe' && (
-              <RoleGuard minLevel="NIVEL_5" showError>
+              <RoleGuard requiredPermission="USUARIO_VER" minLevel="NIVEL_5" showError>
                 <GestaoUsuariosView
                   onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                 />
@@ -3379,7 +3373,7 @@ function AppRefactoredInner() {
             )}
 
             {activeView === 'agenda' && (
-              <RoleGuard minLevel="NIVEL_1" showError>
+              <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
                 <div className="flex min-h-0 flex-1 flex-col">
                 <AgendaDashboard
                   agenda={agendaSchedule}

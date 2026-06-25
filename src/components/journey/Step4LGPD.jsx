@@ -19,6 +19,7 @@ import {
   Mail,
   Link2,
   QrCode,
+  Search,
 } from 'lucide-react';
 import {
   authHeadersForFetch,
@@ -26,6 +27,7 @@ import {
   termosApi,
   notificacoesApi,
   getApiErrorToastMessage,
+  organizacaoApi,
 } from '../../services/api';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
@@ -35,6 +37,10 @@ import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
+import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
+import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
+import { useOrg } from '../../contexts/OrgContext.jsx';
+import { generateTermoPdf } from '../../utils/pdfGenerator';
 
 const STEP4_FOTO_CATEGORIAS = [
   GALERIA_CATEGORIA.ANTES,
@@ -293,6 +299,7 @@ export function Step3Termos({
   const [termoMenuOpen, setTermoMenuOpen] = useState(false);
   const termoMenuRef = useRef(null);
   const [termoSearch, setTermoSearch] = useState('');
+  const [showConfirmRecusa, setShowConfirmRecusa] = useState(false);
   const termoSearchInputRef = useRef(null);
   const [profSigningOpen, setProfSigningOpen] = useState(false);
   const [patSigningOpen, setPatSigningOpen] = useState(false);
@@ -316,6 +323,73 @@ export function Step3Termos({
   const [showConcluirConfirm, setShowConcluirConfirm] = useState(false);
   const [autoSignatureApplied, setAutoSignatureApplied] = useState(false);
   const assinaturaProfRecenteRef = useRef('');
+
+  const [modalEscolhaOpen, setModalEscolhaOpen] = useState(false);
+  const [modalAguardandoOpen, setModalAguardandoOpen] = useState(false);
+  const [metodoEscolhido, setMetodoEscolhido] = useState(null);
+
+  const { orgId } = useOrg();
+  const [permiteTablet, setPermiteTablet] = useState(true);
+  const [permiteQrCode, setPermiteQrCode] = useState(true);
+  const [permiteLink, setPermiteLink] = useState(true);
+
+  useEffect(() => {
+    if (!orgId) return;
+    organizacaoApi.getMinhas()
+      .then(list => {
+        const idStr = String(orgId).trim();
+        const row = list.find(o => o && typeof o === 'object' && (String(o.id ?? '') === idStr || String(o.organizacaoSaudeId ?? '') === idStr));
+        if (row) {
+          setPermiteTablet(row.permiteAssinaturaTablet ?? true);
+          setPermiteQrCode(row.permiteAssinaturaQrCode ?? true);
+          setPermiteLink(row.permiteAssinaturaLink ?? true);
+        }
+      })
+      .catch(e => console.warn('Falha ao carregar configurações de assinatura:', e));
+  }, [orgId]);
+
+  const handlePrepararSessaoExterna = async (metodo) => {
+    setModalEscolhaOpen(false);
+    let assinaturaId = backendAssinaturaId;
+    if (!assinaturaId) {
+      try {
+        const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
+        let ipAddress = null;
+        try {
+          const res = await fetch('https://api.ipify.org?format=json');
+          if (res.ok) {
+            const data = await res.json();
+            ipAddress = data.ip;
+          }
+        } catch {
+          // ignore
+        }
+
+        const resultado = await termoAssinaturaApi.criar({
+          termoId: termoSelecionado?._virtual ? null : termoSelecionadoId,
+          pacienteId,
+          procedimentoFeitoId: procedimentoFeitoId ?? null,
+          roleUserId: roleUserId ?? null,
+          assinaturaProfissional: profissionalAssinaturaDataUrl || 'PENDENTE_EXTERNA',
+          assinaturaPaciente: 'PENDENTE_EXTERNA',
+          pacienteRecusou: false,
+          profissionalAssinouEm: new Date().toISOString(),
+          pacienteAssinouEm: new Date().toISOString(),
+          conteudoSnapshot,
+          userAgent: navigator.userAgent,
+          ipAddress,
+        });
+        
+        assinaturaId = resultado.id;
+        setBackendAssinaturaId(assinaturaId);
+      } catch (e) {
+        toast.error('Erro ao inicializar sessão: ' + (e?.message || 'Tente novamente'));
+        return;
+      }
+    }
+    setMetodoEscolhido(metodo);
+    setModalAguardandoOpen(true);
+  };
 
   useEffect(() => {
     setAssinaturaPersistida(false);
@@ -360,7 +434,7 @@ export function Step3Termos({
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
           assinaturaProfissional: profissionalAssinaturaDataUrl,
-          assinaturaPaciente: pacienteRecusou ? null : termoAssinaturaDataUrl,
+          assinaturaPaciente: pacienteRecusou ? 'RECUSADO' : termoAssinaturaDataUrl,
           pacienteRecusou: pacienteRecusou,
           profissionalAssinouEm:
             profAssinaturaTimestamp != null
@@ -425,6 +499,7 @@ export function Step3Termos({
     roleUserId,
     profAssinaturaTimestamp,
     patAssinaturaTimestamp,
+    pacienteRecusou,
     onAssinaturaSalva,
     toast,
   ]);
@@ -494,15 +569,6 @@ export function Step3Termos({
   
   let conteudoExibicao =
     termoSelecionado?.conteudo ?? termoSelecionado?.content ?? conteudoFallbackProp;
-
-  if (conteudoExibicao) {
-    // Interpolação genérica para placeholders de templates
-    if (pacienteCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DO PACIENTE\]/gi, pacienteCtx.nome);
-    if (pacienteCtx?.cpf) conteudoExibicao = conteudoExibicao.replace(/\[CPF DO PACIENTE\]/gi, pacienteCtx.cpf);
-    if (clinicaCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DA CLÍNICA\]/gi, clinicaCtx.nome);
-    if (clinicaCtx?.cnpj) conteudoExibicao = conteudoExibicao.replace(/\[CNPJ DA CLÍNICA\]/gi, clinicaCtx.cnpj);
-    if (profissionalCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DO PROFISSIONAL\]/gi, profissionalCtx.nome);
-  }
 
   const _temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
 
@@ -1068,7 +1134,7 @@ export function Step3Termos({
                           <button
                             type="button"
                             onClick={() => {
-                              import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                              try {
                                 generateTermoPdf({
                                   titulo: tituloExibicao,
                                   conteudo: conteudoExibicao,
@@ -1081,7 +1147,9 @@ export function Step3Termos({
                                   },
                                   fileName: `termo_assinado_${new Date().getTime()}.pdf`
                                 });
-                              });
+                              } catch (e) {
+                                console.error(e);
+                              }
                             }}
                             className="flex items-center gap-1.5 rounded-lg bg-[#0f172a] px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-[#1e293b] transition-colors"
                           >
@@ -1159,72 +1227,82 @@ export function Step3Termos({
                         <div className="flex flex-col sm:flex-row gap-3">
                           <button
                             type="button"
-                            onClick={() => setPatSigningOpen(true)}
+                            onClick={() => setModalEscolhaOpen(true)}
                             className="rounded-lg bg-[#0f172a] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#1e293b]"
                           >
-                            Assinar no dispositivo
+                            Solicitar Assinatura
                           </button>
                           
                           {linkUrl && (
                             <>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const msg = `Olá! Acesse o link abaixo para assinar o documento da clínica:\n${linkUrl}`;
-                                  const phone = pacienteCtx?.telefone?.replace(/\D/g, '') || '';
-                                  window.open(`https://wa.me/${phone ? `55${phone}` : ''}?text=${encodeURIComponent(msg)}`, '_blank');
-                                }}
-                                className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#1ebd5b]"
-                              >
-                                <MessageCircle className="h-4 w-4" />
-                                WhatsApp
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const subject = 'Assinatura de Documento';
-                                  const body = `Olá!\n\nAcesse o link abaixo para assinar seu documento:\n${linkUrl}`;
-                                  const email = pacienteCtx?.email || '';
-                                  window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                }}
-                                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                              >
-                                <Mail className="h-4 w-4" />
-                                Email
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (navigator.clipboard) {
-                                    navigator.clipboard.writeText(linkUrl);
-                                    toast.success('Link copiado!');
-                                  }
-                                }}
-                                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                              >
-                                <Link2 className="h-4 w-4" />
-                                Copiar Link
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowQr(!showQr)}
-                                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                              >
-                                <QrCode className="h-4 w-4" />
-                                {showQr ? 'Ocultar QR Code' : 'Mostrar QR Code'}
-                              </button>
+                              {permiteLink && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const msg = `Olá! Acesse o link abaixo para assinar o documento da clínica:\n${linkUrl}`;
+                                      const phone = pacienteCtx?.telefone?.replace(/\D/g, '') || '';
+                                      window.open(`https://wa.me/${phone ? `55${phone}` : ''}?text=${encodeURIComponent(msg)}`, '_blank');
+                                    }}
+                                    className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#1ebd5b]"
+                                  >
+                                    <MessageCircle className="h-4 w-4" />
+                                    WhatsApp
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const subject = 'Assinatura de Documento';
+                                      const body = `Olá!\n\nAcesse o link abaixo para assinar seu documento:\n${linkUrl}`;
+                                      const email = pacienteCtx?.email || '';
+                                      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                    }}
+                                    className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                                  >
+                                    <Mail className="h-4 w-4" />
+                                    Email
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (navigator.clipboard) {
+                                        navigator.clipboard.writeText(linkUrl);
+                                        toast.success('Link copiado!');
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                                  >
+                                    <Link2 className="h-4 w-4" />
+                                    Copiar Link
+                                  </button>
+                                </>
+                              )}
+                              {permiteQrCode && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowQr(!showQr)}
+                                  className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                                >
+                                  <QrCode className="h-4 w-4" />
+                                  {showQr ? 'Ocultar QR Code' : 'Mostrar QR Code'}
+                                </button>
+                              )}
                             </>
                           )}
 
                           <button
                             type="button"
-                            onClick={() => setPacienteRecusou(true)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setShowConfirmRecusa(true);
+                            }}
                             className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-100"
                           >
                             Recusar a assinar
                           </button>
                         </div>
-                        {showQr && linkUrl && qrUrl ? (
+                        {showQr && permiteQrCode && linkUrl && qrUrl ? (
                           <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
                             <img
                               src={qrUrl}
@@ -1270,13 +1348,50 @@ export function Step3Termos({
       />
       <SignatureFullscreenModal
         open={patSigningOpen}
-        title="Assinatura do Paciente"
+        title={`Assinatura do Paciente: ${pacienteCtx?.nome ?? 'Paciente'}`}
         onClose={() => setPatSigningOpen(false)}
         canvasRef={patCanvasRef}
         hasStrokeRef={patHasStrokeRef}
         mobilePortrait={mobilePortrait}
         onConfirm={handleConfirmPat}
       />
+
+      <ModalEscolhaAssinatura
+        open={modalEscolhaOpen}
+        onClose={() => setModalEscolhaOpen(false)}
+        onSelectTablet={() => {
+          setModalEscolhaOpen(false);
+          setPatSigningOpen(true);
+        }}
+        onSelectQrCode={() => handlePrepararSessaoExterna('QR_CODE')}
+        onSelectLink={() => handlePrepararSessaoExterna('LINK_WHATSAPP')}
+        opcoes={{ tablet: permiteTablet, qrCode: permiteQrCode, link: permiteLink }}
+      />
+
+      <AguardandoPacienteModal
+        open={modalAguardandoOpen}
+        onClose={() => {
+          setModalAguardandoOpen(false);
+          setMetodoEscolhido(null);
+        }}
+        metodo={metodoEscolhido}
+        sessaoExternaPayload={{
+          termoAssinaturaId: backendAssinaturaId || termoSelecionadoId,
+          assinaturaDocumentoId: null,
+          telefonePaciente: pacienteCtx?.telefone || '',
+        }}
+        onAssinaturaConcluida={() => {
+          setModalAguardandoOpen(false);
+          setMetodoEscolhido(null);
+          handleVerificarAssinaturaRemota();
+        }}
+        onCancelar={() => {
+          setModalAguardandoOpen(false);
+          setMetodoEscolhido(null);
+          setPatSigningOpen(true);
+        }}
+      />
+
       {showSalvarPadraoPrompt ? (
         <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
           <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
@@ -1416,6 +1531,39 @@ export function Step3Termos({
           </button>
         </div>
       ) : null}
+
+      {showConfirmRecusa && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3 text-red-600">
+              <AlertTriangle className="h-6 w-6 shrink-0" strokeWidth={2} />
+              <h3 className="text-[16px] font-bold">Confirmar recusa</h3>
+            </div>
+            <p className="mb-6 text-[14px] text-slate-600">
+              Tem certeza de que o paciente se recusa a assinar o documento? O registro ficará salvo e o procedimento não poderá prosseguir sem o consentimento.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmRecusa(false)}
+                className="rounded-lg px-4 py-2.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmRecusa(false);
+                  setPacienteRecusou(true);
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Sim, registrar recusa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2549,7 +2549,12 @@ export function PatientProfileView({
                                           <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
                                             Assinatura do Paciente
                                           </div>
-                                          {imgAssinPac ? (
+                                          {assinaturaVinculada?.recusado ? (
+                                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-bold text-red-700">
+                                              <AlertTriangle className="h-4 w-4" strokeWidth={2} />
+                                              Recusado pelo paciente
+                                            </div>
+                                          ) : imgAssinPac ? (
                                             <img
                                               src={imgAssinPac}
                                               alt=""

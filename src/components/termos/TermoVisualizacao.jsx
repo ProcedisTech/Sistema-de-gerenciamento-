@@ -1,5 +1,7 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
+import { replaceTermVariables } from '../../utils/replaceTermVariables';
+import 'react-quill-new/dist/quill.snow.css';
 
 export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalCtx, clinicaCtx, children }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
@@ -22,13 +24,9 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
   const contatoPaciente = pac.telefone || '[Telefone do Paciente]';
 
   let conteudoTexto = String(conteudo || '').trim();
-  // Substitui os placeholders pelos dados reais do contexto (se existirem e não forem os fallbacks padrão)
-  conteudoTexto = conteudoTexto
-    .replace(/\[NOME DO PACIENTE\]/gi, pac.nome ? pac.nome : '[NOME DO PACIENTE]')
-    .replace(/\[CPF DO PACIENTE\]/gi, pac.cpf ? pac.cpf : '[CPF DO PACIENTE]')
-    .replace(/\[NOME DA CLÍNICA\]/gi, clinica.nome ? clinica.nome : '[NOME DA CLÍNICA]')
-    .replace(/\[CNPJ DA CLÍNICA\]/gi, clinica.cnpj ? clinica.cnpj : '[CNPJ DA CLÍNICA]')
-    .replace(/\[NOME DO PROFISSIONAL\]/gi, prof.nome ? prof.nome : '[NOME DO PROFISSIONAL]');
+  
+  // Substitui os placeholders pelos dados reais do contexto usando o utility centralizado
+  conteudoTexto = replaceTermVariables(conteudoTexto, { pac, clinica, prof });
 
   const temConteudoTexto = conteudoTexto.length > 0;
 
@@ -68,10 +66,12 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
       <div className="bg-[#f8fafc] p-6">
         <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
           {temConteudoTexto ? (
-            <div 
-              className="prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
-              dangerouslySetInnerHTML={{ __html: conteudoTexto }}
-            />
+            <div className="ql-snow">
+              <div 
+                className="ql-editor p-0 prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
+                dangerouslySetInnerHTML={{ __html: conteudoTexto }}
+              />
+            </div>
           ) : (
             <>
               <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">
