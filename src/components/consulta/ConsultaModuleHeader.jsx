@@ -1,11 +1,12 @@
 import React from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
-import { CONSULTA_MODULE_LABELS } from './consultaModuleLabels.js';
+import { CONSULTA_MODULE_LABELS, CONSULTA_MODULE_LABELS_RETORNO } from './consultaModuleLabels.js';
 
-export function ConsultaModuleHeader({ paciente, module, onBack, getPatientInitials }) {
+export function ConsultaModuleHeader({ paciente, module, onBack, getPatientInitials, isRetorno = false }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
-  const moduleLabel = CONSULTA_MODULE_LABELS[module] ?? 'Consulta';
+  const labels = isRetorno ? CONSULTA_MODULE_LABELS_RETORNO : CONSULTA_MODULE_LABELS;
+  const moduleLabel = labels[module] ?? (isRetorno ? 'Retorno' : 'Consulta');
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
 
   return (

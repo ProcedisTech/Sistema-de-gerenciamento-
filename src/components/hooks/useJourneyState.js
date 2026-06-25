@@ -54,6 +54,18 @@ export const useJourneyState = () => {
   /** UUID do item do catálogo quando o profissional escolhe da lista (evita modal duplicado no finish). */
   const [nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoId] = useState(null);
 
+  /** 'consulta' | 'retorno' — derivado de agenda.tipoProcedimentoCodigo ao iniciar atendimento. */
+  const [tipoAtendimento, setTipoAtendimento] = useState('consulta');
+  const [procedimentoFeitoOrigemId, setProcedimentoFeitoOrigemId] = useState(null);
+  const [retornoAvaliacao, setRetornoAvaliacao] = useState({
+    satisfacao: null,
+    simetria: '',
+    dor: null,
+  });
+  const [houveRetoque, setHouveRetoque] = useState(false);
+
+  const isAgendaRetorno = tipoAtendimento === 'retorno';
+
   // ============ ETAPA 3: TERMOS / LGPD ============
   const [termoLido, setTermoLido] = useState(false);
   const [termoAssinado, setTermoAssinado] = useState(false);
@@ -173,6 +185,15 @@ export const useJourneyState = () => {
     setNomeProcedimento,
     nomeProcedimentoCatalogoId,
     setNomeProcedimentoCatalogoId,
+    tipoAtendimento,
+    setTipoAtendimento,
+    procedimentoFeitoOrigemId,
+    setProcedimentoFeitoOrigemId,
+    isAgendaRetorno,
+    retornoAvaliacao,
+    setRetornoAvaliacao,
+    houveRetoque,
+    setHouveRetoque,
     termoLido,
     setTermoLido,
     termoAssinado,

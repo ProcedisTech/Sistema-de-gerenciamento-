@@ -229,6 +229,8 @@ export function normalizePacienteGaleriaItem(raw) {
     null;
   const procedimentoFeitoId =
     raw.procedimentoFeitoId ?? raw.procedimento_feito_id ?? raw.procedimentoFeito?.id ?? null;
+  const procedimentoFeitoCardId =
+    raw.procedimentoFeitoCardId ?? raw.procedimento_feito_card_id ?? null;
   return {
     serverId: String(id),
     url: absolutizeUrl(String(url)),
@@ -246,6 +248,10 @@ export function normalizePacienteGaleriaItem(raw) {
     descricaoLegenda: parsed.descricao,
     nomeProcedimento,
     procedimentoFeitoId: procedimentoFeitoId != null && String(procedimentoFeitoId).trim() !== '' ? String(procedimentoFeitoId) : null,
+    procedimentoFeitoCardId:
+      procedimentoFeitoCardId != null && String(procedimentoFeitoCardId).trim() !== ''
+        ? String(procedimentoFeitoCardId)
+        : null,
   };
 }
 

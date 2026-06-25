@@ -34,18 +34,33 @@ export function ProcedureTimelineRail({ children }) {
   );
 }
 
-/** Marca teal + conteúdo à direita. */
-export function ProcedureTimelineEntry({ children }) {
+/** Marca teal + conteúdo à direita. depth > 0 = retorno indentado. */
+export function ProcedureTimelineEntry({ children, depth = 0 }) {
+  const isChild = depth > 0;
   return (
-    <li className="grid min-w-0 grid-cols-[26px_minmax(0,1fr)] gap-2 sm:grid-cols-[30px_minmax(0,1fr)]">
-      <div className="relative z-[2] mt-[13px] flex justify-center pt-px sm:mt-[14px]">
+    <li
+      className={`grid min-w-0 grid-cols-[26px_minmax(0,1fr)] gap-2 sm:grid-cols-[30px_minmax(0,1fr)] ${
+        isChild ? 'ml-4 sm:ml-6' : ''
+      }`}
+    >
+      <div className={`relative z-[2] flex justify-center pt-px ${isChild ? 'mt-[15px]' : 'mt-[13px] sm:mt-[14px]'}`}>
         <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#00a88e] shadow-[0_0_0_4px_white] sm:h-3 sm:w-3 sm:shadow-[0_0_0_5px_white]"
+          className={`shrink-0 rounded-full bg-[#00a88e] shadow-[0_0_0_4px_white] sm:shadow-[0_0_0_5px_white] ${
+            isChild ? 'h-2 w-2' : 'h-2.5 w-2.5 sm:h-3 sm:w-3'
+          }`}
           aria-hidden
         />
       </div>
-      <div className="min-w-0">{children}</div>
+      <div className={`min-w-0 ${isChild ? 'border-l-2 border-[#00a88e]/20 pl-2 sm:pl-3' : ''}`}>{children}</div>
     </li>
+  );
+}
+
+export function RetornoTimelineBadge({ isRetoque }) {
+  return (
+    <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
+      {isRetoque ? 'Retoque' : 'Avaliação'}
+    </span>
   );
 }
 

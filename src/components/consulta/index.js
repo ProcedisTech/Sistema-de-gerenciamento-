@@ -7,3 +7,6 @@ export { ConsultaViewShell } from './ConsultaViewShell.jsx';
 export { PlanosTab } from '../planos/PlanosTab.jsx';
 export { ConsultaProcedimentoFlow } from './ConsultaProcedimentoFlow.jsx';
 export { ConsultaAvaliacaoFlow } from './ConsultaAvaliacaoFlow.jsx';
+export { ConsultaRetornoFlow } from './ConsultaRetornoFlow.jsx';
+export { ConsultaRetornoOrigemModal } from './ConsultaRetornoOrigemModal.jsx';
+export { formatRetornoAvaliacaoTexto } from './consultaRetornoUtils.js';

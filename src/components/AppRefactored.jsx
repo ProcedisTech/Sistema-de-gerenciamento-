@@ -94,6 +94,9 @@ import {
   ConsultaViewShell,
   ConsultaProcedimentoFlow,
   ConsultaAvaliacaoFlow,
+  ConsultaRetornoFlow,
+  ConsultaRetornoOrigemModal,
+  formatRetornoAvaliacaoTexto,
   ConsultaEncerrarFooter,
   ConsultaEncerrarConfirmModal,
   getEncerrarConsultaMessage,
@@ -329,6 +332,7 @@ function AppRefactoredInner() {
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
   const [isSalvandoFotosAvaliacao, setIsSalvandoFotosAvaliacao] = React.useState(false);
+  const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
   const [isSalvandoProcedimento, setIsSalvandoProcedimento] = React.useState(false);
   const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
@@ -448,6 +452,8 @@ function AppRefactoredInner() {
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
         modoRetorno: true,
         planejamentoItemId,
+        retornoOrigemNome: String(item.catalogoNome ?? '').trim() || 'Procedimento',
+        retornoDataPlanejada: item.dataPlanejada ?? null,
         profissionalRoleUserId: roleUserId,
         onAgendaSaved: onSaved,
       });
@@ -838,6 +844,7 @@ function AppRefactoredInner() {
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [consultaModule, setConsultaModule] = React.useState(null);
+  const [retornoAvulsoPickerOpen, setRetornoAvulsoPickerOpen] = React.useState(false);
   const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
   
   // --- Lote de Procedimentos ---
@@ -884,6 +891,14 @@ function AppRefactoredInner() {
     }
     setActiveView(view);
   };
+
+  React.useEffect(() => {
+    if (activeView !== 'consulta' || !journeyState.isAgendaRetorno) return;
+    const blocked = ['anamnese', 'avaliacao', 'planejamento', 'procedimento'];
+    if (blocked.includes(consultaModule)) {
+      setConsultaModule('hub');
+    }
+  }, [activeView, consultaModule, journeyState.isAgendaRetorno]);
 
   React.useEffect(() => {
     if (activeView === 'configuracoes' && postLoginGate === 'ready' && !canSeeConfig) {
@@ -1100,11 +1115,56 @@ function AppRefactoredInner() {
     journeyState.setNomeProcedimentoCatalogoId(catAgenda);
     journeyState.setNomeProcedimento(nomeAgenda);
     journeyState.setAgendaId(options.agendaId ?? null);
-    const mod = options.initialModule ?? LEGACY_STEP_TO_MODULE[options.initialStep] ?? 'hub';
+    const isRetorno =
+      options.isAgendaRetorno === true ||
+      String(options.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
+    journeyState.setTipoAtendimento(isRetorno ? 'retorno' : 'consulta');
+    journeyState.setProcedimentoFeitoOrigemId(
+      options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
+    );
+    if (!isSameDayResume && isRetorno) {
+      journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
+      journeyState.setHouveRetoque(false);
+    }
+    const mod = isRetorno
+      ? (options.initialModule ?? 'hub')
+      : (options.initialModule ?? LEGACY_STEP_TO_MODULE[options.initialStep] ?? 'hub');
     setConsultaModule(mod);
     setActiveView('consulta');
     setPatientView('list');
   };
+
+  const handleIniciarRetornoAvulso = React.useCallback(() => {
+    if (!pacienteAtual?.id) return;
+    setRetornoAvulsoPickerOpen(true);
+  }, [pacienteAtual?.id]);
+
+  const handleRetornoAvulsoPaiEscolhido = React.useCallback(
+    (procedimentoFeitoOrigemId) => {
+      if (!pacienteAtual?.id || !roleUserId) return;
+      setRetornoAvulsoPickerOpen(false);
+      const origemId = String(procedimentoFeitoOrigemId || '').trim();
+      if (!origemId) return;
+      agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(pacienteAtual), {
+        modoRetorno: true,
+        procedimentoFeitoOrigemId: origemId,
+        profissionalRoleUserId: roleUserId,
+        onAgendaSaved: (payload) => {
+          handleStartAttendance(pacienteAtual, {
+            agendaId: payload?.agendaId,
+            isAgendaRetorno: true,
+            tipoProcedimentoCodigo: 'retorno',
+            procedimentoFeitoOrigemId: origemId,
+            fromAgendaSlot: true,
+            initialModule: 'hub',
+            data: payload?.dataAgendamento,
+            horaInicio: payload?.horaInicio,
+          });
+        },
+      });
+    },
+    [agendaSchedule, buildAgendaPacienteFromRecord, pacienteAtual, roleUserId],
+  );
 
   const onSairConsulta = React.useCallback(() => {
     setConsultaModule(null);
@@ -1155,9 +1215,12 @@ function AppRefactoredInner() {
             .sort((a,b) => String(a?.horaInicio).localeCompare(String(b?.horaInicio)));
           
           const lote = agendamentosDoDia.map(a => ({
-            agendaId: a.id,
+            agendaId: a.id || a.agendaId,
             procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
             catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+            isAgendaRetorno:
+              String(a.tipoProcedimentoCodigo ?? a.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() ===
+              'retorno',
           }));
           
           setProcedimentosLote(lote);
@@ -1732,6 +1795,10 @@ function AppRefactoredInner() {
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
     journeyState.setNomeProcedimentoCatalogoId(null);
+    journeyState.setTipoAtendimento('consulta');
+    journeyState.setProcedimentoFeitoOrigemId(null);
+    journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
+    journeyState.setHouveRetoque(false);
     setSugestaoProcedimentoEnviada(false);
     journeyState.setAgendaId(null);
     journeyState.setStep2Errors({});
@@ -1767,46 +1834,136 @@ function AppRefactoredInner() {
     mapaAplicacaoState,
   ]);
 
+  const UUID_REGEX_PROC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const getOrCreateProcedimentoFeitoId = React.useCallback(
+    async (paciente, opts = {}) => {
+      const existing = loteProcedimentosFeitosIds[0];
+      if (existing) return String(existing);
+
+      if (!opts.allowCreate) return null;
+      if (!paciente?.id || !roleUserId) return null;
+
+      const agendaIdValido =
+        journeyState.agendaId && UUID_REGEX_PROC.test(String(journeyState.agendaId))
+          ? journeyState.agendaId
+          : null;
+      if (!agendaIdValido) return null;
+
+      const catalogoId =
+        opts.catalogoId != null && String(opts.catalogoId).trim() !== ''
+          ? String(opts.catalogoId).trim()
+          : null;
+      const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
+
+      const body = {
+        pacienteId: paciente.id,
+        agendaId: agendaIdValido,
+        roleUserId,
+        ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
+        ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
+      };
+      if (planejamentoItemId) body.planejamentoItemId = planejamentoItemId;
+
+      try {
+        const res = await procedimentosApi.iniciar(body);
+        const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+        if (pid != null && pid !== '') {
+          const idStr = String(pid);
+          setLoteProcedimentosFeitosIds([idStr]);
+          return idStr;
+        }
+      } catch (e) {
+        console.warn('iniciar procedimento falhou:', e);
+      }
+      return null;
+    },
+    [journeyState.agendaId, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds[0]],
+  );
+
+  const iniciarProcedimentoRetorno = React.useCallback(
+    async (paciente, { isRetoque }) =>
+      getOrCreateProcedimentoFeitoId(paciente, {
+        allowCreate: true,
+        isRetoque,
+        catalogoId: null,
+      }),
+    [getOrCreateProcedimentoFeitoId],
+  );
+
+  const handleConcluirRetorno = React.useCallback(async () => {
+    if (finishJourneyLockRef.current) return;
+    finishJourneyLockRef.current = true;
+    setIsSalvandoRetorno(true);
+    try {
+      const paciente = resolvePacienteAtendimento();
+      if (!paciente?.id) {
+        toast.error('Paciente não encontrado.');
+        return;
+      }
+      const pid = await iniciarProcedimentoRetorno(paciente, {
+        isRetoque: journeyState.houveRetoque,
+      });
+      if (!pid) {
+        toast.error('Não foi possível iniciar o retorno.');
+        return;
+      }
+      journeyState.setObservacoesExecucao(
+        formatRetornoAvaliacaoTexto(journeyState.retornoAvaliacao),
+      );
+      pendingAnnotatedGalleryBlobsRef.current = [];
+      await uploadEvaluationCapturedPhotos({
+        paciente,
+        procIdOpt: pid,
+        dataRefSessao: toLocalISODate(new Date()),
+      });
+      await procedimentosApi.finalizar(pid);
+      toast.success('Retorno registrado com sucesso.');
+      setConsultaModule('hub');
+    } catch (error) {
+      console.error('Erro ao concluir retorno:', error);
+      toast.error(error?.message || 'Erro ao concluir retorno.');
+    } finally {
+      finishJourneyLockRef.current = false;
+      setIsSalvandoRetorno(false);
+    }
+  }, [
+    iniciarProcedimentoRetorno,
+    journeyState.houveRetoque,
+    journeyState.retornoAvaliacao,
+    journeyState.setObservacoesExecucao,
+    resolvePacienteAtendimento,
+    uploadEvaluationCapturedPhotos,
+    toast,
+  ]);
+
   const ensureProcedimentoFeitoForMapa = React.useCallback(
     async (paciente) => {
-      if (loteProcedimentosFeitosIds[0]) return loteProcedimentosFeitosIds[0];
+      if (journeyState.isAgendaRetorno) {
+        return loteProcedimentosFeitosIds[0] ? String(loteProcedimentosFeitosIds[0]) : null;
+      }
 
-      const nome = String(journeyState.nomeProcedimento || '').trim();
       const catalogoId =
         journeyState.nomeProcedimentoCatalogoId != null &&
         String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
+      const nome = String(journeyState.nomeProcedimento || '').trim();
 
       if (!nome || !paciente?.id || !roleUserId) return null;
+      if (!catalogoId) return null;
 
-      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const created = await getOrCreateProcedimentoFeitoId(paciente, {
+        allowCreate: true,
+        catalogoId,
+      });
+      if (created) return created;
+
       const agendaIdValido =
-        journeyState.agendaId && UUID_REGEX.test(journeyState.agendaId)
+        journeyState.agendaId && UUID_REGEX_PROC.test(String(journeyState.agendaId))
           ? journeyState.agendaId
           : null;
       const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
-
-      if (agendaIdValido && catalogoId) {
-        try {
-          const body = {
-            agendaId: agendaIdValido,
-            catalogoProcedimentoSaudeId: catalogoId,
-            roleUserId,
-          };
-          if (planejamentoItemId) body.planejamentoItemId = planejamentoItemId;
-          const res = await procedimentosApi.iniciar(body);
-          const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-          if (pid != null && pid !== '') {
-            const idStr = String(pid);
-            setLoteProcedimentosFeitosIds([idStr]);
-            return idStr;
-          }
-        } catch (e) {
-          console.warn('iniciar procedimento falhou, tentando manual:', e);
-        }
-      }
-
       const resultado = await procedimentosApi.registrarManual(paciente.id, {
         nome,
         roleUserId,
@@ -1824,7 +1981,9 @@ function AppRefactoredInner() {
       return null;
     },
     [
+      getOrCreateProcedimentoFeitoId,
       journeyState.agendaId,
+      journeyState.isAgendaRetorno,
       journeyState.nomeProcedimento,
       journeyState.nomeProcedimentoCatalogoId,
       journeyState.observacoesExecucao,
@@ -2072,23 +2231,37 @@ function AppRefactoredInner() {
 
       if (procedimentosLote && procedimentosLote.length > 0) {
         for (const proc of procedimentosLote) {
-           const body = {
-             nome: proc.procedimentoNome,
-             roleUserId,
-             observacao: null,
-             agendaId: proc.agendaId,
-             catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
-             ...(resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) ? { planejamentoItemId: resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) } : {}),
-           };
-           let pid = null;
-           try {
-             const res = await procedimentosApi.iniciar(body);
-             pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-           } catch {
-             const res = await procedimentosApi.registrarManual(paciente.id, body);
-             pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-           }
-           if (pid) novosIds.push(String(pid));
+          const body = {
+            pacienteId: paciente.id,
+            roleUserId,
+            agendaId: proc.agendaId,
+            ...(proc.catalogoProcedimentoSaudeId
+              ? { catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId }
+              : {}),
+            ...(proc.isAgendaRetorno ? { isRetoque: proc.isRetoque ?? false } : {}),
+            ...(resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId)
+              ? { planejamentoItemId: resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) }
+              : {}),
+          };
+          let pid = null;
+          try {
+            const res = await procedimentosApi.iniciar(body);
+            pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+          } catch {
+            const manualBody = {
+              nome: proc.procedimentoNome,
+              roleUserId,
+              observacao: null,
+              agendaId: proc.agendaId,
+              catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
+              ...(resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId)
+                ? { planejamentoItemId: resolvePlanejamentoItemId(proc.catalogoProcedimentoSaudeId) }
+                : {}),
+            };
+            const res = await procedimentosApi.registrarManual(paciente.id, manualBody);
+            pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+          }
+          if (pid) novosIds.push(String(pid));
         }
       } else {
         const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente);
@@ -2783,6 +2956,7 @@ function AppRefactoredInner() {
               <ConsultaModuleHeader
                 paciente={pacienteAtual}
                 module={consultaModule}
+                isRetorno={journeyState.isAgendaRetorno}
                 onBack={consultaModule !== 'hub' ? () => setConsultaModule('hub') : undefined}
                 getPatientInitials={getPatientInitials}
               />
@@ -2792,12 +2966,28 @@ function AppRefactoredInner() {
                 {consultaModule === 'hub' ? (
                   <ConsultaHub
                     paciente={pacienteAtual}
+                    isRetorno={journeyState.isAgendaRetorno}
                     onSelectModule={setConsultaModule}
+                    onIniciarRetornoAvulso={handleIniciarRetornoAvulso}
                     onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
                   />
                 ) : null}
-                {consultaModule === 'anamnese' ? (
+                {consultaModule === 'retorno' ? (
+                  <ConsultaRetornoFlow
+                    retornoAvaliacao={journeyState.retornoAvaliacao}
+                    setRetornoAvaliacao={journeyState.setRetornoAvaliacao}
+                    houveRetoque={journeyState.houveRetoque}
+                    setHouveRetoque={journeyState.setHouveRetoque}
+                    evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos ?? []}
+                    evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                    onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
+                    onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
+                    onConcluirRetorno={handleConcluirRetorno}
+                    isConcluirBusy={isSalvandoRetorno}
+                  />
+                ) : null}
+                {consultaModule === 'anamnese' && !journeyState.isAgendaRetorno ? (
                   <Step2Anamnese
                     ref={anamneseRef}
                     queixa={journeyState.queixa}
@@ -2822,7 +3012,7 @@ function AppRefactoredInner() {
                     isConcluirAnamneseBusy={step1Busy}
                   />
                 ) : null}
-                {consultaModule === 'avaliacao' ? (
+                {consultaModule === 'avaliacao' && !journeyState.isAgendaRetorno ? (
                   <ConsultaAvaliacaoFlow
                     queixa={journeyState.queixa}
                     setQueixa={journeyState.setQueixa}
@@ -2837,7 +3027,7 @@ function AppRefactoredInner() {
                     isConcluirBusy={isSalvandoFotosAvaliacao}
                   />
                 ) : null}
-                {consultaModule === 'planejamento' ? (
+                {consultaModule === 'planejamento' && !journeyState.isAgendaRetorno ? (
                   <PlanosTab
                     variant="consulta"
                     pacienteId={pacienteAtual?.id ?? null}
@@ -2900,7 +3090,7 @@ function AppRefactoredInner() {
                     onConcluir={() => setConsultaModule('hub')}
                   />
                 ) : null}
-                {consultaModule === 'procedimento' ? (
+                {consultaModule === 'procedimento' && !journeyState.isAgendaRetorno ? (
                   <ConsultaProcedimentoFlow
                     pacienteIdForProcedures={pacienteAtual?.id || null}
                     nomeProcedimento={journeyState.nomeProcedimento}
@@ -2988,6 +3178,14 @@ function AppRefactoredInner() {
               message={getEncerrarConsultaMessage(consultaModule, pacienteAtual?.nome)}
               onCancel={cancelEncerrarConsulta}
               onConfirm={confirmEncerrarConsulta}
+            />
+
+            <ConsultaRetornoOrigemModal
+              key={retornoAvulsoPickerOpen ? `retorno-origem-${pacienteAtual?.id}` : 'retorno-origem-closed'}
+              open={retornoAvulsoPickerOpen}
+              pacienteId={pacienteAtual?.id}
+              onClose={() => setRetornoAvulsoPickerOpen(false)}
+              onConfirm={handleRetornoAvulsoPaiEscolhido}
             />
 
             {photoAnnotationScope != null &&

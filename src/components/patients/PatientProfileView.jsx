@@ -69,8 +69,13 @@ import {
   ProcedureTimelineEntry,
   ProcedureTimelineProfileVerMaisStrip,
   ProcedureTimelinePreviewCard,
+  RetornoTimelineBadge,
 } from './ProcedureTimelineBlock.jsx';
-import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
+import {
+  sortProcedimentosPorCriadoEmDesc,
+  nestProcedimentosTimeline,
+  flattenNestedTimelineRoots,
+} from './procedureTimelineUtils.js';
 import {
   formatPacienteGaleriaError,
   normalizePacienteGaleriaResponse,
@@ -1667,27 +1672,40 @@ export function PatientProfileView({
     [apiProcedures],
   );
 
+  const nestedApiProcedures = useMemo(
+    () => nestProcedimentosTimeline(apiProcedures || []),
+    [apiProcedures],
+  );
+
   const perfilRecentMax = 3;
-  const perfilRecentProcedures = useMemo(
-    () => sortedApiProcedures.slice(0, perfilRecentMax),
-    [sortedApiProcedures],
+  const perfilRecentRoots = useMemo(
+    () => nestedApiProcedures.slice(0, perfilRecentMax),
+    [nestedApiProcedures],
   );
 
   const proximoRetornoResumoDisplay = proximoRetornoKpiDisplay;
 
   const prontuarioListMax = 3;
   const prontuarioListTruncated =
-    sortedApiProcedures.length > prontuarioListMax && !showAllProntuario;
-  const prontuarioProceduresVisible = prontuarioListTruncated
-    ? sortedApiProcedures.slice(0, prontuarioListMax)
-    : sortedApiProcedures;
+    nestedApiProcedures.length > prontuarioListMax && !showAllProntuario;
+  const prontuarioRootsVisible = prontuarioListTruncated
+    ? nestedApiProcedures.slice(0, prontuarioListMax)
+    : nestedApiProcedures;
+  const flatProntuarioVisible = useMemo(
+    () => flattenNestedTimelineRoots(prontuarioRootsVisible),
+    [prontuarioRootsVisible],
+  );
 
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
       const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
       const pid = proc?.id != null && proc?.id !== '' ? String(proc.id) : '';
       return (apiGaleriaItems || []).filter((it) => {
-        if (pid && it.procedimentoFeitoId != null && String(it.procedimentoFeitoId) === pid) return true;
+        const cardId =
+          it.procedimentoFeitoCardId != null ? String(it.procedimentoFeitoCardId) : null;
+        const feitoId = it.procedimentoFeitoId != null ? String(it.procedimentoFeitoId) : null;
+        if (pid && cardId === pid) return true;
+        if (pid && feitoId === pid) return true;
         if (
           nome &&
           (it.procedimentoFeitoId == null || String(it.procedimentoFeitoId).trim() === '') &&
@@ -2283,7 +2301,8 @@ export function PatientProfileView({
                     ) : (
                       <div className="space-y-3">
                         <ProcedureTimelineRail>
-                          {perfilRecentProcedures.map((proc, idx) => {
+                          {perfilRecentRoots.map((root, idx) => {
+                            const proc = root;
                             const rowKey =
                               proc.id != null && proc.id !== ''
                                 ? String(proc.id)
@@ -2300,15 +2319,20 @@ export function PatientProfileView({
                                 })
                               : '';
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
-                            const isLast = idx === perfilRecentProcedures.length - 1;
+                            const retornoCount = (root.retornos || []).length;
+                            const isLast = idx === perfilRecentRoots.length - 1;
                             const showVerMais =
-                              isLast && sortedApiProcedures.length > perfilRecentProcedures.length;
+                              isLast && nestedApiProcedures.length > perfilRecentRoots.length;
                             return (
                               <ProcedureTimelineEntry key={rowKey}>
                                 <ProcedureTimelinePreviewCard
                                   dateLabel={dateLabel}
                                   timeLabel={timeLabel}
-                                  procedureName={nomeProc}
+                                  procedureName={
+                                    retornoCount > 0
+                                      ? `${nomeProc} (+${retornoCount} retorno${retornoCount > 1 ? 's' : ''})`
+                                      : nomeProc
+                                  }
                                   professionalName={proc.profissionalNome || '—'}
                                   onPress={
                                     showVerMais
@@ -2322,7 +2346,7 @@ export function PatientProfileView({
                             );
                           })}
                         </ProcedureTimelineRail>
-                        {sortedApiProcedures.length <= perfilRecentProcedures.length ? (
+                        {nestedApiProcedures.length <= perfilRecentRoots.length ? (
                           <button
                             type="button"
                             onClick={() => setPatientDetailTab('prontuario')}
@@ -2365,12 +2389,11 @@ export function PatientProfileView({
                     <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
                   ) : (
                     <ProcedureTimelineRail>
-                      {prontuarioProceduresVisible.map((proc, idx) => {
-                        const procOrderKey = sortedApiProcedures.indexOf(proc);
+                      {flatProntuarioVisible.map(({ proc, depth }, idx) => {
                         const rowKey =
                           proc.id != null && proc.id !== ''
                             ? String(proc.id)
-                            : `proc-${procOrderKey >= 0 ? procOrderKey : idx}`;
+                            : `proc-${idx}`;
                         const open = Boolean(prontuarioExpanded[rowKey]);
                         const dataLabel = proc.criadoEm
                           ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
@@ -2378,7 +2401,12 @@ export function PatientProfileView({
                         const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                         const fotosProc = galeriaItemsForProcedure(proc);
                         const procId = proc.id ?? proc.procedimentoId;
-                        const showVerMaisHere = prontuarioListTruncated && idx === prontuarioProceduresVisible.length - 1;
+                        const lastRootId = prontuarioRootsVisible[prontuarioRootsVisible.length - 1]?.id;
+                        const showVerMaisHere =
+                          prontuarioListTruncated &&
+                          depth === 0 &&
+                          lastRootId != null &&
+                          String(proc.id) === String(lastRootId);
                         const assinaturaVinculada = (assinaturas || []).find(
                           (a) =>
                             a &&
@@ -2404,7 +2432,7 @@ export function PatientProfileView({
                           assinaturaVinculada?.pacienteAssinouEm ??
                           assinaturaVinculada?.paciente_assinou_em;
                         return (
-                          <ProcedureTimelineEntry key={rowKey}>
+                          <ProcedureTimelineEntry key={rowKey} depth={depth}>
                             <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8fafc] shadow-sm">
                               <button
                                 type="button"
@@ -2428,6 +2456,9 @@ export function PatientProfileView({
                                   </p>
                                 </div>
                                 <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
+                                  {depth > 0 ? (
+                                    <RetornoTimelineBadge isRetoque={Boolean(proc.isRetoque)} />
+                                  ) : null}
                                   {proc.statusNome ? (
                                     <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
                                       {proc.statusNome}

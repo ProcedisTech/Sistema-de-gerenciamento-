@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, ChevronDown, Calendar } from 'lucide-react';
+import { X, ChevronDown, Calendar, Lock } from 'lucide-react';
 import { useUsuarioLogado } from '../../hooks/useUsuarioLogado.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
 import { CalendarioMensal } from './CalendarioMensal.jsx';
 import { PainelA_SlotsHorario } from './PainelA_SlotsHorario.jsx';
 import { ProcedimentoSearchInput } from './ProcedimentoSearchInput.jsx';
+import { RetornoOrigemSelect } from './RetornoOrigemSelect.jsx';
 import { ProfissionalSearchInput } from './ProfissionalSearchInput.jsx';
 import { AgendaFormDataHoraSheet } from './AgendaFormDataHoraSheet.jsx';
 import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
@@ -14,6 +15,7 @@ import {
   deriveHoraFimReal,
   deriveRangePhase,
 } from '../../utils/agendaRangeSelection.js';
+import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
 
 function resolveProfissionalNome(agenda) {
   const id = String(agenda.roleUserIdAgenda || '').trim();
@@ -27,7 +29,14 @@ function buildResumo({ form, agenda, rangePhase, duracaoTotalMin, horaFimReal, p
   const partes = [];
   if (form.pacienteNome) partes.push(form.pacienteNome);
   if (form.agendamentoTipoRetorno) {
-    partes.push('Retorno');
+    if (form.retornoOrigemNome) {
+      partes.push(`Retorno: ${form.retornoOrigemNome}`);
+    } else {
+      const pai = (form.procedimentosFeitosRaiz || []).find(
+        (r) => String(r.id) === String(form.procedimentoFeitoOrigemId),
+      );
+      partes.push(pai ? `Retorno: ${pai.catalogoProcedimentoNome || pai.nome}` : 'Retorno');
+    }
   } else if (procedimentosSelecionados.length > 0) {
     const nomes = procedimentosSelecionados.map((p) => p.nome).join(', ');
     partes.push(nomes);
@@ -149,9 +158,14 @@ export function AgendaFormModal({ agenda }) {
   const dayModelForSlots = agenda.form.data && agenda.dispDaySlots ? agenda.dispDaySlots : null;
 
   const isModoRetorno = Boolean(agenda.form.agendamentoTipoRetorno);
+  const isRetornoSemSeletorPai =
+    isModoRetorno && (agenda.retornoTemVinculoPlano || agenda.retornoPaiPreselecionado);
   const confirmDisabled =
     !agenda.form.pacienteId ||
     (!isModoRetorno && !(agenda.form.catalogoProcedimentoSaudeIds?.length > 0)) ||
+    (isModoRetorno &&
+      !isRetornoSemSeletorPai &&
+      !String(agenda.form.procedimentoFeitoOrigemId || '').trim()) ||
     !agenda.form.data ||
     !agenda.form.horaInicio ||
     !agenda.form.horaFimSlot ||
@@ -362,12 +376,48 @@ export function AgendaFormModal({ agenda }) {
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
                 Procedimentos {!isModoRetorno ? <span className="text-red-500">*</span> : null}
               </p>
-              {isModoRetorno ? (
-                <div className="flex min-h-[2.5rem] items-center rounded-xl border border-ink-200 bg-[#e6f7f5] px-3 py-2">
-                  <span className="rounded-md bg-[#00a88e]/15 px-2.5 py-1 text-[12px] font-bold text-[#0f766e]">
-                    Retorno
-                  </span>
-                </div>
+              {isModoRetorno && !isRetornoSemSeletorPai ? (
+                <RetornoOrigemSelect
+                  value={agenda.form.procedimentoFeitoOrigemId || ''}
+                  onChange={(val) => agenda.updateForm('procedimentoFeitoOrigemId', val)}
+                  options={agenda.form.procedimentosFeitosRaiz || []}
+                  loading={agenda.form.procedimentosRaizLoading}
+                  error={agenda.form.procedimentosRaizError}
+                  fieldError={agenda.formErrors?.procedimentoFeitoOrigemId}
+                />
+              ) : isModoRetorno ? (
+                agenda.form.retornoOrigemNome ? (
+                  <div
+                    role="status"
+                    aria-label="Procedimento de origem do retorno"
+                    className="flex items-start gap-3 rounded-xl border-2 border-[#00a88e] bg-[#e6f7f5] px-3 py-2.5"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#0f766e]">
+                      <Lock className="h-4 w-4" aria-hidden />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-semibold text-[#0f766e]">
+                        {agenda.form.retornoOrigemNome}
+                      </p>
+                      <p className="mt-0.5 flex items-center gap-1 text-[12px] text-ink-500">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span>
+                          {agenda.form.retornoDataPlanejada
+                            ? `Agendado para ${formatDataPt(agenda.form.retornoDataPlanejada)}`
+                            : 'Data planejada não definida'}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-[10px] font-medium text-[#0f766e]/70">
+                        Vínculo automático ao item do plano
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-[#e6f7f5] bg-[#f8fbfb] px-3 py-2.5 text-[12px] font-medium text-[#0f766e]">
+                    Retorno vinculado ao item do plano — o sistema identifica o procedimento de origem
+                    automaticamente.
+                  </p>
+                )
               ) : (
                 <ProcedimentoSearchInput
                   procedimentoOptions={agenda.procedimentoOptions}

@@ -5,6 +5,12 @@ export const CONSULTA_MODULE_LABELS = {
   planejamento: 'Planejamento',
   termos: 'Termos',
   procedimento: 'Procedimento',
+  retorno: 'Retorno',
+};
+
+export const CONSULTA_MODULE_LABELS_RETORNO = {
+  ...CONSULTA_MODULE_LABELS,
+  hub: 'Retorno em andamento',
 };
 
 export function getEncerrarConsultaMessage(module, pacienteNome) {
