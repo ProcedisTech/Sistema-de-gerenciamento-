@@ -1597,7 +1597,9 @@ export function Step4Procedimento({
   onPrepareMapaCapture = () => {},
   onEnsureProcedimento = () => Promise.resolve(null),
   onSugestaoEnviada = () => {},
+  onAutoSaveProcedimento = null,
 }) {
+  const [obsaveStatus, setObsaveStatus] = React.useState(''); // '' | 'saving' | 'saved'
   const uploadInputRef = React.useRef(null);
   const toast = useToast();
   const { options: catalogoOptions } = useProcedimentosOptions();
@@ -1769,13 +1771,34 @@ export function Step4Procedimento({
           <label className="text-[13px] font-bold text-[#00a88e]">
             Descrição detalhada do que foi realizado
           </label>
-          <textarea
-            value={observacoesExecucao}
-            onChange={(e) => setObservacoesExecucao(e.target.value)}
-            placeholder="Ex: Aplicação de 20U de toxina botulínica na glabela, 10U nas linhas frontais. Produto: Dysport lote #XXXX. Paciente tolerou bem..."
-            rows={5}
-            className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px]"
-          />
+          <div className="relative">
+            {obsaveStatus === 'saving' && (
+              <div className="absolute right-2 top-1 z-10 flex items-center gap-1 text-[#94a3b8]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#94a3b8]" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Salvando...</span>
+              </div>
+            )}
+            {obsaveStatus === 'saved' && (
+              <div className="absolute right-2 top-1 z-10 flex items-center gap-1 text-[#00a88e]">
+                <span className="text-[11px]">☁️</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider">Salvo</span>
+              </div>
+            )}
+            <textarea
+              value={observacoesExecucao}
+              onChange={(e) => setObservacoesExecucao(e.target.value)}
+              onBlur={async () => {
+                if (!observacoesExecucao?.trim() || typeof onAutoSaveProcedimento !== 'function') return;
+                setObsaveStatus('saving');
+                await onAutoSaveProcedimento(observacoesExecucao);
+                setObsaveStatus('saved');
+                setTimeout(() => setObsaveStatus(''), 2500);
+              }}
+              placeholder="Ex: Aplicação de 20U de toxina botulínica na glabela, 10U nas linhas frontais. Produto: Dysport lote #XXXX. Paciente tolerou bem..."
+              rows={5}
+              className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px]"
+            />
+          </div>
         </div>
       </div>
 

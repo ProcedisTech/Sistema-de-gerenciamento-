@@ -1043,6 +1043,11 @@ export const procedimentosApi = {
       body: JSON.stringify(body ?? {}),
     });
   },
+  atualizarObservacao: (id, observacao) =>
+    request(`/api/v1/procedimentos/${id}/observacao`, {
+      method: 'PATCH',
+      body: JSON.stringify({ observacao: String(observacao ?? '').trim() }),
+    }),
 };
 
 export const criarRelatoAcompanhamento = (dados) =>

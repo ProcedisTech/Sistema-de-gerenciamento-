@@ -1175,7 +1175,13 @@ function AppRefactoredInner() {
     setConsultaModule(null);
     setActiveView('pacientes');
     setProcedimentosLote([]);
-  }, [setActiveView]);
+    
+    // Clear journey state to prevent data leaking into next consultation
+    journeyState.setQueixa('');
+    journeyState.setExpectativas('');
+    journeyState.setObservacoesExecucao('');
+    anamnesePreenchimentoIdRef.current = null;
+  }, [setActiveView, journeyState]);
 
   const requestEncerrarConsulta = React.useCallback(() => {
     setEncerrarConsultaOpen(true);
@@ -1185,10 +1191,62 @@ function AppRefactoredInner() {
     setEncerrarConsultaOpen(false);
   }, []);
 
-  const confirmEncerrarConsulta = React.useCallback(() => {
+  const autoSaveAnamneseSilently = React.useCallback(async () => {
+    if (!pacienteAtual?.id || !roleUserId) return;
+    if (!journeyState.queixa?.trim() && !journeyState.expectativas?.trim()) return;
+    try {
+      const observacoes = [
+        journeyState.queixa?.trim() ? `Queixa: ${journeyState.queixa.trim()}` : '',
+        journeyState.expectativas?.trim() ? `. Expectativas: ${journeyState.expectativas.trim()}` : '',
+      ].join('').trim();
+
+      if (anamnesePreenchimentoIdRef.current) {
+        await anamneseApi.atualizarObservacoesAnamnese(
+          pacienteAtual.id,
+          anamnesePreenchimentoIdRef.current,
+          observacoes
+        );
+      } else {
+        let anamneseId = journeyState.fichaSelecionadaId;
+        if (!anamneseId) {
+          const fichaBasica = await anamneseApi.getFichaBasica();
+          anamneseId = fichaBasica?.id ?? fichaBasica?.anamneseId;
+        }
+        if (!anamneseId) return;
+
+        const created = await anamneseApi.createPaciente(pacienteAtual.id, roleUserId, {
+          anamneseId,
+          observacoes,
+          respostas: [],
+        });
+        const pid = created?.id ?? created?.preenchimentoId;
+        if (pid != null && pid !== '') {
+          anamnesePreenchimentoIdRef.current = String(pid);
+        }
+      }
+    } catch (err) {
+      console.warn('[AutoSave] Falha ao salvar anamnese no encerramento/blur:', err?.message);
+    }
+  }, [journeyState.queixa, journeyState.expectativas, journeyState.fichaSelecionadaId, pacienteAtual?.id, roleUserId]);
+
+  const autoSaveProcedimentoSilently = React.useCallback(async (observacoes) => {
+    const obs = String(observacoes || '').trim();
+    if (!obs || !loteProcedimentosFeitosIds?.length) return;
+    try {
+      for (const pid of loteProcedimentosFeitosIds.filter(Boolean)) {
+        await procedimentosApi.atualizarObservacao(pid, obs);
+      }
+    } catch (err) {
+      console.warn('[AutoSave] Falha ao salvar observações no encerramento:', err?.message);
+    }
+  }, [loteProcedimentosFeitosIds]);
+
+  const confirmEncerrarConsulta = React.useCallback(async () => {
     setEncerrarConsultaOpen(false);
+    await autoSaveAnamneseSilently();
+    await autoSaveProcedimentoSilently(journeyState.observacoesExecucao);
     onSairConsulta();
-  }, [onSairConsulta]);
+  }, [autoSaveAnamneseSilently, autoSaveProcedimentoSilently, journeyState.observacoesExecucao, onSairConsulta]);
 
   const closeIniciarTolModal = React.useCallback(() => {
     setIniciarTolModal(null);
@@ -2521,6 +2579,7 @@ function AppRefactoredInner() {
                   <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
                   {currentStep === 1 && (
                     <Step2Anamnese
+                      onAutoSaveAnamnese={autoSaveAnamneseSilently}
                       ref={anamneseRef}
                       queixa={journeyState.queixa}
                       setQueixa={journeyState.setQueixa}
@@ -2654,6 +2713,7 @@ function AppRefactoredInner() {
 
                   {currentStep === 4 && (
                     <Step4Procedimento
+                      onAutoSaveProcedimento={autoSaveProcedimentoSilently}
                       pacienteIdForProcedures={pacienteAtual?.id || null}
                       nomeProcedimento={journeyState.nomeProcedimento}
                       setNomeProcedimento={journeyState.setNomeProcedimento}
@@ -2982,6 +3042,7 @@ function AppRefactoredInner() {
                 ) : null}
                 {consultaModule === 'anamnese' && !journeyState.isAgendaRetorno ? (
                   <Step2Anamnese
+                    onAutoSaveAnamnese={autoSaveAnamneseSilently}
                     ref={anamneseRef}
                     queixa={journeyState.queixa}
                     setQueixa={journeyState.setQueixa}
