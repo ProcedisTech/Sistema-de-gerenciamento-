@@ -108,7 +108,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   consultaMode = false,
   onConcluirAnamnese,
   isConcluirAnamneseBusy = false,
+  onAutoSaveAnamnese = null,
 }, ref) {
+  const [saveStatus, setSaveStatus] = useState(''); // '' | 'saving' | 'saved'
   const [fichas, setFichas] = useState([]);
   const draftValido = savedAnamneseState?.pacienteId === pacienteId;
   const [fichaSelecionadaId, setFichaSelecionadaId] = useState(
@@ -1022,23 +1024,44 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               Queixa Principal
               {!queixaOpcional ? <span className="text-red-500"> *</span> : null}
             </label>
-            <textarea
-              value={queixa}
-              onChange={(e) => {
-                setQueixa(e.target.value);
-                setStep2Errors((prev) => ({ ...prev, queixa: false }));
-              }}
-              rows={4}
-              readOnly={modoVisualizacao}
-              className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
-                modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
-              } ${
-                step2Errors.queixa
-                  ? 'border-red-500 bg-red-50 focus:border-red-600'
-                  : 'border-[#e2e8f0] focus:border-[#00a88e]'
-              }`}
-              placeholder="Descreva o motivo da consulta..."
-            />
+            <div className="relative">
+              {saveStatus === 'saving' && (
+                <div className="absolute right-2 top-1 flex items-center gap-1 text-[#94a3b8]">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#94a3b8]" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">Salvando...</span>
+                </div>
+              )}
+              {saveStatus === 'saved' && (
+                <div className="absolute right-2 top-1 flex items-center gap-1 text-[#00a88e]">
+                  <span className="text-[11px]">☁️</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Salvo</span>
+                </div>
+              )}
+              <textarea
+                value={queixa}
+                onChange={(e) => {
+                  setQueixa(e.target.value);
+                  setStep2Errors((prev) => ({ ...prev, queixa: false }));
+                }}
+                onBlur={async () => {
+                  if (!queixa?.trim() || typeof onAutoSaveAnamnese !== 'function') return;
+                  setSaveStatus('saving');
+                  await onAutoSaveAnamnese();
+                  setSaveStatus('saved');
+                  setTimeout(() => setSaveStatus(''), 2500);
+                }}
+                rows={4}
+                readOnly={modoVisualizacao}
+                className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
+                  modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
+                } ${
+                  step2Errors.queixa
+                    ? 'border-red-500 bg-red-50 focus:border-red-600'
+                    : 'border-[#e2e8f0] focus:border-[#00a88e]'
+                }`}
+                placeholder="Descreva o motivo da consulta..."
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <label className="ml-1 text-[13px] font-bold text-[#00a88e]">
@@ -1050,6 +1073,13 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               onChange={(e) => {
                 setExpectativas(e.target.value);
                 setStep2Errors((prev) => ({ ...prev, expectativas: false }));
+              }}
+              onBlur={async () => {
+                if (!expectativas?.trim() || typeof onAutoSaveAnamnese !== 'function') return;
+                setSaveStatus('saving');
+                await onAutoSaveAnamnese();
+                setSaveStatus('saved');
+                setTimeout(() => setSaveStatus(''), 2500);
               }}
               rows={4}
               readOnly={modoVisualizacao}
