@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
-import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId, setAccessToken as apiSetAccessToken } from '../services/api';
-import { supabase } from '../lib/supabaseClient';
+import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
 import { DEFAULT_ORG_ID, ALT_ORG_ID } from '../config/apiEnv';
 
 const LS_ORG = 'procedi_org_id';
@@ -47,16 +46,7 @@ export function OrgProvider({ children }) {
     apiSetOrgId(orgId);
   }, [orgId]);
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.access_token) {
-        apiSetAccessToken(session.access_token);
-      } else if (event === 'SIGNED_OUT') {
-        apiSetAccessToken(null);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+
 
   const setOrgId = useCallback((id, slug = '') => {
     if (!id) return;

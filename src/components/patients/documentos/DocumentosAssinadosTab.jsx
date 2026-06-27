@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, FileText, Loader2, Link, ChevronDown, ChevronUp } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
-import { getAccessToken } from '../../../services/api';
+import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
 import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
@@ -22,7 +22,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
     const fetchDocs = async () => {
       try {
         setLoading(true);
-        const token = getAccessToken();
+        const token = await getFreshToken();
         const res = await fetch(resolveApiUrl(`/api/v1/pacientes/${pacienteId}/documentos-assinados`), {
           headers: {
             'Authorization': `Bearer ${token}`,
