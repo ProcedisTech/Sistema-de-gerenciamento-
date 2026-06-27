@@ -3,7 +3,6 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient.js';
-import { setAccessToken } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 
 /**
@@ -23,11 +22,6 @@ export const useAuthState = (options = {}) => {
   const [showPassword, setShowPassword] = useState(false);
 
   const applySessionFromSupabase = useCallback((session) => {
-    if (session?.access_token) {
-      setAccessToken(session.access_token);
-    } else {
-      setAccessToken(null);
-    }
     if (session?.user) {
       setAuthUser({
         id: session.user.id,
@@ -53,13 +47,11 @@ export const useAuthState = (options = {}) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        setAccessToken(null);
         setAuthUser(null);
         setIsLoggedIn(false);
         return;
       }
       if (session?.access_token) {
-        setAccessToken(session.access_token);
         setAuthUser((prev) => {
           const nextId = session.user.id;
           const nextEmail = session.user.email;
@@ -87,9 +79,6 @@ export const useAuthState = (options = {}) => {
         setLoginError(error.message || 'Usuário ou senha incorretos.');
         return;
       }
-      if (data.session?.access_token) {
-        setAccessToken(data.session.access_token);
-      }
       if (data.user) {
         setAuthUser({ id: data.user.id, email: data.user.email });
         setIsLoggedIn(true);
@@ -109,7 +98,6 @@ export const useAuthState = (options = {}) => {
     } catch {
       /* ignore */
     }
-    setAccessToken(null);
     try {
       sessionStorage.clear();
     } catch {
@@ -129,6 +117,17 @@ export const useAuthState = (options = {}) => {
     window.addEventListener('auth:expired', handler);
     return () => window.removeEventListener('auth:expired', handler);
   }, [handleLogout]);
+
+  // Refresh automático quando a aba voltar do background
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   return {
     authReady,

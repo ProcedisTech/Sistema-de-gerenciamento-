@@ -11,8 +11,7 @@ import {
   birthDateValidationUserMessage,
 } from '../utils/formatters';
 import { formatPhoneForApi } from '../../utils/phoneUtils';
-import { getPacienteCreateErrorFeedback, pacientesApi, setAccessToken } from '../../services/api';
-import { supabase } from '../../lib/supabaseClient.js';
+import { getPacienteCreateErrorFeedback, pacientesApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { convertToWebP } from '../../utils/imageUtils';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
@@ -267,13 +266,7 @@ export function PatientCreateView({
       }
       setSucesso(true);
       
-      // Garante que o token esteja atualizado antes de recarregar a lista (evita 401 se expirou durante o POST)
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) setAccessToken(session.access_token);
-      } catch (tokenErr) {
-        console.warn('Falha ao atualizar token após cadastro:', tokenErr);
-      }
+
 
       if (onPatientCreated) onPatientCreated();
 

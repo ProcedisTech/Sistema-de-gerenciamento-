@@ -2,20 +2,18 @@
  * Cliente HTTP do frontend para o Spring Boot (mesma origem em dev via Vite: :5173 → proxy /api → :8080).
  *
  * Autenticação
- * - Cookie HttpOnly `jwt` (POST /api/auth/login) + credentials: 'include' em todas as chamadas.
- * - Se o JSON de login ou GET /api/auth/me trouxer `accessToken` (LoginResponseDTO / MeResponseDTO), enviamos também
- *   Authorization: Bearer … (sessionStorage + memória) — necessário quando o filtro JWT do Spring prioriza Bearer.
+ * - O app utiliza o Supabase para gerenciar a sessão localmente.
+ * - O cabeçalho `Authorization: Bearer <token>` é gerado dinamicamente através do SDK do Supabase.
+ * - Em caso de 401, a API tenta renovar a sessão com `supabase.auth.refreshSession()` e refaz a requisição.
  *
  * Rotas públicas (exemplos)
- * - POST /api/auth/login   body: { username, password }
+ * - /api/public/**
  *
  * Autenticado
+ * - /api/v1/** — X-Org-Id quando needsOrg: true + Bearer obtido via getFreshToken().
  * - GET /api/auth/me — 401 = usuário não logado
- * - POST /api/auth/logout
  *
- * Protegido
- * - /api/v1/** — X-Org-Id quando needsOrg: true + Bearer quando houver accessToken guardado.
- * - Binários (foto de perfil, galeria/arquivo): requestBlob com os mesmos headers.
+ * Binários (foto de perfil, galeria/arquivo): requestBlob com os mesmos headers.
  *
  * @see vite.config.js — proxy /api, reescrita de cookie para dev same-origin
  * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
@@ -34,53 +32,32 @@ export function getOrgId() {
   return currentOrgId;
 }
 
-const ACCESS_TOKEN_LS = 'procedi_access_token';
-
-function readStoredAccessToken() {
+export async function getFreshToken() {
   try {
-    const v = sessionStorage.getItem(ACCESS_TOKEN_LS);
-    return v && String(v).trim() ? String(v).trim() : null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
   } catch {
     return null;
   }
 }
 
-let accessTokenMemory = readStoredAccessToken();
-
-/** Grava token devolvido no login/register/me; limpar no logout. Persiste na sessão da aba (F5 mantém). */
-export function setAccessToken(token) {
-  const t =
-    token != null && typeof token === 'string' && token.trim() ? String(token).trim() : null;
-  accessTokenMemory = t;
-  try {
-    if (t) sessionStorage.setItem(ACCESS_TOKEN_LS, t);
-    else sessionStorage.removeItem(ACCESS_TOKEN_LS);
-  } catch {
-    /* ignore */
-  }
+function bearerAuthorizationHeader(token) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export function getAccessToken() {
-  return accessTokenMemory;
-}
-
-function bearerAuthorizationHeader() {
-  const t = accessTokenMemory;
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-function withAuthHeaders(base) {
+function withAuthHeaders(base, token) {
   const h = base && typeof base === 'object' ? { ...base } : {};
-  Object.assign(h, bearerAuthorizationHeader());
+  Object.assign(h, bearerAuthorizationHeader(token));
   return h;
 }
 
 /**
  * Headers para `fetch` fora deste módulo (ex.: logout, journey photos).
- * @param {{ needsOrg?: boolean }} opts
+ * @param {{ needsOrg?: boolean, token?: string | null }} opts
  */
-export function authHeadersForFetch({ needsOrg = true } = {}) {
-  const h = bearerAuthorizationHeader();
+export async function authHeadersForFetch({ needsOrg = true, token = null } = {}) {
+  const t = token !== undefined ? token : await getFreshToken();
+  const h = bearerAuthorizationHeader(t);
   if (needsOrg && currentOrgId) h['X-Org-Id'] = currentOrgId;
   return h;
 }
@@ -95,14 +72,24 @@ async function dispatchAuthExpiredIfSessionReallyGone(failedUrl) {
 }
 
 async function requestDelete(path, { needsOrg = true } = {}) {
-  const headers = withAuthHeaders({});
+  const token = await getFreshToken();
+  const headers = withAuthHeaders({}, token);
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
-  const res = await fetch(url, { method: 'DELETE', credentials: 'include', headers });
+
+  let res = await fetch(url, { method: 'DELETE', credentials: 'omit', headers });
+  if (res.status === 401) {
+    const refreshed = await attemptTokenRefresh();
+    if (refreshed) {
+      headers.Authorization = `Bearer ${refreshed}`;
+      res = await fetch(url, { method: 'DELETE', credentials: 'omit', headers });
+    }
+  }
+
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      console.warn(`[api] DELETE ${url} retornou 401.`);
+      console.warn(`[api] DELETE ${url} retornou 401 fatal.`);
       await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const body = await res.json().catch(() => ({}));
@@ -265,38 +252,45 @@ export function getPacienteCreateErrorFeedback(err) {
   return { banner, cpfField: '', highlightCpf: false };
 }
 
-async function ensureValidToken() {
+async function attemptTokenRefresh() {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      setAccessToken(session.access_token);
-    }
+    const { data: { session }, error } = await supabase.auth.refreshSession();
+    if (error || !session?.access_token) return null;
+    return session.access_token;
   } catch {
-    /* ignore */
+    return null;
   }
 }
 
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
-  await ensureValidToken();
-  const headers = withAuthHeaders({ 'Content-Type': 'application/json', ...fetchOpts.headers });
+  const token = await getFreshToken();
+  const headers = withAuthHeaders({ 'Content-Type': 'application/json', ...fetchOpts.headers }, token);
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
-
 
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
-  console.log(`[api] about to fetch ${url}. Headers:`, headers);
-
-  // Sempre enviar cookie HttpOnly `jwt` (same-origin :5173 + proxy /api). Nunca use 'omit' aqui.
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     ...fetchOpts,
     headers,
-    credentials: 'include',
+    credentials: 'omit',
   });
+
+  if (res.status === 401) {
+    const refreshed = await attemptTokenRefresh();
+    if (refreshed) {
+      headers.Authorization = `Bearer ${refreshed}`;
+      res = await fetch(url, {
+        ...fetchOpts,
+        headers,
+        credentials: 'omit',
+      });
+    }
+  }
 
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      console.warn(`[api] ${fetchOpts.method || 'GET'} ${url} retornou 401.`);
+      console.warn(`[api] ${fetchOpts.method || 'GET'} ${url} retornou 401 fatal.`);
       await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const body = await res.json().catch(() => ({}));
@@ -310,25 +304,38 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
 
 /** POST multipart (FormData): não define Content-Type para o browser enviar boundary. */
 async function requestForm(path, { needsOrg = true, method = 'POST', body, ...rest } = {}) {
-  await ensureValidToken();
-  const headers = withAuthHeaders({ ...rest.headers });
+  const token = await getFreshToken();
+  const headers = withAuthHeaders({ ...rest.headers }, token);
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
 
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
-
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     ...rest,
     method,
     body,
     headers,
-    credentials: 'include',
+    credentials: 'omit',
   });
+
+  if (res.status === 401) {
+    const refreshed = await attemptTokenRefresh();
+    if (refreshed) {
+      headers.Authorization = `Bearer ${refreshed}`;
+      res = await fetch(url, {
+        ...rest,
+        method,
+        body,
+        headers,
+        credentials: 'omit',
+      });
+    }
+  }
 
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
-      console.warn(`[api] POST/form ${url} retornou 401.`);
+      console.warn(`[api] POST/form ${url} retornou 401 fatal.`);
       await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const resBody = await res.json().catch(() => ({}));
@@ -352,17 +359,16 @@ const blobInflight = new Map();
  * URL absoluta em outro host (presigned R2 etc.) — sem auth (assinatura na query string).
  */
 async function requestBlob(path, { needsOrg = true } = {}) {
-  await ensureValidToken();
+  const token = await getFreshToken();
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
   const attachAuth = shouldAttachApiAuthToFetchUrl(url);
   let headers = {};
   let credentials = 'omit';
   if (attachAuth) {
-    headers = withAuthHeaders({});
+    headers = withAuthHeaders({}, token);
     if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
-    credentials = 'include';
   }
-  const tokenMark = accessTokenMemory ? 'b' : 'c';
+  const tokenMark = token ? 'b' : 'c';
   const dedupeKey = attachAuth
     ? `${needsOrg ? String(currentOrgId || '') : '_'}|${tokenMark}|${url}`
     : `ext|${url}`;
@@ -371,17 +377,24 @@ async function requestBlob(path, { needsOrg = true } = {}) {
 
   const promise = (async () => {
     try {
-      const res = await fetch(url, { method: 'GET', credentials, headers });
+      let res = await fetch(url, { method: 'GET', credentials, headers });
+      if (res.status === 401 && attachAuth) {
+        const refreshed = await attemptTokenRefresh();
+        if (refreshed) {
+          headers.Authorization = `Bearer ${refreshed}`;
+          res = await fetch(url, { method: 'GET', credentials, headers });
+        }
+      }
       if (!res.ok) {
         // Não disparar auth:expired aqui (ver comentário anterior no histórico).
         const body = await res.json().catch(() => ({}));
         if (import.meta.env.DEV && res.status === 401) {
           console.warn(
-            '[api] requestBlob 401 — envie Cookie jwt e/ou Authorization Bearer (accessToken do login) + X-Org-Id. ' +
+            '[api] requestBlob 401 — envie Authorization Bearer (accessToken do login) + X-Org-Id. ' +
               'Org:',
             currentOrgId || '(vazio)',
             ' Bearer:',
-            accessTokenMemory ? '(presente)' : '(ausente)',
+            token ? '(presente)' : '(ausente)',
             '\n URL:',
             url,
           );
