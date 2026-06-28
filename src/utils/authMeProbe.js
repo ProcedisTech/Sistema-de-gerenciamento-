@@ -37,7 +37,7 @@ export async function fetchAuthMeSnapshot() {
   const url = resolveApiUrl(AUTH_ME_PATH);
   cache.inFlight = (async () => {
     try {
-      const headers = { ...authHeadersForFetch({ needsOrg: false }) };
+      const headers = { ...(await authHeadersForFetch({ needsOrg: false })) };
       console.log(`[authMeProbe] about to fetch ${url}. Headers:`, headers);
       const res = await fetch(url, {
         method: 'GET',

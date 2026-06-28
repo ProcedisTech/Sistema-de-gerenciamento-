@@ -226,7 +226,7 @@ export function useJourneyController({
             method: 'POST',
             body: form,
             credentials: 'include',
-            headers: { ...authHeadersForFetch() },
+            headers: { ...(await authHeadersForFetch()) },
           });
         } catch {
           // ignore

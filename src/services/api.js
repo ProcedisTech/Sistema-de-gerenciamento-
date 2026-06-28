@@ -55,7 +55,7 @@ function withAuthHeaders(base, token) {
  * Headers para `fetch` fora deste módulo (ex.: logout, journey photos).
  * @param {{ needsOrg?: boolean, token?: string | null }} opts
  */
-export async function authHeadersForFetch({ needsOrg = true, token = null } = {}) {
+export async function authHeadersForFetch({ needsOrg = true, token } = {}) {
   const t = token !== undefined ? token : await getFreshToken();
   const h = bearerAuthorizationHeader(t);
   if (needsOrg && currentOrgId) h['X-Org-Id'] = currentOrgId;

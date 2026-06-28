@@ -637,7 +637,7 @@ export function Step3Termos({
   const fetchAssinaturaPadrao = useCallback(async () => {
     const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
       credentials: 'include',
-      headers: { ...authHeadersForFetch({ needsOrg: false }) },
+      headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return null;
@@ -751,7 +751,7 @@ export function Step3Termos({
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...authHeadersForFetch({ needsOrg: false }),
+          ...(await authHeadersForFetch({ needsOrg: false })),
         },
         body: JSON.stringify({ assinaturaPadrao: assinaturaProfRecenteRef.current }),
       });

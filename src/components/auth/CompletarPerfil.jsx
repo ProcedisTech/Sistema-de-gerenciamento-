@@ -21,7 +21,7 @@ export function CompletarPerfil({ onComplete, email }) {
     try {
       const res = await fetch(resolveApiUrl('/api/auth/me'), {
         credentials: 'include',
-        headers: { ...authHeadersForFetch({ needsOrg: false }) },
+        headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -74,7 +74,7 @@ export function CompletarPerfil({ onComplete, email }) {
         method: 'POST',
         credentials: 'include',
         headers: {
-          ...authHeadersForFetch({ needsOrg: false }),
+          ...(await authHeadersForFetch({ needsOrg: false })),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),

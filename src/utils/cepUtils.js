@@ -116,7 +116,7 @@ export async function fetchAddressByCepBackend(cep8, { signal: externalSignal } 
       signal: timeoutController.signal,
       credentials: 'include',
       headers: {
-        ...authHeadersForFetch({ needsOrg: false }),
+        ...(await authHeadersForFetch({ needsOrg: false })),
       },
     });
 

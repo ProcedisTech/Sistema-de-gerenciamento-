@@ -60,6 +60,7 @@ export function PatientsView(props) {
         clinicSlug={clinicSlug || clinicaInfo?.slug}
         clinicaInfo={clinicaInfo}
         perfilInfo={perfilInfo}
+        patientListBump={props.patientListBump}
       />
     );
   }
