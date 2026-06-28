@@ -77,7 +77,7 @@ export async function pingBackendOnce() {
       credentials: 'include',
       signal: controller.signal,
       cache: 'no-store',
-      headers: { ...authHeadersForFetch({ needsOrg: false }) },
+      headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
     });
     clearTimeout(timer);
 

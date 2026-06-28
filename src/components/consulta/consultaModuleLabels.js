@@ -16,12 +16,12 @@ export const CONSULTA_MODULE_LABELS_RETORNO = {
 export function getEncerrarConsultaMessage(module, pacienteNome) {
   if (!module || module === 'hub') {
     return pacienteNome
-      ? `Deseja encerrar a consulta de ${pacienteNome}?`
-      : 'Deseja encerrar a consulta?';
+      ? `O que deseja fazer com o atendimento de ${pacienteNome}?`
+      : 'O que deseja fazer com o atendimento atual?';
   }
   const label = CONSULTA_MODULE_LABELS[module] ?? 'este módulo';
   if (pacienteNome) {
-    return `Deseja encerrar a consulta de ${pacienteNome} sem terminar ${label}?`;
+    return `O que deseja fazer com o atendimento de ${pacienteNome} (saindo de ${label})?`;
   }
-  return `Deseja encerrar a consulta sem terminar ${label}?`;
+  return `O que deseja fazer com o atendimento (saindo de ${label})?`;
 }

@@ -827,6 +827,7 @@ export function PatientProfileView({
   clinicSlug,
   clinicaInfo,
   perfilInfo,
+  patientListBump,
 }) {
   const toast = useToast();
   const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
@@ -1439,7 +1440,7 @@ export function PatientProfileView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recarregar só ao trocar paciente
-  }, [selectedPatient?.id]);
+  }, [selectedPatient?.id, patientListBump]);
 
   useEffect(() => {
     const id = selectedPatient?.id;
@@ -1497,7 +1498,7 @@ export function PatientProfileView({
     return () => {
       cancelled = true;
     };
-  }, [selectedPatient?.id]);
+  }, [selectedPatient?.id, patientListBump]);
 
   useEffect(() => {
     const pacienteId = selectedPatient?.id;
@@ -1602,7 +1603,7 @@ export function PatientProfileView({
     return () => {
       cancelled = true;
     };
-  }, [selectedPatient?.id, mergePatientById]);
+  }, [selectedPatient?.id, mergePatientById, patientListBump]);
 
   const alertasSidebarGeral = useMemo(() => {
     const keys = new Set(alertasAlergia.map((x) => x.key));

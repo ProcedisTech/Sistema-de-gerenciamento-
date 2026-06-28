@@ -36,7 +36,7 @@ export function AguardandoPacienteModal({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...authHeadersForFetch({ needsOrg: false }),
+            ...(await authHeadersForFetch({ needsOrg: false })),
           },
           body: JSON.stringify({
             termoAssinaturaId: sessaoExternaPayload.termoAssinaturaId,
@@ -66,7 +66,7 @@ export function AguardandoPacienteModal({
       pollingRef.current = setInterval(async () => {
         try {
           const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/status`), {
-            headers: { ...authHeadersForFetch({ needsOrg: false }) },
+            headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
           });
           const data = await res.json();
           if (data.status === 'CONCLUIDO') {

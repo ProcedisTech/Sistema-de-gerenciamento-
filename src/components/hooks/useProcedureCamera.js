@@ -53,26 +53,28 @@ export function useProcedureCamera({
 
   const resetProcedureCapturedPhotos = useCallback(() => {
     setProcedureCapturedPhotos((prev) => {
-      (prev || []).forEach((ph) => {
-        try {
-          if (ph?.url) URL.revokeObjectURL(ph.url);
-        } catch {
-          /* ignore */
-        }
-      });
+      const oldUrls = (prev || []).map(p => p.url).filter(Boolean);
+      if (oldUrls.length > 0) {
+        setTimeout(() => {
+          oldUrls.forEach((url) => {
+            try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+          });
+        }, 1000);
+      }
       return [];
     });
   }, []);
 
   const resetEvaluationPhotos = useCallback(() => {
     setEvaluationCapturedPhotos((prev) => {
-      (prev || []).forEach((ph) => {
-        try {
-          if (ph?.url) URL.revokeObjectURL(ph.url);
-        } catch {
-          /* ignore */
-        }
-      });
+      const oldUrls = (prev || []).map(p => p.url).filter(Boolean);
+      if (oldUrls.length > 0) {
+        setTimeout(() => {
+          oldUrls.forEach((url) => {
+            try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+          });
+        }, 1000);
+      }
       return [];
     });
     setEvaluationSelectedPhotoIndex(null);
