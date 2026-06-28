@@ -37,22 +37,13 @@ import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
+import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
 
-const STEP4_FOTO_CATEGORIAS = [
-  GALERIA_CATEGORIA.ANTES,
-  GALERIA_CATEGORIA.MAPA,
-  GALERIA_CATEGORIA.DEPOIS,
-];
 
-const STEP4_FOTO_OVERLAY_BADGE = {
-  [GALERIA_CATEGORIA.ANTES]: 'bg-[#f59e0b]',
-  [GALERIA_CATEGORIA.MAPA]: 'bg-[#a855f7]',
-  [GALERIA_CATEGORIA.DEPOIS]: 'bg-[#22c55e]',
-};
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
 
@@ -1598,6 +1589,8 @@ export function Step4Procedimento({
   onEnsureProcedimento = () => Promise.resolve(null),
   onSugestaoEnviada = () => {},
   onAutoSaveProcedimento = null,
+  onProcedureOpenCamera,
+  onClearMapaCaptureIntent,
 }) {
   const [obsaveStatus, setObsaveStatus] = React.useState(''); // '' | 'saving' | 'saved'
   const uploadInputRef = React.useRef(null);
@@ -1629,9 +1622,29 @@ export function Step4Procedimento({
   const [sugestaoEnviada, setSugestaoEnviada] = React.useState(false);
   const [sugestaoEnviando, setSugestaoEnviando] = React.useState(false);
 
+  const [laneMenuOpen, setLaneMenuOpen] = React.useState(false);
+  const intendedCategoryRef = React.useRef(null);
+
   React.useEffect(() => {
     onProcedureFotoCategoriaSync(fotoCategoria);
   }, [fotoCategoria, onProcedureFotoCategoriaSync]);
+
+  const handleActionSheetOption = (option) => {
+    const cat = intendedCategoryRef.current;
+    if (!cat) return;
+    
+    setFotoCategoria(cat);
+    onProcedureFotoCategoriaSync(cat);
+
+    if (option === 'camera') {
+      onClearMapaCaptureIntent?.();
+      onProcedureOpenCamera?.();
+    } else if (option === 'upload') {
+      uploadInputRef.current?.click();
+    }
+    
+    setLaneMenuOpen(false);
+  };
 
   React.useEffect(() => {
     if (!referencePreviewUrl) return undefined;
@@ -1641,6 +1654,15 @@ export function Step4Procedimento({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [referencePreviewUrl]);
+
+  React.useEffect(() => {
+    if (!laneMenuOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setLaneMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [laneMenuOpen]);
 
   React.useEffect(() => {
     const urls = new Set((procedureCapturedPhotos || []).map((p) => p.url).filter(Boolean));
@@ -1658,14 +1680,36 @@ export function Step4Procedimento({
   }, [procedureCapturedPhotos]);
 
 
+  const photos = procedureCapturedPhotos || [];
+
+  const groupedPhotos = React.useMemo(() => {
+    const groups = { antes: [], depois: [], mapa: [], outros: [] };
+    photos.forEach((photo, originalIndex) => {
+      const cat = photo.meta?.categoria;
+      if (cat === GALERIA_CATEGORIA.ANTES) groups.antes.push({ photo, originalIndex });
+      else if (cat === GALERIA_CATEGORIA.DEPOIS) groups.depois.push({ photo, originalIndex });
+      else if (cat === GALERIA_CATEGORIA.MAPA) groups.mapa.push({ photo, originalIndex });
+      else groups.outros.push({ photo, originalIndex });
+    });
+    return groups;
+  }, [photos]);
+
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
     event.target.value = '';
     if (!files.length) return;
-    onProcedureUploadFiles?.(files, fotoCategoria);
+    const cat = intendedCategoryRef.current || fotoCategoria;
+    onProcedureUploadFiles?.(files, cat);
   };
 
-  const photos = procedureCapturedPhotos || [];
+  const handleLaneUploadClick = (files, category, isFocusOnly = false) => {
+    setFotoCategoria(category);
+    onProcedureFotoCategoriaSync(category);
+    intendedCategoryRef.current = category;
+    if (!isFocusOnly) {
+      setLaneMenuOpen(true);
+    }
+  };
 
   const handleEnviarSugestao = async () => {
     const nome = String(sugestaoTexto || '').trim();
@@ -1802,27 +1846,6 @@ export function Step4Procedimento({
         </div>
       </div>
 
-      {mapaState ? (
-        <MapaAplicacaoPanel
-          mapaState={mapaState}
-          pacienteId={_pacienteIdForProcedures}
-          roleUserId={roleUserId}
-          procedimentoFeitoId={procedimentoFeitoId}
-          catalogoId={catalogoId}
-          nomeProcedimento={nomeProcedimento}
-          planejamentoItemId={planejamentoItemId}
-          planejamentoId={planejamentoId}
-          procedimentosComPontos={procedimentosComPontos}
-          sidebarInsetPx={sidebarInsetPx}
-          pendingCapture={pendingMapaCapture}
-          onCaptureConsumed={onMapaCaptureConsumed}
-          onPrepareCapture={onPrepareMapaCapture}
-          onEnsureProcedimento={onEnsureProcedimento}
-          disabled={!String(nomeProcedimento || '').trim() || !catalogoId}
-          disabledHint="Selecione um procedimento do catálogo para habilitar o mapa de aplicação."
-        />
-      ) : null}
-
       {fotosAvaliacao.length > 0 && (
         <div className="mb-4">
           <div className="mb-2 flex items-center gap-2">
@@ -1854,31 +1877,18 @@ export function Step4Procedimento({
         </div>
       )}
 
-      <div className="mb-3 flex items-center gap-3">
-        <span className="text-[13px] font-semibold text-[#64748b]">Categoria das fotos:</span>
-        <div className="flex flex-wrap gap-2">
-          {STEP4_FOTO_CATEGORIAS.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setFotoCategoria(cat)}
-              className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-colors ${
-                fotoCategoria === cat
-                  ? 'border-[#00a88e] bg-[#e6f7f5] text-[#00a88e]'
-                  : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/40'
-              }`}
-            >
-              {GALERIA_CATEGORIA_LABELS[cat]}
-            </button>
-          ))}
+      <div className="mb-4 flex items-center justify-between gap-2 border-b border-[#e2e8f0] pb-2">
+        <h4 className="text-[15px] font-bold text-[#0f172a]">Fotos e Mapa</h4>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-[12px] font-semibold text-[#64748b]">
+            {photos.length}/{procedurePhotoMax}
+          </span>
+          <span className="text-[10px] text-[#94a3b8] italic">
+            Câmera flutuante adicionará em: <strong className="font-semibold text-[#0f172a]">
+              {GALERIA_CATEGORIA_LABELS[fotoCategoria] || GALERIA_CATEGORIA_LABELS.antes}
+            </strong>
+          </span>
         </div>
-      </div>
-
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-[13px] font-bold text-[#00a88e]">Fotos do procedimento</h4>
-        <span className="text-[12px] font-semibold text-[#64748b]">
-          {photos.length}/{procedurePhotoMax}
-        </span>
       </div>
 
       <input
@@ -1890,65 +1900,96 @@ export function Step4Procedimento({
         onChange={handleImageUpload}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {photos.map((ph, idx) => (
-          <div key={`${ph.url}_${idx}`} className="min-w-0">
-            <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
-              <div
-                className={`absolute left-1 top-1 z-10 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
-                  STEP4_FOTO_OVERLAY_BADGE[ph.meta?.categoria] || STEP4_FOTO_OVERLAY_BADGE[GALERIA_CATEGORIA.ANTES]
-                }`}
-              >
-                {GALERIA_CATEGORIA_LABELS[ph.meta?.categoria] || GALERIA_CATEGORIA_LABELS.antes}
-              </div>
-              <img src={ph.url} alt="" className="h-full w-full object-cover" />
-              {typeof onProcedureAnnotatePhoto === 'function' ? (
-                <button
-                  type="button"
-                  onClick={() => onProcedureAnnotatePhoto(idx)}
-                  className="absolute inset-0 z-[1] flex items-center justify-center bg-black/35 opacity-100 transition-all sm:bg-black/0 sm:opacity-0 sm:group-hover:bg-black/45 sm:group-hover:opacity-100"
-                >
-                  <span className="rounded-lg bg-white px-3 py-2 text-[12px] font-bold text-[#0f172a] shadow sm:py-1.5">
-                    Anotar
-                  </span>
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => onProcedureRemovePhoto?.(idx)}
-                className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
-                aria-label="Remover imagem"
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
-              </button>
-            </div>
-            <input
-              type="text"
-              value={legendas[ph.url] ?? ''}
-              onChange={(e) =>
-                setLegendas((prev) => ({ ...prev, [ph.url]: e.target.value }))
-              }
-              placeholder="Ex: Antes, Depois, Detalhe..."
-              className="mt-1 w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-2 py-1 text-[11px] text-[#0f172a] outline-none placeholder:text-[#cbd5e1] focus:border-[#00a88e]"
-            />
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => uploadInputRef.current?.click()}
-          className="col-span-2 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#cbd5e1] bg-[#fafafa] px-4 py-2 text-[#64748b] transition-colors active:border-[#00a88e]/50 active:bg-[#f0fdf9] active:text-[#00a88e] sm:col-span-1 sm:aspect-square sm:min-h-0 sm:hover:border-[#00a88e]/50 sm:hover:bg-[#f0fdf9] sm:hover:text-[#00a88e]"
-        >
-          <Camera className="h-6 w-6" strokeWidth={2} />
-          <span className="px-1 text-center text-[11px] font-semibold leading-tight">Upload de imagens</span>
-        </button>
-      </div>
+      <PhotoCarouselLane
+        title={GALERIA_CATEGORIA_LABELS.antes}
+        category={GALERIA_CATEGORIA.ANTES}
+        items={groupedPhotos.antes}
+        legendas={legendas}
+        setLegendas={setLegendas}
+        onUpload={handleLaneUploadClick}
+        onRemove={onProcedureRemovePhoto}
+        onAnnotate={onProcedureAnnotatePhoto}
+        showUpload={true}
+        emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.antes}' adicionada.`}
+      />
 
-      {photos.length === 0 ? (
-        <p className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#94a3b8]">
-          <ImageIcon className="h-4 w-4 shrink-0" />
-          A câmera flutuante da jornada também adiciona fotos aqui.
-        </p>
+      <PhotoCarouselLane
+        title={GALERIA_CATEGORIA_LABELS.depois}
+        category={GALERIA_CATEGORIA.DEPOIS}
+        items={groupedPhotos.depois}
+        legendas={legendas}
+        setLegendas={setLegendas}
+        onUpload={handleLaneUploadClick}
+        onRemove={onProcedureRemovePhoto}
+        onAnnotate={onProcedureAnnotatePhoto}
+        showUpload={true}
+        emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.depois}' adicionada.`}
+      />
+
+      {groupedPhotos.mapa.length > 0 && (
+        <PhotoCarouselLane
+          title="Mapa de Aplicação (Legado)"
+          category={GALERIA_CATEGORIA.MAPA}
+          items={groupedPhotos.mapa}
+          legendas={legendas}
+          setLegendas={setLegendas}
+          onRemove={onProcedureRemovePhoto}
+          onAnnotate={onProcedureAnnotatePhoto}
+          showUpload={false}
+          emptyHint="Sem fotos mapa (Legado)"
+        />
+      )}
+
+      {groupedPhotos.outros.length > 0 && (
+        <PhotoCarouselLane
+          title="Outras Fotos (Durante / Produtos)"
+          category={GALERIA_CATEGORIA.OUTRO}
+          items={groupedPhotos.outros}
+          legendas={legendas}
+          setLegendas={setLegendas}
+          onUpload={handleLaneUploadClick}
+          onRemove={onProcedureRemovePhoto}
+          onAnnotate={onProcedureAnnotatePhoto}
+          showUpload={true}
+          emptyHint="Nenhuma foto diversa adicionada."
+        />
+      )}
+
+      {mapaState ? (
+        <div className="mt-6">
+          <MapaAplicacaoPanel
+            mapaState={mapaState}
+            pacienteId={_pacienteIdForProcedures}
+            roleUserId={roleUserId}
+            procedimentoFeitoId={procedimentoFeitoId}
+            catalogoId={catalogoId}
+            nomeProcedimento={nomeProcedimento}
+            planejamentoItemId={planejamentoItemId}
+            planejamentoId={planejamentoId}
+            procedimentosComPontos={procedimentosComPontos}
+            sidebarInsetPx={sidebarInsetPx}
+            pendingCapture={pendingMapaCapture}
+            onCaptureConsumed={onMapaCaptureConsumed}
+            onPrepareCapture={onPrepareMapaCapture}
+            onEnsureProcedimento={onEnsureProcedimento}
+            disabled={!String(nomeProcedimento || '').trim() || !catalogoId}
+            disabledHint="Selecione um procedimento do catálogo para habilitar o mapa de aplicação."
+          />
+        </div>
       ) : null}
+
+      {groupedPhotos.outros.length === 0 && (
+        <div className="mt-4 flex justify-end">
+           <button
+             type="button"
+             onClick={() => handleLaneUploadClick(null, GALERIA_CATEGORIA.OUTRO, false)}
+             className="flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] transition-colors"
+           >
+             <Camera className="h-4 w-4" />
+             + Adicionar Outras Fotos (Durante/Produtos)
+           </button>
+        </div>
+      )}
 
       {referencePreviewUrl ? (
         <div
@@ -1975,6 +2016,46 @@ export function Step4Procedimento({
           </p>
         </div>
       ) : null}
+
+      {laneMenuOpen && (
+        <div 
+          className="fixed inset-0 z-[500] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          onClick={() => setLaneMenuOpen(false)}
+          role="presentation"
+        >
+          <div 
+            className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-2xl animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-4 px-2 text-center text-[14px] font-bold text-[#0f172a]">
+              Adicionar foto em: {GALERIA_CATEGORIA_LABELS[fotoCategoria] || GALERIA_CATEGORIA_LABELS.antes}
+            </h3>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handleActionSheetOption('camera')}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-4 py-3.5 text-[14px] font-semibold text-white active:bg-[#00967f] sm:hover:bg-[#00967f]"
+              >
+                <Camera className="h-5 w-5" /> Tirar Foto (Câmera)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleActionSheetOption('upload')}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#f1f5f9] px-4 py-3.5 text-[14px] font-semibold text-[#334155] active:bg-[#e2e8f0] sm:hover:bg-[#e2e8f0]"
+              >
+                <ImageIcon className="h-5 w-5" /> Escolher da galeria
+              </button>
+              <button
+                type="button"
+                onClick={() => setLaneMenuOpen(false)}
+                className="mt-2 flex items-center justify-center rounded-xl bg-transparent px-4 py-3 text-[14px] font-semibold text-[#64748b] active:bg-[#f1f5f9] sm:hover:bg-[#f1f5f9]"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

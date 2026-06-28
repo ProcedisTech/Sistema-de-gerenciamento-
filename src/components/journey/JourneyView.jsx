@@ -189,6 +189,8 @@ export function JourneyView({
   onProcedureUploadFiles,
   onProcedureRemovePhoto,
   onProcedureAnnotatePhoto,
+  onProcedureOpenCamera,
+  onClearMapaCaptureIntent,
   /** Fotos no resumo da etapa 5; padrão vazio se o integrador não enviar. */
   fotosAvaliacaoResumo = [],
   fotosProcedimentoResumo = [],
@@ -383,6 +385,8 @@ export function JourneyView({
           step4Errors={step4Errors}
           setStep4Errors={setStep4Errors}
           onProcedureAnnotatePhoto={onProcedureAnnotatePhoto}
+          onProcedureOpenCamera={onProcedureOpenCamera}
+          onClearMapaCaptureIntent={onClearMapaCaptureIntent}
         />
       )}
 
