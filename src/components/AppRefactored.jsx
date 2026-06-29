@@ -2853,6 +2853,8 @@ function AppRefactoredInner() {
                       onProcedureUploadFiles={(files, cat) =>
                         cameraState.uploadProcedureFiles(files, cat)
                       }
+                      onProcedureOpenCamera={cameraState.openPhotoModal}
+                      onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
                       onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
                       step4Errors={journeyState.step4Errors}
                       setStep4Errors={journeyState.setStep4Errors}
@@ -3288,6 +3290,8 @@ function AppRefactoredInner() {
                     setProcedureCapturedPhotos={cameraState.setProcedureCapturedPhotos}
                     procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
+                    onProcedureOpenCamera={cameraState.openPhotoModal}
+                    onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
                     onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
                     step4Errors={journeyState.step4Errors}
                     setStep4Errors={journeyState.setStep4Errors}

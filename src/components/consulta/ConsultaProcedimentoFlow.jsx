@@ -39,6 +39,8 @@ export function ConsultaProcedimentoFlow({
   onEnsureProcedimento = () => Promise.resolve(null),
   sugestaoProcedimentoEnviada = false,
   onSugestaoEnviada = () => {},
+  onProcedureOpenCamera,
+  onClearMapaCaptureIntent,
   // Step5
   procedureDateIso,
   proximoRetornoDisplay,
@@ -198,6 +200,8 @@ export function ConsultaProcedimentoFlow({
           onPrepareMapaCapture={onPrepareMapaCapture}
           onEnsureProcedimento={onEnsureProcedimento}
           onSugestaoEnviada={onSugestaoEnviada}
+          onProcedureOpenCamera={onProcedureOpenCamera}
+          onClearMapaCaptureIntent={onClearMapaCaptureIntent}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button

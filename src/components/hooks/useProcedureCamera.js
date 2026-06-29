@@ -6,6 +6,7 @@ const STEP4_FOTO_CATEGORIAS = new Set([
   GALERIA_CATEGORIA.ANTES,
   GALERIA_CATEGORIA.DEPOIS,
   GALERIA_CATEGORIA.MAPA,
+  GALERIA_CATEGORIA.OUTRO,
 ]);
 
 function normalizeStep4FotoCategoria(categoria) {
