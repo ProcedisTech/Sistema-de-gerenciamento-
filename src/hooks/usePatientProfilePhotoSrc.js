@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { shouldAttachApiAuthToFetchUrl } from '../config/apiEnv.js';
 import { pacientesApi } from '../services/api.js';
-import { getStoredProfilePhotoDataUrl, profilePhotoStorageKey } from '../utils/patientProfilePhoto.js';
 
 /**
  * Resolve a URL exibível da foto de perfil.
@@ -11,14 +10,12 @@ import { getStoredProfilePhotoDataUrl, profilePhotoStorageKey } from '../utils/p
 export function usePatientProfilePhotoSrc(patient) {
   const rawFoto = typeof patient?.fotoPerfilUrl === 'string' ? patient.fotoPerfilUrl.trim() : '';
   const id = patient?.id;
-  const isDataUrl = rawFoto.startsWith('data:');
-  const storageKey = profilePhotoStorageKey(patient);
-  const storedFallback = !rawFoto && storageKey ? getStoredProfilePhotoDataUrl(storageKey) : null;
+  const isVolatilePreviewUrl = rawFoto.startsWith('data:') || rawFoto.startsWith('blob:');
 
   const isHttp = rawFoto.startsWith('http://') || rawFoto.startsWith('https://');
   const useDirectPresignedUrl = Boolean(isHttp && !shouldAttachApiAuthToFetchUrl(rawFoto));
 
-  const needsApiFetch = Boolean(id && rawFoto && !isDataUrl && !useDirectPresignedUrl);
+  const needsApiFetch = Boolean(id && rawFoto && !isVolatilePreviewUrl && !useDirectPresignedUrl);
 
   const [blobSrc, setBlobSrc] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -65,13 +62,13 @@ export function usePatientProfilePhotoSrc(patient) {
     };
   }, [needsApiFetch, id, rawFoto]);
 
-  const src = isDataUrl
+  const src = isVolatilePreviewUrl
     ? rawFoto
     : useDirectPresignedUrl
       ? rawFoto
       : needsApiFetch
         ? blobSrc
-        : storedFallback;
+        : null;
   const loadingVisible = Boolean(needsApiFetch && loading && !blobSrc);
 
   return { src, loading: loadingVisible };

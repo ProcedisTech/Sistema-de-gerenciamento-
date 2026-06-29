@@ -56,8 +56,6 @@ import {
 } from '../../utils/birthday.js';
 import {
   compressImageFileToJpegDataUrl,
-  profilePhotoStorageKey,
-  setStoredProfilePhotoDataUrl,
 } from '../../utils/patientProfilePhoto.js';
 import { ProfileBreadcrumb } from './ProfileBreadcrumb.jsx';
 import { ProfileHero } from './ProfileHero.jsx';
@@ -1015,9 +1013,6 @@ export function PatientProfileView({
 
   const applyProfilePhoto = useCallback(
     (dataUrl) => {
-      const key = profilePhotoStorageKey(selectedPatient);
-      if (dataUrl && key) setStoredProfilePhotoDataUrl(key, dataUrl);
-      if (!dataUrl && key) setStoredProfilePhotoDataUrl(key, null);
       if (selectedPatient?.id) {
         mergePatientById?.(selectedPatient.id, (prev) => ({ ...prev, fotoPerfilUrl: dataUrl || '' }));
       }
@@ -1076,20 +1071,26 @@ export function PatientProfileView({
         toast.error('Arquivo acima de 50 MB. Escolha um arquivo menor.');
         return;
       }
+      
+      const previousPhotoUrl = selectedPatient.fotoPerfilUrl;
+      const volatileUrl = URL.createObjectURL(file);
+      mergePatientById?.(selectedPatient.id, (prev) => ({ ...prev, fotoPerfilUrl: volatileUrl }));
+
       setProfilePhotoBusy(true);
       try {
         const updated = await pacientesApi.uploadFotoPerfil(selectedPatient.id, file);
-        const key = profilePhotoStorageKey(selectedPatient);
-        if (key) setStoredProfilePhotoDataUrl(key, null);
         const sameId =
           updated &&
           typeof updated === 'object' &&
           String(updated.id) === String(selectedPatient.id);
         const dto = sameId ? updated : await pacientesApi.get(selectedPatient.id);
         mergeServerPatientIntoState(dto);
+        URL.revokeObjectURL(volatileUrl);
         refreshPatients?.();
         toast.success('Foto de perfil salva no servidor.');
       } catch (err) {
+        mergePatientById?.(selectedPatient.id, (prev) => ({ ...prev, fotoPerfilUrl: previousPhotoUrl }));
+        URL.revokeObjectURL(volatileUrl);
         toast.error(err?.message || 'Não foi possível enviar a foto.');
       } finally {
         setProfilePhotoBusy(false);
@@ -1100,7 +1101,7 @@ export function PatientProfileView({
     try {
       const dataUrl = await compressImageFileToJpegDataUrl(file, 480, 0.86);
       applyProfilePhoto(dataUrl);
-      toast.success('Foto de perfil atualizada (somente neste aparelho).');
+      toast.success('Foto de perfil atualizada (será enviada ao salvar o cadastro).');
     } catch (err) {
       toast.error(err?.message || 'Não foi possível usar esta imagem.');
     }

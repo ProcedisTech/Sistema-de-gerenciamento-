@@ -103,6 +103,13 @@ export const useAuthState = (options = {}) => {
     } catch {
       /* ignore */
     }
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('procedi_paciente_foto_')) localStorage.removeItem(key);
+      }
+    } catch {
+      /* ignore */
+    }
     if (typeof setRoleUserId === 'function') setRoleUserId('');
     setIsLoggedIn(false);
     setAuthUser(null);
