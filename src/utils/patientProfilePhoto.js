@@ -14,28 +14,7 @@ export function profilePhotoStorageKey(patient) {
   return null;
 }
 
-export function getStoredProfilePhotoDataUrl(key) {
-  if (!key) return null;
-  try {
-    const v = localStorage.getItem(key);
-    return v && v.startsWith('data:image/') ? v : null;
-  } catch {
-    return null;
-  }
-}
 
-export function setStoredProfilePhotoDataUrl(key, dataUrl) {
-  if (!key) return;
-  try {
-    if (dataUrl) localStorage.setItem(key, dataUrl);
-    else localStorage.removeItem(key);
-  } catch (e) {
-    if (e?.name === 'QuotaExceededError') {
-      throw new Error('Espaço de armazenamento cheio. Tente uma imagem menor ou remova fotos antigas.');
-    }
-    throw e;
-  }
-}
 
 /**
  * Atributo crossOrigin para <img src={url}> quando a imagem vem da API com cookie (CORS).
@@ -49,14 +28,7 @@ export function authenticatedImageCrossOrigin(url) {
   return undefined;
 }
 
-/** URL para exibir: prioriza `fotoPerfilUrl` do servidor, depois backup local (data URL). */
-export function getPatientProfilePhotoDisplayUrl(patient) {
-  if (!patient) return null;
-  const fromState = patient.fotoPerfilUrl;
-  if (typeof fromState === 'string' && fromState.trim().length > 0) return fromState.trim();
-  const key = profilePhotoStorageKey(patient);
-  return getStoredProfilePhotoDataUrl(key);
-}
+
 
 /**
  * Redimensiona e comprime JPEG para caber no localStorage (~centenas de KB).
