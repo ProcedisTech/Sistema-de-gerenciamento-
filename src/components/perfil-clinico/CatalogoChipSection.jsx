@@ -24,6 +24,7 @@ export function CatalogoChipSection({
   onUpdateObservacao,
   searchFn,
   renderChipExtra,
+  renderChipTop,
   placeholder = 'Buscar…',
   readOnly = false,
 }) {
@@ -36,28 +37,30 @@ export function CatalogoChipSection({
   const dropdownRef = useRef(null);
   const debounceRef = useRef(null);
 
-  const handleQueryChange = useCallback((e) => {
-    const q = e.target.value;
-    setQuery(q);
+  /** Busca com debounce. Query vazia busca o catálogo completo (sem CID-10). */
+  const runSearch = useCallback((q) => {
     clearTimeout(debounceRef.current);
-    if (!q.trim()) {
-      setResults([]);
-      setShowResults(false);
-      return;
-    }
     debounceRef.current = setTimeout(async () => {
       setLoadingSearch(true);
       try {
-        const data = await searchFn(q.trim());
-        setResults(Array.isArray(data) ? data : []);
-        setShowResults(true);
+        const data = await searchFn(q);
+        const list = Array.isArray(data) ? data : [];
+        setResults(list);
+        setShowResults(list.length > 0);
       } catch {
         setResults([]);
+        setShowResults(false);
       } finally {
         setLoadingSearch(false);
       }
     }, DEBOUNCE_MS);
   }, [searchFn]);
+
+  const handleQueryChange = useCallback((e) => {
+    const q = e.target.value;
+    setQuery(q);
+    runSearch(q.trim());
+  }, [runSearch]);
 
   // Fecha dropdown ao clicar fora
   useEffect(() => {
@@ -81,12 +84,17 @@ export function CatalogoChipSection({
       dose: '',
       frequencia: '',
       usoContinuo: true,
+      fabricanteId: null,
+      fabricanteNome: null,
+      // Preserva a origem do item (CATALOGO | CID10). Necessário para o backend
+      // resolver a FK correta e para exibir o seletor de variante CID-10.
+      tipo: item.tipo ?? 'CATALOGO',
     };
     onAdd(chip);
+    setExpandedChip(chip.id); // abre automaticamente ao selecionar
     setQuery('');
     setResults([]);
     setShowResults(false);
-    inputRef.current?.focus();
   }, [onAdd]);
 
   const selectedIds = new Set(selected.map((s) => s.id));
@@ -100,6 +108,7 @@ export function CatalogoChipSection({
             {selected.map((item) => {
               const extras = [
                 item.observacao?.trim() || null,
+                item.fabricanteNome?.trim() ? `Fabricante: ${item.fabricanteNome.trim()}` : null,
                 item.dose?.trim() ? `Dose: ${item.dose.trim()}` : null,
                 item.frequencia?.trim() ? `Freq.: ${item.frequencia.trim()}` : null,
                 item.usoContinuo === false ? 'Uso não contínuo' : null,
@@ -137,7 +146,11 @@ export function CatalogoChipSection({
             type="text"
             value={query}
             onChange={handleQueryChange}
-            onFocus={() => query.trim() && results.length > 0 && setShowResults(true)}
+            onFocus={() => {
+              if (results.length > 0) { setShowResults(true); return; }
+              // Abre catálogo na primeira vez que o usuário clica no campo vazio
+              runSearch(query.trim());
+            }}
             placeholder={placeholder}
             className="flex-1 bg-transparent text-[13px] text-slate-700 placeholder:text-slate-400 outline-none"
           />
@@ -189,7 +202,7 @@ export function CatalogoChipSection({
             return (
               <div
                 key={item.id}
-                className="flex flex-col rounded-lg border border-slate-200 bg-slate-50 overflow-hidden"
+                className={`flex flex-col rounded-lg border border-slate-200 bg-slate-50 overflow-hidden${isExpanded ? ' w-full' : ''}`}
               >
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5">
                   <span className="text-[12px] font-medium text-slate-700">{item.nome}</span>
@@ -223,7 +236,16 @@ export function CatalogoChipSection({
 
                 {/* Painel expandido */}
                 {isExpanded && (
-                  <div className="border-t border-slate-200 bg-white px-2.5 pb-2.5 pt-2 flex flex-col gap-2">
+                  <div
+                    className="border-t border-slate-200 bg-white px-2.5 pb-2.5 pt-2 flex flex-col gap-2"
+                    onBlur={(e) => {
+                      // fecha quando o foco sai completamente do painel
+                      if (!e.currentTarget.contains(e.relatedTarget)) {
+                        setExpandedChip(null);
+                      }
+                    }}
+                  >
+                    {renderChipTop && renderChipTop(item)}
                     <label className="flex flex-col gap-1">
                       <span className="text-[11px] text-slate-500">Observação</span>
                       <input
