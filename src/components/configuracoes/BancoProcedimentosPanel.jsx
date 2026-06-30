@@ -1,55 +1,114 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Loader2, Stethoscope, Trash2 } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Search, Loader2 } from 'lucide-react';
 import { useBancoProcedimentos } from '../../hooks/useBancoProcedimentos';
-import { ProcedimentoCard } from './ProcedimentoCard';
 import { usePapel } from '../../hooks/usePapel';
+import { Switch } from '../shared/Switch';
+
+const FILTROS = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'facial', label: 'Facial' },
+  { id: 'corporal', label: 'Corporal' },
+  { id: 'ativos', label: 'Só ativos' },
+];
+
+function getCategoriaBadgeClass(tipoCodigo) {
+  if (tipoCodigo === 'estetico_facial') return 'bg-violet-100 text-violet-700';
+  if (tipoCodigo === 'estetico_corporal') return 'bg-blue-100 text-blue-700';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function getCategoriaLabel(proc) {
+  return proc.tipoNome ?? proc.tipoCodigo ?? 'Procedimento';
+}
+
+function StatusToggle({ proc, vinculo, isLinked, isAdmin, loading, onToggle }) {
+  const statusLabel = isLinked ? 'Oferece' : 'Não oferece';
+
+  return (
+    <div className="flex items-center justify-end gap-2.5 md:justify-start">
+      <Switch
+        checked={isLinked}
+        onChange={() => onToggle(proc, vinculo, isLinked)}
+        disabled={!isAdmin}
+        loading={loading}
+        ariaLabel={`${statusLabel}: ${proc.nome}`}
+      />
+      <span
+        className={`text-[13px] font-semibold ${isLinked ? 'text-[#00a88e]' : 'text-[#64748b]'}`}
+      >
+        {statusLabel}
+      </span>
+    </div>
+  );
+}
+
+function CategoriaBadge({ proc }) {
+  return (
+    <span
+      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${getCategoriaBadgeClass(proc.tipoCodigo)}`}
+    >
+      {getCategoriaLabel(proc)}
+    </span>
+  );
+}
 
 export function BancoProcedimentosPanel() {
   const { isAdmin } = usePapel();
   const { loading, error, catalogo, vinculos, vincular, desvincular } = useBancoProcedimentos();
 
   const [busca, setBusca] = useState('');
-  const [tab, setTab] = useState('catalogo'); // 'catalogo' ou 'meu_banco'
-  const [confirmModal, setConfirmModal] = useState({ open: false, vinculoId: null, nome: '' });
-  const [actionLoading, setActionLoading] = useState({}); // { [id]: true }
+  const [filtro, setFiltro] = useState('todos');
+  const [actionLoading, setActionLoading] = useState({});
 
-  const handleVincular = async (id) => {
-    if (!isAdmin) return;
-    setActionLoading(prev => ({ ...prev, [id]: true }));
-    await vincular(id);
-    setActionLoading(prev => ({ ...prev, [id]: false }));
-  };
+  const vinculosPorCatalogoId = useMemo(() => {
+    const map = new Map();
+    for (const v of vinculos) {
+      if (v.catalogoProcedimentoId) {
+        map.set(v.catalogoProcedimentoId, v);
+      }
+    }
+    return map;
+  }, [vinculos]);
 
-  const handleDesvincular = async (vinculoId) => {
-    if (!isAdmin) return;
-    setActionLoading(prev => ({ ...prev, [vinculoId]: true }));
-    await desvincular(vinculoId);
-    setActionLoading(prev => ({ ...prev, [vinculoId]: false }));
-    setConfirmModal({ open: false, vinculoId: null, nome: '' });
-  };
-
-  const openConfirmModal = (vinculoId, nome) => {
-    setConfirmModal({ open: true, vinculoId, nome });
-  };
-
-  const closeConfirmModal = () => {
-    setConfirmModal({ open: false, vinculoId: null, nome: '' });
-  };
-
-  // Filtros
-  const catalogoFiltrado = useMemo(() => {
+  const itensFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return catalogo.filter(p =>
-      p.nome.toLowerCase().includes(q) || (p.descricao && p.descricao.toLowerCase().includes(q))
-    );
-  }, [catalogo, busca]);
+    let items = catalogo;
 
-  const vinculosFiltrados = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return vinculos.filter(v =>
-      v.nome.toLowerCase().includes(q) || (v.descricao && v.descricao.toLowerCase().includes(q))
-    );
-  }, [vinculos, busca]);
+    if (q) {
+      items = items.filter(
+        (p) =>
+          p.nome.toLowerCase().includes(q) ||
+          (p.descricao && p.descricao.toLowerCase().includes(q))
+      );
+    }
+
+    if (filtro === 'facial') {
+      items = items.filter((p) => p.tipoCodigo === 'estetico_facial');
+    } else if (filtro === 'corporal') {
+      items = items.filter((p) => p.tipoCodigo === 'estetico_corporal');
+    } else if (filtro === 'ativos') {
+      items = items.filter((p) => vinculosPorCatalogoId.has(p.id));
+    }
+
+    return items;
+  }, [catalogo, busca, filtro, vinculosPorCatalogoId]);
+
+  const handleToggle = useCallback(
+    async (proc, vinculo, isLinked) => {
+      if (!isAdmin) return;
+
+      setActionLoading((prev) => ({ ...prev, [proc.id]: true }));
+
+      if (isLinked && vinculo) {
+        await desvincular(vinculo.id);
+      } else {
+        await vincular(proc.id);
+      }
+
+      setActionLoading((prev) => ({ ...prev, [proc.id]: false }));
+    },
+    [isAdmin, vincular, desvincular]
+  );
 
   if (loading) {
     return (
@@ -67,6 +126,9 @@ export function BancoProcedimentosPanel() {
     );
   }
 
+  const totalAtivos = vinculos.length;
+  const totalCatalogo = catalogo.length;
+
   return (
     <div className="flex flex-col gap-5">
       {!isAdmin && (
@@ -78,10 +140,13 @@ export function BancoProcedimentosPanel() {
         </div>
       )}
 
-      {/* Barra de Busca */}
       <div className="shrink-0 rounded-2xl border border-app-border bg-white p-4 shadow-sm">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#00a88e]/60" strokeWidth={2.5} aria-hidden />
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#00a88e]/60"
+            strokeWidth={2.5}
+            aria-hidden
+          />
           <input
             type="search"
             value={busca}
@@ -92,122 +157,124 @@ export function BancoProcedimentosPanel() {
         </div>
       </div>
 
-      {/* Tabs (Apenas Mobile) */}
-      <div className="flex rounded-lg bg-[#f1f5f9] p-1 md:hidden">
-        <button
-          type="button"
-          onClick={() => setTab('catalogo')}
-          className={`flex-1 rounded-md py-2 text-[13px] font-bold transition-colors ${tab === 'catalogo' ? 'bg-white text-[#0f172a] shadow-sm' : 'text-[#64748b]'}`}
-        >
-          Disponíveis ({catalogoFiltrado.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('meu_banco')}
-          className={`flex-1 rounded-md py-2 text-[13px] font-bold transition-colors ${tab === 'meu_banco' ? 'bg-white text-[#0f172a] shadow-sm' : 'text-[#64748b]'}`}
-        >
-          Meus Procedimentos ({vinculosFiltrados.length})
-        </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {FILTROS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFiltro(id)}
+              className={`rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${
+                filtro === id
+                  ? 'bg-[#00a88e] text-white shadow-sm'
+                  : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#00a88e]/30 hover:text-[#0f172a]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[13px] font-semibold text-[#64748b]">
+          <span className="text-[#00a88e]">{totalAtivos}</span> de {totalCatalogo} ativos
+        </p>
       </div>
 
-      {/* Grid de Conteúdo */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        {/* Coluna Esquerda: Catálogo (Visível no Desktop ou se tab for 'catalogo') */}
-        <div className={`${tab !== 'catalogo' ? 'hidden md:block' : ''} space-y-4`}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-[16px] font-bold text-[#0f172a]">Catálogo Geral</h2>
-            <span className="text-[12px] font-medium text-[#64748b]">
-              {catalogoFiltrado.length} disponíveis
-            </span>
+      {itensFiltrados.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#cbd5e1] p-8 text-center text-[#94a3b8]">
+          <Search className="h-10 w-10 opacity-30" />
+          <p className="text-[14px] font-medium">Nenhum procedimento encontrado.</p>
+        </div>
+      ) : (
+        <>
+          {/* Desktop: tabela */}
+          <div className="hidden overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm md:block">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-[#e2e8f0] bg-[#f8fafc]">
+                  <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-[#64748b]">
+                    Procedimento
+                  </th>
+                  <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-[#64748b]">
+                    Categoria
+                  </th>
+                  <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-[#64748b]">
+                    Status na Clínica
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {itensFiltrados.map((proc) => {
+                  const vinculo = vinculosPorCatalogoId.get(proc.id);
+                  const isLinked = !!vinculo;
+                  const itemLoading = !!actionLoading[proc.id];
+
+                  return (
+                    <tr
+                      key={proc.id}
+                      className="border-b border-[#e2e8f0] last:border-b-0 transition-colors hover:bg-[#f8fafc]/80"
+                    >
+                      <td className="px-5 py-4">
+                        <p className="text-[14px] font-bold text-[#0f172a]">{proc.nome}</p>
+                        <p className="mt-0.5 text-[13px] font-medium text-[#64748b] line-clamp-2">
+                          {proc.descricao || 'Sem descrição.'}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 align-middle">
+                        <CategoriaBadge proc={proc} />
+                      </td>
+                      <td className="px-5 py-4 align-middle">
+                        <StatusToggle
+                          proc={proc}
+                          vinculo={vinculo}
+                          isLinked={isLinked}
+                          isAdmin={isAdmin}
+                          loading={itemLoading}
+                          onToggle={handleToggle}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,220px),1fr))] gap-3">
-            {catalogoFiltrado.map(proc => {
-              const vinculo = vinculos.find(v => v.catalogoProcedimentoId === proc.id);
+          {/* Mobile: cards empilhados */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {itensFiltrados.map((proc) => {
+              const vinculo = vinculosPorCatalogoId.get(proc.id);
               const isLinked = !!vinculo;
+              const itemLoading = !!actionLoading[proc.id];
+
               return (
-                <ProcedimentoCard
+                <div
                   key={proc.id}
-                  procedimento={proc}
-                  isVinculado={isLinked}
-                  onVincular={() => handleVincular(proc.id)}
-                  onDesvincular={() => vinculo && openConfirmModal(vinculo.id, proc.nome)}
-                  loading={actionLoading[proc.id] || (vinculo && actionLoading[vinculo.id]) || false}
-                />
+                  className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-bold text-[#0f172a]">{proc.nome}</p>
+                      <p className="mt-0.5 text-[13px] font-medium text-[#64748b] line-clamp-2">
+                        {proc.descricao || 'Sem descrição.'}
+                      </p>
+                    </div>
+                    <CategoriaBadge proc={proc} />
+                  </div>
+                  <div className="mt-3 border-t border-[#e2e8f0] pt-3">
+                    <StatusToggle
+                      proc={proc}
+                      vinculo={vinculo}
+                      isLinked={isLinked}
+                      isAdmin={isAdmin}
+                      loading={itemLoading}
+                      onToggle={handleToggle}
+                    />
+                  </div>
+                </div>
               );
             })}
           </div>
-
-          {catalogoFiltrado.length === 0 && (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#cbd5e1] p-8 text-center text-[#94a3b8]">
-              <Search className="h-10 w-10 opacity-30" />
-              <p className="text-[14px] font-medium">Nenhum procedimento encontrado no catálogo.</p>
-            </div>
-          )}
-        </div>
-
-        {/* Coluna Direita: Meu Banco (Visível no Desktop ou se tab for 'meu_banco') */}
-        <div className={`${tab !== 'meu_banco' ? 'hidden md:block' : ''} space-y-4`}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-[16px] font-bold text-[#0f172a]">Procedimentos da Clínica</h2>
-            <span className="text-[12px] font-medium text-[#64748b]">
-              {vinculosFiltrados.length} selecionados
-            </span>
-          </div>
-
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,220px),1fr))] gap-3">
-            {vinculosFiltrados.map(v => (
-              <ProcedimentoCard
-                key={v.id}
-                procedimento={{
-                  id: v.catalogoProcedimentoId,
-                  nome: v.nome,
-                  tipoCodigo: v.tipoCodigo,
-                  descricao: v.descricao
-                }}
-                isVinculado={true}
-                onDesvincular={() => openConfirmModal(v.id, v.nome)}
-                loading={actionLoading[v.id] || false}
-              />
-            ))}
-          </div>
-
-          {vinculosFiltrados.length === 0 && (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#cbd5e1] p-8 text-center text-[#94a3b8]">
-              <Stethoscope className="h-10 w-10 opacity-30" />
-              <p className="text-[14px] font-medium">Nenhum procedimento vinculado.</p>
-              {isAdmin && <p className="text-[12px]">Adicione procedimentos do catálogo ao lado.</p>}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Modal de Confirmação */}
-      {confirmModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="text-[16px] font-bold text-[#0f172a]">Confirmar Remoção</h3>
-            <p className="mt-2 text-[14px] font-medium text-[#64748b]">
-              Confirma remover <span className="font-bold text-[#0f172a]">&ldquo;{confirmModal.nome}&rdquo;</span> do seu banco?
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeConfirmModal}
-                className="rounded-lg bg-[#f1f5f9] px-4 py-2 text-[13px] font-bold text-[#64748b] hover:bg-[#e2e8f0] transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDesvincular(confirmModal.vinculoId)}
-                className="rounded-lg bg-red-500 px-4 py-2 text-[13px] font-bold text-white hover:bg-red-600 transition-colors"
-              >
-                Remover
-              </button>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

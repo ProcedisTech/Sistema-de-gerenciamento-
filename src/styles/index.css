@@ -270,6 +270,28 @@
   padding: 0;
 }
 
+/* Settings Hub — fade-in para transição hub→detalhe e troca de painel */
+@keyframes config-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-config-fade-in {
+  animation: config-fade-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-config-fade-in {
+    animation: none;
+  }
+}
+
 /* Shake animation — duplicate alternative detection */
 @keyframes shake {
   0%,

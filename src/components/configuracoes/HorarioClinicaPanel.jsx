@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Building2, Clock, Info, Save, User } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Building2, Info, Save, User } from 'lucide-react';
 import {
   configuracoesClinicaApi,
   getApiErrorToastMessage,
@@ -7,16 +7,84 @@ import {
 } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext.jsx';
-import { HorarioIntervalosEditor } from './HorarioIntervalosEditor.jsx';
+import { encontrarSobrepostos } from './horarioSemanaUtils.js';
+import { HorarioSemanaEditor } from './HorarioSemanaEditor.jsx';
 
-export function HorarioClinicaPanel({ onDisponibilidadeInvalidate }) {
+// ── Helpers de agrupamento/desagrupamento ─────────────────────────────────────
+
+/** Lista plana do servidor → diasConfig[0..6] */
+function agrupar(lista) {
+  const dias = Array.from({ length: 7 }, () => ({ ativo: false, turnos: [] }));
+  for (const h of lista) {
+    const d = Number(h.diaSemana);
+    dias[d].ativo = true;
+    dias[d].turnos.push({
+      id: h.id,
+      horaInicio: String(h.horaInicio || '').slice(0, 5),
+      horaFim: String(h.horaFim || '').slice(0, 5),
+    });
+  }
+  return dias;
+}
+
+/** diasConfig[0..6] → lista plana para o PUT (dias desligados não entram) */
+function desagrupar(diasConfig) {
+  return diasConfig.flatMap((dia, diaSemana) =>
+    dia.ativo
+      ? dia.turnos.map((t) => ({
+          diaSemana,
+          horaInicio: String(t.horaInicio || '').slice(0, 5),
+          horaFim: String(t.horaFim || '').slice(0, 5),
+        }))
+      : []
+  );
+}
+
+/**
+ * Snapshot determinístico para dirty detection.
+ * Ordenação estável: diaSemana asc, horaInicio asc.
+ * Premissa: strings HH:MM com zero-padding são lexicograficamente ordenáveis.
+ */
+function sortedSnapshot(diasConfig) {
+  const payload = desagrupar(diasConfig).sort((a, b) =>
+    a.diaSemana !== b.diaSemana
+      ? a.diaSemana - b.diaSemana
+      : a.horaInicio.localeCompare(b.horaInicio)
+  );
+  return JSON.stringify(payload);
+}
+
+// ── Validação ─────────────────────────────────────────────────────────────────
+
+function validarDiasConfig(diasConfig) {
+  for (let d = 0; d < diasConfig.length; d++) {
+    const dia = diasConfig[d];
+    if (!dia.ativo) continue;
+    for (const t of dia.turnos) {
+      const ini = String(t.horaInicio || '').slice(0, 5);
+      const fim = String(t.horaFim || '').slice(0, 5);
+      if (ini && fim && fim <= ini) return 'invalid-time';
+    }
+    if (encontrarSobrepostos(dia.turnos).size > 0) return 'overlap';
+  }
+  return null;
+}
+
+// ── Componente ────────────────────────────────────────────────────────────────
+
+export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange }) {
   const { orgId } = useOrg();
   const [tipoOrg, setTipoOrg] = useState('clinica');
-  const [horarios, setHorarios] = useState([]);
+  const [diasConfig, setDiasConfig] = useState(() =>
+    Array.from({ length: 7 }, () => ({ ativo: false, turnos: [] }))
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { success, error: toastError } = useToast();
 
+  const serverSnapshot = useRef(null);
+
+  // ── Carregamento inicial ───────────────────────────────────────────────────
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -26,46 +94,61 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate }) {
         setTipoOrg(dto?.tipoOrg || 'clinica');
         if (orgId) {
           const horariosRes = await organizacoesHorariosApi.buscar(orgId);
-          if (alive) setHorarios(Array.isArray(horariosRes) ? horariosRes : []);
-        } else if (alive) {
-          setHorarios([]);
+          if (!alive) return;
+          const config = agrupar(Array.isArray(horariosRes) ? horariosRes : []);
+          setDiasConfig(config);
+          serverSnapshot.current = sortedSnapshot(config);
+        } else {
+          const empty = Array.from({ length: 7 }, () => ({ ativo: false, turnos: [] }));
+          serverSnapshot.current = sortedSnapshot(empty);
         }
       } catch (e) {
-        if (alive) toastError(getApiErrorToastMessage(e, 'Erro ao carregar configuracoes'));
+        if (alive) toastError(getApiErrorToastMessage(e, 'Erro ao carregar configurações'));
       } finally {
         if (alive) setLoading(false);
       }
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [toastError, orgId]);
 
-  const diaInvalido = (h) =>
-    Boolean(h?.horaInicio && h?.horaFim && String(h.horaFim) <= String(h.horaInicio));
+  // ── Dirty detection ────────────────────────────────────────────────────────
+  const isDirty = useMemo(() => {
+    if (serverSnapshot.current === null) return false;
+    return serverSnapshot.current !== sortedSnapshot(diasConfig);
+  }, [diasConfig]);
 
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // ── beforeunload: cobre fechar aba / refresh ──────────────────────────────
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  // ── Salvar ────────────────────────────────────────────────────────────────
   const handleSalvar = async () => {
-    const hasInvalid = horarios.some((h) => diaInvalido(h));
-    if (hasInvalid) {
+    const erro = validarDiasConfig(diasConfig);
+    if (erro === 'invalid-time') {
       toastError('Horário final deve ser depois do horário inicial');
+      return;
+    }
+    if (erro === 'overlap') {
+      toastError('Existem turnos sobrepostos no mesmo dia — corrija antes de salvar');
       return;
     }
     setSaving(true);
     try {
       await configuracoesClinicaApi.atualizar({ tipoOrg });
       if (orgId) {
-        await organizacoesHorariosApi.atualizar(
-          orgId,
-          horarios.map((h) => ({
-            id: h.id ?? undefined,
-            diaSemana: Number(h.diaSemana),
-            horaInicio: String(h.horaInicio || '').slice(0, 5),
-            horaFim: String(h.horaFim || '').slice(0, 5),
-            ativo: h.ativo !== false,
-          }))
-        );
+        await organizacoesHorariosApi.atualizar(orgId, desagrupar(diasConfig));
       }
+      serverSnapshot.current = sortedSnapshot(diasConfig);
+      // Re-cria referência do array para forçar re-render e recalcular isDirty → false
+      setDiasConfig((prev) => prev.map((d) => ({ ...d })));
       success('Configurações salvas');
       onDisponibilidadeInvalidate?.({ scope: 'all' });
     } catch (e) {
@@ -75,10 +158,10 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate }) {
     }
   };
 
-  const algumDiaInvalido = horarios.some((h) => diaInvalido(h));
+  const temErro = validarDiasConfig(diasConfig) !== null;
 
   if (loading) {
-    return <div className="text-sm text-[#64748b]">Carregando configuracoes...</div>;
+    return <div className="text-sm text-[#64748b]">Carregando configurações...</div>;
   }
 
   return (
@@ -116,7 +199,7 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate }) {
             <Building2 className="h-5 w-5 text-[#00a88e]" />
             <div>
               <p className="text-[14px] font-bold text-[#0f172a]">Clínica</p>
-              <p className="text-[12px] text-[#64748b]">Varios profissionais</p>
+              <p className="text-[12px] text-[#64748b]">Vários profissionais</p>
             </div>
           </label>
           <label
@@ -144,24 +227,26 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate }) {
       </section>
 
       <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[15px] font-bold text-[#0f172a]">
-          <Clock className="h-4 w-4" />
-          Horários de funcionamento
-        </h3>
-        <HorarioIntervalosEditor
-          value={horarios}
-          onChange={setHorarios}
-          addButtonLabel="Adicionar turno"
-          emptyStateLabel="Nenhum turno cadastrado."
-        />
+        <h3 className="mb-1 text-[15px] font-bold text-[#0f172a]">Horários de funcionamento</h3>
+        <p className="mb-3 text-[12px] text-[#94a3b8]">
+          Ligue o botão ao lado de cada dia para definir o horário. Dias desligados aparecem como Fechado.
+        </p>
+        <HorarioSemanaEditor diasConfig={diasConfig} onChange={setDiasConfig} />
       </section>
 
-      <div className="flex justify-end border-t border-[#e2e8f0] pt-4">
+      <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] pt-4">
+        {isDirty && !saving && (
+          <span className="text-[12px] font-medium text-amber-600">Alterações não salvas</span>
+        )}
         <button
           type="button"
           onClick={handleSalvar}
-          disabled={saving || algumDiaInvalido}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#00a88e] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#008f78] disabled:opacity-50"
+          disabled={saving || temErro || !isDirty}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors disabled:opacity-50 ${
+            isDirty && !temErro
+              ? 'bg-[#00a88e] hover:bg-[#008f78]'
+              : 'cursor-not-allowed bg-[#94a3b8]'
+          }`}
         >
           <Save className="h-4 w-4" />
           {saving ? 'Salvando...' : 'Salvar'}
