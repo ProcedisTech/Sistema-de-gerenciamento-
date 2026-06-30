@@ -1,3 +1,4 @@
+// ⚠️ APOSENTADO — substituído por PerguntasCategoriasPanel.jsx. Não usar/importar. Remover após validação em produção.
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, Tag, Loader2, Pencil, Trash2, Check, X, Search, ChevronRight } from 'lucide-react';
 import { anamneseApi, getApiErrorDetail } from '../../services/api';

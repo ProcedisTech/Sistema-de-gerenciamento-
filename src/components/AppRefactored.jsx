@@ -65,6 +65,7 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
+import { UnsavedChangesModal } from './shared/UnsavedChangesModal';
 import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import { AgendaBloqueioModal } from './agenda/AgendaBloqueioModal.jsx';
@@ -931,8 +932,30 @@ function AppRefactoredInner() {
       toast.error('Você não tem permissão para acessar a Gestão de Equipe.');
       return;
     }
+    if (view === 'configuracoes') {
+      setConfigSectionState(null);
+    }
     setActiveView(view);
   };
+
+  // ── Guard de alterações não salvas no Horário de Atendimento ───────────────
+  const [isDirtyHorarios, setIsDirtyHorarios] = React.useState(false);
+  const [isUnsavedNavModalOpen, setIsUnsavedNavModalOpen] = React.useState(false);
+  const pendingNavAction = useRef(null);
+
+  /**
+   * Substitui goToView nos call sites que podem ocorrer enquanto o usuário
+   * está em Configurações > Horário de Atendimento com alterações não salvas.
+   */
+  const goToViewWithGuard = React.useCallback((view) => {
+    if (isDirtyHorarios && activeView === 'configuracoes') {
+      pendingNavAction.current = () => goToView(view);
+      setIsUnsavedNavModalOpen(true);
+      return;
+    }
+    goToView(view);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirtyHorarios, activeView, canSeeConfig, canSeeConfigEquipe]);
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || !journeyState.isAgendaRetorno) return;
@@ -2641,10 +2664,25 @@ function AppRefactoredInner() {
   return (
     <div className="flex min-h-dvh md:h-screen flex-col md:flex-row font-sans overflow-x-hidden bg-app-canvas text-app-ink md:overflow-hidden">
 
+      {/* Guard de alterações não salvas no Horário de Atendimento */}
+      <UnsavedChangesModal
+        isOpen={isUnsavedNavModalOpen}
+        onContinue={() => {
+          setIsUnsavedNavModalOpen(false);
+          pendingNavAction.current = null;
+        }}
+        onDiscard={() => {
+          setIsUnsavedNavModalOpen(false);
+          const action = pendingNavAction.current;
+          pendingNavAction.current = null;
+          action?.();
+        }}
+      />
+
       {/* Sidebar */}
       <Sidebar
         activeView={activeView}
-        setActiveView={setActiveView}
+        setActiveView={goToViewWithGuard}
         handleLogout={handleLogout}
         authUser={authUser}
         onRailWidthPxChange={setSidebarRailWidthPx}
@@ -3523,7 +3561,7 @@ function AppRefactoredInner() {
                   kpi={kpiState}
                   kpiLoading={kpiState.loading}
                   nomeUsuario={perfilInfo.nomeCompleto}
-                  onNavigateToAgenda={() => setActiveView('agenda')}
+                  onNavigateToAgenda={() => goToViewWithGuard('agenda')}
                   roleUserId={roleUserId}
                   patientQuickFilter={patientQuickFilter}
                   setPatientQuickFilter={setPatientQuickFilter}
@@ -3555,6 +3593,7 @@ function AppRefactoredInner() {
                   onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
                   onPacientesCatalogRefresh={refreshPatientsAndPagedList}
                   onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                  onDirtyHorariosChange={setIsDirtyHorarios}
                 />
               </RoleGuard>
             )}
@@ -3603,10 +3642,10 @@ function AppRefactoredInner() {
       {!isJornadaView && !isConsultaView ? (
         <MobileNavigation
           activeView={activeView}
-          onGoPacientes={() => goToView('pacientes')}
-          onGoAgenda={() => goToView('agenda')}
-          onGoGestaoEquipe={() => goToView('gestao-equipe')}
-          onGoConfiguracoes={() => goToView('configuracoes')}
+          onGoPacientes={() => goToViewWithGuard('pacientes')}
+          onGoAgenda={() => goToViewWithGuard('agenda')}
+          onGoGestaoEquipe={() => goToViewWithGuard('gestao-equipe')}
+          onGoConfiguracoes={() => goToViewWithGuard('configuracoes')}
           onLogout={handleLogout}
         />
       ) : null}

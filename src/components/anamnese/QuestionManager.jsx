@@ -1,3 +1,4 @@
+// ⚠️ APOSENTADO — substituído por PerguntasCategoriasPanel.jsx. Não usar/importar. Remover após validação em produção.
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, HelpCircle, Loader2, ChevronDown, ChevronUp,

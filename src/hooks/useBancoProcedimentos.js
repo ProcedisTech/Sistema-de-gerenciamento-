@@ -28,6 +28,7 @@ export function useBancoProcedimentos() {
         id: p.id,
         nome: p.nomeProcedimento || p.nome, // Fallback caso mude
         tipoCodigo: p.tipoCodigo,
+        tipoNome: p.tipoNome,
         descricao: p.descricao
       }));
 
@@ -37,6 +38,7 @@ export function useBancoProcedimentos() {
         catalogoProcedimentoId: v.procedimento?.id,
         nome: v.procedimento?.nomeProcedimento || v.procedimento?.nome,
         tipoCodigo: v.procedimento?.tipoCodigo,
+        tipoNome: v.procedimento?.tipoNome,
         descricao: v.procedimento?.descricao
       }));
 
@@ -63,6 +65,7 @@ export function useBancoProcedimentos() {
       catalogoProcedimentoId: proc.id,
       nome: proc.nome,
       tipoCodigo: proc.tipoCodigo,
+      tipoNome: proc.tipoNome,
       descricao: proc.descricao,
     };
 
@@ -78,6 +81,7 @@ export function useBancoProcedimentos() {
         catalogoProcedimentoId: res.procedimento?.id,
         nome: res.procedimento?.nomeProcedimento || res.procedimento?.nome,
         tipoCodigo: res.procedimento?.tipoCodigo,
+        tipoNome: res.procedimento?.tipoNome,
         descricao: res.procedimento?.descricao
       };
 

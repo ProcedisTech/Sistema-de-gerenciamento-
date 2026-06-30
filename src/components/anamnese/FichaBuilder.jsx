@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, FileText, Loader2, ChevronUp, ChevronDown, Trash2, GripVertical, Save, X, Pencil } from 'lucide-react';
 import { anamneseApi, dimensoesApi } from '../../services/api';
-import { EditModal } from './QuestionManager';
+import { HabitoEditModal } from './HabitoEditModal';
 
 export function FichaBuilder() {
   const [fichas, setFichas] = useState([]);
@@ -243,7 +243,7 @@ export function FichaBuilder() {
 
       {/* Edit question from inside the ficha builder */}
       {editingPerguntaInBuilder && (
-        <EditModal
+        <HabitoEditModal
           key={editingPerguntaInBuilder.id}
           pergunta={editingPerguntaInBuilder}
           categorias={categorias}

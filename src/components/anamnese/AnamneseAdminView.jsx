@@ -1,3 +1,4 @@
+// ⚠️ APOSENTADO — substituído pelo roteamento direto em ConfigDetailView (PerguntasCategoriasPanel + FichasPanel). Não usar/importar. Remover após validação em produção.
 import React, { useState, useCallback, useEffect } from 'react';
 import { ClipboardList, Tag, HelpCircle, FileText, X, Settings } from 'lucide-react';
 import { CategoryManager } from './CategoryManager';
