@@ -91,7 +91,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     try {
       const res = await fetch(resolveApiUrl('/api/v1/perfil'), {
         credentials: 'include',
-        headers: { ...fetchHeaders() },
+        headers: { ...(await fetchHeaders()) },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -126,7 +126,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     try {
       const res = await fetch(resolveApiUrl('/api/v1/perfil/assinatura'), {
         credentials: 'include',
-        headers: { ...fetchHeaders() },
+        headers: { ...(await fetchHeaders()) },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return;
@@ -164,7 +164,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         method: 'PUT',
         credentials: 'include',
         headers: {
-          ...fetchHeaders(),
+          ...(await fetchHeaders()),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ assinaturaPadrao }),
@@ -193,7 +193,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         method: 'PUT',
         credentials: 'include',
         headers: {
-          ...fetchHeaders(),
+          ...(await fetchHeaders()),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ assinaturaPadrao: null }),
@@ -232,7 +232,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
       const res = await fetch(resolveApiUrl('/api/v1/perfil/foto'), {
         method: 'POST',
         credentials: 'include',
-        headers: { ...fetchHeaders() },
+        headers: { ...(await fetchHeaders()) },
         body: formData,
       });
       if (res.ok) {
@@ -266,7 +266,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         method: 'PUT',
         credentials: 'include',
         headers: {
-          ...fetchHeaders(),
+          ...(await fetchHeaders()),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),

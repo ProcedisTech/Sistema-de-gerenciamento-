@@ -23,7 +23,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders }) {
   const fetchPermissoes = async () => {
     try {
       const res = await fetch(resolveApiUrl('/api/v1/permissoes'), {
-        headers: fetchHeaders(),
+        headers: await fetchHeaders(),
         credentials: 'include'
       });
       if (res.ok) {
@@ -50,7 +50,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders }) {
     try {
       setLoadingPermissoes(true);
       const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfil.id}/permissoes`), {
-        headers: fetchHeaders(),
+        headers: await fetchHeaders(),
         credentials: 'include'
       });
       if (res.ok) {
@@ -76,7 +76,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders }) {
     try {
       const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilToDelete.id}`), {
         method: 'DELETE',
-        headers: fetchHeaders(),
+        headers: await fetchHeaders(),
         credentials: 'include'
       });
       if (res.ok) {
@@ -107,7 +107,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders }) {
       
       const res = await fetch(url, {
         method,
-        headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await fetchHeaders()), 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(formData)
       });
@@ -118,7 +118,7 @@ export function GestaoPerfisTab({ perfisAcesso, onReload, fetchHeaders }) {
 
         const putRes = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
           method: 'PUT',
-          headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
+          headers: { ...(await fetchHeaders()), 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify(selectedPermissoes)
         });
