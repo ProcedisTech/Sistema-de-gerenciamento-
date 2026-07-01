@@ -77,8 +77,8 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [mobilePortrait, setMobilePortrait] = useState(false);
 
-  const fetchHeaders = useCallback(() => {
-    const h = typeof getAuthHeaders === 'function' ? getAuthHeaders() : {};
+  const fetchHeaders = useCallback(async () => {
+    const h = typeof getAuthHeaders === 'function' ? await getAuthHeaders() : {};
     return h && typeof h === 'object' ? { ...h } : {};
   }, [getAuthHeaders]);
 
