@@ -221,7 +221,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
       const res = await fetch(resolveApiUrl('/api/v1/clinica/foto'), {
         method: 'POST',
         credentials: 'include',
-        headers: { ...fetchHeaders() },
+        headers: { ...(await fetchHeaders()) },
         body: formData,
       });
       if (res.ok) {

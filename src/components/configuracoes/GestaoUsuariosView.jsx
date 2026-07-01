@@ -44,19 +44,19 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
     try {
       const [equipeRes, rolesRes, perfisRes, especialidadesRes] = await Promise.all([
         fetch(resolveApiUrl('/api/v1/equipe'), {
-          headers: fetchHeaders(),
+          headers: await fetchHeaders(),
           credentials: 'include'
         }),
         fetch(resolveApiUrl('/api/v1/dimensoes/roles'), {
-          headers: fetchHeaders(),
+          headers: await fetchHeaders(),
           credentials: 'include'
         }),
         fetch(resolveApiUrl('/api/v1/perfis-acesso'), {
-          headers: fetchHeaders(),
+          headers: await fetchHeaders(),
           credentials: 'include'
         }),
         fetch(resolveApiUrl('/api/v1/dimensoes/especialidades'), {
-          headers: fetchHeaders(),
+          headers: await fetchHeaders(),
           credentials: 'include'
         })
       ]);
@@ -192,7 +192,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
     try {
       const res = await fetch(resolveApiUrl(`/api/v1/equipe/${id}`), {
         method: 'DELETE',
-        headers: fetchHeaders(),
+        headers: await fetchHeaders(),
         credentials: 'include'
       });
       if (res.ok) {
