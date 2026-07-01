@@ -132,8 +132,8 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
   const [logoUrlServidor, setLogoUrlServidor] = useState('');
   const [fotoPreview, setFotoPreview] = useState('');
 
-  const fetchHeaders = useCallback(() => {
-    const h = typeof getAuthHeaders === 'function' ? getAuthHeaders() : {};
+  const fetchHeaders = useCallback(async () => {
+    const h = typeof getAuthHeaders === 'function' ? await getAuthHeaders() : {};
     return h && typeof h === 'object' ? { ...h } : {};
   }, [getAuthHeaders]);
 
