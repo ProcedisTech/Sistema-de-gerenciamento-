@@ -6,6 +6,7 @@ import { GaleriaFilterChips } from './GaleriaFilterChips.jsx';
 import { GaleriaSessaoCard } from './GaleriaSessaoCard.jsx';
 import { GaleriaCategoriaLightbox } from './GaleriaCategoriaLightbox.jsx';
 import { shouldGaleriaSessionStartExpanded } from './galeriaUiConstants.js';
+import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
 
 export function GaleriaTab({
   isNivel1,
@@ -273,10 +274,11 @@ export function GaleriaTab({
                   <span className="text-[12px] font-bold uppercase tracking-wide text-[#00a88e] bg-[#00a88e]/20 px-3 py-1 rounded-full">
                     Antes
                   </span>
-                  <img
+                  <ProtectedPatientMedia
                     src={compararSelecionadas.antes.url}
                     alt="Antes"
-                    className="max-h-[75dvh] max-w-full rounded-xl object-contain"
+                    className="max-h-[75dvh] max-w-full rounded-xl"
+                    imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
                   />
                 </div>
                 <div className="w-px h-full bg-white/20 hidden sm:block" />
@@ -284,10 +286,11 @@ export function GaleriaTab({
                   <span className="text-[12px] font-bold uppercase tracking-wide text-[#f59e0b] bg-[#f59e0b]/20 px-3 py-1 rounded-full">
                     Depois
                   </span>
-                  <img
+                  <ProtectedPatientMedia
                     src={compararSelecionadas.depois.url}
                     alt="Depois"
-                    className="max-h-[75dvh] max-w-full rounded-xl object-contain"
+                    className="max-h-[75dvh] max-w-full rounded-xl"
+                    imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
                   />
                 </div>
               </div>

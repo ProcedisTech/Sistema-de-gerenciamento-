@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 
 import { Camera, ImageIcon, Maximize2, Upload, X } from 'lucide-react';
+import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
 
 import {
   clickToPercent,
@@ -434,20 +435,14 @@ export function FotoVistaCanvasCore({
 
             >
 
-              <img
-
+              <ProtectedPatientMedia
                 ref={imgRef}
-
+                interactive={true}
                 src={displayUrl}
-
                 alt=""
-
-                className="z-0 h-full w-full object-contain pointer-events-none"
-
-                draggable={false}
-
+                className="z-0 h-full w-full pointer-events-none"
+                imgClassName="h-full w-full object-contain pointer-events-none"
                 onLoad={handleImgLoad}
-
               />
 
               {allPontos.map((p) => {
@@ -777,7 +772,7 @@ export function GaleriaVistaPickerModal({ open, items, loading, onSelect, onClos
 
                   {item.thumbSrc ? (
 
-                    <img src={item.thumbSrc} alt="" className="h-full w-full object-cover" />
+                    <ProtectedPatientMedia src={item.thumbSrc} alt="" imgClassName="h-full w-full object-cover" />
 
                   ) : (
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image as ImageIcon, Loader2 } from 'lucide-react';
 import { usePacienteGaleriaArquivoBlobUrl } from '../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
+import { ProtectedPatientMedia } from '../ui/ProtectedPatientMedia.jsx';
 
 /** Miniatura ou preview: imagem da galeria no servidor (fetch autenticado + blob). */
 export function GaleriaArquivoImage({ url, alt = '', className = '', imgClassName = 'w-full h-full object-cover' }) {
@@ -20,13 +21,13 @@ export function GaleriaArquivoImage({ url, alt = '', className = '', imgClassNam
       </div>
     );
   }
-  return <img src={src} alt={alt} className={imgClassName} />;
+  return <ProtectedPatientMedia src={src} alt={alt} imgClassName={imgClassName} />;
 }
 
 /** Imagem local (data:/blob:) ou jornada — sem header X-Org-Id. */
 export function GaleriaLocalImage({ url, alt = '', imgClassName = 'w-full h-full object-cover' }) {
   if (!url) return null;
-  return <img src={url} alt={alt} className={imgClassName} />;
+  return <ProtectedPatientMedia src={url} alt={alt} imgClassName={imgClassName} />;
 }
 
 /** Modal de preview: mesma autenticação que a miniatura. */
@@ -39,10 +40,11 @@ export function GaleriaArquivoLightbox({ url, alt = 'Preview da foto' }) {
     return <Loader2 className="w-10 h-10 text-white animate-spin" aria-label="Carregando" />;
   }
   return (
-    <img
+    <ProtectedPatientMedia
       src={src}
       alt={alt}
-      className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30 object-contain"
+      className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30"
+      imgClassName="max-w-[90vw] max-h-[85vh] object-contain"
     />
   );
 }

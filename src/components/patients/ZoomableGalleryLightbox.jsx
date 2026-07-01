@@ -141,7 +141,13 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
           </div>
         )}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 z-20"
+          onContextMenu={(e) => e.preventDefault()}
+          title={alt}
+          aria-hidden="true"
+        />
+        <div
+          className="absolute inset-0 z-0"
           style={{
             transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
             transformOrigin: '0 0',
@@ -154,6 +160,7 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
             draggable={false}
             className="absolute pointer-events-none select-none"
             style={{
+              WebkitUserDrag: 'none',
               left: layout.dx,
               top: layout.dy,
               width: layout.drawW,
@@ -161,6 +168,7 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
             }}
             onLoad={handleImgLoad}
             onError={handleImgError}
+            onContextMenu={(e) => e.preventDefault()}
           />
         </div>
       </div>
