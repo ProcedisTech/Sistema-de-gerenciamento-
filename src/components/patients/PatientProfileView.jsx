@@ -1501,6 +1501,17 @@ export function PatientProfileView({
     };
   }, [selectedPatient?.id, patientListBump]);
 
+  // Refresh silencioso da galeria a cada 45 minutos (2700000ms)
+  // Evita que URLs pré-assinadas com TTL de 1 hora expirem durante uso prolongado
+  useEffect(() => {
+    if (!selectedPatient?.id) return;
+    const intervalId = setInterval(() => {
+      refreshGaleriaFromApi();
+    }, 45 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [selectedPatient?.id, refreshGaleriaFromApi]);
+
+
   useEffect(() => {
     const pacienteId = selectedPatient?.id;
     setAlertasModalOpen(false);

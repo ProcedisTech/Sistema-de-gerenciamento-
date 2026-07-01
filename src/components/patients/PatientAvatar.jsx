@@ -1,6 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { usePatientProfilePhotoSrc } from '../../hooks/usePatientProfilePhotoSrc.js';
+import { ProtectedPatientMedia } from '../ui/ProtectedPatientMedia.jsx';
 
 export function PatientAvatar({
   patient,
@@ -20,7 +21,7 @@ export function PatientAvatar({
           aria-label="Carregando foto"
         />
       ) : src ? (
-        <img src={src} alt="" className="w-full h-full object-cover" />
+        <ProtectedPatientMedia src={src} alt="" imgClassName="w-full h-full object-cover" />
       ) : (
         <span
           className={`flex h-full w-full items-center justify-center bg-[#00a88e] text-white ${initialsClassName}`}
