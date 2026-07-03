@@ -68,7 +68,7 @@ function PontoMarcadorPopoverForm({
         aria-labelledby="ponto-edit-title"
         onSubmit={handleSubmit}
         style={popoverStyle}
-        className="absolute z-[25] w-[min(280px,calc(100%-1rem))] -translate-x-1/2 -translate-y-[calc(100%+12px)] rounded-xl border border-app-border bg-white p-4 shadow-app-card"
+        className="absolute z-[25] w-[280px] -translate-x-1/2 -translate-y-[calc(100%+12px)] rounded-xl border border-app-border bg-white p-4 shadow-app-card"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >

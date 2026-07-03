@@ -553,6 +553,7 @@ export function MapeamentoFacialPanel({
                 onRequestUpload={handleRequestUpload}
 
                 onRequestFullscreen={() => setFullscreenOpen(true)}
+                previewMode={true}
 
                 onAddPonto={state.adicionarPonto}
 

@@ -7,6 +7,7 @@ import { QuantidadeUnidadeInputGroup } from './UnidadeMedidaSelect.jsx';
 export function PontoQuantidadeModal({
   open,
   procedimentoArmado,
+  modo = 'ponto',
   onConfirm,
   onCancel,
   unidadeMedida,
@@ -15,6 +16,7 @@ export function PontoQuantidadeModal({
   passo,
 }) {
   const inputRef = useRef(null);
+  const tamanhoRef = useRef(null);
   const unit = normalizeUnidadeMedida(unidadeMedida);
   const step = getPassoFallback(unit, passo);
   const presetList = Array.isArray(presets) ? presets : getPresetsForUnidade(unit);
@@ -34,7 +36,14 @@ export function PontoQuantidadeModal({
 
   const submitQty = (qty) => {
     if (!Number.isFinite(qty) || qty <= 0) return;
-    onConfirm?.(qty);
+    let tamanho = null;
+    if (modo === 'traco') {
+      const rawTam = tamanhoRef.current?.value;
+      if (!rawTam) return; // Tamanho é obrigatório no modo traço
+      tamanho = Number(String(rawTam).replace(',', '.'));
+      if (!Number.isFinite(tamanho) || tamanho <= 0) return;
+    }
+    onConfirm?.(qty, tamanho);
   };
 
   const handleSubmit = (e) => {
@@ -55,7 +64,7 @@ export function PontoQuantidadeModal({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h4 id="qty-ponto-title" className="text-[15px] font-bold text-app-ink">
-          Quantidade no ponto
+          {modo === 'traco' ? 'Quantidade no traço' : 'Quantidade no ponto'}
         </h4>
         {procedimentoArmado?.nome ? (
           <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-app-nav-active px-3 py-1.5">
@@ -95,6 +104,22 @@ export function PontoQuantidadeModal({
             Unidade aplicada a todos os pontos deste procedimento.
           </p>
         ) : null}
+
+        {modo === 'traco' && (
+          <div className="mt-4">
+            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
+              Tamanho (obrigatório)
+            </label>
+            <QuantidadeUnidadeInputGroup
+              inputRef={tamanhoRef}
+              inputKey="tam-traco"
+              defaultValue={1}
+              step={0.1}
+              min={0.1}
+              unidadeMedida="cm"
+            />
+          </div>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"

@@ -10,10 +10,12 @@ function nextLocalId() {
 
 export function mapLocalPontoToApi(p) {
   const row = {
-    posX: Number(p.posX),
-    posY: Number(p.posY),
+    posX: p.posX != null ? Number(p.posX) : undefined,
+    posY: p.posY != null ? Number(p.posY) : undefined,
     quantidade: Number(p.quantidade),
     tamanho: normalizeTamanho(p.tamanho),
+    tipoGeometria: p.tipoGeometria || 'ponto',
+    vertices: Array.isArray(p.vertices) ? p.vertices.map(v => ({ posX: Number(v.posX ?? v.x), posY: Number(v.posY ?? v.y) })) : []
   };
   if (p.regiaoFacial != null && String(p.regiaoFacial).trim()) {
     row.regiaoFacial = String(p.regiaoFacial).trim();
@@ -41,9 +43,10 @@ export function hydrateMapaFromGet(response) {
   const pontosPorVista = {};
   const fotoGaleriaIdPorVista = { ...(raw.fotoGaleriaIdPorAngulo || {}) };
 
-  const lista = Array.isArray(raw.pontos) ? raw.pontos : [];
+  const lista = Array.isArray(raw.marcacoes) ? raw.marcacoes : [];
+
   lista.forEach((p, idx) => {
-    const vista = String(p?.anguloFotoCodigo || p?.vista || '').trim();
+    const vista = String(p?.anguloFotoCodigo || '').trim();
     if (!vista) return;
     if (!pontosPorVista[vista]) pontosPorVista[vista] = [];
     pontosPorVista[vista].push(mapExecucaoApiPontoToLocal(p, idx + 1));

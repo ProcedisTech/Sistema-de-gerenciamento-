@@ -744,14 +744,6 @@ export const planejamentosApi = {
     planejamentosApi.atualizarItem(planejamentoId, itemId, {
       statusProcedimentoId: STATUS_PROCEDIMENTO_FINALIZADO_ID,
     }),
-  salvarPontosVista: (itemId, vistaCodigo, pontos) =>
-    request(
-      `/api/v1/planejamentos/item/${encodeURIComponent(String(itemId))}/pontos?vista=${encodeURIComponent(String(vistaCodigo))}`,
-      {
-        method: 'PUT',
-        body: JSON.stringify({ pontos: Array.isArray(pontos) ? pontos : [] }),
-      },
-    ),
 };
 
 /**
@@ -1045,20 +1037,7 @@ export const procedimentosApi = {
     }),
   finalizar: (id) => request(`/api/v1/procedimentos/${id}/finalizar`, { method: 'PATCH' }),
   deletar: (id) => request(`/api/v1/procedimentos/${id}`, { method: 'DELETE' }),
-  getPontos: (procedimentoFeitoId, { vista } = {}) => {
-    const pid = encodeURIComponent(String(procedimentoFeitoId));
-    const v = vista != null && String(vista).trim() ? String(vista).trim() : '';
-    const qs = v ? `?vista=${encodeURIComponent(v)}` : '';
-    return request(`/api/v1/procedimentos/${pid}/pontos${qs}`);
-  },
-  salvarPontos: (procedimentoFeitoId, vistaCodigo, body) => {
-    const pid = encodeURIComponent(String(procedimentoFeitoId));
-    const vista = encodeURIComponent(String(vistaCodigo || '').trim());
-    return request(`/api/v1/procedimentos/${pid}/pontos?vista=${vista}`, {
-      method: 'PUT',
-      body: JSON.stringify(body ?? {}),
-    });
-  },
+
   atualizarObservacao: (id, observacao) =>
     request(`/api/v1/procedimentos/${id}/observacao`, {
       method: 'PATCH',
@@ -1080,6 +1059,21 @@ export const atualizarRelatoAcompanhamento = (relatoAcompanhamentoId, dados) =>
     method: 'PUT',
     body: JSON.stringify(dados),
   });
+
+// ── Mapas de Aplicação ─────────────────────────────────────
+
+export const mapasApi = {
+  criar: (data) =>
+    request('/api/v1/mapas', { method: 'POST', body: JSON.stringify(data) }),
+  buscarPorId: (id) =>
+    request(`/api/v1/mapas/${encodeURIComponent(id)}`),
+  buscarPorProcedimento: (procedimentoFeitoId) =>
+    request(`/api/v1/mapas?procedimentoFeitoId=${encodeURIComponent(procedimentoFeitoId)}`),
+  buscarPorPlanejamento: (planejamentoItemId) =>
+    request(`/api/v1/mapas?planejamentoItemId=${encodeURIComponent(planejamentoItemId)}`),
+  buscarHistorico: (pacienteId, catalogoId) =>
+    request(`/api/v1/mapas/historico?pacienteId=${encodeURIComponent(pacienteId)}&catalogoId=${encodeURIComponent(catalogoId)}`),
+};
 
 // ── Estoque / Insumos ───────────────────────────────────────
 

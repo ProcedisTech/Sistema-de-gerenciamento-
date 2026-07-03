@@ -15,11 +15,13 @@ export function mapApiPontoToLocal(apiPonto, ordem) {
   const p = apiPonto && typeof apiPonto === 'object' ? apiPonto : {};
   const row = {
     localId: nextLocalId(),
-    posX: Number(p.posX),
-    posY: Number(p.posY),
+    posX: Number(p.posX), // fallback legado
+    posY: Number(p.posY), // fallback legado
     quantidade: Number(p.quantidade),
     tamanho: normalizeTamanho(p.tamanho),
     ordem: Number(ordem) || 1,
+    tipoGeometria: p.tipoGeometria || 'ponto',
+    vertices: Array.isArray(p.vertices) ? p.vertices : [],
   };
   if (p.regiaoFacial != null && String(p.regiaoFacial).trim()) {
     row.regiaoFacial = String(p.regiaoFacial).trim();
@@ -81,7 +83,7 @@ export function useMapeamentoFacialState() {
   );
 
   const adicionarPonto = useCallback(
-    (vistaCodigo, { posX, posY, quantidade, regiaoFacial, tamanho }) => {
+    (vistaCodigo, { posX, posY, quantidade, regiaoFacial, tamanho, tipoGeometria = 'ponto', vertices = [] }) => {
       if (!procedimentoArmado?.id) return false;
       const catId = String(procedimentoArmado.id).trim();
       const vista = String(vistaCodigo || vistaAtual || '').trim();
@@ -102,10 +104,12 @@ export function useMapeamentoFacialState() {
         ordemGlobal += 1;
         lista.push({
           localId: nextLocalId(),
-          posX: Number(posX),
-          posY: Number(posY),
+          posX: posX != null ? Number(posX) : undefined,
+          posY: posY != null ? Number(posY) : undefined,
           quantidade: qty,
           tamanho: normalizeTamanho(tamanho ?? TAMANHO_DEFAULT),
+          tipoGeometria,
+          vertices: Array.isArray(vertices) ? vertices : [],
           regiaoFacial: regiaoFacial != null ? String(regiaoFacial) : undefined,
           ordem: ordemGlobal,
         });

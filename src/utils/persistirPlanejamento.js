@@ -1,5 +1,5 @@
 import { normalizeTamanho } from '../constants/mapeamentoMarcador.js';
-import { pacientesGaleriaApi, planejamentosApi } from '../services/api.js';
+import { pacientesGaleriaApi, planejamentosApi, mapasApi } from '../services/api.js';
 import {
   formatGaleriaLegendaForUpload,
   GALERIA_CATEGORIA,
@@ -8,10 +8,12 @@ import { toLocalISODate } from './dateLimits.js';
 
 function toApiPonto(p, fotoGaleriaId) {
   const row = {
-    posX: Number(p.posX),
-    posY: Number(p.posY),
+    posX: p.posX != null ? Number(p.posX) : undefined,
+    posY: p.posY != null ? Number(p.posY) : undefined,
     quantidade: Number(p.quantidade),
     tamanho: normalizeTamanho(p.tamanho),
+    tipoGeometria: p.tipoGeometria || 'ponto',
+    vertices: Array.isArray(p.vertices) ? p.vertices.map(v => ({ posX: Number(v.posX || v.x), posY: Number(v.posY || v.y) })) : []
   };
   if (p.regiaoFacial != null && String(p.regiaoFacial).trim()) {
     row.regiaoFacial = String(p.regiaoFacial).trim();
@@ -165,14 +167,31 @@ export async function persistirPlanejamento({
     const itemId = itemIdByCatalogo[proc.catalogoProcedimentoSaudeId];
     if (!itemId) continue;
     const porVista = proc.pontosPorVista || {};
+    
+    const marcacoes = [];
     for (const [vistaCodigo, pontos] of Object.entries(porVista)) {
       if (!Array.isArray(pontos) || pontos.length === 0) continue;
-      const fotoId = fotoGaleriaIdPorVista[vistaCodigo] || null;
-      const payload = pontos.map((p) => toApiPonto(p, fotoId));
+      const payload = pontos.map((p) => toApiPonto(p, fotoGaleriaIdPorVista[vistaCodigo]));
+      for (const pt of payload) {
+        marcacoes.push({
+          anguloFotoCodigo: vistaCodigo,
+          tipoGeometria: pt.tipoGeometria || 'ponto',
+          quantidade: pt.quantidade,
+          tamanho: pt.tamanho,
+          vertices: pt.vertices?.length ? pt.vertices : [{ posX: pt.posX, posY: pt.posY }]
+        });
+      }
+    }
+
+    if (marcacoes.length > 0) {
       try {
-        await planejamentosApi.salvarPontosVista(itemId, vistaCodigo, payload);
+        await mapasApi.criar({
+          origemTipo: 'planejamento',
+          origemId: itemId,
+          marcacoes
+        });
       } catch (e) {
-        errosParciais.push(`Pontos ${proc.nomeProcedimento} / ${vistaCodigo}: ${e?.message || 'erro'}`);
+        errosParciais.push(`Pontos ${proc.nomeProcedimento}: ${e?.message || 'erro'}`);
         return {
           ok: false,
           planejamentoId,
