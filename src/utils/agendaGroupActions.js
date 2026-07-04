@@ -72,6 +72,7 @@ export function formatGroupActionResultMessage({ succeeded, failed }, { verb = '
 /** Resolve lista de appointments a partir de target single ou group. */
 export function resolveActionAppointments(target) {
   if (target?.kind === 'group' && Array.isArray(target.appointments)) return target.appointments;
+  if (target?.kind === 'single') return target.appointment ? [target.appointment] : [];
   if (Array.isArray(target?.appointments)) return target.appointments;
   return target ? [target] : [];
 }

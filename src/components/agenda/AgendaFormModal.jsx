@@ -468,7 +468,7 @@ export function AgendaFormModal({ agenda }) {
                   onPrevMonth={agenda.goDispPrevMonth}
                   onNextMonth={agenda.goDispNextMonth}
                   onRetry={agenda.retryDispMonth}
-                  diaSelecionado={isReagendar ? undefined : agenda.form.data}
+                  diaSelecionado={agenda.form.data}
                   onSelecionarDia={handleSelecionarDia}
                   showDensityLegend={Boolean(roleUserIdFiltro)}
                 />
@@ -602,7 +602,7 @@ export function AgendaFormModal({ agenda }) {
       {!isDesktop && dispSheetOpen && (
         <AgendaFormDataHoraSheet
           open
-          diaSelecionado={isReagendar ? undefined : agenda.form.data}
+          diaSelecionado={agenda.form.data}
           dayModel={dayModelForSlots}
           roleUserIdFiltro={roleUserIdFiltro}
           horaInicio={agenda.form.horaInicio}
