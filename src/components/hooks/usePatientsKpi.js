@@ -69,7 +69,7 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       safe(() => pacientesApi.list({ size: 1, statusPlano: 'plano_ativo' })),
       safe(() => pacientesApi.list({ size: 1, ehNovo: true })),
       safe(() => pacientesApi.list({ size: 1, ehAniversarianteMes: true })),
-      safe(() => agendasApi.byRange(hoje, hoje)),
+      safe(() => agendasApi.byRange(hoje, hoje, { excluirCancelado: true })),
       safe(() => pacientesApi.list({ size: 100, order: 'nome_asc' })),
       safe(() => pacientesApi.list({ size: 5, order: 'birthday_asc' })),
     ]);
@@ -99,6 +99,9 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       .map(mapAgendaDtoToDashboardRow)
       .filter(Boolean)
       .filter(isAgendaVisibleOnDashboard)
+      // Painel "Agendamentos de hoje" (Pacientes) não deve mostrar cancelados —
+      // diferente da grade da Agenda, que os exibe riscados como referência.
+      .filter((row) => row.status !== 'cancelado')
       .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
     setAgendamentosHoje(agendaDtos);
 

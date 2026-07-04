@@ -888,6 +888,9 @@ export const agendasApi = {
     if (opts?.profissionalRoleUserId) {
       url += `&profissionalRoleUserId=${encodeURIComponent(String(opts.profissionalRoleUserId).trim())}`;
     }
+    if (opts?.excluirCancelado) {
+      url += `&excluirCancelado=true`;
+    }
     return request(url);
   },
   byProfissional: (roleUserId, date) =>
