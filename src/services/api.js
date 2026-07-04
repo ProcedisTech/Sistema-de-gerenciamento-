@@ -1063,14 +1063,19 @@ export const atualizarRelatoAcompanhamento = (relatoAcompanhamentoId, dados) =>
 // ── Mapas de Aplicação ─────────────────────────────────────
 
 export const mapasApi = {
-  criar: (data) =>
+  salvar: (data) =>
     request('/api/v1/mapas', { method: 'POST', body: JSON.stringify(data) }),
-  buscarPorId: (id) =>
-    request(`/api/v1/mapas/${encodeURIComponent(id)}`),
+  buscar: (origemTipo, origemId) => {
+    const qt = encodeURIComponent(origemTipo);
+    const qi = encodeURIComponent(origemId);
+    return request(`/api/v1/mapas?origemTipo=${qt}&origemId=${qi}`);
+  },
   buscarPorProcedimento: (procedimentoFeitoId) =>
     request(`/api/v1/mapas?procedimentoFeitoId=${encodeURIComponent(procedimentoFeitoId)}`),
-  buscarPorPlanejamento: (planejamentoItemId) =>
+  buscarPorPlanejamentoItem: (planejamentoItemId) =>
     request(`/api/v1/mapas?planejamentoItemId=${encodeURIComponent(planejamentoItemId)}`),
+  buscarPorId: (id) =>
+    request(`/api/v1/mapas/${encodeURIComponent(id)}`),
   buscarHistorico: (pacienteId, catalogoId) =>
     request(`/api/v1/mapas/historico?pacienteId=${encodeURIComponent(pacienteId)}&catalogoId=${encodeURIComponent(catalogoId)}`),
 };

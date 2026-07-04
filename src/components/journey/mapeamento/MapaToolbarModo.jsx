@@ -3,8 +3,8 @@ import { MousePointer2, MoveDiagonal, Eraser, Hand } from 'lucide-react';
 
 export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
   return (
-    <div className="flex items-center gap-2 bg-[#f8fafc] p-1.5 rounded-lg border border-[#e2e8f0] shadow-sm pointer-events-auto">
-      <div className="flex items-center gap-1">
+    <div className="flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 bg-[#f8fafc] p-1.5 rounded-lg border border-[#e2e8f0] shadow-sm pointer-events-auto">
+      <div className="flex flex-wrap justify-center items-center gap-1">
         <button
           type="button"
           onClick={() => setModo('ponto')}
@@ -15,7 +15,7 @@ export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
           }`}
         >
           <MousePointer2 className="h-3.5 w-3.5" />
-          Ponto
+          <span className="hidden sm:inline">Ponto</span>
         </button>
         <button
           type="button"
@@ -27,7 +27,7 @@ export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
           }`}
         >
           <Hand className="h-3.5 w-3.5" />
-          Mover
+          <span className="hidden sm:inline">Mover</span>
         </button>
         <button
           type="button"
@@ -39,7 +39,7 @@ export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
           }`}
         >
           <MoveDiagonal className="h-3.5 w-3.5" />
-          Traço
+          <span className="hidden sm:inline">Traço</span>
         </button>
         <button
           type="button"
@@ -52,7 +52,7 @@ export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
           }`}
         >
           <Eraser className="h-3.5 w-3.5" />
-          Borracha
+          <span className="hidden sm:inline">Borracha</span>
         </button>
       </div>
 

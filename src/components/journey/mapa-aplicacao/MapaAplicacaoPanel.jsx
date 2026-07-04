@@ -484,6 +484,7 @@ export function MapaAplicacaoPanel({
         vistaAtual={vistaAtual}
         foto={fotoAtual}
         procedimentoArmado={procedimentoArmado}
+        hideProcedimentoPicker={true}
         onArmar={() => {}}
         procedimentosUsados={[]}
         pontosVista={gruposPontos}

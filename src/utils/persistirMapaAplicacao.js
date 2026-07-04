@@ -126,22 +126,19 @@ export async function persistirMapaAplicacao({
         tipoGeometria: pt.tipoGeometria || 'ponto',
         quantidade: pt.quantidade,
         tamanho: pt.tamanho,
-        vertices: pt.vertices?.length ? pt.vertices : [{ posX: pt.posX, posY: pt.posY }]
+        vertices: pt.vertices?.length ? pt.vertices : [{ ordem: 1, posX: pt.posX, posY: pt.posY }]
       });
     }
   }
 
   if (marcacoes.length > 0) {
     try {
-      await mapasApi.criar({
+      await mapasApi.salvar({
         origemTipo: 'procedimento',
         origemId: procedimentoFeitoId,
+        fotoGaleriaIdPorVista,
         marcacoes
       });
-      // Fallback retrocompatibilidade (Opcional - só para garantir que os pontos velhos fiquem salvos tb, 
-      // mas se o backend estiver lendo do novo, não precisa). A pedido do usuário, "Refatoramos o Frontend... integração com a nova API". 
-      // Mas a leitura legada é mantida. Não é necessário manter a ESCRITA legada se a leitura lê do novo. 
-      // Wait, se a leitura lê do novo (mapaResp?.marcacoes), então a escrita pode ser SÓ no novo!
     } catch (e) {
       erros.push(`Erro ao salvar mapa: ${mapApiErrorMessage(e)}`);
     }

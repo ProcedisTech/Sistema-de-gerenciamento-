@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Undo2, Eye, EyeOff, FileText, X } from 'lucide-react';
+import { Undo2, Eye, EyeOff, FileText, X, Menu } from 'lucide-react';
 import { FotoVistaCanvasCore } from './FotoVistaCanvas.jsx';
 import { MapeamentoFullscreenProcedimentoFloatingPanel } from './MapeamentoFullscreenProcedimentoPanel.jsx';
 import { MapeamentoFullscreenToolbar } from './MapeamentoFullscreenToolbar.jsx';
@@ -35,6 +35,7 @@ export function MapeamentoFullscreenOverlay({
   const [tamanhoGlobalPonto, setTamanhoGlobalPonto] = useState(1.0);
   const [mostrarValores, setMostrarValores] = useState(false);
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [configMarcacao, setConfigMarcacao] = useState({
     dosePadrao: 1,
     profundidade: '',
@@ -57,10 +58,21 @@ export function MapeamentoFullscreenOverlay({
         setConfigMarcacao={setConfigMarcacao}
         unidadeMedida={unidadeMedida}
         onClearVista={onClearVista}
+        hideProcedimentoPicker={hideProcedimentoPicker}
+        drawerOpen={sidebarOpen}
+        onCloseDrawer={() => setSidebarOpen(false)}
       />
 
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col p-4">
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[50] flex items-center gap-2">
+        <div className="absolute top-4 left-0 right-0 z-[50] flex flex-wrap justify-center gap-2 px-2 pointer-events-none">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }}
+            className="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] shadow-sm hover:bg-slate-50 hover:text-app-accent-deep pointer-events-auto"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+          
           <button
             type="button"
             title={mostrarValores ? "Ocultar valores na foto" : "Mostrar valores na foto"}
