@@ -72,7 +72,7 @@ export function useMapaAplicacaoState() {
   );
 
   const adicionarPonto = useCallback(
-    (vistaCodigo, { posX, posY, quantidade, regiaoFacial, tamanho }) => {
+    (vistaCodigo, { posX, posY, quantidade, regiaoFacial, tamanho, tipoGeometria = 'ponto', vertices = [] }) => {
       const vista = String(vistaCodigo || vistaAtual || '').trim();
       if (!vista) return false;
       const qty = Number(quantidade);
@@ -83,10 +83,12 @@ export function useMapaAplicacaoState() {
         const ordem = lista.length + 1;
         lista.push({
           localId: nextLocalId(),
-          posX: Number(posX),
-          posY: Number(posY),
+          posX: posX != null ? Number(posX) : undefined,
+          posY: posY != null ? Number(posY) : undefined,
           quantidade: qty,
           tamanho: normalizeTamanho(tamanho ?? TAMANHO_DEFAULT),
+          tipoGeometria,
+          vertices: Array.isArray(vertices) ? vertices : [],
           regiaoFacial: regiaoFacial != null ? String(regiaoFacial) : undefined,
           ordem,
         });
@@ -150,7 +152,50 @@ export function useMapaAplicacaoState() {
     [vistaAtual, markDirty],
   );
 
+  const desfazerUltimoPonto = useCallback(
+    (vistaCodigo) => {
+      const vista = String(vistaCodigo || vistaAtual || '').trim();
+      if (!vista) return false;
+
+      setPontosPorVista((prev) => {
+        const lista = prev[vista];
+        if (!Array.isArray(lista) || lista.length === 0) return prev;
+        
+        // Remove the point with the highest ordem
+        let maxOrdemIdx = -1;
+        let maxOrdem = -1;
+        for (let i = 0; i < lista.length; i++) {
+          if (lista[i].ordem > maxOrdem) {
+            maxOrdem = lista[i].ordem;
+            maxOrdemIdx = i;
+          }
+        }
+
+        if (maxOrdemIdx === -1) return prev;
+        
+        const nextLista = [...lista];
+        nextLista.splice(maxOrdemIdx, 1);
+        return { ...prev, [vista]: nextLista };
+      });
+      markDirty(vista);
+      return true;
+    },
+    [vistaAtual, markDirty],
+  );
+
+
+  const limparPontosVista = useCallback(
+    (vistaCodigo) => {
+      const vista = String(vistaCodigo || vistaAtual || '').trim();
+      if (!vista) return;
+      setPontosPorVista((prev) => ({ ...prev, [vista]: [] }));
+      markDirty(vista);
+    },
+    [vistaAtual, markDirty],
+  );
+
   const importarPontosDoPlano = useCallback(
+
     (pontosPlano, vistaCodigo) => {
       const vista = String(vistaCodigo || vistaAtual || '').trim();
       if (!vista || !Array.isArray(pontosPlano) || pontosPlano.length === 0) return false;
@@ -258,6 +303,8 @@ export function useMapaAplicacaoState() {
     adicionarPonto,
     removerPonto,
     editarPonto,
+    desfazerUltimoPonto,
+    limparPontosVista,
     importarPontosDoPlano,
     hydrateFromApi,
     getPontosVista,

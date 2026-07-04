@@ -2461,7 +2461,8 @@ function AppRefactoredInner() {
           
           const snap = proc.mapaSnapshot || (i === journeyState.activeProcedureIndex ? mapaAplicacaoState.getSnapshotForPersist() : null);
           if (snap) {
-            await persistirMapaAplicacaoAtual(pid, paciente, snap, null, proc.nomeProcedimentoCatalogoId);
+            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+            await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
           }
           
           const photos = proc.fotosSnapshot || (i === journeyState.activeProcedureIndex ? cameraState.procedureCapturedPhotos : []);

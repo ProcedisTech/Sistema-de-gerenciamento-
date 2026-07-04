@@ -1,4 +1,4 @@
-import { pacientesGaleriaApi, procedimentosApi } from '../services/api.js';
+import { pacientesGaleriaApi, mapasApi } from '../services/api.js';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGaleria.js';
 import { toLocalISODate } from './dateLimits.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
@@ -68,7 +68,6 @@ export async function persistirMapaAplicacao({
   procedimentoFeitoId,
   catalogoProcedimentoSaudeId,
   snapshot,
-  dirtyVistasOnly = true,
 }) {
   const erros = [];
   if (!procedimentoFeitoId) {
@@ -83,20 +82,9 @@ export async function persistirMapaAplicacao({
   const pontosPorVista = raw.pontosPorVista || {};
   const fotoGaleriaIdPorVista = { ...(raw.fotoGaleriaIdPorVista || {}) };
 
-  let vistas = Array.isArray(raw.dirtyVistas) ? [...raw.dirtyVistas] : [];
-  if (!dirtyVistasOnly || vistas.length === 0) {
-    const set = new Set(vistas);
-    Object.keys(fotosPorVista).forEach((v) => set.add(v));
-    Object.keys(pontosPorVista).forEach((v) => set.add(v));
-    Object.keys(fotoGaleriaIdPorVista).forEach((v) => set.add(v));
-    vistas = Array.from(set);
-  }
+  const marcacoes = [];
 
-  if (!vistas.length) {
-    return { ok: true, erros: [] };
-  }
-
-  for (const vista of vistas) {
+  for (const vista of Object.keys(pontosPorVista)) {
     const vistaCodigo = String(vista || '').trim();
     if (!vistaCodigo) continue;
 
@@ -113,7 +101,10 @@ export async function persistirMapaAplicacao({
           procedimentoFeitoId,
           catalogoProcedimentoSaudeId,
         });
-        if (fid) fotoGaleriaId = String(fid);
+        if (fid) {
+          fotoGaleriaId = String(fid);
+          fotoGaleriaIdPorVista[vistaCodigo] = fotoGaleriaId;
+        }
       } catch (e) {
         erros.push(`Upload foto ${vistaCodigo}: ${mapApiErrorMessage(e)}`);
         continue;
@@ -123,15 +114,33 @@ export async function persistirMapaAplicacao({
     const pontosRaw = Array.isArray(pontosPorVista[vistaCodigo]) ? pontosPorVista[vistaCodigo] : [];
     const pontos = pontosRaw.map((p) => mapLocalPontoToApi(p));
 
-    if (!fotoGaleriaId && pontos.length === 0) continue;
+    // TODO: A fotoGaleriaId deveria ser enviada na marcacao, mas o backend vincula a foto do ângulo de outra forma
+    // ou na verdade a fotoGaleriaId não está sendo salva no novo banco tb_mapa. 
+    // Como a migration de fotosGaleriaId ainda não existe no tb_mapa, 
+    // a gente pode salvar a foto no antigo por retrocompatibilidade se necessário, ou só fazer upload.
+    // O backend cria o Mapa. Por enquanto o upload é feito e salvo no pacienteGaleria.
 
+    for (const pt of pontos) {
+      marcacoes.push({
+        anguloFotoCodigo: vistaCodigo,
+        tipoGeometria: pt.tipoGeometria || 'ponto',
+        quantidade: pt.quantidade,
+        tamanho: pt.tamanho,
+        vertices: pt.vertices?.length ? pt.vertices : [{ ordem: 1, posX: pt.posX, posY: pt.posY }]
+      });
+    }
+  }
+
+  if (marcacoes.length > 0) {
     try {
-      await procedimentosApi.salvarPontos(procedimentoFeitoId, vistaCodigo, {
-        fotoGaleriaId: fotoGaleriaId || null,
-        pontos,
+      await mapasApi.salvar({
+        origemTipo: 'procedimento',
+        origemId: procedimentoFeitoId,
+        fotoGaleriaIdPorVista,
+        marcacoes
       });
     } catch (e) {
-      erros.push(`${getVistaLabel(vistaCodigo) || vistaCodigo}: ${mapApiErrorMessage(e)}`);
+      erros.push(`Erro ao salvar mapa: ${mapApiErrorMessage(e)}`);
     }
   }
 

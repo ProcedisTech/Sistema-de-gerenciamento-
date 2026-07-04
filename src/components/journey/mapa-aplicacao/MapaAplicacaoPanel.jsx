@@ -5,7 +5,7 @@ import {
   catalogosApi,
   pacientesGaleriaApi,
   planejamentosApi,
-  procedimentosApi,
+  mapasApi,
 } from '../../../services/api.js';
 import {
   getPresetsForUnidade,
@@ -106,7 +106,7 @@ export function MapaAplicacaoPanel({
   planejamentoItemId,
   planejamentoId,
   procedimentosComPontos = [],
-  sidebarInsetPx = 0,
+
   pendingCapture,
   onCaptureConsumed,
   onPrepareCapture,
@@ -145,6 +145,18 @@ export function MapaAplicacaoPanel({
   const vistaAtual = mapaState.vistaAtual;
   const fotoAtual = mapaState.getFotoVista(vistaAtual);
   const gruposPontos = mapaState.getPontosVista(vistaAtual, catalogoId, nomeProcedimento);
+  // gruposSessao: para o PontosResumoPanel mostrar totais de todas as vistas da sessão
+  const gruposSessao = useMemo(() => {
+    const pontosPorVista = mapaState.pontosPorVista || {};
+    if (!catalogoId || Object.keys(pontosPorVista).length === 0) return [];
+    const todosPontos = Object.values(pontosPorVista).flat();
+    if (todosPontos.length === 0) return [];
+    return [{
+      catalogoProcedimentoSaudeId: String(catalogoId),
+      nomeProcedimento: String(nomeProcedimento || ''),
+      pontosPorVista,
+    }];
+  }, [mapaState.pontosPorVista, catalogoId, nomeProcedimento]);
 
   useEffect(() => {
     if (!catalogoId) {
@@ -188,11 +200,13 @@ export function MapaAplicacaoPanel({
     if (!procedimentoFeitoId || !pacienteId) return undefined;
     let cancelled = false;
     setHydrating(true);
-    procedimentosApi
-      .getPontos(procedimentoFeitoId)
-      .then(async (resp) => {
+    Promise.all([
+      mapasApi.buscarPorProcedimento(procedimentoFeitoId).catch(() => null),
+    ]).then(async ([mapaResp]) => {
         if (cancelled) return;
-        const data = mapaState.hydrateFromApi(resp);
+        const mergedResp = mapaResp || {};
+          
+        const data = mapaState.hydrateFromApi(mergedResp);
         if (!cancelled && data.unidadeMedida) {
           setUnidadeMedida(normalizeUnidadeMedida(data.unidadeMedida));
           setPasso(getPassoFallback(data.unidadeMedida, data.passo));
@@ -412,6 +426,9 @@ export function MapaAplicacaoPanel({
             onUnidadeMedidaChange={handleUnidadeMedidaChange}
             presets={presets}
             passo={passo}
+            pacienteId={pacienteId}
+            catalogoId={catalogoId}
+            isRetorno={procedimentoArmado?.id && false /* Aqui pode ser checado se é retorno, mas a prop isRetorno/pacienteId é suficiente */}
             onAddPonto={mapaState.adicionarPonto}
             onEditarPonto={(_catId, vista, localId, patch) =>
               mapaState.editarPonto(vista, localId, patch)
@@ -434,11 +451,13 @@ export function MapaAplicacaoPanel({
               });
             }}
             onRequestFullscreen={() => setFullscreenOpen(true)}
+            previewMode={true}
           />
         </div>
         <PontosResumoPanel
           vistaAtual={vistaAtual}
           gruposPontos={gruposPontos}
+          gruposSessao={gruposSessao}
           unidadeMedida={unidadeMedida}
         />
       </div>
@@ -462,14 +481,15 @@ export function MapaAplicacaoPanel({
 
       <MapeamentoFullscreenOverlay
         open={fullscreenOpen}
-        toolbarWidthPx={sidebarInsetPx}
         vistaAtual={vistaAtual}
         foto={fotoAtual}
         procedimentoArmado={procedimentoArmado}
+        hideProcedimentoPicker={true}
         onArmar={() => {}}
         procedimentosUsados={[]}
-        hideProcedimentoPicker
         pontosVista={gruposPontos}
+        gruposSessao={gruposSessao}
+        countPontosVista={mapaState.countPontosVista(vistaAtual)}
         unidadeMedida={unidadeMedida}
         onUnidadeMedidaChange={handleUnidadeMedidaChange}
         presets={presets}
@@ -479,6 +499,8 @@ export function MapaAplicacaoPanel({
           mapaState.editarPonto(vista, localId, patch)
         }
         onRemovePonto={(_catId, vista, localId) => mapaState.removerPonto(vista, localId)}
+        onDesfazerUltimo={() => mapaState.desfazerUltimoPonto(vistaAtual)}
+        onClearVista={() => mapaState.limparPontosVista(vistaAtual)}
         onClose={() => setFullscreenOpen(false)}
       />
     </div>

@@ -1,6 +1,7 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
-import { Camera, ImageIcon, Maximize2, Upload, X } from 'lucide-react';
+import { Camera, ImageIcon, Maximize2, Upload, X, Eye, EyeOff } from 'lucide-react';
 import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
 
 import {
@@ -8,6 +9,8 @@ import {
   getObjectContainMetrics,
   percentToContainerPositionFromMetrics,
 } from '../../../utils/mapeamentoCoords.js';
+
+import { simplifyCurveRDP, distance } from '../../../utils/geometry.js';
 
 import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 import {
@@ -18,8 +21,11 @@ import {
 } from '../../../constants/mapeamentoMarcador.js';
 
 import { PontoQuantidadeModal } from './PontoQuantidadeModal.jsx';
-
 import { PontoMarcadorPopover } from './PontoMarcadorPopover.jsx';
+import { MapaToolbarModo } from './MapaToolbarModo.jsx';
+import { TracadoEmProgresso } from './TracadoEmProgresso.jsx';
+import { MapaComparacaoModal } from './MapaComparacaoModal.jsx';
+import { MapaRetornoOverlay } from './MapaRetornoOverlay.jsx';
 
 
 
@@ -102,38 +108,80 @@ export function FotoVistaCanvasCore({
   emptyTitle = 'Adicione uma foto para esta vista',
 
   emptySubtitle = 'Escolha da galeria, capture ou faça upload do dispositivo.',
+  
+  previewMode = false,
+
+  tamanhoGlobalPonto = 1.0,
 
   unidadeMedida,
 
   onUnidadeMedidaChange,
 
-  presets,
+  pacienteId,
+
+  catalogoId,
+
+  isRetorno,
 
   passo,
 
+  externalModo,
+
+  onModoChange,
+  
+  configMarcacao,
+  
+  mostrarValores: externalMostrarValores,
 }) {
-
   const containerRef = useRef(null);
-
   const imgRef = useRef(null);
-
   const fileInputRef = useRef(null);
 
   const [pendingClick, setPendingClick] = useState(null);
-
   const [pontoSelecionado, setPontoSelecionado] = useState(null);
-
   const [imgLayout, setImgLayout] = useState(EMPTY_LAYOUT);
+  
+  // Novos estados do modo traço e valores
+  const [internalModo, setInternalModo] = useState('ponto');
+  const [internalMostrarValores, setInternalMostrarValores] = useState(true);
+  
+  const modo = externalModo !== undefined ? externalModo : internalModo;
+  const setModo = onModoChange !== undefined ? onModoChange : setInternalModo;
+  const mostrarValores = externalMostrarValores !== undefined ? externalMostrarValores : internalMostrarValores;
+  const [pendingTraco, setPendingTraco] = useState(null);
 
-
+  // Refs e states para desenho livre (freehand)
+  const isDrawing = useRef(false);
+  const liveVerticesRef = useRef([]); // Guarda os vértices sem depender do ciclo do React
+  const [liveVertices, setLiveVertices] = useState([]); // Apenas para re-render visual
+  
+  // Overlay Historico
+  const [comparacaoModalOpen, setComparacaoModalOpen] = useState(false);
+  const [mapaComparacaoSelecionado, setMapaComparacaoSelecionado] = useState(null);
 
   const displayUrl = foto?.displayUrl;
-
   const effectiveAspect = imgLayout.url === displayUrl ? imgLayout.aspect : null;
-
   const layoutMetrics = imgLayout.url === displayUrl ? imgLayout.metrics : null;
 
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && isDrawing.current) {
+        isDrawing.current = false;
+        liveVerticesRef.current = [];
+        setLiveVertices([]);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
 
+  useEffect(() => {
+    if (modo !== 'traco') {
+      isDrawing.current = false;
+      liveVerticesRef.current = [];
+      setTimeout(() => setLiveVertices([]), 0);
+    }
+  }, [modo]);
 
   useLayoutEffect(() => {
     if (!displayUrl) return undefined;
@@ -190,7 +238,12 @@ export function FotoVistaCanvasCore({
 
 
 
-  const handleImageClick = (e) => {
+  const handlePointerDown = (e) => {
+    if (previewMode && onRequestFullscreen) {
+      onRequestFullscreen();
+      return;
+    }
+
     if (pontoSelecionado) {
       setPontoSelecionado(null);
       return;
@@ -198,60 +251,139 @@ export function FotoVistaCanvasCore({
 
     if (!procedimentoArmado?.id || !foto?.displayUrl) return;
 
-    const coords = clickToPercent(
-      e.clientX,
-      e.clientY,
-      containerRef.current,
-      imgRef.current,
-    );
+    if (modo === 'ponto') {
+      const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
+      if (!coords) return;
+      
+      if (configMarcacao?.confirmarDose === false) {
+        onAddPonto?.(vistaAtual, {
+          ...coords,
+          quantidade: configMarcacao.dosePadrao || 1,
+          tamanho: tamanhoGlobalPonto,
+          profundidade: configMarcacao.profundidade ? Number(configMarcacao.profundidade) : undefined,
+          tipoGeometria: 'ponto',
+        });
+      } else {
+        setPendingClick(coords);
+      }
+      return;
+    }
 
+    if (modo === 'traco') {
+      const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
+      if (!coords) return;
+      
+      e.currentTarget.setPointerCapture(e.pointerId);
+      isDrawing.current = true;
+      const initialPoint = { x: coords.posX, y: coords.posY };
+      liveVerticesRef.current = [initialPoint];
+      setLiveVertices([initialPoint]);
+    }
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isDrawing.current || modo !== 'traco') return;
+
+    const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
     if (!coords) return;
 
-    setPendingClick(coords);
+    const prev = liveVerticesRef.current;
+    if (prev.length === 0) return;
+    
+    const last = prev[prev.length - 1];
+    const p = { x: coords.posX, y: coords.posY };
+    
+    // Throttle: adiciona vértice apenas se moveu mais que 1% (~8px dependendo da tela)
+    if (distance(last, p) > 1.0) {
+      const newArray = [...prev, p];
+      liveVerticesRef.current = newArray;
+      setLiveVertices(newArray);
+    }
+  };
+
+  const handlePointerUpOrCancel = (e) => {
+    if (!isDrawing.current || modo !== 'traco') return;
+    
+    isDrawing.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+
+    const finalVertices = liveVerticesRef.current;
+    // Se tiver arrastado o suficiente
+    if (finalVertices.length > 1) {
+      // RDP para simplificar. 0.5 de tolerância (em %).
+      const simplified = simplifyCurveRDP(finalVertices, 0.5);
+      if (simplified.length > 1) {
+        if (configMarcacao?.confirmarDose === false) {
+          onAddPonto?.(vistaAtual, {
+            vertices: simplified,
+            quantidade: configMarcacao.dosePadrao || 1,
+            tamanho: tamanhoGlobalPonto,
+            tipoGeometria: 'traco',
+          });
+        } else {
+          setPendingTraco(simplified);
+        }
+      }
+    }
+    
+    liveVerticesRef.current = [];
+    setLiveVertices([]);
   };
 
 
 
-  const handleConfirmQty = (quantidade) => {
-
-    if (!pendingClick || !procedimentoArmado?.id) return;
-
-    onAddPonto?.(vistaAtual, {
-
-      ...pendingClick,
-
-      quantidade,
-
-    });
-
-    setPendingClick(null);
-
+  const handleConfirmQty = (quantidade, tamanho) => {
+    if (!procedimentoArmado?.id) return;
+    
+    if (pendingClick) {
+      onAddPonto?.(vistaAtual, {
+        ...pendingClick,
+        quantidade,
+        tamanho: tamanho ?? tamanhoGlobalPonto,
+        tipoGeometria: 'ponto',
+      });
+      setPendingClick(null);
+    } else if (pendingTraco) {
+      onAddPonto?.(vistaAtual, {
+        vertices: pendingTraco,
+        quantidade,
+        tamanho,
+        tipoGeometria: 'traco',
+      });
+      setPendingTraco(null);
+    }
   };
 
 
 
   const handleMarkerClick = (ev, p) => {
-
     ev.stopPropagation();
+
+    if (modo === 'borracha') {
+      onRemovePonto?.(p.catalogoId, vistaAtual, p.localId);
+      return;
+    }
 
     setPendingClick(null);
 
+    let posX = p.posX;
+    let posY = p.posY;
+    
+    // Se for traço, a âncora do popover será no último vértice (onde fica o marcador visual)
+    if (p.tipoGeometria === 'traco' && p.vertices?.length > 0) {
+      const lastV = p.vertices[p.vertices.length - 1];
+      posX = lastV.posX ?? lastV.x;
+      posY = lastV.posY ?? lastV.y;
+    }
+
     setPontoSelecionado({
-
       localId: p.localId,
-
       catalogoId: p.catalogoId,
-
       nomeProcedimento: p.nomeProcedimento,
-
       ponto: p,
-
-      posX: p.posX,
-
-      posY: p.posY,
-
+      posX,
+      posY,
     });
-
   };
 
 
@@ -414,27 +546,29 @@ export function FotoVistaCanvasCore({
         <>
 
           <div
-
-            className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-[#0f172a]"
-
+            className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-[#0f172a] overflow-hidden"
             role="presentation"
-
           >
-
-            <div
-
-              ref={containerRef}
-
-              className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${canMark ? 'cursor-crosshair' : ''}`}
-
-              style={effectiveAspect ? { aspectRatio: effectiveAspect } : undefined}
-
-              onClick={handleImageClick}
-
-              role="presentation"
-
+            <TransformWrapper
+              panning={{ disabled: modo !== 'mover' }}
+              doubleClick={{ disabled: true }}
+              wheel={{ step: 0.05, smoothStep: 0.01 }}
+              minScale={1}
+              maxScale={5}
             >
+              {({ state }) => (
+                <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full flex items-center justify-center">
+                  <div
+                    ref={containerRef}
 
+              className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${canMark ? 'cursor-crosshair' : ''} touch-none`}
+              style={effectiveAspect ? { aspectRatio: effectiveAspect } : undefined}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUpOrCancel}
+              onPointerCancel={handlePointerUpOrCancel}
+              role="presentation"
+            >
               <ProtectedPatientMedia
                 ref={imgRef}
                 interactive={true}
@@ -445,13 +579,62 @@ export function FotoVistaCanvasCore({
                 onLoad={handleImgLoad}
               />
 
+              <MapaRetornoOverlay 
+                mapaComparacao={mapaComparacaoSelecionado} 
+                layoutMetrics={layoutMetrics} 
+              />
+
+              <TracadoEmProgresso 
+                vertices={liveVertices} 
+                layoutMetrics={layoutMetrics} 
+              />
+
+              {/* Renderiza os traços salvos via SVG (polylines) */}
+              <svg className="absolute inset-0 h-full w-full z-[10]" style={{ overflow: 'visible', pointerEvents: 'none' }}>
+                {allPontos.filter(p => p.tipoGeometria === 'traco' && p.vertices?.length > 0).map(p => {
+                  const cor = corParaProcedimento(p.catalogoId);
+                  const selected = pontoSelecionado?.localId === p.localId;
+                  const resolvePos = (x, y) => {
+                    const pos = percentToContainerPositionFromMetrics(x, y, layoutMetrics);
+                    return pos ? { x: pos.left, y: pos.top } : { x, y };
+                  };
+                  const points = p.vertices.map(v => resolvePos(v.posX ?? v.x, v.posY ?? v.y));
+                  return points.map((pt, i) => {
+                    if (i === 0) return null;
+                    const prev = points[i - 1];
+                    return (
+                      <line
+                        key={`${p.localId}-segment-${i}`}
+                        x1={`${prev.x}%`}
+                        y1={`${prev.y}%`}
+                        x2={`${pt.x}%`}
+                        y2={`${pt.y}%`}
+                        stroke={cor}
+                        strokeWidth={selected ? "6" : "4"}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                        onPointerDown={(ev) => handleMarkerClick(ev, p)}
+                      />
+                    );
+                  });
+                })}
+              </svg>
+
               {allPontos.map((p) => {
-
                 const cor = corParaProcedimento(p.catalogoId);
-
                 const selected = pontoSelecionado?.localId === p.localId;
+                
+                let containerPos;
+                if (p.tipoGeometria === 'traco' && p.vertices?.length > 0) {
+                  // Pega o último vértice para exibir a etiqueta
+                  const lastV = p.vertices[p.vertices.length - 1];
+                  containerPos = resolveContainerPos(lastV.posX ?? lastV.x, lastV.posY ?? lastV.y);
+                } else {
+                  containerPos = resolveContainerPos(p.posX, p.posY);
+                }
 
-                const containerPos = resolveContainerPos(p.posX, p.posY);
+                if (!containerPos) return null;
 
                 const tamanho = normalizeTamanho(p.tamanho);
                 const sizePx = markerSizePx(tamanho);
@@ -480,19 +663,15 @@ export function FotoVistaCanvasCore({
 
                     <div className="relative" style={{ width: sizePx, height: sizePx }}>
 
-                      <span
-
-                        className="pointer-events-none absolute bottom-[calc(100%+5px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[14px] font-medium leading-none text-white shadow-sm"
-
-                        style={{ backgroundColor: cor }}
-
-                        aria-hidden
-
-                      >
-
-                        {formatQuantidadeEtiqueta(p.quantidade, unidadeMedida)}
-
-                      </span>
+                      {mostrarValores && (
+                        <span
+                          className="pointer-events-none absolute bottom-[calc(100%+5px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-[14px] font-medium leading-none text-white shadow-sm"
+                          style={{ backgroundColor: cor }}
+                          aria-hidden
+                        >
+                          {formatQuantidadeEtiqueta(p.quantidade, unidadeMedida)}
+                        </span>
+                      )}
 
                       <button
 
@@ -503,15 +682,11 @@ export function FotoVistaCanvasCore({
                         className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-0 bg-transparent p-0"
 
                         style={{
-
-                          width: MARKER_HIT_AREA_PX,
-
-                          height: MARKER_HIT_AREA_PX,
-
+                          width: Math.max(20, sizePx + 8),
+                          height: Math.max(20, sizePx + 8),
                         }}
-
-                        onClick={(ev) => handleMarkerClick(ev, p)}
-
+                        onPointerDown={(ev) => handleMarkerClick(ev, p)}
+                        onClick={(ev) => ev.stopPropagation()}
                       >
 
                         <span
@@ -548,45 +723,48 @@ export function FotoVistaCanvasCore({
 
               })}
 
-              <PontoMarcadorPopover
-
-                open={Boolean(pontoSelecionado)}
-
-                ponto={pontoSelecionado?.ponto}
-
-                nomeProcedimento={pontoSelecionado?.nomeProcedimento}
-
-                catalogoId={pontoSelecionado?.catalogoId}
-
-                anchorLeft={popoverAnchor?.left}
-
-                anchorTop={popoverAnchor?.top}
-
-                onSave={handleSavePonto}
-
-                onRemove={handleRemovePonto}
-
-                onCancel={() => setPontoSelecionado(null)}
-
-                unidadeMedida={unidadeMedida}
-
-                onUnidadeMedidaChange={onUnidadeMedidaChange}
-
-                presets={presets}
-
-                passo={passo}
-
-              />
+              <div style={{ transform: `scale(${1 / (state?.scale || 1)})`, transformOrigin: 'bottom center', position: 'absolute', top: `${popoverAnchor?.top}%`, left: `${popoverAnchor?.left}%`, zIndex: 40 }}>
+                <PontoMarcadorPopover
+                  open={Boolean(pontoSelecionado)}
+                  ponto={pontoSelecionado?.ponto}
+                  nomeProcedimento={pontoSelecionado?.nomeProcedimento}
+                  catalogoId={pontoSelecionado?.catalogoId}
+                  anchorLeft={0}
+                  anchorTop={0}
+                  onSave={handleSavePonto}
+                  onRemove={handleRemovePonto}
+                  onCancel={() => setPontoSelecionado(null)}
+                  unidadeMedida={unidadeMedida}
+                  onUnidadeMedidaChange={onUnidadeMedidaChange}
+                  passo={passo}
+                />
+              </div>
 
             </div>
-
-          </div>
+          </TransformComponent>
+        )}
+      </TransformWrapper>
+    </div>
 
           {showToolbar ? (
-
             <div className="mt-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-app-border bg-white px-3 py-2 shadow-sm">
-
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  type="button"
+                  title={mostrarValores ? "Ocultar valores na foto" : "Mostrar valores na foto"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (externalMostrarValores === undefined) {
+                      setInternalMostrarValores((prev) => !prev);
+                    }
+                  }}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] shadow-sm transition-colors hover:bg-slate-50 hover:text-app-accent-deep pointer-events-auto"
+                >
+                  {mostrarValores ? <Eye className="h-4 w-4" strokeWidth={2} /> : <EyeOff className="h-4 w-4" strokeWidth={2} />}
+                </button>
+                <MapaToolbarModo modo={modo} setModo={setModo} />
+                <div className="h-6 w-px bg-app-border"></div>
+                <div className="flex flex-wrap gap-2">
 
                 <button
 
@@ -634,7 +812,18 @@ export function FotoVistaCanvasCore({
 
               </div>
 
-              {onRequestFullscreen ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {(isRetorno || (pacienteId && catalogoId)) ? (
+                  <button
+                    type="button"
+                    onClick={() => setComparacaoModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-slate-50 transition-colors"
+                  >
+                    Comparar com mapa anterior
+                  </button>
+                ) : null}
+
+                {onRequestFullscreen ? (
 
                 <button
 
@@ -655,39 +844,41 @@ export function FotoVistaCanvasCore({
               ) : null}
 
             </div>
+          </div>
+        </div>
+      ) : null}
 
-          ) : null}
-
-        </>
-
-      )}
+    </>
+  )}
 
 
 
       <PontoQuantidadeModal
-
-        open={Boolean(pendingClick)}
-
+        open={Boolean(pendingClick || pendingTraco)}
         procedimentoArmado={procedimentoArmado}
-
+        modo={pendingTraco ? 'traco' : 'ponto'}
         onConfirm={handleConfirmQty}
-
-        onCancel={() => setPendingClick(null)}
-
+        onCancel={() => {
+          setPendingClick(null);
+          setPendingTraco(null);
+        }}
         unidadeMedida={unidadeMedida}
-
         onUnidadeMedidaChange={onUnidadeMedidaChange}
-
-        presets={presets}
-
         passo={passo}
-
       />
 
+      <MapaComparacaoModal
+        open={comparacaoModalOpen}
+        onClose={() => setComparacaoModalOpen(false)}
+        pacienteId={pacienteId}
+        catalogoId={catalogoId}
+        onSelectMapa={(item) => {
+          setMapaComparacaoSelecionado(item);
+          setComparacaoModalOpen(false);
+        }}
+      />
     </div>
-
   );
-
 }
 
 
