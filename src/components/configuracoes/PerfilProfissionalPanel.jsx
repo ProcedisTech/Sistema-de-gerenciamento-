@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Camera, Loader2, User } from 'lucide-react';
+import { Loader2, PenLine, Plus, Save, Trash2, User } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 import { SignatureFullscreenModal } from '../journey/Step4LGPD.jsx';
+import { AgendaAvatarInitials } from '../agenda/AgendaAvatarInitials.jsx';
+import { formatBrNationalParentheses } from '../../utils/phoneUtils';
+import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 const STATUS_OPTIONS = [
-  { value: 'online', label: 'Online' },
-  { value: 'atendendo', label: 'Atendendo' },
-  { value: 'aguardando', label: 'Aguardando' },
-  { value: 'offline', label: 'Offline' },
+  { value: 'online', label: 'Online', color: '#22c55e' },
+  { value: 'atendendo', label: 'Atendendo', color: '#3b82f6' },
+  { value: 'aguardando', label: 'Aguardando', color: '#f59e0b' },
+  { value: 'offline', label: 'Offline', color: '#94a3b8' },
 ];
 
 const VALID_STATUS = new Set(STATUS_OPTIONS.map((o) => o.value));
@@ -46,6 +49,7 @@ function resolveFotoSrc(fotoUrl) {
   return t;
 }
 
+
 /**
  * @param {{
  *   getAuthHeaders: () => Record<string, string>,
@@ -71,11 +75,30 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
 
   /** URL persistida no servidor (para PUT quando o preview local é base64). */
   const [fotoUrlServidor, setFotoUrlServidor] = useState('');
-  /** Valor exibido no círculo: URL do servidor ou data URL do arquivo local. */
+  /** Valor exibido na UI: URL do servidor ou data URL do arquivo local. */
   const [fotoUrlPreview, setFotoUrlPreview] = useState('');
   const [assinaturaPadraoPreview, setAssinaturaPadraoPreview] = useState('');
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   const [mobilePortrait, setMobilePortrait] = useState(false);
+
+  const [errors, setErrors] = useState({});
+
+  const clearError = (field) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
+  const inputClass = (field) => {
+    if (errors[field]) {
+      return 'w-full px-4 py-3 bg-red-50 border border-red-400 rounded-xl text-[14px] text-[#0f172a] font-medium outline-none transition';
+    }
+    return 'w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all border-[#00a88e]/25 focus:border-[#00a88e]';
+  };
+
+  const labelCls = (color) => `text-[13px] font-bold ${color}`;
+  const gridGapClass = 'gap-x-6 gap-y-5';
 
   const fetchHeaders = useCallback(async () => {
     const h = typeof getAuthHeaders === 'function' ? await getAuthHeaders() : {};
@@ -109,7 +132,9 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
       }
       setNomeCompleto(m.nomeCompleto);
       setApelido(m.apelido);
-      setTelefone(m.telefone);
+      // Ao carregar, aplicar máscara no número vindo do backend (dígitos puros)
+      const digitsOnly = m.telefone.replace(/\D/g, '');
+      setTelefone(digitsOnly ? formatBrNationalParentheses(digitsOnly) : '');
       setStatusPresenca(m.statusPresenca);
       const srv =
         m.fotoUrl != null && typeof m.fotoUrl === 'string' ? m.fotoUrl.trim() : '';
@@ -145,6 +170,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     loadAssinaturaPadrao();
   }, [loadAssinaturaPadrao]);
 
+  // Detecta orientação mobile para o modal de assinatura — não remover
   useEffect(() => {
     const ev = () => {
       const isMobile = window.matchMedia('(max-width: 639px)').matches;
@@ -155,6 +181,8 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     window.addEventListener('resize', ev);
     return () => window.removeEventListener('resize', ev);
   }, []);
+
+  // --- Handlers de assinatura (intocados) ---
 
   const saveAssinaturaPadrao = async (assinaturaPadrao) => {
     if (!assinaturaPadrao) return;
@@ -214,6 +242,8 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     }
   };
 
+  // --- Handler de foto (intocado) ---
+
   const onPickFoto = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -228,7 +258,6 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     const formData = new FormData();
     formData.append('file', file);
     try {
-      console.log('headers upload:', getAuthHeaders());
       const res = await fetch(resolveApiUrl('/api/v1/perfil/foto'), {
         method: 'POST',
         credentials: 'include',
@@ -250,14 +279,27 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     }
   };
 
+  // --- Submit (PUT /api/v1/perfil) ---
+
   const handleSubmit = async (ev) => {
     ev.preventDefault();
+
+    // Validação inline
+    const e = {};
+    if (!nomeCompleto.trim()) e.nome = true;
+    if (!telefone.trim()) e.telefone = true;
+    if (Object.keys(e).length) {
+      setErrors(e);
+      return;
+    }
+
     setSaving(true);
     try {
       const body = {
         nomeCompleto: nomeCompleto.trim(),
         apelido: apelido.trim(),
-        telefone: telefone.trim(),
+        // Enviar apenas dígitos — backend não deve receber parênteses/traços da máscara
+        telefone: telefone.replace(/\D/g, ''),
         statusPresenca,
         fotoUrl: fotoUrlServidor,
       };
@@ -281,7 +323,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         fotoUrl: fotoUrlServidor,
       });
       toast.success('Perfil salvo com sucesso.');
-      await loadPerfil();
+      await loadPerfil({ silent: true });
     } catch {
       toast.error('Falha ao salvar. Tente novamente.');
     } finally {
@@ -289,15 +331,14 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc]">
-        <Loader2 className="h-9 w-9 animate-spin text-[#00a88e]" aria-hidden />
-      </div>
-    );
-  }
+  const handleCancel = () => {
+    void loadPerfil();
+    void loadAssinaturaPadrao();
+  };
 
-  if (loadError) {
+  // --- Estados de carregamento ---
+
+  if (loadError && !loading) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-center">
         <p className="text-[14px] font-semibold text-red-800">{loadError}</p>
@@ -312,158 +353,248 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     );
   }
 
-  const imgSrc = fotoUrlPreview || '';
   const fotoInputId = `${formId}-foto`;
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-lg space-y-5">
-      <div>
-        <label htmlFor={fotoInputId} className="mb-1 block text-[13px] font-bold text-[#00a88e]">
-          Foto
-        </label>
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] text-[#00a88e] shadow-sm ring-offset-2 transition hover:border-[#00a88e]/45 focus:outline-none focus:ring-2 focus:ring-[#00a88e]/40"
-            aria-label="Alterar foto de perfil"
-          >
-            {imgSrc ? (
-              <img src={imgSrc} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <User className="h-10 w-10" strokeWidth={1.75} aria-hidden />
-            )}
-            <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-[#00a88e] text-white shadow">
-              <Camera className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-            </span>
-          </button>
-          <input
-            ref={fileInputRef}
-            id={fotoInputId}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={onPickFoto}
-          />
-          <div className="min-w-0 text-[12px] font-medium leading-snug text-[#64748b]">
-            Toque no círculo para escolher: preview imediato e envio automático ao servidor.
-          </div>
+    <form onSubmit={handleSubmit} noValidate className="mx-auto max-w-3xl space-y-6">
+      <div className="mb-2 flex items-center gap-4">
+        <div className="rounded-2xl border border-app-border bg-[#e6f7f5] p-3 text-[#00a88e]">
+          <User className="h-7 w-7" strokeWidth={2.5} aria-hidden />
+        </div>
+        <div>
+          <h3 className="text-[20px] font-bold text-[#0f172a]">Meu Perfil</h3>
+          <p className="text-[14px] font-medium text-[#64748b]">
+            Informações pessoais e identidade profissional
+          </p>
         </div>
       </div>
 
-      <div>
-        <label htmlFor={`${formId}-nome`} className="mb-2 block text-[13px] font-bold text-[#00a88e]">
-          Nome completo
-        </label>
-        <input
-          id={`${formId}-nome`}
-          type="text"
-          value={nomeCompleto}
-          onChange={(e) => setNomeCompleto(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
-          autoComplete="name"
-        />
-      </div>
-
-      <div>
-        <label htmlFor={`${formId}-apelido`} className="mb-2 block text-[13px] font-bold text-[#00a88e]">
-          Apelido
-        </label>
-        <input
-          id={`${formId}-apelido`}
-          type="text"
-          value={apelido}
-          onChange={(e) => setApelido(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
-          autoComplete="nickname"
-        />
-      </div>
-
-      <div>
-        <label htmlFor={`${formId}-tel`} className="mb-2 block text-[13px] font-bold text-[#00a88e]">
-          Telefone / WhatsApp
-        </label>
-        <input
-          id={`${formId}-tel`}
-          type="tel"
-          value={telefone}
-          onChange={(e) => setTelefone(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
-          autoComplete="tel"
-        />
-      </div>
-
-      <div>
-        <label htmlFor={`${formId}-status`} className="mb-2 block text-[13px] font-bold text-[#00a88e]">
-          Status de presença
-        </label>
-        <select
-          id={`${formId}-status`}
-          value={statusPresenca}
-          onChange={(e) => setStatusPresenca(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35"
-        >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
-        <h3 className="text-[14px] font-bold text-[#0f172a]">Assinatura Padrão</h3>
-        {assinaturaPadraoPreview ? (
-          <div className="mt-3 rounded-lg border border-[#e2e8f0] bg-white p-3 text-center">
-            <img
-              src={assinaturaPadraoPreview}
-              alt="Assinatura padrão"
-              className="mx-auto h-20 max-w-full rounded border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+      {loading ? (
+        <>
+          <div className="mb-2 flex justify-center">
+            <div className="h-24 w-24 animate-pulse rounded-full bg-[#f1f5f9]" />
+          </div>
+          <div className="mb-4 flex flex-wrap justify-center gap-1.5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={`sk-pill-${i}`} className="h-7 w-20 animate-pulse rounded-full bg-[#f1f5f9]" />
+            ))}
+          </div>
+          <ConfigFormSectionsSkeleton sections={2} cardRounded="2xl" />
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="group relative mb-2 flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] shadow-sm transition-all hover:border-[#00a88e] focus:outline-none focus:ring-2 focus:ring-[#00a88e]/40"
+              aria-label="Alterar foto de perfil"
+            >
+              {fotoUrlPreview ? (
+                <img src={fotoUrlPreview} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <AgendaAvatarInitials name={nomeCompleto || 'Usuário'} size={96} />
+              )}
+              <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#00a88e] shadow">
+                <Plus className="h-3.5 w-3.5 text-white" strokeWidth={2.5} aria-hidden />
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              id={fotoInputId}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={onPickFoto}
             />
-            <p className="mt-2 text-[12px] font-semibold text-[#64748b]">Assinatura configurada</p>
+            <p className="-mt-2 mb-3 text-center text-[12px] font-medium text-[#94a3b8]">
+              Foto de perfil (opcional)
+            </p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {STATUS_OPTIONS.map((o) => {
+                const active = statusPresenca === o.value;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setStatusPresenca(o.value)}
+                    className={[
+                      'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold transition',
+                      active
+                        ? 'border-[#00a88e]/30 bg-white text-[#0f172a] shadow-sm'
+                        : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200',
+                    ].join(' ')}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: o.color }}
+                    />
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        ) : (
-          <p className="mt-3 text-[12px] font-semibold text-[#64748b]">Nenhuma assinatura configurada</p>
-        )}
-        {assinaturaPadraoPreview ? (
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setSignatureModalOpen(true)}
-              className="h-10 flex-1 rounded-lg bg-[#00a88e] text-[13px] font-semibold text-white hover:bg-[#00967f]"
-            >
-              Alterar assinatura
-            </button>
-            <button
-              type="button"
-              onClick={removeAssinaturaPadrao}
-              disabled={savingAssinatura}
-              className="h-10 flex-1 rounded-lg border border-red-200 bg-red-50 text-[13px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Remover assinatura
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setSignatureModalOpen(true)}
-            className="mt-3 h-10 w-full rounded-lg bg-[#00a88e] text-[13px] font-semibold text-white hover:bg-[#00967f]"
-          >
-            Adicionar assinatura
-          </button>
-        )}
-      </div>
 
-      <div className="pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-[#00a88e] px-4 py-3 text-[14px] font-bold text-white shadow-sm transition hover:bg-[#00997f] disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
-          {saving ? 'Salvando…' : 'Salvar alterações'}
-        </button>
-      </div>
+          {/* Card 1 — Informações Pessoais */}
+          <div className="rounded-2xl border border-[#00a88e]/25 bg-white p-6 transition-colors">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
+                1
+              </div>
+              <h4 className="text-[18px] font-bold text-[#0f766e]">Informações Pessoais</h4>
+            </div>
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
+              <div className="md:col-span-2 space-y-1.5">
+                <label htmlFor={`${formId}-nome`} className={labelCls('text-[#00a88e]')}>
+                  Nome completo <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id={`${formId}-nome`}
+                  type="text"
+                  value={nomeCompleto}
+                  onChange={(e) => {
+                    setNomeCompleto(e.target.value);
+                    clearError('nome');
+                  }}
+                  className={inputClass('nome')}
+                  autoComplete="name"
+                  aria-invalid={Boolean(errors.nome)}
+                />
+                {errors.nome ? (
+                  <p className="text-[12px] font-semibold text-red-600" role="alert">
+                    Nome é obrigatório.
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor={`${formId}-apelido`} className={labelCls('text-[#00a88e]')}>
+                  Apelido
+                </label>
+                <input
+                  id={`${formId}-apelido`}
+                  type="text"
+                  value={apelido}
+                  onChange={(e) => setApelido(e.target.value)}
+                  className={inputClass('apelido')}
+                  autoComplete="nickname"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor={`${formId}-tel`} className={labelCls('text-[#00a88e]')}>
+                  Telefone / WhatsApp <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id={`${formId}-tel`}
+                  type="tel"
+                  inputMode="numeric"
+                  value={telefone}
+                  onChange={(e) => {
+                    setTelefone(formatBrNationalParentheses(e.target.value));
+                    clearError('telefone');
+                  }}
+                  placeholder="(00) 00000-0000"
+                  className={inputClass('telefone')}
+                  autoComplete="tel"
+                  aria-invalid={Boolean(errors.telefone)}
+                />
+                {errors.telefone ? (
+                  <p className="text-[12px] font-semibold text-red-600" role="alert">
+                    Telefone é obrigatório.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2 — Identidade Profissional */}
+          <div className="rounded-2xl border border-blue-200 bg-white p-6 transition-colors">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
+                2
+              </div>
+              <h4 className="text-[18px] font-bold text-[#1d4ed8]">Identidade Profissional</h4>
+            </div>
+            <div className="space-y-2">
+              <span className={labelCls('text-[#3b82f6]')}>Assinatura padrão</span>
+              <button
+                type="button"
+                onClick={() => setSignatureModalOpen(true)}
+                aria-label={
+                  assinaturaPadraoPreview ? 'Alterar assinatura padrão' : 'Adicionar assinatura padrão'
+                }
+                className={[
+                  'group flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 py-6 transition',
+                  assinaturaPadraoPreview
+                    ? 'border-[#3b82f6]/40 bg-[#eff6ff]'
+                    : 'border-dashed border-blue-200 bg-[#eff6ff]/50 hover:border-[#3b82f6]/50 hover:bg-[#eff6ff]',
+                ].join(' ')}
+              >
+                {assinaturaPadraoPreview ? (
+                  <>
+                    <img
+                      src={assinaturaPadraoPreview}
+                      alt="Assinatura padrão"
+                      className="mx-auto h-16 max-w-[200px] object-contain"
+                    />
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#3b82f6]">
+                      <PenLine className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                      Alterar assinatura
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-[#3b82f6] group-hover:bg-blue-200">
+                      <PenLine className="h-7 w-7" strokeWidth={1.75} aria-hidden />
+                    </div>
+                    <span className="text-[12px] font-semibold text-slate-500 group-hover:text-[#3b82f6]">
+                      Clique para adicionar sua assinatura
+                    </span>
+                  </>
+                )}
+              </button>
+              {assinaturaPadraoPreview ? (
+                <button
+                  type="button"
+                  onClick={removeAssinaturaPadrao}
+                  disabled={savingAssinatura}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 py-2.5 text-[12px] font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingAssinatura ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                  )}
+                  Remover assinatura
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t-[3px] border-[#00a88e]/15 pt-4 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Save className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              )}
+              {saving ? 'Salvando…' : 'Salvar alterações'}
+            </button>
+          </div>
+        </>
+      )}
+
       <SignatureFullscreenModal
         open={signatureModalOpen}
         title="Assinatura Padrão"

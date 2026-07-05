@@ -19,6 +19,14 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { anamneseApi } from '../../services/api';
 import { tipoLabel } from './anamneseTipoLabels';
+import {
+  HabitoModalShell,
+  HABITO_INPUT_CLASS,
+  HABITO_READONLY_CLASS,
+  HABITO_MODAL_CANCEL_CLASS,
+  HABITO_MODAL_SUBMIT_CLASS,
+  PrioridadeSegmented,
+} from './HabitoModalShell';
 
 const TIPOS_COM_ALTERNATIVAS = ['escolha_unica', 'multipla_escolha'];
 const DESCRICAO_MAX_CHARS = 300;
@@ -242,28 +250,47 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
     }
   };
 
+  const catNome = categorias.find((c) => String(c.id) === String(categoriaId))?.nome;
+
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2e8f0]">
-          <h3 className="text-[16px] font-bold text-[#0f172a]">Editar Pergunta</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-[#64748b] hover:bg-[#f1f5f9]">
-            <X className="w-5 h-5" strokeWidth={2} />
+    <HabitoModalShell
+      title="Editar Pergunta"
+      subtitle={catNome ? `Categoria: ${catNome}` : null}
+      icon={Pencil}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={HABITO_MODAL_CANCEL_CLASS}>
+            Cancelar
           </button>
-        </div>
+          <button
+            type="submit"
+            form="edit-habito-form"
+            disabled={salvando}
+            className={HABITO_MODAL_SUBMIT_CLASS}
+          >
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />}
+            Salvar
+          </button>
+        </>
+      }
+    >
+      <form
+        id="edit-habito-form"
+        onSubmit={handleSalvar}
+        className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4"
+      >
+          {erro ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[13px] font-bold text-red-600">{erro}</div>
+          ) : null}
 
-        <form onSubmit={handleSalvar} className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
-          {erro && (
-            <div className="bg-red-50 text-red-600 border border-red-200 rounded-xl p-3 text-[13px] font-bold">{erro}</div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e] ml-1">Categoria *</label>
+              <label className="ml-1 text-[13px] font-bold text-[#00a88e]">Categoria *</label>
               <select
                 value={categoriaId}
                 onChange={(e) => setCategoriaId(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
+                className={HABITO_INPUT_CLASS}
               >
                 <option value="">Selecione...</option>
                 {categorias.map((c) => (
@@ -273,29 +300,21 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[13px] font-bold text-[#00a88e] ml-1">Tipo de Resposta *</label>
-              <div className="w-full px-4 py-3 bg-[#f1f5f9] border border-app-border rounded-xl text-[14px] font-medium text-[#475569] flex items-center gap-2">
+              <label className="ml-1 text-[13px] font-bold text-[#00a88e]">Tipo de Resposta *</label>
+              <div className={`${HABITO_READONLY_CLASS} flex items-center gap-2`}>
                 <span>{resolveTipo(tipoStrOriginal || tipoSelecionado)}</span>
-                <span className="text-[11px] text-[#94a3b8] font-normal ml-auto">(não editável)</span>
+                <span className="ml-auto text-[11px] font-normal text-[#94a3b8]">(não editável)</span>
               </div>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[13px] font-bold text-[#00a88e] ml-1">Prioridade</label>
-            <select
-              value={prioridade}
-              onChange={(e) => setPrioridade(e.target.value)}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e] appearance-none"
-            >
-              <option value="NORMAL">Normal</option>
-              <option value="ALERTA">⚠️ Alerta</option>
-              <option value="CRITICA">🔴 Crítica</option>
-            </select>
+            <label className="ml-1 text-[13px] font-bold text-[#00a88e]">Prioridade</label>
+            <PrioridadeSegmented value={prioridade} onChange={setPrioridade} />
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-2 ml-1">
+            <div className="ml-1 flex items-baseline justify-between gap-2">
               <label className="text-[13px] font-bold text-[#00a88e]">Pergunta / Descrição *</label>
               <span className={`text-[11px] font-medium tabular-nums ${descricao.length >= DESCRICAO_MAX_CHARS ? 'text-red-600' : 'text-[#94a3b8]'}`}>
                 {descricao.length}/{DESCRICAO_MAX_CHARS}
@@ -306,15 +325,15 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
               onChange={(e) => setDescricao(e.target.value.slice(0, DESCRICAO_MAX_CHARS))}
               rows={3}
               maxLength={DESCRICAO_MAX_CHARS}
-              className="w-full px-4 py-3 bg-[#f8fbfb] border border-app-border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+              className={HABITO_INPUT_CLASS}
             />
           </div>
 
-          {mostrarAlternativas && (() => {
+          {mostrarAlternativas ? (() => {
             const editDupeIndices = findDuplicateIndices(alternativas);
             return (
-              <div className="space-y-3 p-4 bg-[#f8fbfb] border border-fuchsia-200 rounded-xl">
-                <label className="text-[13px] font-bold text-[#a855f7] ml-1">Alternativas (arraste para reordenar)</label>
+              <div className="space-y-3 rounded-xl border border-fuchsia-200 bg-[#f8fbfb] p-4">
+                <label className="ml-1 text-[13px] font-bold text-[#a855f7]">Alternativas (arraste para reordenar)</label>
 
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={alternativas.map((a) => a.id)} strategy={verticalListSortingStrategy}>
@@ -339,43 +358,24 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
                     onChange={(e) => { setNovaAlt(e.target.value); setDupWarning(''); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdicionarAlt(); } }}
                     placeholder="Nova alternativa..."
-                    className={`flex-1 px-3 py-2 bg-white border-[2px] rounded-lg text-[13px] font-medium focus:outline-none ${
+                    className={`flex-1 rounded-lg border-[2px] bg-white px-3 py-2 text-[13px] font-medium focus:outline-none ${
                       dupWarning ? 'border-red-400 focus:border-red-500' : 'border-[#a855f7]/20 focus:border-[#a855f7]'
                     }`}
                   />
-                  <button type="button" onClick={handleAdicionarAlt} className="px-3 py-2 rounded-lg bg-[#a855f7] text-white text-[12px] font-bold">
-                    <Plus className="w-4 h-4" />
+                  <button type="button" onClick={handleAdicionarAlt} className="rounded-lg bg-[#a855f7] px-3 py-2 text-[12px] font-bold text-white">
+                    <Plus className="h-4 w-4" aria-hidden />
                   </button>
                 </div>
-                {dupWarning && (
-                  <p className="text-[12px] font-bold text-red-600 flex items-center gap-1.5 ml-1">
-                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                {dupWarning ? (
+                  <p className="ml-1 flex items-center gap-1.5 text-[12px] font-bold text-red-600">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     {dupWarning}
                   </p>
-                )}
+                ) : null}
               </div>
             );
-          })()}
-
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={salvando}
-              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-[#00a88e] hover:bg-[#00967f] text-white border border-transparent shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" strokeWidth={2.5} />}
-              Salvar
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-3 rounded-xl font-bold text-[14px] bg-white text-[#64748b] border border-slate-200 hover:border-[#00a88e]/20"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          })() : null}
+      </form>
+    </HabitoModalShell>
   );
 }

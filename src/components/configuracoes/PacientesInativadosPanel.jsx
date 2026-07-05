@@ -4,6 +4,7 @@ import { pacientesApi, getApiErrorDetail } from '../../services/api';
 import { maskCPF } from '../utils/formatters';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
+import { ConfigTableRowsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 function mapInativoRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -128,11 +129,6 @@ export function PacientesInativadosPanel({ onPacientesCatalogRefresh }) {
       </div>
 
       <div className="relative overflow-hidden rounded-xl border border-[#e2e8f0] bg-white">
-        {loading ? (
-          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center bg-white/60">
-            <Loader2 className="h-8 w-8 animate-spin text-[#00a88e]" aria-hidden />
-          </div>
-        ) : null}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-[#e2e8f0] bg-[#f8fafc] text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
@@ -146,7 +142,9 @@ export function PacientesInativadosPanel({ onPacientesCatalogRefresh }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f1f5f9]">
-              {!loading && rows.length === 0 ? (
+              {loading ? (
+                <ConfigTableRowsSkeleton rows={6} colSpan={6} />
+              ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-[13px] font-medium text-[#64748b]">
                     Nenhum paciente inativado.

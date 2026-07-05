@@ -132,10 +132,10 @@ export function ConfigDetailView({
             onSelect={handleSetConfigSection}
           />
 
-          {/* Painel com fade — key força re-mount apenas no painel ao trocar seção */}
+          {/* Painel com rise — key força re-mount apenas no painel ao trocar seção */}
           <div
             key={effectiveSection}
-            className="animate-config-fade-in min-h-0 min-w-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] px-3 py-4 sm:px-5 sm:py-6 md:px-6 md:py-8"
+            className="animate-agenda-rise min-h-0 min-w-0 flex-1 overflow-y-auto [-webkit-overflow-scrolling:touch] px-3 py-4 sm:px-5 sm:py-6 md:px-6 md:py-8"
           >
             <PainelAtivo
               configSection={effectiveSection}

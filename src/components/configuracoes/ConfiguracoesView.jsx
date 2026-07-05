@@ -119,8 +119,11 @@ export function ConfiguracoesView({
         />
       )}
 
-      {/* Conteúdo — hub ou detalhe, animado com fade */}
-      <div key={displayCategory ?? 'hub'} className="animate-config-fade-in flex min-h-0 flex-1 flex-col">
+      {/* Conteúdo — detalhe anima com fade no wrapper; no hub a entrada fica por conta do stagger dos cards */}
+      <div
+        key={displayCategory ?? 'hub'}
+        className={`flex min-h-0 flex-1 flex-col ${displayCategory === null ? '' : 'animate-config-fade-in'}`}
+      >
         {displayCategory === null ? (
           <ConfigHub
             canSeeAnamnese={canSeeAnamnese}

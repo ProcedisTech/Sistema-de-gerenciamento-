@@ -9,6 +9,7 @@ import {
 import { auditoriaApi, equipeApi } from '../../services/api';
 import { AuditoriaDetailsModal } from './AuditoriaDetailsModal';
 import { formatData, formatarEntidade, getIconForEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
+import { ConfigCardStackSkeleton, ConfigTableRowsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 const PERIODOS = [
   { value: '',       label: 'Todos' },
@@ -116,14 +117,7 @@ export function AuditoriaView() {
     'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10 appearance-none shadow-sm';
 
   // ── Estado vazio / loading compartilhado ──
-  const emptyState = loading ? (
-    <div className="flex flex-col items-center justify-center gap-4 py-20 text-slate-500">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
-      </div>
-      <span className="text-[15px] font-semibold text-slate-700">Carregando histórico...</span>
-    </div>
-  ) : itensDaPagina.length === 0 ? (
+  const emptyState = !loading && itensDaPagina.length === 0 ? (
     <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-20 px-6 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
         <History className="h-8 w-8 text-slate-400" />
@@ -316,7 +310,12 @@ export function AuditoriaView() {
 
       {/* ── MOBILE: Cards (até md) ── */}
       <div className="flex flex-col gap-4 lg:hidden">
-        {emptyState ?? itensDaPagina.map((item) => {
+        {loading ? (
+          <ConfigCardStackSkeleton count={4} className="h-20" />
+        ) : itensDaPagina.length === 0 ? (
+          emptyState
+        ) : (
+          itensDaPagina.map((item) => {
           const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
           return (
             <div
@@ -373,7 +372,8 @@ export function AuditoriaView() {
               </div>
             </div>
           );
-        })}
+        })
+        )}
 
         {/* paginação mobile */}
         {!loading && itensDaPagina.length > 0 && (
@@ -418,19 +418,10 @@ export function AuditoriaView() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr>
-                  <td colSpan="5" className="py-24 text-center">
-                    <div className="flex flex-col items-center justify-center gap-4 text-slate-500">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
-                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
-                      </div>
-                      <span className="text-[15px] font-semibold text-slate-700">Carregando histórico...</span>
-                    </div>
-                  </td>
-                </tr>
+                <ConfigTableRowsSkeleton rows={8} colSpan={6} />
               ) : itensDaPagina.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-24 text-center">
+                  <td colSpan={6} className="py-24 text-center">
                     <div className="flex flex-col items-center justify-center gap-4 text-slate-500">
                       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 shadow-sm ring-1 ring-slate-900/5">
                         <History className="h-8 w-8 text-slate-400" />

@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { encontrarSobrepostos } from './horarioSemanaUtils.js';
 import { HorarioSemanaEditor } from './HorarioSemanaEditor.jsx';
+import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 // ── Helpers de agrupamento/desagrupamento ─────────────────────────────────────
 
@@ -160,10 +161,6 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
 
   const temErro = validarDiasConfig(diasConfig) !== null;
 
-  if (loading) {
-    return <div className="text-sm text-[#64748b]">Carregando configurações...</div>;
-  }
-
   return (
     <div className="space-y-6">
       {tipoOrg === 'autonomo' ? (
@@ -231,17 +228,21 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
         <p className="mb-3 text-[12px] text-[#94a3b8]">
           Ligue o botão ao lado de cada dia para definir o horário. Dias desligados aparecem como Fechado.
         </p>
-        <HorarioSemanaEditor diasConfig={diasConfig} onChange={setDiasConfig} />
+        {loading ? (
+          <ConfigFormSectionsSkeleton sections={7} />
+        ) : (
+          <HorarioSemanaEditor diasConfig={diasConfig} onChange={setDiasConfig} />
+        )}
       </section>
 
       <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] pt-4">
-        {isDirty && !saving && (
+        {isDirty && !saving && !loading && (
           <span className="text-[12px] font-medium text-amber-600">Alterações não salvas</span>
         )}
         <button
           type="button"
           onClick={handleSalvar}
-          disabled={saving || temErro || !isDirty}
+          disabled={saving || temErro || !isDirty || loading}
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors disabled:opacity-50 ${
             isDirty && !temErro
               ? 'bg-[#00a88e] hover:bg-[#008f78]'

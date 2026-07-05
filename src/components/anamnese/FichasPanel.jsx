@@ -6,6 +6,7 @@ import {
 import { anamneseApi, dimensoesApi } from '../../services/api';
 import { HabitoEditModal } from './HabitoEditModal';
 import { tipoLabel } from './anamneseTipoLabels';
+import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
 
 // ── Badges de especialidade (padrão do Catálogo/BancoProcedimentos) ──────────
 
@@ -382,11 +383,14 @@ export function FichasPanel() {
     await fetchDados();
   }, [fetchDados]);
 
-  if (loading) {
+  if (loading && editando === null) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-6 h-6 animate-spin text-[#00a88e]" />
-        <span className="ml-2 text-[#64748b] text-[13px] font-medium">Carregando fichas...</span>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="h-10 max-w-sm flex-1 animate-pulse rounded-xl bg-[#f1f5f9]" />
+          <div className="h-10 w-32 animate-pulse rounded-xl bg-[#f1f5f9]" />
+        </div>
+        <ConfigTableSkeleton rows={5} />
       </div>
     );
   }
@@ -449,7 +453,8 @@ export function FichasPanel() {
           <button
             type="button"
             onClick={() => setEditando('nova')}
-            className="shrink-0 px-5 py-2.5 rounded-xl font-bold text-[13px] bg-[#00a88e] hover:bg-[#00967f] text-white shadow-md flex items-center gap-2"
+            disabled={loading}
+            className="shrink-0 px-5 py-2.5 rounded-xl font-bold text-[13px] bg-[#00a88e] hover:bg-[#00967f] text-white shadow-md flex items-center gap-2 disabled:opacity-50"
           >
             <Plus className="w-4 h-4" strokeWidth={2.5} />
             Nova Ficha

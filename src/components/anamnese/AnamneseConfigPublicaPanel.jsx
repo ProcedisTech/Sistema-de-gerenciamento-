@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { acessoPublicoApi, anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
+import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 export function AnamneseConfigPublicaPanel() {
   const [loading, setLoading] = useState(true);
@@ -155,15 +156,6 @@ export function AnamneseConfigPublicaPanel() {
     { label: 'Nunca', value: 0 },
   ];
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-[#00a88e] animate-spin mb-3" />
-        <p className="text-[14px] text-slate-500 font-medium">Carregando configurações...</p>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={handleSave} className="flex flex-col h-full bg-slate-50 relative pb-24 animate-fade-in">
       {/* HEADER EXPLICATIVO */}
@@ -177,7 +169,8 @@ export function AnamneseConfigPublicaPanel() {
         <button
           type="button"
           onClick={handleOpenPortal}
-          className="flex items-center gap-2 px-4 py-2 bg-[#00a88e] hover:bg-[#00967f] text-white text-[13px] font-bold rounded-lg transition-colors shadow-sm"
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-[#00a88e] hover:bg-[#00967f] text-white text-[13px] font-bold rounded-lg transition-colors shadow-sm disabled:opacity-50"
         >
           <ExternalLink className="w-4 h-4" />
           Abrir portal
@@ -185,6 +178,11 @@ export function AnamneseConfigPublicaPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="max-w-4xl mx-auto py-8 px-8 my-6">
+            <ConfigFormSectionsSkeleton sections={3} />
+          </div>
+        ) : (
         <div className="max-w-4xl mx-auto py-8 px-8 flex flex-col gap-0 bg-white rounded-2xl border border-slate-200 shadow-sm my-6">
           
           {/* Seção 1 — Endereço público */}
@@ -381,13 +379,14 @@ export function AnamneseConfigPublicaPanel() {
           </div>
 
         </div>
+        )}
       </div>
 
       {/* FOOTER FIXED ACTION */}
       <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-white border-t border-slate-200 px-8 py-4 flex justify-end z-20 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)]">
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || loading}
           className="relative px-6 py-2.5 bg-[#00a88e] text-white rounded-lg text-[14px] font-bold shadow-sm hover:bg-[#00967f] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 overflow-hidden group"
         >
           {saving && (

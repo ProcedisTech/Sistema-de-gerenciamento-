@@ -21,11 +21,11 @@ export function ConfigHub({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <p className="mb-5 text-[13px] leading-snug text-[#64748b]">
+      <p className="animate-agenda-rise mb-5 text-[13px] leading-snug text-[#64748b]">
         Selecione uma área para configurar
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {visibleCategories.map((cat) => (
+        {visibleCategories.map((cat, index) => (
           <ConfigCategoryCard
             key={cat.key}
             icon={cat.icon}
@@ -34,6 +34,7 @@ export function ConfigHub({
             description={cat.description}
             itemCount={cat.visibleItems.length}
             onClick={() => onSelectCategory(cat.key)}
+            entranceDelayMs={index * 60}
           />
         ))}
       </div>
