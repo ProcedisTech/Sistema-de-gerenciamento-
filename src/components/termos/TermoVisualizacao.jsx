@@ -1,9 +1,18 @@
 import React from 'react';
+import DOMPurify from 'dompurify';
 import { Shield } from 'lucide-react';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
 import 'react-quill-new/dist/quill.snow.css';
 
-export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalCtx, clinicaCtx, children }) {
+export function TermoVisualizacao({
+  titulo,
+  conteudo,
+  pacienteCtx,
+  profissionalCtx,
+  clinicaCtx,
+  children,
+  canvasMode,
+}) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
 
   // Fallbacks para quando os contextos não são passados (ex: preview do manager)
@@ -28,7 +37,14 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
   // Substitui os placeholders pelos dados reais do contexto usando o utility centralizado
   conteudoTexto = replaceTermVariables(conteudoTexto, { pac, clinica, prof });
 
-  const temConteudoTexto = conteudoTexto.length > 0;
+  const conteudoSanitizado = DOMPurify.sanitize(conteudoTexto, {
+    ADD_ATTR: ['class'],
+  });
+
+  const temConteudoTexto = conteudoSanitizado.length > 0;
+
+  const canvasClassName =
+    canvasMode === 'static' ? 'a4-canvas a4-canvas--static' : 'a4-canvas';
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm ring-1 ring-[#e2e8f0]">
@@ -39,7 +55,7 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
             <Shield className="h-5 w-5" strokeWidth={2.5} />
           </div>
         </div>
-        
+
         <div className="flex flex-col gap-1.5 text-white">
           <div className="text-[11px] leading-snug">
             <span className="font-bold text-emerald-100 mr-1">CLÍNICA:</span>
@@ -55,7 +71,7 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
           </div>
         </div>
       </div>
-      
+
       {/* Titulo */}
       <div className="border-b border-[#e2e8f0] bg-[#f0fdfa] px-6 py-4 text-center">
         <h3 className="text-[16px] font-bold tracking-wide text-[#0f172a] uppercase">
@@ -63,13 +79,13 @@ export function TermoVisualizacao({ titulo, conteudo, pacienteCtx, profissionalC
         </h3>
       </div>
       {/* Corpo do Documento */}
-      <div className="bg-[#f8fafc] p-6">
-        <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <div className={canvasClassName}>
+        <div className="a4-sheet">
           {temConteudoTexto ? (
             <div className="ql-snow">
-              <div 
+              <div
                 className="ql-editor p-0 prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
-                dangerouslySetInnerHTML={{ __html: conteudoTexto }}
+                dangerouslySetInnerHTML={{ __html: conteudoSanitizado }}
               />
             </div>
           ) : (

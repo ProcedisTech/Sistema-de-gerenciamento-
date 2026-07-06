@@ -24,6 +24,7 @@ import { PatientFiltersPopover } from './PatientFiltersPopover.jsx';
 import { PatientActiveFilterChips } from './PatientActiveFilterChips.jsx';
 import { getRailCardActions } from '../../utils/agendaCardActions.js';
 import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
+import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
 import {
   countActivePatientFilters,
   applyPatientQuickFilter,
@@ -420,6 +421,14 @@ export function PatientsListView({
   const [loadingPreviewProcedures, setLoadingPreviewProcedures] = useState(false);
   /** Paciente cujo fetch de anamnese do preview terminou; `null` = nenhum / resetado. */
   const [previewAnamneseListOwnerId, setPreviewAnamneseListOwnerId] = useState(null);
+  const [showEntrance, setShowEntrance] = useState(true);
+
+  useEffect(() => {
+    if (!showEntrance) return undefined;
+    const id = window.setTimeout(() => setShowEntrance(false), 1800);
+    return () => window.clearTimeout(id);
+  }, [showEntrance]);
+
   const activeFiltersCount = useMemo(
     () =>
       countActivePatientFilters({
@@ -606,39 +615,45 @@ export function PatientsListView({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div
+        className={`flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 ${agendaEnterClass(showEntrance, 'agenda-delay-100')}`}
+      >
         <h1 className="min-w-0 text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
           Pacientes
         </h1>
       </div>
 
-      <KpiCards
-        kpi={kpi}
-        loading={kpiLoading}
-        activeCard={activeKpiCard}
-        onActivateFilter={handleActivateFilter}
-      />
+      <div className={agendaEnterClass(showEntrance, 'agenda-delay-150')}>
+        <KpiCards
+          kpi={kpi}
+          loading={kpiLoading}
+          activeCard={activeKpiCard}
+          onActivateFilter={handleActivateFilter}
+        />
 
-      <PatientsTodayStrip
-        kpi={kpi}
-        loading={kpiLoading}
-        onSelectPatient={(agendaSlot) => {
-          if (!agendaSlot?.pacienteId) return;
-          const pid = String(agendaSlot.pacienteId);
-          const fullPatient =
-            patients.find((p) => String(p.id) === pid) ||
-            patientListItems.find((p) => String(p.id) === pid);
-          if (fullPatient) {
-            openPatientPreview(fullPatient, { fromSidebar: true, agendaSlot });
-          }
-        }}
-      />
+        <PatientsTodayStrip
+          kpi={kpi}
+          loading={kpiLoading}
+          onSelectPatient={(agendaSlot) => {
+            if (!agendaSlot?.pacienteId) return;
+            const pid = String(agendaSlot.pacienteId);
+            const fullPatient =
+              patients.find((p) => String(p.id) === pid) ||
+              patientListItems.find((p) => String(p.id) === pid);
+            if (fullPatient) {
+              openPatientPreview(fullPatient, { fromSidebar: true, agendaSlot });
+            }
+          }}
+        />
+      </div>
 
       <div className="flex w-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-5">
         <div className="flex min-w-0 flex-1 flex-col lg:min-w-[min(100%,19rem)]">
           <div className="flex min-w-0 flex-col">
             {/* Header: search + chips + sort */}
-            <div className="sticky top-0 z-10 bg-transparent">
+            <div
+              className={`sticky top-0 z-10 bg-transparent ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}
+            >
               {/* < xl: busca full-width (coluna estreita com PulseSidebar/preview) */}
               <div className="px-4 pt-3 pb-2 xl:hidden">
                 <div className="relative min-h-[44px] min-w-0">
@@ -801,7 +816,9 @@ export function PatientsListView({
           </div>
 
           <div className="px-4">
-            <div className="relative min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch]">
+            <div
+              className={`relative min-w-0 overflow-x-hidden [-webkit-overflow-scrolling:touch] ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}
+            >
             {patientListLoading ? (
               <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-slate-50/60 backdrop-blur-[1px]">
                 <Loader2 className="h-8 w-8 animate-spin text-[#00a88e]" aria-hidden />
@@ -917,16 +934,18 @@ export function PatientsListView({
             </div>
           </>
         ) : (
-          <PulseSidebar
-            kpi={kpi}
-            loading={kpiLoading}
-            nomeUsuario={nomeUsuario}
-            onNavigateToAgenda={onNavigateToAgenda}
-            onSelectPatient={(patient) => openPatientPreview(patient, { fromSidebar: true })}
-            getPatientInitials={getPatientInitials}
-            agendaSchedule={agendaSchedule}
-            onStartAttendance={onStartAttendance}
-          />
+          <div className={agendaEnterClass(showEntrance, 'agenda-delay-250')}>
+            <PulseSidebar
+              kpi={kpi}
+              loading={kpiLoading}
+              nomeUsuario={nomeUsuario}
+              onNavigateToAgenda={onNavigateToAgenda}
+              onSelectPatient={(patient) => openPatientPreview(patient, { fromSidebar: true })}
+              getPatientInitials={getPatientInitials}
+              agendaSchedule={agendaSchedule}
+              onStartAttendance={onStartAttendance}
+            />
+          </div>
         )}
       </div>
 

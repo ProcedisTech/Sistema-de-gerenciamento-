@@ -1,12 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
   FileText,
   Pencil,
   Trash2,
   Plus,
   Loader2,
   Search,
-  X,
   Lightbulb,
   MoreVertical,
   Shield,
@@ -14,15 +18,13 @@ import {
 import { termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
-import { TermoVisualizacao } from './TermoVisualizacao';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
+import { TermoFolha } from './TermoFolha';
 
 function stripHtml(html) {
   if (!html) return '';
-  const tmp = document.createElement("DIV");
+  const tmp = document.createElement('DIV');
   tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || "";
+  return tmp.textContent || tmp.innerText || '';
 }
 
 function normalizeList(raw) {
@@ -40,12 +42,26 @@ function isAtivo(row) {
   return true;
 }
 
+const CAMPOS_AUTOMATICOS = [
+  { token: '[NOME DO PACIENTE]', desc: 'Nome completo' },
+  { token: '[CPF DO PACIENTE]', desc: 'CPF formatado' },
+  { token: '[NOME DA CLÍNICA]', desc: 'Razão social ou nome' },
+  { token: '[CNPJ DA CLÍNICA]', desc: 'CNPJ formatado' },
+  { token: '[NOME DO PROFISSIONAL]', desc: 'Nome do atendente' },
+];
+
+const INTRO_BASICA =
+  '<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste documento que compreendo e concordo com as informações aqui descritas:</p>';
+
+const INTRO_LGPD =
+  '<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):</p>';
+
 export function TermosManager() {
   const { success: toastSuccess, error: toastError } = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
+  const [modo, setModo] = useState('lista');
   const [editingId, setEditingId] = useState(null);
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
@@ -55,17 +71,21 @@ export function TermosManager() {
   const [viewingRow, setViewingRow] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState(null);
+  // Painel de ajuda do editor: aberto por padrão em telas lg+, recolhido abaixo disso.
+  const [helpOpen, setHelpOpen] = useState(
+    () => typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches
+  );
+  const quillRef = useRef(null);
 
-  const modules = useMemo(() => ({
-    toolbar: [
-      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'align': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      ['blockquote', 'link'],
-      ['clean']
-    ]
-  }), []);
+  /** Insere um placeholder na posição do cursor do Quill (fim do doc se nunca focado). */
+  const insertToken = (token) => {
+    const quill = quillRef.current?.getEditor();
+    if (!quill) return;
+    // getSelection(true) pode retornar null se o Quill nunca teve foco — fallback: fim.
+    const range = quill.getSelection(true) || { index: quill.getLength() };
+    quill.insertText(range.index, token, 'user');
+    quill.setSelection(range.index + token.length);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,19 +121,21 @@ export function TermosManager() {
     setConteudo('');
     setAutoAssinarProfissional(false);
     setFormErrors({});
-    setFormOpen(true);
     setViewingRow(null);
+    setModo('edit');
   };
 
   const openNewWithLgpdTemplate = () => {
     setEditingId(null);
     setTitulo('Termo de Consentimento LGPD');
-    const html = LGPD_TEMPLATE_BRUTO.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '').join('');
+    const html = LGPD_TEMPLATE_BRUTO.split('\n')
+      .map((p) => (p.trim() ? `<p>${p}</p>` : ''))
+      .join('');
     setConteudo(html);
     setAutoAssinarProfissional(true);
     setFormErrors({});
-    setFormOpen(true);
     setViewingRow(null);
+    setModo('edit');
   };
 
   const openEdit = (row) => {
@@ -122,13 +144,13 @@ export function TermosManager() {
     setConteudo(row.conteudo ?? row.content ?? '');
     setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
     setFormErrors({});
-    setFormOpen(true);
     setViewingRow(null);
     setMenuOpenId(null);
+    setModo('edit');
   };
 
   const closeForm = () => {
-    setFormOpen(false);
+    setModo('lista');
     setEditingId(null);
     setTitulo('');
     setConteudo('');
@@ -188,10 +210,148 @@ export function TermosManager() {
   const openView = (row) => {
     setViewingRow(row);
     setMenuOpenId(null);
+    setModo('view');
+  };
+
+  const voltarDaView = () => {
+    setModo('lista');
+    setViewingRow(null);
   };
 
   const emptyNoData = items.length === 0;
   const emptyFiltered = !emptyNoData && filteredItems.length === 0;
+
+  if (modo === 'view' && viewingRow) {
+    return (
+      <div className="animate-in fade-in duration-300">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={voltarDaView}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#e2e8f0] px-3 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc]"
+            >
+              <ArrowLeft className="h-4 w-4" strokeWidth={2} />
+              Voltar
+            </button>
+            <h3 className="truncate text-[16px] font-bold text-[#0f172a]">
+              {viewingRow.titulo ?? viewingRow.title ?? '—'}
+            </h3>
+            <span className="inline-flex shrink-0 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
+              Ativo
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openEdit(viewingRow)}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white"
+          >
+            <Pencil className="h-4 w-4" strokeWidth={2} />
+            Editar
+          </button>
+        </div>
+
+        <TermoFolha
+          editavel={false}
+          titulo={viewingRow.titulo ?? viewingRow.title}
+          conteudo={viewingRow.conteudo ?? viewingRow.content ?? ''}
+        />
+      </div>
+    );
+  }
+
+  if (modo === 'edit') {
+    return (
+      <div className="animate-in fade-in flex flex-col gap-3 duration-300">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={closeForm}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#e2e8f0] px-3 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc]"
+            >
+              <ArrowLeft className="h-4 w-4" strokeWidth={2} />
+              Voltar
+            </button>
+            <h2 className="truncate text-[16px] font-bold text-[#0f172a]">
+              {editingId != null ? 'Editar Termo' : 'Novo Termo'}
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <label
+              className="hidden h-9 cursor-pointer items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 sm:inline-flex"
+              title="Se o profissional possuir uma Assinatura Padrão configurada no perfil, ela será inserida automaticamente neste termo."
+            >
+              <input
+                type="checkbox"
+                id="autoAssinarProfissional"
+                checked={autoAssinarProfissional}
+                onChange={(e) => setAutoAssinarProfissional(e.target.checked)}
+                className="h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+              />
+              <span className="text-[12px] font-medium text-[#0f172a]">Assinatura automática</span>
+            </label>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSave}
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              Salvar
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block shrink-0 text-[13px] font-semibold text-[#0f172a]">
+            Conteúdo do termo <span className="text-red-500">*</span>
+          </label>
+          <div className="mt-1.5 flex min-h-0 flex-col gap-3 lg:flex-row lg:items-stretch">
+            <div className="min-w-0 flex-1">
+              <div
+                id="termo-editor-wrapper"
+                className={`relative flex max-h-[min(640px,calc(100vh-26rem))] min-h-[420px] flex-col overflow-hidden rounded-xl border ${
+                  formErrors.conteudo
+                    ? 'border-[#dc2626]'
+                    : 'border-[#e2e8f0] transition-colors hover:border-[#00a88e]/30 focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-[#00a88e]/10'
+                }`}
+              >
+                <TermoFolha
+                  editavel
+                  titulo={titulo}
+                  conteudo={conteudo}
+                  onChangeConteudo={setConteudo}
+                  onChangeTitulo={setTitulo}
+                  tituloError={!!formErrors.titulo}
+                  quillRef={quillRef}
+                />
+              </div>
+              {formErrors.conteudo ? (
+                <p className="mt-1 text-[12px] text-[#dc2626]">Conteúdo obrigatório</p>
+              ) : null}
+            </div>
+            <TermoHelpPanel
+              open={helpOpen}
+              onToggle={() => setHelpOpen((v) => !v)}
+              onInsertToken={insertToken}
+              onInsertIntro={(intro) => setConteudo((prev) => intro + prev)}
+              showTemplateLgpd={editingId == null && !conteudo}
+              onUseLgpdTemplate={() => {
+                setTitulo((t) => t || 'Termo de Consentimento LGPD');
+                const html = LGPD_TEMPLATE_BRUTO.split('\n')
+                  .map((p) => (p.trim() ? `<p>${p}</p>` : ''))
+                  .join('');
+                setConteudo(html);
+              }}
+              autoAssinar={autoAssinarProfissional}
+              onChangeAutoAssinar={setAutoAssinarProfissional}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in duration-300">
@@ -253,7 +413,6 @@ export function TermosManager() {
           </p>
           {emptyNoData ? (
             <div className="mt-5 flex flex-col items-center gap-3">
-              {/* Ação primária: usar o template LGPD pronto */}
               <button
                 type="button"
                 onClick={openNewWithLgpdTemplate}
@@ -262,7 +421,6 @@ export function TermosManager() {
                 <Shield className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
                 Usar Template LGPD
               </button>
-              {/* Ação secundária: criar do zero */}
               <button
                 type="button"
                 onClick={openNew}
@@ -339,8 +497,12 @@ export function TermosManager() {
                 </div>
               </div>
 
-              <p className="text-[15px] font-semibold text-[#0f172a]">{row.titulo ?? row.title ?? '—'}</p>
-              <p className="mt-1 line-clamp-2 text-[13px] text-[#64748b]">{stripHtml(row.conteudo ?? row.content)}</p>
+              <p className="text-[15px] font-semibold text-[#0f172a]">
+                {row.titulo ?? row.title ?? '—'}
+              </p>
+              <p className="mt-1 line-clamp-2 text-[13px] text-[#64748b]">
+                {stripHtml(row.conteudo ?? row.content)}
+              </p>
 
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-4">
                 <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
@@ -373,244 +535,6 @@ export function TermosManager() {
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Modal criar / editar */}
-      {formOpen && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
-          onClick={closeForm}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="termo-form-title"
-            className="flex h-[98dvh] w-[98vw] max-w-[1600px] flex-col rounded-2xl bg-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
-              <h2 id="termo-form-title" className="text-[18px] font-bold text-[#0f172a]">
-                {editingId != null ? 'Editar Termo' : 'Novo Termo'}
-              </h2>
-              <button
-                type="button"
-                onClick={closeForm}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
-                aria-label="Fechar"
-              >
-                <X className="h-5 w-5" strokeWidth={2} />
-              </button>
-            </div>
-            <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-              <div>
-                <label className="block text-[13px] font-semibold text-[#0f172a]">
-                  Nome do termo <span className="text-red-500">*</span>
-                </label>
-                <p className="mt-0.5 text-[12px] text-[#64748b]">
-                  Ex: Termo Botox, Termo Preenchimento, Termo Cirurgia
-                </p>
-                <input
-                  type="text"
-                  value={titulo}
-                  onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ex: Termo de Consentimento — Toxina Botulínica"
-                  className={`mt-2 h-11 w-full rounded-xl border px-4 text-[14px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/10 ${
-                    formErrors.titulo ? 'border-[#dc2626]' : 'border-[#e2e8f0]'
-                  }`}
-                />
-                {formErrors.titulo ? (
-                  <p className="mt-1 text-[12px] text-[#dc2626]">Título obrigatório</p>
-                ) : null}
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-[#0f172a]">
-                  Conteúdo do termo <span className="text-red-500">*</span>
-                </label>
-                <p className="mt-0.5 text-[12px] text-[#64748b]">
-                  Texto completo que será exibido ao paciente para leitura e assinatura
-                </p>
-                {/* Banner de atalho para template LGPD — só aparece em novos termos sem conteúdo */}
-                {editingId == null && !conteudo && (
-                  <div className="mt-2 flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTitulo((t) => t || 'Termo de Consentimento LGPD');
-                        const html = LGPD_TEMPLATE_BRUTO.split('\n').map(p => p.trim() ? `<p>${p}</p>` : '').join('');
-                        setConteudo(html);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#00a88e]/50 bg-[#f0fdfa] px-4 py-2.5 text-left text-[13px] font-medium text-[#0f766e] transition-colors hover:bg-[#dcfce7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]"
-                    >
-                      <Shield className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                      Usar Template LGPD pronto — Lei nº 13.709/2018
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConteudo((prev) => `<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo...</p>` + prev)}
-                      className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#3b82f6]/50 bg-[#eff6ff] px-4 py-2.5 text-left text-[13px] font-medium text-[#1d4ed8] transition-colors hover:bg-[#dbeafe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]"
-                    >
-                      <Plus className="h-4 w-4 shrink-0 text-[#3b82f6]" strokeWidth={2} aria-hidden />
-                      Inserir parágrafo inicial com dados do Paciente
-                    </button>
-                  </div>
-                )}
-                <div id="termo-editor-wrapper" className={`mt-2 rounded-xl border relative ${formErrors.conteudo ? 'border-[#dc2626]' : 'border-[#e2e8f0] hover:border-[#00a88e]/30 transition-colors focus-within:border-[#00a88e] focus-within:ring-2 focus-within:ring-[#00a88e]/10'}`}>
-                  <ReactQuill
-                    theme="snow"
-                    value={conteudo}
-                    onChange={setConteudo}
-                    modules={modules}
-                    bounds="#termo-editor-wrapper"
-                    className="bg-white rounded-xl [&_.ql-container]:min-h-[50dvh] [&_.ql-container]:border-0 [&_.ql-container]:rounded-b-xl [&_.ql-container]:text-[14px] [&_.ql-editor]:p-4 [&_.ql-editor]:min-h-[50dvh] [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-b-[#e2e8f0] [&_.ql-toolbar]:bg-slate-50 [&_.ql-toolbar]:rounded-t-xl"
-                  />
-                </div>
-                {formErrors.conteudo ? (
-                  <p className="mt-1 text-[12px] text-[#dc2626]">Conteúdo obrigatório</p>
-                ) : null}
-                <div className="mt-2 flex gap-3 rounded-lg border border-[#99f6e4] bg-[#f0fdfa] p-3">
-                  <Lightbulb className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                  <div className="text-[12px] leading-relaxed text-[#0f766e] w-full">
-                    <p className="font-semibold mb-1">Campos Automáticos (Copie e cole no texto):</p>
-                    <ul className="list-disc pl-4 space-y-0.5 mb-3">
-                      <li><strong className="font-semibold">{'[NOME DO PACIENTE]'}</strong> - Nome completo</li>
-                      <li><strong className="font-semibold">{'[CPF DO PACIENTE]'}</strong> - CPF formatado</li>
-                      <li><strong className="font-semibold">{'[NOME DA CLÍNICA]'}</strong> - Razão social ou nome</li>
-                      <li><strong className="font-semibold">{'[CNPJ DA CLÍNICA]'}</strong> - CNPJ formatado</li>
-                      <li><strong className="font-semibold">{'[NOME DO PROFISSIONAL]'}</strong> - Nome do atendente</li>
-                    </ul>
-                    
-                    <p className="font-semibold mb-2 pt-2 border-t border-[#99f6e4]">Modelos Prontos de Introdução (com dados automáticos):</p>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const intro = "<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste documento que compreendo e concordo com as informações aqui descritas:</p>";
-                          setConteudo((prev) => intro + prev);
-                        }}
-                        className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] hover:bg-[#ccfbf1] transition-colors"
-                      >
-                        Inserir Intro Básica
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const intro = "<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):</p>";
-                          setConteudo((prev) => intro + prev);
-                        }}
-                        className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] hover:bg-[#ccfbf1] transition-colors"
-                      >
-                        Inserir Intro LGPD
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
-                <input
-                  type="checkbox"
-                  id="autoAssinarProfissional"
-                  checked={autoAssinarProfissional}
-                  onChange={(e) => setAutoAssinarProfissional(e.target.checked)}
-                  className="h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
-                />
-                <div>
-                  <label htmlFor="autoAssinarProfissional" className="block text-[13px] font-semibold text-[#0f172a] cursor-pointer">
-                    Preencher assinatura do profissional automaticamente
-                  </label>
-                  <p className="mt-0.5 text-[12px] text-[#64748b]">
-                    Se o profissional possuir uma Assinatura Padrão configurada no perfil, ela será inserida automaticamente neste termo.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={closeForm}
-                className="h-10 rounded-lg border border-[#e2e8f0] px-4 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc] disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleSave}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal visualizar */}
-      {viewingRow && !formOpen && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setViewingRow(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="flex h-[98dvh] w-[98vw] max-w-[1600px] flex-col rounded-2xl bg-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2e8f0] px-6 py-4">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <h3 className="truncate text-[18px] font-bold text-[#0f172a]">
-                  {viewingRow.titulo ?? viewingRow.title ?? '—'}
-                </h3>
-                <span className="inline-flex shrink-0 rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
-                  Ativo
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEdit(viewingRow)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#e2e8f0] px-3 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc]"
-                >
-                  <Pencil className="h-4 w-4" strokeWidth={2} />
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewingRow(null)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
-                  aria-label="Fechar"
-                >
-                  <X className="h-5 w-5" strokeWidth={2} />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto bg-[#f8fafc] px-6 py-5">
-              <TermoVisualizacao
-                titulo={viewingRow.titulo}
-                conteudo={viewingRow.conteudo ?? viewingRow.content ?? ''}
-              />
-            </div>
-            <div className="flex flex-col items-center gap-3 border-t border-[#e2e8f0] px-6 py-4 sm:flex-row sm:justify-center">
-              <button
-                type="button"
-                onClick={() => setViewingRow(null)}
-                className="h-10 w-full rounded-lg border border-[#e2e8f0] px-4 text-[13px] font-medium text-[#0f172a] hover:bg-[#f8fafc] sm:w-auto"
-              >
-                Fechar
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(viewingRow)}
-                className="h-10 w-full rounded-lg bg-[#00a88e] px-5 text-[13px] font-semibold text-white sm:w-auto"
-              >
-                Editar termo
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -653,5 +577,136 @@ export function TermosManager() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Painel lateral recolhível de ajuda do editor de termos.
+ * lg+: coluna à direita da folha (expandido 260px / recolhido 44px).
+ * <lg: acordeão full-width acima da folha (order-first).
+ */
+function TermoHelpPanel({
+  open,
+  onToggle,
+  onInsertToken,
+  onInsertIntro,
+  showTemplateLgpd,
+  onUseLgpdTemplate,
+  autoAssinar,
+  onChangeAutoAssinar,
+}) {
+  return (
+    <aside
+      className={`order-first flex shrink-0 flex-col self-start overflow-hidden rounded-xl border border-[#99f6e4] bg-[#f0fdfa] transition-[width] duration-200 lg:order-none lg:self-stretch ${
+        open ? 'w-full lg:w-[260px]' : 'w-full lg:w-[44px]'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        title={open ? 'Recolher ajuda' : 'Expandir ajuda'}
+        className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-semibold text-[#0f766e] transition-colors hover:bg-[#ccfbf1]/60 ${
+          open ? '' : 'lg:h-auto lg:flex-1 lg:flex-col lg:justify-start lg:gap-2 lg:px-0 lg:py-3'
+        }`}
+      >
+        <Lightbulb className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+        {open ? (
+          <>
+            <span className="flex-1 truncate">Ajuda do editor</span>
+            {/* <lg (acordeão): seta pra cima = fechar; lg+ (painel lateral): seta pra direita = recolher */}
+            <ChevronUp className="h-4 w-4 shrink-0 lg:hidden" strokeWidth={2} aria-hidden />
+            <ChevronRight className="hidden h-4 w-4 shrink-0 lg:block" strokeWidth={2} aria-hidden />
+          </>
+        ) : (
+          <>
+            {/* <lg: barra horizontal, seta pra baixo = abrir */}
+            <span className="flex-1 truncate lg:hidden">Ajuda do editor</span>
+            <ChevronDown className="h-4 w-4 shrink-0 lg:hidden" strokeWidth={2} aria-hidden />
+            {/* lg+: texto vertical + seta pra esquerda = expandir */}
+            <span className="hidden text-[12px] tracking-wide lg:block lg:[writing-mode:vertical-rl]">
+              Ajuda
+            </span>
+            <ChevronLeft className="hidden h-4 w-4 shrink-0 lg:block" strokeWidth={2} aria-hidden />
+          </>
+        )}
+      </button>
+
+      {open ? (
+        <div className="max-h-[min(640px,calc(100vh-26rem))] overflow-y-auto border-t border-[#99f6e4] px-3 py-3 text-[12px] leading-relaxed text-[#0f766e]">
+          {showTemplateLgpd ? (
+            <div className="mb-3 border-b border-[#99f6e4] pb-3">
+              <p className="mb-2 font-semibold">Começar com modelo:</p>
+              <button
+                type="button"
+                onClick={onUseLgpdTemplate}
+                className="flex w-full items-center gap-2 rounded-lg border border-dashed border-[#00a88e]/50 bg-white px-3 py-2 text-left text-[12px] font-medium text-[#0f766e] transition-colors hover:bg-[#dcfce7]"
+              >
+                <Shield className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                Usar Template LGPD — Lei nº 13.709/2018
+              </button>
+            </div>
+          ) : null}
+
+          <p className="mb-1.5 font-semibold">Campos Automáticos (clique para inserir):</p>
+          <div className="mb-3 flex flex-wrap gap-1.5 lg:flex-col lg:flex-nowrap">
+            {CAMPOS_AUTOMATICOS.map(({ token, desc }) => (
+              <button
+                key={token}
+                type="button"
+                onClick={() => onInsertToken(token)}
+                title={`Clique para inserir no texto — ${desc}`}
+                className="group rounded-lg border border-[#99f6e4] bg-white px-2.5 py-1.5 text-left transition-colors hover:border-[#0f766e] hover:bg-[#ccfbf1]"
+              >
+                <span className="block font-mono text-[11px] font-semibold text-[#0f766e]">
+                  {token}
+                </span>
+                <span className="block text-[10px] text-[#0f766e]/70">{desc}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="mb-2 border-t border-[#99f6e4] pt-2 font-semibold">
+            Modelos Prontos de Introdução (com dados automáticos):
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => onInsertIntro(INTRO_BASICA)}
+              className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] transition-colors hover:bg-[#ccfbf1]"
+            >
+              Inserir Intro Básica
+            </button>
+            <button
+              type="button"
+              onClick={() => onInsertIntro(INTRO_LGPD)}
+              className="inline-flex items-center justify-center rounded-lg border border-[#0f766e] px-3 py-1.5 text-[11px] font-semibold text-[#0f766e] transition-colors hover:bg-[#ccfbf1]"
+            >
+              Inserir Intro LGPD
+            </button>
+          </div>
+
+          {/* Fallback mobile: o toggle compacto da barra de ação some abaixo de sm */}
+          <div className="mt-3 flex items-start gap-2 border-t border-[#99f6e4] pt-3 sm:hidden">
+            <input
+              type="checkbox"
+              id="autoAssinarProfissionalPanel"
+              checked={autoAssinar}
+              onChange={(e) => onChangeAutoAssinar(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+            />
+            <label htmlFor="autoAssinarProfissionalPanel" className="cursor-pointer">
+              <span className="block font-semibold">
+                Preencher assinatura do profissional automaticamente
+              </span>
+              <span className="mt-0.5 block text-[11px] text-[#0f766e]/80">
+                Se o profissional possuir uma Assinatura Padrão configurada no perfil, ela será
+                inserida automaticamente neste termo.
+              </span>
+            </label>
+          </div>
+        </div>
+      ) : null}
+    </aside>
   );
 }

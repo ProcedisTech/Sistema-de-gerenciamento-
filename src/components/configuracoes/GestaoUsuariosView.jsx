@@ -10,6 +10,8 @@ import { AuditoriaView } from './AuditoriaView';
 import { GestaoPerfisTab } from './GestaoPerfisTab';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
+import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
+import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
 
 export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
   // eslint-disable-next-line no-unused-vars
@@ -34,6 +36,13 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
   const [searchName, setSearchName] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterLevel, setFilterLevel] = useState('');
+  const [showEntrance, setShowEntrance] = useState(true);
+
+  useEffect(() => {
+    if (!showEntrance) return undefined;
+    const id = window.setTimeout(() => setShowEntrance(false), 1800);
+    return () => window.clearTimeout(id);
+  }, [showEntrance]);
 
   const fetchHeaders = useCallback(() => {
     return authHeadersForFetch({ needsOrg: true });
@@ -219,17 +228,10 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#00a88e]" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header Responsivo */}
+      <div className={agendaEnterClass(showEntrance, 'agenda-delay-100')}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
@@ -250,8 +252,10 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           </button>
         )}
       </div>
+      </div>
       
       {/* Abas Internas (Segmented Control) */}
+      <div className={agendaEnterClass(showEntrance, 'agenda-delay-150')}>
       <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:inline-flex sm:w-auto relative z-10">
         <button
           onClick={() => setActiveTab('membros')}
@@ -287,9 +291,11 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           <span className="text-center leading-tight">Perfis <span className="hidden sm:inline">de Acesso</span></span>
         </button>
       </div>
+      </div>
 
       {activeTab === 'membros' ? (
         <>
+          <div className={agendaEnterClass(showEntrance, 'agenda-delay-200')}>
           {/* Mini Dashboard */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
@@ -298,7 +304,9 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
               </div>
               <div>
                 <p className="text-sm text-slate-500 font-medium">Total da Equipe</p>
-                <h4 className="text-2xl font-bold text-slate-900">{stats.total}</h4>
+                <h4 className="text-2xl font-bold text-slate-900">
+                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-200" /> : stats.total}
+                </h4>
               </div>
             </div>
             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
@@ -307,7 +315,9 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
               </div>
               <div>
                 <p className="text-sm text-slate-500 font-medium">Membros Ativos</p>
-                <h4 className="text-2xl font-bold text-slate-900">{stats.ativos}</h4>
+                <h4 className="text-2xl font-bold text-slate-900">
+                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-200" /> : stats.ativos}
+                </h4>
               </div>
             </div>
             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
@@ -316,13 +326,15 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
               </div>
               <div>
                 <p className="text-sm text-slate-500 font-medium">Profissionais/Médicos</p>
-                <h4 className="text-2xl font-bold text-slate-900">{stats.medicos}</h4>
+                <h4 className="text-2xl font-bold text-slate-900">
+                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-200" /> : stats.medicos}
+                </h4>
               </div>
             </div>
           </div>
 
           {/* Alertas de Aniversário e Tempo de Casa */}
-          {tempoCasaHoje.length > 0 && (
+          {!loading && tempoCasaHoje.length > 0 && (
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-4 shadow-md text-white mb-4 flex items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4">
               <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
                 <Award className="h-6 w-6 sm:h-8 sm:w-8" />
@@ -349,7 +361,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
             </div>
           )}
 
-          {aniversariantesHoje.length > 0 && (
+          {!loading && aniversariantesHoje.length > 0 && (
             <div className="bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl p-4 shadow-md text-white mb-4 flex items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4">
               <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
                 <PartyPopper className="h-6 w-6 sm:h-8 sm:w-8" />
@@ -376,7 +388,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
             </div>
           )}
 
-          {aniversariantesHoje.length === 0 && proximoAniversariante && (
+          {!loading && aniversariantesHoje.length === 0 && proximoAniversariante && (
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 flex items-center gap-3">
               <div className="bg-blue-50 text-blue-500 p-2 rounded-lg shrink-0">
                 <CalendarDays className="h-5 w-5" />
@@ -387,6 +399,9 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
             </div>
           )}
 
+          </div>
+
+          <div className={`space-y-6 ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}>
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
             <div className="flex-1">
@@ -425,7 +440,9 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           </div>
 
           {/* Unified Rich Card Grid */}
-          {(() => {
+          {loading ? (
+            <ConfigTableSkeleton rows={6} mobileCards />
+          ) : (() => {
             const filteredUsers = usuarios.filter(u => {
               const matchName = searchName === '' || (u.nomeCompleto || u.usuarioNome || '').toLowerCase().includes(searchName.toLowerCase());
               const matchRole = filterRole === '' || String(u.roleId || u.role?.id) === String(filterRole);
@@ -612,6 +629,8 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           );
         })()}
 
+          </div>
+
           {showInviteModal && (
             <InviteModal 
               roles={roles} 
@@ -652,14 +671,18 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           )}
         </>
       ) : activeTab === 'auditoria' ? (
-        <AuditoriaView />
+        <div className={agendaEnterClass(showEntrance, 'agenda-delay-250')}>
+          <AuditoriaView />
+        </div>
       ) : (
+        <div className={agendaEnterClass(showEntrance, 'agenda-delay-250')}>
         <GestaoPerfisTab 
           perfisAcesso={perfisAcesso} 
           onReload={loadData} 
           fetchHeaders={fetchHeaders}
           tipoOrg={tipoOrg} 
         />
+        </div>
       )}
     </div>
   );

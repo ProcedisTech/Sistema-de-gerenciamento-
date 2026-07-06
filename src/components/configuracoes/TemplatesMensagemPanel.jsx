@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageCircle, Save } from 'lucide-react';
 import { getApiErrorToastMessage, templatesMensagemApi } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
+import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 // BUG #19: emoji no template estava virando "diamante interrogação" (U+FFFD) no WhatsApp
 // do paciente. Decisão de produto (clínica médica): emoji não cabe nesse contexto e
@@ -158,10 +159,6 @@ export function TemplatesMensagemPanel() {
     }
   };
 
-  if (loading) {
-    return <div className="text-sm text-[#64748b]">Carregando templates...</div>;
-  }
-
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
@@ -178,6 +175,10 @@ export function TemplatesMensagemPanel() {
         </p>
       </div>
 
+      {loading ? (
+        <ConfigFormSectionsSkeleton sections={2} />
+      ) : (
+        <>
       <TemplateEditor
         titulo="Confirmação (24h antes)"
         descricao="Enviado para confirmar presença do paciente no dia anterior"
@@ -195,6 +196,8 @@ export function TemplatesMensagemPanel() {
         onSalvar={() => handleSalvar('lembrete', textoLembrete, setSalvandoLembrete)}
         salvando={salvandoLembrete}
       />
+        </>
+      )}
     </div>
   );
 }

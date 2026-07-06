@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { feriadosApi, getApiErrorToastMessage } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
+import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
 
 function formatarData(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return '—';
@@ -245,7 +246,9 @@ export function FeriadosPanel() {
         </div>
       </div>
 
-      {loading && <p className="text-sm text-[#64748b]">Carregando...</p>}
+      {loading ? (
+        <ConfigCardStackSkeleton count={4} className="h-14" />
+      ) : null}
 
       {!loading && feriados.length === 0 && (
         <div className="rounded-xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-6 text-center">

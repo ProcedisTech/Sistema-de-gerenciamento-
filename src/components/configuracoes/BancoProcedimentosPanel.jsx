@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useBancoProcedimentos } from '../../hooks/useBancoProcedimentos';
 import { usePapel } from '../../hooks/usePapel';
 import { Switch } from '../shared/Switch';
+import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
 
 const FILTROS = [
   { id: 'todos', label: 'Todos' },
@@ -110,15 +111,7 @@ export function BancoProcedimentosPanel() {
     [isAdmin, vincular, desvincular]
   );
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc]">
-        <Loader2 className="h-9 w-9 animate-spin text-[#00a88e]" aria-hidden />
-      </div>
-    );
-  }
-
-  if (error) {
+  if (error && !loading) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-center">
         <p className="text-[14px] font-semibold text-red-800">{error}</p>
@@ -175,11 +168,19 @@ export function BancoProcedimentosPanel() {
           ))}
         </div>
         <p className="text-[13px] font-semibold text-[#64748b]">
-          <span className="text-[#00a88e]">{totalAtivos}</span> de {totalCatalogo} ativos
+          {loading ? (
+            <span className="inline-block h-4 w-24 animate-pulse rounded bg-[#e2e8f0]" />
+          ) : (
+            <>
+              <span className="text-[#00a88e]">{totalAtivos}</span> de {totalCatalogo} ativos
+            </>
+          )}
         </p>
       </div>
 
-      {itensFiltrados.length === 0 ? (
+      {loading ? (
+        <ConfigTableSkeleton rows={6} mobileCards />
+      ) : itensFiltrados.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#cbd5e1] p-8 text-center text-[#94a3b8]">
           <Search className="h-10 w-10 opacity-30" />
           <p className="text-[14px] font-medium">Nenhum procedimento encontrado.</p>

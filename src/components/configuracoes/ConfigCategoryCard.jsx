@@ -11,13 +11,23 @@ import { ChevronRight } from 'lucide-react';
  * @param {string} props.description           — descrição curta
  * @param {number} props.itemCount             — qtd de itens visíveis ao usuário
  * @param {() => void} props.onClick
+ * @param {number} [props.entranceDelayMs]     — delay do stagger de entrada (agenda-rise)
  */
-export function ConfigCategoryCard({ icon, color, label, description, itemCount, onClick }) {
+export function ConfigCategoryCard({
+  icon,
+  color,
+  label,
+  description,
+  itemCount,
+  onClick,
+  entranceDelayMs,
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full flex-col gap-3 rounded-xl border border-[#e2e8f0] bg-white p-5 text-left shadow-app-card transition-all hover:border-[#cbd5e1] hover:shadow-agenda-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/50"
+      className="group animate-agenda-rise flex w-full flex-col gap-3 rounded-xl border border-[#e2e8f0] bg-white p-5 text-left shadow-app-card transition-all hover:border-[#cbd5e1] hover:shadow-agenda-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/50"
+      style={entranceDelayMs != null ? { animationDelay: `${entranceDelayMs}ms` } : undefined}
     >
       {/* Ícone + seta */}
       <div className="flex items-start justify-between">

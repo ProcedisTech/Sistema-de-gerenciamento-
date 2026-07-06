@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 import { getApiErrorToastMessage, organizacaoApi } from '../../services/api.js';
+import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
 
 function findOrgRow(list, orgId) {
   if (!Array.isArray(list) || !orgId) return null;
@@ -89,15 +90,7 @@ export function MetodosAssinaturaPanel() {
 
   const dis = !canEdit;
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc]">
-        <Loader2 className="h-9 w-9 animate-spin text-[#00a88e]" aria-hidden />
-      </div>
-    );
-  }
-
-  if (loadError) {
+  if (loadError && !loading) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-center">
         <p className="text-[14px] font-semibold text-red-800">{loadError}</p>
@@ -131,6 +124,10 @@ export function MetodosAssinaturaPanel() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {loading ? (
+          <ConfigCardStackSkeleton count={3} className="h-24" />
+        ) : (
+          <>
         <div className={`rounded-xl border p-4 transition-colors ${permiteQrCode ? 'border-[#00a88e]/30 bg-[#f0fdf9]' : 'border-slate-200 bg-white'}`}>
           <label className="flex items-start gap-3 cursor-pointer">
             <div className="flex h-6 items-center">
@@ -208,6 +205,8 @@ export function MetodosAssinaturaPanel() {
               <p className="mt-2 text-[12px] font-semibold text-red-600">Selecione pelo menos um método de assinatura.</p>
             )}
           </div>
+        )}
+          </>
         )}
       </form>
     </div>
