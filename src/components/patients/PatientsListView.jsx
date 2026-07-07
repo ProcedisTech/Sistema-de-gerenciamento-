@@ -65,6 +65,21 @@ function applyQuickFilter(items, filter) {
   return applyPatientQuickFilter(items, filter);
 }
 
+/** Espelha AgendaDashboard.jsx — monta as options de tolerância a partir de um slot de agenda. */
+function buildAgendaSlotOptions(slot) {
+  return {
+    agendaId: slot.agendaId,
+    data: slot.data,
+    horaInicio: slot.horaInicio,
+    fromAgendaSlot: true,
+    procedimentoNome: slot.procedimentoNome,
+    catalogoProcedimentoSaudeId: slot.catalogoProcedimentoSaudeId,
+    tipoProcedimentoCodigo: slot.tipoProcedimentoCodigo,
+    procedimentoFeitoOrigemId: slot.procedimentoFeitoOrigemId,
+    isAgendaRetorno: String(slot.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno',
+  };
+}
+
 const PATIENT_CARD_MAX_STATUS_BADGES = 3;
 
 function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
@@ -232,7 +247,7 @@ function PatientPreviewPanel({
 
   const handleIniciarAtendimentoClick = () => {
     if (!canStartAnamnese || previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
-    onStartAttendance(selectedPatient);
+    onStartAttendance(selectedPatient, previewAgendaSlot ? buildAgendaSlotOptions(previewAgendaSlot) : {});
   };
 
   return (
@@ -295,7 +310,7 @@ function PatientPreviewPanel({
             compact={false}
             onConfirmar={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'confirmado')}
             onCheckIn={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'paciente_chegou')}
-            onIniciarAtendimento={() => onStartAttendance?.(previewAgendaSlot.pacienteId, previewAgendaSlot.agendaId, previewAgendaSlot)}
+            onIniciarAtendimento={() => onStartAttendance?.(selectedPatient, buildAgendaSlotOptions(previewAgendaSlot))}
             onWhatsApp={() => agendaSchedule?.handleEnviarWhatsApp(previewAgendaSlot.agendaId)}
             onEnviarAnamnese={() => agendaSchedule?.openDaySheet(previewAgendaSlot.data, previewAgendaSlot)}
             onReagendar={() => agendaSchedule?.openReagendarModal(previewAgendaSlot, [previewAgendaSlot])}
@@ -589,6 +604,16 @@ export function PatientsListView({
     setPreviewPatientCpf(patient.cpf);
     setPreviewPatientSeed(fromSidebar ? patient : null);
     setPreviewAgendaSlot(agendaSlot);
+  };
+
+  /** PulseSidebar só tem o slot cru (kpi.agendamentosHoje) — resolve o paciente completo antes de iniciar. */
+  const handleStartAttendanceFromSlot = (slot) => {
+    if (!slot?.pacienteId || typeof onStartAttendance !== 'function') return;
+    const pid = String(slot.pacienteId);
+    const fullPatient =
+      patients.find((p) => String(p.id) === pid) || patientListItems.find((p) => String(p.id) === pid);
+    if (!fullPatient) return;
+    onStartAttendance(fullPatient, buildAgendaSlotOptions(slot));
   };
 
   useEffect(() => {
@@ -899,6 +924,8 @@ export function PatientsListView({
                   onStartAttendance={onStartAttendance}
                   previewAnamneseLoading={previewAnamneseLoading}
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
+                  agendaSchedule={agendaSchedule}
+                  previewAgendaSlot={previewAgendaSlot}
                   shellClassName="patient-preview-sheet w-full border-0 shadow-none"
                 />
               </div>
@@ -943,7 +970,7 @@ export function PatientsListView({
               onSelectPatient={(patient) => openPatientPreview(patient, { fromSidebar: true })}
               getPatientInitials={getPatientInitials}
               agendaSchedule={agendaSchedule}
-              onStartAttendance={onStartAttendance}
+              onStartAttendance={handleStartAttendanceFromSlot}
             />
           </div>
         )}

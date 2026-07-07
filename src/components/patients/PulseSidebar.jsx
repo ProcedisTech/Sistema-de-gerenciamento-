@@ -174,7 +174,7 @@ function AgendaRow({ slot, agendaSchedule, onStartAttendance }) {
             compact={true}
             onConfirmar={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'confirmado')}
             onCheckIn={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'paciente_chegou')}
-            onIniciarAtendimento={() => onStartAttendance?.(slot.pacienteId, slot.agendaId, slot)}
+            onIniciarAtendimento={() => onStartAttendance?.(slot)}
             onWhatsApp={() => agendaSchedule.handleEnviarWhatsApp(slot.agendaId)}
             onEnviarAnamnese={() => agendaSchedule.openDaySheet(slot.data, slot)}
             onReagendar={() => agendaSchedule.openReagendarModal(slot, [slot])}
