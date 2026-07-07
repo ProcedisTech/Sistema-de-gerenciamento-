@@ -3530,7 +3530,7 @@ function AppRefactoredInner() {
                   setPatientSearchQuery={setPatientSearchQuery}
                   getPatientInitials={getPatientInitials}
                   onCreatePatient={handleCreatePatientFromPatients}
-                  onStartAttendance={handleStartAttendance}
+                  onStartAttendance={handleAgendaStartAttendance}
                   onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
                   onReagendarPlanoItem={handleReagendarPlanoItem}
                   onUpdatePatient={handleUpdatePatientProfile}
