@@ -168,7 +168,6 @@ export function AgendaDashboard({
   agenda,
   patients = [],
   onStartAttendance,
-  authEnabled = false,
   onSlotCancelar,
   onSlotReagendar,
   clinicaNome = 'Procedi',
@@ -665,7 +664,6 @@ export function AgendaDashboard({
           viewMode={agenda.viewMode}
           onChangeViewMode={agenda.setViewMode}
           onSyncWeekFromSelection={agenda.syncWeekFromSelection}
-          authEnabled={authEnabled}
         />
       </div>
 

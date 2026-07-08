@@ -2,14 +2,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Bell, BellRing } from 'lucide-react';
 import { notificacoesApi } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
+import { formatarMensagemNotificacao, formatarTempoRelativo } from '../../utils/notificacaoFormat.js';
 
 const POLL_INTERVAL_MS = 60_000;
 
-export default function NotificationBell({ variant = 'default' }) {
+export default function NotificationBell({
+  variant = 'default',
+  onVerTodas,
+  notificacoesRefreshKey = 0,
+}) {
   const isAgenda = variant === 'agenda';
+  const isHeader = variant === 'header';
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
+  const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const { error: toastError } = useToast();
   const containerRef = useRef(null);
@@ -28,6 +35,10 @@ export default function NotificationBell({ variant = 'default' }) {
     const id = setInterval(refreshCount, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [refreshCount]);
+
+  useEffect(() => {
+    refreshCount();
+  }, [notificacoesRefreshKey, refreshCount]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -52,6 +63,7 @@ export default function NotificationBell({ variant = 'default' }) {
     try {
       const page = await notificacoesApi.listar({ page: 0, size: 20 });
       setItems(Array.isArray(page?.content) ? page.content : []);
+      setTotalElements(typeof page?.totalElements === 'number' ? page.totalElements : 0);
     } catch {
       toastError('Erro ao carregar notificações');
     } finally {
@@ -87,6 +99,8 @@ export default function NotificationBell({ variant = 'default' }) {
   };
 
   const Icon = count > 0 ? BellRing : Bell;
+  const previewItems = items.slice(0, 2);
+  const totalCount = totalElements > 0 ? totalElements : items.length;
 
   return (
     <div ref={containerRef} className="relative">
@@ -94,20 +108,28 @@ export default function NotificationBell({ variant = 'default' }) {
         type="button"
         onClick={handleToggle}
         className={
-          isAgenda
-            ? 'relative flex h-10 w-10 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-700 shadow-agenda-sm transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40'
-            : 'relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-app-surface-soft'
+          isHeader
+            ? 'relative flex h-10 w-10 items-center justify-center rounded-xl border-[1.5px] border-[#00a88e] bg-white text-[#00a88e] transition-colors hover:bg-teal-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40'
+            : isAgenda
+              ? 'relative flex h-10 w-10 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-700 shadow-agenda-sm transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40'
+              : 'relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-app-surface-soft'
         }
         title="Notificações"
         aria-label="Notificações"
       >
-        <Icon className={`h-5 w-5 ${isAgenda ? 'text-ink-700' : 'text-gray-700'}`} />
+        <Icon
+          className={`h-5 w-5 ${
+            isHeader ? 'text-[#00a88e]' : isAgenda ? 'text-ink-700' : 'text-gray-700'
+          }`}
+        />
         {count > 0 ? (
           <span
             className={
-              isAgenda
-                ? 'absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-status-danger px-1 text-xs font-bold text-white'
-                : 'absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white'
+              isHeader
+                ? 'absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-[#00a88e] px-1 text-xs font-bold text-white'
+                : isAgenda
+                  ? 'absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-status-danger px-1 text-xs font-bold text-white'
+                  : 'absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white'
             }
           >
             {count > 99 ? '99+' : count}
@@ -116,7 +138,11 @@ export default function NotificationBell({ variant = 'default' }) {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-12 z-40 max-h-96 w-80 overflow-y-auto rounded-xl bg-white shadow-2xl ring-1 ring-gray-200">
+        <div
+          className={`absolute right-0 top-12 w-80 rounded-xl bg-white shadow-2xl ring-1 ring-gray-200 ${
+            isHeader ? 'z-50' : 'z-40'
+          }`}
+        >
           <div className="flex items-center justify-between border-b border-gray-100 p-3">
             <h3 className="text-sm font-bold text-gray-900">Notificações</h3>
             {count > 0 ? (
@@ -136,9 +162,9 @@ export default function NotificationBell({ variant = 'default' }) {
             <div className="p-6 text-center text-sm text-gray-500">Nenhuma notificação</div>
           ) : null}
 
-          {!loading && items.length > 0 ? (
+          {!loading && previewItems.length > 0 ? (
             <ul className="divide-y divide-gray-100">
-              {items.map((n) => (
+              {previewItems.map((n) => (
                 <li
                   key={n.id}
                   onClick={() => !n.lida && handleMarcarLida(n.id)}
@@ -165,83 +191,23 @@ export default function NotificationBell({ variant = 'default' }) {
               ))}
             </ul>
           ) : null}
+
+          {typeof onVerTodas === 'function' ? (
+            <div className="border-t border-gray-100 p-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onVerTodas();
+                }}
+                className="w-full rounded-lg py-2 text-sm font-medium text-[#00a88e] hover:bg-teal-50"
+              >
+                {totalCount > 2 ? `Ver todas (${totalCount})` : 'Ver todas'}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
-}
-
-const TIPO_VERBO = {
-  paciente_confirmou: 'confirmou presença',
-  paciente_recusou: 'recusou',
-  paciente_sem_resposta: 'não respondeu',
-  agenda_cancelada: 'Agendamento cancelado',
-  agenda_reagendada: 'Agendamento reagendado',
-};
-
-function lerPayload(p) {
-  if (!p) return {};
-  if (typeof p === 'object') return p;
-  if (typeof p === 'string') {
-    try { return JSON.parse(p); }
-    catch { return {}; }
-  }
-  return {};
-}
-
-function formatarQuando(data, hora) {
-  if (!data) return null;
-  let dataBr;
-  if (/^\d{4}-\d{2}-\d{2}/.test(data)) {
-    const [, m, d] = data.split('-');
-    dataBr = `${d}/${m}`;
-  } else if (/^\d{2}\/\d{2}/.test(data)) {
-    dataBr = data.substring(0, 5);
-  } else {
-    return null;
-  }
-  return hora ? `${dataBr} às ${hora}` : dataBr;
-}
-
-function formatarMensagemNotificacao(n) {
-  const payload = lerPayload(n?.payload);
-  const nome = payload.pacienteNome;
-  const quando = formatarQuando(payload.dataAgendamento, payload.horaInicio);
-  const procStr = payload.procedimentoNome ? ` (${payload.procedimentoNome})` : '';
-
-  switch (n?.tipo) {
-    case 'paciente_confirmou':
-    case 'paciente_recusou':
-    case 'paciente_sem_resposta': {
-      const verbo = TIPO_VERBO[n.tipo];
-      if (nome && quando) return `${nome} ${verbo} em ${quando}${procStr}`;
-      if (nome) return `${nome} ${verbo}`;
-      return `Paciente ${verbo}`;
-    }
-    case 'agenda_cancelada': {
-      if (nome && quando) return `Agendamento de ${nome} em ${quando}${procStr} cancelado`;
-      if (nome) return `Agendamento de ${nome} cancelado`;
-      return 'Agendamento cancelado';
-    }
-    case 'agenda_reagendada': {
-      // TODO: confirmar campos dataAntiga/dataNova quando o PR backend mergear
-      if (nome && quando) return `Agendamento de ${nome} reagendado (era ${quando}${procStr})`;
-      return 'Agendamento reagendado';
-    }
-    default:
-      return TIPO_VERBO[n?.tipo] || n?.tipo || '';
-  }
-}
-
-function formatarTempoRelativo(iso) {
-  if (!iso) return '';
-  try {
-    const diff = (new Date() - new Date(iso)) / 1000;
-    if (diff < 60) return 'agora há pouco';
-    if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
-    if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
-    return `há ${Math.floor(diff / 86400)} dias`;
-  } catch {
-    return '';
-  }
 }

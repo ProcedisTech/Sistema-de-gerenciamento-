@@ -1,6 +1,5 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
-import NotificationBell from '../layout/NotificationBell.jsx';
 import { AGENDA_SELECTED_SURFACE } from './agendaSelectionStyles.js';
 import { useNowClock } from './hooks/useNowClock.js';
 
@@ -68,7 +67,6 @@ export function AgendaTopbar({
   viewMode,
   onChangeViewMode,
   onSyncWeekFromSelection,
-  authEnabled = false,
 }) {
   const crumbClinica = String(clinicaNome || 'Procedi').trim() || 'Procedi';
   const crumbProf = String(profissionalNome || '').trim();
@@ -96,7 +94,6 @@ export function AgendaTopbar({
           onChangeViewMode={onChangeViewMode}
           onSyncWeekFromSelection={onSyncWeekFromSelection}
         />
-        {authEnabled ? <NotificationBell variant="agenda" /> : null}
       </div>
     </header>
   );

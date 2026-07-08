@@ -1,9 +1,7 @@
-import NotificationBell from '../layout/NotificationBell.jsx';
 import { formatGreetingLine, formatSubtitleForDay } from '../../utils/agendaDayInsights.js';
 
 export function AgendaPageHeader({
   userDisplayName = '',
-  authEnabled = false,
   selectedDay,
   todayIso,
   selectedDayCount = 0,
@@ -30,7 +28,6 @@ export function AgendaPageHeader({
         <h2 className="min-w-0 flex-1 truncate text-xl font-black leading-tight text-[#1A1A2E] sm:text-2xl">
           {greeting}
         </h2>
-        {authEnabled ? <NotificationBell /> : null}
       </div>
       <p className="text-sm font-medium text-slate-600">{subtitle}</p>
       {nextLabel ? (

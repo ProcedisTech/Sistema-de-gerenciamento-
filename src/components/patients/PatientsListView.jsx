@@ -679,8 +679,8 @@ export function PatientsListView({
             <div
               className={`sticky top-0 z-10 bg-transparent ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}
             >
-              {/* < xl: busca full-width (coluna estreita com PulseSidebar/preview) */}
-              <div className="px-4 pt-3 pb-2 xl:hidden">
+              {/* < lg: busca full-width (coluna estreita com PulseSidebar/preview) */}
+              <div className="px-4 pt-3 pb-2 lg:hidden">
                 <div className="relative min-h-[44px] min-w-0">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
@@ -698,24 +698,8 @@ export function PatientsListView({
                 </div>
               </div>
 
-              {/* xl+: busca + ordenação + filtros (wrap quando a coluna aperta) */}
-              <div className="hidden w-full min-w-0 flex-row flex-wrap items-center gap-3 px-4 pt-3 pb-2 xl:flex">
-                <div className="relative min-h-10 min-w-[12rem] w-full flex-1 basis-[min(100%,20rem)]">
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
-                    strokeWidth={2.25}
-                    aria-hidden
-                  />
-                  <input
-                    type="text"
-                    value={patientSearchQuery}
-                    onChange={(e) => setPatientSearchQuery(e.target.value)}
-                    placeholder="Buscar por nome, CPF ou telefone…"
-                    className="h-10 w-full min-w-[12rem] rounded-xl border border-[#e2e8f0] bg-white py-2 pl-9 pr-3 text-[14px] text-[#0f172a] placeholder:text-[#94a3b8] outline-none focus:border-[#00a88e]/50"
-                    autoComplete="off"
-                  />
-                </div>
-
+              {/* xl+: ordenação + filtros (busca e Novo Paciente no GlobalHeader lg+) */}
+              <div className="hidden w-full min-w-0 flex-row flex-wrap items-center justify-end gap-3 px-4 pt-3 pb-2 xl:flex">
                 <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
                   <div className="relative flex h-10 shrink-0 items-center">
                   <ArrowUpDown
@@ -770,15 +754,6 @@ export function PatientsListView({
                     onFilterChange={onFilterChange}
                   />
                   </div>
-                  {canCreatePacientes ? (
-                    <button
-                      type="button"
-                      onClick={onCreatePatient}
-                      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-                    >
-                      <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden /> Novo Paciente
-                    </button>
-                  ) : null}
                 </div>
               </div>
 
@@ -828,7 +803,7 @@ export function PatientsListView({
                   <button
                     type="button"
                     onClick={onCreatePatient}
-                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f] sm:px-4"
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#00967f] sm:px-4 lg:hidden"
                   >
                     <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
                     <span className="whitespace-nowrap">Novo Paciente</span>
