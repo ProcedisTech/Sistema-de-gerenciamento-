@@ -21,6 +21,8 @@ import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 // Componentes de Layout
 import { RoleGuard } from './auth/RoleGuard.jsx';
 import { Sidebar, Stepper, MobileNavigation } from './layout';
+import { GlobalHeader } from './layout/GlobalHeader.jsx';
+import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
 import { resolverPapel } from '../utils/authPayload';
@@ -318,6 +320,7 @@ function AppRefactoredInner() {
   });
   const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', fotoUrl: '' });
   const [configSection, setConfigSectionState] = useState(readStoredSection);
+  const [notifVersion, setNotifVersion] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
   const canvasRef = useRef(null);
@@ -910,6 +913,7 @@ function AppRefactoredInner() {
       return 'pacientes';
     }
   });
+  const [previousView, setPreviousView] = React.useState(null);
   const setActiveView = React.useCallback((view) => {
     _setActiveView((prev) => {
       const next = typeof view === 'function' ? view(prev) : view;
@@ -1462,6 +1466,60 @@ function AppRefactoredInner() {
   const handleCreatePatientFromPatients = () => {
     setPatientView('create');
   };
+
+  const handleGlobalPatientSelect = React.useCallback(
+    (patient) => {
+      const cpf = String(patient?.cpf || '').trim();
+      if (!cpf) return;
+      if (activeView !== 'pacientes') goToViewWithGuard('pacientes');
+      captureProfileNavSnapshot?.(cpf);
+      setSelectedPatientCpf(cpf);
+      setPatientDetailTab('planos');
+      setPatientView('profile');
+    },
+    [
+      activeView,
+      goToViewWithGuard,
+      captureProfileNavSnapshot,
+      setSelectedPatientCpf,
+      setPatientDetailTab,
+      setPatientView,
+    ],
+  );
+
+  const handleGlobalNovoPaciente = React.useCallback(() => {
+    if (activeView !== 'pacientes') goToViewWithGuard('pacientes');
+    setPatientView('create');
+  }, [activeView, goToViewWithGuard, setPatientView]);
+
+  const handleGlobalAgendamento = React.useCallback(() => {
+    agendaSchedule.openCreateModal(agendaSchedule.selectedDay);
+  }, [agendaSchedule]);
+
+  const handleOpenNotificacoes = React.useCallback(() => {
+    if (activeView !== 'notificacoes') {
+      setPreviousView(activeView);
+    }
+    goToViewWithGuard('notificacoes');
+  }, [activeView, goToViewWithGuard]);
+
+  const handleVoltarNotificacoes = React.useCallback(() => {
+    goToViewWithGuard(previousView || 'pacientes');
+  }, [previousView, goToViewWithGuard]);
+
+  const handleNotificacoesChanged = React.useCallback(() => {
+    setNotifVersion((v) => v + 1);
+  }, []);
+
+  const handleNavigateToCatalogo = React.useCallback(() => {
+    if (!canSeeConfig) return;
+    goToViewWithGuard('configuracoes');
+    setConfigSection('procedimentos');
+  }, [canSeeConfig, goToViewWithGuard, setConfigSection]);
+
+  const handleNavigateToAgenda = React.useCallback(() => {
+    goToViewWithGuard('agenda');
+  }, [goToViewWithGuard]);
 
   const handleUpdatePatientProfile = (cpfKey, patch) => {
     updatePatientByCpf(cpfKey, (prev) => ({ ...prev, ...patch }));
@@ -3492,6 +3550,17 @@ function AppRefactoredInner() {
             ) : null}
           </>
         ) : (
+        <>
+        <GlobalHeader
+          activeView={activeView}
+          onPatientSelect={handleGlobalPatientSelect}
+          onNovoPaciente={handleGlobalNovoPaciente}
+          onAgendamento={handleGlobalAgendamento}
+          onOpenNotificacoes={handleOpenNotificacoes}
+          notificacoesRefreshKey={notifVersion}
+          patientSearchQuery={patientSearchQuery}
+          setPatientSearchQuery={setPatientSearchQuery}
+        />
         <div
           className={`w-full mx-auto ${
             activeView === 'configuracoes' || activeView === 'gestao-equipe'
@@ -3607,13 +3676,21 @@ function AppRefactoredInner() {
               </RoleGuard>
             )}
 
+            {activeView === 'notificacoes' && (
+              <NotificacoesView
+                onVoltar={handleVoltarNotificacoes}
+                onNavigateToCatalogo={handleNavigateToCatalogo}
+                onNavigateToAgenda={handleNavigateToAgenda}
+                onNotificacoesChanged={handleNotificacoesChanged}
+              />
+            )}
+
             {activeView === 'agenda' && (
               <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
                 <div className="flex min-h-0 flex-1 flex-col">
                 <AgendaDashboard
                   agenda={agendaSchedule}
                   patients={patients}
-                  authEnabled={authSessionReady}
                   clinicaNome={clinicaInfo.nome}
                   clinicaSlug={clinicaInfo.slug}
                   profissionalNome={perfilInfo.nomeCompleto || roleNome}
@@ -3630,13 +3707,14 @@ function AppRefactoredInner() {
             )}
 
             {/* @deprecated — 'jornada' legado; 'consulta' reservado para ConsultaHub (render-block). */}
-            {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe'].includes(activeView) && (
+            {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'notificacoes'].includes(activeView) && (
               <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                 Visao nao encontrada.
               </div>
             )}
           </div>
         </div>
+        </>
         )}
       </main>
 

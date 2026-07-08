@@ -1411,6 +1411,17 @@ export const notificacoesApi = {
     request('/api/v1/notificacoes/marcar-todas-lidas', { method: 'PATCH' }),
 
   /**
+   * Soft delete de uma notificação.
+   */
+  deletar: (id) => request(`/api/v1/notificacoes/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Bulk: remove (soft delete) todas as notificações lidas.
+   * @returns {Promise<{ removidas: number }>}
+   */
+  limparLidas: () => request('/api/v1/notificacoes/lidas', { method: 'DELETE' }),
+
+  /**
    * Sugere inclusão de procedimento no catálogo (notifica admins da org).
    * @param {string} nome
    * @returns {Promise<{ criadas: number }>}
