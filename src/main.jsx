@@ -28,16 +28,17 @@ window.addEventListener('error', (event) => {
   if (
     message.includes('ResizeObserver loop completed with undelivered notifications') ||
     message.includes('ResizeObserver loop limit exceeded') ||
-    message.includes('AbortError')
+    message.includes('AbortError') ||
+    message.includes('The object can not be found here') ||
+    message.includes('NotFoundError')
   ) {
-    return; // Ignora erros benignos de ResizeObserver e abortos
+    return; // Ignora erros benignos de ResizeObserver, abortos e desmontagem no iOS
   }
 
   // Tratar falhas de chunk no iOS/Safari/Chrome (WebKit)
   const isChunkError =
     message.includes('dynamically imported module') ||
-    message.includes('Importing a module script failed') ||
-    message.includes('The object can not be found here');
+    message.includes('Importing a module script failed');
 
   if (isChunkError) {
     if (!sessionStorage.getItem('chunk_reload_attempted')) {
@@ -57,15 +58,17 @@ window.addEventListener('unhandledrejection', (event) => {
   if (
     message.includes('AbortError') ||
     message.includes('ResizeObserver') ||
-    reason?.name === 'AbortError'
+    message.includes('The object can not be found here') ||
+    message.includes('NotFoundError') ||
+    reason?.name === 'AbortError' ||
+    reason?.name === 'NotFoundError'
   ) {
     return; // Ignora erros benignos e cancelamentos de promise
   }
 
   const isChunkError =
     message.includes('dynamically imported module') ||
-    message.includes('Importing a module script failed') ||
-    message.includes('The object can not be found here');
+    message.includes('Importing a module script failed');
 
   if (isChunkError) {
     if (!sessionStorage.getItem('chunk_reload_attempted')) {
@@ -82,6 +85,9 @@ try {
   if (!rootEl) {
     throw new Error('Elemento #root nao encontrado em index.html')
   }
+
+  // O app inicializou com sucesso: remove a flag de tentativa de reload de chunk
+  sessionStorage.removeItem('chunk_reload_attempted');
 
   ReactDOM.createRoot(rootEl).render(
     <React.StrictMode>
