@@ -186,19 +186,38 @@ export function PublicSignatureFlow() {
       const canvas = canvasRef.current;
       
       const initCanvas = () => {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return; // ignore se não estiver renderizado
-        
-        const ratio = window.devicePixelRatio || 1;
-        canvas.width = rect.width * ratio;
-        canvas.height = rect.height * ratio;
-        
-        const ctx = canvas.getContext('2d');
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        ctx.fillStyle = '#f8fafc';
-        ctx.fillRect(0, 0, rect.width, rect.height);
-        
-        hasStrokeRef.current = false;
+        try {
+          const rect = canvas.parentElement.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return; // ignore se não estiver renderizado
+          
+          let snap = '';
+          try {
+            if (hasStrokeRef.current && canvas.width) snap = canvas.toDataURL('image/png');
+          } catch {
+            snap = '';
+          }
+
+          const ratio = window.devicePixelRatio || 1;
+          canvas.width = rect.width * ratio;
+          canvas.height = rect.height * ratio;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, rect.width, rect.height);
+          
+          if (snap) {
+            const image = new Image();
+            image.onload = () => {
+              ctx.drawImage(image, 0, 0, rect.width, rect.height);
+            };
+            image.src = snap;
+          } else {
+            hasStrokeRef.current = false;
+          }
+        } catch (e) {
+          console.warn('Erro benigno no resize do canvas:', e);
+        }
       };
 
       setTimeout(initCanvas, 50);
@@ -468,11 +487,15 @@ export function PublicSignatureFlow() {
               </p>
             </div>
 
-            <div className="fixed inset-0 z-50 bg-white p-4 sm:p-6 text-center flex-col hidden sm:flex sm:portrait:flex landscape:flex">
-              <div className="flex shrink-0 items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-slate-800">Sua Assinatura</h2>
-                <p className="text-sm text-slate-500 hidden sm:block">Assine no quadro abaixo usando o seu dedo.</p>
-                <div className="w-8"></div> {/* spacer para o flex-between */}
+            <div className="fixed inset-0 z-50 bg-white p-2 sm:p-6 text-center flex-col hidden sm:flex sm:portrait:flex landscape:flex">
+              <div className="flex shrink-0 items-center justify-between mb-2 px-2">
+                <h2 className="text-lg font-bold text-slate-800">Assine abaixo</h2>
+                <button
+                  onClick={clearCanvas}
+                  className="text-sm font-semibold text-teal-700 underline"
+                >
+                  Limpar
+                </button>
               </div>
               
               <div className="relative w-full flex-1 rounded-xl border-2 border-slate-200 overflow-hidden bg-[#f8fafc] touch-none shadow-inner">
@@ -492,23 +515,16 @@ export function PublicSignatureFlow() {
               <div className="pointer-events-none absolute left-0 right-0 top-[70%] border-b-2 border-dashed border-slate-300 mx-8" />
             </div>
 
-            <button
-              onClick={clearCanvas}
-              className="mt-4 text-sm font-semibold text-slate-500 underline shrink-0"
-            >
-              Limpar quadro
-            </button>
-
-            <div className="mt-8 flex gap-3">
+            <div className="mt-2 flex gap-3 shrink-0 pb-[max(16px,env(safe-area-inset-bottom))] px-2">
               <button
                 onClick={() => setStep(3)}
-                className="w-1/3 rounded-xl border-2 border-slate-200 py-3 text-center font-bold text-slate-600 transition hover:bg-slate-50"
+                className="w-1/3 rounded-xl border-2 border-slate-200 py-2 sm:py-3 text-center font-bold text-slate-600 transition hover:bg-slate-50"
               >
                 Voltar
               </button>
               <button
                 onClick={handleSubmitSignature}
-                className="w-2/3 rounded-xl bg-teal-700 py-3 text-center font-bold text-white transition hover:bg-teal-800"
+                className="w-2/3 rounded-xl bg-teal-700 py-2 sm:py-3 text-center font-bold text-white transition hover:bg-teal-800"
               >
                 Confirmar Assinatura
               </button>
