@@ -25,16 +25,58 @@ function renderFatalBootError(error) {
 
 window.addEventListener('error', (event) => {
   const message = event?.message || event?.error?.message || '';
-  if (message.includes('ResizeObserver loop completed with undelivered notifications') || 
-      message.includes('ResizeObserver loop limit exceeded')) {
-    return; // Ignora erros benignos de ResizeObserver
+  if (
+    message.includes('ResizeObserver loop completed with undelivered notifications') ||
+    message.includes('ResizeObserver loop limit exceeded') ||
+    message.includes('AbortError')
+  ) {
+    return; // Ignora erros benignos de ResizeObserver e abortos
   }
-  renderFatalBootError(event?.error || event?.message)
-})
+
+  // Tratar falhas de chunk no iOS/Safari/Chrome (WebKit)
+  const isChunkError =
+    message.includes('dynamically imported module') ||
+    message.includes('Importing a module script failed') ||
+    message.includes('The object can not be found here');
+
+  if (isChunkError) {
+    if (!sessionStorage.getItem('chunk_reload_attempted')) {
+      sessionStorage.setItem('chunk_reload_attempted', 'true');
+      window.location.reload();
+      return;
+    }
+  }
+
+  renderFatalBootError(event?.error || event?.message);
+});
 
 window.addEventListener('unhandledrejection', (event) => {
-  renderFatalBootError(event?.reason)
-})
+  const reason = event?.reason;
+  const message = reason?.message || String(reason || '');
+
+  if (
+    message.includes('AbortError') ||
+    message.includes('ResizeObserver') ||
+    reason?.name === 'AbortError'
+  ) {
+    return; // Ignora erros benignos e cancelamentos de promise
+  }
+
+  const isChunkError =
+    message.includes('dynamically imported module') ||
+    message.includes('Importing a module script failed') ||
+    message.includes('The object can not be found here');
+
+  if (isChunkError) {
+    if (!sessionStorage.getItem('chunk_reload_attempted')) {
+      sessionStorage.setItem('chunk_reload_attempted', 'true');
+      window.location.reload();
+      return;
+    }
+  }
+
+  renderFatalBootError(reason);
+});
 
 try {
   if (!rootEl) {

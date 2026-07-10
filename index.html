@@ -14,6 +14,14 @@
     <title>procedi-app</title>
   </head>
   <body translate="no" class="notranslate">
+    <!-- Prevents iOS bfcache issues restoring broken pages -->
+    <script>
+      window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+          window.location.reload();
+        }
+      });
+    </script>
     <div id="root" translate="no" class="notranslate"></div>
     <!-- Pilha de toasts fora de #root: evita overflow/transform cortarem ou empilharem errado -->
     <div

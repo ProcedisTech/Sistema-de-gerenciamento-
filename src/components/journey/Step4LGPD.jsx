@@ -80,29 +80,33 @@ export function SignatureFullscreenModal({
   const [strokePresent, setStrokePresent] = useState(false);
 
   const resizeAndPaintCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
-    const rect = wrap.getBoundingClientRect();
-    const ratio = window.devicePixelRatio || 1;
-    let snap = '';
     try {
-      if (hasStrokeRef.current && canvas.width) snap = canvas.toDataURL('image/png');
-    } catch {
-      snap = '';
-    }
-    canvas.width = Math.max(1, Math.floor(rect.width * ratio));
-    canvas.height = Math.max(1, Math.floor(rect.height * ratio));
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    if (snap) {
-      const image = new Image();
-      image.onload = () => {
-        ctx.drawImage(image, 0, 0, rect.width, rect.height);
-      };
-      image.src = snap;
+      const canvas = canvasRef.current;
+      const wrap = wrapRef.current;
+      if (!canvas || !wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      let snap = '';
+      try {
+        if (hasStrokeRef.current && canvas.width) snap = canvas.toDataURL('image/png');
+      } catch {
+        snap = '';
+      }
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      if (snap) {
+        const image = new Image();
+        image.onload = () => {
+          ctx.drawImage(image, 0, 0, rect.width, rect.height);
+        };
+        image.src = snap;
+      }
+    } catch (e) {
+      console.warn('Erro benigno no ResizeObserver capturado (ignorado):', e);
     }
   }, [canvasRef, hasStrokeRef]);
 
