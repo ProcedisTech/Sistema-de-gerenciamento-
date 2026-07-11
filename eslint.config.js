@@ -41,6 +41,7 @@ export default defineConfig([
       '**/components/anamnese/AnamneseAdminView.jsx',
       '**/components/journey/Step1CheckIn.jsx',
       '**/components/journey/Step3Evaluation.jsx',
+      '**/components/patients/EnviarDocumentoAssinarModal.jsx',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',

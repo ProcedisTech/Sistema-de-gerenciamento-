@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Download, FileText, Loader2, Link, ChevronDown, ChevronUp } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
 import { getFreshToken } from '../../../services/api';
@@ -221,7 +222,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                   <div className="md:col-span-2">
                     <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Conteúdo do Documento</h5>
                     <div className="bg-white border border-slate-200 rounded-lg max-h-[400px] overflow-y-auto text-sm text-slate-700 custom-scrollbar shadow-inner ql-snow">
-                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: doc.conteudoSnapshot || '<p>Conteúdo indisponível</p>' }} />
+                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(doc.conteudoSnapshot || '<p>Conteúdo indisponível</p>') }} />
                     </div>
                   </div>
                   

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { 
+import React, { useState, useEffect, useRef } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
+import {
   Save, 
   ExternalLink, 
   Link2, 
@@ -30,6 +31,7 @@ export function AnamneseConfigPublicaPanel() {
   });
   const [copied, setCopied] = useState(false);
   const toast = useToast();
+  const qrCanvasRef = useRef(null);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -81,7 +83,6 @@ export function AnamneseConfigPublicaPanel() {
   };
 
   const linkUrl = config.slug ? `${window.location.origin}/anamnese?clinic=${config.slug}` : '';
-  const qrUrl = linkUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(linkUrl)}&size=200x200&margin=2` : '';
 
   const handleOpenPortal = () => {
     if (!config.slug) {
@@ -99,26 +100,22 @@ export function AnamneseConfigPublicaPanel() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadQR = async () => {
-    if (!qrUrl) return;
-    try {
-      const response = await fetch(qrUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `qrcode_${config.slug}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Erro ao baixar o QR Code.');
-    }
+  const handleDownloadQR = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qrcode_${config.slug}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handlePrintQR = () => {
-    if (!qrUrl) return;
+    const canvas = qrCanvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL('image/png');
     const printWindow = window.open('', '_blank', 'width=800,height=800');
     printWindow.document.write(`
       <html>
@@ -134,7 +131,7 @@ export function AnamneseConfigPublicaPanel() {
         <body>
           <h1>Acesso ao Portal do Paciente</h1>
           <p>Escaneie o QR Code abaixo com a câmera do seu celular.</p>
-          <img src="${qrUrl}" alt="QR Code" />
+          <img src="${dataUrl}" alt="QR Code" />
           <div class="url">${linkUrl}</div>
           <script>
             window.onload = () => {
@@ -287,7 +284,7 @@ export function AnamneseConfigPublicaPanel() {
               {config.slug ? (
                 <div className="flex gap-5 items-center">
                   <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200 shrink-0">
-                    <img src={qrUrl} alt="QR Code" className="w-[120px] h-[120px] rounded-lg" />
+                    <QRCodeCanvas ref={qrCanvasRef} value={linkUrl} size={120} className="rounded-lg" />
                   </div>
                   <div className="flex flex-col gap-3">
                     <div>

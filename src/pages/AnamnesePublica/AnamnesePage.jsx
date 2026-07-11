@@ -184,7 +184,8 @@ export const AnamnesePage = () => {
       const res = await fetch(resolveApiUrl('/api/public/anamnese/responder'), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
         },
         body: JSON.stringify(body)
       });

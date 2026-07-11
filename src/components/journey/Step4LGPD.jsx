@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Shield,
   RotateCw,
@@ -685,21 +686,16 @@ export function Step3Termos({
   };
 
   const linkUrl = useMemo(() => {
-    if (!clinicaCtx?.clinicSlug || !pacienteCtx?.cpf) return '';
+    if (!clinicaCtx?.clinicSlug) return '';
     if (!termoSelecionadoId && !backendAssinaturaId) return '';
     const base = window.location.origin;
-    const cleanCpf = String(pacienteCtx.cpf).replace(/\D/g, '');
+    // O CPF é informado pelo próprio paciente na página de destino (não trafega na URL).
     if (backendAssinaturaId) {
-      return `${base}/documento?cpf=${cleanCpf}&clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
+      return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
     } else {
-      return `${base}/documento?cpf=${cleanCpf}&clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO&documento_id=${termoSelecionadoId}`;
+      return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO&documento_id=${termoSelecionadoId}`;
     }
-  }, [termoSelecionadoId, backendAssinaturaId, clinicaCtx?.clinicSlug, pacienteCtx?.cpf]);
-
-  const qrUrl = useMemo(() => {
-    if (!linkUrl) return '';
-    return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(linkUrl)}&size=200x200`;
-  }, [linkUrl]);
+  }, [termoSelecionadoId, backendAssinaturaId, clinicaCtx?.clinicSlug]);
 
   const handleVerificarAssinaturaRemota = async () => {
     if (!backendAssinaturaId) return;
@@ -1297,15 +1293,9 @@ export function Step3Termos({
                             Recusar a assinar
                           </button>
                         </div>
-                        {showQr && permiteQrCode && linkUrl && qrUrl ? (
+                        {showQr && permiteQrCode && linkUrl ? (
                           <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                            <img
-                              src={qrUrl}
-                              alt="QR Code do link"
-                              width={200}
-                              height={200}
-                              className="rounded-lg"
-                            />
+                            <QRCodeSVG value={linkUrl} size={200} />
                             <p className="text-center text-[11px] text-slate-400">
                               O paciente pode escanear este QR Code para acessar o documento
                             </p>

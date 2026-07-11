@@ -154,7 +154,7 @@ export const DocumentoPublicoPage = () => {
 
       const res = await fetch(resolveApiUrl('/api/public/documento/assinar'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify(body)
       });
 
@@ -203,7 +203,7 @@ export const DocumentoPublicoPage = () => {
 
       const res = await fetch(resolveApiUrl('/api/public/documento/assinar'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify(body)
       });
 

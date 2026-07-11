@@ -19,6 +19,8 @@ export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pd
   /* ── Import lazy (code-splitting) ─────────────────────────────────────── */
   const mod   = await import('jspdf');
   const jsPDF = mod.jsPDF ?? mod.default;
+  const domPurifyMod = await import('dompurify');
+  const DOMPurify = domPurifyMod.default ?? domPurifyMod;
 
   const doc    = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW  = 210;
@@ -188,7 +190,7 @@ export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pd
   /* ── Parse do texto por seções ───────────────────────────────────────── */
   // Strip HTML caso o texto venha do editor rico
   let tempDiv = document.createElement("div");
-  tempDiv.innerHTML = text || '';
+  tempDiv.innerHTML = DOMPurify.sanitize(text || '');
   const cleanText = tempDiv.innerText || tempDiv.textContent || '';
   
   const rawLines = cleanText.split('\n');
