@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import DOMPurify from 'dompurify';
 import { replaceTermVariables } from './replaceTermVariables';
 
 export const generateTermoPdf = async ({
@@ -104,7 +105,7 @@ export const generateTermoPdf = async ({
 
   // Parse Inteligente de HTML para Array de Parágrafos (Preservando Alinhamento, Indentação e Headings)
   const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = html;
+  tempDiv.innerHTML = DOMPurify.sanitize(html);
   
   let paragraphs = [];
   let currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, forceEmpty: false };

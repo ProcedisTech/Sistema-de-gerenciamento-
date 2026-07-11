@@ -419,7 +419,11 @@ async function requestBlob(path, { needsOrg = true } = {}) {
  * Usado pelas rotas /c/** (página pública de confirmação WhatsApp do paciente).
  */
 async function requestPublic(path, fetchOpts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(fetchOpts.headers || {}) };
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(fetchOpts.method === 'POST' ? { 'X-Requested-With': 'XMLHttpRequest' } : {}),
+    ...(fetchOpts.headers || {}),
+  };
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
   const res = await fetch(url, {
     ...fetchOpts,

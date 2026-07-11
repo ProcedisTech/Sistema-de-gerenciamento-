@@ -11,3 +11,8 @@
   for = "/*"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
+    # CSP de base: bloqueia execução de script externo/injetado. 'unsafe-inline' em style-src é necessário
+    # porque a UI usa bastante style inline (React) e Tailwind; connect-src/img-src usam https: amplo porque
+    # a API backend, Supabase e o bucket R2/S3 de fotos rodam em domínios que variam por ambiente — vale a
+    # pena restringir a hosts exatos assim que estiverem fixos.
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"

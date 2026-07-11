@@ -30,13 +30,9 @@ export function OrgProvider({ children }) {
   const [orgId, setOrgIdState] = useState(readInitialOrgIdSynced);
   const [orgSlug, setOrgSlugState] = useState(() => readLs(LS_SLUG, ''));
   const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, ''));
-  const [papel, setPapelState] = useState(() => {
-    try {
-      return localStorage.getItem(LS_PAPEL) || null;
-    } catch {
-      return null;
-    }
-  });
+  // Não inicializa a partir do localStorage: o papel só é confiável depois que /me responder,
+  // para não aplicar um papel desatualizado/de outro usuário por uma fração de segundo.
+  const [papel, setPapelState] = useState(null);
   /** Nome da role vindo do /me (antes de resolverPapel). */
   const [roleNome, setRoleNomeState] = useState('');
   /** Permissões customizadas ou do perfil, vindas do /me. */
@@ -91,6 +87,25 @@ export function OrgProvider({ children }) {
     setPermissoesState(Array.isArray(perms) ? perms : []);
   }, []);
 
+  /** Limpa org/papel/role do localStorage e do estado no logout. */
+  const clearOrgSession = useCallback(() => {
+    try {
+      localStorage.removeItem(LS_ORG);
+      localStorage.removeItem(LS_SLUG);
+      localStorage.removeItem(LS_ROLE);
+      localStorage.removeItem(LS_PAPEL);
+    } catch {
+      /* ignore */
+    }
+    setOrgIdState(DEFAULT_ORG_ID);
+    setOrgSlugState('');
+    setRoleUserIdState('');
+    setPapelState(null);
+    setRoleNomeState('');
+    setPermissoesState([]);
+    apiSetOrgId(DEFAULT_ORG_ID);
+  }, []);
+
   const value = useMemo(
     () => ({
       orgId,
@@ -106,8 +121,9 @@ export function OrgProvider({ children }) {
       setRoleNome,
       permissoes,
       setPermissoes,
+      clearOrgSession,
     }),
-    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, clearOrgSession]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;

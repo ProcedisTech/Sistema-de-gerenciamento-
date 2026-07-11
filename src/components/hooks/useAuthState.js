@@ -6,10 +6,10 @@ import { supabase } from '../../lib/supabaseClient.js';
 import { useToast } from '../../contexts/useToast.js';
 
 /**
- * @param {{ setRoleUserId?: (id: string) => void, setOrgId?: (id: string) => void }} [options]
+ * @param {{ setRoleUserId?: (id: string) => void, setOrgId?: (id: string) => void, clearOrgSession?: () => void }} [options]
  */
 export const useAuthState = (options = {}) => {
-  const { setRoleUserId } = options;
+  const { setRoleUserId, clearOrgSession } = options;
   const { success: toastSuccess, info: toastInfo } = useToast();
 
   const [authReady, setAuthReady] = useState(false);
@@ -110,14 +110,18 @@ export const useAuthState = (options = {}) => {
     } catch {
       /* ignore */
     }
-    if (typeof setRoleUserId === 'function') setRoleUserId('');
+    if (typeof clearOrgSession === 'function') {
+      clearOrgSession();
+    } else if (typeof setRoleUserId === 'function') {
+      setRoleUserId('');
+    }
     setIsLoggedIn(false);
     setAuthUser(null);
     setUsername('');
     setPassword('');
     setLoginError('');
     toastInfo('Sessão encerrada.');
-  }, [setRoleUserId, toastInfo]);
+  }, [setRoleUserId, clearOrgSession, toastInfo]);
 
   useEffect(() => {
     const handler = () => handleLogout();

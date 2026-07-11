@@ -156,7 +156,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 function AppRefactoredInner() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, clearOrgSession } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -173,7 +173,7 @@ function AppRefactoredInner() {
   } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
-  const authState = useAuthState({ setRoleUserId, setOrgId });
+  const authState = useAuthState({ setRoleUserId, setOrgId, clearOrgSession });
   /** null = deslogado ou pendente; checking = carregando gates; profile | cadastrar-clinica | clinic | ready = pós-login */
   const [postLoginGate, setPostLoginGate] = React.useState(null);
   const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
@@ -2210,11 +2210,6 @@ function AppRefactoredInner() {
       if (fotosProcedimento.length > 0 && paciente?.id && ridOk) {
         const uploads = fotosProcedimento.map(async (foto) => {
           try {
-            console.log('foto state:', {
-              hasBlob: !!foto.blob,
-              url: foto.url?.substring(0, 50),
-              meta: foto.meta,
-            });
             let fileToUpload = foto.blob;
             if (!fileToUpload && foto.url) {
               const resp = await fetch(foto.url);

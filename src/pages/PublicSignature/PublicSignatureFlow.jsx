@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { Shield, Loader2, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
@@ -54,9 +55,8 @@ export function PublicSignatureFlow() {
         
         setDocumentoConteudo(conteudo);
 
-        // Pula OTP por enquanto, se precisar de OTP real chamaria outro endpoint para ver se a sessão precisa
-        // Como o backend valida OTP só no submit ou numa rota especifica, vamos simplificar
-        setStep(2); 
+        const precisaOtp = Boolean(data.precisaOtp) && !data.otpValidado;
+        setStep(precisaOtp ? 1 : 2);
         setLoading(false);
       } catch (err) {
         setError(err.message);
@@ -72,7 +72,7 @@ export function PublicSignatureFlow() {
     try {
       const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/validar-otp`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify({ otpCode: otp }),
       });
       const isValid = await res.json();
@@ -268,7 +268,7 @@ export function PublicSignatureFlow() {
 
       const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/assinar`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify({
           assinaturaBase64: base64,
           selfieBase64: selfieDataUrl,
@@ -388,7 +388,7 @@ export function PublicSignatureFlow() {
                 <h2 className="text-xl font-bold uppercase">{documentoTitulo}</h2>
               </div>
               <div className="ql-snow">
-                <div className="ql-editor p-0" dangerouslySetInnerHTML={{ __html: documentoConteudo || '<p>Nenhum conteúdo disponível.</p>' }} />
+                <div className="ql-editor p-0" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(documentoConteudo || '<p>Nenhum conteúdo disponível.</p>') }} />
               </div>
               <br/><br/>
               <p className="text-center font-bold">(Fim do documento)</p>
@@ -571,7 +571,7 @@ export function PublicSignatureFlow() {
                 <div className="ql-snow">
                   <div 
                     className="ql-editor leading-relaxed text-[12pt] text-justify p-0"
-                    dangerouslySetInnerHTML={{ __html: documentoConteudo || '' }} 
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(documentoConteudo || '') }}
                   />
                 </div>
               
