@@ -20,6 +20,7 @@ export function useProcedureCamera({
   selectedPatientCpf,
   cpf,
   setPatients,
+  isProcedimentoMode,
 }) {
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [cameraError, setCameraError] = useState('');
@@ -143,7 +144,7 @@ export function useProcedureCamera({
 
   const openPhotoModal = () => {
     const count =
-      currentStep === 4 ? procedureCapturedPhotos.length : evaluationCapturedPhotos.length;
+      isProcedimentoMode ? procedureCapturedPhotos.length : evaluationCapturedPhotos.length;
     if (count >= EVALUATION_PHOTO_MAX) {
       setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
       return;
@@ -197,7 +198,7 @@ export function useProcedureCamera({
   const confirmPhoto = () => {
     if (!photoPreviewUrl) return;
 
-    if (currentStep === 4) {
+    if (isProcedimentoMode) {
       if (procedureCapturedPhotos.length >= EVALUATION_PHOTO_MAX) {
         setCameraError(`Limite de ${EVALUATION_PHOTO_MAX} fotos atingido.`);
         return;
