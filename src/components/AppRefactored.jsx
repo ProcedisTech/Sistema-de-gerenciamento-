@@ -652,6 +652,8 @@ function AppRefactoredInner() {
     [journeyProcedureDateIso, journeyState.proximoRetornoDisplay]
   );
 
+  const isProcedimentoMode = currentStep === 4 || (activeView === 'consulta' && consultaModule === 'procedimento');
+
   const cameraState = useProcedureCamera({
     currentStep,
     journeyId,
@@ -659,6 +661,7 @@ function AppRefactoredInner() {
     selectedPatientCpf,
     cpf: pacienteAtual?.cpf || '',
     setPatients,
+    isProcedimentoMode,
   });
 
   // Reseta estado de anamnese ao trocar de paciente para evitar vazamento de draft entre pacientes
@@ -1868,13 +1871,14 @@ function AppRefactoredInner() {
           }
         });
         await Promise.allSettled(uploads);
+        cameraState.resetEvaluationPhotos();
       } else if (fotosAvaliacao.length > 0 && paciente?.id && !ridOk) {
         console.warn(
           'Fotos de avaliação não enviadas: selecione o profissional (roleUserId) na barra de contexto.'
         );
       }
     },
-    [cameraState.evaluationCapturedPhotos, roleUserId]
+    [cameraState.evaluationCapturedPhotos, cameraState.resetEvaluationPhotos, roleUserId]
   );
 
   const salvarFotosAvaliacao = React.useCallback(async () => {
