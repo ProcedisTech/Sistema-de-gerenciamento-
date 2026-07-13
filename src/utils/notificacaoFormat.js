@@ -80,7 +80,14 @@ export function formatarMensagemNotificacao(n) {
       return 'Agendamento cancelado';
     }
     case 'agenda_reagendada': {
-      if (nome && quando) return `Agendamento de ${nome} reagendado (era ${quando}${procStr})`;
+      const whenAntigo = formatarQuando(payload.dataAntiga, payload.horarioAntigo);
+      const whenNovo = formatarQuando(payload.dataNova ?? payload.dataAgendamento, payload.horarioNovo ?? payload.horaInicio);
+      if (nome && whenAntigo && whenNovo)
+        return `Agendamento de ${nome} reagendado de ${whenAntigo} para ${whenNovo}${procStr}`;
+      if (nome && whenNovo)
+        return `Agendamento de ${nome} reagendado para ${whenNovo}${procStr}`;
+      if (nome)
+        return `Agendamento de ${nome} reagendado`;
       return 'Agendamento reagendado';
     }
     case 'SUGESTAO_PROCEDIMENTO': {
