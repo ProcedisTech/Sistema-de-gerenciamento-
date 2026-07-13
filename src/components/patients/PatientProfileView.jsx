@@ -572,7 +572,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                       ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
                       : 'bg-[#fef9c3] text-[#b45309] border-[#f59e0b]/20'
                   }`}>
-                    {an.status || 'rascunho'}
+                    {an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO' ? 'Finalizada' : 'Em rascunho'}
                   </span>
                 </div>
               </div>
