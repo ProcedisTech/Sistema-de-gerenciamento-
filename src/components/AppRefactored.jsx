@@ -320,6 +320,62 @@ function AppRefactoredInner() {
   });
   const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', fotoUrl: '' });
   const [configSection, setConfigSectionState] = useState(readStoredSection);
+
+  // ============ FUNÇÕES DE NAVEGAÇÃO ============
+  const [consultaModule, setConsultaModule] = React.useState(null);
+  const [retornoAvulsoPickerOpen, setRetornoAvulsoPickerOpen] = React.useState(false);
+  const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
+  const [finishingMode, setFinishingMode] = React.useState(null);
+  
+  // --- Lote de Procedimentos ---
+  const [procedimentosLote, setProcedimentosLote] = React.useState([]);
+  // O índice do procedimento ativo foi movido para o useJourneyState para manter tudo em sincronia.
+  
+  // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
+
+  const [activeView, _setActiveView] = React.useState(() => {
+    try {
+      const v = sessionStorage.getItem('activeView');
+      // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
+      if (v === 'jornada' || v === 'consulta') return 'pacientes';
+      if (v === 'anamnese' || v === 'termos') {
+        sessionStorage.setItem('activeView', 'configuracoes');
+        return 'configuracoes';
+      }
+      return v || 'pacientes';
+    } catch {
+      return 'pacientes';
+    }
+  });
+  const [previousView, setPreviousView] = React.useState(null);
+  const setActiveView = React.useCallback((view) => {
+    _setActiveView((prev) => {
+      const next = typeof view === 'function' ? view(prev) : view;
+      try {
+        if (next) sessionStorage.setItem('activeView', String(next));
+        else sessionStorage.removeItem('activeView');
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+  const goToView = (view) => {
+    // Verificacao de segurança na troca de view
+    if (view === 'configuracoes' && !canSeeConfig) {
+      toast.error('Você não tem permissão para acessar as configurações.');
+      return;
+    }
+    if (view === 'gestao-equipe' && !canSeeConfigEquipe) {
+      toast.error('Você não tem permissão para acessar a Gestão de Equipe.');
+      return;
+    }
+    if (view === 'configuracoes') {
+      setConfigSectionState(null);
+    }
+    setActiveView(view);
+  };
+
   const [notifVersion, setNotifVersion] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
@@ -890,60 +946,7 @@ function AppRefactoredInner() {
     [journeyState, openEvaluationPhotoAnnotationFromSummary]
   );
 
-  // ============ FUNÇÕES DE NAVEGAÇÃO ============
-  const [consultaModule, setConsultaModule] = React.useState(null);
-  const [retornoAvulsoPickerOpen, setRetornoAvulsoPickerOpen] = React.useState(false);
-  const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
-  const [finishingMode, setFinishingMode] = React.useState(null);
-  
-  // --- Lote de Procedimentos ---
-  const [procedimentosLote, setProcedimentosLote] = React.useState([]);
-  // O índice do procedimento ativo foi movido para o useJourneyState para manter tudo em sincronia.
-  
-  // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
 
-  const [activeView, _setActiveView] = React.useState(() => {
-    try {
-      const v = sessionStorage.getItem('activeView');
-      // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
-      if (v === 'jornada' || v === 'consulta') return 'pacientes';
-      if (v === 'anamnese' || v === 'termos') {
-        sessionStorage.setItem('activeView', 'configuracoes');
-        return 'configuracoes';
-      }
-      return v || 'pacientes';
-    } catch {
-      return 'pacientes';
-    }
-  });
-  const [previousView, setPreviousView] = React.useState(null);
-  const setActiveView = React.useCallback((view) => {
-    _setActiveView((prev) => {
-      const next = typeof view === 'function' ? view(prev) : view;
-      try {
-        if (next) sessionStorage.setItem('activeView', String(next));
-        else sessionStorage.removeItem('activeView');
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
-  const goToView = (view) => {
-    // Verificacao de segurança na troca de view
-    if (view === 'configuracoes' && !canSeeConfig) {
-      toast.error('Você não tem permissão para acessar as configurações.');
-      return;
-    }
-    if (view === 'gestao-equipe' && !canSeeConfigEquipe) {
-      toast.error('Você não tem permissão para acessar a Gestão de Equipe.');
-      return;
-    }
-    if (view === 'configuracoes') {
-      setConfigSectionState(null);
-    }
-    setActiveView(view);
-  };
 
   // ── Guard de alterações não salvas no Horário de Atendimento ───────────────
   const [isDirtyHorarios, setIsDirtyHorarios] = React.useState(false);
