@@ -2,28 +2,57 @@
  * Organização(ões) para o header X-Org-Id nas rotas /api/v1/** que o backend exige.
  *
  * Defina no .env (ver .env.example):
- * - VITE_DEFAULT_ORG_ID — UUID da org no PostgreSQL (single-tenant dev).
+ * - VITE_DEFAULT_ORG_ID — UUID real da org (dev). Nunca use o placeholder seed de bootstrap.
  * - VITE_ALT_ORG_ID — opcional; segunda org na barra de contexto (dev).
  *
  * URL absoluta da API no deploy (Netlify → Render): defina VITE_API_BASE_URL sem barra final.
+ *
+ * Importante: o UUID seed `b0000000-0000-0000-0000-000000000001` NÃO é org do usuário —
+ * se aparecer em env/localStorage, é tratado como vazio (ver {@link isPlaceholderOrgId}).
  */
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
-function pickUuid(envValue, fallback) {
-  const v = typeof envValue === 'string' ? envValue.trim() : '';
-  if (v && UUID_RE.test(v)) return v;
-  return fallback;
+/** Placeholder histórico de bootstrap single-tenant — nunca deve virar currentOrgId. */
+export const PLACEHOLDER_ORG_ID = 'b0000000-0000-0000-0000-000000000001';
+
+/**
+ * @param {unknown} id
+ * @returns {boolean}
+ */
+export function isPlaceholderOrgId(id) {
+  if (id == null) return false;
+  const s = String(id).trim().toLowerCase();
+  return s === PLACEHOLDER_ORG_ID;
 }
 
-/** Fallback só quando VITE_DEFAULT_ORG_ID não é um UUID válido. */
-const FALLBACK_ORG = 'b0000000-0000-0000-0000-000000000001';
+/**
+ * Normaliza UUID de org: inválido / placeholder → string vazia.
+ * @param {unknown} id
+ * @returns {string}
+ */
+export function sanitizeOrgId(id) {
+  if (id == null) return '';
+  const s = String(id).trim();
+  if (!s || !UUID_RE.test(s) || isPlaceholderOrgId(s)) return '';
+  return s;
+}
 
-export const DEFAULT_ORG_ID = pickUuid(import.meta.env.VITE_DEFAULT_ORG_ID, FALLBACK_ORG);
+function pickUuidOrEmpty(envValue) {
+  const v = typeof envValue === 'string' ? envValue.trim() : '';
+  if (v && UUID_RE.test(v) && !isPlaceholderOrgId(v)) return v;
+  return '';
+}
+
+/**
+ * Org default só se VITE_DEFAULT_ORG_ID for UUID real (não placeholder).
+ * Sem env / seed → '' (descoberta via /organizacoes/minhas).
+ */
+export const DEFAULT_ORG_ID = pickUuidOrEmpty(import.meta.env.VITE_DEFAULT_ORG_ID);
 
 export const ALT_ORG_ID = (() => {
   const v =
     typeof import.meta.env.VITE_ALT_ORG_ID === 'string' ? import.meta.env.VITE_ALT_ORG_ID.trim() : '';
-  return v && UUID_RE.test(v) ? v : null;
+  return v && UUID_RE.test(v) && !isPlaceholderOrgId(v) ? v : null;
 })();
 
 /** Base URL do backend (vazia em dev com proxy Vite). */

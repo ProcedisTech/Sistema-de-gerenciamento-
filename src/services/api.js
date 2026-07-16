@@ -20,13 +20,17 @@
  */
 
 import { STATUS_PROCEDIMENTO_FINALIZADO_ID } from '../constants/statusProcedimento.js';
-import { DEFAULT_ORG_ID, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
+import { sanitizeOrgId, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 import { supabase } from '../lib/supabaseClient';
 
-let currentOrgId = DEFAULT_ORG_ID;
+let currentOrgId = '';
 
+/**
+ * Define a org atual para X-Org-Id. falsy / placeholder → '' (nunca reinjeta seed).
+ * @param {unknown} id
+ */
 export function setOrgId(id) {
-  currentOrgId = id || DEFAULT_ORG_ID;
+  currentOrgId = sanitizeOrgId(id);
 }
 export function getOrgId() {
   return currentOrgId;
@@ -51,11 +55,23 @@ function withAuthHeaders(base, token) {
   return h;
 }
 
+/** Fail closed: needsOrg exige org selecionada (UUID real). */
+function assertOrgForTenantRequest(needsOrg) {
+  if (!needsOrg) return;
+  if (!currentOrgId) {
+    const err = new Error('Organização não selecionada. Conclua o login antes de acessar dados da clínica.');
+    err.status = 400;
+    err.code = 'ORG_REQUIRED';
+    throw err;
+  }
+}
+
 /**
  * Headers para `fetch` fora deste módulo (ex.: logout, journey photos).
  * @param {{ needsOrg?: boolean, token?: string | null }} opts
  */
 export async function authHeadersForFetch({ needsOrg = true, token } = {}) {
+  assertOrgForTenantRequest(needsOrg);
   const t = token !== undefined ? token : await getFreshToken();
   const h = bearerAuthorizationHeader(t);
   if (needsOrg && currentOrgId) h['X-Org-Id'] = currentOrgId;
@@ -72,6 +88,7 @@ async function dispatchAuthExpiredIfSessionReallyGone(failedUrl) {
 }
 
 async function requestDelete(path, { needsOrg = true } = {}) {
+  assertOrgForTenantRequest(needsOrg);
   const token = await getFreshToken();
   const headers = withAuthHeaders({}, token);
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
@@ -263,6 +280,7 @@ async function attemptTokenRefresh() {
 }
 
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
+  assertOrgForTenantRequest(needsOrg);
   const token = await getFreshToken();
   const headers = withAuthHeaders({ 'Content-Type': 'application/json', ...fetchOpts.headers }, token);
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
@@ -304,6 +322,7 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
 
 /** POST multipart (FormData): não define Content-Type para o browser enviar boundary. */
 async function requestForm(path, { needsOrg = true, method = 'POST', body, ...rest } = {}) {
+  assertOrgForTenantRequest(needsOrg);
   const token = await getFreshToken();
   const headers = withAuthHeaders({ ...rest.headers }, token);
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
@@ -362,6 +381,9 @@ async function requestBlob(path, { needsOrg = true } = {}) {
   const token = await getFreshToken();
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
   const attachAuth = shouldAttachApiAuthToFetchUrl(url);
+  if (attachAuth) {
+    assertOrgForTenantRequest(needsOrg);
+  }
   let headers = {};
   let credentials = 'omit';
   if (attachAuth) {
@@ -1263,7 +1285,7 @@ export function normalizeMinhasOrganizacoesResponse(raw) {
 // ── Organizações (minhas / cadastro Onda 3) ────────────────────
 export const organizacaoApi = {
   getMinhas: async () => {
-    const raw = await request('/api/v1/organizacoes/minhas');
+    const raw = await request('/api/v1/organizacoes/minhas', { needsOrg: false });
     return normalizeMinhasOrganizacoesResponse(raw);
   },
   criar: (dto) =>

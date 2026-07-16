@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
-import { DEFAULT_ORG_ID, ALT_ORG_ID } from '../config/apiEnv';
+import { DEFAULT_ORG_ID, ALT_ORG_ID, sanitizeOrgId } from '../config/apiEnv';
 
 const LS_ORG = 'procedi_org_id';
 const LS_SLUG = 'procedi_org_slug';
@@ -20,8 +20,18 @@ function readLs(key, fallback) {
 }
 
 function readInitialOrgIdSynced() {
-  const initial = readLs(LS_ORG, DEFAULT_ORG_ID);
-  /** Antes do primeiro useEffect: garante que api.js já usa a org do localStorage (evita 401 em /v1 com org errada). */
+  const fromLs = readLs(LS_ORG, '');
+  const initial = sanitizeOrgId(fromLs) || sanitizeOrgId(DEFAULT_ORG_ID) || '';
+  // Seed presa no LS de sessões antigas → limpar e não reinjetar.
+  if (fromLs && !initial) {
+    try {
+      localStorage.removeItem(LS_ORG);
+      localStorage.removeItem(LS_SLUG);
+    } catch {
+      /* ignore */
+    }
+  }
+  /** Antes do primeiro useEffect: sync api.js (vazio até /minhas ou escolha real). */
   apiSetOrgId(initial);
   return initial;
 }
@@ -42,20 +52,31 @@ export function OrgProvider({ children }) {
     apiSetOrgId(orgId);
   }, [orgId]);
 
-
-
   const setOrgId = useCallback((id, slug = '') => {
-    if (!id) return;
-    setOrgIdState(id);
+    const next = sanitizeOrgId(id);
+    if (!next) {
+      // falsy / placeholder: limpa org (nunca reinjeta seed)
+      setOrgIdState('');
+      setOrgSlugState('');
+      try {
+        localStorage.removeItem(LS_ORG);
+        localStorage.removeItem(LS_SLUG);
+      } catch {
+        /* ignore */
+      }
+      apiSetOrgId('');
+      return;
+    }
+    setOrgIdState(next);
     try {
-      localStorage.setItem(LS_ORG, id);
+      localStorage.setItem(LS_ORG, next);
       if (slug) localStorage.setItem(LS_SLUG, slug);
       else localStorage.removeItem(LS_SLUG);
     } catch {
       /* ignore */
     }
     if (slug) setOrgSlugState(slug);
-    apiSetOrgId(id);
+    apiSetOrgId(next);
   }, []);
 
   const setRoleUserId = useCallback((id) => {
@@ -97,13 +118,13 @@ export function OrgProvider({ children }) {
     } catch {
       /* ignore */
     }
-    setOrgIdState(DEFAULT_ORG_ID);
+    setOrgIdState('');
     setOrgSlugState('');
     setRoleUserIdState('');
     setPapelState(null);
     setRoleNomeState('');
     setPermissoesState([]);
-    apiSetOrgId(DEFAULT_ORG_ID);
+    apiSetOrgId('');
   }, []);
 
   const value = useMemo(
@@ -146,6 +167,7 @@ export function useOrg() {
       setRoleNome: () => {},
       permissoes: [],
       setPermissoes: () => {},
+      clearOrgSession: () => {},
     };
   }
   return ctx;
