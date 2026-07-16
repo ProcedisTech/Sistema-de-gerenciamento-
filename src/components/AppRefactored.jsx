@@ -176,6 +176,8 @@ function AppRefactoredInner() {
   const authState = useAuthState({ setRoleUserId, setOrgId, clearOrgSession });
   /** null = deslogado ou pendente; checking = carregando gates; profile | cadastrar-clinica | clinic | ready = pós-login */
   const [postLoginGate, setPostLoginGate] = React.useState(null);
+  /** Incrementado após CompletarPerfil para re-rodar descoberta sem loop profile↔checking. */
+  const [orgDiscoveryNonce, setOrgDiscoveryNonce] = React.useState(0);
   const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
 
   React.useEffect(() => {
@@ -241,10 +243,19 @@ function AppRefactoredInner() {
         }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
-          headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
+          headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
         });
         const orgJson = await orgRes.json().catch(() => ({}));
         if (cancelled) return;
+        if (!orgRes.ok) {
+          toast.error(
+            orgJson?.message ||
+              orgJson?.detail ||
+              `Não foi possível carregar suas clínicas (erro ${orgRes.status}). Tente novamente.`,
+          );
+          setPostLoginGate('ready');
+          return;
+        }
         const list = Array.isArray(orgJson) ? orgJson : orgJson?.content ?? orgJson?.organizacoes ?? orgJson?.data ?? [];
         const arr = Array.isArray(list) ? list : [];
         if (arr.length === 1) {
@@ -286,13 +297,17 @@ function AppRefactoredInner() {
         }
         setPostLoginGate('clinic');
       } catch {
-        if (!cancelled) setPostLoginGate('ready');
+        if (!cancelled) {
+          toast.error('Falha ao verificar suas clínicas. Tente novamente.');
+          setPostLoginGate('ready');
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [authState.isLoggedIn, authState.authUser?.id, authState.authReady, setOrgId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toast estável; orgDiscoveryNonce re-dispara após CompletarPerfil
+  }, [authState.isLoggedIn, authState.authUser?.id, authState.authReady, setOrgId, orgDiscoveryNonce]);
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   const mapaAplicacaoState = useMapaAplicacaoState();
@@ -2694,7 +2709,10 @@ function AppRefactoredInner() {
       <CompletarPerfil
         email={authUser?.email}
         onComplete={() => {
-          setPostLoginGate('cadastrar-clinica');
+          // Re-dispara o effect de descoberta (deps incluem orgDiscoveryNonce).
+          // /me já terá nomeCompleto → não volta a profile; evita hardcode cadastrar-clinica.
+          setPostLoginGate('checking');
+          setOrgDiscoveryNonce((n) => n + 1);
         }}
       />
     );

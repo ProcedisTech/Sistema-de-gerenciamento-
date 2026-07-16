@@ -20,7 +20,7 @@ export function SelecionarClinica({ setOrgId, onComplete }) {
       try {
         const res = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
-          headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
+          headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
         });
         const raw = await res.json().catch(() => ({}));
         if (!res.ok) {
