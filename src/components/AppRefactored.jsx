@@ -405,6 +405,7 @@ function AppRefactoredInner() {
   const [pendingMapaAplicacaoCapture, setPendingMapaAplicacaoCapture] = React.useState(null);
   /** Id do preenchimento retornado por `createPaciente` (PATCH de observações ao finalizar). */
   const anamnesePreenchimentoIdRef = useRef(null);
+  const autoSaveAnamnesePromiseRef = useRef(null);
   /** Último paciente resolvido na jornada — mantém header quando catálogo/search está temporariamente vazio. */
   const pacienteAtualRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
@@ -770,6 +771,7 @@ function AppRefactoredInner() {
     
     // Clear refs and state to prevent cross-patient corruption
     anamnesePreenchimentoIdRef.current = null;
+    autoSaveAnamnesePromiseRef.current = null;
     pendingAnnotatedGalleryBlobsRef.current = [];
     journeyState.setTermoSelecionadoId(null);
     setAssinaturasRealizadasIds([]);
@@ -1290,42 +1292,76 @@ function AppRefactoredInner() {
   }, []);
 
   const autoSaveAnamneseSilently = React.useCallback(async () => {
-    if (!pacienteAtual?.id || !roleUserId) return;
+    // Lê pacienteAtual e roleUserId via closure, mas le o REF em runtime (não via closure)
+    // para garantir que sempre vemos o ID mais recente, mesmo em closures capturadas anteriormente.
+    const pacienteId = pacienteAtual?.id;
+    const uid = roleUserId;
+    if (!pacienteId || !uid) return;
     if (!journeyState.queixa?.trim() && !journeyState.expectativas?.trim()) return;
-    try {
-      const observacoes = [
-        journeyState.queixa?.trim() ? `Queixa: ${journeyState.queixa.trim()}` : '',
-        journeyState.expectativas?.trim() ? `. Expectativas: ${journeyState.expectativas.trim()}` : '',
-      ].join('').trim();
 
-      if (anamnesePreenchimentoIdRef.current) {
-        await anamneseApi.atualizarObservacoesAnamnese(
-          pacienteAtual.id,
-          anamnesePreenchimentoIdRef.current,
-          observacoes
-        );
-      } else {
-        let anamneseId = journeyState.fichaSelecionadaId;
-        if (!anamneseId) {
-          const fichaBasica = await anamneseApi.getFichaBasica();
-          anamneseId = fichaBasica?.id ?? fichaBasica?.anamneseId;
-        }
-        if (!anamneseId) return;
-
-        const created = await anamneseApi.createPaciente(pacienteAtual.id, roleUserId, {
-          anamneseId,
-          observacoes,
-          respostas: [],
-        });
-        const pid = created?.id ?? created?.preenchimentoId;
-        if (pid != null && pid !== '') {
-          anamnesePreenchimentoIdRef.current = String(pid);
-        }
+    // Se já existe uma promise de save em andamento (ex: onBlur disparou e encerramento chama simultaneamente),
+    // aguardamos ela terminar antes de decidir se precisamos criar ou atualizar.
+    if (autoSaveAnamnesePromiseRef.current) {
+      try {
+        await autoSaveAnamnesePromiseRef.current;
+      } catch {
+        // Ignora — vamos tentar salvar de novo abaixo se necessário
       }
-    } catch (err) {
-      console.warn('[AutoSave] Falha ao salvar anamnese no encerramento/blur:', err?.message);
     }
-  }, [journeyState.queixa, journeyState.expectativas, journeyState.fichaSelecionadaId, pacienteAtual?.id, roleUserId]);
+
+    // Após aguardar qualquer promise anterior, verificamos novamente o ref.
+    // Se o onBlur já criou o registro e populou o ref, basta fazer PATCH.
+    // Lemos o ref AGORA (runtime), não via closure capturada.
+    const existingId = anamnesePreenchimentoIdRef.current;
+
+    const observacoes = [
+      journeyState.queixa?.trim() ? `Queixa: ${journeyState.queixa.trim()}` : '',
+      journeyState.expectativas?.trim() ? `. Expectativas: ${journeyState.expectativas.trim()}` : '',
+    ].join('').trim();
+
+    const savePromise = (async () => {
+      try {
+        if (existingId) {
+          // Registro já existe — só atualiza
+          await anamneseApi.atualizarObservacoesAnamnese(pacienteId, existingId, observacoes);
+        } else {
+          // Ainda não existe — cria
+          const fichaId =
+            journeyState.step2AnamneseDraft?.fichaSelecionadaId ||
+            journeyState.step2AnamneseDraft?.fichaDropdownNovo ||
+            '';
+          let anamneseId = fichaId;
+          if (!anamneseId) {
+            const fichaBasica = await anamneseApi.getFichaBasica();
+            anamneseId = fichaBasica?.id ?? fichaBasica?.anamneseId;
+          }
+          if (!anamneseId) return;
+
+          const created = await anamneseApi.createPaciente(pacienteId, uid, {
+            anamneseId,
+            observacoes,
+            respostas: [],
+          });
+          const pid = created?.id ?? created?.preenchimentoId;
+          if (pid != null && pid !== '') {
+            anamnesePreenchimentoIdRef.current = String(pid);
+          }
+        }
+      } catch (err) {
+        console.warn('[AutoSave] Falha ao salvar anamnese no encerramento/blur:', err?.message);
+        throw err;
+      }
+    })();
+
+    autoSaveAnamnesePromiseRef.current = savePromise;
+    try {
+      await savePromise;
+    } finally {
+      if (autoSaveAnamnesePromiseRef.current === savePromise) {
+        autoSaveAnamnesePromiseRef.current = null;
+      }
+    }
+  }, [journeyState.queixa, journeyState.expectativas, journeyState.step2AnamneseDraft, pacienteAtual?.id, roleUserId]);
 
   const autoSaveProcedimentoSilently = React.useCallback(async (observacoes) => {
     const obs = String(observacoes || '').trim();
@@ -1743,15 +1779,41 @@ function AppRefactoredInner() {
         if (q && e) observacoes = `Queixa: ${q}. Expectativas: ${e}`;
         else if (q) observacoes = `Queixa: ${q}`;
         else if (e) observacoes = `Expectativas: ${e}`;
+
+        // Se o autoSave (onBlur ou encerramento) já criou um rascunho, aguardamos
+        // qualquer promise pendente e depois fazemos PUT (atualização completa) em vez de
+        // POST (novo registro). Isso evita duplicatas quando o profissional preenche,
+        // sai do campo (onBlur cria) e depois clica em "Próximo" / "Salvar Anamnese".
+        if (autoSaveAnamnesePromiseRef.current) {
+          try {
+            await autoSaveAnamnesePromiseRef.current;
+          } catch {
+            // ignora falha do onBlur; o bloco abaixo tentará de novo
+          }
+        }
+
+        const existingId = anamnesePreenchimentoIdRef.current;
+
         try {
-          const created = await anamneseApi.createPaciente(paciente.id, rid, {
-            anamneseId,
-            ...(observacoes ? { observacoes } : {}),
-            respostas: anamneseData?.respostas || [],
-          });
-          const pid = created?.id ?? created?.preenchimentoId;
-          if (pid != null && pid !== '') {
-            anamnesePreenchimentoIdRef.current = String(pid);
+          if (existingId) {
+            // Registro já existe — atualiza com as respostas completas da ficha
+            await anamneseApi.editPaciente(paciente.id, existingId, rid, {
+              anamneseId,
+              ...(observacoes ? { observacoes } : {}),
+              respostas: anamneseData?.respostas || [],
+            });
+            // ID permanece o mesmo; não precisa atualizar o ref
+          } else {
+            // Sem rascunho prévio — cria novo registro
+            const created = await anamneseApi.createPaciente(paciente.id, rid, {
+              anamneseId,
+              ...(observacoes ? { observacoes } : {}),
+              respostas: anamneseData?.respostas || [],
+            });
+            const pid = created?.id ?? created?.preenchimentoId;
+            if (pid != null && pid !== '') {
+              anamnesePreenchimentoIdRef.current = String(pid);
+            }
           }
         } catch (err) {
           toast.error(getApiErrorToastMessage(err, 'Erro ao salvar a anamnese.'));
@@ -2604,8 +2666,23 @@ function AppRefactoredInner() {
   const confirmEncerrarConsulta = React.useCallback(async (decision) => {
     try {
       setFinishingMode(decision);
+
+      // Se existe uma promise de onBlur em andamento, esperamos ela terminar.
+      // Isso garante que o anamnesePreenchimentoIdRef seja populado antes de decidirmos
+      // se precisamos criar ou apenas atualizar o registro de anamnese.
+      if (autoSaveAnamnesePromiseRef.current) {
+        try {
+          await autoSaveAnamnesePromiseRef.current;
+        } catch {
+          // Ignora falha do onBlur — o autoSaveAnamneseSilently abaixo tentará novamente
+        }
+      }
+
+      // Só chama o save se ainda não existe um registro persistido.
+      // Se o onBlur já criou (ref preenchido), apenas faz PATCH (dentro de autoSaveAnamneseSilently).
+      // Se não tem nem ID nem promise pendente, cria o registro agora.
       await autoSaveAnamneseSilently();
-      
+
       if (decision === 'finalizar') {
         await encerrarAtendimento(false);
       } else {
