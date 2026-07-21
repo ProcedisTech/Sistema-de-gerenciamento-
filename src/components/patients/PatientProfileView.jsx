@@ -104,6 +104,8 @@ import {
 } from '../anamnese/anamneseFichaUtils.js';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
+import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
+import { AlertasClinicosPanel } from './AlertasClinicosPanel.jsx';
 
 function resolveProcedimentoFeitoIdForUpload(sess, categoria) {
   const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
@@ -177,64 +179,6 @@ function normalizeAlertaManualItem(raw) {
   };
 }
 
-function renderRespostaValue(resp) {
-  if (resp.opcaoSelecionada) return resp.opcaoSelecionada;
-  if (Array.isArray(resp.opcoesSelecionadasLabels) && resp.opcoesSelecionadasLabels.length > 0) {
-    return resp.opcoesSelecionadasLabels.join(', ');
-  }
-  if (resp.respostaTexto) return resp.respostaTexto;
-  if (resp.respostaNumero !== null && resp.respostaNumero !== undefined) return String(resp.respostaNumero);
-  if (resp.respostaBoolean === true) return 'Sim';
-  if (resp.respostaBoolean === false) return 'Não';
-  return '-';
-}
-
-/** Resposta cuja pergunta foi marcada como alerta na ficha (ALERTA / alert). */
-function isRespostaPrioridadeAlerta(resp) {
-  const p = resp?.pergunta;
-  const pr = p?.prioridade ?? resp?.prioridade ?? resp?.priority ?? p?.priority;
-  if (pr == null || pr === '') return false;
-  const s = String(pr).trim().toLowerCase();
-  return pr === 'ALERTA' || s === 'alerta' || s === 'alert';
-}
-
-/** Pergunta em ALERTA só entra no painel se o paciente de fato respondeu algo relevante. */
-function isRespostaPreocupante(resp) {
-  if (resp.respostaBoolean === true) return true;
-  if (resp.respostaBoolean === false) return false;
-  if (resp.respostaTexto != null && String(resp.respostaTexto).trim() !== '') return true;
-  if (resp.perguntaOpcaoId != null && resp.perguntaOpcaoId !== '') return true;
-  if (Array.isArray(resp.opcoesSelecionadas) && resp.opcoesSelecionadas.length > 0) return true;
-  if (Array.isArray(resp.opcoes_selecionadas) && resp.opcoes_selecionadas.length > 0) return true;
-  if (resp.respostaNumero != null && resp.respostaNumero !== '') return true;
-  return false;
-}
-
-function textoPerguntaResposta(resp) {
-  return (resp?.perguntaDescricao || resp?.pergunta?.descricao || 'Pergunta').trim() || 'Pergunta';
-}
-
-function isRespostaCategoria(resp, nomeCategoria) {
-  const cat = (
-    resp?.pergunta?.categoria?.nome ||
-    resp?.pergunta?.categoriaNome ||
-    resp?.categoriaName ||
-    resp?.categoria?.nome ||
-    ''
-  ).trim().toLowerCase();
-  return cat === nomeCategoria.toLowerCase();
-}
-
-function isRespostaPositiva(resp) {
-  if (resp.respostaBoolean === false) return false;
-  if (resp.respostaBoolean === true) return true;
-  if (resp.respostaTexto && resp.respostaTexto.trim() !== '') return true;
-  if (resp.perguntaOpcaoId) return true;
-  if (Array.isArray(resp.opcoesSelecionadas) && resp.opcoesSelecionadas.length > 0) return true;
-  if (Array.isArray(resp.opcoes_selecionadas) && resp.opcoes_selecionadas.length > 0) return true;
-  return false;
-}
-
 /** Formato gravado em AppRefactored: `Queixa: …. Expectativas: …` */
 function parseQueixaExpectativas(observacoes) {
   if (!observacoes || typeof observacoes !== 'string') return null;
@@ -244,10 +188,6 @@ function parseQueixaExpectativas(observacoes) {
   const queixa = observacoes.slice(0, idx).replace(/^Queixa:\s*/i, '').trim();
   const expectativas = observacoes.slice(idx + marker.length).trim();
   return { queixa: queixa || '—', expectativas: expectativas || '—' };
-}
-
-function getPerguntaIdFromResp(resp) {
-  return resp.perguntaId ?? resp.pergunta?.id ?? null;
 }
 
 function AnamneseObservacoesBlock({ texto }) {
@@ -830,7 +770,13 @@ export function PatientProfileView({
   const toast = useToast();
   const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
-  const perfilClinicoMain = usePerfilClinico(selectedPatient?.id, null, patient.sexo);
+  const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
+    sexoPaciente: patient.sexo,
+    refreshKey: patientListBump,
+    onAlergiasResumo: (texto) => {
+      mergePatientById?.(selectedPatient?.id, (prev) => ({ ...prev, alergias: texto }));
+    },
+  });
   const birthParts = useMemo(
     () => parsePatientBirthDate(patient.dataNascimento),
     [patient.dataNascimento],
@@ -863,9 +809,6 @@ export function PatientProfileView({
   const [galeriaFilterProcedimento, setGaleriaFilterProcedimento] = useState('all');
   const [galeriaUploadBusy, setGaleriaUploadBusy] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
-  const [alertasAnamnese, setAlertasAnamnese] = useState([]);
-  const [alertasAlergia, setAlertasAlergia] = useState([]);
-  const [alertasAnamneseLoading, setAlertasAnamneseLoading] = useState(false);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [showAllProntuario, setShowAllProntuario] = useState(false);
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
@@ -1513,144 +1456,10 @@ export function PatientProfileView({
 
 
   useEffect(() => {
-    const pacienteId = selectedPatient?.id;
     setAlertasModalOpen(false);
-    if (!pacienteId) {
-      setAlertasAnamnese([]);
-      setAlertasAlergia([]);
-      setAlertasAnamneseLoading(false);
-      return undefined;
-    }
-    let cancelled = false;
-    setAlertasAnamneseLoading(true);
-    (async () => {
-      try {
-        const list = await anamneseApi.listPaciente(pacienteId);
-        const arr = Array.isArray(list) ? list : [];
+  }, [selectedPatient?.id]);
 
-        // Manter apenas o preenchimento mais recente por ficha (anamneseId/fichaId)
-        const maisRecentePorFicha = new Map();
-        for (const an of arr) {
-          const fichaId = an.anamneseId ?? an.fichaId ?? an.anamneseFichaId ?? an.id;
-          const ts = an.dataHora ? new Date(an.dataHora).getTime() : 0;
-          const prev = maisRecentePorFicha.get(String(fichaId));
-          if (!prev || ts > (prev.dataHora ? new Date(prev.dataHora).getTime() : 0)) {
-            maisRecentePorFicha.set(String(fichaId), an);
-          }
-        }
-        const arrFiltrado = Array.from(maisRecentePorFicha.values());
-
-        const pairs = await Promise.all(
-          arrFiltrado.map((an) =>
-            anamneseApi
-              .getPaciente(pacienteId, an.id)
-              .then((det) => ({ an, det }))
-              .catch(() => ({ an, det: null }))
-          )
-        );
-        if (cancelled) return;
-        const alergiasDetectadas = [];
-        const itemsAlergia = [];
-        const itemsGeral = [];
-        for (const { an, det } of pairs) {
-          if (!det || !Array.isArray(det.respostas)) continue;
-          const ts = an.dataHora ? new Date(an.dataHora).getTime() : 0;
-          const nome = an.anamneseNome || 'Anamnese';
-          det.respostas.forEach((resp, rIdx) => {
-            if (isRespostaCategoria(resp, 'alergias') && isRespostaPositiva(resp)) {
-              const valorAlergia = renderRespostaValue(resp);
-              const perguntaTexto = textoPerguntaResposta(resp);
-              alergiasDetectadas.push(`${perguntaTexto}: ${valorAlergia}`);
-              const pidA = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
-              itemsAlergia.push({
-                key: `${pidA}`,
-                titulo: textoPerguntaResposta(resp),
-                valor: renderRespostaValue(resp),
-                fichaNome: nome,
-                dataHora: an.dataHora,
-                ts,
-              });
-            }
-            if (!isRespostaPrioridadeAlerta(resp)) return;
-            if (!isRespostaPreocupante(resp)) return;
-            const pid = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
-            itemsGeral.push({
-              key: `${pid}`,
-              titulo: textoPerguntaResposta(resp),
-              valor: renderRespostaValue(resp),
-              fichaNome: nome,
-              dataHora: an.dataHora,
-              ts,
-            });
-          });
-        }
-        itemsAlergia.sort((a, b) => b.ts - a.ts);
-        itemsGeral.sort((a, b) => b.ts - a.ts);
-        const seen = new Set();
-        const merged = [];
-        for (const it of [...itemsAlergia, ...itemsGeral]) {
-          if (seen.has(it.key)) continue;
-          seen.add(it.key);
-          merged.push(it);
-        }
-        merged.sort((a, b) => b.ts - a.ts);
-        if (!cancelled) setAlertasAlergia(itemsAlergia);
-        if (!cancelled) setAlertasAnamnese(merged);
-
-        if (pacienteId && alergiasDetectadas.length > 0) {
-          mergePatientById?.(pacienteId, (prev) => ({
-            ...prev,
-            alergias: alergiasDetectadas.join(' · '),
-          }));
-        }
-      } catch {
-        if (!cancelled) {
-          setAlertasAnamnese([]);
-          setAlertasAlergia([]);
-        }
-      } finally {
-        if (!cancelled) setAlertasAnamneseLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedPatient?.id, mergePatientById, patientListBump]);
-
-  const alertasSidebarGeral = useMemo(() => {
-    const keys = new Set(alertasAlergia.map((x) => x.key));
-    return alertasAnamnese.filter((row) => !keys.has(row.key));
-  }, [alertasAnamnese, alertasAlergia]);
-
-  const alertasPerfil = useMemo(() => {
-    const s = perfilClinicoMain.state;
-    if (!s) return [];
-    const items = [];
-    (s.alergias ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-alergia-${chip.id ?? chip.nome}`, titulo: 'Alergia alimentar', valor: val, secao: 'alergias', origem: 'perfil' });
-    });
-    (s.alergiasPrincipioAtivo ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-pa-${chip.id ?? chip.nome}`, titulo: 'Alergia a princípio ativo', valor: val, secao: 'alergiasPrincipioAtivo', origem: 'perfil' });
-    });
-    (s.medicamentosEmUso ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const parts = [chip.nome];
-      if (chip.dose) parts.push(chip.dose);
-      if (chip.frequencia) parts.push(chip.frequencia);
-      if (chip.observacao) parts.push(chip.observacao);
-      items.push({ key: `perfil-med-${chip.id ?? chip.nome}`, titulo: 'Medicamento em uso', valor: parts.join(' · '), secao: 'medicamentos', origem: 'perfil' });
-    });
-    (s.antecedentes ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-ant-${chip.id ?? chip.nome}`, titulo: 'Antecedente', valor: val, secao: 'antecedentes', origem: 'perfil' });
-    });
-    return items;
-  }, [perfilClinicoMain.state]);
+  const { alertasAnamnese, alertasAlergia, alertasPerfil, isLoading: alertasClinicosLoading } = alertasClinicos;
 
   useEffect(() => {
     const pacienteId = selectedPatient?.id;
@@ -2787,87 +2596,14 @@ export function PatientProfileView({
                 )}
               </div>
 
-              {/* Alertas clínicos: perfil clínico + anamnese */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
-                  Alertas clínicos
-                </span>
-                {alertasAnamneseLoading || perfilClinicoMain.isLoading ? (
-                  <div className="flex items-center gap-2 text-[11px] font-medium text-[#64748b]">
-                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#dc2626]" aria-hidden />
-                    Carregando alertas…
-                  </div>
-                ) : alertasPerfil.length === 0 && alertasAnamnese.length === 0 ? (
-                  <p className="text-[11px] font-medium leading-snug text-[#64748b]">
-                    Nenhum alerta clínico registrado.
-                  </p>
-                ) : (
-                  <>
-                    {alertasPerfil.length > 0 && (
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
-                          Perfil clínico
-                        </span>
-                        {alertasPerfil.map((item) => (
-                          <div
-                            key={item.key}
-                            className="rounded-md border border-[#fecaca] bg-[#fef2f2] px-2 py-1.5"
-                          >
-                            <p className="line-clamp-1 text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
-                              {item.titulo}
-                            </p>
-                            <p className="line-clamp-2 text-[12px] font-semibold text-[#0f172a]">{item.valor}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {alertasAnamnese.length > 0 && (
-                      <div className="space-y-1">
-                        {alertasPerfil.length > 0 && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#64748b]">
-                            Anamnese
-                          </span>
-                        )}
-                        {alertasAlergia.length > 0 && (
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-[#dc2626]">
-                              Alergias registradas
-                            </span>
-                            {alertasAlergia.map((item) => (
-                              <div
-                                key={item.key}
-                                className="rounded-md border border-[#fecaca] bg-[#fef2f2] px-2 py-1.5"
-                              >
-                                <p className="line-clamp-2 text-[11px] font-bold text-[#dc2626]">{item.titulo}</p>
-                                <p className="line-clamp-3 text-[12px] font-semibold text-[#0f172a]">{item.valor}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {alertasSidebarGeral.slice(0, 3).map((row) => (
-                          <div key={row.key} className="rounded-md border border-[#fecaca] bg-[#fef2f2]/80 px-2 py-1.5">
-                            <p className="line-clamp-2 text-[11px] font-bold uppercase tracking-wide text-[#dc2626]">
-                              {row.titulo}
-                            </p>
-                            <p className="mt-0.5 line-clamp-3 break-words text-[12px] font-semibold text-[#0f172a]">
-                              {row.valor}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {(alertasPerfil.length + alertasAnamnese.length) > 3 ? (
-                      <button
-                        type="button"
-                        onClick={() => setAlertasModalOpen(true)}
-                        className="mt-1 flex h-7 w-full items-center justify-center rounded-md border border-[#fecaca] text-[11px] font-semibold text-[#dc2626] transition-colors hover:bg-[#fef2f2]"
-                      >
-                        Ver todos ({alertasPerfil.length + alertasAnamnese.length})
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </div>
+              <AlertasClinicosPanel
+                alertasPerfil={alertasPerfil}
+                alertasAnamnese={alertasAnamnese}
+                alertasAlergia={alertasAlergia}
+                isLoading={alertasClinicosLoading}
+                variant="sidebar"
+                onVerTodos={() => setAlertasModalOpen(true)}
+              />
             </div>
           </div>
 

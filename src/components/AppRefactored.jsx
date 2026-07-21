@@ -3348,6 +3348,7 @@ function AppRefactoredInner() {
                     onIniciarRetornoAvulso={handleIniciarRetornoAvulso}
                     onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
+                    mergePatientById={mergePatientById}
                   />
                 ) : null}
                 {consultaModule === 'retorno' ? (
