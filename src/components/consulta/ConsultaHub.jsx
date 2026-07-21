@@ -1,6 +1,8 @@
 import React from 'react';
 import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
+import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
+import { AlertasClinicosPanel } from '../patients/AlertasClinicosPanel.jsx';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -15,6 +17,21 @@ const MODULE_CARDS = [
     icon: RotateCcw,
   },
 ];
+
+function getCardPendingDot(cardId, paciente) {
+  if (!paciente) return null;
+  if (cardId === 'anamnese' && paciente.anamneseDesatualizada === true) {
+    return { colorClass: 'bg-status-danger-ink', tooltip: 'Anamnese desatualizada — revisar antes de continuar' };
+  }
+  if (
+    cardId === 'planejamento' &&
+    paciente.statusPlanoCodigo != null &&
+    paciente.statusPlanoCodigo !== 'sem_plano'
+  ) {
+    return { colorClass: 'bg-status-warn-ink', tooltip: 'Há planejamento em andamento para este paciente' };
+  }
+  return null;
+}
 
 function buildModuleCards(isRetorno) {
   if (isRetorno) {
@@ -38,10 +55,17 @@ export function ConsultaHub({
   onIniciarRetornoAvulso,
   onEncerrarConsulta,
   getPatientInitials,
+  mergePatientById,
 }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
   const cards = buildModuleCards(isRetorno);
+  const alertasClinicos = useAlertasClinicos(paciente?.id, {
+    sexoPaciente: paciente?.sexo,
+    onAlergiasResumo: (texto) => {
+      mergePatientById?.(paciente?.id, (prev) => ({ ...prev, alergias: texto }));
+    },
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,9 +101,20 @@ export function ConsultaHub({
         ) : null}
       </div>
 
+      {alertasClinicos.totalCount > 0 ? (
+        <AlertasClinicosPanel
+          alertasPerfil={alertasClinicos.alertasPerfil}
+          alertasAnamnese={alertasClinicos.alertasAnamnese}
+          alertasAlergia={alertasClinicos.alertasAlergia}
+          isLoading={alertasClinicos.isLoading}
+          variant="hub"
+        />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const ModuleIcon = card.icon;
+          const pendingDot = getCardPendingDot(card.id, paciente);
           return (
             <button
               key={card.id}
@@ -91,8 +126,15 @@ export function ConsultaHub({
                 }
                 onSelectModule?.(card.id);
               }}
-              className="flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
+              className="relative flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
             >
+              {pendingDot ? (
+                <span
+                  className={`absolute right-3 top-3 h-2 w-2 rounded-full sm:right-3.5 sm:top-3.5 ${pendingDot.colorClass}`}
+                  title={pendingDot.tooltip}
+                  aria-label={pendingDot.tooltip}
+                />
+              ) : null}
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e6f7f5] text-[#00a88e]">
                 <ModuleIcon className="h-5 w-5" strokeWidth={2.2} aria-hidden />
               </span>
