@@ -341,6 +341,9 @@ function AppRefactoredInner() {
   const [retornoAvulsoPickerOpen, setRetornoAvulsoPickerOpen] = React.useState(false);
   const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
   const [finishingMode, setFinishingMode] = React.useState(null);
+  /** Controle do modal "Sair sem salvar?" ao voltar do módulo para o Hub */
+  const [unsavedWarningOpen, setUnsavedWarningOpen] = React.useState(false);
+  const [unsavedWarningSaving, setUnsavedWarningSaving] = React.useState(false);
   
   // --- Lote de Procedimentos ---
   const [procedimentosLote, setProcedimentosLote] = React.useState([]);
@@ -2013,6 +2016,31 @@ function AppRefactoredInner() {
     }
   }, [salvarAnamneseAntesDeAvancar, toast]);
 
+  /**
+   * Intercepta o "Voltar para o Hub" quando o módulo de Anamnese está ativo.
+   * Verifica se há dados não salvos (queixa, expectativas, respostas da ficha ou perfil clínico)
+   * e exibe o modal de aviso. Para outros módulos, navega imediatamente — eles têm seus
+   * próprios botões de conclusão explícita (Avaliação, Termos, Procedimento).
+   * NÃO interfere com o fluxo de cancelar atendimento (resetJourney) nem com o encerramento.
+   */
+  const handleBackToHub = React.useCallback(() => {
+    if (consultaModule === 'anamnese') {
+      const hasQueixa = Boolean(journeyState.queixa?.trim());
+      const hasExpectativas = Boolean(journeyState.expectativas?.trim());
+      const refDirty = typeof anamneseRef?.current?.isDirty === 'function'
+        ? anamneseRef.current.isDirty()
+        : false;
+      const perfilDirty = typeof anamneseRef?.current?.isPerfilDirty === 'function'
+        ? anamneseRef.current.isPerfilDirty()
+        : false;
+      if (hasQueixa || hasExpectativas || refDirty || perfilDirty) {
+        setUnsavedWarningOpen(true);
+        return;
+      }
+    }
+    setConsultaModule('hub');
+  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef]);
+
   const resetJourney = React.useCallback(() => {
     setPhotoAnnotationScope(null);
     setPhotoAnnotationIndex(null);
@@ -3334,7 +3362,7 @@ function AppRefactoredInner() {
                 paciente={pacienteAtual}
                 module={consultaModule}
                 isRetorno={journeyState.isAgendaRetorno}
-                onBack={consultaModule !== 'hub' ? () => setConsultaModule('hub') : undefined}
+                onBack={consultaModule !== 'hub' ? handleBackToHub : undefined}
                 getPatientInitials={getPatientInitials}
               />
             </header>
@@ -3562,6 +3590,83 @@ function AppRefactoredInner() {
               onConfirm={confirmEncerrarConsulta}
               finishingMode={finishingMode}
             />
+
+            {/* Modal: alterações não salvas na Anamnese */}
+            {unsavedWarningOpen && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="unsaved-warning-title"
+                className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+              >
+                <div className="relative flex w-full max-w-sm flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                  {/* X de fechar */}
+                  <button
+                    type="button"
+                    onClick={() => setUnsavedWarningOpen(false)}
+                    disabled={unsavedWarningSaving}
+                    className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+                    aria-label="Fechar aviso"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+
+                  <div className="px-6 pb-2 pt-6">
+                    <h3 id="unsaved-warning-title" className="text-[16px] font-bold text-[#0f172a]">
+                      Sair sem salvar?
+                    </h3>
+                  </div>
+                  <div className="px-6 pb-4 pt-2">
+                    <p className="text-[14px] leading-relaxed text-[#475569]">
+                      A anamnese tem alterações que ainda não foram salvas. O que deseja fazer?
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
+                    {/* Sair sem salvar */}
+                    <button
+                      type="button"
+                      disabled={unsavedWarningSaving}
+                      onClick={() => {
+                        setUnsavedWarningOpen(false);
+                        setConsultaModule('hub');
+                      }}
+                      className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-[#64748b] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    >
+                      Sair sem salvar
+                    </button>
+
+                    {/* Salvar */}
+                    <button
+                      type="button"
+                      disabled={unsavedWarningSaving}
+                      onClick={async () => {
+                        setUnsavedWarningSaving(true);
+                        try {
+                          await handleConcluirAnamnese();
+                        } finally {
+                          setUnsavedWarningSaving(false);
+                          setUnsavedWarningOpen(false);
+                        }
+                      }}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-4 py-3 text-[14px] font-semibold text-white shadow-sm transition-colors hover:bg-[#00967f] disabled:opacity-50"
+                    >
+                      {unsavedWarningSaving ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                          Salvando…
+                        </>
+                      ) : (
+                        'Salvar'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <ConsultaRetornoOrigemModal
               key={retornoAvulsoPickerOpen ? `retorno-origem-${pacienteAtual?.id}` : 'retorno-origem-closed'}
