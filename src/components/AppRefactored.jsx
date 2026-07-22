@@ -1941,7 +1941,7 @@ function AppRefactoredInner() {
                 type: blob.type || 'image/jpeg',
               });
             }
-            if (!fileToUpload) return;
+            if (!fileToUpload) return false;
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
             await pacientesGaleriaApi.upload(paciente.id, webp, {
               roleUserId: ridUpload,
@@ -1949,19 +1949,35 @@ function AppRefactoredInner() {
               legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.AVALIACAO),
               dataReferencia: dataRefSessao,
             });
+            return true;
           } catch (e) {
             console.warn('Erro ao salvar foto de avaliação na galeria:', e);
+            return false;
           }
         });
-        await Promise.allSettled(uploads);
-        cameraState.resetEvaluationPhotos();
+        const results = await Promise.allSettled(uploads);
+        const sentPhotos = new Set(
+          fotosAvaliacao.filter((_, idx) => results[idx].status === 'fulfilled' && results[idx].value === true)
+        );
+        const attempted = results.length;
+        const succeeded = sentPhotos.size;
+        if (succeeded > 0) {
+          cameraState.setEvaluationCapturedPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
+        }
+        if (succeeded < attempted) {
+          toast.error(
+            succeeded === 0
+              ? 'Não foi possível enviar as fotos de avaliação. Elas continuam salvas para nova tentativa.'
+              : `${attempted - succeeded} foto(s) de avaliação não puderam ser enviadas e continuam salvas para nova tentativa.`
+          );
+        }
       } else if (fotosAvaliacao.length > 0 && paciente?.id && !ridOk) {
         console.warn(
           'Fotos de avaliação não enviadas: selecione o profissional (roleUserId) na barra de contexto.'
         );
       }
     },
-    [cameraState.evaluationCapturedPhotos, cameraState.resetEvaluationPhotos, roleUserId]
+    [cameraState, roleUserId, toast]
   );
 
   const salvarFotosAvaliacao = React.useCallback(async () => {
@@ -2357,12 +2373,22 @@ function AppRefactoredInner() {
           }
         });
         const results = await Promise.allSettled(uploads);
+        const sentPhotos = new Set(
+          fotosProcedimento.filter((_, idx) => results[idx].status === 'fulfilled' && results[idx].value === true)
+        );
         const attempted = results.length;
-        const succeeded = results.filter(
-          (r) => r.status === 'fulfilled' && r.value === true
-        ).length;
-        if (attempted > 0 && succeeded > 0) {
-          cameraState.resetProcedureCapturedPhotos();
+        const succeeded = sentPhotos.size;
+        if (succeeded > 0) {
+          // Filtro por referência: se fotosProcedimento veio de um fotosSnapshot de outra aba do lote,
+          // os objetos não existem no buffer ao vivo (de outra aba) e o filter é um no-op seguro.
+          cameraState.setProcedureCapturedPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
+        }
+        if (succeeded < attempted) {
+          toast.error(
+            succeeded === 0
+              ? 'Não foi possível enviar as fotos do procedimento. Elas continuam salvas para nova tentativa.'
+              : `${attempted - succeeded} foto(s) do procedimento não puderam ser enviadas e continuam salvas para nova tentativa.`
+          );
         }
       } else if (fotosProcedimento.length > 0 && paciente?.id && !ridOk) {
         console.warn(
@@ -2370,7 +2396,7 @@ function AppRefactoredInner() {
         );
       }
     },
-    [cameraState, journeyState.nomeProcedimento, roleUserId]
+    [cameraState, journeyState.nomeProcedimento, roleUserId, toast]
   );
 
   const persistirEncerramentoConsulta = React.useCallback(
@@ -2669,20 +2695,23 @@ function AppRefactoredInner() {
       setIsFinishing(false);
     }
   }, [
-    journeyState.procedimentosSessao,
+    journeyState,
     procedimentosLote,
     roleUserId,
-    journeyState.agendaId,
     resolvePlanejamentoItemId,
     registrarProcedimentoManual,
     resolvePacienteAtendimento,
     persistirMapaAplicacaoAtual,
+    mapaAplicacaoState,
+    cameraState,
     uploadProcedureCapturedPhotos,
+    uploadEvaluationCapturedPhotos,
     finalizarAtendimentoNavegacao,
     pacienteAtual?.cpf,
     persistirEncerramentoConsulta,
     selectedPatientCpf,
     setIsFinishing,
+    onSairConsulta,
     toast,
   ]);
 
@@ -3578,7 +3607,7 @@ function AppRefactoredInner() {
                   />
                 ) : null}
                 {consultaModule !== 'hub' ? (
-                  <ConsultaEncerrarFooter onEncerrarConsulta={requestEncerrarConsulta} />
+                  <ConsultaEncerrarFooter onEncerrarConsulta={requestEncerrarConsulta} isFinishing={isFinishing} />
                 ) : null}
               </div>
             </ConsultaViewShell>

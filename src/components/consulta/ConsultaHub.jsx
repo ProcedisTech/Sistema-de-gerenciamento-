@@ -21,14 +21,22 @@ const MODULE_CARDS = [
 function getCardPendingDot(cardId, paciente) {
   if (!paciente) return null;
   if (cardId === 'anamnese' && paciente.anamneseDesatualizada === true) {
-    return { colorClass: 'bg-status-danger-ink', tooltip: 'Anamnese desatualizada — revisar antes de continuar' };
+    return {
+      badgeClass: 'bg-status-danger-bg text-status-danger-ink',
+      tooltipClass: 'border-status-danger-ink/30 bg-status-danger-bg text-status-danger-ink',
+      tooltip: 'Anamnese desatualizada — revisar antes de continuar',
+    };
   }
   if (
     cardId === 'planejamento' &&
     paciente.statusPlanoCodigo != null &&
     paciente.statusPlanoCodigo !== 'sem_plano'
   ) {
-    return { colorClass: 'bg-status-warn-ink', tooltip: 'Há planejamento em andamento para este paciente' };
+    return {
+      badgeClass: 'bg-status-warn-bg text-status-warn-ink',
+      tooltipClass: 'border-status-warn-ink/30 bg-status-warn-bg text-status-warn-ink',
+      tooltip: 'Há planejamento em andamento para este paciente',
+    };
   }
   return null;
 }
@@ -126,14 +134,24 @@ export function ConsultaHub({
                 }
                 onSelectModule?.(card.id);
               }}
-              className="relative flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
+              className="group relative flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
             >
               {pendingDot ? (
-                <span
-                  className={`absolute right-3 top-3 h-2 w-2 rounded-full sm:right-3.5 sm:top-3.5 ${pendingDot.colorClass}`}
-                  title={pendingDot.tooltip}
-                  aria-label={pendingDot.tooltip}
-                />
+                <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5">
+                  <span
+                    tabIndex={0}
+                    aria-label={pendingDot.tooltip}
+                    className={`block animate-pulse rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${pendingDot.badgeClass}`}
+                  >
+                    Pendência
+                  </span>
+                  <span
+                    role="tooltip"
+                    className={`pointer-events-none absolute right-0 top-6 z-20 hidden w-max max-w-[200px] whitespace-normal rounded-md border px-2 py-1 text-[11px] font-semibold leading-snug shadow-md group-hover:block group-focus-visible:block ${pendingDot.tooltipClass}`}
+                  >
+                    {pendingDot.tooltip}
+                  </span>
+                </span>
               ) : null}
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e6f7f5] text-[#00a88e]">
                 <ModuleIcon className="h-5 w-5" strokeWidth={2.2} aria-hidden />

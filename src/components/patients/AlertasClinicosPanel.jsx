@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
 
 /**
  * Bloco de alertas clínicos (perfil clínico + respostas de anamnese em ALERTA/alergia).
@@ -14,7 +14,9 @@ export function AlertasClinicosPanel({
   isLoading = false,
   variant = 'sidebar',
   onVerTodos,
+  defaultCollapsed = false,
 }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const alertasSidebarGeral = useMemo(() => {
     const keys = new Set(alertasAlergia.map((x) => x.key));
     return alertasAnamnese.filter((row) => !keys.has(row.key));
@@ -96,11 +98,25 @@ export function AlertasClinicosPanel({
   if (variant === 'hub') {
     return (
       <div className="overflow-hidden rounded-[14px] border border-[#fecaca] shadow-md">
-        <div className="flex items-center gap-2 bg-[#fef2f2] px-3 py-2">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#dc2626]" strokeWidth={2.5} aria-hidden />
-          <h5 className="text-[12px] font-bold text-[#dc2626]">Alertas clínicos</h5>
-        </div>
-        <div className="bg-white p-2.5">{content}</div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          aria-expanded={!collapsed}
+          className="flex w-full items-center justify-between gap-2 bg-[#fef2f2] px-3 py-2 text-left"
+        >
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#dc2626]" strokeWidth={2.5} aria-hidden />
+            <h5 className="text-[12px] font-bold text-[#dc2626]">
+              Alertas clínicos{totalCount > 0 ? ` (${totalCount})` : ''}
+            </h5>
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-[#dc2626] transition-transform ${collapsed ? '' : 'rotate-180'}`}
+            strokeWidth={2.5}
+            aria-hidden
+          />
+        </button>
+        {!collapsed && <div className="bg-white p-2.5">{content}</div>}
       </div>
     );
   }
