@@ -3,6 +3,7 @@ import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGale
 import { toLocalISODate } from './dateLimits.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
+import { renderMapPhotoWithPoints } from './mapaRenderUtils.js';
 
 function mapApiErrorMessage(e) {
   const msg = String(e?.message || '');
@@ -32,13 +33,13 @@ async function uploadModeloFoto({
     blob instanceof File
       ? blob
       : new File([blob], `modelo_${vistaCodigo}_${Date.now()}.jpg`, {
-          type: blob?.type || 'image/jpeg',
-        });
+        type: blob?.type || 'image/jpeg',
+      });
   const dataRef = toLocalISODate(new Date());
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(
-      GALERIA_CATEGORIA.MODELO,
+      GALERIA_CATEGORIA.MAPA,
       getVistaLabel(vistaCodigo) || vistaCodigo,
     ),
     procedimentoFeitoId: String(procedimentoFeitoId),
@@ -90,8 +91,32 @@ export async function persistirMapaAplicacao({
 
     const foto = fotosPorVista[vistaCodigo];
     let fotoGaleriaId = fotoGaleriaIdPorVista[vistaCodigo] || foto?.fotoGaleriaId || null;
+    const pontosRaw = Array.isArray(pontosPorVista[vistaCodigo]) ? pontosPorVista[vistaCodigo] : [];
 
-    if (!fotoGaleriaId && foto?.blob) {
+    const imageSource = foto?.blob || foto?.displayUrl || null;
+    const jaTemFotoDoMapa = Boolean(fotoGaleriaIdPorVista[vistaCodigo]);
+
+    if (!jaTemFotoDoMapa && imageSource && pontosRaw.length > 0) {
+      try {
+        const renderedBlob = await renderMapPhotoWithPoints(imageSource, pontosRaw, snapshot?.unidadeMedida);
+        if (renderedBlob) {
+          const fid = await uploadModeloFoto({
+            pacienteId,
+            roleUserId,
+            blob: renderedBlob,
+            vistaCodigo,
+            procedimentoFeitoId,
+            catalogoProcedimentoSaudeId,
+          });
+          if (fid) {
+            fotoGaleriaId = String(fid);
+            fotoGaleriaIdPorVista[vistaCodigo] = fotoGaleriaId;
+          }
+        }
+      } catch (e) {
+        console.warn('[persistirMapaAplicacao] Erro ao renderizar/enviar foto do mapa:', e);
+      }
+    } else if (!fotoGaleriaId && foto?.blob) {
       try {
         const fid = await uploadModeloFoto({
           pacienteId,
@@ -111,7 +136,6 @@ export async function persistirMapaAplicacao({
       }
     }
 
-    const pontosRaw = Array.isArray(pontosPorVista[vistaCodigo]) ? pontosPorVista[vistaCodigo] : [];
     const pontos = pontosRaw.map((p) => mapLocalPontoToApi(p));
 
     // TODO: A fotoGaleriaId deveria ser enviada na marcacao, mas o backend vincula a foto do ângulo de outra forma
