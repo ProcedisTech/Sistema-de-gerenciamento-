@@ -413,7 +413,6 @@ function AppRefactoredInner() {
   const pacienteAtualRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
-  const [isSalvandoFotosAvaliacao, setIsSalvandoFotosAvaliacao] = React.useState(false);
   const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
   const [isSalvandoProcedimento] = React.useState(false);
   const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
@@ -1980,44 +1979,11 @@ function AppRefactoredInner() {
     [cameraState, roleUserId, toast]
   );
 
-  const salvarFotosAvaliacao = React.useCallback(async () => {
-    if (finishJourneyLockRef.current) return;
-    finishJourneyLockRef.current = true;
-    setIsSalvandoFotosAvaliacao(true);
-    try {
-      const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      const paciente = sCpf
-        ? patients.find((p) => String(p?.cpf || '').trim() === sCpf)
-        : null;
-      const dataRefSessao = toLocalISODate(new Date());
-      const procIdOpt = loteProcedimentosFeitosIds[0] ?? undefined;
-      pendingAnnotatedGalleryBlobsRef.current = [];
-      await uploadEvaluationCapturedPhotos({ paciente, procIdOpt, dataRefSessao });
-    } catch (error) {
-      console.error('Erro ao salvar fotos de avaliação:', error);
-      toast.error(error.message || 'Erro ao salvar fotos de avaliação.');
-      throw error;
-    } finally {
-      finishJourneyLockRef.current = false;
-      setIsSalvandoFotosAvaliacao(false);
-    }
-  }, [
-    pacienteAtual?.cpf,
-    patients,
-    selectedPatientCpf,
-    toast,
-    loteProcedimentosFeitosIds[0],
-    uploadEvaluationCapturedPhotos,
-  ]);
-
   const handleConcluirAvaliacao = React.useCallback(async () => {
-    try {
-      await salvarFotosAvaliacao();
-      setConsultaModule('hub');
-    } catch {
-      /* toast já exibido em salvarFotosAvaliacao */
-    }
-  }, [salvarFotosAvaliacao]);
+    // Apenas retorna ao hub para manter as fotos no estado e visíveis na UI.
+    // O salvamento real de evaluationCapturedPhotos ocorre apenas em encerrarAtendimento.
+    setConsultaModule('hub');
+  }, []);
 
   const handleConcluirAnamnese = React.useCallback(async () => {
     setStep1Busy(true);
@@ -2676,12 +2642,12 @@ function AppRefactoredInner() {
         }
       }
 
-      if (isApenasSair && cameraState.evaluationCapturedPhotos?.length > 0) {
+      if (cameraState.evaluationCapturedPhotos?.length > 0) {
         const dataRefSessao = toLocalISODate(new Date());
         try {
           await uploadEvaluationCapturedPhotos({ paciente, procIdOpt: novosIdsValidos[0], dataRefSessao });
         } catch (e) {
-          console.warn('[encerrarAtendimento] erro ao enviar fotos avaliacao no Sair:', e);
+          console.warn('[encerrarAtendimento] erro ao enviar fotos avaliacao:', e);
         }
       }
 
@@ -3460,7 +3426,6 @@ function AppRefactoredInner() {
                     onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
                     onAnnotatePhoto={openEvaluationPhotoAnnotationForConsulta}
                     onConcluirAvaliacao={handleConcluirAvaliacao}
-                    isConcluirBusy={isSalvandoFotosAvaliacao}
                   />
                 ) : null}
                 {consultaModule === 'planejamento' && !journeyState.isAgendaRetorno ? (
