@@ -126,7 +126,11 @@ export function groupGaleriaItemsBySession(items) {
   const groups = new Map();
   for (const it of items || []) {
     const dataISO = itemDataReferenciaISO(it) || 'sem-data';
-    const key = dataISO;
+    const feitoId = it.procedimentoFeitoId != null && String(it.procedimentoFeitoId).trim() !== ''
+      ? String(it.procedimentoFeitoId).trim()
+      : null;
+    const key = feitoId ? `${dataISO}_${feitoId}` : dataISO;
+
     if (!groups.has(key)) {
       groups.set(key, {
         key,
@@ -163,7 +167,12 @@ export function groupGaleriaItemsBySession(items) {
   const sortedAsc = [...arr].sort((a, b) => {
     if (a.dataISO === 'sem-data') return 1;
     if (b.dataISO === 'sem-data') return -1;
-    return a.dataISO.localeCompare(b.dataISO);
+    if (a.dataISO !== b.dataISO) {
+      return a.dataISO.localeCompare(b.dataISO);
+    }
+    const timeA = a.fotos[0]?.createdAt ? new Date(a.fotos[0].createdAt).getTime() : 0;
+    const timeB = b.fotos[0]?.createdAt ? new Date(b.fotos[0].createdAt).getTime() : 0;
+    return timeA - timeB;
   });
   const sessionNumberByKey = new Map(sortedAsc.map((s, idx) => [s.key, idx + 1]));
 
@@ -174,7 +183,10 @@ export function groupGaleriaItemsBySession(items) {
   arr.sort((a, b) => {
     if (a.dataISO === 'sem-data') return 1;
     if (b.dataISO === 'sem-data') return -1;
-    return b.dataISO.localeCompare(a.dataISO);
+    if (a.dataISO !== b.dataISO) {
+      return b.dataISO.localeCompare(a.dataISO);
+    }
+    return (b.sessionNumber || 0) - (a.sessionNumber || 0);
   });
 
   return arr;

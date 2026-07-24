@@ -250,8 +250,8 @@ function AppRefactoredInner() {
         if (!orgRes.ok) {
           toast.error(
             orgJson?.message ||
-              orgJson?.detail ||
-              `Não foi possível carregar suas clínicas (erro ${orgRes.status}). Tente novamente.`,
+            orgJson?.detail ||
+            `Não foi possível carregar suas clínicas (erro ${orgRes.status}). Tente novamente.`,
           );
           setPostLoginGate('ready');
           return;
@@ -270,7 +270,7 @@ function AppRefactoredInner() {
             const nomeClinica = clinicaJson?.nome || clinicaJson?.nomeFantasia || '';
             const logoRaw = clinicaJson?.logoUrl ?? clinicaJson?.logo_url;
             const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
-            
+
             let endCompleto = String(clinicaJson?.enderecoLogradouro ?? clinicaJson?.endereco ?? clinicaJson?.logradouro ?? '').trim();
             if (clinicaJson?.enderecoNumero) endCompleto += `, ${clinicaJson.enderecoNumero}`;
             if (clinicaJson?.enderecoCidade) endCompleto += ` - ${clinicaJson.enderecoCidade}`;
@@ -344,11 +344,11 @@ function AppRefactoredInner() {
   /** Controle do modal "Sair sem salvar?" ao voltar do módulo para o Hub */
   const [unsavedWarningOpen, setUnsavedWarningOpen] = React.useState(false);
   const [unsavedWarningSaving, setUnsavedWarningSaving] = React.useState(false);
-  
+
   // --- Lote de Procedimentos ---
   const [procedimentosLote, setProcedimentosLote] = React.useState([]);
   // O índice do procedimento ativo foi movido para o useJourneyState para manter tudo em sincronia.
-  
+
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
 
   const [activeView, _setActiveView] = React.useState(() => {
@@ -577,9 +577,9 @@ function AppRefactoredInner() {
       if (!sessao?.agendaId) return;
       const catId = String(
         item.catalogoId ??
-          item.catalogoProcedimentoSaudeId ??
-          sessao.catalogoProcedimentoSaudeId ??
-          '',
+        item.catalogoProcedimentoSaudeId ??
+        sessao.catalogoProcedimentoSaudeId ??
+        '',
       ).trim();
       const appointment = {
         agendaId: sessao.agendaId,
@@ -771,7 +771,7 @@ function AppRefactoredInner() {
     cameraState.setAnamnesePhotoUrl(null);
     cameraState.setAnamnesePhotoBlob(null);
     cameraState.setAnamnesePhotoMeta(null);
-    
+
     // Clear refs and state to prevent cross-patient corruption
     anamnesePreenchimentoIdRef.current = null;
     autoSaveAnamnesePromiseRef.current = null;
@@ -792,7 +792,7 @@ function AppRefactoredInner() {
     journeyState.setProfissionalAssinaturaDataUrl('');
     journeyState.setOrientacoesItens([]);
     journeyState.setOrientacoesCarregadas(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pacienteAtual?.id]);
 
   const handleSelectCapturedPhoto = (idx) => {
@@ -984,7 +984,7 @@ function AppRefactoredInner() {
       return;
     }
     goToView(view);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDirtyHorarios, activeView, canSeeConfig, canSeeConfigEquipe]);
 
   React.useEffect(() => {
@@ -1104,7 +1104,7 @@ function AppRefactoredInner() {
           const nomeClinica = c?.nome || c?.nomeFantasia || c?.nome_fantasia || '';
           const logoRaw = c?.logoUrl ?? c?.logo_url;
           const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
-          
+
           let endCompleto = String(c?.enderecoLogradouro ?? c?.endereco ?? c?.logradouro ?? '').trim();
           if (c?.enderecoNumero) endCompleto += `, ${c.enderecoNumero}`;
           if (c?.enderecoCidade) endCompleto += ` - ${c.enderecoCidade}`;
@@ -1267,9 +1267,9 @@ function AppRefactoredInner() {
     const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
     setConsultaModule(null);
     setActiveView('pacientes');
-    
+
     refreshPatientsAndPagedList();
-    
+
     if (sCpf) {
       setSelectedPatientCpf(sCpf);
       setPatientView('profile');
@@ -1391,7 +1391,7 @@ function AppRefactoredInner() {
     const fromSlot = opt.fromAgendaSlot === true;
     const dataRaw = opt.data;
     const horaRaw = opt.horaInicio;
-    
+
     if (opt.lote && Array.isArray(opt.lote) && opt.lote.length > 0) {
       setProcedimentosLote(opt.lote);
       journeyState.setProcedimentosSessao(opt.lote);
@@ -1407,8 +1407,8 @@ function AppRefactoredInner() {
               const isSamePatient = (patient.id && sameId) || sameName;
               return isSamePatient && toDateKey(i?.data) === toDateKey(dataRaw);
             })
-            .sort((a,b) => String(a?.horaInicio).localeCompare(String(b?.horaInicio)));
-          
+            .sort((a, b) => String(a?.horaInicio).localeCompare(String(b?.horaInicio)));
+
           const lote = agendamentosDoDia.map(a => ({
             agendaId: a.id || a.agendaId,
             procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
@@ -1417,7 +1417,7 @@ function AppRefactoredInner() {
               String(a.tipoProcedimentoCodigo ?? a.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() ===
               'retorno',
           }));
-          
+
           setProcedimentosLote(lote);
           journeyState.setProcedimentosSessao(lote);
           journeyState.setActiveProcedureIndex(0);
@@ -1865,7 +1865,7 @@ function AppRefactoredInner() {
       const nomeP = String(journeyState.nomeProcedimento || '').trim();
       const catId =
         journeyState.nomeProcedimentoCatalogoId != null &&
-        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
       if (!nomeP || (!catId && !sugestaoProcedimentoEnviada)) {
@@ -2236,7 +2236,7 @@ function AppRefactoredInner() {
 
       const catalogoId =
         journeyState.nomeProcedimentoCatalogoId != null &&
-        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
       const nome = String(journeyState.nomeProcedimento || '').trim();
@@ -2289,7 +2289,7 @@ function AppRefactoredInner() {
       let procedimentoFeitoIdParaVinculo = loteProcedimentosFeitosIds[0];
       const snapshotCatalogoId =
         journeyState.nomeProcedimentoCatalogoId != null &&
-        String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+          String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
 
@@ -2549,79 +2549,79 @@ function AppRefactoredInner() {
     try {
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
       const paciente = resolvePacienteAtendimento();
-      
-      const listaParaSalvar = journeyState.procedimentosSessao && journeyState.procedimentosSessao.length > 0 
-        ? journeyState.procedimentosSessao 
+
+      const listaParaSalvar = journeyState.procedimentosSessao && journeyState.procedimentosSessao.length > 0
+        ? journeyState.procedimentosSessao
         : procedimentosLote;
 
-      const todosIds = []; 
+      const todosIds = [];
       const payloadLote = { procedimentos: [] };
       const indexParaCriar = [];
 
       if (listaParaSalvar && listaParaSalvar.length > 0) {
         for (let i = 0; i < listaParaSalvar.length; i++) {
-           const proc = listaParaSalvar[i];
-           if (proc.id) {
-             todosIds.push(proc.id);
-             if (proc.observacoesExecucao) {
-               try {
-                 await procedimentosApi.atualizarObservacao(proc.id, proc.observacoesExecucao);
-               } catch (e) {
-                 console.warn('[encerrarAtendimento] erro ao atualizar obs do proc', proc.id, e);
-               }
-             }
-           } else {
-             const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-             const body = {
-               nome: proc.nomeProcedimento || proc.procedimentoNome,
-               roleUserId,
-               observacao: proc.observacoesExecucao || null,
-               agendaId: proc.agendaId || journeyState.agendaId,
-               catalogoProcedimentoSaudeId: catId,
-               ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
-             };
-             payloadLote.procedimentos.push(body);
-             indexParaCriar.push(i);
-             todosIds.push(null); 
-           }
+          const proc = listaParaSalvar[i];
+          if (proc.id) {
+            todosIds.push(proc.id);
+            if (proc.observacoesExecucao) {
+              try {
+                await procedimentosApi.atualizarObservacao(proc.id, proc.observacoesExecucao);
+              } catch (e) {
+                console.warn('[encerrarAtendimento] erro ao atualizar obs do proc', proc.id, e);
+              }
+            }
+          } else {
+            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+            const body = {
+              nome: proc.nomeProcedimento || proc.procedimentoNome,
+              roleUserId,
+              observacao: proc.observacoesExecucao || null,
+              agendaId: proc.agendaId || journeyState.agendaId,
+              catalogoProcedimentoSaudeId: catId,
+              ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
+            };
+            payloadLote.procedimentos.push(body);
+            indexParaCriar.push(i);
+            todosIds.push(null);
+          }
         }
 
         if (payloadLote.procedimentos.length > 0) {
           let temErroNoLote = false;
           for (let idx = 0; idx < payloadLote.procedimentos.length; idx++) {
-             const body = payloadLote.procedimentos[idx];
-             const bodyToSave = isApenasSair ? { ...body, agendaId: undefined } : body;
-             try {
-               const res = await procedimentosApi.registrarManual(paciente.id, bodyToSave);
-               const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-               if (pid) {
-                  const origIdx = indexParaCriar[idx];
-                  todosIds[origIdx] = String(pid);
-               } else {
-                  temErroNoLote = true;
-               }
-             } catch (e) {
-               console.warn('[encerrarAtendimento] Erro ao registrar procedimento manual no lote', e);
-               temErroNoLote = true;
-             }
+            const body = payloadLote.procedimentos[idx];
+            const bodyToSave = isApenasSair ? { ...body, agendaId: undefined } : body;
+            try {
+              const res = await procedimentosApi.registrarManual(paciente.id, bodyToSave);
+              const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+              if (pid) {
+                const origIdx = indexParaCriar[idx];
+                todosIds[origIdx] = String(pid);
+              } else {
+                temErroNoLote = true;
+              }
+            } catch (e) {
+              console.warn('[encerrarAtendimento] Erro ao registrar procedimento manual no lote', e);
+              temErroNoLote = true;
+            }
           }
           if (temErroNoLote) {
-             throw new Error('Falha ao salvar um ou mais procedimentos do lote.');
+            throw new Error('Falha ao salvar um ou mais procedimentos do lote.');
           }
         }
       } else {
         const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente, isApenasSair);
         if (procedimentoFeitoIdParaVinculo) {
-           todosIds.push(procedimentoFeitoIdParaVinculo);
+          todosIds.push(procedimentoFeitoIdParaVinculo);
         } else if (journeyState.nomeProcedimento && journeyState.nomeProcedimento.trim()) {
-           throw new Error('Falha ao registrar procedimento manual. Verifique sua conexão.');
+          throw new Error('Falha ao registrar procedimento manual. Verifique sua conexão.');
         }
       }
 
       const novosIdsValidos = todosIds.filter(Boolean);
 
       if (journeyState.procedimentosSessao?.length > 0 && novosIdsValidos.length > 0) {
-        journeyState.setProcedimentosSessao(prev => 
+        journeyState.setProcedimentosSessao(prev =>
           prev.map((p, i) => ({ ...p, id: todosIds[i] || p.id }))
         );
       }
@@ -2635,10 +2635,16 @@ function AppRefactoredInner() {
         }
       }
 
-      // Salva o snapshot final da aba atual no state antes de persistir
-      journeyState.updateProcedureByIndex(journeyState.activeProcedureIndex, {
-        mapaSnapshot: mapaAplicacaoState.getSnapshotForPersist(),
-        fotosSnapshot: cameraState.procedureCapturedPhotos
+      // Captura síncrona ANTES do updateProcedureByIndex (que é assíncrono no React)
+      // proc.fotosSnapshot lido logo após seria undefined pois o state ainda não teria atualizado
+      const activeIndex = journeyState.activeProcedureIndex;
+      const activePhotosSync = cameraState.procedureCapturedPhotos || [];
+      const activeMapaSnapSync = mapaAplicacaoState.getSnapshotForPersist();
+
+      // Salva o snapshot final da aba atual no state (para persistência futura)
+      journeyState.updateProcedureByIndex(activeIndex, {
+        mapaSnapshot: activeMapaSnapSync,
+        fotosSnapshot: activePhotosSync
       });
 
 
@@ -2649,19 +2655,21 @@ function AppRefactoredInner() {
         for (let i = 0; i < novosIdsValidos.length; i++) {
           const pid = novosIdsValidos[i];
           const proc = journeyState.procedimentosSessao[i] || {};
-          
-          const snap = proc.mapaSnapshot || (i === journeyState.activeProcedureIndex ? mapaAplicacaoState.getSnapshotForPersist() : null);
+
+          // Para o índice ativo, usa os valores capturados sincronamente acima
+          // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
+          const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
           if (snap) {
             const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
             await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
           }
-          
-          const photos = proc.fotosSnapshot || (i === journeyState.activeProcedureIndex ? cameraState.procedureCapturedPhotos : []);
+
+          const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
           if (photos.length > 0) {
             await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
           }
         }
-        
+
         if (!isApenasSair) {
           const finalizarPromises = novosIdsValidos.map(id => procedimentosApi.finalizar(id).catch(e => console.warn('Erro ao finalizar proc', id, e)));
           await Promise.all(finalizarPromises);
@@ -2786,7 +2794,7 @@ function AppRefactoredInner() {
   const isAgendaView = activeView === 'agenda';
   const isPaginaPublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
-  const isAnamnesePublica = 
+  const isAnamnesePublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/anamnese');
   const isDocumentoPublico =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/documento');
@@ -2910,38 +2918,35 @@ function AppRefactoredInner() {
 
       {/* Main Content */}
       <main
-        className={`flex flex-1 flex-col h-full min-h-0 ${
-          isJornadaView || isConsultaView
+        className={`flex flex-1 flex-col h-full min-h-0 ${isJornadaView || isConsultaView
             ? 'overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
             : isAgendaView
               ? 'overflow-hidden max-lg:overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
               : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
-        }`}
+          }`}
       >
         {isJornadaView && (
-        <header
-          className={`border-b border-app-border shadow-app-card ${
-            isJornadaView
-              ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
-              : `z-0 bg-white ${
-                  activeView === 'configuracoes'
-                    ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
-                    : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
+          <header
+            className={`border-b border-app-border shadow-app-card ${isJornadaView
+                ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
+                : `z-0 bg-white ${activeView === 'configuracoes'
+                  ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
+                  : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
                 }`
-          }`}
-        >
-          {/* @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'. */}
-          {activeView === 'jornada' ? (
-            <>
-              <JourneyPatientContextHeader
-                pacienteAtual={pacienteAtual}
-                onCancelJourney={onCancelJourney}
-                getPatientInitials={getPatientInitials}
-              />
-              <Stepper currentStep={currentStep} />
-            </>
-          ) : null}
-        </header>
+              }`}
+          >
+            {/* @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'. */}
+            {activeView === 'jornada' ? (
+              <>
+                <JourneyPatientContextHeader
+                  pacienteAtual={pacienteAtual}
+                  onCancelJourney={onCancelJourney}
+                  getPatientInitials={getPatientInitials}
+                />
+                <Stepper currentStep={currentStep} />
+              </>
+            ) : null}
+          </header>
         )}
 
         {/* @deprecated — substituído por isConsultaView + consultaModule. Remover na v2 após confirmar que nenhum call site usa 'jornada'. */}
@@ -2950,392 +2955,388 @@ function AppRefactoredInner() {
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto w-full max-w-[1600px] p-3 pb-28 [-webkit-overflow-scrolling:touch] sm:p-6 md:px-8 md:pt-8 md:pb-28">
-                  <div className={`rounded-[20px] border border-app-border bg-white shadow-app-card ${
-                    currentStep === 1
+                  <div className={`rounded-[20px] border border-app-border bg-white shadow-app-card ${currentStep === 1
                       ? 'p-3 pb-4 sm:p-5 sm:pb-5 md:p-6 md:pb-6'
                       : 'p-4 pb-5 sm:p-8 sm:pb-6 md:pb-8'
-                  }`}>
-                  <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
-                  {currentStep === 1 && (
-                    <Step2Anamnese
-                      onAutoSaveAnamnese={autoSaveAnamneseSilently}
-                      ref={anamneseRef}
-                      queixa={journeyState.queixa}
-                      setQueixa={journeyState.setQueixa}
-                      expectativas={journeyState.expectativas}
-                      setExpectativas={journeyState.setExpectativas}
-                      pacienteId={pacienteAtual?.id || null}
-                      pacienteSexo={pacienteAtual?.sexo || null}
-                      roleUserId={roleUserId}
-                      step2Errors={journeyState.step2Errors}
-                      setStep2Errors={journeyState.setStep2Errors}
-                      savedAnamneseState={journeyState.step2AnamneseDraft}
-                      onSavedAnamneseStateChange={journeyState.setStep2AnamneseDraft}
-                      respostasAnamnese={journeyState.respostasAnamnese}
-                      salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
-                      setRespostasAnamnese={journeyState.setRespostasAnamnese}
-                      onQueixaVisibilityChange={setQueixaVisivel}
-                      perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
-                      onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => {})}
-                    />
-                  )}
-
-                  {currentStep === 2 && (
-                    <Step3Evaluation
-                      pacienteId={pacienteAtual?.id ?? null}
-                      roleUserId={roleUserId ?? null}
-                      sidebarInsetPx={sidebarRailWidthPx}
-                      observacoes={journeyState.observacoes}
-                      setObservacoes={journeyState.setObservacoes}
-                      pendingCapture={pendingMapeamentoCapture}
-                      onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
-                      onPrepareCapture={handlePrepareMapeamentoCapture}
-                      onGerarPlanoSuccess={(result) => {
-                        if (result?.planejamentoId) {
-                          journeyState.setJourneyPlanejamentoCtx({
-                            planejamentoId: result.planejamentoId,
-                            itemIdByCatalogo: result.itemIdByCatalogo ?? {},
-                            procedimentosComPontos: Array.isArray(result.procedimentosComPontos)
-                              ? result.procedimentosComPontos
-                              : [],
-                          });
-                        }
-                      }}
-                      onStepComplete={(planoSnapshot) => {
-                        if (planoSnapshot?.planejamentoId) {
-                          journeyState.setJourneyPlanejamentoCtx({
-                            planejamentoId: planoSnapshot.planejamentoId,
-                            itemIdByCatalogo: planoSnapshot.itemIdByCatalogo ?? {},
-                            procedimentosComPontos: Array.isArray(planoSnapshot.procedimentosComPontos)
-                              ? planoSnapshot.procedimentosComPontos
-                              : [],
-                          });
-                        }
-                        setCurrentStep(3);
-                      }}
-                      profissionalLogadoNome={perfilInfo?.nomeCompleto ?? ''}
-                      onAgendarPlanejamentoItem={(row, onSaved) => {
-                        if (!pacienteAtual?.id || !roleUserId) return;
-                        agendaSchedule.openCreateModalForPatient(
-                          {
-                            id: pacienteAtual.id,
-                            nome: pacienteAtual.nome,
-                            telefone:
-                              pacienteAtual.telefone ||
-                              pacienteAtual.phone ||
-                              pacienteAtual.telefoneNumero ||
-                              pacienteAtual.telefonePrincipal ||
-                              '',
-                          },
-                          {
-                            catalogoProcedimentoSaudeIds: [
-                              String(row.catalogoProcedimentoSaudeId).trim(),
-                            ],
-                            planejamentoItemId: row.planejamentoItemId,
-                            planejamentoItemIdPorCatalogo: {
-                              [String(row.catalogoProcedimentoSaudeId).trim()]:
-                                row.planejamentoItemId,
-                            },
-                            profissionalRoleUserId: roleUserId,
-                            onAgendaSaved: onSaved,
-                          }
-                        );
-                      }}
-                    />
-                  )}
-
-                  {currentStep === 3 && (
-                    <Step3Termos
-                      termoLido={journeyState.termoLido}
-                      setTermoLido={journeyState.setTermoLido}
-                      termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
-                      setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
-                      setTermoAssinado={journeyState.setTermoAssinado}
-                      profissionalAssinaturaDataUrl={journeyState.profissionalAssinaturaDataUrl}
-                      setProfissionalAssinaturaDataUrl={journeyState.setProfissionalAssinaturaDataUrl}
-                      step4Errors={journeyState.step4Errors}
-                      setStep4Errors={journeyState.setStep4Errors}
-                      termosAssinados={journeyState.termosAssinados}
-                      setTermosAssinados={journeyState.setTermosAssinados}
-                      termosPendentesIds={journeyState.termosPendentesIds}
-                      setTermosPendentesIds={journeyState.setTermosPendentesIds}
-                      termoTitulo={journeyTermoTitulo || undefined}
-                      termoConteudo={journeyTermoConteudo || undefined}
-                      onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
-                      pacienteId={pacienteAtual?.id ?? null}
-                      procedimentoFeitoId={loteProcedimentosFeitosIds[0] ?? null}
-                      roleUserId={roleUserId ?? null}
-                      onAssinaturaSalva={handleTermoAssinaturaSalva}
-                      pacienteCtx={{
-                        nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
-                        cpf: pacienteAtual?.cpf,
-                        telefone:
-                          pacienteAtual?.telefone ||
-                          pacienteAtual?.phone ||
-                          pacienteAtual?.telefoneNumero ||
-                          pacienteAtual?.telefonePrincipal,
-                      }}
-                      clinicaCtx={{
-                        nome: clinicaInfo?.nome,
-                        cnpj: clinicaInfo?.cnpj,
-                        endereco: clinicaInfo?.endereco,
-                        telefone: clinicaInfo?.telefone,
-                        clinicSlug: clinicaInfo?.slug
-                      }}
-                      profissionalCtx={{
-                        nome: perfilInfo?.nomeCompleto,
-                        cpf: perfilInfo?.cpf || perfilInfo?.crm,
-                        telefone: perfilInfo?.telefone
-                      }}
-                    />
-                  )}
-
-                  {currentStep === 4 && (
-                    <Step4Procedimento
-                      onAutoSaveProcedimento={autoSaveProcedimentoSilently}
-                      pacienteIdForProcedures={pacienteAtual?.id || null}
-                      nomeProcedimento={journeyState.nomeProcedimento}
-                      setNomeProcedimento={journeyState.setNomeProcedimento}
-                      setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
-                      observacoesExecucao={journeyState.observacoesExecucao}
-                      setObservacoesExecucao={journeyState.setObservacoesExecucao}
-                      procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
-                      procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                      onProcedureUploadFiles={(files, cat) =>
-                        cameraState.uploadProcedureFiles(files, cat)
-                      }
-                      onProcedureOpenCamera={cameraState.openPhotoModal}
-                      onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
-                      onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
-                      step4Errors={journeyState.step4Errors}
-                      setStep4Errors={journeyState.setStep4Errors}
-                      fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
-                      onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
-                      onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
-                      mapaState={mapaAplicacaoState}
-                      roleUserId={roleUserId}
-                      procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
-                      catalogoId={journeyState.nomeProcedimentoCatalogoId}
-                      planejamentoItemId={resolvePlanejamentoItemId(
-                        journeyState.nomeProcedimentoCatalogoId,
+                    }`}>
+                    <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
+                      {currentStep === 1 && (
+                        <Step2Anamnese
+                          onAutoSaveAnamnese={autoSaveAnamneseSilently}
+                          ref={anamneseRef}
+                          queixa={journeyState.queixa}
+                          setQueixa={journeyState.setQueixa}
+                          expectativas={journeyState.expectativas}
+                          setExpectativas={journeyState.setExpectativas}
+                          pacienteId={pacienteAtual?.id || null}
+                          pacienteSexo={pacienteAtual?.sexo || null}
+                          roleUserId={roleUserId}
+                          step2Errors={journeyState.step2Errors}
+                          setStep2Errors={journeyState.setStep2Errors}
+                          savedAnamneseState={journeyState.step2AnamneseDraft}
+                          onSavedAnamneseStateChange={journeyState.setStep2AnamneseDraft}
+                          respostasAnamnese={journeyState.respostasAnamnese}
+                          salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
+                          setRespostasAnamnese={journeyState.setRespostasAnamnese}
+                          onQueixaVisibilityChange={setQueixaVisivel}
+                          perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
+                          onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => { })}
+                        />
                       )}
-                      planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
-                      procedimentosComPontos={
-                        journeyState.journeyPlanejamentoCtx?.procedimentosComPontos ?? []
-                      }
-                      sidebarInsetPx={sidebarRailWidthPx}
-                      pendingMapaCapture={pendingMapaAplicacaoCapture}
-                      onMapaCaptureConsumed={() => setPendingMapaAplicacaoCapture(null)}
-                      onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
-                      onEnsureProcedimento={() =>
-                        ensureProcedimentoFeitoForMapa(pacienteAtual)
-                      }
-                      onSugestaoEnviada={setSugestaoProcedimentoEnviada}
-                    />
-                  )}
 
-                  {currentStep === 5 && (
-                    <Step5Finalization
-                      key={String(journeyState.nomeProcedimento || '')}
-                      procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
-                      procedureDateIso={journeyProcedureDateIso}
-                      proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
-                      setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
-                      orientacoes={journeyState.orientacoes}
-                      orientacoesItens={journeyState.orientacoesItens}
-                      setOrientacoesItens={journeyState.setOrientacoesItens}
-                      orientacoesCarregadas={journeyState.orientacoesCarregadas}
-                      setOrientacoesCarregadas={journeyState.setOrientacoesCarregadas}
-                      step5Errors={journeyState.step5Errors}
-                      setStep5Errors={journeyState.setStep5Errors}
-                      pacienteNome={pacienteAtual?.nomeCompleto ?? pacienteAtual?.nome ?? ''}
-                      pacienteIdade={pacienteAtual?.idade ?? null}
-                      pacienteCpf={pacienteAtual?.cpf ?? ''}
-                      telefonePaciente={
-                        pacienteAtual?.telefone ||
-                        pacienteAtual?.phone ||
-                        pacienteAtual?.telefoneNumero ||
-                        pacienteAtual?.telefonePrincipal ||
-                        ''
-                      }
-                      nomeProcedimento={journeyState.nomeProcedimento ?? ''}
-                      observacoesProcedimento={journeyState.observacoesExecucao ?? ''}
-                      queixa={journeyState.queixa ?? ''}
-                      alertasAnamnese={[]}
-                      alertasAlergia={[]}
-                      profissionalAssinaturaDataUrl={journeyState.profissionalAssinaturaDataUrl ?? ''}
-                      termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl ?? ''}
-                      profAssinaturaTimestamp={null}
-                      patAssinaturaTimestamp={null}
-                      termoTitulo={journeyTermoTitulo ?? ''}
-                      fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
-                      fotosProcedimento={cameraState.procedureCapturedPhotos ?? []}
-                      nomeUsuario={
-                        authUser?.nome || authUser?.name || authUser?.email || authUser?.username || ''
-                      }
-                      onAnnotateEvaluationPhoto={openEvaluationPhotoAnnotationFromSummary}
-                      onAnnotateProcedurePhoto={openProcedurePhotoAnnotation}
-                    />
-                  )}
+                      {currentStep === 2 && (
+                        <Step3Evaluation
+                          pacienteId={pacienteAtual?.id ?? null}
+                          roleUserId={roleUserId ?? null}
+                          sidebarInsetPx={sidebarRailWidthPx}
+                          observacoes={journeyState.observacoes}
+                          setObservacoes={journeyState.setObservacoes}
+                          pendingCapture={pendingMapeamentoCapture}
+                          onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
+                          onPrepareCapture={handlePrepareMapeamentoCapture}
+                          onGerarPlanoSuccess={(result) => {
+                            if (result?.planejamentoId) {
+                              journeyState.setJourneyPlanejamentoCtx({
+                                planejamentoId: result.planejamentoId,
+                                itemIdByCatalogo: result.itemIdByCatalogo ?? {},
+                                procedimentosComPontos: Array.isArray(result.procedimentosComPontos)
+                                  ? result.procedimentosComPontos
+                                  : [],
+                              });
+                            }
+                          }}
+                          onStepComplete={(planoSnapshot) => {
+                            if (planoSnapshot?.planejamentoId) {
+                              journeyState.setJourneyPlanejamentoCtx({
+                                planejamentoId: planoSnapshot.planejamentoId,
+                                itemIdByCatalogo: planoSnapshot.itemIdByCatalogo ?? {},
+                                procedimentosComPontos: Array.isArray(planoSnapshot.procedimentosComPontos)
+                                  ? planoSnapshot.procedimentosComPontos
+                                  : [],
+                              });
+                            }
+                            setCurrentStep(3);
+                          }}
+                          profissionalLogadoNome={perfilInfo?.nomeCompleto ?? ''}
+                          onAgendarPlanejamentoItem={(row, onSaved) => {
+                            if (!pacienteAtual?.id || !roleUserId) return;
+                            agendaSchedule.openCreateModalForPatient(
+                              {
+                                id: pacienteAtual.id,
+                                nome: pacienteAtual.nome,
+                                telefone:
+                                  pacienteAtual.telefone ||
+                                  pacienteAtual.phone ||
+                                  pacienteAtual.telefoneNumero ||
+                                  pacienteAtual.telefonePrincipal ||
+                                  '',
+                              },
+                              {
+                                catalogoProcedimentoSaudeIds: [
+                                  String(row.catalogoProcedimentoSaudeId).trim(),
+                                ],
+                                planejamentoItemId: row.planejamentoItemId,
+                                planejamentoItemIdPorCatalogo: {
+                                  [String(row.catalogoProcedimentoSaudeId).trim()]:
+                                    row.planejamentoItemId,
+                                },
+                                profissionalRoleUserId: roleUserId,
+                                onAgendaSaved: onSaved,
+                              }
+                            );
+                          }}
+                        />
+                      )}
+
+                      {currentStep === 3 && (
+                        <Step3Termos
+                          termoLido={journeyState.termoLido}
+                          setTermoLido={journeyState.setTermoLido}
+                          termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
+                          setTermoAssinaturaDataUrl={journeyState.setTermoAssinaturaDataUrl}
+                          setTermoAssinado={journeyState.setTermoAssinado}
+                          profissionalAssinaturaDataUrl={journeyState.profissionalAssinaturaDataUrl}
+                          setProfissionalAssinaturaDataUrl={journeyState.setProfissionalAssinaturaDataUrl}
+                          step4Errors={journeyState.step4Errors}
+                          setStep4Errors={journeyState.setStep4Errors}
+                          termosAssinados={journeyState.termosAssinados}
+                          setTermosAssinados={journeyState.setTermosAssinados}
+                          termosPendentesIds={journeyState.termosPendentesIds}
+                          setTermosPendentesIds={journeyState.setTermosPendentesIds}
+                          termoTitulo={journeyTermoTitulo || undefined}
+                          termoConteudo={journeyTermoConteudo || undefined}
+                          onTermoChange={(id) => journeyState.setTermoSelecionadoId(id)}
+                          pacienteId={pacienteAtual?.id ?? null}
+                          procedimentoFeitoId={loteProcedimentosFeitosIds[0] ?? null}
+                          roleUserId={roleUserId ?? null}
+                          onAssinaturaSalva={handleTermoAssinaturaSalva}
+                          pacienteCtx={{
+                            nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
+                            cpf: pacienteAtual?.cpf,
+                            telefone:
+                              pacienteAtual?.telefone ||
+                              pacienteAtual?.phone ||
+                              pacienteAtual?.telefoneNumero ||
+                              pacienteAtual?.telefonePrincipal,
+                          }}
+                          clinicaCtx={{
+                            nome: clinicaInfo?.nome,
+                            cnpj: clinicaInfo?.cnpj,
+                            endereco: clinicaInfo?.endereco,
+                            telefone: clinicaInfo?.telefone,
+                            clinicSlug: clinicaInfo?.slug
+                          }}
+                          profissionalCtx={{
+                            nome: perfilInfo?.nomeCompleto,
+                            cpf: perfilInfo?.cpf || perfilInfo?.crm,
+                            telefone: perfilInfo?.telefone
+                          }}
+                        />
+                      )}
+
+                      {currentStep === 4 && (
+                        <Step4Procedimento
+                          onAutoSaveProcedimento={autoSaveProcedimentoSilently}
+                          pacienteIdForProcedures={pacienteAtual?.id || null}
+                          nomeProcedimento={journeyState.nomeProcedimento}
+                          setNomeProcedimento={journeyState.setNomeProcedimento}
+                          setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
+                          observacoesExecucao={journeyState.observacoesExecucao}
+                          setObservacoesExecucao={journeyState.setObservacoesExecucao}
+                          procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
+                          procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
+                          onProcedureUploadFiles={(files, cat) =>
+                            cameraState.uploadProcedureFiles(files, cat)
+                          }
+                          onProcedureOpenCamera={cameraState.openPhotoModal}
+                          onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
+                          onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
+                          step4Errors={journeyState.step4Errors}
+                          setStep4Errors={journeyState.setStep4Errors}
+                          fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                          onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
+                          onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
+                          mapaState={mapaAplicacaoState}
+                          roleUserId={roleUserId}
+                          procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
+                          catalogoId={journeyState.nomeProcedimentoCatalogoId}
+                          planejamentoItemId={resolvePlanejamentoItemId(
+                            journeyState.nomeProcedimentoCatalogoId,
+                          )}
+                          planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
+                          procedimentosComPontos={
+                            journeyState.journeyPlanejamentoCtx?.procedimentosComPontos ?? []
+                          }
+                          sidebarInsetPx={sidebarRailWidthPx}
+                          pendingMapaCapture={pendingMapaAplicacaoCapture}
+                          onMapaCaptureConsumed={() => setPendingMapaAplicacaoCapture(null)}
+                          onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
+                          onEnsureProcedimento={() =>
+                            ensureProcedimentoFeitoForMapa(pacienteAtual)
+                          }
+                          onSugestaoEnviada={setSugestaoProcedimentoEnviada}
+                        />
+                      )}
+
+                      {currentStep === 5 && (
+                        <Step5Finalization
+                          key={String(journeyState.nomeProcedimento || '')}
+                          procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
+                          procedureDateIso={journeyProcedureDateIso}
+                          proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
+                          setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
+                          orientacoes={journeyState.orientacoes}
+                          orientacoesItens={journeyState.orientacoesItens}
+                          setOrientacoesItens={journeyState.setOrientacoesItens}
+                          orientacoesCarregadas={journeyState.orientacoesCarregadas}
+                          setOrientacoesCarregadas={journeyState.setOrientacoesCarregadas}
+                          step5Errors={journeyState.step5Errors}
+                          setStep5Errors={journeyState.setStep5Errors}
+                          pacienteNome={pacienteAtual?.nomeCompleto ?? pacienteAtual?.nome ?? ''}
+                          pacienteIdade={pacienteAtual?.idade ?? null}
+                          pacienteCpf={pacienteAtual?.cpf ?? ''}
+                          telefonePaciente={
+                            pacienteAtual?.telefone ||
+                            pacienteAtual?.phone ||
+                            pacienteAtual?.telefoneNumero ||
+                            pacienteAtual?.telefonePrincipal ||
+                            ''
+                          }
+                          nomeProcedimento={journeyState.nomeProcedimento ?? ''}
+                          observacoesProcedimento={journeyState.observacoesExecucao ?? ''}
+                          queixa={journeyState.queixa ?? ''}
+                          alertasAnamnese={[]}
+                          alertasAlergia={[]}
+                          profissionalAssinaturaDataUrl={journeyState.profissionalAssinaturaDataUrl ?? ''}
+                          termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl ?? ''}
+                          profAssinaturaTimestamp={null}
+                          patAssinaturaTimestamp={null}
+                          termoTitulo={journeyTermoTitulo ?? ''}
+                          fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                          fotosProcedimento={cameraState.procedureCapturedPhotos ?? []}
+                          nomeUsuario={
+                            authUser?.nome || authUser?.name || authUser?.email || authUser?.username || ''
+                          }
+                          onAnnotateEvaluationPhoto={openEvaluationPhotoAnnotationFromSummary}
+                          onAnnotateProcedurePhoto={openProcedurePhotoAnnotation}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {photoAnnotationScope != null &&
-            photoAnnotationIndex != null &&
-            (photoAnnotationScope === 'procedure'
-              ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
-              : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
-              <JourneyPhotoAnnotationEditor
-                sidebarInsetPx={sidebarRailWidthPx}
-                photos={
-                  photoAnnotationScope === 'procedure'
-                    ? cameraState.procedureCapturedPhotos || []
-                    : cameraState.evaluationCapturedPhotos || []
-                }
-                editingIndex={photoAnnotationIndex}
-                setEditingIndex={setPhotoAnnotationIndex}
-                fallbackSelectedPhotoIndex={photoAnnotationIndex}
-                saveListLength={
-                  (photoAnnotationScope === 'procedure'
-                    ? cameraState.procedureCapturedPhotos
-                    : cameraState.evaluationCapturedPhotos
-                  )?.length ?? 0
-                }
-                imageSrc={journeyState.imageSrc}
-                activeTool={journeyState.activeTool}
-                setActiveTool={journeyState.setActiveTool}
-                activeColor={journeyState.activeColor}
-                setActiveColor={journeyState.setActiveColor}
-                pointSize={journeyState.pointSize}
-                setPointSize={journeyState.setPointSize}
-                showPointNumbers={journeyState.showPointNumbers}
-                setShowPointNumbers={journeyState.setShowPointNumbers}
-                eraserSize={journeyState.eraserSize}
-                setEraserSize={journeyState.setEraserSize}
-                cursorPos={journeyState.cursorPos}
-                setCursorPos={journeyState.setCursorPos}
-                isHoveringCanvas={journeyState.isHoveringCanvas}
-                setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                paths={journeyState.paths}
-                setPaths={journeyState.setPaths}
-                isDrawing={journeyState.isDrawing}
-                setIsDrawing={journeyState.setIsDrawing}
-                canvasRef={canvasRef}
-                containerRef={containerRef}
-                evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                selectedPatientCpf={selectedPatientCpf}
-                cpf={pacienteAtual?.cpf || ''}
-                setPatients={setPatients}
-                onSelectCapturedPhoto={(i) => {
-                  if (photoAnnotationScope === 'procedure') {
-                    const ph = (cameraState.procedureCapturedPhotos || [])[i];
-                    if (ph?.url) {
-                      journeyState.setImageSrc(ph.url);
-                      journeyState.setPaths([]);
-                    }
-                    setPhotoAnnotationIndex(i);
-                  } else {
-                    handleSelectCapturedPhoto(i);
-                    setPhotoAnnotationIndex(i);
+              {photoAnnotationScope != null &&
+                photoAnnotationIndex != null &&
+                (photoAnnotationScope === 'procedure'
+                  ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
+                  : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+                <JourneyPhotoAnnotationEditor
+                  sidebarInsetPx={sidebarRailWidthPx}
+                  photos={
+                    photoAnnotationScope === 'procedure'
+                      ? cameraState.procedureCapturedPhotos || []
+                      : cameraState.evaluationCapturedPhotos || []
                   }
-                }}
-                onAnnotatedCaptureSaved={
-                  photoAnnotationScope === 'procedure'
-                    ? ({ index, newUrl, blob }) => {
+                  editingIndex={photoAnnotationIndex}
+                  setEditingIndex={setPhotoAnnotationIndex}
+                  fallbackSelectedPhotoIndex={photoAnnotationIndex}
+                  saveListLength={
+                    (photoAnnotationScope === 'procedure'
+                      ? cameraState.procedureCapturedPhotos
+                      : cameraState.evaluationCapturedPhotos
+                    )?.length ?? 0
+                  }
+                  imageSrc={journeyState.imageSrc}
+                  activeTool={journeyState.activeTool}
+                  setActiveTool={journeyState.setActiveTool}
+                  activeColor={journeyState.activeColor}
+                  setActiveColor={journeyState.setActiveColor}
+                  pointSize={journeyState.pointSize}
+                  setPointSize={journeyState.setPointSize}
+                  showPointNumbers={journeyState.showPointNumbers}
+                  setShowPointNumbers={journeyState.setShowPointNumbers}
+                  eraserSize={journeyState.eraserSize}
+                  setEraserSize={journeyState.setEraserSize}
+                  cursorPos={journeyState.cursorPos}
+                  setCursorPos={journeyState.setCursorPos}
+                  isHoveringCanvas={journeyState.isHoveringCanvas}
+                  setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
+                  paths={journeyState.paths}
+                  setPaths={journeyState.setPaths}
+                  isDrawing={journeyState.isDrawing}
+                  setIsDrawing={journeyState.setIsDrawing}
+                  canvasRef={canvasRef}
+                  containerRef={containerRef}
+                  evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
+                  setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
+                  selectedPatientCpf={selectedPatientCpf}
+                  cpf={pacienteAtual?.cpf || ''}
+                  setPatients={setPatients}
+                  onSelectCapturedPhoto={(i) => {
+                    if (photoAnnotationScope === 'procedure') {
+                      const ph = (cameraState.procedureCapturedPhotos || [])[i];
+                      if (ph?.url) {
+                        journeyState.setImageSrc(ph.url);
+                        journeyState.setPaths([]);
+                      }
+                      setPhotoAnnotationIndex(i);
+                    } else {
+                      handleSelectCapturedPhoto(i);
+                      setPhotoAnnotationIndex(i);
+                    }
+                  }}
+                  onAnnotatedCaptureSaved={
+                    photoAnnotationScope === 'procedure'
+                      ? ({ index, newUrl, blob }) => {
                         cameraState.replaceProcedureCapturedPhotoAt(index, { url: newUrl, blob });
                         journeyState.setImageSrc(newUrl);
                         journeyState.setPaths([]);
                       }
-                    : handleAnnotatedCaptureSaved
-                }
-                persistAnnotatedPhotoToGallery={
-                  photoAnnotationScope === 'evaluation' ? persistAnnotatedPhotoToGallery : undefined
-                }
-                onClose={closeJourneyPhotoAnnotation}
-              />
-            ) : null}
+                      : handleAnnotatedCaptureSaved
+                  }
+                  persistAnnotatedPhotoToGallery={
+                    photoAnnotationScope === 'evaluation' ? persistAnnotatedPhotoToGallery : undefined
+                  }
+                  onClose={closeJourneyPhotoAnnotation}
+                />
+              ) : null}
 
-            <div
-              className="pointer-events-none fixed inset-x-0 bottom-0 z-[30] hidden md:block"
-              style={{ paddingLeft: sidebarRailWidthPx }}
-            >
-              <div className="pointer-events-auto border-t border-[#e2e8f0] bg-white px-6 py-4 shadow-[0_-4px_24px_rgba(15,23,42,0.06)]">
-                <div className="mx-auto grid w-full max-w-[1600px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4">
-                  <div className="flex justify-start">
-                    <button
-                      type="button"
-                      onClick={prevStep}
-                      disabled={currentStep === 1 || isFinishing}
-                      className={`flex items-center justify-center gap-2 rounded-xl border-[2px] px-5 py-2.5 text-[13px] font-semibold outline-none transition-all ${
-                        currentStep === 1 || isFinishing
-                          ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
-                          : 'border-[#e2e8f0] bg-white text-[#00a88e] hover:border-[#00a88e]/40 hover:bg-[#f0fdf9]'
-                      }`}
-                    >
-                      <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Anterior
-                    </button>
-                  </div>
-                  <p className="text-center text-[12px] font-medium text-[#94a3b8]">
-                    Etapa {currentStep} de 5
-                  </p>
-                  <div className="flex justify-end">
-                    {currentStep < 5 ? (
+              <div
+                className="pointer-events-none fixed inset-x-0 bottom-0 z-[30] hidden md:block"
+                style={{ paddingLeft: sidebarRailWidthPx }}
+              >
+                <div className="pointer-events-auto border-t border-[#e2e8f0] bg-white px-6 py-4 shadow-[0_-4px_24px_rgba(15,23,42,0.06)]">
+                  <div className="mx-auto grid w-full max-w-[1600px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4">
+                    <div className="flex justify-start">
                       <button
                         type="button"
-                        onClick={handleNextStep}
-                        disabled={isFinishing || (currentStep === 1 && step1Busy)}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={prevStep}
+                        disabled={currentStep === 1 || isFinishing}
+                        className={`flex items-center justify-center gap-2 rounded-xl border-[2px] px-5 py-2.5 text-[13px] font-semibold outline-none transition-all ${currentStep === 1 || isFinishing
+                            ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                            : 'border-[#e2e8f0] bg-white text-[#00a88e] hover:border-[#00a88e]/40 hover:bg-[#f0fdf9]'
+                          }`}
                       >
-                        {currentStep === 1 && step1Busy ? 'Salvando…' : 'Próximo'}{' '}
-                        {!(currentStep === 1 && step1Busy) && (
-                          <ChevronRight className="h-4 w-4" strokeWidth={3} />
-                        )}
+                        <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Anterior
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleNextStep}
-                        disabled={
-                          isFinishing ||
-                          !journeyState.orientacoes ||
-                          step5RetornoBloqueiaFinal
-                        }
-                        className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                          journeyState.orientacoes &&
-                          !step5RetornoBloqueiaFinal &&
-                          !isFinishing
-                            ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
-                            : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
-                        }`}
-                      >
-                        {isFinishing
-                          ? 'Salvando...'
-                          : !journeyState.orientacoes
-                            ? 'Confirme as orientações para finalizar'
-                            : step5RetornoBloqueiaFinal
-                              ? 'Corrija a data de retorno'
-                              : 'Finalizar Atendimento ✓'}
-                      </button>
-                    )}
+                    </div>
+                    <p className="text-center text-[12px] font-medium text-[#94a3b8]">
+                      Etapa {currentStep} de 5
+                    </p>
+                    <div className="flex justify-end">
+                      {currentStep < 5 ? (
+                        <button
+                          type="button"
+                          onClick={handleNextStep}
+                          disabled={isFinishing || (currentStep === 1 && step1Busy)}
+                          className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {currentStep === 1 && step1Busy ? 'Salvando…' : 'Próximo'}{' '}
+                          {!(currentStep === 1 && step1Busy) && (
+                            <ChevronRight className="h-4 w-4" strokeWidth={3} />
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleNextStep}
+                          disabled={
+                            isFinishing ||
+                            !journeyState.orientacoes ||
+                            step5RetornoBloqueiaFinal
+                          }
+                          className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${journeyState.orientacoes &&
+                              !step5RetornoBloqueiaFinal &&
+                              !isFinishing
+                              ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
+                              : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
+                            }`}
+                        >
+                          {isFinishing
+                            ? 'Salvando...'
+                            : !journeyState.orientacoes
+                              ? 'Confirme as orientações para finalizar'
+                              : step5RetornoBloqueiaFinal
+                                ? 'Corrija a data de retorno'
+                                : 'Finalizar Atendimento ✓'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
             <div className="fixed inset-x-0 bottom-0 z-[125] flex h-16 min-h-[4rem] items-center gap-2 border-t border-[#e2e8f0] bg-white px-3 pb-[env(safe-area-inset-bottom)] pt-1 md:hidden">
               <button
                 type="button"
                 onClick={prevStep}
                 disabled={currentStep === 1 || isFinishing}
-                className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-xl border-[2px] px-4 text-[14px] font-semibold ${
-                  currentStep === 1 || isFinishing
+                className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-xl border-[2px] px-4 text-[14px] font-semibold ${currentStep === 1 || isFinishing
                     ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
                     : 'border-[#e2e8f0] bg-white text-[#00a88e] active:border-[#00a88e]/40'
-                }`}
+                  }`}
               >
                 <ChevronLeft className="h-4 w-4" strokeWidth={3} aria-hidden />
                 <span>Anterior</span>
@@ -3352,17 +3353,16 @@ function AppRefactoredInner() {
                   (currentStep === 5 &&
                     (!journeyState.orientacoes || step5RetornoBloqueiaFinal))
                 }
-                className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${
-                  currentStep < 5
+                className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${currentStep < 5
                     ? isFinishing || (currentStep === 1 && step1Busy)
                       ? 'cursor-not-allowed bg-[#00a88e]/50'
                       : 'bg-[#00a88e] active:bg-[#00967f]'
                     : journeyState.orientacoes &&
-                        !step5RetornoBloqueiaFinal &&
-                        !isFinishing
+                      !step5RetornoBloqueiaFinal &&
+                      !isFinishing
                       ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
-                }`}
+                  }`}
               >
                 {currentStep < 5 ? (
                   currentStep === 1 && step1Busy ? (
@@ -3442,7 +3442,7 @@ function AppRefactoredInner() {
                     setRespostasAnamnese={journeyState.setRespostasAnamnese}
                     onQueixaVisibilityChange={setQueixaVisivel}
                     perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
-                    onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => {})}
+                    onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => { })}
                     consultaMode
                     onConcluirAnamnese={handleConcluirAnamnese}
                     isConcluirAnamneseBusy={step1Busy}
@@ -3706,10 +3706,10 @@ function AppRefactoredInner() {
             />
 
             {photoAnnotationScope != null &&
-            photoAnnotationIndex != null &&
-            (photoAnnotationScope === 'procedure'
-              ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
-              : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+              photoAnnotationIndex != null &&
+              (photoAnnotationScope === 'procedure'
+                ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
+                : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
               <JourneyPhotoAnnotationEditor
                 sidebarInsetPx={sidebarRailWidthPx}
                 photos={
@@ -3768,10 +3768,10 @@ function AppRefactoredInner() {
                 onAnnotatedCaptureSaved={
                   photoAnnotationScope === 'procedure'
                     ? ({ index, newUrl, blob }) => {
-                        cameraState.replaceProcedureCapturedPhotoAt(index, { url: newUrl, blob });
-                        journeyState.setImageSrc(newUrl);
-                        journeyState.setPaths([]);
-                      }
+                      cameraState.replaceProcedureCapturedPhotoAt(index, { url: newUrl, blob });
+                      journeyState.setImageSrc(newUrl);
+                      journeyState.setPaths([]);
+                    }
                     : handleAnnotatedCaptureSaved
                 }
                 persistAnnotatedPhotoToGallery={
@@ -3782,171 +3782,170 @@ function AppRefactoredInner() {
             ) : null}
           </>
         ) : (
-        <>
-        <GlobalHeader
-          activeView={activeView}
-          onPatientSelect={handleGlobalPatientSelect}
-          onNovoPaciente={handleGlobalNovoPaciente}
-          onAgendamento={handleGlobalAgendamento}
-          onOpenNotificacoes={handleOpenNotificacoes}
-          notificacoesRefreshKey={notifVersion}
-          patientSearchQuery={patientSearchQuery}
-          setPatientSearchQuery={setPatientSearchQuery}
-        />
-        <div
-          className={`w-full mx-auto ${
-            activeView === 'configuracoes' || activeView === 'gestao-equipe'
-              ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
-              : isAgendaView
-                ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)]'
-                : activeView === 'pacientes'
-                  ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
-                  : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
-          }`}
-        >
-          <div
-            className={
-              isAgendaView
-                ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5'
-                : activeView === 'pacientes'
-                  ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
-                  : activeView === 'configuracoes' || activeView === 'gestao-equipe'
-                  ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
-                  : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
-            }
-          >
+          <>
+            <GlobalHeader
+              activeView={activeView}
+              onPatientSelect={handleGlobalPatientSelect}
+              onNovoPaciente={handleGlobalNovoPaciente}
+              onAgendamento={handleGlobalAgendamento}
+              onOpenNotificacoes={handleOpenNotificacoes}
+              notificacoesRefreshKey={notifVersion}
+              patientSearchQuery={patientSearchQuery}
+              setPatientSearchQuery={setPatientSearchQuery}
+            />
+            <div
+              className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
+                  ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
+                  : isAgendaView
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)]'
+                    : activeView === 'pacientes'
+                      ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
+                      : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
+                }`}
+            >
+              <div
+                className={
+                  isAgendaView
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5'
+                    : activeView === 'pacientes'
+                      ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
+                      : activeView === 'configuracoes' || activeView === 'gestao-equipe'
+                        ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
+                        : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
+                }
+              >
 
-            {activeView === 'pacientes' && (
-              <RoleGuard requiredPermission="PACIENTE_VER" minLevel="NIVEL_1" showError>
-                <PatientsView
-                  isRecepcionista={isRecepcionista}
-                  patients={patients}
-                  patientView={patientView}
-                  selectedPatientCpf={selectedPatientCpf}
-                  setSelectedPatientCpf={setSelectedPatientCpf}
-                  patientDetailTab={patientDetailTab}
-                  setPatientDetailTab={setPatientDetailTab}
-                  setPatientView={setPatientView}
-                  patientSearchQuery={patientSearchQuery}
-                  setPatientSearchQuery={setPatientSearchQuery}
-                  getPatientInitials={getPatientInitials}
-                  onCreatePatient={handleCreatePatientFromPatients}
-                  onStartAttendance={handleAgendaStartAttendance}
-                  onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
-                  onReagendarPlanoItem={handleReagendarPlanoItem}
-                  onUpdatePatient={handleUpdatePatientProfile}
-                  onAddGalleryFiles={handleAddGalleryFiles}
-                  onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
-                  onPatientCreated={refreshPatientsAndPagedList}
-                  clinicaInfo={clinicaInfo}
-                  perfilInfo={perfilInfo}
-                  mergePatientById={mergePatientById}
-                  refreshPatients={refreshPatientsAndPagedList}
-                  patientListItems={patientListItems}
-                  patientListPage={patientListPage}
-                  setPatientListPage={setPatientListPage}
-                  patientListLoading={patientListLoading}
-                  patientListMeta={patientListMeta}
-                  patientListSortBy={patientListSortBy}
-                  setPatientListSortBy={setPatientListSortBy}
-                  statusPlanoFilter={statusPlanoFilter}
-                  setStatusPlanoFilter={setStatusPlanoFilter}
-                  anamneseDesatualizadaFilter={anamneseDesatualizadaFilter}
-                  setAnamneseDesatualizadaFilter={setAnamneseDesatualizadaFilter}
-                  semRetornoFilter={semRetornoFilter}
-                  setSemRetornoFilter={setSemRetornoFilter}
-                  ehNovoFilter={ehNovoFilter}
-                  setEhNovoFilter={setEhNovoFilter}
-                  ehAniversarianteFilter={ehAniversarianteFilter}
-                  setEhAniversarianteFilter={setEhAniversarianteFilter}
-                  patientListBump={patientListBump}
-                  kpi={kpiState}
-                  kpiLoading={kpiState.loading}
-                  nomeUsuario={perfilInfo.nomeCompleto}
-                  onNavigateToAgenda={() => goToViewWithGuard('agenda')}
-                  roleUserId={roleUserId}
-                  patientQuickFilter={patientQuickFilter}
-                  setPatientQuickFilter={setPatientQuickFilter}
-                  captureProfileNavSnapshot={captureProfileNavSnapshot}
-                  navigateProfilePatient={navigateProfilePatient}
-                  profileNav={profileNav}
-                  clearProfileNavSnapshot={clearProfileNavSnapshot}
-                  clinicSlug={clinicaInfo.slug}
-                  agendaSchedule={agendaSchedule}
-                />
-              </RoleGuard>
-            )}
+                {activeView === 'pacientes' && (
+                  <RoleGuard requiredPermission="PACIENTE_VER" minLevel="NIVEL_1" showError>
+                    <PatientsView
+                      isRecepcionista={isRecepcionista}
+                      patients={patients}
+                      patientView={patientView}
+                      selectedPatientCpf={selectedPatientCpf}
+                      setSelectedPatientCpf={setSelectedPatientCpf}
+                      patientDetailTab={patientDetailTab}
+                      setPatientDetailTab={setPatientDetailTab}
+                      setPatientView={setPatientView}
+                      patientSearchQuery={patientSearchQuery}
+                      setPatientSearchQuery={setPatientSearchQuery}
+                      getPatientInitials={getPatientInitials}
+                      onCreatePatient={handleCreatePatientFromPatients}
+                      onStartAttendance={handleAgendaStartAttendance}
+                      onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
+                      onReagendarPlanoItem={handleReagendarPlanoItem}
+                      onUpdatePatient={handleUpdatePatientProfile}
+                      onAddGalleryFiles={handleAddGalleryFiles}
+                      onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
+                      onPatientCreated={refreshPatientsAndPagedList}
+                      clinicaInfo={clinicaInfo}
+                      perfilInfo={perfilInfo}
+                      mergePatientById={mergePatientById}
+                      refreshPatients={refreshPatientsAndPagedList}
+                      patientListItems={patientListItems}
+                      patientListPage={patientListPage}
+                      setPatientListPage={setPatientListPage}
+                      patientListLoading={patientListLoading}
+                      patientListMeta={patientListMeta}
+                      patientListSortBy={patientListSortBy}
+                      setPatientListSortBy={setPatientListSortBy}
+                      statusPlanoFilter={statusPlanoFilter}
+                      setStatusPlanoFilter={setStatusPlanoFilter}
+                      anamneseDesatualizadaFilter={anamneseDesatualizadaFilter}
+                      setAnamneseDesatualizadaFilter={setAnamneseDesatualizadaFilter}
+                      semRetornoFilter={semRetornoFilter}
+                      setSemRetornoFilter={setSemRetornoFilter}
+                      ehNovoFilter={ehNovoFilter}
+                      setEhNovoFilter={setEhNovoFilter}
+                      ehAniversarianteFilter={ehAniversarianteFilter}
+                      setEhAniversarianteFilter={setEhAniversarianteFilter}
+                      patientListBump={patientListBump}
+                      kpi={kpiState}
+                      kpiLoading={kpiState.loading}
+                      nomeUsuario={perfilInfo.nomeCompleto}
+                      onNavigateToAgenda={() => goToViewWithGuard('agenda')}
+                      roleUserId={roleUserId}
+                      patientQuickFilter={patientQuickFilter}
+                      setPatientQuickFilter={setPatientQuickFilter}
+                      captureProfileNavSnapshot={captureProfileNavSnapshot}
+                      navigateProfilePatient={navigateProfilePatient}
+                      profileNav={profileNav}
+                      clearProfileNavSnapshot={clearProfileNavSnapshot}
+                      clinicSlug={clinicaInfo.slug}
+                      agendaSchedule={agendaSchedule}
+                    />
+                  </RoleGuard>
+                )}
 
-            {activeView === 'configuracoes' && (
-              <RoleGuard condition={canSeeConfig} showError>
-                <ConfiguracoesView
-                  canSeeAnamnese={canSeeConfigAnamnese}
-                  canSeeProcedimentos={canSeeConfigProcedimentos}
-                  canSeeTermos={canSeeConfigTermos}
-                  canSeePerfil={canSeeConfigPerfil}
-                  canSeeClinica={canSeeConfigClinica}
-                  canSeeAgendaConfig={canSeeConfigAgenda}
-                  canSeeEquipe={canSeeConfigEquipe}
-                  configSection={configSection}
-                  setConfigSection={setConfigSection}
-                  onClinicaAtualizada={(nome, logoUrl) =>
-                    setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
-                  }
-                  onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
-                  onPacientesCatalogRefresh={refreshPatientsAndPagedList}
-                  onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
-                  onDirtyHorariosChange={setIsDirtyHorarios}
-                />
-              </RoleGuard>
-            )}
+                {activeView === 'configuracoes' && (
+                  <RoleGuard condition={canSeeConfig} showError>
+                    <ConfiguracoesView
+                      canSeeAnamnese={canSeeConfigAnamnese}
+                      canSeeProcedimentos={canSeeConfigProcedimentos}
+                      canSeeTermos={canSeeConfigTermos}
+                      canSeePerfil={canSeeConfigPerfil}
+                      canSeeClinica={canSeeConfigClinica}
+                      canSeeAgendaConfig={canSeeConfigAgenda}
+                      canSeeEquipe={canSeeConfigEquipe}
+                      configSection={configSection}
+                      setConfigSection={setConfigSection}
+                      onClinicaAtualizada={(nome, logoUrl) =>
+                        setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
+                      }
+                      onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
+                      onPacientesCatalogRefresh={refreshPatientsAndPagedList}
+                      onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                      onDirtyHorariosChange={setIsDirtyHorarios}
+                    />
+                  </RoleGuard>
+                )}
 
-            {activeView === 'gestao-equipe' && (
-              <RoleGuard requiredPermission="USUARIO_VER" minLevel="NIVEL_5" showError>
-                <GestaoUsuariosView
-                  onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
-                />
-              </RoleGuard>
-            )}
+                {activeView === 'gestao-equipe' && (
+                  <RoleGuard requiredPermission="USUARIO_VER" minLevel="NIVEL_5" showError>
+                    <GestaoUsuariosView
+                      onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                    />
+                  </RoleGuard>
+                )}
 
-            {activeView === 'notificacoes' && (
-              <NotificacoesView
-                onVoltar={handleVoltarNotificacoes}
-                onNavigateToCatalogo={handleNavigateToCatalogo}
-                onNavigateToAgenda={handleNavigateToAgenda}
-                onNotificacoesChanged={handleNotificacoesChanged}
-              />
-            )}
+                {activeView === 'notificacoes' && (
+                  <NotificacoesView
+                    onVoltar={handleVoltarNotificacoes}
+                    onNavigateToCatalogo={handleNavigateToCatalogo}
+                    onNavigateToAgenda={handleNavigateToAgenda}
+                    onNotificacoesChanged={handleNotificacoesChanged}
+                  />
+                )}
 
-            {activeView === 'agenda' && (
-              <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
-                <div className="flex min-h-0 flex-1 flex-col">
-                <AgendaDashboard
-                  agenda={agendaSchedule}
-                  patients={patients}
-                  clinicaNome={clinicaInfo.nome}
-                  clinicaSlug={clinicaInfo.slug}
-                  profissionalNome={perfilInfo.nomeCompleto || roleNome}
-                  onStartAttendance={handleAgendaStartAttendance}
-                  onSlotCancelar={(target) => {
-                    const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
-                    if (row) setScheduleCancelRow(row);
-                  }}
-                  onSlotReagendar={handleSlotReagendar}
-                  shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
-                />
-                </div>
-              </RoleGuard>
-            )}
+                {activeView === 'agenda' && (
+                  <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <AgendaDashboard
+                        agenda={agendaSchedule}
+                        patients={patients}
+                        clinicaNome={clinicaInfo.nome}
+                        clinicaSlug={clinicaInfo.slug}
+                        profissionalNome={perfilInfo.nomeCompleto || roleNome}
+                        onStartAttendance={handleAgendaStartAttendance}
+                        onSlotCancelar={(target) => {
+                          const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+                          if (row) setScheduleCancelRow(row);
+                        }}
+                        onSlotReagendar={handleSlotReagendar}
+                        shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
+                      />
+                    </div>
+                  </RoleGuard>
+                )}
 
-            {/* @deprecated — 'jornada' legado; 'consulta' reservado para ConsultaHub (render-block). */}
-            {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'notificacoes'].includes(activeView) && (
-              <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
-                Visao nao encontrada.
+                {/* @deprecated — 'jornada' legado; 'consulta' reservado para ConsultaHub (render-block). */}
+                {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'notificacoes'].includes(activeView) && (
+                  <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
+                    Visao nao encontrada.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-        </>
+            </div>
+          </>
         )}
       </main>
 
