@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  CalendarClock,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -14,11 +15,16 @@ import {
   Lightbulb,
   MoreVertical,
   Shield,
+  Stethoscope,
 } from 'lucide-react';
 import { termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
+import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
 import { TermoFolha } from './TermoFolha';
+
+const MODO_EXPIRACAO_PLANO = 'PLANO';
+const MODO_EXPIRACAO_PROCEDIMENTO = 'PROCEDIMENTO';
 
 function stripHtml(html) {
   if (!html) return '';
@@ -66,6 +72,10 @@ export function TermosManager() {
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
   const [autoAssinarProfissional, setAutoAssinarProfissional] = useState(false);
+  const [modoExpiracao, setModoExpiracao] = useState(MODO_EXPIRACAO_PLANO);
+  const [diasExpiracaoProcedimento, setDiasExpiracaoProcedimento] = useState('');
+  const [procedimentosVinculados, setProcedimentosVinculados] = useState([]);
+  const { options: procedimentoOptions, loading: procedimentoOptionsLoading } = useProcedimentosOptions();
   const [formErrors, setFormErrors] = useState({});
   const [confirmDeleteRow, setConfirmDeleteRow] = useState(null);
   const [viewingRow, setViewingRow] = useState(null);
@@ -120,6 +130,9 @@ export function TermosManager() {
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
+    setModoExpiracao(MODO_EXPIRACAO_PLANO);
+    setDiasExpiracaoProcedimento('');
+    setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
     setModo('edit');
@@ -133,6 +146,9 @@ export function TermosManager() {
       .join('');
     setConteudo(html);
     setAutoAssinarProfissional(true);
+    setModoExpiracao(MODO_EXPIRACAO_PLANO);
+    setDiasExpiracaoProcedimento('');
+    setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
     setModo('edit');
@@ -143,6 +159,13 @@ export function TermosManager() {
     setTitulo(row.titulo ?? row.title ?? '');
     setConteudo(row.conteudo ?? row.content ?? '');
     setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
+    setModoExpiracao(row.modoExpiracao ?? MODO_EXPIRACAO_PLANO);
+    setDiasExpiracaoProcedimento(
+      row.diasExpiracaoProcedimento != null ? String(row.diasExpiracaoProcedimento) : ''
+    );
+    setProcedimentosVinculados(
+      (row.procedimentosVinculados ?? []).map((p) => String(p.catalogoProcedimentoSaudeId))
+    );
     setFormErrors({});
     setViewingRow(null);
     setMenuOpenId(null);
@@ -155,15 +178,22 @@ export function TermosManager() {
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
+    setModoExpiracao(MODO_EXPIRACAO_PLANO);
+    setDiasExpiracaoProcedimento('');
+    setProcedimentosVinculados([]);
     setFormErrors({});
   };
 
   const handleSave = async () => {
     const t = String(titulo || '').trim();
     const c = String(conteudo || '').trim();
+    const dias = diasExpiracaoProcedimento === '' ? null : Number(diasExpiracaoProcedimento);
     const fe = {};
     if (!t) fe.titulo = true;
     if (!c) fe.conteudo = true;
+    if (modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO && (dias == null || Number.isNaN(dias) || dias < 0)) {
+      fe.diasExpiracaoProcedimento = true;
+    }
     if (Object.keys(fe).length > 0) {
       setFormErrors(fe);
       return;
@@ -171,7 +201,15 @@ export function TermosManager() {
     setFormErrors({});
     setSaving(true);
     try {
-      const body = { titulo: t, conteudo: c, autoAssinarProfissional, ativo: true };
+      const body = {
+        titulo: t,
+        conteudo: c,
+        autoAssinarProfissional,
+        ativo: true,
+        modoExpiracao,
+        diasExpiracaoProcedimento: modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO ? dias : null,
+        catalogoProcedimentoSaudeIds: procedimentosVinculados,
+      };
       if (editingId != null) {
         await termosApi.update(editingId, body);
         toastSuccess('Termo atualizado.');
@@ -349,6 +387,18 @@ export function TermosManager() {
             />
           </div>
         </div>
+
+        <TermoExpiracaoConfig
+          modoExpiracao={modoExpiracao}
+          onChangeModoExpiracao={setModoExpiracao}
+          diasExpiracaoProcedimento={diasExpiracaoProcedimento}
+          onChangeDiasExpiracaoProcedimento={setDiasExpiracaoProcedimento}
+          diasError={!!formErrors.diasExpiracaoProcedimento}
+          procedimentoOptions={procedimentoOptions}
+          procedimentoOptionsLoading={procedimentoOptionsLoading}
+          procedimentosVinculados={procedimentosVinculados}
+          onChangeProcedimentosVinculados={setProcedimentosVinculados}
+        />
       </div>
     );
   }
@@ -504,7 +554,14 @@ export function TermosManager() {
                 {stripHtml(row.conteudo ?? row.content)}
               </p>
 
-              <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-4">
+              <div className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-[#64748b]">
+                <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                {row.modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO
+                  ? `Expira ${row.diasExpiracaoProcedimento ?? '?'} dia(s) após o procedimento`
+                  : 'Expira com o plano de tratamento'}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-3">
                 <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
                   Ativo
                 </span>
@@ -708,5 +765,243 @@ function TermoHelpPanel({
         </div>
       ) : null}
     </aside>
+  );
+}
+
+/**
+ * Configuração de expiração do termo: quando ele deixa de valer (junto com o
+ * plano de tratamento, ou N dias após o procedimento vinculado ser finalizado)
+ * e a quais procedimentos ativos da clínica ele está vinculado.
+ */
+function TermoExpiracaoConfig({
+  modoExpiracao,
+  onChangeModoExpiracao,
+  diasExpiracaoProcedimento,
+  onChangeDiasExpiracaoProcedimento,
+  diasError,
+  procedimentoOptions,
+  procedimentoOptionsLoading,
+  procedimentosVinculados,
+  onChangeProcedimentosVinculados,
+}) {
+  return (
+    <div className="rounded-xl border border-[#e2e8f0] bg-white p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <CalendarClock className="h-4 w-4 text-[#00a88e]" strokeWidth={2} aria-hidden />
+        <h3 className="text-[13px] font-bold text-[#0f172a]">Expiração do termo</h3>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label
+          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
+            modoExpiracao === MODO_EXPIRACAO_PLANO
+              ? 'border-[#00a88e] bg-[#f0fdfa]'
+              : 'border-[#e2e8f0] hover:bg-[#f8fafc]'
+          }`}
+        >
+          <input
+            type="radio"
+            name="modoExpiracao"
+            checked={modoExpiracao === MODO_EXPIRACAO_PLANO}
+            onChange={() => onChangeModoExpiracao(MODO_EXPIRACAO_PLANO)}
+            className="mt-0.5 h-4 w-4 shrink-0 border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+          />
+          <span>
+            <span className="block text-[13px] font-semibold text-[#0f172a]">
+              Vale durante todo o plano
+            </span>
+            <span className="mt-0.5 block text-[11px] text-[#64748b]">
+              Expira quando o plano de tratamento é concluído ou encerrado. Se o procedimento
+              vinculado não fizer parte de nenhum plano, expira assim que ele for finalizado.
+            </span>
+          </span>
+        </label>
+
+        <label
+          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
+            modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO
+              ? 'border-[#00a88e] bg-[#f0fdfa]'
+              : 'border-[#e2e8f0] hover:bg-[#f8fafc]'
+          }`}
+        >
+          <input
+            type="radio"
+            name="modoExpiracao"
+            checked={modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO}
+            onChange={() => onChangeModoExpiracao(MODO_EXPIRACAO_PROCEDIMENTO)}
+            className="mt-0.5 h-4 w-4 shrink-0 border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+          />
+          <span>
+            <span className="block text-[13px] font-semibold text-[#0f172a]">
+              Expira após o procedimento
+            </span>
+            <span className="mt-0.5 block text-[11px] text-[#64748b]">
+              Expira N dias após o procedimento vinculado ser finalizado — vale também para
+              procedimentos avulsos, sem plano.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      {modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO ? (
+        <div className="mt-3">
+          <label htmlFor="diasExpiracaoProcedimento" className="block text-[12px] font-semibold text-[#0f172a]">
+            Dias após a finalização do procedimento <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="diasExpiracaoProcedimento"
+            type="number"
+            min={0}
+            step={1}
+            value={diasExpiracaoProcedimento}
+            onChange={(e) => onChangeDiasExpiracaoProcedimento(e.target.value)}
+            placeholder="Ex.: 30"
+            className={`mt-1 h-9 w-32 rounded-lg border px-3 text-[13px] outline-none transition-colors focus:ring-2 ${
+              diasError
+                ? 'border-[#dc2626] focus:border-[#dc2626] focus:ring-[#dc2626]/10'
+                : 'border-[#e2e8f0] focus:border-[#00a88e] focus:ring-[#00a88e]/10'
+            }`}
+          />
+          {diasError ? (
+            <p className="mt-1 text-[12px] text-[#dc2626]">Informe um número de dias (0 ou mais)</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-4 border-t border-[#f1f5f9] pt-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Stethoscope className="h-3.5 w-3.5 text-[#64748b]" strokeWidth={2} aria-hidden />
+          <p className="text-[12px] font-semibold text-[#0f172a]">
+            Vincular a procedimentos ativos da clínica
+          </p>
+        </div>
+        <ProcedimentosVinculadosPicker
+          options={procedimentoOptions}
+          loading={procedimentoOptionsLoading}
+          selectedIds={procedimentosVinculados}
+          onChange={onChangeProcedimentosVinculados}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Multi-select em dropdown dos procedimentos ativos da clínica (mesma fonte que os selects de planejamento). */
+function ProcedimentosVinculadosPicker({ options, loading, selectedIds, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [filtro, setFiltro] = useState('');
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  const filteredOptions = useMemo(
+    () =>
+      options.filter((o) => o.nomeProcedimento.toLowerCase().includes(filtro.trim().toLowerCase())),
+    [options, filtro]
+  );
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedOptions = useMemo(
+    () => options.filter((o) => selectedSet.has(o.id)),
+    [options, selectedSet]
+  );
+
+  const toggle = (id) => {
+    if (selectedSet.has(id)) {
+      onChange(selectedIds.filter((v) => v !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-9 w-full items-center justify-between rounded-lg border border-[#e2e8f0] px-3 text-left text-[13px] text-[#0f172a] hover:border-[#00a88e]/30 sm:w-80"
+      >
+        <span className="truncate text-[#64748b]">
+          {selectedOptions.length === 0
+            ? 'Nenhum procedimento vinculado'
+            : `${selectedOptions.length} procedimento(s) selecionado(s)`}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+      </button>
+
+      {selectedOptions.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {selectedOptions.map((o) => (
+            <span
+              key={o.id}
+              className="inline-flex items-center gap-1 rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-2 py-0.5 text-[11px] font-medium text-[#0f766e]"
+            >
+              {o.nomeProcedimento}
+              <button
+                type="button"
+                onClick={() => toggle(o.id)}
+                className="ml-0.5 leading-none text-[#0f766e]/70 hover:text-[#0f766e]"
+                aria-label={`Remover ${o.nomeProcedimento}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {open ? (
+        <div className="absolute left-0 top-full z-20 mt-1.5 w-full min-w-[260px] rounded-lg border border-[#e2e8f0] bg-white p-2 shadow-lg sm:w-80">
+          <div className="relative mb-2">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#94a3b8]"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <input
+              type="search"
+              autoFocus
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              placeholder="Buscar procedimento..."
+              className="h-8 w-full rounded-md border border-[#e2e8f0] py-1 pl-8 pr-2 text-[12px] outline-none focus:border-[#00a88e]"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {loading ? (
+              <p className="px-2 py-3 text-[12px] text-[#94a3b8]">Carregando procedimentos...</p>
+            ) : filteredOptions.length === 0 ? (
+              <p className="px-2 py-3 text-[12px] text-[#94a3b8]">
+                Nenhum procedimento ativo encontrado.
+              </p>
+            ) : (
+              filteredOptions.map((o) => (
+                <label
+                  key={o.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-[#0f172a] hover:bg-[#f8fafc]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSet.has(o.id)}
+                    onChange={() => toggle(o.id)}
+                    className="h-3.5 w-3.5 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+                  />
+                  {o.nomeProcedimento}
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

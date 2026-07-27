@@ -152,13 +152,22 @@ export function AguardandoPacienteModal({
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 w-full">
                   <p className="text-sm font-semibold text-emerald-800 mb-3">Link gerado com sucesso!</p>
                   <a
-                    href={`https://wa.me/${sessaoExternaPayload.telefonePaciente?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(`Olá! Acesse o link abaixo para assinar o documento:\n${sessaoData.urlPublica}`)}`}
+                    href={`https://wa.me/${sessaoExternaPayload.telefonePaciente?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(
+                      sessaoData.otpCode
+                        ? `Olá! Acesse o link abaixo para assinar o documento:\n${sessaoData.urlPublica}\n\nSeu código de verificação é: ${sessaoData.otpCode}`
+                        : `Olá! Acesse o link abaixo para assinar o documento:\n${sessaoData.urlPublica}`
+                    )}`}
                     target="_blank"
                     rel="noreferrer"
                     className="flex w-full items-center justify-center rounded-lg bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#1ebd5b] transition-all"
                   >
                     Enviar via WhatsApp
                   </a>
+                  {sessaoData.otpCode && (
+                    <p className="mt-2 text-xs text-emerald-700">
+                      Código de verificação: <span className="font-mono font-bold">{sessaoData.otpCode}</span>
+                    </p>
+                  )}
                 </div>
               )}
 
