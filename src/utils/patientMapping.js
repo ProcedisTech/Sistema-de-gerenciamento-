@@ -190,6 +190,7 @@ export function mapBackendPatient(dto) {
     ehNovo: dto.ehNovo === true,
     ehAniversariante: dto.ehAniversariante === true,
     anamneseDesatualizada: dto.anamneseDesatualizada === true,
+    anamnesePendente: dto.anamnesePendente === true,
   };
 }
 
