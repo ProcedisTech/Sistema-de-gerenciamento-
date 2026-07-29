@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
 import { Plus } from 'lucide-react';
-import { GALERIA_CATEGORIA_LABELS } from '../../../utils/pacienteGaleria.js';
+import { GALERIA_CATEGORIA_LABELS, GALERIA_CATEGORIA } from '../../../utils/pacienteGaleria.js';
 import { GaleriaArquivoImage } from '../GaleriaArquivoImage.jsx';
+import { GaleriaMapaThumb } from './GaleriaMapaThumb.jsx';
 import {
   GALERIA_CATEGORIA_BADGE_CLASS,
   GALERIA_INLINE_PREVIEW_LIMIT,
@@ -16,6 +17,10 @@ function fotoToGridItem(foto) {
     source: 'api',
     index: -1,
   };
+}
+
+function shouldShowMapaOverlay(foto) {
+  return Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === GALERIA_CATEGORIA.MAPA;
 }
 
 export function GaleriaCategoriaSection({
@@ -108,12 +113,22 @@ export function GaleriaCategoriaSection({
                     : 'border border-[#e2e8f0] hover:border-[#00a88e]/40'
                 }`}
               >
-                <GaleriaArquivoImage
-                  url={foto.url}
-                  alt=""
-                  className="h-full w-full"
-                  imgClassName="h-full w-full object-cover"
-                />
+                {shouldShowMapaOverlay(foto) ? (
+                  <GaleriaMapaThumb
+                    url={foto.url}
+                    mapaOverlay={foto.mapaOverlay}
+                    alt=""
+                    className="h-full w-full"
+                    density="thumb"
+                  />
+                ) : (
+                  <GaleriaArquivoImage
+                    url={foto.url}
+                    alt=""
+                    className="h-full w-full"
+                    imgClassName="h-full w-full object-cover"
+                  />
+                )}
               </button>
               {emEdicao ? (
                 <button

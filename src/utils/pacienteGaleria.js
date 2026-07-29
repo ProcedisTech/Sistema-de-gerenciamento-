@@ -243,9 +243,34 @@ export function normalizePacienteGaleriaItem(raw) {
     raw.procedimentoFeitoId ?? raw.procedimento_feito_id ?? raw.procedimentoFeito?.id ?? null;
   const procedimentoFeitoCardId =
     raw.procedimentoFeitoCardId ?? raw.procedimento_feito_card_id ?? null;
+  const tipoFotoCodigoRaw =
+    raw.tipoFotoCodigo ?? raw.tipo_foto_codigo ?? raw.tipoFoto?.codigo ?? null;
+  const tipoFotoCodigo =
+    tipoFotoCodigoRaw != null && String(tipoFotoCodigoRaw).trim() !== ''
+      ? String(tipoFotoCodigoRaw).trim().toUpperCase()
+      : null;
+
+  const mapaOverlayRaw = raw.mapaOverlay ?? raw.mapa_overlay ?? null;
+  let mapaOverlay = null;
+  if (mapaOverlayRaw && typeof mapaOverlayRaw === 'object') {
+    const marcacoes = Array.isArray(mapaOverlayRaw.marcacoes)
+      ? mapaOverlayRaw.marcacoes
+      : [];
+    mapaOverlay = {
+      mapaId:
+        mapaOverlayRaw.mapaId != null ? String(mapaOverlayRaw.mapaId) : null,
+      anguloFotoCodigo:
+        mapaOverlayRaw.anguloFotoCodigo != null
+          ? String(mapaOverlayRaw.anguloFotoCodigo)
+          : null,
+      marcacoes,
+    };
+  }
+
   return {
     serverId: String(id),
     url: absolutizeUrl(String(url)),
+    tipoFotoCodigo,
     fileName:
       legenda ||
       raw.nomeArquivo ||
@@ -264,6 +289,7 @@ export function normalizePacienteGaleriaItem(raw) {
       procedimentoFeitoCardId != null && String(procedimentoFeitoCardId).trim() !== ''
         ? String(procedimentoFeitoCardId)
         : null,
+    mapaOverlay,
   };
 }
 
