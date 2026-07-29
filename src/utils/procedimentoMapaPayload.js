@@ -34,6 +34,21 @@ export function mapExecucaoApiPontoToLocal(apiPonto, ordem) {
 }
 
 /**
+ * true se a resposta do GET de mapa carrega marcações e/ou vínculos de foto por vista.
+ * Usado por hydrateFromApi para no-op quando o servidor não tem conteúdo (não destruir estado local).
+ */
+export function hasMapaHydrateContent(response) {
+  if (response == null || typeof response !== 'object') return false;
+  const marcacoes = Array.isArray(response.marcacoes) ? response.marcacoes : null;
+  const pontos = Array.isArray(response.pontos) ? response.pontos : null;
+  if (marcacoes?.length > 0 || pontos?.length > 0) return true;
+  const fotos =
+    response.fotoGaleriaIdPorVista || response.fotoGaleriaIdPorAngulo || {};
+  if (fotos && typeof fotos === 'object' && Object.keys(fotos).length > 0) return true;
+  return false;
+}
+
+/**
  * Normaliza GET /procedimentos/{id}/pontos para estado local do mapa.
  */
 export function hydrateMapaFromGet(response) {

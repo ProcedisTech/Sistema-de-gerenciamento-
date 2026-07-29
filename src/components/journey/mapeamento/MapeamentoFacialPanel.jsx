@@ -276,29 +276,7 @@ export function MapeamentoFacialPanel({
 
       const normalized = normalizePacienteGaleriaResponse(raw);
 
-      const withThumbs = await Promise.all(
-
-        normalized.slice(0, 60).map(async (item) => {
-
-          try {
-
-            const blob = await pacientesGaleriaApi.fetchArquivoBlob(item.url);
-
-            const thumbSrc = URL.createObjectURL(blob);
-
-            return { ...item, thumbSrc };
-
-          } catch {
-
-            return { ...item, thumbSrc: null };
-
-          }
-
-        }),
-
-      );
-
-      setGaleriaItems(withThumbs);
+      setGaleriaItems(normalized.slice(0, 60));
 
     } catch (e) {
 

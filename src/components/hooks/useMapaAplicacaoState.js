@@ -1,10 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   normalizeTamanho,
   TAMANHO_DEFAULT,
 } from '../../constants/mapeamentoMarcador.js';
 import { VISTA_MAPA_APLICACAO_PADRAO } from '../../constants/vistasMapaAplicacao.js';
-import { hydrateMapaFromGet } from '../../utils/procedimentoMapaPayload.js';
+import {
+  hasMapaHydrateContent,
+  hydrateMapaFromGet,
+} from '../../utils/procedimentoMapaPayload.js';
 
 let localIdSeq = 0;
 function nextLocalId() {
@@ -21,6 +24,20 @@ export function useMapaAplicacaoState() {
   const [pontosPorVista, setPontosPorVista] = useState({});
   const [fotoGaleriaIdPorVista, setFotoGaleriaIdPorVista] = useState({});
   const [dirtyVistas, setDirtyVistas] = useState(() => new Set());
+  /** PF ids já hidratados com conteúdo real nesta sessão (sobrevive unmount do panel). */
+  const hydratedProcedimentoFeitoIdsRef = useRef(new Set());
+
+  const shouldHydrateFromServer = useCallback((procedimentoFeitoId) => {
+    const id = String(procedimentoFeitoId || '').trim();
+    if (!id) return false;
+    return !hydratedProcedimentoFeitoIdsRef.current.has(id);
+  }, []);
+
+  const markHydratedFromServer = useCallback((procedimentoFeitoId) => {
+    const id = String(procedimentoFeitoId || '').trim();
+    if (!id) return;
+    hydratedProcedimentoFeitoIdsRef.current.add(id);
+  }, []);
 
   const markDirty = useCallback((vista) => {
     const v = String(vista || '').trim();
@@ -60,7 +77,46 @@ export function useMapaAplicacaoState() {
           ...prev,
           [vista]: String(payload.fotoGaleriaId),
         }));
+      } else if (
+        payload.source === 'capture' ||
+        payload.source === 'upload' ||
+        Object.prototype.hasOwnProperty.call(payload, 'fotoGaleriaId')
+      ) {
+        // Capture/upload replace without gallery id — clear stale link so persist can re-upload
+        setFotoGaleriaIdPorVista((prev) => {
+          if (!(vista in prev)) return prev;
+          const next = { ...prev };
+          delete next[vista];
+          return next;
+        });
       }
+      markDirty(vista);
+    },
+    [markDirty],
+  );
+
+  const removerFotoVista = useCallback(
+    (vistaCodigo) => {
+      const vista = String(vistaCodigo || '').trim();
+      if (!vista) return;
+      setFotosPorVista((prev) => {
+        if (!(vista in prev)) return prev;
+        const next = { ...prev };
+        delete next[vista];
+        return next;
+      });
+      setFotoGaleriaIdPorVista((prev) => {
+        if (!(vista in prev)) return prev;
+        const next = { ...prev };
+        delete next[vista];
+        return next;
+      });
+      setPontosPorVista((prev) => {
+        if (!(vista in prev) || !Array.isArray(prev[vista]) || prev[vista].length === 0) {
+          return prev;
+        }
+        return { ...prev, [vista]: [] };
+      });
       markDirty(vista);
     },
     [markDirty],
@@ -218,11 +274,14 @@ export function useMapaAplicacaoState() {
   );
 
   const hydrateFromApi = useCallback((response) => {
+    if (!hasMapaHydrateContent(response)) {
+      return { applied: false, data: null };
+    }
     const data = hydrateMapaFromGet(response);
     setPontosPorVista(data.pontosPorVista || {});
     setFotoGaleriaIdPorVista(data.fotoGaleriaIdPorVista || {});
     setDirtyVistas(new Set());
-    return data;
+    return { applied: true, data };
   }, []);
 
   const getPontosVista = useCallback(
@@ -279,6 +338,7 @@ export function useMapaAplicacaoState() {
     setPontosPorVista({});
     setFotoGaleriaIdPorVista({});
     setDirtyVistas(new Set());
+    hydratedProcedimentoFeitoIdsRef.current = new Set();
   }, []);
 
   const restoreSnapshot = useCallback((snapshot) => {
@@ -299,6 +359,7 @@ export function useMapaAplicacaoState() {
     pontosPorVista,
     fotoGaleriaIdPorVista,
     setFotoVista,
+    removerFotoVista,
     getFotoVista,
     adicionarPonto,
     removerPonto,
@@ -307,6 +368,8 @@ export function useMapaAplicacaoState() {
     limparPontosVista,
     importarPontosDoPlano,
     hydrateFromApi,
+    shouldHydrateFromServer,
+    markHydratedFromServer,
     getPontosVista,
     countPontosVista,
     getVistasPreenchidas,

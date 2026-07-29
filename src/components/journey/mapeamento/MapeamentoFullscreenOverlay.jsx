@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Undo2, Eye, EyeOff, FileText, X, Menu } from 'lucide-react';
+import { X, Menu } from 'lucide-react';
 import { FotoVistaCanvasCore } from './FotoVistaCanvas.jsx';
 import { MapeamentoFullscreenProcedimentoFloatingPanel } from './MapeamentoFullscreenProcedimentoPanel.jsx';
 import { MapeamentoFullscreenToolbar } from './MapeamentoFullscreenToolbar.jsx';
-import { MapaToolbarModo } from './MapaToolbarModo.jsx';
 import { PontosResumoPanel } from './PontosResumoPanel.jsx';
+import { useMapeamentoFullscreenKeyboardShortcuts } from './useMapeamentoFullscreenKeyboardShortcuts.js';
+import { useMediaQuery } from '../../../hooks/useMediaQuery.js';
 
 export function MapeamentoFullscreenOverlay({
   open,
-  toolbarWidthPx = 220,
+  toolbarWidthPx = 240,
   vistaAtual,
   foto,
   procedimentoArmado,
@@ -29,6 +30,7 @@ export function MapeamentoFullscreenOverlay({
   onUnidadeMedidaChange,
   presets,
   passo,
+  onRemoverFotoVista,
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [modo, setModo] = useState('ponto');
@@ -36,10 +38,33 @@ export function MapeamentoFullscreenOverlay({
   const [mostrarValores, setMostrarValores] = useState(false);
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [configPopoverOpen, setConfigPopoverOpen] = useState(false);
   const [configMarcacao, setConfigMarcacao] = useState({
     dosePadrao: 1,
     profundidade: '',
     confirmarDose: true,
+  });
+
+  const isMdUp = useMediaQuery('(min-width: 768px)');
+
+  const handleEscape = useCallback(() => {
+    if (configPopoverOpen) {
+      setConfigPopoverOpen(false);
+      return;
+    }
+    if (resumoModalOpen) {
+      setResumoModalOpen(false);
+      return;
+    }
+    onClose?.();
+  }, [configPopoverOpen, resumoModalOpen, onClose]);
+
+  useMapeamentoFullscreenKeyboardShortcuts({
+    enabled: open,
+    blocked: false,
+    onSetModo: setModo,
+    onDesfazer: onDesfazerUltimo,
+    onEscape: handleEscape,
   });
 
   if (!open) return null;
@@ -58,65 +83,37 @@ export function MapeamentoFullscreenOverlay({
         setConfigMarcacao={setConfigMarcacao}
         unidadeMedida={unidadeMedida}
         onClearVista={onClearVista}
+        onRemoverFotoVista={onRemoverFotoVista}
+        hasFoto={Boolean(foto?.displayUrl)}
         hideProcedimentoPicker={hideProcedimentoPicker}
         drawerOpen={sidebarOpen}
         onCloseDrawer={() => setSidebarOpen(false)}
+        modo={modo}
+        setModo={setModo}
+        tamanho={tamanhoGlobalPonto}
+        setTamanho={setTamanhoGlobalPonto}
+        mostrarValores={mostrarValores}
+        onToggleMostrarValores={() => setMostrarValores((v) => !v)}
+        onDesfazerUltimo={onDesfazerUltimo}
+        onOpenResumo={() => setResumoModalOpen(true)}
+        configPopoverOpen={configPopoverOpen}
+        onConfigPopoverOpenChange={setConfigPopoverOpen}
       />
 
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col p-4">
-        <div className="absolute top-4 left-0 right-0 z-[50] flex flex-wrap justify-center gap-2 px-2 pointer-events-none">
+      {/* Área da foto: zero chrome (exceto Menu mobile para abrir drawer) */}
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col p-0">
+        {!isMdUp && !sidebarOpen ? (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }}
-            className="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] shadow-sm hover:bg-slate-50 hover:text-app-accent-deep pointer-events-auto"
+            aria-label="Abrir menu de ferramentas"
+            title="Abrir menu"
+            onClick={() => setSidebarOpen(true)}
+            className="absolute left-2 top-2 z-[50] flex h-9 w-9 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] shadow-sm hover:bg-slate-50 hover:text-app-accent-deep"
           >
             <Menu className="h-4 w-4" />
           </button>
-          
-          <button
-            type="button"
-            title={mostrarValores ? "Ocultar valores na foto" : "Mostrar valores na foto"}
-            onClick={(e) => {
-              e.stopPropagation();
-              setMostrarValores((prev) => !prev);
-            }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] shadow-sm transition-colors hover:bg-slate-50 hover:text-app-accent-deep pointer-events-auto"
-          >
-            {mostrarValores ? <Eye className="h-4 w-4" strokeWidth={2} /> : <EyeOff className="h-4 w-4" strokeWidth={2} />}
-          </button>
-          
-          <MapaToolbarModo 
-            modo={modo} 
-            setModo={setModo} 
-            tamanho={tamanhoGlobalPonto} 
-            setTamanho={setTamanhoGlobalPonto} 
-          />
-          <button
-            type="button"
-            title="Desfazer último ponto"
-            disabled={countPontosVista === 0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDesfazerUltimo?.();
-            }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] shadow-sm transition-colors hover:bg-slate-50 hover:text-app-accent-deep disabled:cursor-not-allowed disabled:opacity-50 pointer-events-auto"
-          >
-            <Undo2 className="h-4 w-4" strokeWidth={2} />
-          </button>
-          
-          <button
-            type="button"
-            title="Ver Resumo de Insumos"
-            onClick={(e) => {
-              e.stopPropagation();
-              setResumoModalOpen(true);
-            }}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[12px] font-semibold text-[#64748b] shadow-sm transition-colors hover:bg-slate-50 hover:text-app-accent-deep pointer-events-auto"
-          >
-            <FileText className="h-4 w-4" strokeWidth={2} />
-            <span className="hidden sm:inline">Resumo</span>
-          </button>
-        </div>
+        ) : null}
+
         <FotoVistaCanvasCore
           vistaAtual={vistaAtual}
           foto={foto}
@@ -150,13 +147,14 @@ export function MapeamentoFullscreenOverlay({
           />
         ) : null}
 
-        {resumoModalOpen && (
+        {resumoModalOpen ? (
           <div className="absolute inset-0 z-[150] flex items-center justify-center bg-black/60 p-4">
             <div className="relative w-full max-w-sm">
               <button
                 type="button"
+                aria-label="Fechar resumo"
                 onClick={() => setResumoModalOpen(false)}
-                className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#64748b] shadow-md hover:text-app-ink z-10"
+                className="absolute -right-2 -top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#64748b] shadow-md hover:text-app-ink"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -169,7 +167,7 @@ export function MapeamentoFullscreenOverlay({
               />
             </div>
           </div>
-        )}
+        ) : null}
       </main>
     </div>,
     document.body,
