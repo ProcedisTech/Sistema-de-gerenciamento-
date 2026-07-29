@@ -77,7 +77,46 @@ export function useMapaAplicacaoState() {
           ...prev,
           [vista]: String(payload.fotoGaleriaId),
         }));
+      } else if (
+        payload.source === 'capture' ||
+        payload.source === 'upload' ||
+        Object.prototype.hasOwnProperty.call(payload, 'fotoGaleriaId')
+      ) {
+        // Capture/upload replace without gallery id — clear stale link so persist can re-upload
+        setFotoGaleriaIdPorVista((prev) => {
+          if (!(vista in prev)) return prev;
+          const next = { ...prev };
+          delete next[vista];
+          return next;
+        });
       }
+      markDirty(vista);
+    },
+    [markDirty],
+  );
+
+  const removerFotoVista = useCallback(
+    (vistaCodigo) => {
+      const vista = String(vistaCodigo || '').trim();
+      if (!vista) return;
+      setFotosPorVista((prev) => {
+        if (!(vista in prev)) return prev;
+        const next = { ...prev };
+        delete next[vista];
+        return next;
+      });
+      setFotoGaleriaIdPorVista((prev) => {
+        if (!(vista in prev)) return prev;
+        const next = { ...prev };
+        delete next[vista];
+        return next;
+      });
+      setPontosPorVista((prev) => {
+        if (!(vista in prev) || !Array.isArray(prev[vista]) || prev[vista].length === 0) {
+          return prev;
+        }
+        return { ...prev, [vista]: [] };
+      });
       markDirty(vista);
     },
     [markDirty],
@@ -320,6 +359,7 @@ export function useMapaAplicacaoState() {
     pontosPorVista,
     fotoGaleriaIdPorVista,
     setFotoVista,
+    removerFotoVista,
     getFotoVista,
     adicionarPonto,
     removerPonto,

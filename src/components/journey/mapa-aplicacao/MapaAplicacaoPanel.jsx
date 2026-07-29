@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, MapPin } from 'lucide-react';
 import { useToast } from '../../../contexts/useToast.js';
 import {
@@ -118,12 +118,18 @@ export function MapaAplicacaoPanel({
   const [galeriaOpen, setGaleriaOpen] = useState(false);
   const [galeriaItems, setGaleriaItems] = useState([]);
   const [galeriaLoading, setGaleriaLoading] = useState(false);
+  const [galeriaSelecting, setGaleriaSelecting] = useState(false);
+  const [photoActionBusy, setPhotoActionBusy] = useState(false);
   const [vistaModalOpen, setVistaModalOpen] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [hydrating, setHydrating] = useState(false);
   const [unidadeMedida, setUnidadeMedida] = useState('un');
   const [passo, setPasso] = useState(1);
+  const loadGaleriaInFlightRef = useRef(false);
+  const selectGaleriaInFlightRef = useRef(false);
+
+  const mediaBusy = galeriaLoading || galeriaSelecting || photoActionBusy;
 
   const presets = useMemo(() => getPresetsForUnidade(unidadeMedida), [unidadeMedida]);
 
@@ -283,26 +289,19 @@ export function MapaAplicacaoPanel({
       toast.warning('Paciente sem ID no servidor — não é possível abrir a galeria.');
       return;
     }
-    if (!(await ensureReady())) return;
+    if (loadGaleriaInFlightRef.current) return;
+    loadGaleriaInFlightRef.current = true;
     setGaleriaLoading(true);
     try {
+      if (!(await ensureReady())) return;
       const raw = await pacientesGaleriaApi.list(pacienteId);
       const normalized = normalizePacienteGaleriaResponse(raw);
-      const withThumbs = await Promise.all(
-        normalized.map(async (item) => {
-          try {
-            const blob = await pacientesGaleriaApi.fetchArquivoBlob(item.url);
-            return { ...item, thumbUrl: URL.createObjectURL(blob) };
-          } catch {
-            return item;
-          }
-        }),
-      );
-      setGaleriaItems(withThumbs);
+      setGaleriaItems(normalized);
       setGaleriaOpen(true);
     } catch (e) {
       toast.error(e?.message || 'Não foi possível carregar a galeria.');
     } finally {
+      loadGaleriaInFlightRef.current = false;
       setGaleriaLoading(false);
     }
   }, [pacienteId, ensureReady, toast]);
@@ -310,6 +309,9 @@ export function MapaAplicacaoPanel({
   const handleGaleriaSelect = useCallback(
     async (item) => {
       if (!item?.serverId || !vistaAtual) return;
+      if (selectGaleriaInFlightRef.current) return;
+      selectGaleriaInFlightRef.current = true;
+      setGaleriaSelecting(true);
       try {
         const blob = await pacientesGaleriaApi.fetchArquivoBlob(item.url);
         mapaState.setFotoVista(vistaAtual, {
@@ -320,6 +322,9 @@ export function MapaAplicacaoPanel({
         setGaleriaOpen(false);
       } catch (e) {
         toast.error(e?.message || 'Não foi possível carregar a foto.');
+      } finally {
+        selectGaleriaInFlightRef.current = false;
+        setGaleriaSelecting(false);
       }
     },
     [mapaState, toast, vistaAtual],
@@ -449,23 +454,35 @@ export function MapaAplicacaoPanel({
             }
             onRemovePonto={(_catId, vista, localId) => mapaState.removerPonto(vista, localId)}
             onOpenGaleria={loadGaleria}
+            mediaBusy={mediaBusy}
             onRequestCapture={async () => {
-              if (!(await ensureReady())) return;
-              onPrepareCapture?.(vistaAtual);
-              toast.info('Use o botão da câmera flutuante para capturar a foto desta vista.');
+              if (photoActionBusy) return;
+              setPhotoActionBusy(true);
+              try {
+                if (!(await ensureReady())) return;
+                onPrepareCapture?.(vistaAtual);
+                toast.info('Use o botão da câmera flutuante para capturar a foto desta vista.');
+              } finally {
+                setPhotoActionBusy(false);
+              }
             }}
             onRequestUpload={(file) => {
-              ensureReady().then((ok) => {
-                if (!ok || !file) return;
-                mapaState.setFotoVista(vistaAtual, {
-                  displayUrl: URL.createObjectURL(file),
-                  blob: file,
-                  source: 'upload',
-                });
-              });
+              if (photoActionBusy || !file) return;
+              setPhotoActionBusy(true);
+              ensureReady()
+                .then((ok) => {
+                  if (!ok) return;
+                  mapaState.setFotoVista(vistaAtual, {
+                    displayUrl: URL.createObjectURL(file),
+                    blob: file,
+                    source: 'upload',
+                  });
+                })
+                .finally(() => setPhotoActionBusy(false));
             }}
             onRequestFullscreen={() => setFullscreenOpen(true)}
             previewMode={true}
+            maxHeightClass="max-h-[82dvh]"
           />
         </div>
         <PontosResumoPanel
@@ -480,8 +497,12 @@ export function MapaAplicacaoPanel({
         open={galeriaOpen}
         items={galeriaItems}
         loading={galeriaLoading}
+        selecting={galeriaSelecting}
         onSelect={handleGaleriaSelect}
-        onClose={() => setGaleriaOpen(false)}
+        onClose={() => {
+          if (galeriaSelecting) return;
+          setGaleriaOpen(false);
+        }}
       />
 
       <EscolherVistaMapaModal
@@ -515,6 +536,7 @@ export function MapaAplicacaoPanel({
         onRemovePonto={(_catId, vista, localId) => mapaState.removerPonto(vista, localId)}
         onDesfazerUltimo={() => mapaState.desfazerUltimoPonto(vistaAtual)}
         onClearVista={() => mapaState.limparPontosVista(vistaAtual)}
+        onRemoverFotoVista={() => mapaState.removerFotoVista(vistaAtual)}
         onClose={() => setFullscreenOpen(false)}
       />
     </div>

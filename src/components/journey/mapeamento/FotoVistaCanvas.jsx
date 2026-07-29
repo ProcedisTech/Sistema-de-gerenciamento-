@@ -1,13 +1,15 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
-import { Camera, ImageIcon, Maximize2, Upload, X, Eye, EyeOff } from 'lucide-react';
+import { Camera, ImageIcon, Maximize2, Upload, X, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
+import { GaleriaArquivoImage } from '../../patients/GaleriaArquivoImage.jsx';
 
 import {
   clickToPercent,
   getObjectContainMetrics,
   percentToContainerPositionFromMetrics,
+  resolveCanvasNativeMaxWidthPx,
 } from '../../../utils/mapeamentoCoords.js';
 
 import { simplifyCurveRDP, distance } from '../../../utils/geometry.js';
@@ -22,7 +24,7 @@ import { MapaMarcacoesOverlay } from './MapaMarcacoesOverlay.jsx';
 
 
 
-const EMPTY_LAYOUT = { url: null, aspect: null, metrics: null };
+const EMPTY_LAYOUT = { url: null, aspect: null, metrics: null, naturalWidth: null };
 
 const METRIC_KEYS = ['cw', 'ch', 'drawW', 'drawH', 'offsetX', 'offsetY'];
 
@@ -40,6 +42,7 @@ function buildLayout(displayUrl, img, container) {
   return {
     url: displayUrl,
     aspect: `${img.naturalWidth} / ${img.naturalHeight}`,
+    naturalWidth: img.naturalWidth,
     metrics: metricsFromContainer(container, img),
   };
 }
@@ -51,7 +54,7 @@ function metricEqual(a, b) {
 function layoutsEqual(a, b) {
   if (a === b) return true;
   if (!a || !b) return false;
-  if (a.url !== b.url || a.aspect !== b.aspect) return false;
+  if (a.url !== b.url || a.aspect !== b.aspect || a.naturalWidth !== b.naturalWidth) return false;
   if (a.metrics === b.metrics) return true;
   if (!a.metrics && !b.metrics) return true;
   if (!a.metrics || !b.metrics) return false;
@@ -91,6 +94,10 @@ export function FotoVistaCanvasCore({
   readOnly = false,
 
   fillViewport = false,
+
+  maxHeightClass = 'max-h-[min(70dvh,640px)]',
+
+  mediaBusy = false,
 
   onOpenGaleria,
 
@@ -439,9 +446,11 @@ export function FotoVistaCanvasCore({
 
 
 
-  const containerMaxH = fillViewport ? 'max-h-full' : 'max-h-[min(70dvh,640px)]';
+  const containerMaxH = fillViewport ? 'max-h-full' : maxHeightClass;
 
   const containerSize = fillViewport ? 'h-full w-full' : 'mx-auto w-full';
+
+  const nativeMaxWidthPx = resolveCanvasNativeMaxWidthPx(imgLayout.naturalWidth, fillViewport);
 
 
 
@@ -483,13 +492,15 @@ export function FotoVistaCanvasCore({
 
                 type="button"
 
+                disabled={mediaBusy}
+
                 onClick={() => onOpenGaleria()}
 
-                className="inline-flex items-center gap-2 rounded-xl border border-app-accent/40 bg-white px-4 py-2.5 text-[13px] font-semibold text-[#00a88e] shadow-sm hover:bg-app-nav-active"
+                className="inline-flex items-center gap-2 rounded-xl border border-app-accent/40 bg-white px-4 py-2.5 text-[13px] font-semibold text-[#00a88e] shadow-sm hover:bg-app-nav-active disabled:cursor-not-allowed disabled:opacity-60"
 
               >
 
-                <ImageIcon className="h-4 w-4" />
+                {mediaBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
 
                 Galeria
 
@@ -500,9 +511,11 @@ export function FotoVistaCanvasCore({
 
                 type="button"
 
+                disabled={mediaBusy}
+
                 onClick={() => onRequestCapture?.()}
 
-                className="inline-flex items-center gap-2 rounded-xl bg-app-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#00967f]"
+                className="inline-flex items-center gap-2 rounded-xl bg-app-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
 
               >
 
@@ -516,9 +529,11 @@ export function FotoVistaCanvasCore({
 
                 type="button"
 
+                disabled={mediaBusy}
+
                 onClick={() => fileInputRef.current?.click()}
 
-                className="inline-flex items-center gap-2 rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#475569] shadow-sm hover:bg-[#f8fafc]"
+                className="inline-flex items-center gap-2 rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#475569] shadow-sm hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
 
               >
 
@@ -568,7 +583,10 @@ export function FotoVistaCanvasCore({
                     ref={containerRef}
 
               className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${canMark ? 'cursor-crosshair' : ''} touch-none`}
-              style={effectiveAspect ? { aspectRatio: effectiveAspect } : undefined}
+              style={{
+                ...(effectiveAspect ? { aspectRatio: effectiveAspect } : {}),
+                ...(nativeMaxWidthPx ? { maxWidth: `${nativeMaxWidthPx}px` } : {}),
+              }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUpOrCancel}
@@ -653,11 +671,15 @@ export function FotoVistaCanvasCore({
 
                   type="button"
 
+                  disabled={mediaBusy}
+
                   onClick={() => onOpenGaleria?.()}
 
-                  className="rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
 
                 >
+
+                  {mediaBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
 
                   Trocar foto
 
@@ -667,9 +689,11 @@ export function FotoVistaCanvasCore({
 
                   type="button"
 
+                  disabled={mediaBusy}
+
                   onClick={() => fileInputRef.current?.click()}
 
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
+                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
 
                 >
 
@@ -784,7 +808,7 @@ export function FotoVistaCanvas(props) {
 
 /** Modal simples para escolher foto da galeria do paciente. */
 
-export function GaleriaVistaPickerModal({ open, items, loading, onSelect, onClose }) {
+export function GaleriaVistaPickerModal({ open, items, loading, selecting = false, onSelect, onClose }) {
 
   if (!open) return null;
 
@@ -808,7 +832,12 @@ export function GaleriaVistaPickerModal({ open, items, loading, onSelect, onClos
 
           <h3 className="text-[15px] font-bold text-app-ink">Escolher da galeria</h3>
 
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-[#64748b] hover:bg-slate-100">
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={onClose}
+            className="rounded-lg p-1 text-[#64748b] hover:bg-slate-100 disabled:opacity-50"
+          >
 
             <X className="h-5 w-5" />
 
@@ -838,21 +867,32 @@ export function GaleriaVistaPickerModal({ open, items, loading, onSelect, onClos
 
                   type="button"
 
+                  disabled={selecting}
+
                   onClick={() => onSelect?.(item)}
 
-                  className="aspect-square overflow-hidden rounded-xl border border-[#e2e8f0] bg-[#f1f5f9] hover:ring-2 hover:ring-app-accent"
+                  className="relative aspect-square overflow-hidden rounded-xl border border-[#e2e8f0] bg-[#f1f5f9] hover:ring-2 hover:ring-app-accent disabled:cursor-not-allowed disabled:opacity-60"
 
                 >
 
-                  {item.thumbSrc ? (
-
+                  {item.url ? (
+                    <GaleriaArquivoImage
+                      url={item.url}
+                      alt=""
+                      className="h-full w-full"
+                      imgClassName="h-full w-full object-cover"
+                    />
+                  ) : item.thumbSrc ? (
                     <ProtectedPatientMedia src={item.thumbSrc} alt="" imgClassName="h-full w-full object-cover" />
-
                   ) : (
-
                     <span className="flex h-full items-center justify-center text-[11px] text-[#94a3b8]">…</span>
-
                   )}
+
+                  {selecting ? (
+                    <span className="absolute inset-0 flex items-center justify-center bg-white/50">
+                      <Loader2 className="h-5 w-5 animate-spin text-app-accent" />
+                    </span>
+                  ) : null}
 
                 </button>
 

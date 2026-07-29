@@ -2374,46 +2374,62 @@ function AppRefactoredInner() {
     toast,
   ]);
 
+  const ensurePfInFlightRef = useRef(null);
   const ensureProcedimentoFeitoForMapa = React.useCallback(
     async (paciente) => {
-      if (journeyState.isAgendaRetorno) {
-        return loteProcedimentosFeitosIds[0] ? String(loteProcedimentosFeitosIds[0]) : null;
+      if (ensurePfInFlightRef.current) {
+        return ensurePfInFlightRef.current;
       }
 
-      const catalogoId =
-        journeyState.nomeProcedimentoCatalogoId != null &&
-          String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
-          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
-          : null;
-      const nome = String(journeyState.nomeProcedimento || '').trim();
+      const run = (async () => {
+        if (journeyState.isAgendaRetorno) {
+          return loteProcedimentosFeitosIds[0] ? String(loteProcedimentosFeitosIds[0]) : null;
+        }
 
-      if (!nome || !paciente?.id || !roleUserId) return null;
-      if (!catalogoId) return null;
+        const catalogoId =
+          journeyState.nomeProcedimentoCatalogoId != null &&
+            String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
+            ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+            : null;
+        const nome = String(journeyState.nomeProcedimento || '').trim();
 
-      const created = await getOrCreateProcedimentoFeitoId(paciente, {
-        allowCreate: true,
-        catalogoId,
-      });
-      if (created) return created;
+        if (!nome || !paciente?.id || !roleUserId) return null;
+        if (!catalogoId) return null;
 
-      const agendaIdValido =
-        journeyState.agendaId && UUID_REGEX_PROC.test(String(journeyState.agendaId))
-          ? journeyState.agendaId
-          : null;
-      const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
-      const idStr = await criarProcedimentoFeitoVinculado(paciente, {
-        nome,
-        roleUserId,
-        observacao: String(journeyState.observacoesExecucao || '').trim() || null,
-        agendaId: agendaIdValido,
-        catalogoProcedimentoSaudeId: catalogoId,
-        ...(planejamentoItemId ? { planejamentoItemId } : {}),
-      });
-      if (idStr) {
-        setLoteProcedimentosFeitosIds([idStr]);
-        return idStr;
+        const created = await getOrCreateProcedimentoFeitoId(paciente, {
+          allowCreate: true,
+          catalogoId,
+        });
+        if (created) return created;
+
+        const agendaIdValido =
+          journeyState.agendaId && UUID_REGEX_PROC.test(String(journeyState.agendaId))
+            ? journeyState.agendaId
+            : null;
+        const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
+        const idStr = await criarProcedimentoFeitoVinculado(paciente, {
+          nome,
+          roleUserId,
+          observacao: String(journeyState.observacoesExecucao || '').trim() || null,
+          agendaId: agendaIdValido,
+          catalogoProcedimentoSaudeId: catalogoId,
+          ...(planejamentoItemId ? { planejamentoItemId } : {}),
+        });
+        if (idStr) {
+          setLoteProcedimentosFeitosIds([idStr]);
+          return idStr;
+        }
+        return null;
+      })();
+
+      ensurePfInFlightRef.current = run;
+      try {
+        return await run;
+      } finally {
+        if (ensurePfInFlightRef.current === run) {
+          ensurePfInFlightRef.current = null;
+        }
       }
-      return null;
     },
     [
       criarProcedimentoFeitoVinculado,

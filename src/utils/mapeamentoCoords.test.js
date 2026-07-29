@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getObjectContainMetrics,
   percentToContainerPositionFromMetrics,
+  resolveCanvasNativeMaxWidthPx,
 } from './mapeamentoCoords.js';
 
 function fakeContainer(w, h, left = 0, top = 0) {
@@ -98,5 +99,45 @@ describe('getObjectContainMetrics + percentToContainerPositionFromMetrics', () =
     const tl = percentToContainerPositionFromMetrics(0, 0, metrics);
     approx(tl.left, 25);
     approx(tl.top, 0);
+  });
+
+  it('f) anti-upscale: container > naturalWidth → maxWidth nativo; altura segue dvh (sem maxHeight)', () => {
+    const naturalW = 800;
+    const naturalH = 600;
+
+    // Policy: só maxWidth; fillViewport não aplica teto (fullscreen)
+    expect(resolveCanvasNativeMaxWidthPx(naturalW, false)).toBe(naturalW);
+    expect(resolveCanvasNativeMaxWidthPx(naturalW, true)).toBeNull();
+    expect(resolveCanvasNativeMaxWidthPx(0, false)).toBeNull();
+    expect(resolveCanvasNativeMaxWidthPx(null, false)).toBeNull();
+
+    // Sem o cap CSS, container maior que o nativo UPSCALA o draw (risco a evitar)
+    const uncapped = getObjectContainMetrics(
+      fakeContainer(1600, 1200),
+      fakeImg(naturalW, naturalH),
+    );
+    expect(uncapped).not.toBeNull();
+    expect(uncapped.drawW).toBeGreaterThan(naturalW);
+
+    // Com maxWidth = natural (e aspectRatio → altura proporcional), draw <= nativo
+    const capped = getObjectContainMetrics(
+      fakeContainer(naturalW, naturalH),
+      fakeImg(naturalW, naturalH),
+    );
+    expect(capped).not.toBeNull();
+    expect(capped.drawW).toBeLessThanOrEqual(naturalW);
+    expect(capped.drawH).toBeLessThanOrEqual(naturalH);
+
+    // Altura relacional (82dvh) ainda limita o container: nativo alto não vira maxHeight inline
+    // Simula viewport 900px → 82dvh ≈ 738; foto 3024x4032 com maxWidth=3024 mas altura capped pelo dvh
+    const dvhCapH = 738;
+    const portrait = getObjectContainMetrics(
+      fakeContainer(Math.min(3024, Math.round(dvhCapH * (3024 / 4032))), dvhCapH),
+      fakeImg(3024, 4032),
+    );
+    expect(portrait).not.toBeNull();
+    expect(portrait.ch).toBe(dvhCapH);
+    expect(portrait.drawH).toBeLessThanOrEqual(dvhCapH);
+    expect(portrait.drawW).toBeLessThanOrEqual(3024);
   });
 });

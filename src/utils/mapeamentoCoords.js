@@ -132,6 +132,13 @@ export function percentToContainerPosition(posX, posY, containerEl, imgEl) {
 
 
 
+export function resolveCanvasNativeMaxWidthPx(naturalWidth, fillViewport = false) {
+  if (fillViewport) return null;
+  const nw = Number(naturalWidth);
+  if (!Number.isFinite(nw) || nw <= 0) return null;
+  return nw;
+}
+
 function clampRound(value, min, max) {
 
   const n = Math.min(max, Math.max(min, Number(value)));
