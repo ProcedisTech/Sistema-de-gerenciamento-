@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Download, FileText, Loader2, Link, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, FileText, Loader2, Link, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
 import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
 import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
 import 'react-quill-new/dist/quill.snow.css';
+
+/** Retorna { expirado, data } a partir de doc.dataExpiracao, ou null se o termo não tem expiração configurada/calculada. */
+function resolverStatusExpiracao(doc) {
+  if (!doc.dataExpiracao) return null;
+  const data = new Date(doc.dataExpiracao);
+  if (Number.isNaN(data.getTime())) return null;
+  return { expirado: data.getTime() <= Date.now(), data };
+}
 
 export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, paciente, clinicaInfo, perfilInfo }) {
   const [documentos, setDocumentos] = useState([]);
@@ -168,7 +176,47 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                     </span>
                   )}
                 </div>
-                
+
+                {doc.procedimentosVinculados && doc.procedimentosVinculados.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {doc.procedimentosVinculados.map((p) => (
+                      <span
+                        key={p.catalogoProcedimentoSaudeId}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700 border border-teal-100"
+                      >
+                        <Stethoscope className="w-3.5 h-3.5" />
+                        {p.nomeProcedimento}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {doc.tipoDocumento === 'TERMO' && !doc.recusado && (() => {
+                  const statusExp = resolverStatusExpiracao(doc);
+                  const dataStr = statusExp?.data?.toLocaleDateString('pt-BR');
+                  return (
+                    <div
+                      className={`mt-1.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold border ${
+                        statusExp?.expirado
+                          ? 'bg-slate-100 text-slate-500 border-slate-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}
+                    >
+                      {statusExp?.expirado ? (
+                        <>
+                          <ShieldX className="w-3.5 h-3.5" />
+                          Expirado em {dataStr}
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          {statusExp ? `Ativo até ${dataStr}` : 'Ativo'}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {doc.recusado && (
                   <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 border border-red-200">
                     RECUSADO PELO PACIENTE
@@ -238,6 +286,14 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                           <span className="text-slate-400">Endereço IP:</span>
                           <span className="font-medium">{doc.ipOrigem || 'Não registrado'}</span>
                         </div>
+                        {doc.procedimentosVinculados && doc.procedimentosVinculados.length > 0 && (
+                          <div className="flex justify-between border-b border-slate-100 pb-2">
+                            <span className="text-slate-400">Procedimentos:</span>
+                            <span className="font-medium text-right">
+                              {doc.procedimentosVinculados.map((p) => p.nomeProcedimento).join(', ')}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between">
                           <span className="text-slate-400">Status:</span>
                           <span className={`font-medium ${doc.recusado ? 'text-red-600' : 'text-teal-600'}`}>

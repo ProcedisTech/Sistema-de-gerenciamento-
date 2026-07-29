@@ -20,6 +20,13 @@ const MODULE_CARDS = [
 
 function getCardPendingDot(cardId, paciente) {
   if (!paciente) return null;
+  if (cardId === 'anamnese' && paciente.anamnesePendente === true) {
+    return {
+      badgeClass: 'bg-status-danger-bg text-status-danger-ink',
+      tooltipClass: 'border-status-danger-ink/30 bg-status-danger-bg text-status-danger-ink',
+      tooltip: 'Paciente novo sem ficha de anamnese preenchida',
+    };
+  }
   if (cardId === 'anamnese' && paciente.anamneseDesatualizada === true) {
     return {
       badgeClass: 'bg-status-danger-bg text-status-danger-ink',
