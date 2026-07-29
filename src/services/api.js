@@ -704,6 +704,7 @@ export const pacientesGaleriaApi = {
       catalogoProcedimentoSaudeId,
       procedimentoFeitoId,
       legenda,
+      tipoFotoCodigo,
     } = options;
     if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
       fd.append('roleUserId', String(roleUserId));
@@ -719,6 +720,9 @@ export const pacientesGaleriaApi = {
     }
     if (legenda != null && String(legenda).trim()) {
       fd.append('legenda', String(legenda).trim());
+    }
+    if (tipoFotoCodigo != null && String(tipoFotoCodigo).trim()) {
+      fd.append('tipoFotoCodigo', String(tipoFotoCodigo).trim().toUpperCase());
     }
     return requestForm(`/api/v1/pacientes/${pacienteId}/galeria`, { method: 'POST', body: fd });
   },

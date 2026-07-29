@@ -3,7 +3,6 @@ import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGale
 import { toLocalISODate } from './dateLimits.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
-import { renderMapPhotoWithPoints } from './mapaRenderUtils.js';
 
 function mapApiErrorMessage(e) {
   const msg = String(e?.message || '');
@@ -19,6 +18,18 @@ function mapApiErrorMessage(e) {
     return bodyMsg || 'Dados inválidos (foto, quantidade ou posição).';
   }
   return msg || bodyMsg || 'Falha ao salvar mapa de aplicação.';
+}
+
+async function resolveCleanBlob(foto) {
+  if (foto?.blob instanceof Blob) return foto.blob;
+  if (!foto?.displayUrl) return null;
+  try {
+    const resp = await fetch(foto.displayUrl);
+    if (!resp.ok) return null;
+    return await resp.blob();
+  } catch {
+    return null;
+  }
 }
 
 async function uploadModeloFoto({
@@ -43,6 +54,7 @@ async function uploadModeloFoto({
       getVistaLabel(vistaCodigo) || vistaCodigo,
     ),
     procedimentoFeitoId: String(procedimentoFeitoId),
+    tipoFotoCodigo: 'MAPA',
   };
   if (catalogoProcedimentoSaudeId) {
     opts.catalogoProcedimentoSaudeId = String(catalogoProcedimentoSaudeId);
@@ -62,6 +74,7 @@ async function uploadModeloFoto({
 
 /**
  * Persiste mapa de aplicação por vista (PUT /procedimentos/{id}/pontos).
+ * A galeria recebe sempre a foto LIMPA; marcações ficam só no DTO do mapa.
  */
 export async function persistirMapaAplicacao({
   pacienteId,
@@ -93,17 +106,16 @@ export async function persistirMapaAplicacao({
     let fotoGaleriaId = fotoGaleriaIdPorVista[vistaCodigo] || foto?.fotoGaleriaId || null;
     const pontosRaw = Array.isArray(pontosPorVista[vistaCodigo]) ? pontosPorVista[vistaCodigo] : [];
 
-    const imageSource = foto?.blob || foto?.displayUrl || null;
     const jaTemFotoDoMapa = Boolean(fotoGaleriaIdPorVista[vistaCodigo]);
 
-    if (!jaTemFotoDoMapa && imageSource && pontosRaw.length > 0) {
+    if (!jaTemFotoDoMapa && !fotoGaleriaId) {
       try {
-        const renderedBlob = await renderMapPhotoWithPoints(imageSource, pontosRaw, snapshot?.unidadeMedida);
-        if (renderedBlob) {
+        const cleanBlob = await resolveCleanBlob(foto);
+        if (cleanBlob) {
           const fid = await uploadModeloFoto({
             pacienteId,
             roleUserId,
-            blob: renderedBlob,
+            blob: cleanBlob,
             vistaCodigo,
             procedimentoFeitoId,
             catalogoProcedimentoSaudeId,
@@ -114,35 +126,12 @@ export async function persistirMapaAplicacao({
           }
         }
       } catch (e) {
-        console.warn('[persistirMapaAplicacao] Erro ao renderizar/enviar foto do mapa:', e);
-      }
-    } else if (!fotoGaleriaId && foto?.blob) {
-      try {
-        const fid = await uploadModeloFoto({
-          pacienteId,
-          roleUserId,
-          blob: foto.blob,
-          vistaCodigo,
-          procedimentoFeitoId,
-          catalogoProcedimentoSaudeId,
-        });
-        if (fid) {
-          fotoGaleriaId = String(fid);
-          fotoGaleriaIdPorVista[vistaCodigo] = fotoGaleriaId;
-        }
-      } catch (e) {
         erros.push(`Upload foto ${vistaCodigo}: ${mapApiErrorMessage(e)}`);
         continue;
       }
     }
 
     const pontos = pontosRaw.map((p) => mapLocalPontoToApi(p));
-
-    // TODO: A fotoGaleriaId deveria ser enviada na marcacao, mas o backend vincula a foto do ângulo de outra forma
-    // ou na verdade a fotoGaleriaId não está sendo salva no novo banco tb_mapa. 
-    // Como a migration de fotosGaleriaId ainda não existe no tb_mapa, 
-    // a gente pode salvar a foto no antigo por retrocompatibilidade se necessário, ou só fazer upload.
-    // O backend cria o Mapa. Por enquanto o upload é feito e salvo no pacienteGaleria.
 
     for (const pt of pontos) {
       marcacoes.push({

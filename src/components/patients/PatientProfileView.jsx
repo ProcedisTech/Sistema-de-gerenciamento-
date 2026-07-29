@@ -81,12 +81,14 @@ import {
   groupGaleriaItemsBySession,
   formatGaleriaLegendaForUpload,
   itemMesReferenciaISO,
+  GALERIA_CATEGORIA,
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
   GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
+import { GaleriaMapaThumb } from './galeria/GaleriaMapaThumb.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { GaleriaTab } from './galeria/GaleriaTab.jsx';
 import { EnviarDocumentoAssinarModal } from './EnviarDocumentoAssinarModal.jsx';
@@ -1556,7 +1558,19 @@ export function PatientProfileView({
       setGaleriaUploadBusy(true);
       try {
         const webp = await convertToWebP(file, 0.85, 1920);
-        await pacientesGaleriaApi.upload(pacienteId, webp, {
+        const tipoFotoCodigo =
+          categoria === GALERIA_CATEGORIA.ANTES
+            ? 'ANTES'
+            : categoria === GALERIA_CATEGORIA.PLANEJAMENTO
+              ? 'PLANEJAMENTO'
+              : categoria === GALERIA_CATEGORIA.AVALIACAO
+                ? 'AVALIACAO'
+                : categoria === GALERIA_CATEGORIA.MAPA
+                  ? 'MAPA'
+                  : categoria === GALERIA_CATEGORIA.DEPOIS
+                    ? 'DEPOIS'
+                    : null;
+        const uploadOpts = {
           roleUserId,
           procedimentoFeitoId: procedimentoFeitoId ?? undefined,
           dataReferencia: sess.dataISO !== 'sem-data' ? sess.dataISO : undefined,
@@ -1564,7 +1578,9 @@ export function PatientProfileView({
             categoria,
             resolveNomeProcedimentoForUpload(sess, categoria),
           ),
-        });
+        };
+        if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
+        await pacientesGaleriaApi.upload(pacienteId, webp, uploadOpts);
         await refreshGaleriaFromApi();
         toast.success('Foto adicionada à galeria.');
       } catch (e) {
@@ -2400,7 +2416,11 @@ export function PatientProfileView({
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
                                     {fotosProc.length ? (
                                       <div className="mt-2 grid grid-cols-4 gap-2">
-                                        {fotosProc.map((foto) => (
+                                        {fotosProc.map((foto) => {
+                                          const showMapa =
+                                            Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
+                                            foto?.categoria === GALERIA_CATEGORIA.MAPA;
+                                          return (
                                           <button
                                             key={foto.serverId}
                                             type="button"
@@ -2409,18 +2429,31 @@ export function PatientProfileView({
                                                 url: foto.url,
                                                 authFetch: true,
                                                 caption: foto.legenda || foto.fileName,
+                                                mapaOverlay: foto.mapaOverlay || null,
+                                                categoria: foto.categoria || null,
                                               })
                                             }
                                             className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
                                           >
-                                            <GaleriaArquivoImage
-                                              url={foto.url}
-                                              alt=""
-                                              className="h-full w-full"
-                                              imgClassName="h-full w-full object-cover"
-                                            />
+                                            {showMapa ? (
+                                              <GaleriaMapaThumb
+                                                url={foto.url}
+                                                mapaOverlay={foto.mapaOverlay}
+                                                alt=""
+                                                className="h-full w-full"
+                                                density="thumb"
+                                              />
+                                            ) : (
+                                              <GaleriaArquivoImage
+                                                url={foto.url}
+                                                alt=""
+                                                className="h-full w-full"
+                                                imgClassName="h-full w-full object-cover"
+                                              />
+                                            )}
                                           </button>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     ) : (
                                       <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
@@ -3117,11 +3150,24 @@ export function PatientProfileView({
             >
               Fechar
             </button>
-            <ZoomableGalleryLightbox
-              url={galleryPreview.url}
-              alt={galleryPreview.caption || 'Preview da foto'}
-              authFetch={Boolean(galleryPreview.authFetch)}
-            />
+            {Boolean(galleryPreview.mapaOverlay?.marcacoes?.length) ||
+            galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ? (
+              <div className="aspect-square w-[min(90vw,85vh)] overflow-hidden rounded-xl border border-white/30 bg-slate-900">
+                <GaleriaMapaThumb
+                  url={galleryPreview.url}
+                  mapaOverlay={galleryPreview.mapaOverlay}
+                  alt={galleryPreview.caption || 'Preview da foto'}
+                  className="h-full w-full"
+                  density="full"
+                />
+              </div>
+            ) : (
+              <ZoomableGalleryLightbox
+                url={galleryPreview.url}
+                alt={galleryPreview.caption || 'Preview da foto'}
+                authFetch={Boolean(galleryPreview.authFetch)}
+              />
+            )}
           </div>
         </div>
       )}

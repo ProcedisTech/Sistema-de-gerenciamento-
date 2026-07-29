@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { GaleriaArquivoImage } from '../GaleriaArquivoImage.jsx';
+import { GaleriaMapaThumb } from './GaleriaMapaThumb.jsx';
 import { ZoomableGalleryLightbox } from '../ZoomableGalleryLightbox.jsx';
+import { GALERIA_CATEGORIA } from '../../../utils/pacienteGaleria.js';
+
+function shouldShowMapaOverlay(foto) {
+  return Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === GALERIA_CATEGORIA.MAPA;
+}
 
 export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose }) {
   const [zoomIndex, setZoomIndex] = useState(null);
@@ -84,11 +90,25 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose 
               </button>
             </>
           ) : null}
-          <ZoomableGalleryLightbox
-            url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
-            alt={currentFoto.fileName || categoriaLabel || 'Foto'}
-            authFetch
-          />
+          {shouldShowMapaOverlay(currentFoto) ? (
+            <div className="flex max-h-[85vh] w-full max-w-[90vw] items-center justify-center">
+              <div className="aspect-square w-full max-h-[85vh] max-w-[min(90vw,85vh)] overflow-hidden rounded-xl border border-white/30 bg-slate-900">
+                <GaleriaMapaThumb
+                  url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
+                  mapaOverlay={currentFoto.mapaOverlay}
+                  alt={currentFoto.fileName || categoriaLabel || 'Foto'}
+                  className="h-full w-full"
+                  density="full"
+                />
+              </div>
+            </div>
+          ) : (
+            <ZoomableGalleryLightbox
+              url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
+              alt={currentFoto.fileName || categoriaLabel || 'Foto'}
+              authFetch
+            />
+          )}
           <button
             type="button"
             onClick={() => setZoomIndex(null)}
@@ -110,12 +130,22 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose 
                 onClick={() => setZoomIndex(idx)}
                 className="aspect-square overflow-hidden rounded-xl border border-white/20 bg-slate-900 transition hover:border-white/40"
               >
-                <GaleriaArquivoImage
-                  url={foto.url}
-                  alt=""
-                  className="h-full w-full"
-                  imgClassName="h-full w-full object-cover"
-                />
+                {shouldShowMapaOverlay(foto) ? (
+                  <GaleriaMapaThumb
+                    url={foto.url}
+                    mapaOverlay={foto.mapaOverlay}
+                    alt=""
+                    className="h-full w-full"
+                    density="thumb"
+                  />
+                ) : (
+                  <GaleriaArquivoImage
+                    url={foto.url}
+                    alt=""
+                    className="h-full w-full"
+                    imgClassName="h-full w-full object-cover"
+                  />
+                )}
               </button>
             ))}
           </div>

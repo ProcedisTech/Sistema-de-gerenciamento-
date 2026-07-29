@@ -35,6 +35,7 @@ async function uploadCaptureFoto(pacienteId, roleUserId, blob, vistaCodigo) {
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.PLANEJAMENTO, vistaCodigo),
+    tipoFotoCodigo: 'PLANEJAMENTO',
   };
   if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
     opts.roleUserId = String(roleUserId);
