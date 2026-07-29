@@ -145,6 +145,12 @@ export function MapaAplicacaoPanel({
   const vistaAtual = mapaState.vistaAtual;
   const fotoAtual = mapaState.getFotoVista(vistaAtual);
   const gruposPontos = mapaState.getPontosVista(vistaAtual, catalogoId, nomeProcedimento);
+  const setFotoVista = mapaState.setFotoVista;
+  const setVistaAtual = mapaState.setVistaAtual;
+  const shouldHydrateFromServer = mapaState.shouldHydrateFromServer;
+  const markHydratedFromServer = mapaState.markHydratedFromServer;
+  const hydrateFromApi = mapaState.hydrateFromApi;
+  const clearAllDirty = mapaState.clearAllDirty;
   // gruposSessao: para o PontosResumoPanel mostrar totais de todas as vistas da sessão
   const gruposSessao = useMemo(() => {
     const pontosPorVista = mapaState.pontosPorVista || {};
@@ -187,26 +193,34 @@ export function MapaAplicacaoPanel({
   useEffect(() => {
     if (!pendingCapture?.blob || !pendingCapture?.vista) return;
     const url = URL.createObjectURL(pendingCapture.blob);
-    mapaState.setFotoVista(pendingCapture.vista, {
+    setFotoVista(pendingCapture.vista, {
       displayUrl: url,
       blob: pendingCapture.blob,
       source: 'capture',
     });
-    mapaState.setVistaAtual(pendingCapture.vista);
+    setVistaAtual(pendingCapture.vista);
     onCaptureConsumed?.();
-  }, [pendingCapture, mapaState, onCaptureConsumed]);
+  }, [pendingCapture, setFotoVista, setVistaAtual, onCaptureConsumed]);
 
   useEffect(() => {
     if (!procedimentoFeitoId || !pacienteId) return undefined;
+    if (typeof shouldHydrateFromServer === 'function' && !shouldHydrateFromServer(procedimentoFeitoId)) {
+      return undefined;
+    }
     let cancelled = false;
     setHydrating(true);
     Promise.all([
       mapasApi.buscarPorProcedimento(procedimentoFeitoId).catch(() => null),
     ]).then(async ([mapaResp]) => {
         if (cancelled) return;
-        const mergedResp = mapaResp || {};
-          
-        const data = mapaState.hydrateFromApi(mergedResp);
+        if (mapaResp == null) return;
+
+        const { applied, data } = hydrateFromApi(mapaResp);
+        if (!applied || !data) return;
+
+        if (!cancelled) {
+          markHydratedFromServer?.(procedimentoFeitoId);
+        }
         if (!cancelled && data.unidadeMedida) {
           setUnidadeMedida(normalizeUnidadeMedida(data.unidadeMedida));
           setPasso(getPassoFallback(data.unidadeMedida, data.passo));
@@ -229,7 +243,7 @@ export function MapaAplicacaoPanel({
             try {
               const blob = await pacientesGaleriaApi.fetchArquivoBlob(item.url);
               if (cancelled) return;
-              mapaState.setFotoVista(vista, {
+              setFotoVista(vista, {
                 displayUrl: URL.createObjectURL(blob),
                 fotoGaleriaId: String(fid),
                 source: 'galeria',
@@ -239,7 +253,7 @@ export function MapaAplicacaoPanel({
             }
           }),
         );
-        if (!cancelled) mapaState.clearAllDirty();
+        if (!cancelled) clearAllDirty?.();
       })
       .catch((e) => {
         if (!cancelled) console.warn('Falha ao hidratar mapa:', e);
@@ -250,7 +264,7 @@ export function MapaAplicacaoPanel({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per procedimentoFeitoId
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate gated by hook guard per procedimentoFeitoId
   }, [procedimentoFeitoId, pacienteId]);
 
   const ensureReady = useCallback(async () => {
