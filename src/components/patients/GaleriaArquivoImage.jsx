@@ -1,11 +1,27 @@
 import React from 'react';
 import { Image as ImageIcon, Loader2 } from 'lucide-react';
-import { usePacienteGaleriaArquivoBlobUrl } from '../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
+import {
+  buildGaleriaArquivoFallbackPath,
+  usePacienteGaleriaArquivoBlobUrl,
+} from '../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
 import { ProtectedPatientMedia } from '../ui/ProtectedPatientMedia.jsx';
 
 /** Miniatura ou preview: imagem da galeria no servidor (fetch autenticado + blob). */
-export function GaleriaArquivoImage({ url, alt = '', className = '', imgClassName = 'w-full h-full object-cover' }) {
-  const { src, loading, error } = usePacienteGaleriaArquivoBlobUrl(url, true);
+export function GaleriaArquivoImage({
+  url,
+  alt = '',
+  className = '',
+  imgClassName = 'w-full h-full object-cover',
+  pacienteId = null,
+  fotoId = null,
+}) {
+  const fallback = buildGaleriaArquivoFallbackPath(pacienteId, fotoId);
+  const { src, loading, error, onImgError } = usePacienteGaleriaArquivoBlobUrl(
+    url,
+    true,
+    false,
+    fallback,
+  );
 
   if (error) {
     return (
@@ -21,7 +37,14 @@ export function GaleriaArquivoImage({ url, alt = '', className = '', imgClassNam
       </div>
     );
   }
-  return <ProtectedPatientMedia src={src} alt={alt} imgClassName={imgClassName} />;
+  return (
+    <ProtectedPatientMedia
+      src={src}
+      alt={alt}
+      imgClassName={imgClassName}
+      onError={onImgError}
+    />
+  );
 }
 
 /** Imagem local (data:/blob:) ou jornada — sem header X-Org-Id. */
@@ -31,8 +54,19 @@ export function GaleriaLocalImage({ url, alt = '', imgClassName = 'w-full h-full
 }
 
 /** Modal de preview: mesma autenticação que a miniatura. */
-export function GaleriaArquivoLightbox({ url, alt = 'Preview da foto' }) {
-  const { src, loading, error } = usePacienteGaleriaArquivoBlobUrl(url, true);
+export function GaleriaArquivoLightbox({
+  url,
+  alt = 'Preview da foto',
+  pacienteId = null,
+  fotoId = null,
+}) {
+  const fallback = buildGaleriaArquivoFallbackPath(pacienteId, fotoId);
+  const { src, loading, error, onImgError } = usePacienteGaleriaArquivoBlobUrl(
+    url,
+    true,
+    false,
+    fallback,
+  );
   if (error) {
     return <p className="text-center text-white text-[14px] font-medium px-4">Não foi possível carregar a imagem.</p>;
   }
@@ -45,6 +79,7 @@ export function GaleriaArquivoLightbox({ url, alt = 'Preview da foto' }) {
       alt={alt}
       className="max-w-[90vw] max-h-[85vh] rounded-xl border border-white/30"
       imgClassName="max-w-[90vw] max-h-[85vh] object-contain"
+      onError={onImgError}
     />
   );
 }

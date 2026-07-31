@@ -20,6 +20,7 @@ export function GaleriaSessaoCard({
   onUploadCategoria,
   uploadDisabled,
   uploadDisabledTitle,
+  pacienteId = null,
 }) {
   const fotosPorCategoria = groupFotosByCategoria(sess.fotos);
   const tituloSessao = sess.nomeProcedimento || 'Consulta / Avaliação';
@@ -90,6 +91,7 @@ export function GaleriaSessaoCard({
                 onUpload={(file) => onUploadCategoria?.(sess, cat, file)}
                 uploadDisabled={uploadDisabled}
                 uploadDisabledTitle={uploadDisabledTitle}
+                pacienteId={pacienteId}
               />
             );
           })}

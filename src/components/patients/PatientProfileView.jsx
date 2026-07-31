@@ -2431,6 +2431,7 @@ export function PatientProfileView({
                                                 caption: foto.legenda || foto.fileName,
                                                 mapaOverlay: foto.mapaOverlay || null,
                                                 categoria: foto.categoria || null,
+                                                serverId: foto.serverId || null,
                                               })
                                             }
                                             className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
@@ -2442,6 +2443,8 @@ export function PatientProfileView({
                                                 alt=""
                                                 className="h-full w-full"
                                                 density="thumb"
+                                                pacienteId={selectedPatient?.id}
+                                                fotoId={foto.serverId}
                                               />
                                             ) : (
                                               <GaleriaArquivoImage
@@ -2449,6 +2452,8 @@ export function PatientProfileView({
                                                 alt=""
                                                 className="h-full w-full"
                                                 imgClassName="h-full w-full object-cover"
+                                                pacienteId={selectedPatient?.id}
+                                                fotoId={foto.serverId}
                                               />
                                             )}
                                           </button>
@@ -3159,6 +3164,8 @@ export function PatientProfileView({
                   alt={galleryPreview.caption || 'Preview da foto'}
                   className="h-full w-full"
                   density="full"
+                  pacienteId={selectedPatient?.id}
+                  fotoId={galleryPreview.serverId}
                 />
               </div>
             ) : (
@@ -3166,6 +3173,8 @@ export function PatientProfileView({
                 url={galleryPreview.url}
                 alt={galleryPreview.caption || 'Preview da foto'}
                 authFetch={Boolean(galleryPreview.authFetch)}
+                pacienteId={selectedPatient?.id}
+                fotoId={galleryPreview.serverId}
               />
             )}
           </div>

@@ -1,6 +1,6 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2 } from 'lucide-react';
-import { usePacienteGaleriaArquivoBlobUrl } from '../../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
+import { usePacienteGaleriaArquivoBlobUrl, buildGaleriaArquivoFallbackPath } from '../../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
 import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
 import { getObjectContainMetrics } from '../../../utils/mapeamentoCoords.js';
 import { MapaMarcacoesOverlay } from '../../journey/mapeamento/MapaMarcacoesOverlay.jsx';
@@ -26,8 +26,16 @@ export function GaleriaMapaThumb({
   className = '',
   density = 'thumb',
   imgClassName = 'h-full w-full object-contain',
+  pacienteId = null,
+  fotoId = null,
 }) {
-  const { src, loading, error } = usePacienteGaleriaArquivoBlobUrl(url, true);
+  const fallback = buildGaleriaArquivoFallbackPath(pacienteId, fotoId);
+  const { src, loading, error, onImgError } = usePacienteGaleriaArquivoBlobUrl(
+    url,
+    true,
+    false,
+    fallback,
+  );
   const containerRef = useRef(null);
   const imgRef = useRef(null);
   const [layoutMetrics, setLayoutMetrics] = useState(null);
@@ -84,6 +92,7 @@ export function GaleriaMapaThumb({
         className="absolute inset-0 z-0 h-full w-full"
         imgClassName={imgClassName}
         onLoad={syncMetrics}
+        onError={onImgError}
       />
       {pontos.length > 0 ? (
         <MapaMarcacoesOverlay

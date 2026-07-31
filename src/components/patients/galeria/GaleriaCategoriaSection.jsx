@@ -36,6 +36,7 @@ export function GaleriaCategoriaSection({
   onUpload,
   uploadDisabled,
   uploadDisabledTitle,
+  pacienteId = null,
 }) {
   const fileInputRef = useRef(null);
   const labelText = GALERIA_CATEGORIA_LABELS[categoria] || categoria;
@@ -120,6 +121,8 @@ export function GaleriaCategoriaSection({
                     alt=""
                     className="h-full w-full"
                     density="thumb"
+                    pacienteId={pacienteId}
+                    fotoId={foto.serverId}
                   />
                 ) : (
                   <GaleriaArquivoImage
@@ -127,6 +130,8 @@ export function GaleriaCategoriaSection({
                     alt=""
                     className="h-full w-full"
                     imgClassName="h-full w-full object-cover"
+                    pacienteId={pacienteId}
+                    fotoId={foto.serverId}
                   />
                 )}
               </button>
