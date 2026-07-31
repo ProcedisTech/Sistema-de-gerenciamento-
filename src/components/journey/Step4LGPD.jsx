@@ -36,6 +36,7 @@ import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
+import { isAssinaturaResolvida } from '../../utils/termoResolucao';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
@@ -290,6 +291,7 @@ export function Step3Termos({
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
   const [termosLoading, setTermosLoading] = useState(true);
+  const [termosResolvidosIds, setTermosResolvidosIds] = useState(() => new Set());
   const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
   const [termoSelecionado, setTermoSelecionado] = useState(null);
   const [termoMenuOpen, setTermoMenuOpen] = useState(false);
@@ -503,7 +505,7 @@ export function Step3Termos({
   useEffect(() => {
     termosApi
       .list()
-      .then((raw) => {
+      .then(async (raw) => {
         const list = Array.isArray(raw) ? raw : raw?.content ?? [];
         const ativos = list.filter((t) => t.ativo !== false);
         // Se a clínica ainda não cadastrou nenhum termo, injetamos o template
@@ -518,13 +520,43 @@ export function Step3Termos({
               _virtual: true, // marca para tratamento especial ao salvar
             },
           ]);
-        } else {
-          setTermosDisponiveis(ativos);
+          setTermosResolvidosIds(new Set());
+          return;
+        }
+        setTermosDisponiveis(ativos);
+
+        if (!pacienteId) {
+          setTermosResolvidosIds(new Set());
+          return;
+        }
+        try {
+          const assinaturasRaw = await termoAssinaturaApi.listarPorPaciente(pacienteId);
+          const assinaturas = Array.isArray(assinaturasRaw) ? assinaturasRaw : assinaturasRaw?.content ?? [];
+          const resolvidos = new Set(
+            ativos
+              .filter((t) => assinaturas.some((a) => a.termoId === t.id && isAssinaturaResolvida(a)))
+              .map((t) => String(t.id))
+          );
+          setTermosResolvidosIds(resolvidos);
+
+          // Termos obrigatórios sem assinatura válida entram sozinhos em "aguardando
+          // assinatura" — não dependem do profissional lembrar de selecioná-los.
+          const idsObrigatoriosPendentes = ativos
+            .filter((t) => t.obrigatorio === true && !resolvidos.has(String(t.id)))
+            .map((t) => String(t.id));
+          if (idsObrigatoriosPendentes.length === 0) return;
+          setTermosPendentesIds((prev) => {
+            const set = new Set(prev.map(String));
+            idsObrigatoriosPendentes.forEach((id) => set.add(id));
+            return Array.from(set);
+          });
+        } catch {
+          // Falha nessa checagem não deve bloquear o fluxo de assinatura.
         }
       })
       .catch(() => setTermosDisponiveis([]))
       .finally(() => setTermosLoading(false));
-  }, []);
+  }, [pacienteId, setTermosPendentesIds]);
 
   useEffect(() => {
     if (!termoMenuOpen) return undefined;
@@ -577,6 +609,13 @@ export function Step3Termos({
         .includes(q)
     );
   }, [termosDisponiveis, termoSearch]);
+
+  const termosNaoObrigatoriosPendentes = useMemo(() => {
+    if (termosDisponiveis.length === 0 || termosDisponiveis[0]?._virtual) return [];
+    return termosDisponiveis.filter(
+      (t) => t.obrigatorio !== true && !termosResolvidosIds.has(String(t.id))
+    );
+  }, [termosDisponiveis, termosResolvidosIds]);
 
   const toggleTermoPendente = useCallback((termo) => {
     if (!termo) return;
@@ -859,6 +898,11 @@ export function Step3Termos({
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
           {termosAssinados.length > 0 ? 'Adicionar outro termo' : 'Selecionar termo de consentimento'}
         </p>
+        {termosNaoObrigatoriosPendentes.length > 0 ? (
+          <p className="mb-2 text-[12px] font-medium text-[#b45309]">
+            {termosNaoObrigatoriosPendentes.length} termo(s) pendente(s) não obrigatório(s) — selecione acima para assinar agora.
+          </p>
+        ) : null}
         {termosLoading ? (
           <div className="flex h-12 items-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-4 text-[13px] text-[#64748b]">
             Carregando termos…
@@ -950,7 +994,20 @@ export function Step3Termos({
                             {sel && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[14px] font-semibold text-[#0f172a]">{t.titulo ?? t.title ?? '—'}</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-[14px] font-semibold text-[#0f172a]">{t.titulo ?? t.title ?? '—'}</p>
+                              {!t._virtual ? (
+                                <span
+                                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                    termosResolvidosIds.has(String(t.id))
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                  }`}
+                                >
+                                  {termosResolvidosIds.has(String(t.id)) ? 'Assinado' : 'Pendente'}
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">{preview || '—'}</p>
                           </div>
                         </button>

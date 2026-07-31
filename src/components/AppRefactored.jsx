@@ -3553,6 +3553,7 @@ function AppRefactoredInner() {
                     onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
                     mergePatientById={mergePatientById}
+                    termosSelecionadosIds={journeyState.termosPendentesIds}
                   />
                 ) : null}
                 {consultaModule === 'retorno' ? (

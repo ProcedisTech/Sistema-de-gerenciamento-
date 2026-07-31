@@ -2,6 +2,7 @@ import React from 'react';
 import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
+import { useTermosPendentes } from '../../hooks/useTermosPendentes';
 import { AlertasClinicosPanel } from '../patients/AlertasClinicosPanel.jsx';
 
 const MODULE_CARDS = [
@@ -18,8 +19,16 @@ const MODULE_CARDS = [
   },
 ];
 
-function getCardPendingDot(cardId, paciente) {
+function getCardPendingDot(cardId, paciente, termosPendentes) {
   if (!paciente) return null;
+  if (cardId === 'termos' && (termosPendentes?.count ?? 0) > 0) {
+    const n = termosPendentes.count;
+    return {
+      badgeClass: 'bg-status-warn-bg text-status-warn-ink',
+      tooltipClass: 'border-status-warn-ink/30 bg-status-warn-bg text-status-warn-ink',
+      tooltip: `${n} termo${n > 1 ? 's' : ''} pendente${n > 1 ? 's' : ''} de assinatura`,
+    };
+  }
   if (cardId === 'anamnese' && paciente.anamnesePendente === true) {
     return {
       badgeClass: 'bg-status-danger-bg text-status-danger-ink',
@@ -71,6 +80,7 @@ export function ConsultaHub({
   onEncerrarConsulta,
   getPatientInitials,
   mergePatientById,
+  termosSelecionadosIds,
 }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
@@ -81,6 +91,7 @@ export function ConsultaHub({
       mergePatientById?.(paciente?.id, (prev) => ({ ...prev, alergias: texto }));
     },
   });
+  const termosPendentes = useTermosPendentes(paciente?.id, { termosSelecionadosIds });
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,7 +140,7 @@ export function ConsultaHub({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const ModuleIcon = card.icon;
-          const pendingDot = getCardPendingDot(card.id, paciente);
+          const pendingDot = getCardPendingDot(card.id, paciente, termosPendentes);
           return (
             <button
               key={card.id}
