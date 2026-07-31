@@ -9,7 +9,7 @@ function shouldShowMapaOverlay(foto) {
   return Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === GALERIA_CATEGORIA.MAPA;
 }
 
-export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose }) {
+export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose, pacienteId = null }) {
   const [zoomIndex, setZoomIndex] = useState(null);
 
   const handleKeyDown = useCallback(
@@ -99,6 +99,8 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose 
                   alt={currentFoto.fileName || categoriaLabel || 'Foto'}
                   className="h-full w-full"
                   density="full"
+                  pacienteId={pacienteId}
+                  fotoId={currentFoto.serverId}
                 />
               </div>
             </div>
@@ -107,6 +109,8 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose 
               url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
               alt={currentFoto.fileName || categoriaLabel || 'Foto'}
               authFetch
+              pacienteId={pacienteId}
+              fotoId={currentFoto.serverId}
             />
           )}
           <button
@@ -137,6 +141,8 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose 
                     alt=""
                     className="h-full w-full"
                     density="thumb"
+                    pacienteId={pacienteId}
+                    fotoId={foto.serverId}
                   />
                 ) : (
                   <GaleriaArquivoImage
@@ -144,6 +150,8 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose 
                     alt=""
                     className="h-full w-full"
                     imgClassName="h-full w-full object-cover"
+                    pacienteId={pacienteId}
+                    fotoId={foto.serverId}
                   />
                 )}
               </button>

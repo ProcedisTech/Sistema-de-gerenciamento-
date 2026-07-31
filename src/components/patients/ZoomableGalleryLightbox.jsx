@@ -2,22 +2,45 @@ import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useCanvasZoom } from '../../hooks/useCanvasZoom.js';
 import { getLetterboxLayout } from '../../utils/canvasAnnotationDraw.js';
+import {
+  buildGaleriaArquivoFallbackPath,
+  usePacienteGaleriaArquivoBlobUrl,
+} from '../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
 
 const EMPTY_LAYOUT = { drawW: 0, drawH: 0, dx: 0, dy: 0 };
 
-/** Fullscreen com zoom/pan via CSS transform; `url` presigned direta no `<img>` (como o grid). */
-export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetch = false }) {
+/** Fullscreen com zoom/pan via CSS transform; `url` presigned (com fallback /arquivo no onError). */
+export function ZoomableGalleryLightbox({
+  url,
+  alt = 'Preview da foto',
+  authFetch = false,
+  pacienteId = null,
+  fotoId = null,
+}) {
   void authFetch;
+
+  const fallback = buildGaleriaArquivoFallbackPath(pacienteId, fotoId);
+  const { src, loading, error, onImgError } = usePacienteGaleriaArquivoBlobUrl(
+    url,
+    true,
+    false,
+    fallback,
+  );
 
   const containerRef = useRef(null);
   const imgRef = useRef(/** @type {HTMLImageElement | null} */ (null));
-  const imageSrc = typeof url === 'string' ? url.trim() : '';
+  const imageSrc = typeof src === 'string' ? src.trim() : '';
   const [loadedSrc, setLoadedSrc] = useState('');
-  const [errorSrc, setErrorSrc] = useState('');
   const [layout, setLayout] = useState(EMPTY_LAYOUT);
+  const [prevImageSrc, setPrevImageSrc] = useState(imageSrc);
+
+  if (imageSrc !== prevImageSrc) {
+    setPrevImageSrc(imageSrc);
+    setLoadedSrc('');
+    setLayout(EMPTY_LAYOUT);
+  }
 
   const imageReady = Boolean(imageSrc) && loadedSrc === imageSrc;
-  const imageError = Boolean(imageSrc) && errorSrc === imageSrc;
 
   const {
     scale,
@@ -56,15 +79,9 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
 
   const handleImgLoad = useCallback(() => {
     setLoadedSrc(imageSrc);
-    setErrorSrc('');
     fitToScreen();
     syncLayout();
   }, [fitToScreen, imageSrc, syncLayout]);
-
-  const handleImgError = useCallback(() => {
-    setLoadedSrc('');
-    setErrorSrc(imageSrc);
-  }, [imageSrc]);
 
   const cursorClass = isPanning
     ? 'cursor-grabbing'
@@ -74,12 +91,12 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
         ? 'cursor-grab'
         : 'cursor-default';
 
-  if (!imageSrc) {
+  if (error || (!loading && !imageSrc)) {
     return <p className="px-4 text-center text-[14px] font-medium text-white">Não foi possível carregar a imagem.</p>;
   }
 
-  if (imageError) {
-    return <p className="px-4 text-center text-[14px] font-medium text-white">Não foi possível carregar a imagem.</p>;
+  if (loading && !imageSrc) {
+    return <Loader2 className="h-10 w-10 animate-spin text-white" aria-label="Carregando" />;
   }
 
   return (
@@ -167,7 +184,7 @@ export function ZoomableGalleryLightbox({ url, alt = 'Preview da foto', authFetc
               height: layout.drawH,
             }}
             onLoad={handleImgLoad}
-            onError={handleImgError}
+            onError={onImgError}
             onContextMenu={(e) => e.preventDefault()}
           />
         </div>

@@ -202,6 +202,7 @@ export function GaleriaTab({
                   onUploadCategoria={onUploadCategoria}
                   uploadDisabled={uploadDisabled}
                   uploadDisabledTitle={uploadDisabledTitle}
+                  pacienteId={selectedPatientId}
                 />
               ))}
             </div>
@@ -235,6 +236,8 @@ export function GaleriaTab({
                           alt=""
                           className="w-full h-full"
                           imgClassName="w-full h-full object-cover"
+                          pacienteId={selectedPatientId}
+                          fotoId={item.serverId}
                         />
                       ) : (
                         <GaleriaLocalImage
@@ -314,6 +317,7 @@ export function GaleriaTab({
             fotos={categoriaLightbox?.fotos}
             categoriaLabel={categoriaLightbox?.categoriaLabel}
             onClose={() => setCategoriaLightbox(null)}
+            pacienteId={selectedPatientId}
           />
         </>
       )}
