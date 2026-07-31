@@ -72,6 +72,7 @@ export function TermosManager() {
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
   const [autoAssinarProfissional, setAutoAssinarProfissional] = useState(false);
+  const [obrigatorio, setObrigatorio] = useState(false);
   const [modoExpiracao, setModoExpiracao] = useState(MODO_EXPIRACAO_PLANO);
   const [diasExpiracaoProcedimento, setDiasExpiracaoProcedimento] = useState('');
   const [procedimentosVinculados, setProcedimentosVinculados] = useState([]);
@@ -130,6 +131,7 @@ export function TermosManager() {
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
+    setObrigatorio(false);
     setModoExpiracao(MODO_EXPIRACAO_PLANO);
     setDiasExpiracaoProcedimento('');
     setProcedimentosVinculados([]);
@@ -146,6 +148,7 @@ export function TermosManager() {
       .join('');
     setConteudo(html);
     setAutoAssinarProfissional(true);
+    setObrigatorio(true);
     setModoExpiracao(MODO_EXPIRACAO_PLANO);
     setDiasExpiracaoProcedimento('');
     setProcedimentosVinculados([]);
@@ -159,6 +162,7 @@ export function TermosManager() {
     setTitulo(row.titulo ?? row.title ?? '');
     setConteudo(row.conteudo ?? row.content ?? '');
     setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
+    setObrigatorio(row.obrigatorio ?? false);
     setModoExpiracao(row.modoExpiracao ?? MODO_EXPIRACAO_PLANO);
     setDiasExpiracaoProcedimento(
       row.diasExpiracaoProcedimento != null ? String(row.diasExpiracaoProcedimento) : ''
@@ -178,6 +182,7 @@ export function TermosManager() {
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
+    setObrigatorio(false);
     setModoExpiracao(MODO_EXPIRACAO_PLANO);
     setDiasExpiracaoProcedimento('');
     setProcedimentosVinculados([]);
@@ -205,6 +210,7 @@ export function TermosManager() {
         titulo: t,
         conteudo: c,
         autoAssinarProfissional,
+        obrigatorio,
         ativo: true,
         modoExpiracao,
         diasExpiracaoProcedimento: modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO ? dias : null,
@@ -318,6 +324,19 @@ export function TermosManager() {
           <div className="flex shrink-0 items-center gap-2">
             <label
               className="hidden h-9 cursor-pointer items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 sm:inline-flex"
+              title="Um termo obrigatório é sempre exigido do paciente, independente de quantos outros termos ativos existam, e é adicionado automaticamente à tela de assinatura quando pendente."
+            >
+              <input
+                type="checkbox"
+                id="obrigatorio"
+                checked={obrigatorio}
+                onChange={(e) => setObrigatorio(e.target.checked)}
+                className="h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+              />
+              <span className="text-[12px] font-medium text-[#0f172a]">Termo obrigatório</span>
+            </label>
+            <label
+              className="hidden h-9 cursor-pointer items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 sm:inline-flex"
               title="Se o profissional possuir uma Assinatura Padrão configurada no perfil, ela será inserida automaticamente neste termo."
             >
               <input
@@ -384,6 +403,8 @@ export function TermosManager() {
               }}
               autoAssinar={autoAssinarProfissional}
               onChangeAutoAssinar={setAutoAssinarProfissional}
+              obrigatorio={obrigatorio}
+              onChangeObrigatorio={setObrigatorio}
             />
           </div>
         </div>
@@ -562,9 +583,16 @@ export function TermosManager() {
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-3">
-                <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
-                  Ativo
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
+                    Ativo
+                  </span>
+                  {row.obrigatorio ? (
+                    <span className="inline-flex items-center rounded-full border border-[#fde68a] bg-[#fef9c3] px-2 py-0.5 text-[11px] font-bold text-[#92400e]">
+                      Obrigatório
+                    </span>
+                  ) : null}
+                </div>
                 <div className="flex shrink-0 gap-1">
                   <button
                     type="button"
@@ -651,6 +679,8 @@ function TermoHelpPanel({
   onUseLgpdTemplate,
   autoAssinar,
   onChangeAutoAssinar,
+  obrigatorio,
+  onChangeObrigatorio,
 }) {
   return (
     <aside
@@ -759,6 +789,23 @@ function TermoHelpPanel({
               <span className="mt-0.5 block text-[11px] text-[#0f766e]/80">
                 Se o profissional possuir uma Assinatura Padrão configurada no perfil, ela será
                 inserida automaticamente neste termo.
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-3 flex items-start gap-2 border-t border-[#99f6e4] pt-3 sm:hidden">
+            <input
+              type="checkbox"
+              id="obrigatorioPanel"
+              checked={obrigatorio}
+              onChange={(e) => onChangeObrigatorio(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
+            />
+            <label htmlFor="obrigatorioPanel" className="cursor-pointer">
+              <span className="block font-semibold">Termo obrigatório</span>
+              <span className="mt-0.5 block text-[11px] text-[#0f766e]/80">
+                Sempre exigido do paciente, independente de quantos outros termos ativos existam,
+                e adicionado automaticamente à tela de assinatura quando pendente.
               </span>
             </label>
           </div>
