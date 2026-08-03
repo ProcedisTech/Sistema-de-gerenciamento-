@@ -50,13 +50,21 @@ export function mapAgendaDtoToDashboardRow(dto) {
   const profissionalRoleUserId =
     dto.profissionalRoleUserId != null ? String(dto.profissionalRoleUserId) : roleUserIdFromDto(dto);
 
+  // Rótulos literais no FE (seed grava 'Avaliacao' sem acento — não usar tipoProcedimentoNome).
+  const MODALIDADE_LABEL = {
+    retorno: 'Retorno',
+    avaliacao: 'Avaliação',
+    consulta: 'Consulta Inicial',
+  };
+
   let procedimentoNome;
   if (tipo === 'bloqueio') {
     procedimentoNome =
       (dto.observacao != null && String(dto.observacao).trim()) || 'Bloqueio';
-  } else if (tipoCodigo === 'retorno') {
+  } else if (MODALIDADE_LABEL[tipoCodigo]) {
+    const label = MODALIDADE_LABEL[tipoCodigo];
     const cat = dto.catalogoProcedimentoNome?.trim();
-    procedimentoNome = cat ? `Retorno: ${cat}` : 'Retorno';
+    procedimentoNome = cat ? `${label}: ${cat}` : label;
   } else {
     procedimentoNome =
       dto.catalogoProcedimentoNome?.trim() ||

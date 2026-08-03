@@ -29,6 +29,9 @@ export function AgendaFormDataHoraSheet({
   onNextMonth,
   onRetry,
   showDensityLegend = true,
+  showFechadoLegend = false,
+  showVagasCount = false,
+  compactChrome = false,
   onSelecionarDia,
   onRangeSlotClick,
   onClearRange,
@@ -60,7 +63,7 @@ export function AgendaFormDataHoraSheet({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-xl p-2 text-ink-500 hover:bg-ink-100"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-ink-500 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14B8A6] focus-visible:ring-offset-1"
           aria-label="Fechar"
         >
           <X className="h-5 w-5" />
@@ -79,6 +82,9 @@ export function AgendaFormDataHoraSheet({
             diaSelecionado={diaSelecionado}
             onSelecionarDia={onSelecionarDia}
             showDensityLegend={showDensityLegend}
+            showFechadoLegend={showFechadoLegend}
+            showVagasCount={showVagasCount}
+            compactChrome={compactChrome}
           />
         </div>
         <div className="mt-6 shrink-0">
@@ -108,7 +114,7 @@ export function AgendaFormDataHoraSheet({
         <button
           type="button"
           onClick={onCancel}
-          className={`${BTN_ACTION} bg-vivid-teal-600 text-white hover:bg-vivid-teal-700`}
+          className={`${BTN_ACTION} bg-vivid-teal-600 text-white hover:bg-vivid-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14B8A6] focus-visible:ring-offset-1`}
         >
           Concluir
         </button>
