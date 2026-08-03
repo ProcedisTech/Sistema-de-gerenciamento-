@@ -24,6 +24,54 @@ function densityFromRatio(ratio) {
   return 'cheio';
 }
 
+/**
+ * Subtrai segmentos ocupados das janelas de expediente → intervalos livres.
+ * @returns {Array<{startMin: number, endMin: number}>}
+ */
+export function freeWindowsFromOccupied(windows, segments) {
+  let free = (windows || [])
+    .filter((w) => w && w.endMin > w.startMin)
+    .map((w) => ({ startMin: w.startMin, endMin: w.endMin }));
+
+  for (const seg of segments || []) {
+    if (!seg || seg.endMin <= seg.startMin) continue;
+    const next = [];
+    for (const w of free) {
+      if (seg.endMin <= w.startMin || seg.startMin >= w.endMin) {
+        next.push(w);
+        continue;
+      }
+      if (seg.startMin > w.startMin) {
+        next.push({ startMin: w.startMin, endMin: Math.min(seg.startMin, w.endMin) });
+      }
+      if (seg.endMin < w.endMin) {
+        next.push({ startMin: Math.max(seg.endMin, w.startMin), endMin: w.endMin });
+      }
+    }
+    free = next.filter((w) => w.endMin > w.startMin);
+  }
+  return free;
+}
+
+/**
+ * Conta inícios (passo 30) que comportam `duracaoMin` e a maior janela livre.
+ * @returns {{ vagas: number, maiorJanelaLivreMinutos: number }}
+ */
+export function countFitsInFreeWindows(freeWindows, duracaoMin, stepMin = AGENDA_SLOT_STEP_MIN) {
+  const dur = Math.max(1, Number(duracaoMin) || stepMin);
+  const step = Math.max(1, Number(stepMin) || AGENDA_SLOT_STEP_MIN);
+  let vagas = 0;
+  let maiorJanelaLivreMinutos = 0;
+  for (const w of freeWindows || []) {
+    const len = w.endMin - w.startMin;
+    if (len > maiorJanelaLivreMinutos) maiorJanelaLivreMinutos = len;
+    for (let t = w.startMin; t + dur <= w.endMin; t += step) {
+      vagas += 1;
+    }
+  }
+  return { vagas, maiorJanelaLivreMinutos };
+}
+
 export function abbreviatePatientName(nome) {
   const parts = String(nome || '')
     .trim()
@@ -64,32 +112,55 @@ export function buildMonthHeatmap({
   excludeAgendaId,
   profissionalRoleUserId,
   selectedIso,
+  duracaoPretendida,
 }) {
   const baseCells = buildCalendarCells(monthDate);
   const today = String(todayIso || toLocalDateIso()).slice(0, 10);
   const segOpts = { profissionalRoleUserId, excludeAgendaId };
+  const fitDur =
+    duracaoPretendida != null && Number(duracaoPretendida) > 0
+      ? Number(duracaoPretendida)
+      : null;
 
   const cells = baseCells.map((cell) => {
     const windows = getDayWindowsForIso(cell.iso, disponibilidade);
     const isPast = cell.iso < today;
     const hasWindows = windows.length > 0;
+    const fechado = cell.inCurrentMonth && !hasWindows && !isPast;
 
     let density = 'neutral';
+    let vagas = null;
+    let maiorJanelaLivreMinutos = null;
+
     if (cell.inCurrentMonth && hasWindows && !isPast) {
       const segments = segmentsForDayIso(dtos, cell.iso, segOpts);
       const totalAvail = totalWindowMinutes(windows);
       const occupied = occupiedMinutesInWindows(segments, windows);
       const ratio = totalAvail > 0 ? occupied / totalAvail : 1;
       density = densityFromRatio(ratio);
+
+      if (fitDur != null) {
+        const free = freeWindowsFromOccupied(windows, segments);
+        const fit = countFitsInFreeWindows(free, fitDur);
+        vagas = fit.vagas;
+        maiorJanelaLivreMinutos = fit.maiorJanelaLivreMinutos;
+      }
     }
 
-    const clickable = cell.inCurrentMonth && hasWindows && !isPast;
+    // fitDur definido ⇒ vagas é número (0+); null só quando não há filtro de duração
+    const fitsDuration = fitDur == null || (typeof vagas === 'number' && vagas > 0);
+    const clickable =
+      cell.inCurrentMonth && hasWindows && !isPast && fitsDuration;
 
     return {
       ...cell,
       isPast,
       clickable,
       density,
+      fechado,
+      vagas,
+      maiorJanelaLivreMinutos,
+      duracaoPretendida: fitDur,
       isSelected: Boolean(selectedIso && cell.iso === selectedIso),
     };
   });
@@ -115,6 +186,10 @@ export function buildNeutralMonthHeatmap({ monthDate, todayIso, selectedIso }) {
       ...cell,
       isPast,
       density: 'neutral',
+      fechado: false,
+      vagas: null,
+      maiorJanelaLivreMinutos: null,
+      duracaoPretendida: null,
       clickable: cell.inCurrentMonth && !isPast,
       isSelected: Boolean(selectedIso && cell.iso === selectedIso),
     };
