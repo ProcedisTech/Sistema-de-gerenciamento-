@@ -46,6 +46,9 @@ import {
   maskRG,
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
+  formatBirthDigitsBR,
+  sanitizeBirthDateDigits,
+  calculateAgeFromISODate,
 } from '../utils/formatters';
 import { PatientForm } from './PatientForm.jsx';
 import { formatPhoneAsYouType, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
@@ -1968,8 +1971,19 @@ export function PatientProfileView({
                   onDataNascimentoDisplayChange={(raw) => {
                     setEditing((p) => {
                       if (!p) return p;
-                      const numeric = raw.replace(/\D/g, '');
-                      return { ...p, dataNascimentoDisplay: numeric, dataNascimentoIso: '' };
+                      const digits = sanitizeBirthDateDigits(raw);
+                      const display = formatBirthDigitsBR(digits);
+                      let iso = '';
+                      let age = p.idade;
+                      if (digits.length === 8) {
+                        const r = validateBirthDateDigits8(digits);
+                        if (r.ok) {
+                          iso = r.iso;
+                          const calculatedAge = calculateAgeFromISODate(r.iso);
+                          if (calculatedAge !== '') age = calculatedAge;
+                        }
+                      }
+                      return { ...p, dataNascimentoDisplay: display, dataNascimentoIso: iso, idade: age };
                     });
                   }}
                   onSexoChange={(value) => setEditing((p) => p ? { ...p, sexo: value } : p)}
