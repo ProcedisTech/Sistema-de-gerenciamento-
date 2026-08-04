@@ -11,6 +11,7 @@ import { useCepLookup } from '../hooks/useCepLookup.js';
  */
 export function EnderecoFields({
   variant = 'page',
+  readOnly = false,
   cep = '',
   onCepChange,
   rua = '',
@@ -114,6 +115,7 @@ export function EnderecoFields({
             inputMode="numeric"
             autoComplete="postal-code"
             value={cep}
+            disabled={readOnly}
             maxLength={PACIENTE_FIELD_MAX.cep}
             onChange={(e) => {
               const masked = maskCep(e.target.value);
@@ -140,6 +142,7 @@ export function EnderecoFields({
           id="patient-endereco-numero"
           type="text"
           value={numero}
+          disabled={readOnly}
           maxLength={PACIENTE_FIELD_MAX.enderecoNumero}
           onChange={(e) => {
             onNumeroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.enderecoNumero));
@@ -158,6 +161,7 @@ export function EnderecoFields({
           id="patient-endereco-logradouro"
           type="text"
           value={rua}
+          disabled={readOnly}
           maxLength={PACIENTE_FIELD_MAX.enderecoRua}
           onChange={(e) => {
             onRuaChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.enderecoRua));
@@ -176,6 +180,7 @@ export function EnderecoFields({
           id="patient-endereco-complemento"
           type="text"
           value={complemento}
+          disabled={readOnly}
           maxLength={PACIENTE_FIELD_MAX.enderecoComplemento}
           onChange={(e) => {
             onComplementoChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.enderecoComplemento));
@@ -194,6 +199,7 @@ export function EnderecoFields({
           id="patient-endereco-bairro"
           type="text"
           value={bairro}
+          disabled={readOnly}
           maxLength={PACIENTE_FIELD_MAX.enderecoBairro}
           onChange={(e) => {
             onBairroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.enderecoBairro));
@@ -212,6 +218,7 @@ export function EnderecoFields({
           id="patient-endereco-cidade"
           type="text"
           value={cidade}
+          disabled={readOnly}
           maxLength={PACIENTE_FIELD_MAX.enderecoCidade}
           onChange={(e) => {
             onCidadeChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.enderecoCidade));
@@ -229,6 +236,7 @@ export function EnderecoFields({
         <select
           id="patient-endereco-uf"
           value={estado}
+          disabled={readOnly}
           onChange={(e) => {
             onEstadoChange(e.target.value.slice(0, 2).toUpperCase());
             clearError?.('enderecoEstado');

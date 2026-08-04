@@ -46,6 +46,9 @@ import {
   maskRG,
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
+  formatBirthDigitsBR,
+  sanitizeBirthDateDigits,
+  calculateAgeFromISODate,
 } from '../utils/formatters';
 import { PatientForm } from './PatientForm.jsx';
 import { formatPhoneAsYouType, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
@@ -795,6 +798,7 @@ export function PatientProfileView({
   const [editFormErrors, setEditFormErrors] = useState({});
   const [profileSaving, setProfileSaving] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [cadastroReadOnly, setCadastroReadOnly] = useState(true);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
   const [galleryPreview, setGalleryPreview] = useState(null);
   const [sessoesExpandidas, setSessoesExpandidas] = useState({});
@@ -1090,8 +1094,9 @@ export function PatientProfileView({
   const openEditProfile = useCallback(() => {
     setEditFormErrors({});
     setProfileSaveError('');
+    setCadastroReadOnly(true);
     setEditing(createEditDraft());
-  }, [patient]);
+  }, [patient, createEditDraft]);
 
   const clearEditFieldError = (field) =>
     setEditFormErrors((prev) => ({ ...prev, [field]: false }));
@@ -1890,34 +1895,51 @@ export function PatientProfileView({
                   className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
                 >
                   <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#00a88e] text-white shadow-sm">
-                        <UserIcon className="h-6 w-6" strokeWidth={2.5} />
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#00a88e] text-white shadow-sm">
+                          <UserIcon className="h-6 w-6" strokeWidth={2.5} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-[18px] font-bold text-slate-900 sm:text-[20px]">
+                            {cadastroReadOnly ? 'Cadastro do Paciente' : 'Editar Cadastro'}
+                          </h3>
+                          <p className="text-[13px] font-medium text-slate-500">
+                            {cadastroReadOnly ? 'Visualização dos dados cadastrais' : 'Atualize os dados pessoais do paciente'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <h3 className="text-[18px] font-bold text-slate-900 sm:text-[20px]">Editar Cadastro</h3>
-                        <p className="text-[13px] font-medium text-slate-500">Atualize os dados pessoais do paciente</p>
+                      <div className="flex items-center gap-2">
+                        {cadastroReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setCadastroReadOnly(false)}
+                            className="flex items-center gap-1.5 rounded-lg border border-[#00a88e] bg-[#e6f7f5] px-3.5 py-2 text-[13px] font-bold text-[#00a88e] transition hover:bg-[#00a88e] hover:text-white shadow-sm"
+                          >
+                            <Pencil className="h-4 w-4" strokeWidth={2.25} />
+                            <span>Editar</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditing(null);
+                            setEditFormErrors({});
+                            setProfileSaveError('');
+                          }}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                        >
+                          <X className="h-5 w-5" strokeWidth={2.25} />
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(null);
-                        setEditFormErrors({});
-                        setProfileSaveError('');
-                      }}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-                    >
-                      <X className="h-5 w-5" strokeWidth={2.25} />
-                    </button>
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 bg-[#f8fbfb]">
-                    <PatientForm
-                      mode="edit"
-                      variant="modal"
-                      showFormHeading={false}
-                      formHeading=""
-                      nome={editing.nome}
+                    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 bg-[#f8fbfb]">
+                      <PatientForm
+                        mode="edit"
+                        variant="modal"
+                        readOnly={cadastroReadOnly}
+                        showFormHeading={false}
+                        formHeading=""
+                  nome={editing.nome}
                   dataNascimentoDisplay={editing.dataNascimentoDisplay}
                   idade={editing.idade}
                   sexo={editing.sexo}
@@ -1949,8 +1971,19 @@ export function PatientProfileView({
                   onDataNascimentoDisplayChange={(raw) => {
                     setEditing((p) => {
                       if (!p) return p;
-                      const numeric = raw.replace(/\D/g, '');
-                      return { ...p, dataNascimentoDisplay: numeric, dataNascimentoIso: '' };
+                      const digits = sanitizeBirthDateDigits(raw);
+                      const display = formatBirthDigitsBR(digits);
+                      let iso = '';
+                      let age = p.idade;
+                      if (digits.length === 8) {
+                        const r = validateBirthDateDigits8(digits);
+                        if (r.ok) {
+                          iso = r.iso;
+                          const calculatedAge = calculateAgeFromISODate(r.iso);
+                          if (calculatedAge !== '') age = calculatedAge;
+                        }
+                      }
+                      return { ...p, dataNascimentoDisplay: display, dataNascimentoIso: iso, idade: age };
                     });
                   }}
                   onSexoChange={(value) => setEditing((p) => p ? { ...p, sexo: value } : p)}
