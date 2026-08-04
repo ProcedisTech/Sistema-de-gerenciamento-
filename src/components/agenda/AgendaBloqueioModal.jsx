@@ -117,7 +117,7 @@ export function AgendaBloqueioModal({ agenda }) {
           <FieldWrap error={errors.data}>
             <FieldLabel required>Data</FieldLabel>
             {roleId ? (
-              <div className="min-h-[280px]">
+              <div className="flex min-h-[280px] flex-col">
                 <CalendarioMensal
                   heatmap={agenda.bloqueioCalendarioHeatmap}
                   loading={agenda.dispMonthLoading}
