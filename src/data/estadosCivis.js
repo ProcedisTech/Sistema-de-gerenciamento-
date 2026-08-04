@@ -1,8 +1,8 @@
 export const ESTADOS_CIVIS = [
-  { id: '34813ff7-802d-4567-afd8-8a027392409e', nome: 'Solteiro(a)' },
-  { id: '61b6e41b-0b64-4b24-9ca7-7fef8f6168d3', nome: 'Casado(a)' },
-  { id: '7fa49695-391d-4de3-86f3-04349e507b3e', nome: 'Divorciado(a)' },
-  { id: '5357a0b7-0a52-412d-b3dc-65b332e2cd37', nome: 'Viúvo(a)' },
-  { id: 'dbbbb362-a55a-4412-bc91-c6d395194672', nome: 'União Estável' },
-  { id: 'e0eadafb-43ea-42d0-8b45-46921852d431', nome: 'Separado(a)' },
+  { id: '1b00849d-eae3-4cd4-aeab-054669f4d643', nome: 'Solteiro(a)' },
+  { id: '4f550be6-f96d-4bbd-859b-218035f56abe', nome: 'Casado(a)' },
+  { id: 'b2125b7b-c01d-4496-8011-62c4b0d4b076', nome: 'Divorciado(a)' },
+  { id: '1f1e0ed2-c0e8-4fbb-a3c6-e30609351d84', nome: 'Viúvo(a)' },
+  { id: '8fd04920-f96f-4618-abef-d9871ff016b0', nome: 'União Estável' },
+  { id: 'a9f94da6-de30-431c-852c-986a1538fc57', nome: 'Separado(a)' },
 ];

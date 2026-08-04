@@ -12,6 +12,7 @@ import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
 import ProfissaoSelect from './ProfissaoSelect';
+import { EstadoCivilSelect } from './EstadoCivilSelect';
 
 const FieldReq = () => <span className="text-red-500">*</span>;
 
@@ -21,6 +22,7 @@ const FieldReq = () => <span className="text-red-500">*</span>;
  */
 export function PatientForm({
   mode,
+  readOnly = false,
   variant = 'page',
   nome,
   dataNascimentoDisplay,
@@ -316,6 +318,7 @@ export function PatientForm({
             <input
               type="text"
               value={nome}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
               onChange={(e) => {
                 const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
@@ -336,6 +339,7 @@ export function PatientForm({
                 inputMode="numeric"
                 autoComplete="bday"
                 value={dataNascimentoDisplay}
+                disabled={readOnly}
                 onChange={(e) => {
                   onDataNascimentoDisplayChange(e.target.value);
                   clearError?.('dataNascimento');
@@ -375,6 +379,7 @@ export function PatientForm({
             </label>
             <select
               value={sexo}
+              disabled={readOnly}
               onChange={(e) => {
                 onSexoChange(e.target.value);
                 clearError?.('sexo');
@@ -391,21 +396,17 @@ export function PatientForm({
             <label className={labelCls('text-[#00a88e]')}>
               Estado Civil <FieldReq />
             </label>
-            <select
+            <EstadoCivilSelect
+              id="patient-form-estado-civil"
               value={estadoCivilId}
-              onChange={(e) => {
-                onEstadoCivilChange(e.target.value);
+              disabled={readOnly}
+              error={Boolean(errors?.estadoCivil)}
+              onChange={(value) => {
+                onEstadoCivilChange(value);
                 clearError?.('estadoCivil');
               }}
-              className={selectPersonalClass('estadoCivil')}
-            >
-              <option value="">Selecione...</option>
-              {ESTADOS_CIVIS.map((ec) => (
-                <option key={ec.id} value={ec.id}>
-                  {ec.nome}
-                </option>
-              ))}
-            </select>
+              selectClassName={selectPersonalClass('estadoCivil')}
+            />
           </div>
           <div className="md:col-span-2 space-y-1.5">
             <label className={labelCls('text-[#00a88e]')}>
@@ -413,6 +414,7 @@ export function PatientForm({
             </label>
             <ProfissaoSelect
               value={profissaoId ?? null}
+              disabled={readOnly}
               onChange={(uuid) => {
                 onProfissaoIdChange(uuid);
                 clearError?.('profissao');
@@ -426,6 +428,7 @@ export function PatientForm({
             <input
               type="text"
               value={genero}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.genero}
               onChange={(e) =>
                 onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))
@@ -467,7 +470,7 @@ export function PatientForm({
               autoComplete="off"
               aria-invalid={Boolean(errors.cpf || cpfErrorText)}
               aria-describedby={cpfErrorText ? `${cpfInputId}-error` : undefined}
-              className={cpfDisabled ? idadeInputClass() : docInputClass('cpf')}
+              className={cpfDisabled || readOnly ? idadeInputClass() : docInputClass('cpf')}
             />
             {cpfDisabled ? (
               <p className="text-[12px] font-medium text-slate-500">O CPF não pode ser alterado após o cadastro.</p>
@@ -483,6 +486,7 @@ export function PatientForm({
             <input
               type="text"
               value={rg}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.rgFormatado}
               onChange={(e) => onRgChange(maskRG(e.target.value))}
               placeholder="00.000.000-0"
@@ -514,6 +518,7 @@ export function PatientForm({
             <div className={phoneWrapClass()}>
               <select
                 value={telefoneCountryCode}
+                disabled={readOnly}
                 title={getCountryByCode(telefoneCountryCode).name}
                 onChange={(e) => {
                   onTelefoneCountryChange(e.target.value);
@@ -550,6 +555,7 @@ export function PatientForm({
                 <input
                   type="tel"
                   value={telefoneNumero}
+                  disabled={readOnly}
                   maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
                   autoComplete="tel-national"
                   onChange={(e) => {
@@ -577,6 +583,7 @@ export function PatientForm({
             <input
               type="email"
               value={email}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.email}
               onChange={(e) => {
                 onEmailChange(e.target.value);
@@ -591,6 +598,7 @@ export function PatientForm({
             <input
               type="text"
               value={instagram}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.instagram}
               onChange={(e) => onInstagramChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.instagram))}
               placeholder="@usuario"
@@ -602,6 +610,7 @@ export function PatientForm({
             <input
               type="text"
               value={tiktok}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.tiktok}
               onChange={(e) => onTiktokChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.tiktok))}
               placeholder="@usuario"
@@ -622,6 +631,7 @@ export function PatientForm({
           <div className="md:col-span-2">
             <EnderecoFields
               variant={variant === 'page' ? 'page' : variant === 'profile' ? 'profile' : 'modal'}
+              readOnly={readOnly}
               cep={cep}
               onCepChange={onCepChange}
               rua={enderecoRua}
@@ -646,6 +656,7 @@ export function PatientForm({
             <input
               type="text"
               value={nomeMae}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.nomeMae}
               onChange={(e) => onNomeMaeChange(e.target.value)}
               placeholder="Nome completo"
@@ -657,6 +668,7 @@ export function PatientForm({
             <input
               type="text"
               value={nomePai}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.nomePai}
               onChange={(e) => onNomePaiChange(e.target.value)}
               placeholder="Nome completo"
@@ -668,6 +680,7 @@ export function PatientForm({
             <input
               type="text"
               value={indicacao}
+              disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.indicacao}
               onChange={(e) => onIndicacaoChange(e.target.value)}
               placeholder="Quem indicou o paciente?"
@@ -693,20 +706,22 @@ export function PatientForm({
               : 'flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto'
           }
         >
-          {cancelLabel}
+          {readOnly ? 'Fechar' : cancelLabel}
         </button>
-        <button
-          type="submit"
-          disabled={salvando}
-          className={
-            isModalVariant
-              ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-[#00a88e] px-5 py-2.5 text-[14px] font-semibold text-white outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-              : 'flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
-          }
-        >
-          {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
-          {defaultSubmitLabel}
-        </button>
+        {!readOnly && (
+          <button
+            type="submit"
+            disabled={salvando}
+            className={
+              isModalVariant
+                ? 'flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-[#00a88e] px-5 py-2.5 text-[14px] font-semibold text-white outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+                : 'flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto'
+            }
+          >
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
+            {defaultSubmitLabel}
+          </button>
+        )}
       </div>
     </form>
   );

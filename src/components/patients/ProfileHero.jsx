@@ -68,7 +68,6 @@ export function ProfileHero({
   onProfilePhotoClick,
   onStartAttendance,
   onAgendar,
-  onEdit,
   onCadastro,
   onInativar,
   onAddAddress,
@@ -319,16 +318,10 @@ export function ProfileHero({
             <span className="truncate">Agendar</span>
           </button>
           {canEditPacientes ? (
-            <>
-              <button type="button" onClick={onCadastro} className={secondaryActionBtn}>
-                <FileText className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                <span className="truncate">Cadastro</span>
-              </button>
-              <button type="button" onClick={onEdit} className={secondaryActionBtn}>
-                <UserIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                <span className="truncate">Editar</span>
-              </button>
-            </>
+            <button type="button" onClick={onCadastro} className={secondaryActionBtn}>
+              <FileText className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              <span className="truncate">Cadastro</span>
+            </button>
           ) : null}
           <button type="button" disabled className={`${secondaryActionBtn} opacity-60`}>
             <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
