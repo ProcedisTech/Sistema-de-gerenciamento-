@@ -7,6 +7,7 @@ import {
   Clock,
   FileText,
   Download,
+  Loader2,
   Mail,
   MapPin,
   Phone,
@@ -72,6 +73,8 @@ export function ProfileHero({
   onInativar,
   onAddAddress,
   onAddResponsavel,
+  onGerarPdf,
+  gerarPdfBusy,
   profileNav,
   onNavigatePrev,
   onNavigateNext,
@@ -323,9 +326,19 @@ export function ProfileHero({
               <span className="truncate">Cadastro</span>
             </button>
           ) : null}
-          <button type="button" disabled className={`${secondaryActionBtn} opacity-60`}>
-            <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-            <span className="truncate">Gerar PDF</span>
+          <button
+            type="button"
+            onClick={onGerarPdf}
+            disabled={gerarPdfBusy || !patient?.id}
+            className={secondaryActionBtn}
+            aria-busy={gerarPdfBusy}
+          >
+            {gerarPdfBusy ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2} aria-hidden />
+            ) : (
+              <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+            )}
+            <span className="truncate">{gerarPdfBusy ? 'Gerando...' : 'Gerar PDF'}</span>
           </button>
         </div>
       </div>
