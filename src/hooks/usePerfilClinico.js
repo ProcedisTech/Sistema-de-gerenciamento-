@@ -18,7 +18,7 @@ function normalizeSexoForApi(sexo) {
  * `id` = id do catálogo (contrato back).
  * @param {object} data — PerfilClinicoResponseDTO
  */
-function mapGetToState(data) {
+export function mapGetToState(data) {
   const toChips = (arr) =>
     Array.isArray(arr)
       ? arr.map((item) => ({

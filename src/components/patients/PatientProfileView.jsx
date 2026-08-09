@@ -26,12 +26,18 @@ import {
   pacientesApi,
   pacienteAlertasManuaisApi,
   pacientesGaleriaApi,
+  perfilClinicoApi,
   notasApi,
   procedimentosApi,
   termoAssinaturaApi,
   getApiErrorDetail,
+  organizacaoApi,
+  listarRelatosPorPaciente,
+  // mapasApi, — reativar junto com a região aplicada na Ficha (ver handleGerarPdf)
+  planejamentosApi,
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
+import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
 import { convertToWebP } from '../../utils/imageUtils.js';
@@ -63,7 +69,8 @@ import {
 import { ProfileBreadcrumb } from './ProfileBreadcrumb.jsx';
 import { ProfileHero } from './ProfileHero.jsx';
 import { ProfileKpiStrip } from './ProfileKpiStrip.jsx';
-import { formatDiasAtrasPtBr } from './profileDisplayUtils.js';
+import { formatDiasAtrasPtBr, formatCreatedAtPtBr } from './profileDisplayUtils.js';
+import { calcSessoesPlano } from '../../utils/planejamentoProfileMetrics.js';
 import {
   ProcedureTimelineHeading,
   ProcedureTimelineRail,
@@ -84,7 +91,9 @@ import {
   groupGaleriaItemsBySession,
   formatGaleriaLegendaForUpload,
   itemMesReferenciaISO,
+  formatDataSessaoPtBr,
   GALERIA_CATEGORIA,
+  GALERIA_CATEGORIA_LABELS,
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
@@ -108,7 +117,7 @@ import {
   isFullWidthItem,
 } from '../anamnese/anamneseFichaUtils.js';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
-import { usePerfilClinico } from '../../hooks/usePerfilClinico';
+import { usePerfilClinico, mapGetToState as mapPerfilClinicoResponseToState } from '../../hooks/usePerfilClinico';
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
 import { AlertasClinicosPanel } from './AlertasClinicosPanel.jsx';
 
@@ -157,6 +166,141 @@ function sexoForPatientFormSelect(patientSexoRaw) {
   if (low === 'n') return 'N';
   return '';
 }
+
+const SEXO_DISPLAY_LABELS = { F: 'Feminino', M: 'Masculino', N: 'Prefiro não dizer' };
+
+/** Endereço completo em uma linha, pra Seção 2 da Ficha Clínica em PDF. */
+function buildEnderecoDisplayForFicha(p) {
+  const linha1Base = [p.enderecoRua, p.enderecoNumero].filter((v) => String(v ?? '').trim()).join(', ');
+  const linha1 = p.enderecoComplemento ? `${linha1Base} - ${p.enderecoComplemento}` : linha1Base;
+  const cidadeUf = [p.enderecoCidade, p.enderecoEstado].filter((v) => String(v ?? '').trim()).join('/');
+  const linha2 = [p.enderecoBairro, cidadeUf].filter((v) => String(v ?? '').trim()).join(', ');
+  const cepPart = p.cep ? `CEP ${p.cep}` : '';
+  return [linha1, linha2, cepPart].filter((v) => String(v ?? '').trim()).join(' — ');
+}
+
+/** snake_case/código de catálogo → texto legível ("perfil_direito" → "Perfil Direito"). */
+function humanizeCode(code) {
+  const s = String(code || '').trim();
+  if (!s) return '';
+  return s
+    .replace(/^ant_|^sub_/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Responsável legal para a Ficha em PDF: só faz sentido pra paciente menor de idade —
+ * usa nomeMae com fallback nomePai (não existe campo próprio "responsável legal" hoje).
+ */
+function resolveResponsavelLegalDisplay(p) {
+  const idade = p.idade != null ? Number(p.idade) : Number(calculateAgeFromISODate(p.dataNascimento) || NaN);
+  if (!Number.isFinite(idade) || idade >= 18) return '';
+  return String(p.nomeMae ?? '').trim() || String(p.nomePai ?? '').trim() || '';
+}
+
+/** Identificação/contato do paciente já como texto pronto para exibição, pra `generateFichaPacientePdf`. */
+function buildPacienteCtxForFicha(p) {
+  const cpfDigits = String(p.cpf ?? '').replace(/\D/g, '');
+  const rgStr = p.rg != null ? String(p.rg) : '';
+  const sexoCodigo = sexoForPatientFormSelect(p.sexo);
+  const idadeCalculada = calculateAgeFromISODate(p.dataNascimento);
+  const cidadeUf = [p.enderecoCidade, p.enderecoEstado].filter((v) => String(v ?? '').trim()).join('/');
+  return {
+    nome: p.nome,
+    // Nome social, contato de emergência e convênio não existem no cadastro hoje —
+    // ficam undefined de propósito (o gerador de PDF já trata como "—").
+    nomeSocialDisplay: undefined,
+    contatoEmergenciaDisplay: undefined,
+    convenioDisplay: undefined,
+    responsavelLegalDisplay: resolveResponsavelLegalDisplay(p) || undefined,
+    origemIndicacaoDisplay: p.indicacao,
+    cpfDisplay: cpfDigits ? maskCPF(cpfDigits) : '',
+    rgDisplay: rgStr ? maskRG(rgStr) : '',
+    nascimentoDisplay: p.dataNascimento ? isoDateToBrazilianDisplay(p.dataNascimento) : '',
+    idadeDisplay: p.idade != null ? `${p.idade} anos` : (idadeCalculada !== '' ? `${idadeCalculada} anos` : ''),
+    sexoDisplay: sexoCodigo ? SEXO_DISPLAY_LABELS[sexoCodigo] : '',
+    estadoCivilDisplay: p.estadoCivil,
+    profissaoDisplay: p.profissaoNome,
+    generoDisplay: p.genero,
+    telefoneDisplay: p.telefone,
+    emailDisplay: p.email,
+    instagramDisplay: p.instagram,
+    tiktokDisplay: p.tiktok,
+    enderecoDisplay: buildEnderecoDisplayForFicha(p),
+    cidadeUfDisplay: cidadeUf || undefined,
+    logradouroDisplay: p.enderecoRua,
+    numeroDisplay: p.enderecoNumero,
+    bairroDisplay: p.enderecoBairro,
+    cidadeDisplay: p.enderecoCidade,
+    ufDisplay: p.enderecoEstado,
+    cepDisplay: p.cep,
+  };
+}
+
+/** Texto de perguntas da anamnese estética seedada (V34) usadas na Ficha em PDF. */
+const ANAMNESE_ESTETICA_QUESTOES = {
+  queixaPrincipal: 'Qual sua queixa estética principal?',
+  expectativa: 'Qual resultado você espera alcançar?',
+  tabagismo: 'Qual sua relação com tabaco?',
+  fotoprotetor: 'Frequência de exposição solar sem proteção?',
+  atividadeFisica: 'Pratica atividade física regularmente?',
+  procedimentosPrevios: 'Já realizou procedimentos estéticos antes? Quais?',
+};
+
+function extractRespostaTexto(r) {
+  if (!r) return '';
+  if (r.opcaoSelecionada != null && String(r.opcaoSelecionada).trim()) return String(r.opcaoSelecionada).trim();
+  if (r.respostaTexto != null && String(r.respostaTexto).trim()) return String(r.respostaTexto).trim();
+  if (r.respostaBoolean != null) return r.respostaBoolean ? 'Sim' : 'Não';
+  return '';
+}
+
+/** Casa as respostas da anamnese preenchida mais recente com as perguntas conhecidas da Seção 02. */
+function buildAnamneseEsteticaFromRespostas(respostas) {
+  const byDescricao = {};
+  (Array.isArray(respostas) ? respostas : []).forEach((r) => {
+    const desc = String(r?.perguntaDescricao ?? '').trim();
+    if (desc) byDescricao[desc] = r;
+  });
+  const out = {};
+  Object.entries(ANAMNESE_ESTETICA_QUESTOES).forEach(([key, questionText]) => {
+    const val = extractRespostaTexto(byDescricao[questionText]);
+    if (val) out[key] = val;
+  });
+  return out;
+}
+
+const ANTECEDENTE_CODIGOS_GESTACAO_LACTACAO = ['ant_gestacao', 'ant_amamentacao', 'ant_menopausa'];
+const ANTECEDENTE_CODIGOS_CICATRIZACAO = ['ant_cicatriz_queloide', 'ant_queloides'];
+const ANTECEDENTE_CODIGOS_ETILISMO = ['ant_etilismo'];
+
+function filterAntecedentesPorCodigo(antecedentes, codigos) {
+  return (Array.isArray(antecedentes) ? antecedentes : []).filter((a) => codigos.includes(a?.codigo));
+}
+
+/** `procedimentoFeitoId` → texto de intercorrência, a partir dos relatos de acompanhamento do paciente. */
+function buildIntercorrenciaMapFromRelatos(relatos) {
+  const map = {};
+  (Array.isArray(relatos) ? relatos : []).forEach((r) => {
+    const pid = r?.procedimentoFeitoId;
+    if (!pid) return;
+    const texto = String(r.reacoes ?? '').trim() || String(r.observacoes ?? '').trim();
+    if (!texto) return;
+    map[pid] = map[pid] ? `${map[pid]}; ${texto}` : texto;
+  });
+  return map;
+}
+
+/** Região (ângulos de foto marcados) a partir do mapa de aplicação de um procedimento — "técnica" não é derivável. */
+// Reativar junto com a coluna "Região e técnica" da Ficha quando existir um campo de
+// região aplicada de verdade (o mapa de aplicação hoje guarda ângulo de foto, não região).
+// function buildRegiaoDisplayFromMapa(mapa) {
+//   if (!mapa || !Array.isArray(mapa.marcacoes) || mapa.marcacoes.length === 0) return '';
+//   const angulos = [...new Set(mapa.marcacoes.map((m) => humanizeCode(m.anguloFotoCodigo)).filter(Boolean))];
+//   return angulos.join(', ');
+// }
 
 function normalizeListaAlertasManualApi(payload) {
   if (payload == null) return [];
@@ -773,6 +917,7 @@ export function PatientProfileView({
 }) {
   const toast = useToast();
   const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
+  const { orgId } = useOrg();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
     sexoPaciente: patient.sexo,
@@ -814,6 +959,8 @@ export function PatientProfileView({
   const [galeriaFilterProcedimento, setGaleriaFilterProcedimento] = useState('all');
   const [galeriaUploadBusy, setGaleriaUploadBusy] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
+  const [gerarPdfBusy, setGerarPdfBusy] = useState(false);
+  const gerarPdfInFlightRef = useRef(false);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [showAllProntuario, setShowAllProntuario] = useState(false);
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
@@ -946,6 +1093,260 @@ export function PatientProfileView({
     }
     onAgendarPaciente?.(selectedPatient);
   }, [selectedPatient, onAgendarPaciente, toast]);
+
+  const handleGerarPdf = useCallback(async () => {
+    // Guarda de duplo-clique via ref (síncrono) — state é assíncrono e um clique
+    // duplo rápido pode disparar esta função duas vezes antes do primeiro
+    // setGerarPdfBusy(true) re-renderizar o botão como disabled.
+    if (gerarPdfInFlightRef.current) return;
+    gerarPdfInFlightRef.current = true;
+    setGerarPdfBusy(true);
+
+    try {
+      if (!selectedPatient?.id) {
+        toast.error('Paciente não carregado. Tente novamente.');
+        return;
+      }
+
+      // 1. BLOQUEANTE: nenhum dado clínico é buscado antes da auditoria confirmar sucesso.
+      try {
+        await pacientesApi.registrarDownloadFicha(selectedPatient.id);
+      } catch (auditErr) {
+        toast.error(getApiErrorDetail(auditErr) || 'Não foi possível registrar a auditoria. PDF não gerado.');
+        return;
+      }
+
+      // 2. Só busca dado clínico se o usuário tiver permissão, e só depois da auditoria.
+      //    perfilClinico continua bloqueante (decisão já tomada); as buscas extras abaixo
+      //    (anamnese estética, relatos de acompanhamento, mapas por procedimento, orientações)
+      //    são best-effort — uma falha isolada degrada aquele campo pra "—", nunca aborta o PDF.
+      let perfilClinico = null;
+      let historicoProcedimentos = [];
+      let manutencaoDisplay;
+      let anamneseEstetica = {};
+      if (canSeeProntuario) {
+        try {
+          const raw = await perfilClinicoApi.get(selectedPatient.id);
+          perfilClinico = mapPerfilClinicoResponseToState(raw);
+        } catch (perfilErr) {
+          // Decisão do produto: aborta tudo, mesmo com o download já registrado na auditoria.
+          toast.error(getApiErrorDetail(perfilErr) || 'Não foi possível carregar o perfil clínico. PDF não gerado.');
+          return;
+        }
+
+        perfilClinico = {
+          ...perfilClinico,
+          gestacaoLactacao: filterAntecedentesPorCodigo(perfilClinico?.antecedentes, ANTECEDENTE_CODIGOS_GESTACAO_LACTACAO),
+          cicatrizacao: filterAntecedentesPorCodigo(perfilClinico?.antecedentes, ANTECEDENTE_CODIGOS_CICATRIZACAO),
+        };
+        const etilismoChips = filterAntecedentesPorCodigo(perfilClinico?.antecedentes, ANTECEDENTE_CODIGOS_ETILISMO);
+
+        const [anamneseListResult, relatosResult] = await Promise.allSettled([
+          anamneseApi.listPaciente(selectedPatient.id),
+          listarRelatosPorPaciente(selectedPatient.id),
+        ]);
+
+        if (anamneseListResult.status === 'fulfilled') {
+          const list = Array.isArray(anamneseListResult.value) ? anamneseListResult.value : [];
+          const maisRecente = [...list].sort((a, b) => new Date(b.dataHora || 0) - new Date(a.dataHora || 0))[0];
+          if (maisRecente) {
+            try {
+              const detalhe = await anamneseApi.getPaciente(selectedPatient.id, maisRecente.id);
+              anamneseEstetica = buildAnamneseEsteticaFromRespostas(detalhe?.respostas);
+              if (detalhe?.dataHora) {
+                anamneseEstetica.dataAtualizacaoDisplay = new Date(detalhe.dataHora).toLocaleDateString('pt-BR', {
+                  timeZone: 'America/Sao_Paulo',
+                });
+              }
+            } catch {
+              // Sem anamnese estética disponível — Seção 02 sai só com "—", não bloqueia o PDF.
+            }
+          }
+        }
+        if (etilismoChips.length > 0) {
+          anamneseEstetica.etilismo = etilismoChips.map((c) => c.nome).join('; ');
+        }
+
+        const relatos = relatosResult.status === 'fulfilled' ? relatosResult.value : [];
+        const intercorrenciaMap = buildIntercorrenciaMapFromRelatos(relatos);
+
+        const procedimentosParaFicha = sortedApiProceduresEarly;
+
+        // Região aplicada (coluna "Região e técnica") desativada: nem o sufixo "Nome — Região"
+        // do catálogo nem o mapa de aplicação (que guarda ângulo de foto, não região anatômica)
+        // são um campo de região de verdade no sistema hoje. Lógica comentada pra reativar
+        // quando existir um campo estruturado de região em tb_procedimento_feito.
+        // const [mapasResults, orientacoesResults] = await Promise.all([
+        //   Promise.allSettled(procedimentosParaFicha.map((proc) => mapasApi.buscarPorProcedimento(proc.id))),
+        //   Promise.allSettled(procedimentosParaFicha.map((proc) => orientacoesApi.listar(proc.id))),
+        // ]);
+        // const mapaByProcId = new Map(
+        //   procedimentosParaFicha.map((proc, idx) => [
+        //     String(proc.id),
+        //     mapasResults[idx]?.status === 'fulfilled' ? mapasResults[idx].value : null,
+        //   ]),
+        // );
+        // const splitNomeRegiao = (nomeCompleto) => {
+        //   const [procNome, ...resto] = String(nomeCompleto || '').split(' — ');
+        //   return { procNome: procNome.trim(), regiaoDoNome: resto.join(' — ').trim() };
+        // };
+
+        // Mesmo agrupamento pai → retorno já usado na timeline do prontuário (nestProcedimentosTimeline):
+        // cada retorno aparece logo abaixo do procedimento de origem, não misturado na mesma linha.
+        const arvore = nestProcedimentosTimeline(procedimentosParaFicha);
+        const linhasComProfundidade = flattenNestedTimelineRoots(arvore);
+
+        historicoProcedimentos = linhasComProfundidade.map(({ proc, depth }) => {
+          const dataDisplay = proc.criadoEm
+            ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+            : '';
+          if (depth > 0) {
+            return {
+              dataDisplay,
+              nome: `• Retorno — ${proc.isRetoque ? 'retoque' : 'avaliação'}`,
+              profissional: proc.profissionalNome,
+              regiaoDisplay: '',
+              intercorrenciaDisplay: intercorrenciaMap[proc.id],
+            };
+          }
+          return {
+            dataDisplay,
+            nome: proc.procedimentoNome || proc.nome || 'Procedimento',
+            profissional: proc.profissionalNome,
+            regiaoDisplay: '',
+            intercorrenciaDisplay: intercorrenciaMap[proc.id],
+          };
+        });
+
+        // Manutenção = o que foi feito no retorno mais recente (retoque com produto vs. só avaliação),
+        // não a data do próximo retorno agendado.
+        const retornosOrdenados = procedimentosParaFicha
+          .filter((p) => p.procedimentoFeitoOrigemId != null && String(p.procedimentoFeitoOrigemId).trim() !== '')
+          .sort((a, b) => new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0));
+        const ultimoRetorno = retornosOrdenados[0];
+        manutencaoDisplay = ultimoRetorno
+          ? ultimoRetorno.isRetoque
+            ? 'Retoque necessário'
+            : 'Sem retoque (avaliação)'
+          : undefined;
+      }
+
+      // 2b. Buscas independentes de canSeeProntuario, também best-effort e em paralelo.
+      const [orgsResult, documentosResult, galeriaResult, planosResult] = await Promise.allSettled([
+        organizacaoApi.getMinhas(),
+        canSeeDocumentos ? pacientesApi.getDocumentosAssinados(selectedPatient.id) : Promise.resolve(null),
+        canSeeGaleria ? pacientesGaleriaApi.list(selectedPatient.id) : Promise.resolve(null),
+        planejamentosApi.listarPorPaciente(selectedPatient.id),
+      ]);
+
+      let responsavelTecnicoNome;
+      let responsavelTecnicoRegistro;
+      if (orgsResult.status === 'fulfilled') {
+        const orgs = Array.isArray(orgsResult.value) ? orgsResult.value : [];
+        const orgAtual = orgs.find((o) => String(o.id) === String(orgId));
+        responsavelTecnicoNome = orgAtual?.responsavelTecnicoNome;
+        responsavelTecnicoRegistro = orgAtual?.responsavelTecnicoRegistro;
+      }
+
+      let documentos = [];
+      if (canSeeDocumentos && documentosResult.status === 'fulfilled' && documentosResult.value) {
+        const list = Array.isArray(documentosResult.value) ? documentosResult.value : [];
+        documentos = list.map((d) => ({
+          dataDisplay: d.dataAssinatura
+            ? new Date(d.dataAssinatura).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+            : '',
+          titulo: d.titulo,
+          tipo: d.tipoDocumento === 'TERMO' ? 'Termo' : 'Procedimento',
+          situacao: d.recusado ? 'Recusado' : 'Assinado',
+        }));
+      }
+
+      let planoAtivo = null;
+      if (planosResult.status === 'fulfilled') {
+        const planos = Array.isArray(planosResult.value) ? planosResult.value : [];
+        const ativo = planos.find((p) => p.statusCodigo === 'ativo');
+        if (ativo) {
+          const { feitas, total } = calcSessoesPlano(ativo.itens);
+          planoAtivo = {
+            nomeDisplay: 'Plano de tratamento',
+            dataCriacaoDisplay: formatCreatedAtPtBr(ativo.criadoEm),
+            sessoesFeitas: feitas,
+            sessoesTotal: total,
+            percentualDisplay: total > 0 ? `${Math.round((feitas / total) * 100)}%` : '0%',
+            manutencaoSugeridaDisplay: manutencaoDisplay,
+          };
+        }
+      }
+
+      let fotos = [];
+      if (canSeeGaleria && galeriaResult.status === 'fulfilled' && galeriaResult.value) {
+        const itensNorm = normalizePacienteGaleriaResponse(galeriaResult.value);
+        const sessoes = groupGaleriaItemsBySession(itensNorm);
+        fotos = (sessoes || []).map((s) => ({
+          rotulo: s.nomeProcedimento || `Sessão ${s.sessionNumber ?? ''}`.trim(),
+          dataDisplay: s.dataISO ? formatDataSessaoPtBr(s.dataISO) : '',
+          itens: (s.fotos || []).map((f) => ({
+            anguloDisplay: [GALERIA_CATEGORIA_LABELS?.[f.categoria], f.tipoFotoCodigo ? humanizeCode(f.tipoFotoCodigo) : '']
+              .filter(Boolean)
+              .join(' — '),
+          })),
+        }));
+      }
+
+      // 3. Geração do PDF em try/catch próprio — erro aqui não pode travar o botão em
+      //    "Gerando..." pra sempre, e a mensagem deve ser específica.
+      try {
+        const { generateFichaPacientePdf } = await import('../../utils/pdfGenerator.js');
+        generateFichaPacientePdf({
+          clinicaCtx: {
+            nome: clinicaInfo?.nome,
+            endereco: clinicaInfo?.endereco,
+            telefone: clinicaInfo?.telefone,
+            cnpj: clinicaInfo?.cnpj,
+          },
+          pacienteCtx: buildPacienteCtxForFicha(patient),
+          numeroProntuario: patient.cpf ? maskCPF(String(patient.cpf).replace(/\D/g, '')) : '',
+          dataCadastroDisplay: formatCreatedAtPtBr(patient.createdAt),
+          statusLabel: (patient.status || 'ativo') !== 'inativo' ? 'Ativo' : 'Inativo',
+          estatisticas: {
+            ultimaVisitaDisplay: ultimaVisitaCardDisplay,
+            proximoRetornoDisplay: proximoRetornoKpiDisplay,
+            totalAtendimentos: sortedApiProceduresEarly.length,
+            responsavelTecnicoNome,
+            responsavelTecnicoRegistro,
+          },
+          canSeeProntuario,
+          canSeeDocumentos,
+          canSeeGaleria,
+          perfilClinico,
+          anamneseEstetica,
+          historico: { procedimentos: historicoProcedimentos, planoAtivo: planoAtivo || {} },
+          documentos,
+          fotos,
+        });
+      } catch (pdfErr) {
+        console.error('[handleGerarPdf] falha ao gerar PDF', pdfErr);
+        toast.error('Não foi possível gerar o PDF. Tente novamente.');
+        return;
+      }
+    } finally {
+      // Sempre libera o botão — sucesso, qualquer abort, ou crash do jsPDF.
+      setGerarPdfBusy(false);
+      gerarPdfInFlightRef.current = false;
+    }
+  }, [
+    selectedPatient,
+    canSeeProntuario,
+    canSeeDocumentos,
+    canSeeGaleria,
+    sortedApiProceduresEarly,
+    proximoRetornoKpiDisplay,
+    ultimaVisitaCardDisplay,
+    clinicaInfo,
+    patient,
+    orgId,
+    toast,
+  ]);
 
   useEffect(() => {
     if (
@@ -1864,6 +2265,8 @@ export function PatientProfileView({
               }}
               onAddAddress={openEditProfile}
               onAddResponsavel={openEditProfile}
+              onGerarPdf={handleGerarPdf}
+              gerarPdfBusy={gerarPdfBusy}
               profileNav={profileNav}
               onNavigatePrev={onProfileNavigatePrev}
               onNavigateNext={onProfileNavigateNext}

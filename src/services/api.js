@@ -642,6 +642,18 @@ export const pacientesApi = {
       method: 'POST',
       body: JSON.stringify(data ?? {}),
     }),
+  /**
+   * Registra (bloqueante) o download da Ficha Clínica em PDF na auditoria.
+   * Sem corpo — roleUserId é inferido pelo backend via JWT. Deve ser chamada e
+   * ter sucesso ANTES de gerar o PDF no frontend (ver `generateFichaPacientePdf`).
+   */
+  registrarDownloadFicha: (id) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(String(id))}/registrar-download-ficha`, {
+      method: 'POST',
+    }),
+  /** Documentos assinados do paciente (termos, etc.) — para a Ficha Clínica em PDF. */
+  getDocumentosAssinados: (id) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(String(id))}/documentos-assinados`),
   /** Pacientes inativos — mesma forma que `list`. */
   listInativos: async (opts = {}) => {
     const params = new URLSearchParams();

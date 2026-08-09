@@ -55,6 +55,7 @@ export const ACOES_MAP = {
   EDITAR_TERMO_CONSENTIMENTO: { label: 'Editou termo',        cor: 'blue' },
   REMOVER_TERMO_CONSENTIMENTO: { label: 'Removeu termo',      cor: 'red' },
   ASSINAR_TERMO:          { label: 'Assinou termo',          cor: 'purple' },
+  BAIXAR_FICHA_PACIENTE:  { label: 'Baixou ficha PDF',       cor: 'purple' },
 
   // Agenda Config
   EDITAR_HORARIO_AGENDA:  { label: 'Editou horários profissional', cor: 'blue' },
