@@ -34,7 +34,6 @@ import {
   organizacaoApi,
   listarRelatosPorPaciente,
   // mapasApi, — reativar junto com a região aplicada na Ficha (ver handleGerarPdf)
-  orientacoesApi,
   planejamentosApi,
 } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
@@ -302,21 +301,6 @@ function buildIntercorrenciaMapFromRelatos(relatos) {
 //   const angulos = [...new Set(mapa.marcacoes.map((m) => humanizeCode(m.anguloFotoCodigo)).filter(Boolean))];
 //   return angulos.join(', ');
 // }
-
-/** Bloco da Seção 04 (Prescrições) a partir das orientações pós-procedimento marcadas. */
-function buildPrescricaoFromProcedimento(proc, itensOrientacoes) {
-  const marcados = (Array.isArray(itensOrientacoes) ? itensOrientacoes : []).filter((it) => it?.checado);
-  if (marcados.length === 0) return null;
-  return {
-    titulo: proc.procedimentoNome || proc.nome || 'Procedimento',
-    subtitulo: 'Orientações pós-procedimento',
-    dataDisplay: proc.criadoEm
-      ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-      : '',
-    profissional: proc.profissionalNome,
-    orientacoes: marcados.map((it) => it.descricao).filter(Boolean).join('; '),
-  };
-}
 
 function normalizeListaAlertasManualApi(payload) {
   if (payload == null) return [];
@@ -1141,7 +1125,6 @@ export function PatientProfileView({
       let historicoProcedimentos = [];
       let manutencaoDisplay;
       let anamneseEstetica = {};
-      let prescricoes = [];
       if (canSeeProntuario) {
         try {
           const raw = await perfilClinicoApi.get(selectedPatient.id);
@@ -1189,9 +1172,6 @@ export function PatientProfileView({
         const intercorrenciaMap = buildIntercorrenciaMapFromRelatos(relatos);
 
         const procedimentosParaFicha = sortedApiProceduresEarly;
-        const orientacoesResults = await Promise.allSettled(
-          procedimentosParaFicha.map((proc) => orientacoesApi.listar(proc.id)),
-        );
 
         // Região aplicada (coluna "Região e técnica") desativada: nem o sufixo "Nome — Região"
         // do catálogo nem o mapa de aplicação (que guarda ângulo de foto, não região anatômica)
@@ -1250,14 +1230,6 @@ export function PatientProfileView({
             ? 'Retoque necessário'
             : 'Sem retoque (avaliação)'
           : undefined;
-
-        prescricoes = procedimentosParaFicha
-          .map((proc, idx) => {
-            const orientResult = orientacoesResults[idx];
-            const itens = orientResult.status === 'fulfilled' ? orientResult.value : [];
-            return buildPrescricaoFromProcedimento(proc, itens);
-          })
-          .filter(Boolean);
       }
 
       // 2b. Buscas independentes de canSeeProntuario, também best-effort e em paralelo.
@@ -1350,7 +1322,6 @@ export function PatientProfileView({
           perfilClinico,
           anamneseEstetica,
           historico: { procedimentos: historicoProcedimentos, planoAtivo: planoAtivo || {} },
-          prescricoes,
           documentos,
           fotos,
         });

@@ -355,7 +355,6 @@ export const generateFichaPacientePdf = ({
   canSeeProntuario,
   perfilClinico,
   historico,
-  prescricoes,
 }) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const margin = 20;
@@ -627,61 +626,6 @@ export const generateFichaPacientePdf = ({
       planoWraps[i].forEach((line, li) => doc.text(line, margin + i * pcw, y + 5 + li * 4.2));
     });
     y += 5 + planoLineCount * 4.2 + 6;
-  }
-
-  // ── Seção 03 — Prescrições e orientações ─────────────────────────
-  if (canSeeProntuario) {
-    drawSectionHeader('03', 'Prescrições e orientações');
-    if (!prescricoes || prescricoes.length === 0) {
-      checkPage(7);
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9);
-      doc.setTextColor(...GRAY);
-      doc.text('Nenhuma prescrição registrada', margin, y);
-      doc.setTextColor(...INK);
-      y += 9;
-    } else {
-      const leftColW = 54;
-      const leftLineH = 4.2;
-      prescricoes.forEach((p) => {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9.5);
-        const titleWrapped = doc.splitTextToSize(safe(p.titulo, 'Procedimento'), leftColW);
-        const orientWrapped = doc.splitTextToSize(safe(p.orientacoes), maxWidth - 68);
-
-        const leftHeight = titleWrapped.length * leftLineH + leftLineH * 2 + 4;
-        const rightHeight = orientWrapped.length * 4.6;
-        const blockHeight = Math.max(leftHeight, rightHeight, 14);
-        checkPage(blockHeight + 8);
-        const blockTop = y;
-
-        let ly = y;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9.5);
-        doc.setTextColor(...INK);
-        titleWrapped.forEach((line) => {
-          doc.text(line, margin, ly);
-          ly += leftLineH;
-        });
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(...GRAY);
-        doc.text(safe(p.dataDisplay), margin, ly);
-        ly += leftLineH;
-        doc.text([p.profissional, p.registroProfissional].filter(Boolean).join(' · ') || '—', margin, ly);
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9.5);
-        doc.setTextColor(...INK);
-        orientWrapped.forEach((line, i) => doc.text(line, margin + 66, blockTop + i * 4.6));
-
-        y = blockTop + blockHeight + 4;
-        doc.setDrawColor(...ROW_BORDER);
-        doc.setLineWidth(0.3);
-        doc.line(margin, y - 2, pageWidth - margin, y - 2);
-      });
-    }
   }
 
   // ── Assinaturas ───────────────────────────────────────────────────
