@@ -93,6 +93,50 @@ export const useJourneyState = () => {
   /** 'consulta' | 'retorno' — derivado de agenda.tipoProcedimentoCodigo ao iniciar atendimento. */
   const [tipoAtendimento, setTipoAtendimento] = useState('consulta');
   const [procedimentoFeitoOrigemId, setProcedimentoFeitoOrigemId] = useState(null);
+  const [attendanceStartTimeState, setAttendanceStartTimeState] = useState(null);
+
+  /** Salva o horário de início no state e no sessionStorage escopado pelo CPF do paciente (com trava de mesmo dia). */
+  const setAttendanceStartTime = useCallback((timeIso, patientCpf) => {
+    setAttendanceStartTimeState(timeIso);
+    if (!timeIso) {
+      if (patientCpf) {
+        try {
+          sessionStorage.removeItem(`procedis_start_time_${patientCpf}`);
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+    if (patientCpf) {
+      try {
+        const payload = JSON.stringify({ time: timeIso, date: timeIso.slice(0, 10) });
+        sessionStorage.setItem(`procedis_start_time_${patientCpf}`, payload);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  /** Recupera o horário de início do state ou do sessionStorage se for do mesmo dia. */
+  const getAttendanceStartTime = useCallback((patientCpf) => {
+    if (attendanceStartTimeState) return attendanceStartTimeState;
+    if (!patientCpf) return null;
+    try {
+      const raw = sessionStorage.getItem(`procedis_start_time_${patientCpf}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const todayIso = new Date().toISOString().slice(0, 10);
+      if (parsed?.date === todayIso && parsed?.time) {
+        return parsed.time;
+      }
+      sessionStorage.removeItem(`procedis_start_time_${patientCpf}`);
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [attendanceStartTimeState]);
+
   const [retornoAvaliacao, setRetornoAvaliacao] = useState({
     satisfacao: null,
     simetria: '',
@@ -238,6 +282,9 @@ export const useJourneyState = () => {
     setTipoAtendimento,
     procedimentoFeitoOrigemId,
     setProcedimentoFeitoOrigemId,
+    attendanceStartTime: attendanceStartTimeState,
+    setAttendanceStartTime,
+    getAttendanceStartTime,
     isAgendaRetorno,
     retornoAvaliacao,
     setRetornoAvaliacao,

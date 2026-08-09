@@ -13,8 +13,8 @@ import {
 } from './agendaBloqueioStyles.js';
 
 const SLOT_HEIGHT = 48;
-const START_MIN = 7 * 60;
-const END_MIN = 20 * 60;
+const DEFAULT_START_MIN = 7 * 60;
+const DEFAULT_END_MIN = 20 * 60;
 const SLOT_MIN = 30;
 
 const WEEK_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -28,15 +28,33 @@ function timeToMinutes(t) {
   return h * 60 + (Number.isNaN(m) ? 0 : m);
 }
 
+function computeGridRange(appointments = []) {
+  let min = DEFAULT_START_MIN;
+  let max = DEFAULT_END_MIN;
+  for (const appt of appointments || []) {
+    if (!appt || !appt.horaInicio) continue;
+    const start = timeToMinutes(appt.horaInicio);
+    const dur = Number(appt.duracaoMin) || 45;
+    const end = start + dur;
+    if (start < min) {
+      min = Math.floor(start / 30) * 30;
+    }
+    if (end > max) {
+      max = Math.ceil(end / 30) * 30;
+    }
+  }
+  return { startMin: Math.max(0, min), endMin: Math.min(24 * 60 - 30, max) };
+}
+
 function formatSlotLabel(totalMin) {
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function buildTimeSlots() {
+function buildTimeSlots(startMin = DEFAULT_START_MIN, endMin = DEFAULT_END_MIN) {
   const rows = [];
-  for (let m = START_MIN; m <= END_MIN; m += SLOT_MIN) {
+  for (let m = startMin; m <= endMin; m += SLOT_MIN) {
     rows.push(m);
   }
   return rows;
@@ -93,7 +111,7 @@ function buildOverlapComponents(indices, items) {
   return components;
 }
 
-function layoutDayColumn(dayAppointments) {
+function layoutDayColumn(dayAppointments, startMin = DEFAULT_START_MIN, endMin = DEFAULT_END_MIN) {
   const raw = dayAppointments.map((appt) => {
     const start = timeToMinutes(appt.horaInicio);
     const dur = Number(appt.duracaoMin) || 45;
@@ -102,11 +120,11 @@ function layoutDayColumn(dayAppointments) {
   });
 
   const items = raw
-    .filter((e) => e.end > START_MIN && e.start < END_MIN + SLOT_MIN)
+    .filter((e) => e.end > startMin && e.start < endMin + SLOT_MIN)
     .map((e) => ({
       ...e,
-      startC: Math.max(e.start, START_MIN),
-      endC: Math.min(e.end, END_MIN + SLOT_MIN),
+      startC: Math.max(e.start, startMin),
+      endC: Math.min(e.end, endMin + SLOT_MIN),
     }))
     .sort((a, b) => a.start - b.start || b.end - a.end);
 
@@ -177,10 +195,10 @@ function dayHeader(iso, todayIso) {
   );
 }
 
-function eventBlockStyle(appt, layout) {
+function eventBlockStyle(appt, layout, startMin = DEFAULT_START_MIN) {
   const start = timeToMinutes(appt.horaInicio);
   const dur = Number(appt.duracaoMin) || 45;
-  const top = Math.max(0, ((start - START_MIN) / SLOT_MIN) * SLOT_HEIGHT);
+  const top = Math.max(0, ((start - startMin) / SLOT_MIN) * SLOT_HEIGHT);
   const height = Math.max(SLOT_HEIGHT, (dur / SLOT_MIN) * SLOT_HEIGHT);
   const lane = layout?.lane ?? 0;
   const colCount = Math.max(1, layout?.colCount ?? 1);
@@ -214,16 +232,18 @@ function DayColumn({
   onAdvanceClick,
   onRemoverBloqueio,
   submittingRemoverBloqueioId,
+  startMin = DEFAULT_START_MIN,
+  endMin = DEFAULT_END_MIN,
 }) {
-  const layouts = React.useMemo(() => layoutDayColumn(appointments), [appointments]);
-  const slots = React.useMemo(() => buildTimeSlots(), []);
+  const layouts = React.useMemo(() => layoutDayColumn(appointments, startMin, endMin), [appointments, startMin, endMin]);
+  const slots = React.useMemo(() => buildTimeSlots(startMin, endMin), [startMin, endMin]);
   const gridHeight = slots.length * SLOT_HEIGHT;
   const now = new Date();
   const showNow =
     iso === todayIso &&
-    now.getHours() * 60 + now.getMinutes() >= START_MIN &&
-    now.getHours() * 60 + now.getMinutes() <= END_MIN + SLOT_MIN;
-  const nowTop = ((now.getHours() * 60 + now.getMinutes() - START_MIN) / SLOT_MIN) * SLOT_HEIGHT;
+    now.getHours() * 60 + now.getMinutes() >= startMin &&
+    now.getHours() * 60 + now.getMinutes() <= endMin + SLOT_MIN;
+  const nowTop = ((now.getHours() * 60 + now.getMinutes() - startMin) / SLOT_MIN) * SLOT_HEIGHT;
 
   return (
     <div className="relative min-w-0 overflow-hidden border-l border-[#E8E8E8]" style={{ minHeight: gridHeight }}>
@@ -264,7 +284,7 @@ function DayColumn({
       ) : null}
       {appointments.map((appt) => {
         const layout = layouts.get(appt.id);
-        const baseStyle = eventBlockStyle(appt, layout);
+        const baseStyle = eventBlockStyle(appt, layout, startMin);
         const blockStyle = { ...baseStyle, ...BLOQUEIO_HATCH_BG };
         const pid = appt.profissionalRoleUserId ?? appt.roleUserId;
         const appointment = {
@@ -321,6 +341,7 @@ function DayColumn({
         }
 
         const showProc = baseStyle.height >= 72;
+        const showProfissional = baseStyle.height >= 90;
         const noShow = appt.status === 'cancelado' && isAgendaNoShow(appt);
         const cardClass = statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
@@ -368,6 +389,11 @@ function DayColumn({
             {showProc ? (
               <div className={`truncate text-[10px] font-medium ${appt.procedimentoNome ? 'text-[#888888]' : 'text-amber-700'} ${lineThrough ? 'line-through' : ''}`}>
                 {appt.procedimentoNome || 'Sem procedimento informado'}
+              </div>
+            ) : null}
+            {showProfissional && appt.profissionalNome ? (
+              <div className="truncate text-[9.5px] font-normal text-[#777]">
+                por: {appt.profissionalNome}
               </div>
             ) : null}
             {showAdvance ? (
@@ -425,7 +451,8 @@ export function WeekTimeGrid({
   submittingRemoverBloqueioId,
 }) {
   const scrollRef = React.useRef(null);
-  const slots = React.useMemo(() => buildTimeSlots(), []);
+  const { startMin, endMin } = React.useMemo(() => computeGridRange(appointments), [appointments]);
+  const slots = React.useMemo(() => buildTimeSlots(startMin, endMin), [startMin, endMin]);
   const gridHeight = slots.length * SLOT_HEIGHT;
 
   const byDay = React.useMemo(() => {
@@ -450,11 +477,11 @@ export function WeekTimeGrid({
     if (!el) return;
     const now = new Date();
     const hm = now.getHours() * 60 + now.getMinutes();
-    const anchorMin = hm >= START_MIN && hm <= END_MIN + SLOT_MIN ? hm : 8 * 60;
-    const targetRow = Math.floor((anchorMin - START_MIN) / SLOT_MIN);
+    const anchorMin = hm >= startMin && hm <= endMin + SLOT_MIN ? hm : Math.max(startMin, 8 * 60);
+    const targetRow = Math.floor((anchorMin - startMin) / SLOT_MIN);
     const y = Math.max(0, targetRow * SLOT_HEIGHT - 80);
     el.scrollTo({ top: y, behavior: 'smooth' });
-  }, [weekKey]);
+  }, [weekKey, startMin, endMin]);
 
   const mobileDays = React.useMemo(() => getMobileDayIsos(weekDayIsos, todayIso), [weekDayIsos, todayIso]);
 
@@ -462,8 +489,8 @@ export function WeekTimeGrid({
     const now = new Date();
     const hm = now.getHours() * 60 + now.getMinutes();
     const showNowRuler =
-      days.includes(todayIso) && hm >= START_MIN && hm <= END_MIN + SLOT_MIN;
-    const nowTopRuler = ((hm - START_MIN) / SLOT_MIN) * SLOT_HEIGHT;
+      days.includes(todayIso) && hm >= startMin && hm <= endMin + SLOT_MIN;
+    const nowTopRuler = ((hm - startMin) / SLOT_MIN) * SLOT_HEIGHT;
 
     return (
     <div className="flex min-h-0 min-w-0 flex-1">
@@ -509,6 +536,8 @@ export function WeekTimeGrid({
             onAdvanceClick={onAdvanceClick}
             onRemoverBloqueio={onRemoverBloqueio}
             submittingRemoverBloqueioId={submittingRemoverBloqueioId}
+            startMin={startMin}
+            endMin={endMin}
           />
         ))}
       </div>

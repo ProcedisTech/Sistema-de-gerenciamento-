@@ -22,7 +22,6 @@ import {
   nomeProcedimentoRaiz,
 } from './retornoOrigemUtils.js';
 import {
-  TIPO_ATENDIMENTO_AVALIACAO,
   TIPO_ATENDIMENTO_CONSULTA,
   TIPO_ATENDIMENTO_PROCEDIMENTO,
   TIPO_ATENDIMENTO_RETORNO,
@@ -31,8 +30,7 @@ import {
 const TIPO_ATENDIMENTO_OPTIONS = [
   { value: TIPO_ATENDIMENTO_PROCEDIMENTO, label: 'Procedimento' },
   { value: TIPO_ATENDIMENTO_RETORNO, label: 'Retorno' },
-  { value: TIPO_ATENDIMENTO_AVALIACAO, label: 'Avaliação' },
-  { value: TIPO_ATENDIMENTO_CONSULTA, label: 'Consulta Inicial' },
+  { value: TIPO_ATENDIMENTO_CONSULTA, label: 'Consulta' },
 ];
 
 const FOCUS_RING =
@@ -82,10 +80,8 @@ function buildResumo({ form, agenda, rangePhase, duracaoTotalMin, horaFimReal, p
       );
       partes.push(pai ? `Retorno: ${pai.catalogoProcedimentoNome || pai.nome}` : 'Retorno');
     }
-  } else if (tipo === TIPO_ATENDIMENTO_AVALIACAO) {
-    partes.push('Avaliação');
   } else if (tipo === TIPO_ATENDIMENTO_CONSULTA) {
-    partes.push('Consulta Inicial');
+    partes.push('Consulta');
   } else if (procedimentosSelecionados.length > 0) {
     const nomes = procedimentosSelecionados.map((p) => p.nome).join(', ');
     partes.push(nomes);
@@ -505,10 +501,10 @@ export function AgendaFormModal({ agenda }) {
       const searching = !isReagendar && !lockPlanejamento && (procSearchExpanded || procedimentosSelecionados.length === 0);
 
       return (
-        <div className={`rounded-xl border border-ink-200 bg-white ${compact ? 'p-2.5' : 'p-3'}`}>
+        <div className={`rounded-xl border border-teal-200/90 bg-teal-50/60 shadow-sm transition-all ${compact ? 'p-2.5' : 'p-3.5'}`}>
           {!compact ? (
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
-              Procedimentos <span className="text-red-500">*</span>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-teal-800">
+              Procedimentos do Atendimento <span className="text-red-500">*</span>
             </p>
           ) : null}
           {isReagendar || lockPlanejamento ? (
@@ -574,10 +570,10 @@ export function AgendaFormModal({ agenda }) {
       (!origemId || retornoOrigemExpanded);
 
     return (
-      <div className={`rounded-xl border border-ink-200 bg-white ${compact ? 'p-2.5' : 'p-3'}`}>
+      <div className={`rounded-xl border border-teal-200/90 bg-teal-50/60 shadow-sm transition-all ${compact ? 'p-2.5' : 'p-3.5'}`}>
         {!compact ? (
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
-            Procedimento de origem <span className="text-red-500">*</span>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-teal-800">
+            Procedimento de origem do retorno <span className="text-red-500">*</span>
           </p>
         ) : null}
 
@@ -633,9 +629,17 @@ export function AgendaFormModal({ agenda }) {
             </p>
           )
         ) : raizesVazias ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-900">
-            Sem procedimento realizado. Este paciente ainda não tem histórico para vincular o
-            retorno.
+          <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] font-medium text-amber-900">
+            <div>
+              Sem procedimento realizado. Este paciente ainda não possui histórico para vincular o retorno.
+            </div>
+            <button
+              type="button"
+              onClick={() => agenda.setTipoAtendimento?.('consulta')}
+              className="inline-flex items-center gap-1.5 self-start rounded-lg bg-amber-200/90 px-3 py-1.5 text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-300"
+            >
+              Alterar Tipo para Consulta com 1 clique
+            </button>
           </div>
         ) : origemId && !retornoOrigemExpanded ? (
           (() => {
@@ -687,17 +691,15 @@ export function AgendaFormModal({ agenda }) {
 
   return (
     <div
-      className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-5"
       role="dialog"
       aria-modal="true"
-      aria-label={modalTitulo}
+      aria-labelledby="modal-agenda-form-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
     >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/50"
+      <div
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-xs transition-opacity"
         onClick={agenda.closeModal}
-        aria-label="Fechar modal"
-        tabIndex={-1}
+        aria-hidden
       />
 
       <div
@@ -707,7 +709,7 @@ export function AgendaFormModal({ agenda }) {
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-100 px-6 py-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="font-display text-[15.5px] font-black text-ink-900">{modalTitulo}</h2>
+            <h2 id="modal-agenda-form-title" className="font-display text-[15.5px] font-black text-ink-900">{modalTitulo}</h2>
             {isReagendar ? (
               <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
                 Reagendamento
@@ -800,9 +802,9 @@ export function AgendaFormModal({ agenda }) {
             {TIPO_ATENDIMENTO_OPTIONS.find((o) => o.value === tipoAtendimento)?.label || ''}
           </div>
 
-          {/* Mobile: proc/retorno permanece abaixo dos seletores */}
-          {!isDesktop && (isModoProcedimento || isModoRetorno) ? (
-            <div className="mt-2.5">{renderProcOuRetornoCard({ compact: false })}</div>
+          {/* Destaque no topo: proc/retorno aparece em toda a largura diretamente abaixo dos seletores */}
+          {(isModoProcedimento || isModoRetorno) ? (
+            <div className="mt-3">{renderProcOuRetornoCard({ compact: false })}</div>
           ) : null}
         </div>
 
@@ -856,10 +858,6 @@ export function AgendaFormModal({ agenda }) {
 
               {!rangeCompleteDesktop ? (
                 <div className="mx-auto flex h-full min-h-0 w-full flex-col overflow-hidden px-4 py-3">
-                  {(isModoProcedimento || isModoRetorno) ? (
-                    <div className="mb-2 shrink-0">{renderProcOuRetornoCard({ compact: true })}</div>
-                  ) : null}
-
                   <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
                     <p
                       className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-[#6b7280]"
@@ -923,7 +921,7 @@ export function AgendaFormModal({ agenda }) {
                 />
                 <span
                   className={`truncate text-sm font-semibold ${
-                    ctaPreenchido ? 'text-vivid-teal-700' : 'text-ink-600'
+                    ctaPreenchido ? 'text-[#0f766e]' : 'text-ink-500'
                   }`}
                 >
                   {ctaLabel}

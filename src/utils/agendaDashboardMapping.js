@@ -63,7 +63,7 @@ export function mapAgendaDtoToDashboardRow(dto) {
       (dto.observacao != null && String(dto.observacao).trim()) || 'Bloqueio';
   } else if (MODALIDADE_LABEL[tipoCodigo]) {
     const label = MODALIDADE_LABEL[tipoCodigo];
-    const cat = dto.catalogoProcedimentoNome?.trim();
+    const cat = dto.catalogoProcedimentoNome?.trim() || dto.procedimentoFeitoOrigemNome?.trim();
     procedimentoNome = cat ? `${label}: ${cat}` : label;
   } else {
     procedimentoNome =

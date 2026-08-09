@@ -1,3 +1,5 @@
+import { getGuaranteedNow } from './serverTime.js';
+
 /** Margem técnica ±min para iniciar sem modal (mesmo dia). */
 export const MARGEM_TECNICA_MIN = 10;
 
@@ -30,7 +32,7 @@ export function parseSlotLocalDateTime(dataIso, horaInicio) {
  * @param {Date} scheduledAt
  * @param {Date} [now]
  */
-export function diffScheduledMinusNowMinutes(scheduledAt, now = new Date()) {
+export function diffScheduledMinusNowMinutes(scheduledAt, now = getGuaranteedNow()) {
   return (scheduledAt.getTime() - now.getTime()) / 60000;
 }
 
@@ -40,7 +42,7 @@ export function formatClockHHMM(date) {
 }
 
 /** Hora atual local HH:MM para query ao backend. */
-export function formatNowHHMM(now = new Date()) {
+export function formatNowHHMM(now = getGuaranteedNow()) {
   return formatClockHHMM(now);
 }
 

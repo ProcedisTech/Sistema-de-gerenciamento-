@@ -21,6 +21,13 @@ const STATUS_CHIPS = [
     iconIdleClass: 'text-status-warn-ink',
   },
   {
+    key: 'realizado',
+    label: 'Realizado',
+    swatch: 'bg-blue-500',
+    active: 'border-blue-500 bg-blue-500 text-white',
+    iconType: 'dot',
+  },
+  {
     key: 'cancelado',
     label: 'Cancelado',
     swatch: 'bg-status-danger',

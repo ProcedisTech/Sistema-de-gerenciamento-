@@ -22,6 +22,7 @@
 import { STATUS_PROCEDIMENTO_FINALIZADO_ID } from '../constants/statusProcedimento.js';
 import { sanitizeOrgId, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 import { supabase } from '../lib/supabaseClient';
+import { updateServerTimeOffset } from '../utils/serverTime';
 
 let currentOrgId = '';
 
@@ -305,6 +306,10 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
     }
   }
 
+  if (res.headers && res.headers.get('date')) {
+    updateServerTimeOffset(res.headers.get('date'));
+  }
+
   if (res.status === 204) return null;
   if (!res.ok) {
     if (res.status === 401) {
@@ -349,6 +354,10 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
         credentials: 'omit',
       });
     }
+  }
+
+  if (res.headers && res.headers.get('date')) {
+    updateServerTimeOffset(res.headers.get('date'));
   }
 
   if (res.status === 204) return null;
@@ -951,11 +960,12 @@ export const agendasApi = {
    * Atualiza status do slot (confirmado | realizado).
    * @param {string} id UUID do slot
    * @param {'confirmado'|'realizado'} codigo
+   * @param {{ horaInicio?: string, horaFim?: string }} [payload]
    */
-  atualizarStatus: (id, codigo) =>
+  atualizarStatus: (id, codigo, payload = {}) =>
     request(`/api/v1/agendas/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ codigo }),
+      body: JSON.stringify({ codigo, ...payload }),
     }),
 
   /**
