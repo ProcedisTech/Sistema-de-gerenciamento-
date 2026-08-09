@@ -1276,6 +1276,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
   /** Recarrega lista do mês e grade semanal (no-op na semana se viewMode !== 'semana'). */
   const refreshDashboard = useCallback(async () => {
+    dispMonthCacheRef.current = {};
     await loadMonth();
     await refreshWeekGrid();
   }, [loadMonth, refreshWeekGrid]);
@@ -1717,6 +1718,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
 
       try {
         await agendasApi.atualizarStatus(agendaId, codigo);
+        dispMonthCacheRef.current = {};
         if (opts.successToast !== false) {
           toastSuccess(
             opts.successToast ||

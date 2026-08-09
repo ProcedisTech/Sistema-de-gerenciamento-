@@ -1246,7 +1246,9 @@ function AppRefactoredInner() {
       journeyState.setNomeProcedimentoCatalogoId(catAgenda);
       journeyState.setNomeProcedimento(nomeAgenda);
       journeyState.setAgendaId(options.agendaId ?? null);
-      journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
+      if (!journeyState.getAttendanceStartTime(cpfKey)) {
+        journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
+      }
       journeyState.setTipoAtendimento(wantsRetorno ? 'retorno' : 'consulta');
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -1258,6 +1260,9 @@ function AppRefactoredInner() {
     } else if (wantsRetorno) {
       /* Same-day: preserva fotos/canvas, mas arma modo retorno (C1 avulso / C2 agenda). */
       journeyState.setAgendaId(options.agendaId ?? null);
+      if (!journeyState.getAttendanceStartTime(cpfKey)) {
+        journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
+      }
       journeyState.setTipoAtendimento('retorno');
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -2495,6 +2500,17 @@ function AppRefactoredInner() {
           : null;
 
       if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
+        if (procedimentoFeitoIdParaVinculo) {
+          if (journeyState.observacoesExecucao) {
+            try {
+              await procedimentosApi.atualizarObservacao(procedimentoFeitoIdParaVinculo, journeyState.observacoesExecucao);
+            } catch (e) {
+              console.warn('[registrarProcedimentoManual] erro ao atualizar obs do proc', procedimentoFeitoIdParaVinculo, e);
+            }
+          }
+          return procedimentoFeitoIdParaVinculo;
+        }
+
         const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const agendaIdValido =
           !isApenasSair && journeyState.agendaId && UUID_REGEX.test(journeyState.agendaId)
@@ -2748,13 +2764,14 @@ function AppRefactoredInner() {
       if (listaParaSalvar && listaParaSalvar.length > 0) {
         for (let i = 0; i < listaParaSalvar.length; i++) {
           const proc = listaParaSalvar[i];
-          if (proc.id) {
-            todosIds.push(proc.id);
+          const existingId = proc.id || loteProcedimentosFeitosIds[i];
+          if (existingId) {
+            todosIds.push(String(existingId));
             if (proc.observacoesExecucao) {
               try {
-                await procedimentosApi.atualizarObservacao(proc.id, proc.observacoesExecucao);
+                await procedimentosApi.atualizarObservacao(existingId, proc.observacoesExecucao);
               } catch (e) {
-                console.warn('[encerrarAtendimento] erro ao atualizar obs do proc', proc.id, e);
+                console.warn('[encerrarAtendimento] erro ao atualizar obs do proc', existingId, e);
               }
             }
           } else {
@@ -2882,7 +2899,7 @@ function AppRefactoredInner() {
           journeyState.setAttendanceStartTime(null, sCpf);
         } else {
           const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-          const actualEndHh = getGuaranteedHHMM();
+          let actualEndHh = getGuaranteedHHMM();
           let actualStartHh = null;
           if (startTimeIso) {
             try {
@@ -2891,6 +2908,14 @@ function AppRefactoredInner() {
             } catch {
               // ignore parse error
             }
+          }
+          if (actualStartHh && actualEndHh <= actualStartHh) {
+            if (actualStartHh === '23:59') actualStartHh = '23:58';
+            const [h, m] = actualStartHh.split(':').map(Number);
+            const total = h * 60 + m + 1;
+            const newH = Math.floor((total % 1440) / 60);
+            const newM = total % 60;
+            actualEndHh = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
           }
           const updatePayload = {
             ...(actualStartHh ? { horaInicio: actualStartHh } : {}),
