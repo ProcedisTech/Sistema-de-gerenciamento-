@@ -79,6 +79,7 @@ export async function registrarAgendaAvulsa({
     // Se início == fim (ex: clicou em encerrar no mesmo minuto), define piso de 1 minuto
     let finalEndHh = endHh;
     if (startHh === endHh) {
+      if (startHh === '23:59') startHh = '23:58';
       finalEndHh = addMinutesToHHMM(startHh, 1);
     }
 

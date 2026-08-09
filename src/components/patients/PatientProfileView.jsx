@@ -1930,10 +1930,7 @@ export function PatientProfileView({
       const nome = (proc?.procedimentoNome || proc?.nome || '').trim();
       const pid = proc?.id != null && proc?.id !== '' ? String(proc.id) : '';
       return (apiGaleriaItems || []).filter((it) => {
-        const cardId =
-          it.procedimentoFeitoCardId != null ? String(it.procedimentoFeitoCardId) : null;
         const feitoId = it.procedimentoFeitoId != null ? String(it.procedimentoFeitoId) : null;
-        if (pid && cardId === pid) return true;
         if (pid && feitoId === pid) return true;
         if (
           nome &&
