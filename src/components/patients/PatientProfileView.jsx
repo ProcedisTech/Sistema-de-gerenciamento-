@@ -17,7 +17,7 @@ import {
   Trash2,
   Pencil,
   Plus,
-  User as   UserIcon,
+  User as UserIcon,
   X,
   Send,
 } from 'lucide-react';
@@ -516,10 +516,10 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
       setEditSaving(true);
       const payload = { respostas: rowsApi, observacoes: editingObservacoes };
       const updated = await anamneseApi.editPaciente(pacienteId, editingAnamneseId, roleUserId, payload);
-      
+
       setDetalhes((prev) => ({ ...prev, [editingAnamneseId]: updated }));
       setAnamneses((prev) => prev.map((a) => (a.id === editingAnamneseId ? updated : a)));
-      
+
       toast.success('Anamnese atualizada com sucesso!');
       handleCancelEdit();
     } catch (e) {
@@ -626,201 +626,200 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
         <h4 className="text-[16px] font-bold text-[#0f172a] mb-3">
           Anamneses preenchidas ({anamneses.length})
         </h4>
-      {anamneses.map((an) => {
-        const isOpen = expandedId === an.id;
-        const detalhe = detalhes[an.id] || an;
-        const respostas = Array.isArray(detalhe.respostas)
-          ? [...detalhe.respostas].sort((a, b) => (a.fichaItemOrdem ?? 999) - (b.fichaItemOrdem ?? 999))
-          : [];
+        {anamneses.map((an) => {
+          const isOpen = expandedId === an.id;
+          const detalhe = detalhes[an.id] || an;
+          const respostas = Array.isArray(detalhe.respostas)
+            ? [...detalhe.respostas].sort((a, b) => (a.fichaItemOrdem ?? 999) - (b.fichaItemOrdem ?? 999))
+            : [];
 
-        return (
-          <div key={an.id} className="border border-app-border rounded-xl overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setExpandedId(isOpen ? null : an.id)}
-              className="w-full flex items-center justify-between p-4 bg-[#f8fbfb] hover:bg-[#f0fdfa] transition-all text-left"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <ClipboardList className="w-4 h-4 text-[#00a88e]" strokeWidth={2} />
-                  <span className="text-[14px] font-bold text-[#0f172a]">{an.anamneseNome || 'Anamnese'}</span>
-                  <span className="text-[12px] text-[#64748b]">({respostas.length} respostas)</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748b]">
-                  {an.preenchidoPorPaciente ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0]">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                      Preenchido pelo paciente
-                    </span>
-                  ) : (
-                    an.profissionalNome && <span>Por: {an.profissionalNome}</span>
-                  )}
-                  {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span>}
-                  <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border-[2px] ${
-                    an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO'
-                      ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
-                      : 'bg-[#fef9c3] text-[#b45309] border-[#f59e0b]/20'
-                  }`}>
-                    {an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO' ? 'Finalizada' : 'Em rascunho'}
-                  </span>
-                </div>
-              </div>
-              <ChevronDown className={`w-5 h-5 text-[#94a3b8] transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isOpen && (
-              <div className="p-4 border-t border-app-border space-y-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-[14px] font-bold text-[#0f172a]">Respostas</h4>
-                  {!an.preenchidoPorPaciente ? (
-                    editingAnamneseId !== an.id ? (
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditAnamnese(an.id, detalhe)}
-                        disabled={editSaving || !fichaByAnId[an.id]}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0f172a] hover:bg-[#f8fafc] hover:border-[#cbd5e1] transition-colors disabled:opacity-50"
-                      >
-                        <Pencil className="h-3.5 w-3.5 text-[#00a88e]" strokeWidth={2} />
-                        Editar Respostas
-                      </button>
-                    ) : null
-                  ) : (
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f1f5f9] px-3 py-1.5 text-[12px] font-medium text-[#94a3b8] cursor-not-allowed"
-                      title="Anamnese preenchida pelo paciente — edição bloqueada (LGPD)"
-                    >
-                      <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-                      Editar Respostas
-                    </span>
-                  )}
-                </div>
-
-                {editingAnamneseId === an.id ? (
-                  <div className="mt-4 border-t border-slate-100 pt-4">
-                    <div className="mb-4">
-                      <label className="text-[12px] font-bold text-slate-700">Observações da Anamnese</label>
-                      <textarea
-                        value={editingObservacoes}
-                        onChange={(e) => setEditingObservacoes(e.target.value)}
-                        rows={3}
-                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
-                        placeholder="Observações ou queixa principal..."
-                      />
-                    </div>
-                    {groupItensByCategoria(sortFichaItens(fichaByAnId[an.id])).map(({ categoriaNome, itens }, secIdx) => (
-                      <div key={categoriaNome || `sec-${secIdx}`} className={secIdx > 0 ? 'mt-6' : ''}>
-                        {categoriaNome && (
-                          <div className="mb-3 border-b border-slate-100 pb-1">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{categoriaNome}</p>
-                          </div>
-                        )}
-                        <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-                          {itens.map((item) => {
-                            const isAlerta = item.pergunta?.prioridade === 'ALERTA';
-                            const pid = item.pergunta?.id;
-                            const hasErr = pid && errosObrigatorias.has(String(pid));
-                            return (
-                              <div key={item.id} className={`min-w-0 ${isFullWidthItem(item) ? 'md:col-span-2' : ''} ${hasErr ? 'rounded-lg p-2 ring-1 ring-red-300' : ''}`}>
-                                <DynamicQuestion
-                                  numero={item.ordem}
-                                  pergunta={item.pergunta}
-                                  resposta={editingRespostas[pid] ?? editingRespostas[String(pid)]}
-                                  onChange={handleRespostaChange}
-                                  alerta={isAlerta}
-                                  obrigatorio={item.obrigatorio}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                    
-                    <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        disabled={editSaving}
-                        className="rounded-lg px-4 py-2 text-[13px] font-semibold text-slate-600 hover:bg-slate-50 border border-slate-200"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveEdit}
-                        disabled={editSaving}
-                        className="rounded-lg bg-[#00a88e] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#00967f] disabled:opacity-50"
-                      >
-                        {editSaving ? 'Salvando...' : 'Salvar Alterações'}
-                      </button>
-                    </div>
+          return (
+            <div key={an.id} className="border border-app-border rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setExpandedId(isOpen ? null : an.id)}
+                className="w-full flex items-center justify-between p-4 bg-[#f8fbfb] hover:bg-[#f0fdfa] transition-all text-left"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ClipboardList className="w-4 h-4 text-[#00a88e]" strokeWidth={2} />
+                    <span className="text-[14px] font-bold text-[#0f172a]">{an.anamneseNome || 'Anamnese'}</span>
+                    <span className="text-[12px] text-[#64748b]">({respostas.length} respostas)</span>
                   </div>
-                ) : (
-                  <>
-                    {detalhe.observacoes ? (
-                      <AnamneseObservacoesBlock texto={detalhe.observacoes} />
-                    ) : null}
-
-                    {respostas.length > 0 ? (
-                      <AnamneseFichaReadonlyView
-                        ficha={fichaByAnId[an.id]}
-                        respostasApi={respostas}
-                        loading={fichaLoadingId === an.id && !fichaByAnId[an.id]}
-                        className="max-w-5xl xl:max-w-6xl"
-                      />
+                  <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748b]">
+                    {an.preenchidoPorPaciente ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0]">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                        Preenchido pelo paciente
+                      </span>
                     ) : (
-                      <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
+                      an.profissionalNome && <span>Por: {an.profissionalNome}</span>
                     )}
-                  </>
-                )}
-
-                {an.preenchidoPorPaciente && an.assinaturaPaciente && (
-                  <div className="mt-6 border-t border-[#e2e8f0] pt-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                      <h4 className="text-[14px] font-bold text-[#0f172a]">Assinatura e Termo do Paciente</h4>
-                    </div>
-                    
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row gap-6">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2 text-[12px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 w-fit">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Termo de consentimento aceito
-                        </div>
-                        <p className="text-[12px] text-slate-600 leading-relaxed">
-                          O paciente declarou que preencheu pessoalmente esta ficha com informações verdadeiras e completas sobre seu histórico de saúde.
-                        </p>
-                        {an.termoAceitoEm && (
-                          <div className="text-[11px] text-slate-500 font-medium">
-                            Aceito em {new Date(an.termoAceitoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às {new Date(an.termoAceitoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="w-full md:w-64 shrink-0 flex flex-col items-center gap-2">
-                        <div className="w-full bg-white border border-slate-200 rounded-xl p-2 flex items-center justify-center min-h-[80px]">
-                          <img 
-                            src={an.assinaturaPaciente} 
-                            alt="Assinatura do Paciente" 
-                            className="max-h-20 w-auto object-contain"
-                          />
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-medium text-center">
-                          Assinatura digital registrada
-                        </div>
-                      </div>
-                    </div>
+                    {an.dataHora && <span>{new Date(an.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {new Date(an.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span>}
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border-[2px] ${an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO'
+                        ? 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20'
+                        : 'bg-[#fef9c3] text-[#b45309] border-[#f59e0b]/20'
+                      }`}>
+                      {an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO' ? 'Finalizada' : 'Em rascunho'}
+                    </span>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+                </div>
+                <ChevronDown className={`w-5 h-5 text-[#94a3b8] transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isOpen && (
+                <div className="p-4 border-t border-app-border space-y-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-[14px] font-bold text-[#0f172a]">Respostas</h4>
+                    {!an.preenchidoPorPaciente ? (
+                      editingAnamneseId !== an.id ? (
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditAnamnese(an.id, detalhe)}
+                          disabled={editSaving || !fichaByAnId[an.id]}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0f172a] hover:bg-[#f8fafc] hover:border-[#cbd5e1] transition-colors disabled:opacity-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-[#00a88e]" strokeWidth={2} />
+                          Editar Respostas
+                        </button>
+                      ) : null
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-[#f1f5f9] px-3 py-1.5 text-[12px] font-medium text-[#94a3b8] cursor-not-allowed"
+                        title="Anamnese preenchida pelo paciente — edição bloqueada (LGPD)"
+                      >
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                        Editar Respostas
+                      </span>
+                    )}
+                  </div>
+
+                  {editingAnamneseId === an.id ? (
+                    <div className="mt-4 border-t border-slate-100 pt-4">
+                      <div className="mb-4">
+                        <label className="text-[12px] font-bold text-slate-700">Observações da Anamnese</label>
+                        <textarea
+                          value={editingObservacoes}
+                          onChange={(e) => setEditingObservacoes(e.target.value)}
+                          rows={3}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15"
+                          placeholder="Observações ou queixa principal..."
+                        />
+                      </div>
+                      {groupItensByCategoria(sortFichaItens(fichaByAnId[an.id])).map(({ categoriaNome, itens }, secIdx) => (
+                        <div key={categoriaNome || `sec-${secIdx}`} className={secIdx > 0 ? 'mt-6' : ''}>
+                          {categoriaNome && (
+                            <div className="mb-3 border-b border-slate-100 pb-1">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{categoriaNome}</p>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                            {itens.map((item) => {
+                              const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+                              const pid = item.pergunta?.id;
+                              const hasErr = pid && errosObrigatorias.has(String(pid));
+                              return (
+                                <div key={item.id} className={`min-w-0 ${isFullWidthItem(item) ? 'md:col-span-2' : ''} ${hasErr ? 'rounded-lg p-2 ring-1 ring-red-300' : ''}`}>
+                                  <DynamicQuestion
+                                    numero={item.ordem}
+                                    pergunta={item.pergunta}
+                                    resposta={editingRespostas[pid] ?? editingRespostas[String(pid)]}
+                                    onChange={handleRespostaChange}
+                                    alerta={isAlerta}
+                                    obrigatorio={item.obrigatorio}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          disabled={editSaving}
+                          className="rounded-lg px-4 py-2 text-[13px] font-semibold text-slate-600 hover:bg-slate-50 border border-slate-200"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveEdit}
+                          disabled={editSaving}
+                          className="rounded-lg bg-[#00a88e] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#00967f] disabled:opacity-50"
+                        >
+                          {editSaving ? 'Salvando...' : 'Salvar Alterações'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {detalhe.observacoes ? (
+                        <AnamneseObservacoesBlock texto={detalhe.observacoes} />
+                      ) : null}
+
+                      {respostas.length > 0 ? (
+                        <AnamneseFichaReadonlyView
+                          ficha={fichaByAnId[an.id]}
+                          respostasApi={respostas}
+                          loading={fichaLoadingId === an.id && !fichaByAnId[an.id]}
+                          className="max-w-5xl xl:max-w-6xl"
+                        />
+                      ) : (
+                        <p className="text-[13px] text-[#94a3b8] text-center py-4">Sem respostas registradas</p>
+                      )}
+                    </>
+                  )}
+
+                  {an.preenchidoPorPaciente && an.assinaturaPaciente && (
+                    <div className="mt-6 border-t border-[#e2e8f0] pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        <h4 className="text-[14px] font-bold text-[#0f172a]">Assinatura e Termo do Paciente</h4>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row gap-6">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2 text-[12px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 w-fit">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Termo de consentimento aceito
+                          </div>
+                          <p className="text-[12px] text-slate-600 leading-relaxed">
+                            O paciente declarou que preencheu pessoalmente esta ficha com informações verdadeiras e completas sobre seu histórico de saúde.
+                          </p>
+                          {an.termoAceitoEm && (
+                            <div className="text-[11px] text-slate-500 font-medium">
+                              Aceito em {new Date(an.termoAceitoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às {new Date(an.termoAceitoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="w-full md:w-64 shrink-0 flex flex-col items-center gap-2">
+                          <div className="w-full bg-white border border-slate-200 rounded-xl p-2 flex items-center justify-center min-h-[80px]">
+                            <img
+                              src={an.assinaturaPaciente}
+                              alt="Assinatura do Paciente"
+                              className="max-h-20 w-auto object-contain"
+                            />
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-medium text-center">
+                            Assinatura digital registrada
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1421,7 +1420,7 @@ export function PatientProfileView({
         toast.error('Arquivo acima de 50 MB. Escolha um arquivo menor.');
         return;
       }
-      
+
       const previousPhotoUrl = selectedPatient.fotoPerfilUrl;
       const volatileUrl = URL.createObjectURL(file);
       mergePatientById?.(selectedPatient.id, (prev) => ({ ...prev, fotoPerfilUrl: volatileUrl }));
@@ -2280,120 +2279,120 @@ export function PatientProfileView({
             />
           </div>
 
-            {isEditing && editing ? (
-              <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" role="presentation">
-                <button
-                  type="button"
-                  className="absolute inset-0 bg-black/60"
-                  onClick={() => {
-                    setEditing(null);
-                    setEditFormErrors({});
-                    setProfileSaveError('');
-                  }}
-                  aria-label="Fechar"
-                />
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                >
-                  <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#00a88e] text-white shadow-sm">
-                          <UserIcon className="h-6 w-6" strokeWidth={2.5} />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-[18px] font-bold text-slate-900 sm:text-[20px]">
-                            {cadastroReadOnly ? 'Cadastro do Paciente' : 'Editar Cadastro'}
-                          </h3>
-                          <p className="text-[13px] font-medium text-slate-500">
-                            {cadastroReadOnly ? 'Visualização dos dados cadastrais' : 'Atualize os dados pessoais do paciente'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {cadastroReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => setCadastroReadOnly(false)}
-                            className="flex items-center gap-1.5 rounded-lg border border-[#00a88e] bg-[#e6f7f5] px-3.5 py-2 text-[13px] font-bold text-[#00a88e] transition hover:bg-[#00a88e] hover:text-white shadow-sm"
-                          >
-                            <Pencil className="h-4 w-4" strokeWidth={2.25} />
-                            <span>Editar</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditing(null);
-                            setEditFormErrors({});
-                            setProfileSaveError('');
-                          }}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-                        >
-                          <X className="h-5 w-5" strokeWidth={2.25} />
-                        </button>
-                      </div>
+          {isEditing && editing ? (
+            <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" role="presentation">
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/60"
+                onClick={() => {
+                  setEditing(null);
+                  setEditFormErrors({});
+                  setProfileSaveError('');
+                }}
+                aria-label="Fechar"
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+              >
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#00a88e] text-white shadow-sm">
+                      <UserIcon className="h-6 w-6" strokeWidth={2.5} />
                     </div>
-                    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 bg-[#f8fbfb]">
-                      <PatientForm
-                        mode="edit"
-                        variant="modal"
-                        readOnly={cadastroReadOnly}
-                        showFormHeading={false}
-                        formHeading=""
-                  nome={editing.nome}
-                  dataNascimentoDisplay={editing.dataNascimentoDisplay}
-                  idade={editing.idade}
-                  sexo={editing.sexo}
-                  estadoCivilId={editing.estadoCivilId}
-                  profissaoId={editing.profissaoId}
-                  genero={editing.genero}
-                  cpf={editing.cpfDisplay}
-                  rg={editing.rg}
-                  telefoneCountryCode={editing.telefoneCountryCode ?? 'BR'}
-                  telefoneNumero={editing.telefoneNumero ?? ''}
-                  telefoneTouched={editing.telefoneTouched ?? false}
-                  email={editing.email}
-                  instagram={editing.instagram}
-                  tiktok={editing.tiktok}
-                  cep={editing.cep}
-                  enderecoRua={editing.enderecoRua}
-                  enderecoNumero={editing.enderecoNumero}
-                  enderecoComplemento={editing.enderecoComplemento}
-                  enderecoBairro={editing.enderecoBairro}
-                  enderecoCidade={editing.enderecoCidade}
-                  enderecoEstado={editing.enderecoEstado}
-                  nomeMae={editing.nomeMae}
-                  nomePai={editing.nomePai}
-                  indicacao={editing.indicacao}
-                  dataNascimentoIso={editing.dataNascimentoIso}
-                  errors={editFormErrors}
-                  erroBanner={profileSaveError}
-                  onNomeChange={(value) => setEditing((p) => p ? { ...p, nome: value } : p)}
-                  onDataNascimentoDisplayChange={(raw) => {
-                    setEditing((p) => {
-                      if (!p) return p;
-                      const digits = sanitizeBirthDateDigits(raw);
-                      const display = formatBirthDigitsBR(digits);
-                      let iso = '';
-                      let age = p.idade;
-                      if (digits.length === 8) {
-                        const r = validateBirthDateDigits8(digits);
-                        if (r.ok) {
-                          iso = r.iso;
-                          const calculatedAge = calculateAgeFromISODate(r.iso);
-                          if (calculatedAge !== '') age = calculatedAge;
+                    <div className="min-w-0">
+                      <h3 className="text-[18px] font-bold text-slate-900 sm:text-[20px]">
+                        {cadastroReadOnly ? 'Cadastro do Paciente' : 'Editar Cadastro'}
+                      </h3>
+                      <p className="text-[13px] font-medium text-slate-500">
+                        {cadastroReadOnly ? 'Visualização dos dados cadastrais' : 'Atualize os dados pessoais do paciente'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {cadastroReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => setCadastroReadOnly(false)}
+                        className="flex items-center gap-1.5 rounded-lg border border-[#00a88e] bg-[#e6f7f5] px-3.5 py-2 text-[13px] font-bold text-[#00a88e] transition hover:bg-[#00a88e] hover:text-white shadow-sm"
+                      >
+                        <Pencil className="h-4 w-4" strokeWidth={2.25} />
+                        <span>Editar</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(null);
+                        setEditFormErrors({});
+                        setProfileSaveError('');
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      <X className="h-5 w-5" strokeWidth={2.25} />
+                    </button>
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 bg-[#f8fbfb]">
+                  <PatientForm
+                    mode="edit"
+                    variant="modal"
+                    readOnly={cadastroReadOnly}
+                    showFormHeading={false}
+                    formHeading=""
+                    nome={editing.nome}
+                    dataNascimentoDisplay={editing.dataNascimentoDisplay}
+                    idade={editing.idade}
+                    sexo={editing.sexo}
+                    estadoCivilId={editing.estadoCivilId}
+                    profissaoId={editing.profissaoId}
+                    genero={editing.genero}
+                    cpf={editing.cpfDisplay}
+                    rg={editing.rg}
+                    telefoneCountryCode={editing.telefoneCountryCode ?? 'BR'}
+                    telefoneNumero={editing.telefoneNumero ?? ''}
+                    telefoneTouched={editing.telefoneTouched ?? false}
+                    email={editing.email}
+                    instagram={editing.instagram}
+                    tiktok={editing.tiktok}
+                    cep={editing.cep}
+                    enderecoRua={editing.enderecoRua}
+                    enderecoNumero={editing.enderecoNumero}
+                    enderecoComplemento={editing.enderecoComplemento}
+                    enderecoBairro={editing.enderecoBairro}
+                    enderecoCidade={editing.enderecoCidade}
+                    enderecoEstado={editing.enderecoEstado}
+                    nomeMae={editing.nomeMae}
+                    nomePai={editing.nomePai}
+                    indicacao={editing.indicacao}
+                    dataNascimentoIso={editing.dataNascimentoIso}
+                    errors={editFormErrors}
+                    erroBanner={profileSaveError}
+                    onNomeChange={(value) => setEditing((p) => p ? { ...p, nome: value } : p)}
+                    onDataNascimentoDisplayChange={(raw) => {
+                      setEditing((p) => {
+                        if (!p) return p;
+                        const digits = sanitizeBirthDateDigits(raw);
+                        const display = formatBirthDigitsBR(digits);
+                        let iso = '';
+                        let age = p.idade;
+                        if (digits.length === 8) {
+                          const r = validateBirthDateDigits8(digits);
+                          if (r.ok) {
+                            iso = r.iso;
+                            const calculatedAge = calculateAgeFromISODate(r.iso);
+                            if (calculatedAge !== '') age = calculatedAge;
+                          }
                         }
-                      }
-                      return { ...p, dataNascimentoDisplay: display, dataNascimentoIso: iso, idade: age };
-                    });
-                  }}
-                  onSexoChange={(value) => setEditing((p) => p ? { ...p, sexo: value } : p)}
-                  onEstadoCivilChange={(value) => setEditing((p) => p ? { ...p, estadoCivilId: value } : p)}
-                  onProfissaoIdChange={(value) => setEditing((p) => p ? { ...p, profissaoId: value } : p)}
-                  onGeneroChange={(value) => setEditing((p) => p ? { ...p, genero: value } : p)}
-                  onCpfChange={(value) => setEditing((p) => {
+                        return { ...p, dataNascimentoDisplay: display, dataNascimentoIso: iso, idade: age };
+                      });
+                    }}
+                    onSexoChange={(value) => setEditing((p) => p ? { ...p, sexo: value } : p)}
+                    onEstadoCivilChange={(value) => setEditing((p) => p ? { ...p, estadoCivilId: value } : p)}
+                    onProfissaoIdChange={(value) => setEditing((p) => p ? { ...p, profissaoId: value } : p)}
+                    onGeneroChange={(value) => setEditing((p) => p ? { ...p, genero: value } : p)}
+                    onCpfChange={(value) => setEditing((p) => {
                       if (!p) return p;
                       const next = { ...p, cpfDisplay: value };
                       if (value.length === 14) {
@@ -2415,56 +2414,56 @@ export function PatientProfileView({
                         });
                       }
                       return next;
-                  })}
-                  onRgChange={(value) => setEditing((p) => p ? { ...p, rg: value } : p)}
-                  onTelefoneCountryChange={(code) =>
-                    setEditing((p) =>
-                      p
-                        ? { ...p, telefoneCountryCode: code, telefoneNumero: '', telefoneTouched: false }
-                        : p,
-                    )
-                  }
-                  onTelefoneNumeroChange={(value) =>
-                    setEditing((p) => (p ? { ...p, telefoneNumero: value } : p))
-                  }
-                  onTelefoneBlur={() => setEditing((p) => (p ? { ...p, telefoneTouched: true } : p))}
-                  onEmailChange={(value) => setEditing((p) => (p ? { ...p, email: value } : p))}
-                  onInstagramChange={(value) => setEditing((p) => (p ? { ...p, instagram: value } : p))}
-                  onTiktokChange={(value) => setEditing((p) => (p ? { ...p, tiktok: value } : p))}
-                  onCepChange={(value) => setEditing((p) => (p ? { ...p, cep: value } : p))}
-                  onEnderecoRuaChange={(value) => setEditing((p) => (p ? { ...p, enderecoRua: value } : p))}
-                  onEnderecoNumeroChange={(value) => setEditing((p) => (p ? { ...p, enderecoNumero: value } : p))}
-                  onEnderecoComplementoChange={(value) =>
-                    setEditing((p) => (p ? { ...p, enderecoComplemento: value } : p))
-                  }
-                  onEnderecoBairroChange={(value) => setEditing((p) => (p ? { ...p, enderecoBairro: value } : p))}
-                  onEnderecoCidadeChange={(value) => setEditing((p) => (p ? { ...p, enderecoCidade: value } : p))}
-                  onEnderecoEstadoChange={(value) => setEditing((p) => (p ? { ...p, enderecoEstado: value } : p))}
-                  onNomeMaeChange={(value) => setEditing((p) => (p ? { ...p, nomeMae: value } : p))}
-                  onNomePaiChange={(value) => setEditing((p) => (p ? { ...p, nomePai: value } : p))}
-                  onIndicacaoChange={(value) => setEditing((p) => (p ? { ...p, indicacao: value } : p))}
-                  clearError={clearEditFieldError}
-                  submitLabel="Salvar Alterações"
-                  onSubmit={(ev) => {
-                    ev.preventDefault();
-                    saveEditProfile();
-                  }}
-                  onCancel={() => {
-                    setEditing(null);
-                    setEditFormErrors({});
-                    setProfileSaveError('');
-                  }}
-                  salvando={profileSaving}
-                  cpfInputId="patient-profile-edit-cpf"
-                  onManageAlerts={handleScrollToAlertas}
-                    />
-                  </div>
+                    })}
+                    onRgChange={(value) => setEditing((p) => p ? { ...p, rg: value } : p)}
+                    onTelefoneCountryChange={(code) =>
+                      setEditing((p) =>
+                        p
+                          ? { ...p, telefoneCountryCode: code, telefoneNumero: '', telefoneTouched: false }
+                          : p,
+                      )
+                    }
+                    onTelefoneNumeroChange={(value) =>
+                      setEditing((p) => (p ? { ...p, telefoneNumero: value } : p))
+                    }
+                    onTelefoneBlur={() => setEditing((p) => (p ? { ...p, telefoneTouched: true } : p))}
+                    onEmailChange={(value) => setEditing((p) => (p ? { ...p, email: value } : p))}
+                    onInstagramChange={(value) => setEditing((p) => (p ? { ...p, instagram: value } : p))}
+                    onTiktokChange={(value) => setEditing((p) => (p ? { ...p, tiktok: value } : p))}
+                    onCepChange={(value) => setEditing((p) => (p ? { ...p, cep: value } : p))}
+                    onEnderecoRuaChange={(value) => setEditing((p) => (p ? { ...p, enderecoRua: value } : p))}
+                    onEnderecoNumeroChange={(value) => setEditing((p) => (p ? { ...p, enderecoNumero: value } : p))}
+                    onEnderecoComplementoChange={(value) =>
+                      setEditing((p) => (p ? { ...p, enderecoComplemento: value } : p))
+                    }
+                    onEnderecoBairroChange={(value) => setEditing((p) => (p ? { ...p, enderecoBairro: value } : p))}
+                    onEnderecoCidadeChange={(value) => setEditing((p) => (p ? { ...p, enderecoCidade: value } : p))}
+                    onEnderecoEstadoChange={(value) => setEditing((p) => (p ? { ...p, enderecoEstado: value } : p))}
+                    onNomeMaeChange={(value) => setEditing((p) => (p ? { ...p, nomeMae: value } : p))}
+                    onNomePaiChange={(value) => setEditing((p) => (p ? { ...p, nomePai: value } : p))}
+                    onIndicacaoChange={(value) => setEditing((p) => (p ? { ...p, indicacao: value } : p))}
+                    clearError={clearEditFieldError}
+                    submitLabel="Salvar Alterações"
+                    onSubmit={(ev) => {
+                      ev.preventDefault();
+                      saveEditProfile();
+                    }}
+                    onCancel={() => {
+                      setEditing(null);
+                      setEditFormErrors({});
+                      setProfileSaveError('');
+                    }}
+                    salvando={profileSaving}
+                    cpfInputId="patient-profile-edit-cpf"
+                    onManageAlerts={handleScrollToAlertas}
+                  />
                 </div>
               </div>
-            ) : null}
+            </div>
+          ) : null}
 
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
-                <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
+            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
                 { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
@@ -2481,11 +2480,10 @@ export function PatientProfileView({
                     title={title}
                     aria-label={title}
                     onClick={() => setPatientDetailTab(key)}
-                    className={`flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-0.5 whitespace-nowrap px-2 py-2.5 text-[11px] font-semibold transition-colors sm:gap-1 sm:px-3 sm:text-[12px] ${
-                      active
+                    className={`flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-0.5 whitespace-nowrap px-2 py-2.5 text-[11px] font-semibold transition-colors sm:gap-1 sm:px-3 sm:text-[12px] ${active
                         ? '-mb-px border-b-2 border-[#00a88e] text-[#00a88e]'
                         : 'border-b-2 border-transparent text-[#64748b] hover:text-[#0f172a]'
-                    }`}
+                      }`}
                   >
                     <TabIcon className="h-3.5 w-3.5 shrink-0 sm:mr-1" strokeWidth={2.25} aria-hidden />
                     <span className="hidden truncate sm:inline">{label}</span>
@@ -2587,10 +2585,10 @@ export function PatientProfileView({
                               : '—';
                             const timeLabel = criado
                               ? criado.toLocaleTimeString('pt-BR', {
-                                  timeZone: 'America/Sao_Paulo',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
+                                timeZone: 'America/Sao_Paulo',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
                               : '';
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                             const retornoCount = (root.retornos || []).length;
@@ -2660,268 +2658,268 @@ export function PatientProfileView({
                   ) : (
                     <>
                       {!sortedApiProcedures.length ? (
-                    <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
-                  ) : (
-                    <ProcedureTimelineRail>
-                      {flatProntuarioVisible.map(({ proc, depth }, idx) => {
-                        const rowKey =
-                          proc.id != null && proc.id !== ''
-                            ? String(proc.id)
-                            : `proc-${idx}`;
-                        const open = Boolean(prontuarioExpanded[rowKey]);
-                        const dataLabel = proc.criadoEm
-                          ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-                          : '—';
-                        const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
-                        const fotosProc = galeriaItemsForProcedure(proc);
-                        const procId = proc.id ?? proc.procedimentoId;
-                        const lastRootId = prontuarioRootsVisible[prontuarioRootsVisible.length - 1]?.id;
-                        const showVerMaisHere =
-                          prontuarioListTruncated &&
-                          depth === 0 &&
-                          lastRootId != null &&
-                          String(proc.id) === String(lastRootId);
-                        const assinaturaVinculada = (assinaturas || []).find(
-                          (a) =>
-                            a &&
-                            a.procedimentoFeitoId != null &&
-                            procId != null &&
-                            String(a.procedimentoFeitoId) === String(procId),
-                        );
-                        const tituloTermoAssinado =
-                          assinaturaVinculada?.termoTitulo ??
-                          assinaturaVinculada?.termo?.titulo ??
-                          assinaturaVinculada?.termo?.title ??
-                          'Termo';
-                        const imgAssinProf =
-                          assinaturaVinculada?.assinaturaProfissional ??
-                          assinaturaVinculada?.assinatura_profissional;
-                        const imgAssinPac =
-                          assinaturaVinculada?.assinaturaPaciente ??
-                          assinaturaVinculada?.assinatura_paciente;
-                        const emAssinProf =
-                          assinaturaVinculada?.profissionalAssinouEm ??
-                          assinaturaVinculada?.profissional_assinou_em;
-                        const emAssinPac =
-                          assinaturaVinculada?.pacienteAssinouEm ??
-                          assinaturaVinculada?.paciente_assinou_em;
-                        return (
-                          <ProcedureTimelineEntry key={rowKey} depth={depth}>
-                            <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8fafc] shadow-sm">
-                              <button
-                                type="button"
-                                onClick={() => toggleProntuarioRow(rowKey)}
-                                className="flex w-full min-h-[44px] items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#f1f5f9] sm:gap-3 sm:px-4 sm:py-3"
-                                aria-expanded={open}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-[#64748b] sm:text-[13px]">
-                                    <Calendar className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                                    <span className="truncate">{dataLabel}</span>
-                                  </div>
-                                  <p className="mt-1 truncate text-[13px] font-bold leading-snug text-[#0f172a] sm:text-[14px]" title={nomeProc}>
-                                    {nomeProc}
-                                  </p>
-                                  <p
-                                    className="mt-0.5 truncate text-[12px] font-medium text-[#64748b]"
-                                    title={proc.profissionalNome || undefined}
+                        <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
+                      ) : (
+                        <ProcedureTimelineRail>
+                          {flatProntuarioVisible.map(({ proc, depth }, idx) => {
+                            const rowKey =
+                              proc.id != null && proc.id !== ''
+                                ? String(proc.id)
+                                : `proc-${idx}`;
+                            const open = Boolean(prontuarioExpanded[rowKey]);
+                            const dataLabel = proc.criadoEm
+                              ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                              : '—';
+                            const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
+                            const fotosProc = galeriaItemsForProcedure(proc);
+                            const procId = proc.id ?? proc.procedimentoId;
+                            const lastRootId = prontuarioRootsVisible[prontuarioRootsVisible.length - 1]?.id;
+                            const showVerMaisHere =
+                              prontuarioListTruncated &&
+                              depth === 0 &&
+                              lastRootId != null &&
+                              String(proc.id) === String(lastRootId);
+                            const assinaturaVinculada = (assinaturas || []).find(
+                              (a) =>
+                                a &&
+                                a.procedimentoFeitoId != null &&
+                                procId != null &&
+                                String(a.procedimentoFeitoId) === String(procId),
+                            );
+                            const tituloTermoAssinado =
+                              assinaturaVinculada?.termoTitulo ??
+                              assinaturaVinculada?.termo?.titulo ??
+                              assinaturaVinculada?.termo?.title ??
+                              'Termo';
+                            const imgAssinProf =
+                              assinaturaVinculada?.assinaturaProfissional ??
+                              assinaturaVinculada?.assinatura_profissional;
+                            const imgAssinPac =
+                              assinaturaVinculada?.assinaturaPaciente ??
+                              assinaturaVinculada?.assinatura_paciente;
+                            const emAssinProf =
+                              assinaturaVinculada?.profissionalAssinouEm ??
+                              assinaturaVinculada?.profissional_assinou_em;
+                            const emAssinPac =
+                              assinaturaVinculada?.pacienteAssinouEm ??
+                              assinaturaVinculada?.paciente_assinou_em;
+                            return (
+                              <ProcedureTimelineEntry key={rowKey} depth={depth}>
+                                <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8fafc] shadow-sm">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleProntuarioRow(rowKey)}
+                                    className="flex w-full min-h-[44px] items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#f1f5f9] sm:gap-3 sm:px-4 sm:py-3"
+                                    aria-expanded={open}
                                   >
-                                    Realizado por {proc.profissionalNome || '—'}
-                                  </p>
-                                </div>
-                                <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
-                                  {depth > 0 ? (
-                                    <RetornoTimelineBadge isRetoque={Boolean(proc.isRetoque)} />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-[#64748b] sm:text-[13px]">
+                                        <Calendar className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                                        <span className="truncate">{dataLabel}</span>
+                                      </div>
+                                      <p className="mt-1 truncate text-[13px] font-bold leading-snug text-[#0f172a] sm:text-[14px]" title={nomeProc}>
+                                        {nomeProc}
+                                      </p>
+                                      <p
+                                        className="mt-0.5 truncate text-[12px] font-medium text-[#64748b]"
+                                        title={proc.profissionalNome || undefined}
+                                      >
+                                        Realizado por {proc.profissionalNome || '—'}
+                                      </p>
+                                    </div>
+                                    <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
+                                      {depth > 0 ? (
+                                        <RetornoTimelineBadge isRetoque={Boolean(proc.isRetoque)} />
+                                      ) : null}
+                                      {proc.statusNome ? (
+                                        <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
+                                          {proc.statusNome}
+                                        </span>
+                                      ) : (
+                                        <span className="shrink-0 rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
+                                          —
+                                        </span>
+                                      )}
+                                      <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform ${open ? 'rotate-180' : ''}`}
+                                        strokeWidth={2.5}
+                                        aria-hidden
+                                      />
+                                    </div>
+                                  </button>
+                                  {open ? (
+                                    <div className="space-y-4 border-t border-[#e2e8f0] bg-[#fafafa] px-3 py-4 sm:px-4">
+                                      <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                          Observações do profissional
+                                        </div>
+                                        <p className="mt-1.5 whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#334155]">
+                                          {proc.observacao && String(proc.observacao).trim() ? String(proc.observacao).trim() : '—'}
+                                        </p>
+                                      </div>
+                                      {assinaturaVinculada ? (
+                                        <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm">
+                                          <div className="mb-3 flex items-center justify-between">
+                                            <div className="flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
+                                              <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                                              Termo Assinado
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                                                  generateTermoPdf({
+                                                    titulo: tituloTermoAssinado,
+                                                    conteudo: assinaturaVinculada?.conteudoSnapshot || assinaturaVinculada?.termo?.conteudo || '',
+                                                    assinaturaPaciente: imgAssinPac,
+                                                    assinaturaProfissional: imgAssinProf,
+                                                    metadados: {
+                                                      pacienteNome: selectedPatient?.nome,
+                                                      profissionalNome: proc?.profissionalNome || '',
+                                                      dataHora: formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac),
+                                                      ipAddress: assinaturaVinculada?.ipAddress,
+                                                    },
+                                                    fileName: `termo_${selectedPatient?.nome?.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
+                                                  });
+                                                });
+                                              }}
+                                              className="flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0f172a] shadow-sm hover:bg-[#f8fafc] transition-colors"
+                                            >
+                                              Exportar PDF
+                                            </button>
+                                          </div>
+                                          <p className="mb-2 text-[13px] font-medium text-[#64748b]">
+                                            <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
+                                            {' · '}
+                                            {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
+                                          </p>
+                                          {assinaturaVinculada?.ipAddress && (
+                                            <p className="mb-4 text-[11px] text-[#64748b] bg-[#f1f5f9] px-2 py-1 rounded w-fit">
+                                              IP do Aceite: <span className="font-mono">{assinaturaVinculada.ipAddress}</span>
+                                            </p>
+                                          )}
+                                          <div className="space-y-4">
+                                            <div>
+                                              <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                                Assinatura do Profissional
+                                              </div>
+                                              {imgAssinProf ? (
+                                                <img
+                                                  src={imgAssinProf}
+                                                  alt=""
+                                                  className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                                                />
+                                              ) : (
+                                                <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
+                                              )}
+                                              <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
+                                                Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf)}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                                                Assinatura do Paciente
+                                              </div>
+                                              {assinaturaVinculada?.recusado ? (
+                                                <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-bold text-red-700">
+                                                  <AlertTriangle className="h-4 w-4" strokeWidth={2} />
+                                                  Recusado pelo paciente
+                                                </div>
+                                              ) : imgAssinPac ? (
+                                                <img
+                                                  src={imgAssinPac}
+                                                  alt=""
+                                                  className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
+                                                />
+                                              ) : (
+                                                <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
+                                              )}
+                                              <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
+                                                Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac)}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                      <div className="flex flex-wrap gap-2">
+                                        <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
+                                        <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
+                                      </div>
+                                      <div>
+                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
+                                        {fotosProc.length ? (
+                                          <div className="mt-2 grid grid-cols-4 gap-2">
+                                            {fotosProc.map((foto) => {
+                                              const showMapa =
+                                                Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
+                                                foto?.categoria === GALERIA_CATEGORIA.MAPA;
+                                              return (
+                                                <button
+                                                  key={foto.serverId}
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setGalleryPreview({
+                                                      url: foto.url,
+                                                      authFetch: true,
+                                                      caption: foto.legenda || foto.fileName,
+                                                      mapaOverlay: foto.mapaOverlay || null,
+                                                      categoria: foto.categoria || null,
+                                                      serverId: foto.serverId || null,
+                                                    })
+                                                  }
+                                                  className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
+                                                >
+                                                  {showMapa ? (
+                                                    <GaleriaMapaThumb
+                                                      url={foto.url}
+                                                      mapaOverlay={foto.mapaOverlay}
+                                                      alt=""
+                                                      className="h-full w-full"
+                                                      density="thumb"
+                                                      pacienteId={selectedPatient?.id}
+                                                      fotoId={foto.serverId}
+                                                    />
+                                                  ) : (
+                                                    <GaleriaArquivoImage
+                                                      url={foto.url}
+                                                      alt=""
+                                                      className="h-full w-full"
+                                                      imgClassName="h-full w-full object-cover"
+                                                      pacienteId={selectedPatient?.id}
+                                                      fotoId={foto.serverId}
+                                                    />
+                                                  )}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : (
+                                          <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
+                                        )}
+                                      </div>
+                                    </div>
                                   ) : null}
-                                  {proc.statusNome ? (
-                                    <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
-                                      {proc.statusNome}
-                                    </span>
-                                  ) : (
-                                    <span className="shrink-0 rounded-full border border-[#e2e8f0] bg-[#f1f5f9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#64748b]">
-                                      —
-                                    </span>
-                                  )}
-                                  <ChevronDown
-                                    className={`h-4 w-4 shrink-0 text-[#94a3b8] transition-transform ${open ? 'rotate-180' : ''}`}
-                                    strokeWidth={2.5}
-                                    aria-hidden
+                                  <ProcedureTimelineProfileVerMaisStrip
+                                    hidden={!showVerMaisHere}
+                                    onExpand={() => setShowAllProntuario(true)}
                                   />
                                 </div>
-                              </button>
-                              {open ? (
-                                <div className="space-y-4 border-t border-[#e2e8f0] bg-[#fafafa] px-3 py-4 sm:px-4">
-                                  <div>
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                                      Observações do profissional
-                                    </div>
-                                    <p className="mt-1.5 whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#334155]">
-                                      {proc.observacao && String(proc.observacao).trim() ? String(proc.observacao).trim() : '—'}
-                                    </p>
-                                  </div>
-                                  {assinaturaVinculada ? (
-                                    <div className="rounded-xl border border-[#e2e8f0] bg-white p-4 shadow-sm">
-                                      <div className="mb-3 flex items-center justify-between">
-                                        <div className="flex items-center gap-2 text-[13px] font-bold text-[#0f172a]">
-                                          <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
-                                          Termo Assinado
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
-                                              generateTermoPdf({
-                                                titulo: tituloTermoAssinado,
-                                                conteudo: assinaturaVinculada?.conteudoSnapshot || assinaturaVinculada?.termo?.conteudo || '',
-                                                assinaturaPaciente: imgAssinPac,
-                                                assinaturaProfissional: imgAssinProf,
-                                                metadados: {
-                                                  pacienteNome: selectedPatient?.nome,
-                                                  profissionalNome: proc?.profissionalNome || '',
-                                                  dataHora: formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac),
-                                                  ipAddress: assinaturaVinculada?.ipAddress,
-                                                },
-                                                fileName: `termo_${selectedPatient?.nome?.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
-                                              });
-                                            });
-                                          }}
-                                          className="flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0f172a] shadow-sm hover:bg-[#f8fafc] transition-colors"
-                                        >
-                                          Exportar PDF
-                                        </button>
-                                      </div>
-                                      <p className="mb-2 text-[13px] font-medium text-[#64748b]">
-                                        <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
-                                        {' · '}
-                                        {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
-                                      </p>
-                                      {assinaturaVinculada?.ipAddress && (
-                                        <p className="mb-4 text-[11px] text-[#64748b] bg-[#f1f5f9] px-2 py-1 rounded w-fit">
-                                          IP do Aceite: <span className="font-mono">{assinaturaVinculada.ipAddress}</span>
-                                        </p>
-                                      )}
-                                      <div className="space-y-4">
-                                        <div>
-                                          <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                                            Assinatura do Profissional
-                                          </div>
-                                          {imgAssinProf ? (
-                                            <img
-                                              src={imgAssinProf}
-                                              alt=""
-                                              className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
-                                            />
-                                          ) : (
-                                            <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
-                                          )}
-                                          <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
-                                            Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf)}
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                                            Assinatura do Paciente
-                                          </div>
-                                          {assinaturaVinculada?.recusado ? (
-                                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-bold text-red-700">
-                                              <AlertTriangle className="h-4 w-4" strokeWidth={2} />
-                                              Recusado pelo paciente
-                                            </div>
-                                          ) : imgAssinPac ? (
-                                            <img
-                                              src={imgAssinPac}
-                                              alt=""
-                                              className="mt-2 h-16 max-w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] object-contain"
-                                            />
-                                          ) : (
-                                            <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
-                                          )}
-                                          <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
-                                            Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac)}
-                                          </p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                  <div className="flex flex-wrap gap-2">
-                                    <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
-                                    <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
-                                  </div>
-                                  <div>
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
-                                    {fotosProc.length ? (
-                                      <div className="mt-2 grid grid-cols-4 gap-2">
-                                        {fotosProc.map((foto) => {
-                                          const showMapa =
-                                            Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
-                                            foto?.categoria === GALERIA_CATEGORIA.MAPA;
-                                          return (
-                                          <button
-                                            key={foto.serverId}
-                                            type="button"
-                                            onClick={() =>
-                                              setGalleryPreview({
-                                                url: foto.url,
-                                                authFetch: true,
-                                                caption: foto.legenda || foto.fileName,
-                                                mapaOverlay: foto.mapaOverlay || null,
-                                                categoria: foto.categoria || null,
-                                                serverId: foto.serverId || null,
-                                              })
-                                            }
-                                            className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
-                                          >
-                                            {showMapa ? (
-                                              <GaleriaMapaThumb
-                                                url={foto.url}
-                                                mapaOverlay={foto.mapaOverlay}
-                                                alt=""
-                                                className="h-full w-full"
-                                                density="thumb"
-                                                pacienteId={selectedPatient?.id}
-                                                fotoId={foto.serverId}
-                                              />
-                                            ) : (
-                                              <GaleriaArquivoImage
-                                                url={foto.url}
-                                                alt=""
-                                                className="h-full w-full"
-                                                imgClassName="h-full w-full object-cover"
-                                                pacienteId={selectedPatient?.id}
-                                                fotoId={foto.serverId}
-                                              />
-                                            )}
-                                          </button>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : (
-                                      <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : null}
-                              <ProcedureTimelineProfileVerMaisStrip
-                                hidden={!showVerMaisHere}
-                                onExpand={() => setShowAllProntuario(true)}
-                              />
-                            </div>
-                          </ProcedureTimelineEntry>
-                        );
-                      })}
-                    </ProcedureTimelineRail>
-                  )}
-                  </>
+                              </ProcedureTimelineEntry>
+                            );
+                          })}
+                        </ProcedureTimelineRail>
+                      )}
+                    </>
                   )}
                 </div>
               )}
 
               {patientDetailTab === 'anamnese' && (
-                <AnamneseTab 
-                  pacienteId={selectedPatient.id} 
-                  pacienteSexo={selectedPatient.sexo} 
-                  roleUserId={roleUserId} 
+                <AnamneseTab
+                  pacienteId={selectedPatient.id}
+                  pacienteSexo={selectedPatient.sexo}
+                  roleUserId={roleUserId}
                 />
               )}
 
@@ -2972,7 +2970,7 @@ export function PatientProfileView({
               )}
 
               {patientDetailTab === 'documentos' && (
-                <DocumentosAssinadosTab 
+                <DocumentosAssinadosTab
                   paciente={selectedPatient}
                   pacienteId={selectedPatient?.id}
                   clinicaInfo={clinicaInfo}
@@ -3129,11 +3127,10 @@ export function PatientProfileView({
                   displayNotes.map((nota, i) => (
                     <div
                       key={nota.id || i}
-                      className={`rounded-lg border p-2 ${
-                        i % 2 === 0
+                      className={`rounded-lg border p-2 ${i % 2 === 0
                           ? 'border-amber-100/90 bg-amber-50/70'
                           : 'border-emerald-100/90 bg-emerald-50/70'
-                      }`}
+                        }`}
                     >
                       <p className="text-[13px] text-[#0f172a]">{nota.texto}</p>
                       <div className="mt-1 flex items-center justify-between gap-2">
@@ -3332,9 +3329,8 @@ export function PatientProfileView({
                     setInativarSenha(e.target.value);
                     if (inativarSenhaErro) setInativarSenhaErro('');
                   }}
-                  className={`w-full rounded-lg border px-3 py-2 text-[14px] text-[#0f172a] outline-none focus:border-[#00a88e]/40 ${
-                    inativarSenhaErro ? 'border-red-400 bg-red-50/40' : 'border-[#e2e8f0]'
-                  }`}
+                  className={`w-full rounded-lg border px-3 py-2 text-[14px] text-[#0f172a] outline-none focus:border-[#00a88e]/40 ${inativarSenhaErro ? 'border-red-400 bg-red-50/40' : 'border-[#e2e8f0]'
+                    }`}
                   disabled={inativarSubmitting}
                 />
                 {inativarSenhaErro ? (
@@ -3506,8 +3502,8 @@ export function PatientProfileView({
                               {row.fichaNome || 'Anamnese'}
                               {row.dataHora
                                 ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
-                                    timeZone: 'America/Sao_Paulo',
-                                  })}`
+                                  timeZone: 'America/Sao_Paulo',
+                                })}`
                                 : ''}
                             </p>
                           )}
@@ -3592,7 +3588,7 @@ export function PatientProfileView({
               Fechar
             </button>
             {Boolean(galleryPreview.mapaOverlay?.marcacoes?.length) ||
-            galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ? (
+              galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ? (
               <div className="aspect-square w-[min(90vw,85vh)] overflow-hidden rounded-xl border border-white/30 bg-slate-900">
                 <GaleriaMapaThumb
                   url={galleryPreview.url}

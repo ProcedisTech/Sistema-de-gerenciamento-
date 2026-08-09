@@ -22,6 +22,12 @@ const STATUS_STYLES = {
     badge: 'bg-amber-50 text-amber-800',
     primary: 'bg-amber-500 hover:bg-amber-600 text-white',
   },
+  realizado: {
+    border: 'border-l-blue-500',
+    dot: 'bg-blue-500',
+    badge: 'bg-blue-100 text-blue-800',
+    primary: 'bg-blue-500 hover:bg-blue-600 text-white',
+  },
   cancelado: {
     border: 'border-l-red-500',
     dot: 'bg-red-500',
@@ -47,7 +53,7 @@ const AVATAR_GRADIENTS = [
 const STATUS_BADGE_CLASSES = {
   confirmado: 'text-green-600 bg-green-100',
   pendente: 'text-amber-600 bg-amber-100',
-  realizado: 'text-slate-600 bg-slate-100',
+  realizado: 'text-blue-700 bg-blue-100',
   cancelado: 'text-red-600 bg-red-100',
   aguardando_confirmacao: 'text-amber-700 bg-amber-50',
   reagendado: 'bg-purple-100 text-purple-800',
@@ -234,9 +240,14 @@ export function AgendaAppointmentSummaryCard({
                   {statusBadgeLabel}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-xs font-medium text-slate-600">{metaLine}</p>
-              {showProfissional && appointment.profissionalNome ? (
-                <p className="mt-0.5 truncate text-xs text-slate-500">{appointment.profissionalNome}</p>
+              <p
+                className="mt-0.5 line-clamp-2 text-xs font-medium leading-snug text-slate-600 [overflow-wrap:anywhere]"
+                title={metaLine}
+              >
+                {metaLine}
+              </p>
+              {(showProfissional || appointment.profissionalNome) && appointment.profissionalNome ? (
+                <p className="mt-0.5 truncate text-xs text-slate-500">por: {appointment.profissionalNome}</p>
               ) : null}
             </div>
           </div>

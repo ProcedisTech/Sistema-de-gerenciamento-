@@ -129,12 +129,17 @@ export function AgendaAppointmentCardRich({
             {appointment.pacienteNome || 'Paciente'}
           </p>
         </div>
-        <p className="mt-0.5 truncate text-[12.5px] text-ink-700">
+        <p
+          className="mt-0.5 line-clamp-2 text-[12.5px] font-medium leading-snug text-ink-700 [overflow-wrap:anywhere]"
+          title={appointment.procedimentoNome || 'Sem procedimento'}
+        >
           {appointment.procedimentoNome || 'Sem procedimento'}
-          {showProfissional && appointment.profissionalNome ? (
-            <span className="text-ink-500"> · {appointment.profissionalNome}</span>
-          ) : null}
         </p>
+        {appointment.profissionalNome ? (
+          <p className="truncate text-[11.5px] font-normal text-ink-500" title={appointment.profissionalNome}>
+            por: {appointment.profissionalNome}
+          </p>
+        ) : null}
         {!isNivel1 ? (
           <AgendaRailCardActions
             appointment={appointment}

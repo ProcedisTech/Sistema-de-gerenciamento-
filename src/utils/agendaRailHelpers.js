@@ -58,6 +58,7 @@ export function getTimelineBlockColorClass(statusBucket) {
     cancelado: 'bg-status-danger',
     noshow: 'bg-status-noshow',
     bloqueio: 'bg-ink-400',
+    realizado: 'bg-blue-500',
   };
   return map[statusBucket] || 'bg-ink-300';
 }
@@ -81,7 +82,7 @@ export function getHeroStats(appointments) {
   for (const item of appointments || []) {
     if (item?.tipo === 'bloqueio') continue;
     const bucket = getAppointmentStatusBucket(item);
-    if (bucket === 'confirmado' || bucket === 'pendente') agendados += 1;
+    if (bucket === 'confirmado' || bucket === 'pendente' || bucket === 'realizado') agendados += 1;
     else if (bucket === 'cancelado' || bucket === 'noshow') cancelados += 1;
   }
   return { agendados, cancelados };
@@ -91,7 +92,7 @@ export function getTimelineBlocks(appointments) {
   const blocks = [];
   for (const item of appointments || []) {
     if (item.tipo === 'bloqueio' && item.status === 'cancelado') continue;
-    if (item.tipo !== 'bloqueio' && (item.status === 'realizado' || item.status === 'reagendado')) continue;
+    if (item.tipo !== 'bloqueio' && item.status === 'reagendado') continue;
 
     const startMin = parseHmToMinutes(item.horaInicio);
     const dur = Number(item.duracaoMin) || 30;
@@ -261,8 +262,8 @@ export function getStatusBadgePresentation(appointment) {
     },
     realizado: {
       label: 'Realizado',
-      dotClass: 'bg-ink-400',
-      pillClass: 'bg-ink-100 text-ink-600',
+      dotClass: 'bg-blue-500',
+      pillClass: 'bg-blue-100 text-blue-800',
     },
     reagendado: {
       label: 'Reagendado',
@@ -338,6 +339,7 @@ export function getRailStripeClass(appointment) {
     cancelado: 'bg-status-danger',
     noshow: 'bg-status-noshow',
     bloqueio: 'bg-ink-400',
+    realizado: 'bg-blue-500',
   };
   return map[bucket] || 'bg-ink-300';
 }

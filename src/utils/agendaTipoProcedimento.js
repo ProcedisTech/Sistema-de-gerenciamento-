@@ -3,12 +3,10 @@ import { normalizeApiList } from './agendaDashboardMapping.js';
 
 export const BLOQUEIO_TIPO_CODIGO = 'bloqueio';
 export const RETORNO_TIPO_CODIGO = 'retorno';
-export const AVALIACAO_TIPO_CODIGO = 'avaliacao';
 export const CONSULTA_TIPO_CODIGO = 'CONSULTA';
 
 export const TIPO_ATENDIMENTO_PROCEDIMENTO = 'procedimento';
 export const TIPO_ATENDIMENTO_RETORNO = 'retorno';
-export const TIPO_ATENDIMENTO_AVALIACAO = 'avaliacao';
 export const TIPO_ATENDIMENTO_CONSULTA = 'consulta';
 
 let tiposCache = null;

@@ -3,17 +3,17 @@ import { isAgendaNoShow } from './agendaCancelamentoMotivo.js';
 import { isKpiCountableAppointment } from './agendaKpiDrilldown.js';
 import { bloqueioMotivoLabel } from '../components/agenda/agendaBloqueioStyles.js';
 
-export const STATUS_FILTER_KEYS = ['confirmado', 'pendente', 'cancelado', 'noshow'];
+export const STATUS_FILTER_KEYS = ['confirmado', 'pendente', 'realizado', 'cancelado', 'noshow'];
 
 export const ALL_STATUS_FILTERS = new Set(STATUS_FILTER_KEYS);
 
 /** Tie-break para count pill / status dominante no calendário. */
-export const DOMINANT_STATUS_TIE_PRIORITY = ['pendente', 'confirmado', 'cancelado', 'noshow'];
+export const DOMINANT_STATUS_TIE_PRIORITY = ['pendente', 'confirmado', 'realizado', 'cancelado', 'noshow'];
 
-const LOADBAR_BUCKETS = ['confirmado', 'pendente', 'cancelado', 'noshow'];
+const LOADBAR_BUCKETS = ['confirmado', 'pendente', 'realizado', 'cancelado', 'noshow'];
 
 const ACTIVE_STATUSES = new Set(['confirmado', 'pendente', 'aguardando_confirmacao']);
-const TERMINAL_STATUSES = new Set(['cancelado', 'realizado', 'reagendado']);
+const TERMINAL_STATUSES = new Set(['cancelado', 'reagendado']);
 
 function normalizeHm(value) {
   const s = String(value || '00:00').trim();
@@ -156,6 +156,7 @@ export function getAppointmentStatusBucket(row) {
   if (row.tipo === 'bloqueio') return 'bloqueio';
   if (row.status === 'pendente' || row.status === 'aguardando_confirmacao') return 'pendente';
   if (row.status === 'confirmado') return 'confirmado';
+  if (row.status === 'realizado') return 'realizado';
   if (row.status === 'cancelado') {
     return isAgendaNoShow(row) ? 'noshow' : 'cancelado';
   }
@@ -336,6 +337,7 @@ function isGroupEligible(appointment) {
 function canMergeConsecutive(prev, next) {
   if (!prev || !next) return false;
   if (!isGroupEligible(prev) || !isGroupEligible(next)) return false;
+  if (prev.status === 'realizado' || next.status === 'realizado') return false;
   if (String(prev.pacienteId) !== String(next.pacienteId)) return false;
   if (String(prev.profissionalRoleUserId || prev.roleUserId) !== String(next.profissionalRoleUserId || next.roleUserId)) {
     return false;

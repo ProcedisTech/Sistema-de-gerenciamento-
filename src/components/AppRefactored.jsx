@@ -28,6 +28,7 @@ import { usePapel } from '../hooks/usePapel';
 import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
+import { getGuaranteedNow, getGuaranteedIso, getGuaranteedHHMM } from '../utils/serverTime.js';
 import {
   applyGroupActionAndRefresh,
   excludeInactiveForReagendarGroup,
@@ -64,6 +65,7 @@ import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
+import { registrarAgendaAvulsa, enriquecerAgendaAgendada } from '../utils/registrarAgendaAvulsa.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
@@ -1176,6 +1178,8 @@ function AppRefactoredInner() {
     const cpfKey = cpf != null ? String(cpf).trim() : '';
     const todayIso = toLocalISODate();
     const isSameDayResume =
+      !options.forceNewSession &&
+      consultaModule !== null &&
       cpfKey !== '' &&
       cpfKey === String(selectedPatientCpf || '').trim() &&
       journeyProcedureDateIso === todayIso;
@@ -1189,6 +1193,14 @@ function AppRefactoredInner() {
       if (!options.fromAgendaSlot) {
         setProcedimentosLote([]);
       }
+      // Limpa IDs de procedimentos da sessão anterior para evitar duplicações no prontuário
+      setLoteProcedimentosFeitosIds([]);
+      journeyState.setProcedimentosSessao([]);
+      journeyState.setActiveProcedureIndex(0);
+      journeyState.setNomeProcedimento('');
+      journeyState.setNomeProcedimentoCatalogoId(null);
+      journeyState.setObservacoesExecucao('');
+
       /* Evita ERR_FILE_NOT_FOUND em blob: após reset — canvas ainda apontava para URLs revogadas. */
       revokeBlobUrlIfAny(journeyState.evaluationAnnotatedPhotoUrl);
       journeyState.setEvaluationAnnotatedPhotoUrl(null);
@@ -1234,6 +1246,7 @@ function AppRefactoredInner() {
       journeyState.setNomeProcedimentoCatalogoId(catAgenda);
       journeyState.setNomeProcedimento(nomeAgenda);
       journeyState.setAgendaId(options.agendaId ?? null);
+      journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
       journeyState.setTipoAtendimento(wantsRetorno ? 'retorno' : 'consulta');
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -1271,25 +1284,17 @@ function AppRefactoredInner() {
       setRetornoAvulsoPickerOpen(false);
       const origemId = String(procedimentoFeitoOrigemId || '').trim();
       if (!origemId) return;
-      agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(pacienteAtual), {
-        modoRetorno: true,
+
+      handleStartAttendance(pacienteAtual, {
+        agendaId: null,
+        isAgendaRetorno: true,
+        tipoProcedimentoCodigo: 'retorno',
         procedimentoFeitoOrigemId: origemId,
-        profissionalRoleUserId: roleUserId,
-        onAgendaSaved: (payload) => {
-          handleStartAttendance(pacienteAtual, {
-            agendaId: payload?.agendaId,
-            isAgendaRetorno: true,
-            tipoProcedimentoCodigo: 'retorno',
-            procedimentoFeitoOrigemId: origemId,
-            fromAgendaSlot: true,
-            initialModule: 'hub',
-            data: payload?.dataAgendamento,
-            horaInicio: payload?.horaInicio,
-          });
-        },
+        fromAgendaSlot: false,
+        initialModule: 'hub',
       });
     },
-    [agendaSchedule, buildAgendaPacienteFromRecord, pacienteAtual, roleUserId],
+    [handleStartAttendance, pacienteAtual, roleUserId],
   );
 
   const onSairConsulta = React.useCallback(() => {
@@ -1492,7 +1497,7 @@ function AppRefactoredInner() {
     }
 
     const scheduledTimeLabel = formatClockHHMM(scheduledAt);
-    const now = new Date();
+    const now = getGuaranteedNow();
     const nowTimeLabel = formatClockHHMM(now);
 
     if (diffMin > MARGEM_TECNICA_MIN) {
@@ -2226,9 +2231,10 @@ function AppRefactoredInner() {
       if (!opts.allowCreate) return null;
       if (!paciente?.id || !roleUserId) return null;
 
+      const rawAgendaId = opts.agendaId || journeyState.agendaId;
       const agendaIdValido =
-        journeyState.agendaId && UUID_REGEX_PROC.test(String(journeyState.agendaId))
-          ? journeyState.agendaId
+        rawAgendaId && UUID_REGEX_PROC.test(String(rawAgendaId))
+          ? String(rawAgendaId)
           : null;
       if (!agendaIdValido) return null;
 
@@ -2253,6 +2259,7 @@ function AppRefactoredInner() {
         if (pid != null && pid !== '') {
           const idStr = String(pid);
           setLoteProcedimentosFeitosIds([idStr]);
+          journeyState.updateActiveProcedure({ id: idStr });
           return idStr;
         }
       } catch (e) {
@@ -2260,17 +2267,50 @@ function AppRefactoredInner() {
       }
       return null;
     },
-    [journeyState.agendaId, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds[0]],
+    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds],
   );
 
   const iniciarProcedimentoRetorno = React.useCallback(
-    async (paciente, { isRetoque }) =>
-      getOrCreateProcedimentoFeitoId(paciente, {
+    async (paciente, { isRetoque }) => {
+      const existing = loteProcedimentosFeitosIds[0];
+      if (existing) return String(existing);
+
+      let currentAgendaId = journeyState.agendaId;
+
+      if (!currentAgendaId) {
+        const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || paciente?.cpf || '').trim();
+        const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+        const createdSlot = await registrarAgendaAvulsa({
+          journeyState,
+          paciente,
+          roleUserId,
+          novosIdsValidos: [],
+          attendanceStartTimeIso: startTimeIso,
+        }).catch((err) => {
+          console.warn('[iniciarProcedimentoRetorno] Erro ao registrar agenda avulsa:', err);
+          return null;
+        });
+        if (createdSlot?.id) {
+          currentAgendaId = String(createdSlot.id);
+          journeyState.setAgendaId(currentAgendaId);
+        }
+      }
+
+      return getOrCreateProcedimentoFeitoId(paciente, {
         allowCreate: true,
         isRetoque,
         catalogoId: null,
-      }),
-    [getOrCreateProcedimentoFeitoId],
+        agendaId: currentAgendaId,
+      });
+    },
+    [
+      getOrCreateProcedimentoFeitoId,
+      journeyState,
+      loteProcedimentosFeitosIds,
+      pacienteAtual?.cpf,
+      roleUserId,
+      selectedPatientCpf,
+    ],
   );
 
   const handleConcluirRetorno = React.useCallback(async () => {
@@ -2772,15 +2812,6 @@ function AppRefactoredInner() {
         );
       }
 
-      if (novosIdsValidos.length === 0 && journeyState.agendaId && !isApenasSair) {
-        try {
-          await agendasApi.atualizarStatus(journeyState.agendaId, 'realizado');
-        } catch (e) {
-          console.warn('[encerrarAtendimento] Erro ao marcar agenda como realizado sem procedimento:', e);
-          throw new Error('Falha ao concluir agendamento na recepção. Tente novamente.');
-        }
-      }
-
       // Captura síncrona ANTES do updateProcedureByIndex (que é assíncrono no React)
       // proc.fotosSnapshot lido logo após seria undefined pois o state ainda não teria atualizado
       const activeIndex = journeyState.activeProcedureIndex;
@@ -2836,6 +2867,51 @@ function AppRefactoredInner() {
         setConsultaModule(null);
         onSairConsulta();
       } else {
+        // Sincronização Retroativa ou Enriquecida da Agenda (aguarda conclusão antes da navegação)
+        if (!journeyState.agendaId) {
+          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+          await registrarAgendaAvulsa({
+            journeyState,
+            paciente,
+            roleUserId,
+            novosIdsValidos,
+            attendanceStartTimeIso: startTimeIso,
+          }).catch((err) => {
+            console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
+          });
+          journeyState.setAttendanceStartTime(null, sCpf);
+        } else {
+          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+          const actualEndHh = getGuaranteedHHMM();
+          let actualStartHh = null;
+          if (startTimeIso) {
+            try {
+              const startDt = new Date(startTimeIso);
+              actualStartHh = `${String(startDt.getHours()).padStart(2, '0')}:${String(startDt.getMinutes()).padStart(2, '0')}`;
+            } catch {
+              // ignore parse error
+            }
+          }
+          const updatePayload = {
+            ...(actualStartHh ? { horaInicio: actualStartHh } : {}),
+            horaFim: actualEndHh,
+          };
+          await agendasApi.atualizarStatus(journeyState.agendaId, 'realizado', updatePayload).catch((err) => {
+            console.warn('[encerrarAtendimento] Erro ao atualizar status da agenda:', err);
+          });
+          journeyState.setAttendanceStartTime(null, sCpf);
+
+          if (novosIdsValidos.length > 0) {
+            await enriquecerAgendaAgendada({
+              agendaId: journeyState.agendaId,
+              procedimentosSessao: journeyState.procedimentosSessao,
+              novosIdsValidos,
+            }).catch((err) => {
+              console.warn('[encerrarAtendimento] Erro ao enriquecer observação da agenda:', err);
+            });
+          }
+        }
+
         await persistirEncerramentoConsulta(novosIdsValidos);
         setConsultaModule(null);
         await finalizarAtendimentoNavegacao(sCpf);

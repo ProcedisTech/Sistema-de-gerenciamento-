@@ -66,11 +66,9 @@ import {
 import { isRoleAgendaPreselect } from './agendaRoleConstants.js';
 import { DURACOES_PILL } from '../../utils/agendaDuracaoPills.js';
 import {
-  AVALIACAO_TIPO_CODIGO,
   BLOQUEIO_TIPO_CODIGO,
   CONSULTA_TIPO_CODIGO,
   RETORNO_TIPO_CODIGO,
-  TIPO_ATENDIMENTO_AVALIACAO,
   TIPO_ATENDIMENTO_CONSULTA,
   TIPO_ATENDIMENTO_PROCEDIMENTO,
   TIPO_ATENDIMENTO_RETORNO,
@@ -230,7 +228,7 @@ function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
     horaFimSlot: '',
     duracaoMin: 30,
     observacao: '',
-    tipoAtendimento: TIPO_ATENDIMENTO_PROCEDIMENTO,
+    tipoAtendimento: proc.id ? TIPO_ATENDIMENTO_PROCEDIMENTO : TIPO_ATENDIMENTO_CONSULTA,
     tipoAtendimentoLocked: false,
     agendamentoTipoRetorno: false,
     retornoPaiLocked: false,
@@ -509,38 +507,42 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     };
   }, [appointments, disponibilidades]);
 
-  const loadMonth = useCallback(async (overrideMonthDate) => {
-    if (!authEnabled) {
-      setAppointments([]);
-      setHojeCount(0);
-      setLoading(false);
-      setError('');
-      return;
-    }
-    const targetMonth = overrideMonthDate ?? monthDate;
-    setLoading(true);
-    setError('');
-    try {
-      const { start, end } = monthRangeIso(targetMonth);
-      const rows = await fetchDashboardAppointmentsForRange(start, end);
-      setAppointments(rows);
-
-      const hoje = toLocalDateIso();
-      try {
-        const rawSlots = await agendasApi.byRange(hoje, hoje);
-        const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
-        setHojeCount(dtos.length);
-      } catch {
+  const loadMonth = useCallback(
+    async (overrideMonthDate) => {
+      dispMonthCacheRef.current = {};
+      if (!authEnabled) {
+        setAppointments([]);
         setHojeCount(0);
+        setLoading(false);
+        setError('');
+        return;
       }
-    } catch (e) {
-      setError(e?.message || 'Não foi possível carregar a agenda.');
-      setAppointments([]);
-      setHojeCount(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [authEnabled, monthDate]);
+      const targetMonth = overrideMonthDate ?? monthDate;
+      setLoading(true);
+      setError('');
+      try {
+        const { start, end } = monthRangeIso(targetMonth);
+        const rows = await fetchDashboardAppointmentsForRange(start, end);
+        setAppointments(rows);
+
+        const hoje = toLocalDateIso();
+        try {
+          const rawSlots = await agendasApi.byRange(hoje, hoje);
+          const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
+          setHojeCount(dtos.length);
+        } catch {
+          setHojeCount(0);
+        }
+      } catch (e) {
+        setError(e?.message || 'Não foi possível carregar a agenda.');
+        setAppointments([]);
+        setHojeCount(0);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authEnabled, monthDate]
+  );
 
   useEffect(() => {
     if (skipNextAutoLoadRef.current) {
@@ -2163,7 +2165,6 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     const patient = patientOptions.find((p) => p.id === form.pacienteId);
     const tipo = form.tipoAtendimento || TIPO_ATENDIMENTO_PROCEDIMENTO;
     const isRetorno = tipo === TIPO_ATENDIMENTO_RETORNO;
-    const isAvaliacao = tipo === TIPO_ATENDIMENTO_AVALIACAO;
     const isConsulta = tipo === TIPO_ATENDIMENTO_CONSULTA;
 
     let agendaSavedPayload = null;
@@ -2209,13 +2210,10 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
             statusCodigo: 'AGENDADO',
           };
         }
-      } else if (isAvaliacao || isConsulta) {
-        const codigoTipo = isAvaliacao ? AVALIACAO_TIPO_CODIGO : CONSULTA_TIPO_CODIGO;
-        const tipoId = await resolveTipoProcedimentoIdByCodigo(codigoTipo);
+      } else if (isConsulta) {
+        const tipoId = await resolveTipoProcedimentoIdByCodigo(CONSULTA_TIPO_CODIGO);
         if (!tipoId) {
-          toastError(
-            `Tipo "${isAvaliacao ? 'avaliacao' : 'CONSULTA'}" não encontrado. Verifique se o backend está atualizado.`,
-          );
+          toastError('Tipo "CONSULTA" não encontrado. Verifique se o backend está atualizado.');
           return false;
         }
         const startHh = String(form.horaInicio || '09:00').slice(0, 5);
