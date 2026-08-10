@@ -25,6 +25,8 @@ import { GlobalHeader } from './layout/GlobalHeader.jsx';
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
+import { useAlertasClinicos } from '../hooks/useAlertasClinicos';
+import { AlertasClinicosPanel } from './patients/AlertasClinicosPanel.jsx';
 import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
@@ -3039,6 +3041,12 @@ function AppRefactoredInner() {
   // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
   const isJornadaView = activeView === 'jornada';
   const isConsultaView = activeView === 'consulta';
+  const alertasClinicosConsulta = useAlertasClinicos(pacienteAtual?.id, {
+    sexoPaciente: pacienteAtual?.sexo,
+    onAlergiasResumo: (texto) => {
+      mergePatientById?.(pacienteAtual?.id, (prev) => ({ ...prev, alergias: texto }));
+    },
+  });
   const isAgendaView = activeView === 'agenda';
   const isPaginaPublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
@@ -3634,7 +3642,7 @@ function AppRefactoredInner() {
           </>
         ) : isConsultaView ? (
           <>
-            <header className="sticky top-0 z-10 shrink-0 border-b border-app-border bg-[#f8fbfb] px-4 py-4 shadow-app-card sm:px-6 sm:py-6 md:px-10">
+            <header className="sticky top-0 z-10 flex shrink-0 flex-col gap-3 border-b border-app-border bg-[#f8fbfb] px-4 py-4 shadow-app-card sm:px-6 sm:py-6 md:px-10">
               <ConsultaModuleHeader
                 paciente={pacienteAtual}
                 module={consultaModule}
@@ -3642,6 +3650,14 @@ function AppRefactoredInner() {
                 onBack={consultaModule !== 'hub' ? handleBackToHub : undefined}
                 getPatientInitials={getPatientInitials}
               />
+              {alertasClinicosConsulta.totalCount > 0 ? (
+                <AlertasClinicosPanel
+                  alertasPerfil={alertasClinicosConsulta.alertasPerfil}
+                  alertasAnamnese={alertasClinicosConsulta.alertasAnamnese}
+                  isLoading={alertasClinicosConsulta.isLoading}
+                  variant="hub"
+                />
+              ) : null}
             </header>
             <ConsultaViewShell>
               <div key={consultaModule} className="animate-in fade-in slide-in-from-right-4 duration-200">
@@ -3653,7 +3669,6 @@ function AppRefactoredInner() {
                     onIniciarRetornoAvulso={handleIniciarRetornoAvulso}
                     onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
-                    mergePatientById={mergePatientById}
                     termosSelecionadosIds={journeyState.termosPendentesIds}
                   />
                 ) : null}
