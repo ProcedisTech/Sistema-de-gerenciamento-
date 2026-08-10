@@ -1,6 +1,19 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
-import { ANAMNESE_STYLE, COLOR_CLASSES, SECAO_STYLE } from './alertaSeveridadeStyle.js';
+import { AlertTriangle, ChevronDown, FlaskConical, HeartPulse, Loader2, Pill, UtensilsCrossed } from 'lucide-react';
+
+const SECAO_STYLE = {
+  alergiasPrincipioAtivo: { color: 'purple', Icon: FlaskConical },
+  antecedentes: { color: 'red', Icon: HeartPulse },
+  alergias: { color: 'amber', Icon: UtensilsCrossed },
+  medicamentos: { color: 'blue', Icon: Pill },
+};
+
+const COLOR_CLASSES = {
+  red: 'border-red-200 bg-red-50 text-red-700',
+  amber: 'border-amber-200 bg-amber-50 text-amber-800',
+  blue: 'border-blue-200 bg-blue-50 text-blue-700',
+  purple: 'border-purple-200 bg-purple-50 text-purple-700',
+};
 
 const MAX_SIDEBAR_CHIPS = 6;
 
@@ -25,8 +38,8 @@ function buildChipItems(alertasPerfil, alertasAnamnese) {
       key: item.key,
       label: item.titulo || item.valor,
       categoria: item.valor,
-      color: ANAMNESE_STYLE.color,
-      Icon: ANAMNESE_STYLE.Icon,
+      color: 'red',
+      Icon: AlertTriangle,
     });
   });
   return chips;
