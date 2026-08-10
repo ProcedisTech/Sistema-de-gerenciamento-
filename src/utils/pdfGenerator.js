@@ -108,17 +108,17 @@ export const generateTermoPdf = async ({
   tempDiv.innerHTML = DOMPurify.sanitize(html);
   
   let paragraphs = [];
-  let currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, forceEmpty: false };
-  
+  let currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, isBlockquote: false, isCode: false, forceEmpty: false };
+
   const flushLine = () => {
     const hasText = currentLine.segments.some(s => s.text.trim().length > 0);
     if (hasText || currentLine.forceEmpty) {
       paragraphs.push({ ...currentLine });
     }
-    currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, forceEmpty: false };
+    currentLine = { segments: [], align: 'left', indent: 0, isHeading: false, isBlockquote: false, isCode: false, forceEmpty: false };
   };
 
-  const traverse = (node, indentLevel = 0, align = 'left', format = { isBold: false, isItalic: false }, listContext = { type: null, index: 0 }) => {
+  const traverse = (node, indentLevel = 0, align = 'left', format = { isBold: false, isItalic: false, isUnderline: false, isStrike: false }, listContext = { type: null, index: 0 }) => {
     if (node.nodeType === 3) {
       let text = node.nodeValue.replace(/\n/g, ' ').replace(/\u00A0/g, ' ').replace(/&nbsp;/g, ' ');
       if (text.trim() || text.includes(' ')) {
@@ -127,7 +127,7 @@ export const generateTermoPdf = async ({
             if (lastSeg.text.endsWith(' ')) return;
             text = ' ';
          }
-         currentLine.segments.push({ text, isBold: format.isBold, isItalic: format.isItalic });
+         currentLine.segments.push({ text, isBold: format.isBold, isItalic: format.isItalic, isUnderline: format.isUnderline, isStrike: format.isStrike });
       }
       return;
     }
@@ -147,18 +147,21 @@ export const generateTermoPdf = async ({
       }
       
       const totalIndent = indentLevel + extraIndent;
-      const isBlock = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'].includes(tag);
-      
+      const isBlock = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre'].includes(tag);
+
       if (isBlock && currentLine.segments.length > 0) flushLine();
-      
+
       currentLine.align = currentAlign;
       currentLine.indent = totalIndent;
-      if (['h1', 'h2', 'h3'].includes(tag)) currentLine.isHeading = true;
-      
+      if (/^h[1-6]$/.test(tag)) currentLine.isHeading = true;
+      if (tag === 'blockquote') { currentLine.isBlockquote = true; currentLine.indent = totalIndent + 1; }
+      if (tag === 'pre') currentLine.isCode = true;
+
       const nextFormat = { ...format };
       if (['strong', 'b'].includes(tag)) nextFormat.isBold = true;
       if (['em', 'i'].includes(tag)) nextFormat.isItalic = true;
       if (tag === 'u') nextFormat.isUnderline = true;
+      if (['s', 'strike', 'del'].includes(tag)) nextFormat.isStrike = true;
       
       if (tag === 'br') {
         currentLine.forceEmpty = true;
@@ -203,6 +206,8 @@ export const generateTermoPdf = async ({
   }
 
   doc.setTextColor(0, 0, 0);
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.2);
 
   finalParagraphs.forEach(p => {
     const indentOffset = p.indent * 8;
@@ -210,10 +215,11 @@ export const generateTermoPdf = async ({
     if (availableWidth < 50) availableWidth = 50;
     
     const fullText = p.segments.map(s => s.text).join('');
-    
-    doc.setFont('helvetica', p.isHeading ? 'bold' : 'normal');
-    doc.setFontSize(p.isHeading ? 13 : 11);
-    
+    const fontFamily = p.isCode ? 'courier' : 'helvetica';
+
+    doc.setFont(fontFamily, p.isHeading ? 'bold' : (p.isBlockquote ? 'italic' : 'normal'));
+    doc.setFontSize(p.isHeading ? 13 : (p.isCode ? 10 : 11));
+
     const wrappedLines = doc.splitTextToSize(fullText, availableWidth);
     
     let globalCharIndex = 0;
@@ -229,7 +235,31 @@ export const generateTermoPdf = async ({
       } else if (p.align === 'right') {
         xPos = pageWidth - margin - lineWidth;
       }
-      
+
+      let extraSpacePerGap = 0;
+      if (p.align === 'justify') {
+        const isLastWrappedLine = lineIdx === wrappedLines.length - 1;
+        const spaceCount = (wLine.match(/ /g) || []).length;
+        const gap = availableWidth - lineWidth;
+        if (!isLastWrappedLine && spaceCount > 0 && gap > 0) {
+          extraSpacePerGap = gap / spaceCount;
+        }
+      }
+
+      const underlineOffset = p.isHeading ? 1.2 : 0.9;
+      const strikeOffset = p.isHeading ? 4.5 : 3.3;
+
+      const drawJustifiedChunk = (text, xStart) => {
+        let cx = xStart;
+        text.split(/( )/).forEach(tok => {
+          if (tok === '') return;
+          doc.text(tok, cx, y);
+          cx += doc.getTextWidth(tok);
+          if (tok === ' ') cx += extraSpacePerGap;
+        });
+        return cx;
+      };
+
       if (wLine.trim() || p.forceEmpty) {
         let lineCharsRemaining = wLine.length;
         
@@ -251,10 +281,18 @@ export const generateTermoPdf = async ({
           const charsFromSeg = Math.min(lineCharsRemaining, seg.text.length - offsetInSeg);
           const textToDraw = seg.text.substr(offsetInSeg, charsFromSeg);
           
-          doc.setFont('helvetica', seg.isBold || p.isHeading ? 'bold' : (seg.isItalic ? 'italic' : 'normal'));
-          doc.text(textToDraw, xPos, y);
-          xPos += doc.getTextWidth(textToDraw);
-          
+          doc.setFont(fontFamily, seg.isBold || p.isHeading ? 'bold' : ((seg.isItalic || p.isBlockquote) ? 'italic' : 'normal'));
+
+          const xPosStart = xPos;
+          if (extraSpacePerGap > 0) {
+            xPos = drawJustifiedChunk(textToDraw, xPos);
+          } else {
+            doc.text(textToDraw, xPos, y);
+            xPos += doc.getTextWidth(textToDraw);
+          }
+          if (seg.isUnderline) doc.line(xPosStart, y + underlineOffset, xPos, y + underlineOffset);
+          if (seg.isStrike) doc.line(xPosStart, y - strikeOffset, xPos, y - strikeOffset);
+
           globalCharIndex += charsFromSeg;
           lineCharsRemaining -= charsFromSeg;
         }
@@ -272,14 +310,17 @@ export const generateTermoPdf = async ({
     });
   });
 
-  y += 10;
-  checkPage(50);
-
   // Assinaturas
   const sigWidth = 80;
   const sigHeight = 35;
   const gap = 15;
-  
+
+  const footerNeeded = Boolean(metadados?.dataHora || metadados?.ipAddress);
+  const sigBlockHeight = sigHeight + 5 + 15 + (footerNeeded ? 8 : 0); // assinaturas + labels + rodapé
+
+  y += 10;
+  checkPage(sigBlockHeight);
+
   if (assinaturaPaciente && assinaturaPaciente.startsWith('data:image')) {
     try { doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight); } catch { /* ignore */ }
   } else if (metadados?.recusado || assinaturaPaciente === 'RECUSADO') {
