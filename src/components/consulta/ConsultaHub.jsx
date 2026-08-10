@@ -1,9 +1,7 @@
 import React from 'react';
 import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
-import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
 import { useTermosPendentes } from '../../hooks/useTermosPendentes';
-import { AlertasClinicosPanel } from '../patients/AlertasClinicosPanel.jsx';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -79,18 +77,11 @@ export function ConsultaHub({
   onIniciarRetornoAvulso,
   onEncerrarConsulta,
   getPatientInitials,
-  mergePatientById,
   termosSelecionadosIds,
 }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
   const cards = buildModuleCards(isRetorno);
-  const alertasClinicos = useAlertasClinicos(paciente?.id, {
-    sexoPaciente: paciente?.sexo,
-    onAlergiasResumo: (texto) => {
-      mergePatientById?.(paciente?.id, (prev) => ({ ...prev, alergias: texto }));
-    },
-  });
   const termosPendentes = useTermosPendentes(paciente?.id, { termosSelecionadosIds });
 
   return (
@@ -126,16 +117,6 @@ export function ConsultaHub({
           </button>
         ) : null}
       </div>
-
-      {alertasClinicos.totalCount > 0 ? (
-        <AlertasClinicosPanel
-          alertasPerfil={alertasClinicos.alertasPerfil}
-          alertasAnamnese={alertasClinicos.alertasAnamnese}
-          alertasAlergia={alertasClinicos.alertasAlergia}
-          isLoading={alertasClinicos.isLoading}
-          variant="hub"
-        />
-      ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {

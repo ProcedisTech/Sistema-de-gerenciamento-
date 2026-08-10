@@ -3,9 +3,13 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle,
+  FlaskConical,
+  HeartPulse,
   Loader2,
+  Pill,
   RefreshCw,
   Shield,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { classifyPerfilError } from '../../hooks/usePerfilClinico';
 import { CatalogoChipSection } from './CatalogoChipSection';
@@ -182,66 +186,80 @@ export function PerfilClinicoBloco({
       )}
 
       <div className="flex flex-col gap-5">
-        <section className="rounded-lg border-l-[3px] border-l-red-400 bg-red-50/40 py-1 pl-3 pr-1">
+        <section className="rounded-lg border-l-[3px] border-l-amber-400 bg-amber-50/40 py-1 pl-3 pr-1">
           <div className="mb-3 flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-red-700/80">Alergias</h4>
+            <UtensilsCrossed className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-amber-800/80">Alergias alimentares</h4>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:gap-y-4">
-            <CatalogoChipSection
-              titulo="Alergias alimentares"
-              selected={state.alergias}
-              onAdd={(item) => addItem('alergias', item)}
-              onRemove={(id) => removeItem('alergias', id)}
-              onUpdateObservacao={(id, texto) => updateObservacao('alergias', id, texto)}
-              searchFn={buscarAlimentos}
-              placeholder="Buscar alimento (ex.: amendoim, glúten…)"
-              readOnly={readOnly}
-            />
-
-            <CatalogoChipSection
-              titulo="Alergias a princípios ativos"
-              selected={state.alergiasPrincipioAtivo}
-              onAdd={(item) => addItem('alergiasPrincipioAtivo', item)}
-              onRemove={(id) => removeItem('alergiasPrincipioAtivo', id)}
-              onUpdateObservacao={(id, texto) => updateObservacao('alergiasPrincipioAtivo', id, texto)}
-              searchFn={buscarPrincipiosAtivos}
-              placeholder="Buscar princípio ativo (ex.: dipirona, penicilina…)"
-              readOnly={readOnly}
-            />
-          </div>
+          <CatalogoChipSection
+            titulo="Alergias alimentares"
+            selected={state.alergias}
+            onAdd={(item) => addItem('alergias', item)}
+            onRemove={(id) => removeItem('alergias', id)}
+            onUpdateObservacao={(id, texto) => updateObservacao('alergias', id, texto)}
+            searchFn={buscarAlimentos}
+            placeholder="Buscar alimento (ex.: amendoim, glúten…)"
+            readOnly={readOnly}
+          />
         </section>
 
-        <section className="border-l-[3px] border-l-slate-200 pl-3 pr-1">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6 md:gap-y-4">
-            <CatalogoChipSection
-              titulo="Medicamentos em uso"
-              selected={state.medicamentosEmUso}
-              onAdd={(item) => addItem('medicamentosEmUso', item)}
-              onRemove={(id) => removeItem('medicamentosEmUso', id)}
-              onUpdateObservacao={(id, texto) => updateObservacao('medicamentosEmUso', id, texto)}
-              searchFn={buscarMedicamentos}
-              placeholder="Buscar medicamento…"
-              readOnly={readOnly}
-              renderChipExtra={readOnly ? undefined : (item, _onChange) => (
-                <MedicamentoExtra
-                  item={item}
-                  onChange={(fields) => updateMedicamentoExtra(item.id, fields)}
-                />
-              )}
-            />
-
-            <CatalogoChipSection
-              titulo="Antecedentes pessoais"
-              selected={state.antecedentes}
-              onAdd={(item) => addItem('antecedentes', item)}
-              onRemove={(id) => removeItem('antecedentes', id)}
-              onUpdateObservacao={(id, texto) => updateObservacao('antecedentes', id, texto)}
-              searchFn={buscarAntecedentes}
-              placeholder="Buscar antecedente (ex.: hipertensão, diabetes…)"
-              readOnly={readOnly}
-            />
+        <section className="rounded-lg border-l-[3px] border-l-purple-400 bg-purple-50/40 py-1 pl-3 pr-1">
+          <div className="mb-3 flex items-center gap-1.5">
+            <FlaskConical className="h-3.5 w-3.5 shrink-0 text-purple-500" aria-hidden />
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-purple-700/80">
+              Alergias a princípios ativos
+            </h4>
           </div>
+          <CatalogoChipSection
+            titulo="Alergias a princípios ativos"
+            selected={state.alergiasPrincipioAtivo}
+            onAdd={(item) => addItem('alergiasPrincipioAtivo', item)}
+            onRemove={(id) => removeItem('alergiasPrincipioAtivo', id)}
+            onUpdateObservacao={(id, texto) => updateObservacao('alergiasPrincipioAtivo', id, texto)}
+            searchFn={buscarPrincipiosAtivos}
+            placeholder="Buscar princípio ativo (ex.: dipirona, penicilina…)"
+            readOnly={readOnly}
+          />
+        </section>
+
+        <section className="rounded-lg border-l-[3px] border-l-blue-400 bg-blue-50/40 py-1 pl-3 pr-1">
+          <div className="mb-3 flex items-center gap-1.5">
+            <Pill className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden />
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-blue-700/80">Medicamentos em uso</h4>
+          </div>
+          <CatalogoChipSection
+            titulo="Medicamentos em uso"
+            selected={state.medicamentosEmUso}
+            onAdd={(item) => addItem('medicamentosEmUso', item)}
+            onRemove={(id) => removeItem('medicamentosEmUso', id)}
+            onUpdateObservacao={(id, texto) => updateObservacao('medicamentosEmUso', id, texto)}
+            searchFn={buscarMedicamentos}
+            placeholder="Buscar medicamento…"
+            readOnly={readOnly}
+            renderChipExtra={readOnly ? undefined : (item, _onChange) => (
+              <MedicamentoExtra
+                item={item}
+                onChange={(fields) => updateMedicamentoExtra(item.id, fields)}
+              />
+            )}
+          />
+        </section>
+
+        <section className="rounded-lg border-l-[3px] border-l-red-400 bg-red-50/40 py-1 pl-3 pr-1">
+          <div className="mb-3 flex items-center gap-1.5">
+            <HeartPulse className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-red-700/80">Antecedentes</h4>
+          </div>
+          <CatalogoChipSection
+            titulo="Antecedentes pessoais"
+            selected={state.antecedentes}
+            onAdd={(item) => addItem('antecedentes', item)}
+            onRemove={(id) => removeItem('antecedentes', id)}
+            onUpdateObservacao={(id, texto) => updateObservacao('antecedentes', id, texto)}
+            searchFn={buscarAntecedentes}
+            placeholder="Buscar antecedente (ex.: hipertensão, diabetes…)"
+            readOnly={readOnly}
+          />
         </section>
       </div>
     </div>
