@@ -119,8 +119,8 @@ import {
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
 import { usePerfilClinico, mapGetToState as mapPerfilClinicoResponseToState } from '../../hooks/usePerfilClinico';
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
-import { AlertasClinicosPanel } from './AlertasClinicosPanel.jsx';
-import { ANAMNESE_STYLE, COLOR_CLASSES, SECAO_STYLE } from './alertaSeveridadeStyle.js';
+import { AlertasClinicosPanel, AlertasGroupCards } from './AlertasClinicosPanel.jsx';
+import { buildGroupedChips } from './alertaGrouping.js';
 
 function resolveProcedimentoFeitoIdForUpload(sess, categoria) {
   const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
@@ -3456,70 +3456,11 @@ export function PatientProfileView({
             <p className="mt-1 text-[12px] font-medium text-[#64748b]">
               Itens do perfil clínico e perguntas em alerta nas fichas de anamnese.
             </p>
-            <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 [-webkit-overflow-scrolling:touch]">
-              {alertasPerfil.length > 0 && (
-                <>
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Perfil clínico</p>
-                  {alertasPerfil.map((row) => {
-                    const style = SECAO_STYLE[row.secao] ?? SECAO_STYLE.antecedentes;
-                    const colorClasses = COLOR_CLASSES[style.color];
-                    const Icon = style.Icon;
-                    return (
-                      <div
-                        key={row.key}
-                        className={`rounded-xl border-[2px] p-4 shadow-sm ${colorClasses}`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <Icon className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wide">{row.titulo}</p>
-                            <p className="mt-1 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
-                              {row.valor}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-              {alertasAnamnese.length > 0 && (
-                <>
-                  {alertasPerfil.length > 0 && (
-                    <p className="pt-1 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Anamnese</p>
-                  )}
-                  {alertasAnamnese.map((row) => {
-                    const colorClasses = COLOR_CLASSES[ANAMNESE_STYLE.color];
-                    const Icon = ANAMNESE_STYLE.Icon;
-                    return (
-                      <div
-                        key={row.key}
-                        className={`rounded-xl border-[2px] p-4 shadow-sm ${colorClasses}`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <Icon className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] font-bold leading-snug">{row.titulo}</p>
-                            <p className="mt-2 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
-                              {row.valor}
-                            </p>
-                            {(row.fichaNome || row.dataHora) && (
-                              <p className="mt-2 text-[11px] font-medium text-[#64748b]">
-                                {row.fichaNome || 'Anamnese'}
-                                {row.dataHora
-                                  ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
-                                    timeZone: 'America/Sao_Paulo',
-                                  })}`
-                                  : ''}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 [-webkit-overflow-scrolling:touch]">
+              <AlertasGroupCards
+                groups={buildGroupedChips(alertasPerfil, alertasAnamnese)}
+                columns="grid-cols-1 sm:grid-cols-2"
+              />
             </div>
             <button
               type="button"
