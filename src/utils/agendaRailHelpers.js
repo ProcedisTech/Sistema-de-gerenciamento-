@@ -1,7 +1,7 @@
 import { getAppointmentStatusBucket, sortAppointmentsByTime } from './agendaDayInsights.js';
 
-export const TIMELINE_START_MIN = 8 * 60;
-export const TIMELINE_END_MIN = 20 * 60;
+export const TIMELINE_START_MIN = 6 * 60;
+export const TIMELINE_END_MIN = 22 * 60;
 export const TIMELINE_SPAN_MIN = TIMELINE_END_MIN - TIMELINE_START_MIN;
 
 const TERMINAL_STATUSES = new Set(['cancelado', 'realizado', 'reagendado']);

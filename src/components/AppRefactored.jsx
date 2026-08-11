@@ -67,7 +67,7 @@ import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
-import { registrarAgendaAvulsa, enriquecerAgendaAgendada } from '../utils/registrarAgendaAvulsa.js';
+import { registrarAgendaAvulsa, enriquecerAgendaAgendada, registrarRetornoFuturo } from '../utils/registrarAgendaAvulsa.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
@@ -771,6 +771,7 @@ function AppRefactoredInner() {
     setProcedimentosLote([]);
     setLoteProcedimentosFeitosIds([]);
     journeyState.setAgendaId(null);
+    journeyState.setAttendanceStartTime(null, selectedPatientCpf);
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
@@ -1248,9 +1249,7 @@ function AppRefactoredInner() {
       journeyState.setNomeProcedimentoCatalogoId(catAgenda);
       journeyState.setNomeProcedimento(nomeAgenda);
       journeyState.setAgendaId(options.agendaId ?? null);
-      if (!journeyState.getAttendanceStartTime(cpfKey)) {
-        journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
-      }
+      journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
       journeyState.setTipoAtendimento(wantsRetorno ? 'retorno' : 'consulta');
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -1262,9 +1261,7 @@ function AppRefactoredInner() {
     } else if (wantsRetorno) {
       /* Same-day: preserva fotos/canvas, mas arma modo retorno (C1 avulso / C2 agenda). */
       journeyState.setAgendaId(options.agendaId ?? null);
-      if (!journeyState.getAttendanceStartTime(cpfKey)) {
-        journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
-      }
+      journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
       journeyState.setTipoAtendimento('retorno');
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -2887,7 +2884,9 @@ function AppRefactoredInner() {
         onSairConsulta();
       } else {
         // Sincronização Retroativa ou Enriquecida da Agenda (aguarda conclusão antes da navegação)
-        if (!journeyState.agendaId) {
+        let targetAgendaId = journeyState.agendaId;
+
+        if (!targetAgendaId) {
           const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
           await registrarAgendaAvulsa({
             journeyState,
@@ -2923,23 +2922,49 @@ function AppRefactoredInner() {
             ...(actualStartHh ? { horaInicio: actualStartHh } : {}),
             horaFim: actualEndHh,
           };
-          await agendasApi.atualizarStatus(journeyState.agendaId, 'realizado', updatePayload).catch((err) => {
-            console.warn('[encerrarAtendimento] Erro ao atualizar status da agenda:', err);
-          });
-          journeyState.setAttendanceStartTime(null, sCpf);
 
-          if (novosIdsValidos.length > 0) {
-            await enriquecerAgendaAgendada({
-              agendaId: journeyState.agendaId,
-              procedimentosSessao: journeyState.procedimentosSessao,
-              novosIdsValidos,
-            }).catch((err) => {
-              console.warn('[encerrarAtendimento] Erro ao enriquecer observação da agenda:', err);
+          const agendaIdsToUpdate = new Set();
+          if (targetAgendaId) agendaIdsToUpdate.add(String(targetAgendaId));
+          (journeyState.procedimentosSessao || []).forEach((p) => {
+            if (p?.agendaId) agendaIdsToUpdate.add(String(p.agendaId));
+          });
+
+          for (const aId of agendaIdsToUpdate) {
+            await agendasApi.atualizarStatus(aId, 'realizado', updatePayload).catch((err) => {
+              console.warn('[encerrarAtendimento] Erro ao atualizar status da agenda:', err);
             });
+            if (novosIdsValidos.length > 0) {
+              await enriquecerAgendaAgendada({
+                agendaId: aId,
+                procedimentosSessao: journeyState.procedimentosSessao,
+                novosIdsValidos,
+              }).catch((err) => {
+                console.warn('[encerrarAtendimento] Erro ao enriquecer observação da agenda:', err);
+              });
+            }
           }
+          journeyState.setAttendanceStartTime(null, sCpf);
         }
 
-        await persistirEncerramentoConsulta(novosIdsValidos);
+        const { validIso: returnIso } = evaluateProximoRetornoStep5(
+          journeyProcedureDateIso,
+          journeyState.proximoRetornoDisplay
+        );
+
+        await Promise.all([
+          persistirEncerramentoConsulta(novosIdsValidos),
+          returnIso && paciente && roleUserId
+            ? registrarRetornoFuturo({
+                paciente,
+                roleUserId,
+                dataRetornoIso: returnIso,
+                procedimentoOrigemId: novosIdsValidos[0] || null,
+              }).catch((err) => {
+                console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
+              })
+            : Promise.resolve(),
+        ]);
+
         setConsultaModule(null);
         await finalizarAtendimentoNavegacao(sCpf);
       }

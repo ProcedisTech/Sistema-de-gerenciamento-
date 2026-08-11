@@ -37,6 +37,7 @@ export function AgendaAppointmentCardRich({
   onCancelar,
   onEnviarAnamnese,
   onRemoverBloqueio,
+  onOpenSlotDetail,
   submittingRemoverBloqueioId,
 }) {
   const { canStartAnamnese } = usePapel();
@@ -49,7 +50,10 @@ export function AgendaAppointmentCardRich({
 
     return (
       <article
-        className={`relative min-w-0 overflow-hidden rounded-xl border border-ink-200 transition-all duration-150 ${
+        onClick={(e) => {
+          if (!e.target.closest('button')) onOpenSlotDetail?.(appointment);
+        }}
+        className={`relative min-w-0 cursor-pointer overflow-hidden rounded-xl border border-ink-200 transition-all duration-150 ${
           highlighted ? 'border-vivid-teal-500 shadow-[0_0_0_3px_oklch(0.66_0.165_172_/_0.15)]' : ''
         }`}
         style={BLOQUEIO_HATCH_BG}
@@ -106,7 +110,10 @@ export function AgendaAppointmentCardRich({
 
   return (
     <article
-      className={`relative grid min-w-0 grid-cols-[56px_1fr_auto] gap-2.5 overflow-hidden rounded-xl border border-ink-200 bg-white p-3 pr-3.5 transition-all duration-150 hover:-translate-y-px hover:border-ink-300 hover:shadow-agenda-sm ${
+      onClick={(e) => {
+        if (!e.target.closest('button')) onOpenSlotDetail?.(appointment);
+      }}
+      className={`relative grid min-w-0 cursor-pointer grid-cols-[56px_1fr_auto] gap-2.5 overflow-hidden rounded-xl border border-ink-200 bg-white p-3 pr-3.5 transition-all duration-150 hover:-translate-y-px hover:border-ink-300 hover:shadow-agenda-sm ${
         highlighted ? 'border-vivid-teal-500 shadow-[0_0_0_3px_oklch(0.66_0.165_172_/_0.15)]' : ''
       }`}
     >

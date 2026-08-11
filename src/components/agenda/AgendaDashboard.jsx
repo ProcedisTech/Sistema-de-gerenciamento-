@@ -490,10 +490,18 @@ export function AgendaDashboard({
 
   const resolveWeekTarget = React.useCallback(
     (appt) => {
-      const dayRows = agenda.filteredWeekGridAppointments.filter(
-        (r) => toDateKey(r.data) === toDateKey(appt.data),
+      if (!appt) return null;
+      if (appt.kind === 'group' || appt.kind === 'single') return appt;
+      const targetDate = toDateKey(appt.data || appt.dataAgendamento || appt.date);
+      const dayRows = (agenda.filteredWeekGridAppointments || []).filter(
+        (r) => toDateKey(r.data) === targetDate,
       );
-      return resolveActionTargetFromDayAppointments(dayRows, appt);
+      if (dayRows.length > 0) {
+        const resolved = resolveActionTargetFromDayAppointments(dayRows, appt);
+        if (resolved) return resolved;
+      }
+      if (Array.isArray(appt.appointments)) return { kind: 'group', ...appt };
+      return { kind: 'single', appointment: appt };
     },
     [agenda.filteredWeekGridAppointments],
   );
@@ -652,6 +660,7 @@ export function AgendaDashboard({
     onReagendar: handleRailReagendar,
     onCancelar: handleRailCancelar,
     onRemoverBloqueio: agenda.handleRemoverBloqueio,
+    onOpenSlotDetail: onOpenWeekSlotDetail,
     submittingRemoverBloqueioId: agenda.submittingRemoverBloqueioId,
   };
 
