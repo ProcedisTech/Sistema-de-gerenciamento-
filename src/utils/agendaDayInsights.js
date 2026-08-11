@@ -13,7 +13,7 @@ export const DOMINANT_STATUS_TIE_PRIORITY = ['pendente', 'confirmado', 'realizad
 const LOADBAR_BUCKETS = ['confirmado', 'pendente', 'realizado', 'cancelado', 'noshow'];
 
 const ACTIVE_STATUSES = new Set(['confirmado', 'pendente', 'aguardando_confirmacao']);
-const TERMINAL_STATUSES = new Set(['cancelado', 'reagendado']);
+const TERMINAL_STATUSES = new Set(['cancelado', 'reagendado', 'realizado']);
 
 function normalizeHm(value) {
   const s = String(value || '00:00').trim();
@@ -181,7 +181,7 @@ export function filterAppointmentsByStatusFilters(appointments, filters) {
 
 /** Contagens do mês para pills dos chips (sem aplicar filtro ativo). */
 export function countAppointmentsByStatusBucket(appointments) {
-  const counts = { confirmado: 0, pendente: 0, cancelado: 0, noshow: 0, all: 0 };
+  const counts = { confirmado: 0, pendente: 0, realizado: 0, cancelado: 0, noshow: 0, all: 0 };
   for (const item of appointments || []) {
     if (item?.tipo === 'bloqueio') continue;
     const bucket = getAppointmentStatusBucket(item);

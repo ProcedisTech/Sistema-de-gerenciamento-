@@ -2629,6 +2629,7 @@ function AppRefactoredInner() {
   const persistirEncerramentoConsulta = React.useCallback(
     async (pidsInput) => {
       const ids = Array.isArray(pidsInput) ? pidsInput : [pidsInput].filter(Boolean);
+      if (ids.length === 0) return;
 
       if (assinaturasRealizadasIds.length > 0 && ids.length > 0) {
         for (const pid of ids) {
@@ -2775,17 +2776,21 @@ function AppRefactoredInner() {
             }
           } else {
             const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-            const body = {
-              nome: proc.nomeProcedimento || proc.procedimentoNome,
-              roleUserId,
-              observacao: proc.observacoesExecucao || null,
-              agendaId: proc.agendaId || journeyState.agendaId,
-              catalogoProcedimentoSaudeId: catId,
-              ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
-            };
-            payloadLote.procedimentos.push(body);
-            indexParaCriar.push(i);
-            todosIds.push(null);
+            const isRetorno = proc.isAgendaRetorno || proc.tipoAtendimento === 'retorno';
+            // Apenas envia ao lote se possuir um catálogo selecionado OU for atendimento de retorno
+            if (catId || isRetorno) {
+              const body = {
+                nome: (proc.nomeProcedimento || proc.procedimentoNome || '').trim(),
+                roleUserId,
+                observacao: proc.observacoesExecucao || null,
+                agendaId: proc.agendaId || journeyState.agendaId,
+                catalogoProcedimentoSaudeId: catId,
+                ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
+              };
+              payloadLote.procedimentos.push(body);
+              indexParaCriar.push(i);
+              todosIds.push(null);
+            }
           }
         }
 
@@ -2887,16 +2892,18 @@ function AppRefactoredInner() {
         let targetAgendaId = journeyState.agendaId;
 
         if (!targetAgendaId) {
-          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-          await registrarAgendaAvulsa({
-            journeyState,
-            paciente,
-            roleUserId,
-            novosIdsValidos,
-            attendanceStartTimeIso: startTimeIso,
-          }).catch((err) => {
-            console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
-          });
+          if (novosIdsValidos.length > 0) {
+            const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+            await registrarAgendaAvulsa({
+              journeyState,
+              paciente,
+              roleUserId,
+              novosIdsValidos,
+              attendanceStartTimeIso: startTimeIso,
+            }).catch((err) => {
+              console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
+            });
+          }
           journeyState.setAttendanceStartTime(null, sCpf);
         } else {
           const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
