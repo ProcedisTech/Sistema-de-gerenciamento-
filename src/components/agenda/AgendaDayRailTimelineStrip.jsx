@@ -6,7 +6,7 @@ import {
   TIMELINE_SPAN_MIN,
 } from '../../utils/agendaRailHelpers.js';
 
-const HOUR_LABELS = [8, 10, 12, 14, 16, 18, 20];
+const HOUR_LABELS = [6, 8, 10, 12, 14, 16, 18, 20, 22];
 
 function AgendaDayRailTimelineStripInner({
   appointments,

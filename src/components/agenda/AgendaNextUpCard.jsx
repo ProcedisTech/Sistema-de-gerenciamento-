@@ -19,6 +19,7 @@ export function AgendaNextUpCard({
   onEnviarAnamnese,
   onReagendar,
   onCancelar,
+  onOpenSlotDetail,
 }) {
   const { canStartAnamnese } = usePapel();
   if (!appointment) return null;
@@ -27,7 +28,12 @@ export function AgendaNextUpCard({
   const actions = getRailCardActions(appointment.status, canStartAnamnese);
 
   return (
-    <article className="relative mb-3 grid grid-cols-[1fr_auto] gap-3 rounded-2xl border-2 border-vivid-teal-500 bg-white p-4 shadow-agenda-glow">
+    <article
+      onClick={(e) => {
+        if (!e.target.closest('button')) onOpenSlotDetail?.(appointment);
+      }}
+      className="relative mb-3 cursor-pointer grid grid-cols-[1fr_auto] gap-3 rounded-2xl border-2 border-vivid-teal-500 bg-white p-4 shadow-agenda-glow"
+    >
       <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1.5 rounded-full bg-vivid-teal-600 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
         <span className="h-[5px] w-[5px] animate-agenda-live-pulse rounded-full bg-white" aria-hidden />
         Próximo · {formatHmDisplay(appointment.horaInicio)}

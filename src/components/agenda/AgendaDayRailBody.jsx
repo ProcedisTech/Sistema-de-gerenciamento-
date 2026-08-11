@@ -51,6 +51,7 @@ export function AgendaDayRailBody({
   onReagendar,
   onCancelar,
   onRemoverBloqueio,
+  onOpenSlotDetail,
   onNovoClick,
   submittingRemoverBloqueioId,
 }) {
@@ -105,6 +106,7 @@ export function AgendaDayRailBody({
           onEnviarAnamnese={onEnviarAnamnese}
           onReagendar={onReagendar}
           onCancelar={onCancelar}
+          onOpenSlotDetail={onOpenSlotDetail}
         />
       ) : null}
 
@@ -160,6 +162,7 @@ export function AgendaDayRailBody({
                         onReagendar={onReagendar}
                         onCancelar={onCancelar}
                         onRemoverBloqueio={onRemoverBloqueio}
+                        onOpenSlotDetail={onOpenSlotDetail}
                         submittingRemoverBloqueioId={submittingRemoverBloqueioId}
                       />
                     </div>

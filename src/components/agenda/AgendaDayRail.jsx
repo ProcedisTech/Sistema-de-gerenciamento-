@@ -28,6 +28,7 @@ export function AgendaDayRail({
   onReagendar,
   onCancelar,
   onRemoverBloqueio,
+  onOpenSlotDetail,
   submittingRemoverBloqueioId,
 }) {
   const now = useTickInterval(60_000);
@@ -105,6 +106,7 @@ export function AgendaDayRail({
         onReagendar={onReagendar}
         onCancelar={onCancelar}
         onRemoverBloqueio={onRemoverBloqueio}
+        onOpenSlotDetail={onOpenSlotDetail}
         onNovoClick={onNovoClick}
         submittingRemoverBloqueioId={submittingRemoverBloqueioId}
       />

@@ -18,7 +18,7 @@ function addMinutesToHHMM(hhmm, minutesToAdd) {
 
 /** Dedução do tipo de atendimento avulso. Hierarquia: Retorno -> Procedimento -> Consulta */
 export function deduzirTipoAtendimentoAvulso(journeyState, novosIdsValidos = []) {
-  if (journeyState?.tipoAtendimento === 'retorno') {
+  if (journeyState?.tipoAtendimento === 'retorno' || journeyState?.isAgendaRetorno) {
     return {
       codigo: RETORNO_TIPO_CODIGO,
       catalogoSaudeId: null,
@@ -41,6 +41,45 @@ export function deduzirTipoAtendimentoAvulso(journeyState, novosIdsValidos = [])
     catalogoSaudeId: null,
     procedimentoFeitoOrigemId: null,
   };
+}
+
+/**
+ * Agenda um retorno futuro na agenda para a data informada (YYYY-MM-DD).
+ */
+export async function registrarRetornoFuturo({
+  paciente,
+  roleUserId,
+  dataRetornoIso,
+  procedimentoOrigemId = null,
+}) {
+  try {
+    const pacienteId = paciente?.id;
+    if (!pacienteId || !roleUserId || !dataRetornoIso) return null;
+
+    const tipoProcedimentoId = await resolveTipoProcedimentoIdByCodigo(RETORNO_TIPO_CODIGO);
+    if (!tipoProcedimentoId) {
+      console.warn(`[registrarRetornoFuturo] Tipo procedimento id não encontrado para retorno`);
+      return null;
+    }
+
+    const body = {
+      dataAgendamento: dataRetornoIso,
+      horaInicio: '09:00',
+      horaFim: '09:30',
+      pacienteId,
+      profissionalRoleUserId: roleUserId,
+      tipoProcedimentoId,
+      statusCodigo: 'confirmado',
+      ...(procedimentoOrigemId ? { procedimentoFeitoOrigemId: procedimentoOrigemId } : {}),
+      observacao: 'Retorno agendado automaticamente pós-procedimento',
+    };
+
+    const created = await agendasApi.create(body, { forcar: true });
+    return created;
+  } catch (err) {
+    console.warn('[registrarRetornoFuturo] Erro ao agendar retorno futuro (não-bloqueante):', err);
+    return null;
+  }
 }
 
 /**

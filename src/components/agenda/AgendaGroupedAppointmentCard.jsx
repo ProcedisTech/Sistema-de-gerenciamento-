@@ -39,6 +39,7 @@ export function AgendaGroupedAppointmentCard({
   onReagendar,
   onCancelar,
   onEnviarAnamnese,
+  onOpenSlotDetail,
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
@@ -54,7 +55,10 @@ export function AgendaGroupedAppointmentCard({
 
   return (
     <article
-      className={`relative grid min-w-0 grid-cols-[minmax(84px,max-content)_minmax(0,1fr)_auto] gap-2.5 overflow-hidden rounded-xl border border-ink-200 bg-white p-3 pr-3.5 transition-all duration-150 hover:-translate-y-px hover:border-ink-300 hover:shadow-agenda-sm ${
+      onClick={(e) => {
+        if (!e.target.closest('button')) onOpenSlotDetail?.(group);
+      }}
+      className={`relative grid min-w-0 cursor-pointer grid-cols-[minmax(84px,max-content)_minmax(0,1fr)_auto] gap-2.5 overflow-hidden rounded-xl border border-ink-200 bg-white p-3 pr-3.5 transition-all duration-150 hover:-translate-y-px hover:border-ink-300 hover:shadow-agenda-sm ${
         highlighted ? 'border-vivid-teal-500 shadow-[0_0_0_3px_oklch(0.66_0.165_172_/_0.15)]' : ''
       }`}
     >
