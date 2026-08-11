@@ -120,6 +120,7 @@ import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
 import { usePerfilClinico, mapGetToState as mapPerfilClinicoResponseToState } from '../../hooks/usePerfilClinico';
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
 import { AlertasClinicosPanel } from './AlertasClinicosPanel.jsx';
+import { ANAMNESE_STYLE, COLOR_CLASSES, SECAO_STYLE } from './alertaSeveridadeStyle.js';
 
 function resolveProcedimentoFeitoIdForUpload(sess, categoria) {
   const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
@@ -3459,22 +3460,27 @@ export function PatientProfileView({
               {alertasPerfil.length > 0 && (
                 <>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Perfil clínico</p>
-                  {alertasPerfil.map((row) => (
-                    <div
-                      key={row.key}
-                      className="rounded-xl border-[2px] border-red-200 bg-red-50/60 p-4 shadow-sm"
-                    >
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11px] font-bold uppercase tracking-wide text-red-600">{row.titulo}</p>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
-                            {row.valor}
-                          </p>
+                  {alertasPerfil.map((row) => {
+                    const style = SECAO_STYLE[row.secao] ?? SECAO_STYLE.antecedentes;
+                    const colorClasses = COLOR_CLASSES[style.color];
+                    const Icon = style.Icon;
+                    return (
+                      <div
+                        key={row.key}
+                        className={`rounded-xl border-[2px] p-4 shadow-sm ${colorClasses}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <Icon className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-bold uppercase tracking-wide">{row.titulo}</p>
+                            <p className="mt-1 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
+                              {row.valor}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
               {alertasAnamnese.length > 0 && (
@@ -3482,32 +3488,36 @@ export function PatientProfileView({
                   {alertasPerfil.length > 0 && (
                     <p className="pt-1 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Anamnese</p>
                   )}
-                  {alertasAnamnese.map((row) => (
-                    <div
-                      key={row.key}
-                      className="rounded-xl border-[2px] border-red-200 bg-red-50/60 p-4 shadow-sm"
-                    >
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" strokeWidth={2.5} aria-hidden />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] font-bold leading-snug text-red-950">{row.titulo}</p>
-                          <p className="mt-2 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
-                            {row.valor}
-                          </p>
-                          {(row.fichaNome || row.dataHora) && (
-                            <p className="mt-2 text-[11px] font-medium text-[#64748b]">
-                              {row.fichaNome || 'Anamnese'}
-                              {row.dataHora
-                                ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
-                                  timeZone: 'America/Sao_Paulo',
-                                })}`
-                                : ''}
+                  {alertasAnamnese.map((row) => {
+                    const colorClasses = COLOR_CLASSES[ANAMNESE_STYLE.color];
+                    const Icon = ANAMNESE_STYLE.Icon;
+                    return (
+                      <div
+                        key={row.key}
+                        className={`rounded-xl border-[2px] p-4 shadow-sm ${colorClasses}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <Icon className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-bold leading-snug">{row.titulo}</p>
+                            <p className="mt-2 whitespace-pre-wrap break-words text-[14px] font-semibold text-[#0f172a]">
+                              {row.valor}
                             </p>
-                          )}
+                            {(row.fichaNome || row.dataHora) && (
+                              <p className="mt-2 text-[11px] font-medium text-[#64748b]">
+                                {row.fichaNome || 'Anamnese'}
+                                {row.dataHora
+                                  ? ` · ${new Date(row.dataHora).toLocaleString('pt-BR', {
+                                    timeZone: 'America/Sao_Paulo',
+                                  })}`
+                                  : ''}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </div>
