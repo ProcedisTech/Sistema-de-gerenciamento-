@@ -185,7 +185,7 @@ export function PerfilClinicoBloco({
         </div>
       )}
 
-      <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <section className="rounded-lg border-l-[3px] border-l-amber-400 bg-amber-50/40 py-1 pl-3 pr-1">
           <div className="mb-3 flex items-center gap-1.5">
             <UtensilsCrossed className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
