@@ -348,13 +348,13 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                   </div>
                   <p className="text-xs text-slate-500 mb-3 min-h-[2.4em] line-clamp-2">{p.descricao || 'Sem descrição.'}</p>
 
-                  <div className="flex gap-1 mb-4">
+                  <div className="flex flex-wrap gap-y-3 gap-x-1 mb-4">
                     {resumo.porModulo.map(m => (
-                      <div key={m.modulo} className="flex-1 flex flex-col items-center gap-1">
+                      <div key={m.modulo} className="flex-1 flex flex-col items-center gap-1 min-w-[45px] max-w-[70px]">
                         <div className="w-full h-[5px] rounded-full bg-teal-50 overflow-hidden">
                           <div className="h-full rounded-full bg-teal-500" style={{ width: m.total ? `${(m.ativos / m.total) * 100}%` : '0%' }} />
                         </div>
-                        <span className="text-[8.5px] font-bold uppercase tracking-wide text-slate-400">{m.label}</span>
+                        <span title={m.label} className="text-[8.5px] font-bold uppercase tracking-wide text-slate-400 truncate w-full text-center">{m.label}</span>
                       </div>
                     ))}
                   </div>
@@ -400,13 +400,13 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                   </div>
                   <p className="text-xs text-slate-500 line-clamp-2 mb-3 min-h-[2.4em]">{p.descricao || 'Nível de acesso nativo do sistema.'}</p>
 
-                  <div className="flex gap-1 mb-4">
+                  <div className="flex flex-wrap gap-y-3 gap-x-1 mb-4">
                     {resumo.porModulo.map(m => (
-                      <div key={m.modulo} className="flex-1 flex flex-col items-center gap-1">
+                      <div key={m.modulo} className="flex-1 flex flex-col items-center gap-1 min-w-[45px] max-w-[70px]">
                         <div className="w-full h-[5px] rounded-full bg-slate-200 overflow-hidden">
                           <div className="h-full rounded-full bg-slate-400" style={{ width: m.total ? `${(m.ativos / m.total) * 100}%` : '0%' }} />
                         </div>
-                        <span className="text-[8.5px] font-bold uppercase tracking-wide text-slate-400">{m.label}</span>
+                        <span title={m.label} className="text-[8.5px] font-bold uppercase tracking-wide text-slate-400 truncate w-full text-center">{m.label}</span>
                       </div>
                     ))}
                   </div>
