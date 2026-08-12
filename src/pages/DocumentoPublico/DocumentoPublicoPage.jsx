@@ -67,14 +67,16 @@ export const DocumentoPublicoPage = () => {
     const docId = params.get('documento_id');
 
     if (slug) setClinicSlug(slug);
-    if (t) setTipo(t);
     if (docId) setDocumentoId(docId);
 
     if (!slug) {
       setErrorMsg('O link acessado é inválido (parâmetro clinic ausente).');
-    }
-    if (!t || !docId) {
+    } else if (!t || !docId) {
       setErrorMsg('O link acessado é inválido (parâmetros tipo ou documento_id ausentes).');
+    } else if (t.toUpperCase() !== 'TERMO_SESSAO') {
+      setErrorMsg('Este link não é mais suportado. Solicite um novo link de assinatura à clínica.');
+    } else {
+      setTipo(t.toUpperCase());
     }
   }, []);
 
@@ -261,7 +263,7 @@ export const DocumentoPublicoPage = () => {
     }
   };
 
-  const tipoLabel = tipo === 'TERMO' ? 'Termo de Consentimento' : tipo === 'PROCEDIMENTO' ? 'Informações do Procedimento' : 'Documento';
+  const tipoLabel = 'Termo de Consentimento';
 
   return (
     <div className="min-h-screen w-full bg-slate-100 flex flex-col items-center py-10 px-4 font-sans">

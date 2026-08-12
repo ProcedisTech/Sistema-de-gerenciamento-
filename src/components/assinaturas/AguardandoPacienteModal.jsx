@@ -13,7 +13,7 @@ export function AguardandoPacienteModal({
   open,
   onClose,
   escolha,
-  sessaoExternaPayload, // { termoAssinaturaId, assinaturaDocumentoId, telefonePaciente }
+  sessaoExternaPayload, // { termoAssinaturaId, telefonePaciente }
   onAssinaturaConcluida,
   onCancelar,
 }) {
@@ -50,7 +50,6 @@ export function AguardandoPacienteModal({
           },
           body: JSON.stringify({
             termoAssinaturaId: sessaoExternaPayload.termoAssinaturaId,
-            assinaturaDocumentoId: sessaoExternaPayload.assinaturaDocumentoId,
             metodoCodigo,
             canalCodigo: canalCodigo || null,
             telefonePaciente: canalCodigo ? (sessaoExternaPayload.telefonePaciente || null) : null,

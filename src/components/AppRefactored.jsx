@@ -4171,7 +4171,6 @@ function AppRefactoredInner() {
                       navigateProfilePatient={navigateProfilePatient}
                       profileNav={profileNav}
                       clearProfileNavSnapshot={clearProfileNavSnapshot}
-                      clinicSlug={clinicaInfo.slug}
                       agendaSchedule={agendaSchedule}
                     />
                   </RoleGuard>

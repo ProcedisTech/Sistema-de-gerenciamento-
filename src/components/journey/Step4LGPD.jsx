@@ -728,16 +728,11 @@ export function Step3Termos({
   };
 
   const linkUrl = useMemo(() => {
-    if (!clinicaCtx?.clinicSlug) return '';
-    if (!termoSelecionadoId && !backendAssinaturaId) return '';
+    if (!clinicaCtx?.clinicSlug || !backendAssinaturaId) return '';
     const base = window.location.origin;
     // O CPF é informado pelo próprio paciente na página de destino (não trafega na URL).
-    if (backendAssinaturaId) {
-      return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
-    } else {
-      return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO&documento_id=${termoSelecionadoId}`;
-    }
-  }, [termoSelecionadoId, backendAssinaturaId, clinicaCtx?.clinicSlug]);
+    return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
+  }, [backendAssinaturaId, clinicaCtx?.clinicSlug]);
 
   const handleVerificarAssinaturaRemota = async () => {
     if (!backendAssinaturaId) return;
@@ -1436,7 +1431,6 @@ export function Step3Termos({
         escolha={metodoEscolhido}
         sessaoExternaPayload={{
           termoAssinaturaId: backendAssinaturaId || termoSelecionadoId,
-          assinaturaDocumentoId: null,
           telefonePaciente: pacienteCtx?.telefone || '',
         }}
         onAssinaturaConcluida={() => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Download, FileText, Loader2, Link, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
+import { Download, FileText, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
 import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
@@ -22,7 +22,7 @@ function isRecusado(doc) {
   return doc?.statusCodigo === 'RECUSADO' || Boolean(doc?.recusadoEm);
 }
 
-export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, paciente, clinicaInfo, perfilInfo }) {
+export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perfilInfo }) {
   const [documentos, setDocumentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -127,33 +127,13 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
       <div className="bg-slate-50 text-slate-500 p-8 rounded-xl border border-slate-200 mt-4 text-center">
         <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
         <p className="font-medium">Nenhum documento assinado encontrado</p>
-        <p className="text-sm mt-1">Quando o paciente assinar documentos públicos, eles aparecerão aqui.</p>
-        <button
-          type="button"
-          onClick={onOpenDocumentoModal}
-          className="mt-4 mx-auto inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-semibold text-sm rounded-lg hover:bg-teal-700 transition-colors"
-        >
-          <Link className="w-4 h-4" />
-          Solicitar Nova Assinatura
-        </button>
+        <p className="text-sm mt-1">Quando o paciente assinar termos, eles aparecerão aqui.</p>
       </div>
     );
   }
 
   return (
     <div className="mt-4 space-y-4">
-      {/* Botão de Solicitar Nova Assinatura no topo */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onOpenDocumentoModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-semibold text-sm rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
-        >
-          <Link className="w-4 h-4" />
-          Solicitar Nova Assinatura
-        </button>
-      </div>
-
       {documentos.map((doc) => {
         const isExpanded = expandedDocId === doc.id;
         return (
@@ -170,7 +150,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                 <h4 className="font-semibold text-slate-800 text-sm md:text-base">{doc.titulo}</h4>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-500">
                   <span className="font-medium bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                    {doc.tipoDocumento === 'TERMO' ? 'Termo' : 'Procedimento'}
+                    Termo
                   </span>
                   <span>
                     Assinado em:{' '}
@@ -201,7 +181,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                   </div>
                 )}
 
-                {doc.tipoDocumento === 'TERMO' && !isRecusado(doc) && (() => {
+                {!isRecusado(doc) && (() => {
                   const statusExp = resolverStatusExpiracao(doc);
                   const dataStr = statusExp?.data?.toLocaleDateString('pt-BR');
                   return (
