@@ -36,7 +36,7 @@ import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
-import { isAssinaturaResolvida } from '../../utils/termoResolucao';
+import { isAssinaturaResolvida, isTermoExigido } from '../../utils/termoResolucao';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
@@ -539,10 +539,10 @@ export function Step3Termos({
           );
           setTermosResolvidosIds(resolvidos);
 
-          // Termos obrigatórios sem assinatura válida entram sozinhos em "aguardando
-          // assinatura" — não dependem do profissional lembrar de selecioná-los.
+          // Termos de natureza PROCEDIMENTO sem assinatura válida entram sozinhos
+          // em "aguardando assinatura" — não dependem do profissional lembrar de selecioná-los.
           const idsObrigatoriosPendentes = ativos
-            .filter((t) => t.obrigatorio === true && !resolvidos.has(String(t.id)))
+            .filter((t) => isTermoExigido(t) && !resolvidos.has(String(t.id)))
             .map((t) => String(t.id));
           if (idsObrigatoriosPendentes.length === 0) return;
           setTermosPendentesIds((prev) => {
@@ -613,7 +613,7 @@ export function Step3Termos({
   const termosNaoObrigatoriosPendentes = useMemo(() => {
     if (termosDisponiveis.length === 0 || termosDisponiveis[0]?._virtual) return [];
     return termosDisponiveis.filter(
-      (t) => t.obrigatorio !== true && !termosResolvidosIds.has(String(t.id))
+      (t) => !isTermoExigido(t) && !termosResolvidosIds.has(String(t.id))
     );
   }, [termosDisponiveis, termosResolvidosIds]);
 

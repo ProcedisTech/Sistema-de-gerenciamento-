@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { termosApi, termoAssinaturaApi } from '../services/api';
-import { isAssinaturaResolvida } from '../utils/termoResolucao';
+import { isAssinaturaResolvida, isTermoExigido } from '../utils/termoResolucao';
 
 const LGPD_VIRTUAL_TITULO = 'Termo de Consentimento LGPD (Padrão Procedi)';
 
 /**
- * Termos que precisam de atenção no Hub: obrigatórios sem assinatura válida,
- * ou termos que o profissional já colocou na fila de assinatura deste
+ * Termos que precisam de atenção no Hub: natureza PROCEDIMENTO sem assinatura
+ * válida, ou termos que o profissional já colocou na fila de assinatura deste
  * atendimento (`termosSelecionadosIds`, vindo de useJourneyState). Um termo
- * comum que nunca foi selecionado nesta consulta não gera pendência aqui —
+ * institucional que nunca foi selecionado nesta consulta não gera pendência aqui —
  * ele só aparece quando o profissional abre a tela de Termos e decide tratá-lo.
  * Uma assinatura expirada volta a contar como pendente; uma recusada continua
  * pendente. Quando a clínica não tem nenhum termo próprio, considera o
@@ -46,7 +46,7 @@ export function useTermosPendentes(pacienteId, { termosSelecionadosIds = [] } = 
           }
         } else {
           for (const termo of ativos) {
-            const relevante = termo.obrigatorio === true || selecionados.has(String(termo.id));
+            const relevante = isTermoExigido(termo) || selecionados.has(String(termo.id));
             if (!relevante) continue;
             const resolvido = assinaturas.some((a) => a.termoId === termo.id && isAssinaturaResolvida(a));
             if (!resolvido) result.push({ id: termo.id, titulo: termo.titulo });
