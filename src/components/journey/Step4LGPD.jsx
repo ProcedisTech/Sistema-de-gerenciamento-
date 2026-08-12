@@ -346,7 +346,7 @@ export function Step3Termos({
       .catch(e => console.warn('Falha ao carregar configurações de assinatura:', e));
   }, [orgId]);
 
-  const handlePrepararSessaoExterna = async (metodo) => {
+  const handlePrepararSessaoExterna = async (escolha) => {
     setModalEscolhaOpen(false);
     let assinaturaId = backendAssinaturaId;
     if (!assinaturaId) {
@@ -386,7 +386,7 @@ export function Step3Termos({
         return;
       }
     }
-    setMetodoEscolhido(metodo);
+    setMetodoEscolhido(escolha);
     setModalAguardandoOpen(true);
   };
 
@@ -1416,8 +1416,14 @@ export function Step3Termos({
           setModalEscolhaOpen(false);
           setPatSigningOpen(true);
         }}
-        onSelectQrCode={() => handlePrepararSessaoExterna('QR_CODE')}
-        onSelectLink={() => handlePrepararSessaoExterna('LINK_WHATSAPP')}
+        onSelectQrCode={() => handlePrepararSessaoExterna({
+          metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL',
+          canalCodigo: null,
+        })}
+        onSelectLink={() => handlePrepararSessaoExterna({
+          metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO',
+          canalCodigo: 'WHATSAPP',
+        })}
         opcoes={{ tablet: permiteTablet, qrCode: permiteQrCode, link: permiteLink }}
       />
 
@@ -1427,7 +1433,7 @@ export function Step3Termos({
           setModalAguardandoOpen(false);
           setMetodoEscolhido(null);
         }}
-        metodo={metodoEscolhido}
+        escolha={metodoEscolhido}
         sessaoExternaPayload={{
           termoAssinaturaId: backendAssinaturaId || termoSelecionadoId,
           assinaturaDocumentoId: null,

@@ -4,12 +4,17 @@ import { X, Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { authHeadersForFetch } from '../../services/api';
 
+/**
+ * @param {{ metodoCodigo: string, canalCodigo?: string|null }} escolha
+ *   metodoCodigo: DISPOSITIVO_PROPRIO_LOCAL | DISPOSITIVO_PROPRIO_REMOTO | ...
+ *   canalCodigo: WHATSAPP | SMS | null (QR)
+ */
 export function AguardandoPacienteModal({
   open,
   onClose,
-  metodo, // 'QR_CODE' ou 'LINK_WHATSAPP' / 'LINK_SMS'
+  escolha,
   sessaoExternaPayload, // { termoAssinaturaId, assinaturaDocumentoId, telefonePaciente }
-  onAssinaturaConcluida, // callback quando o polling retornar CONCLUIDO
+  onAssinaturaConcluida,
   onCancelar,
 }) {
   const [sessaoData, setSessaoData] = useState(null);
@@ -17,6 +22,11 @@ export function AguardandoPacienteModal({
   const [error, setError] = useState(null);
   const [concluido, setConcluido] = useState(false);
   const pollingRef = useRef(null);
+
+  const metodoCodigo = escolha?.metodoCodigo ?? null;
+  const canalCodigo = escolha?.canalCodigo ?? null;
+  const isQr = metodoCodigo === 'DISPOSITIVO_PROPRIO_LOCAL' && !canalCodigo;
+  const isWhatsApp = canalCodigo === 'WHATSAPP';
 
   useEffect(() => {
     if (!open) {
@@ -41,14 +51,15 @@ export function AguardandoPacienteModal({
           body: JSON.stringify({
             termoAssinaturaId: sessaoExternaPayload.termoAssinaturaId,
             assinaturaDocumentoId: sessaoExternaPayload.assinaturaDocumentoId,
-            metodo: metodo,
-            telefonePaciente: sessaoExternaPayload.telefonePaciente,
+            metodoCodigo,
+            canalCodigo: canalCodigo || null,
+            telefonePaciente: canalCodigo ? (sessaoExternaPayload.telefonePaciente || null) : null,
           }),
         });
 
         if (!res.ok) throw new Error('Falha ao gerar sessão');
         const data = await res.json();
-        
+
         if (isSubscribed) {
           setSessaoData(data);
           setLoading(false);
@@ -91,7 +102,7 @@ export function AguardandoPacienteModal({
       isSubscribed = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [open, metodo, sessaoExternaPayload]);
+  }, [open, metodoCodigo, canalCodigo, sessaoExternaPayload]);
 
   if (!open) return null;
 
@@ -139,16 +150,16 @@ export function AguardandoPacienteModal({
               <div className="rounded-2xl bg-indigo-50 p-4 text-indigo-600">
                 <Smartphone className="h-8 w-8" />
               </div>
-              
+
               <h3 className="text-lg font-bold text-slate-900">Aguardando Paciente</h3>
-              
-              {metodo === 'QR_CODE' && sessaoData?.urlPublica && (
+
+              {isQr && sessaoData?.urlPublica && (
                 <div className="rounded-2xl border-2 border-slate-100 bg-white p-4 shadow-sm">
                   <QRCodeSVG value={sessaoData.urlPublica} size={180} />
                 </div>
               )}
 
-              {metodo === 'LINK_WHATSAPP' && sessaoData?.urlPublica && (
+              {isWhatsApp && sessaoData?.urlPublica && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 w-full">
                   <p className="text-sm font-semibold text-emerald-800 mb-3">Link gerado com sucesso!</p>
                   <a
