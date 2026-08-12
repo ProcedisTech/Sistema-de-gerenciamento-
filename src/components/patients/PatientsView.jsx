@@ -23,7 +23,6 @@ export function PatientsView(props) {
     mergePatientById,
     refreshPatients,
     roleUserId,
-    clinicSlug,
     clinicaInfo,
     perfilInfo,
   } = props;
@@ -57,7 +56,6 @@ export function PatientsView(props) {
         profileNav={props.profileNav}
         onProfileNavigatePrev={() => props.navigateProfilePatient?.(-1)}
         onProfileNavigateNext={() => props.navigateProfilePatient?.(1)}
-        clinicSlug={clinicSlug || clinicaInfo?.slug}
         clinicaInfo={clinicaInfo}
         perfilInfo={perfilInfo}
         patientListBump={props.patientListBump}

@@ -36,7 +36,7 @@ import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
 import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
-import { isAssinaturaResolvida } from '../../utils/termoResolucao';
+import { isAssinaturaResolvida, isTermoExigido } from '../../utils/termoResolucao';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
@@ -346,7 +346,7 @@ export function Step3Termos({
       .catch(e => console.warn('Falha ao carregar configurações de assinatura:', e));
   }, [orgId]);
 
-  const handlePrepararSessaoExterna = async (metodo) => {
+  const handlePrepararSessaoExterna = async (escolha) => {
     setModalEscolhaOpen(false);
     let assinaturaId = backendAssinaturaId;
     if (!assinaturaId) {
@@ -368,11 +368,12 @@ export function Step3Termos({
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
-          assinaturaProfissional: profissionalAssinaturaDataUrl || 'PENDENTE_EXTERNA',
-          assinaturaPaciente: 'PENDENTE_EXTERNA',
+          assinaturaProfissional: profissionalAssinaturaDataUrl || null,
+          assinaturaPaciente: null,
           pacienteRecusou: false,
-          profissionalAssinouEm: new Date().toISOString(),
-          pacienteAssinouEm: new Date().toISOString(),
+          statusCodigo: 'PENDENTE',
+          profissionalAssinouEm: profissionalAssinaturaDataUrl ? new Date().toISOString() : null,
+          pacienteAssinouEm: null,
           conteudoSnapshot,
           userAgent: navigator.userAgent,
           ipAddress,
@@ -385,7 +386,7 @@ export function Step3Termos({
         return;
       }
     }
-    setMetodoEscolhido(metodo);
+    setMetodoEscolhido(escolha);
     setModalAguardandoOpen(true);
   };
 
@@ -432,14 +433,16 @@ export function Step3Termos({
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
           assinaturaProfissional: profissionalAssinaturaDataUrl,
-          assinaturaPaciente: pacienteRecusou ? 'RECUSADO' : termoAssinaturaDataUrl,
+          assinaturaPaciente: pacienteRecusou ? null : termoAssinaturaDataUrl,
           pacienteRecusou: pacienteRecusou,
+          statusCodigo: pacienteRecusou ? 'RECUSADO' : 'ASSINADO',
           profissionalAssinouEm:
             profAssinaturaTimestamp != null
               ? new Date(profAssinaturaTimestamp).toISOString()
               : new Date().toISOString(),
-          pacienteAssinouEm:
-            patAssinaturaTimestamp != null
+          pacienteAssinouEm: pacienteRecusou
+            ? null
+            : patAssinaturaTimestamp != null
               ? new Date(patAssinaturaTimestamp).toISOString()
               : new Date().toISOString(),
           conteudoSnapshot,
@@ -539,10 +542,10 @@ export function Step3Termos({
           );
           setTermosResolvidosIds(resolvidos);
 
-          // Termos obrigatórios sem assinatura válida entram sozinhos em "aguardando
-          // assinatura" — não dependem do profissional lembrar de selecioná-los.
+          // Termos de natureza PROCEDIMENTO sem assinatura válida entram sozinhos
+          // em "aguardando assinatura" — não dependem do profissional lembrar de selecioná-los.
           const idsObrigatoriosPendentes = ativos
-            .filter((t) => t.obrigatorio === true && !resolvidos.has(String(t.id)))
+            .filter((t) => isTermoExigido(t) && !resolvidos.has(String(t.id)))
             .map((t) => String(t.id));
           if (idsObrigatoriosPendentes.length === 0) return;
           setTermosPendentesIds((prev) => {
@@ -613,7 +616,7 @@ export function Step3Termos({
   const termosNaoObrigatoriosPendentes = useMemo(() => {
     if (termosDisponiveis.length === 0 || termosDisponiveis[0]?._virtual) return [];
     return termosDisponiveis.filter(
-      (t) => t.obrigatorio !== true && !termosResolvidosIds.has(String(t.id))
+      (t) => !isTermoExigido(t) && !termosResolvidosIds.has(String(t.id))
     );
   }, [termosDisponiveis, termosResolvidosIds]);
 
@@ -725,16 +728,11 @@ export function Step3Termos({
   };
 
   const linkUrl = useMemo(() => {
-    if (!clinicaCtx?.clinicSlug) return '';
-    if (!termoSelecionadoId && !backendAssinaturaId) return '';
+    if (!clinicaCtx?.clinicSlug || !backendAssinaturaId) return '';
     const base = window.location.origin;
     // O CPF é informado pelo próprio paciente na página de destino (não trafega na URL).
-    if (backendAssinaturaId) {
-      return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
-    } else {
-      return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO&documento_id=${termoSelecionadoId}`;
-    }
-  }, [termoSelecionadoId, backendAssinaturaId, clinicaCtx?.clinicSlug]);
+    return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
+  }, [backendAssinaturaId, clinicaCtx?.clinicSlug]);
 
   const handleVerificarAssinaturaRemota = async () => {
     if (!backendAssinaturaId) return;
@@ -745,7 +743,7 @@ export function Step3Termos({
         setPatAssinaturaTimestamp(res.pacienteAssinouEm ? new Date(res.pacienteAssinouEm).getTime() : Date.now());
         if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
         toast.success('Assinatura do paciente recebida!');
-      } else if (res && res.recusado) {
+      } else if (res && (res.statusCodigo === 'RECUSADO' || res.recusadoEm)) {
         setPacienteRecusou(true);
         toast.error('O paciente recusou assinar o documento.');
       } else {
@@ -869,8 +867,16 @@ export function Step3Termos({
                         metadados: {
                           pacienteNome: pacienteCtx?.nome || t.resultadoCompleto?.pacienteNome,
                           profissionalNome: profissionalCtx?.nome || t.resultadoCompleto?.profissionalNome,
-                          dataHora: t.resultadoCompleto?.profissionalAssinouEm ? new Date(t.resultadoCompleto.profissionalAssinouEm).toLocaleString('pt-BR') : undefined,
+                          dataHora: t.resultadoCompleto?.recusadoEm
+                            ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+                            : t.resultadoCompleto?.profissionalAssinouEm
+                              ? new Date(t.resultadoCompleto.profissionalAssinouEm).toLocaleString('pt-BR')
+                              : undefined,
                           ipAddress: t.resultadoCompleto?.ipAddress,
+                          statusCodigo: t.resultadoCompleto?.statusCodigo,
+                          recusadoEm: t.resultadoCompleto?.recusadoEm
+                            ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+                            : undefined,
                         }
                       });
                     });
@@ -1405,8 +1411,14 @@ export function Step3Termos({
           setModalEscolhaOpen(false);
           setPatSigningOpen(true);
         }}
-        onSelectQrCode={() => handlePrepararSessaoExterna('QR_CODE')}
-        onSelectLink={() => handlePrepararSessaoExterna('LINK_WHATSAPP')}
+        onSelectQrCode={() => handlePrepararSessaoExterna({
+          metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL',
+          canalCodigo: null,
+        })}
+        onSelectLink={() => handlePrepararSessaoExterna({
+          metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO',
+          canalCodigo: 'WHATSAPP',
+        })}
         opcoes={{ tablet: permiteTablet, qrCode: permiteQrCode, link: permiteLink }}
       />
 
@@ -1416,10 +1428,9 @@ export function Step3Termos({
           setModalAguardandoOpen(false);
           setMetodoEscolhido(null);
         }}
-        metodo={metodoEscolhido}
+        escolha={metodoEscolhido}
         sessaoExternaPayload={{
           termoAssinaturaId: backendAssinaturaId || termoSelecionadoId,
-          assinaturaDocumentoId: null,
           telefonePaciente: pacienteCtx?.telefone || '',
         }}
         onAssinaturaConcluida={() => {

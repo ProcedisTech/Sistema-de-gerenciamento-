@@ -19,7 +19,6 @@ import {
   Plus,
   User as UserIcon,
   X,
-  Send,
 } from 'lucide-react';
 import {
   anamneseApi,
@@ -103,7 +102,6 @@ import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { GaleriaMapaThumb } from './galeria/GaleriaMapaThumb.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { GaleriaTab } from './galeria/GaleriaTab.jsx';
-import { EnviarDocumentoAssinarModal } from './EnviarDocumentoAssinarModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
 import { AnamneseFichaReadonlyView } from '../anamnese/AnamneseFichaReadonlyView.jsx';
@@ -911,7 +909,6 @@ export function PatientProfileView({
   profileNav = null,
   onProfileNavigatePrev,
   onProfileNavigateNext,
-  clinicSlug,
   clinicaInfo,
   perfilInfo,
   patientListBump,
@@ -982,7 +979,6 @@ export function PatientProfileView({
     procedimentoFeitoId: null,
     pacienteId: null,
   });
-  const [documentoModalOpen, setDocumentoModalOpen] = useState(false);
   const profilePhotoInputRef = useRef(null);
   const alertasCardRef = useRef(null);
 
@@ -1257,8 +1253,8 @@ export function PatientProfileView({
             ? new Date(d.dataAssinatura).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
             : '',
           titulo: d.titulo,
-          tipo: d.tipoDocumento === 'TERMO' ? 'Termo' : 'Procedimento',
-          situacao: d.recusado ? 'Recusado' : 'Assinado',
+          tipo: 'Termo',
+          situacao: d.statusCodigo === 'RECUSADO' || d.recusadoEm ? 'Recusado' : 'Assinado',
         }));
       }
 
@@ -2514,15 +2510,6 @@ export function PatientProfileView({
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => setDocumentoModalOpen(true)}
-                    className="mt-2 inline-flex h-10 w-full max-w-md items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                  >
-                    <Send className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2.5} aria-hidden />
-                    Enviar documento para assinar
-                  </button>
-
                   <div>
                     <h5 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
                       Resumo clínico
@@ -2819,7 +2806,7 @@ export function PatientProfileView({
                                               <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
                                                 Assinatura do Paciente
                                               </div>
-                                              {assinaturaVinculada?.recusado ? (
+                                              {assinaturaVinculada?.statusCodigo === 'RECUSADO' || assinaturaVinculada?.recusadoEm ? (
                                                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-bold text-red-700">
                                                   <AlertTriangle className="h-4 w-4" strokeWidth={2} />
                                                   Recusado pelo paciente
@@ -2973,7 +2960,6 @@ export function PatientProfileView({
                   pacienteId={selectedPatient?.id}
                   clinicaInfo={clinicaInfo}
                   perfilInfo={perfilInfo}
-                  onOpenDocumentoModal={() => setDocumentoModalOpen(true)}
                 />
               )}
 
@@ -3577,12 +3563,6 @@ export function PatientProfileView({
         }}
       />
 
-      <EnviarDocumentoAssinarModal
-        open={documentoModalOpen}
-        onClose={() => setDocumentoModalOpen(false)}
-        paciente={selectedPatient}
-        clinicSlug={clinicSlug}
-      />
     </div>
   );
 }

@@ -84,6 +84,8 @@ export function useLgpdConsent() {
         roleUserId:          roleUserId ?? null,
         assinaturaProfissional,
         assinaturaPaciente,
+        pacienteRecusou: false,
+        statusCodigo: 'ASSINADO',
         profissionalAssinouEm:
           profissionalAssinouEm != null
             ? new Date(profissionalAssinouEm).toISOString()

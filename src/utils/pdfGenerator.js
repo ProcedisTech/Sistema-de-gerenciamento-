@@ -323,11 +323,14 @@ export const generateTermoPdf = async ({
 
   if (assinaturaPaciente && assinaturaPaciente.startsWith('data:image')) {
     try { doc.addImage(assinaturaPaciente, 'PNG', margin, y, sigWidth, sigHeight); } catch { /* ignore */ }
-  } else if (metadados?.recusado || assinaturaPaciente === 'RECUSADO') {
+  } else if (metadados?.statusCodigo === 'RECUSADO' || metadados?.recusado || metadados?.recusadoEm) {
     doc.setTextColor(220, 38, 38);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('RECUSADO PELO PACIENTE', margin, y + sigHeight / 2);
+    const carimbo = metadados?.recusadoEm
+      ? `RECUSADO PELO PACIENTE — ${metadados.recusadoEm}`
+      : 'RECUSADO PELO PACIENTE';
+    doc.text(carimbo, margin, y + sigHeight / 2);
     doc.setTextColor(0, 0, 0);
   } else {
     doc.line(margin, y + sigHeight, margin + sigWidth, y + sigHeight);

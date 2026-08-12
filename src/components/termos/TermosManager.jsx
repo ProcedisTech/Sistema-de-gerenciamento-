@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
-  CalendarClock,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -23,8 +22,8 @@ import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
 import { TermoFolha } from './TermoFolha';
 
-const MODO_EXPIRACAO_PLANO = 'PLANO';
-const MODO_EXPIRACAO_PROCEDIMENTO = 'PROCEDIMENTO';
+const NATUREZA_PROCEDIMENTO = 'PROCEDIMENTO';
+const NATUREZA_INSTITUCIONAL = 'INSTITUCIONAL';
 
 function stripHtml(html) {
   if (!html) return '';
@@ -72,9 +71,7 @@ export function TermosManager() {
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
   const [autoAssinarProfissional, setAutoAssinarProfissional] = useState(false);
-  const [obrigatorio, setObrigatorio] = useState(false);
-  const [modoExpiracao, setModoExpiracao] = useState(MODO_EXPIRACAO_PLANO);
-  const [diasExpiracaoProcedimento, setDiasExpiracaoProcedimento] = useState('');
+  const [naturezaCodigo, setNaturezaCodigo] = useState(NATUREZA_INSTITUCIONAL);
   const [procedimentosVinculados, setProcedimentosVinculados] = useState([]);
   const { options: procedimentoOptions, loading: procedimentoOptionsLoading } = useProcedimentosOptions();
   const [formErrors, setFormErrors] = useState({});
@@ -131,9 +128,7 @@ export function TermosManager() {
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
-    setObrigatorio(false);
-    setModoExpiracao(MODO_EXPIRACAO_PLANO);
-    setDiasExpiracaoProcedimento('');
+    setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
     setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
@@ -148,9 +143,7 @@ export function TermosManager() {
       .join('');
     setConteudo(html);
     setAutoAssinarProfissional(true);
-    setObrigatorio(true);
-    setModoExpiracao(MODO_EXPIRACAO_PLANO);
-    setDiasExpiracaoProcedimento('');
+    setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
     setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
@@ -162,11 +155,7 @@ export function TermosManager() {
     setTitulo(row.titulo ?? row.title ?? '');
     setConteudo(row.conteudo ?? row.content ?? '');
     setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
-    setObrigatorio(row.obrigatorio ?? false);
-    setModoExpiracao(row.modoExpiracao ?? MODO_EXPIRACAO_PLANO);
-    setDiasExpiracaoProcedimento(
-      row.diasExpiracaoProcedimento != null ? String(row.diasExpiracaoProcedimento) : ''
-    );
+    setNaturezaCodigo(row.naturezaCodigo ?? NATUREZA_INSTITUCIONAL);
     setProcedimentosVinculados(
       (row.procedimentosVinculados ?? []).map((p) => String(p.catalogoProcedimentoSaudeId))
     );
@@ -182,9 +171,7 @@ export function TermosManager() {
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
-    setObrigatorio(false);
-    setModoExpiracao(MODO_EXPIRACAO_PLANO);
-    setDiasExpiracaoProcedimento('');
+    setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
     setProcedimentosVinculados([]);
     setFormErrors({});
   };
@@ -192,12 +179,11 @@ export function TermosManager() {
   const handleSave = async () => {
     const t = String(titulo || '').trim();
     const c = String(conteudo || '').trim();
-    const dias = diasExpiracaoProcedimento === '' ? null : Number(diasExpiracaoProcedimento);
     const fe = {};
     if (!t) fe.titulo = true;
     if (!c) fe.conteudo = true;
-    if (modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO && (dias == null || Number.isNaN(dias) || dias < 0)) {
-      fe.diasExpiracaoProcedimento = true;
+    if (naturezaCodigo !== NATUREZA_PROCEDIMENTO && naturezaCodigo !== NATUREZA_INSTITUCIONAL) {
+      fe.naturezaCodigo = true;
     }
     if (Object.keys(fe).length > 0) {
       setFormErrors(fe);
@@ -210,10 +196,8 @@ export function TermosManager() {
         titulo: t,
         conteudo: c,
         autoAssinarProfissional,
-        obrigatorio,
+        naturezaCodigo,
         ativo: true,
-        modoExpiracao,
-        diasExpiracaoProcedimento: modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO ? dias : null,
         catalogoProcedimentoSaudeIds: procedimentosVinculados,
       };
       if (editingId != null) {
@@ -324,16 +308,18 @@ export function TermosManager() {
           <div className="flex shrink-0 items-center gap-2">
             <label
               className="hidden h-9 cursor-pointer items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 sm:inline-flex"
-              title="Um termo obrigatório é sempre exigido do paciente, independente de quantos outros termos ativos existam, e é adicionado automaticamente à tela de assinatura quando pendente."
+              title="PROCEDIMENTO é exigido automaticamente na assinatura; INSTITUCIONAL (ex.: LGPD) é opcional até o profissional selecionar."
             >
-              <input
-                type="checkbox"
-                id="obrigatorio"
-                checked={obrigatorio}
-                onChange={(e) => setObrigatorio(e.target.checked)}
-                className="h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
-              />
-              <span className="text-[12px] font-medium text-[#0f172a]">Termo obrigatório</span>
+              <span className="text-[12px] font-medium text-[#64748b]">Natureza</span>
+              <select
+                id="naturezaCodigo"
+                value={naturezaCodigo}
+                onChange={(e) => setNaturezaCodigo(e.target.value)}
+                className="h-7 rounded border-0 bg-transparent text-[12px] font-medium text-[#0f172a] focus:ring-0"
+              >
+                <option value={NATUREZA_INSTITUCIONAL}>Institucional</option>
+                <option value={NATUREZA_PROCEDIMENTO}>Procedimento</option>
+              </select>
             </label>
             <label
               className="hidden h-9 cursor-pointer items-center gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 sm:inline-flex"
@@ -403,18 +389,13 @@ export function TermosManager() {
               }}
               autoAssinar={autoAssinarProfissional}
               onChangeAutoAssinar={setAutoAssinarProfissional}
-              obrigatorio={obrigatorio}
-              onChangeObrigatorio={setObrigatorio}
+              naturezaCodigo={naturezaCodigo}
+              onChangeNaturezaCodigo={setNaturezaCodigo}
             />
           </div>
         </div>
 
-        <TermoExpiracaoConfig
-          modoExpiracao={modoExpiracao}
-          onChangeModoExpiracao={setModoExpiracao}
-          diasExpiracaoProcedimento={diasExpiracaoProcedimento}
-          onChangeDiasExpiracaoProcedimento={setDiasExpiracaoProcedimento}
-          diasError={!!formErrors.diasExpiracaoProcedimento}
+        <TermoVinculosConfig
           procedimentoOptions={procedimentoOptions}
           procedimentoOptionsLoading={procedimentoOptionsLoading}
           procedimentosVinculados={procedimentosVinculados}
@@ -576,10 +557,17 @@ export function TermosManager() {
               </p>
 
               <div className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-[#64748b]">
-                <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-                {row.modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO
-                  ? `Expira ${row.diasExpiracaoProcedimento ?? '?'} dia(s) após o procedimento`
-                  : 'Expira com o plano de tratamento'}
+                {row.naturezaCodigo === NATUREZA_PROCEDIMENTO ? (
+                  <>
+                    <Stethoscope className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                    Vinculado a procedimento
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                    Institucional
+                  </>
+                )}
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#f1f5f9] pt-3">
@@ -587,11 +575,15 @@ export function TermosManager() {
                   <span className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#16a34a]">
                     Ativo
                   </span>
-                  {row.obrigatorio ? (
+                  {row.naturezaCodigo === NATUREZA_PROCEDIMENTO ? (
                     <span className="inline-flex items-center rounded-full border border-[#fde68a] bg-[#fef9c3] px-2 py-0.5 text-[11px] font-bold text-[#92400e]">
-                      Obrigatório
+                      Procedimento
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="inline-flex items-center rounded-full border border-[#e2e8f0] bg-[#f8fafc] px-2 py-0.5 text-[11px] font-bold text-[#64748b]">
+                      Institucional
+                    </span>
+                  )}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -679,8 +671,8 @@ function TermoHelpPanel({
   onUseLgpdTemplate,
   autoAssinar,
   onChangeAutoAssinar,
-  obrigatorio,
-  onChangeObrigatorio,
+  naturezaCodigo,
+  onChangeNaturezaCodigo,
 }) {
   return (
     <aside
@@ -794,20 +786,20 @@ function TermoHelpPanel({
           </div>
 
           <div className="mt-3 flex items-start gap-2 border-t border-[#99f6e4] pt-3 sm:hidden">
-            <input
-              type="checkbox"
-              id="obrigatorioPanel"
-              checked={obrigatorio}
-              onChange={(e) => onChangeObrigatorio(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
-            />
-            <label htmlFor="obrigatorioPanel" className="cursor-pointer">
-              <span className="block font-semibold">Termo obrigatório</span>
-              <span className="mt-0.5 block text-[11px] text-[#0f766e]/80">
-                Sempre exigido do paciente, independente de quantos outros termos ativos existam,
-                e adicionado automaticamente à tela de assinatura quando pendente.
-              </span>
-            </label>
+            <div className="w-full">
+              <label htmlFor="naturezaCodigoPanel" className="block font-semibold">
+                Natureza do termo
+              </label>
+              <select
+                id="naturezaCodigoPanel"
+                value={naturezaCodigo}
+                onChange={(e) => onChangeNaturezaCodigo(e.target.value)}
+                className="mt-1 h-9 w-full rounded-lg border border-[#99f6e4] bg-white px-2 text-[12px] font-medium text-[#0f766e]"
+              >
+                <option value={NATUREZA_INSTITUCIONAL}>Institucional (ex.: LGPD)</option>
+                <option value={NATUREZA_PROCEDIMENTO}>Procedimento (exigido na assinatura)</option>
+              </select>
+            </div>
           </div>
         </div>
       ) : null}
@@ -816,16 +808,9 @@ function TermoHelpPanel({
 }
 
 /**
- * Configuração de expiração do termo: quando ele deixa de valer (junto com o
- * plano de tratamento, ou N dias após o procedimento vinculado ser finalizado)
- * e a quais procedimentos ativos da clínica ele está vinculado.
+ * Vínculo do termo a procedimentos ativos da clínica.
  */
-function TermoExpiracaoConfig({
-  modoExpiracao,
-  onChangeModoExpiracao,
-  diasExpiracaoProcedimento,
-  onChangeDiasExpiracaoProcedimento,
-  diasError,
+function TermoVinculosConfig({
   procedimentoOptions,
   procedimentoOptionsLoading,
   procedimentosVinculados,
@@ -833,102 +818,18 @@ function TermoExpiracaoConfig({
 }) {
   return (
     <div className="rounded-xl border border-[#e2e8f0] bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <CalendarClock className="h-4 w-4 text-[#00a88e]" strokeWidth={2} aria-hidden />
-        <h3 className="text-[13px] font-bold text-[#0f172a]">Expiração do termo</h3>
+      <div className="mb-2 flex items-center gap-2">
+        <Stethoscope className="h-3.5 w-3.5 text-[#64748b]" strokeWidth={2} aria-hidden />
+        <p className="text-[12px] font-semibold text-[#0f172a]">
+          Vincular a procedimentos ativos da clínica
+        </p>
       </div>
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label
-          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
-            modoExpiracao === MODO_EXPIRACAO_PLANO
-              ? 'border-[#00a88e] bg-[#f0fdfa]'
-              : 'border-[#e2e8f0] hover:bg-[#f8fafc]'
-          }`}
-        >
-          <input
-            type="radio"
-            name="modoExpiracao"
-            checked={modoExpiracao === MODO_EXPIRACAO_PLANO}
-            onChange={() => onChangeModoExpiracao(MODO_EXPIRACAO_PLANO)}
-            className="mt-0.5 h-4 w-4 shrink-0 border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
-          />
-          <span>
-            <span className="block text-[13px] font-semibold text-[#0f172a]">
-              Vale durante todo o plano
-            </span>
-            <span className="mt-0.5 block text-[11px] text-[#64748b]">
-              Expira quando o plano de tratamento é concluído ou encerrado. Se o procedimento
-              vinculado não fizer parte de nenhum plano, expira assim que ele for finalizado.
-            </span>
-          </span>
-        </label>
-
-        <label
-          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
-            modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO
-              ? 'border-[#00a88e] bg-[#f0fdfa]'
-              : 'border-[#e2e8f0] hover:bg-[#f8fafc]'
-          }`}
-        >
-          <input
-            type="radio"
-            name="modoExpiracao"
-            checked={modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO}
-            onChange={() => onChangeModoExpiracao(MODO_EXPIRACAO_PROCEDIMENTO)}
-            className="mt-0.5 h-4 w-4 shrink-0 border-[#cbd5e1] text-[#00a88e] focus:ring-[#00a88e]"
-          />
-          <span>
-            <span className="block text-[13px] font-semibold text-[#0f172a]">
-              Expira após o procedimento
-            </span>
-            <span className="mt-0.5 block text-[11px] text-[#64748b]">
-              Expira N dias após o procedimento vinculado ser finalizado — vale também para
-              procedimentos avulsos, sem plano.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      {modoExpiracao === MODO_EXPIRACAO_PROCEDIMENTO ? (
-        <div className="mt-3">
-          <label htmlFor="diasExpiracaoProcedimento" className="block text-[12px] font-semibold text-[#0f172a]">
-            Dias após a finalização do procedimento <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="diasExpiracaoProcedimento"
-            type="number"
-            min={0}
-            step={1}
-            value={diasExpiracaoProcedimento}
-            onChange={(e) => onChangeDiasExpiracaoProcedimento(e.target.value)}
-            placeholder="Ex.: 30"
-            className={`mt-1 h-9 w-32 rounded-lg border px-3 text-[13px] outline-none transition-colors focus:ring-2 ${
-              diasError
-                ? 'border-[#dc2626] focus:border-[#dc2626] focus:ring-[#dc2626]/10'
-                : 'border-[#e2e8f0] focus:border-[#00a88e] focus:ring-[#00a88e]/10'
-            }`}
-          />
-          {diasError ? (
-            <p className="mt-1 text-[12px] text-[#dc2626]">Informe um número de dias (0 ou mais)</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="mt-4 border-t border-[#f1f5f9] pt-3">
-        <div className="mb-2 flex items-center gap-2">
-          <Stethoscope className="h-3.5 w-3.5 text-[#64748b]" strokeWidth={2} aria-hidden />
-          <p className="text-[12px] font-semibold text-[#0f172a]">
-            Vincular a procedimentos ativos da clínica
-          </p>
-        </div>
-        <ProcedimentosVinculadosPicker
-          options={procedimentoOptions}
-          loading={procedimentoOptionsLoading}
-          selectedIds={procedimentosVinculados}
-          onChange={onChangeProcedimentosVinculados}
-        />
-      </div>
+      <ProcedimentosVinculadosPicker
+        options={procedimentoOptions}
+        loading={procedimentoOptionsLoading}
+        selectedIds={procedimentosVinculados}
+        onChange={onChangeProcedimentosVinculados}
+      />
     </div>
   );
 }
