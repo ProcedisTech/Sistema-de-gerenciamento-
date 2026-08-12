@@ -231,7 +231,11 @@ export const DocumentoPublicoPage = () => {
           pacienteNome: lookupData.pacienteNome,
           dataHora: lookupData.dataAssinatura ? new Date(lookupData.dataAssinatura).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : new Date().toLocaleString(),
           ipAddress: lookupData.ipOrigem,
-          recusado: lookupData.recusado
+          recusado: lookupData.recusado,
+          statusCodigo: lookupData.recusado ? 'RECUSADO' : undefined,
+          recusadoEm: lookupData.recusado && lookupData.dataAssinatura
+            ? new Date(lookupData.dataAssinatura).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+            : undefined,
         },
         fileName: `documento_${(lookupData.pacienteNome || 'paciente').replace(/\s+/g, '_')}.pdf`,
         pacienteCtx: {

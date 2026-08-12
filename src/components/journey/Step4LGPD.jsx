@@ -368,11 +368,12 @@ export function Step3Termos({
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
-          assinaturaProfissional: profissionalAssinaturaDataUrl || 'PENDENTE_EXTERNA',
-          assinaturaPaciente: 'PENDENTE_EXTERNA',
+          assinaturaProfissional: profissionalAssinaturaDataUrl || null,
+          assinaturaPaciente: null,
           pacienteRecusou: false,
-          profissionalAssinouEm: new Date().toISOString(),
-          pacienteAssinouEm: new Date().toISOString(),
+          statusCodigo: 'PENDENTE',
+          profissionalAssinouEm: profissionalAssinaturaDataUrl ? new Date().toISOString() : null,
+          pacienteAssinouEm: null,
           conteudoSnapshot,
           userAgent: navigator.userAgent,
           ipAddress,
@@ -432,14 +433,16 @@ export function Step3Termos({
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
           assinaturaProfissional: profissionalAssinaturaDataUrl,
-          assinaturaPaciente: pacienteRecusou ? 'RECUSADO' : termoAssinaturaDataUrl,
+          assinaturaPaciente: pacienteRecusou ? null : termoAssinaturaDataUrl,
           pacienteRecusou: pacienteRecusou,
+          statusCodigo: pacienteRecusou ? 'RECUSADO' : 'ASSINADO',
           profissionalAssinouEm:
             profAssinaturaTimestamp != null
               ? new Date(profAssinaturaTimestamp).toISOString()
               : new Date().toISOString(),
-          pacienteAssinouEm:
-            patAssinaturaTimestamp != null
+          pacienteAssinouEm: pacienteRecusou
+            ? null
+            : patAssinaturaTimestamp != null
               ? new Date(patAssinaturaTimestamp).toISOString()
               : new Date().toISOString(),
           conteudoSnapshot,
@@ -745,7 +748,7 @@ export function Step3Termos({
         setPatAssinaturaTimestamp(res.pacienteAssinouEm ? new Date(res.pacienteAssinouEm).getTime() : Date.now());
         if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
         toast.success('Assinatura do paciente recebida!');
-      } else if (res && res.recusado) {
+      } else if (res && (res.statusCodigo === 'RECUSADO' || res.recusadoEm)) {
         setPacienteRecusou(true);
         toast.error('O paciente recusou assinar o documento.');
       } else {
@@ -869,8 +872,16 @@ export function Step3Termos({
                         metadados: {
                           pacienteNome: pacienteCtx?.nome || t.resultadoCompleto?.pacienteNome,
                           profissionalNome: profissionalCtx?.nome || t.resultadoCompleto?.profissionalNome,
-                          dataHora: t.resultadoCompleto?.profissionalAssinouEm ? new Date(t.resultadoCompleto.profissionalAssinouEm).toLocaleString('pt-BR') : undefined,
+                          dataHora: t.resultadoCompleto?.recusadoEm
+                            ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+                            : t.resultadoCompleto?.profissionalAssinouEm
+                              ? new Date(t.resultadoCompleto.profissionalAssinouEm).toLocaleString('pt-BR')
+                              : undefined,
                           ipAddress: t.resultadoCompleto?.ipAddress,
+                          statusCodigo: t.resultadoCompleto?.statusCodigo,
+                          recusadoEm: t.resultadoCompleto?.recusadoEm
+                            ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+                            : undefined,
                         }
                       });
                     });

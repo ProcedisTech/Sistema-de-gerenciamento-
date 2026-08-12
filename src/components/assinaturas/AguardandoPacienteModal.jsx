@@ -36,7 +36,7 @@ export function AguardandoPacienteModal({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(await authHeadersForFetch({ needsOrg: false })),
+            ...(await authHeadersForFetch({ needsOrg: true })),
           },
           body: JSON.stringify({
             termoAssinaturaId: sessaoExternaPayload.termoAssinaturaId,

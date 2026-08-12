@@ -8,12 +8,18 @@ import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
 import 'react-quill-new/dist/quill.snow.css';
 
-/** Retorna { expirado, data } a partir de doc.dataExpiracao, ou null se o termo não tem expiração configurada/calculada. */
+/** Retorna { expirado, data } a partir de vigencia/expiradaEm, ou null se vigente indefinidamente. */
 function resolverStatusExpiracao(doc) {
-  if (!doc.dataExpiracao) return null;
-  const data = new Date(doc.dataExpiracao);
+  if (typeof doc.vigente === 'boolean' && doc.vigente && !doc.expiradaEm) return null;
+  if (!doc.expiradaEm && doc.vigente !== false) return null;
+  if (!doc.expiradaEm) return { expirado: true, data: null };
+  const data = new Date(doc.expiradaEm);
   if (Number.isNaN(data.getTime())) return null;
   return { expirado: data.getTime() <= Date.now(), data };
+}
+
+function isRecusado(doc) {
+  return doc?.statusCodigo === 'RECUSADO' || Boolean(doc?.recusadoEm);
 }
 
 export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, paciente, clinicaInfo, perfilInfo }) {
@@ -71,7 +77,11 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
         metadados: {
           pacienteNome: paciente?.nomeCompleto || paciente?.nome || 'Paciente',
           dataHora: doc.dataAssinatura ? new Date(doc.dataAssinatura).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
-          recusado: doc.recusado,
+          recusado: isRecusado(doc),
+          statusCodigo: doc.statusCodigo,
+          recusadoEm: doc.recusadoEm
+            ? new Date(doc.recusadoEm).toLocaleString('pt-BR')
+            : undefined,
         },
         fileName: `documento_${doc.titulo ? doc.titulo.replace(/\s+/g, '_').toLowerCase() : 'assinado'}_${new Date().getTime()}.pdf`,
         pacienteCtx: {
@@ -191,7 +201,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                   </div>
                 )}
 
-                {doc.tipoDocumento === 'TERMO' && !doc.recusado && (() => {
+                {doc.tipoDocumento === 'TERMO' && !isRecusado(doc) && (() => {
                   const statusExp = resolverStatusExpiracao(doc);
                   const dataStr = statusExp?.data?.toLocaleDateString('pt-BR');
                   return (
@@ -217,7 +227,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                   );
                 })()}
 
-                {doc.recusado && (
+                {isRecusado(doc) && (
                   <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 border border-red-200">
                     RECUSADO PELO PACIENTE
                   </div>
@@ -225,7 +235,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
               </div>
 
               <div className="shrink-0 flex items-center gap-3">
-                {doc.assinaturaBase64 && !doc.recusado && (
+                {doc.assinaturaBase64 && !isRecusado(doc) && (
                   <div className="border-r border-slate-200 pr-4 py-1">
                     <img 
                       src={doc.assinaturaBase64} 
@@ -236,7 +246,7 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                   </div>
                 )}
                 
-                {doc.selfieUrl && !doc.recusado && (
+                {doc.selfieUrl && !isRecusado(doc) && (
                   <div className="border-r border-slate-200 pr-4 py-1 flex items-center justify-center">
                     <img 
                       src={doc.selfieUrl} 
@@ -296,14 +306,14 @@ export function DocumentosAssinadosTab({ pacienteId, onOpenDocumentoModal, pacie
                         )}
                         <div className="flex justify-between">
                           <span className="text-slate-400">Status:</span>
-                          <span className={`font-medium ${doc.recusado ? 'text-red-600' : 'text-teal-600'}`}>
-                            {doc.recusado ? 'Recusado' : 'Assinado'}
+                          <span className={`font-medium ${isRecusado(doc) ? 'text-red-600' : 'text-teal-600'}`}>
+                            {isRecusado(doc) ? 'Recusado' : 'Assinado'}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {!doc.recusado && doc.selfieUrl && (
+                    {!isRecusado(doc) && doc.selfieUrl && (
                       <div>
                         <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Foto de Validação</h5>
                         <div className="bg-white border border-slate-200 rounded-lg p-3 flex justify-center">
