@@ -10,51 +10,60 @@ import { auditoriaApi, equipeApi } from '../../services/api';
 import { AuditoriaDetailsModal } from './AuditoriaDetailsModal';
 import { formatData, formatarEntidade, getIconForEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
 import { ConfigCardStackSkeleton, ConfigTableRowsSkeleton } from '../shared/ConfigPanelSkeletons';
+import { usePapel } from '../../hooks/usePapel';
+import { useToast } from '../../contexts/useToast.js';
 
 const PERIODOS = [
-  { value: '',       label: 'Todos' },
-  { value: '1h',     label: 'Última hora' },
-  { value: 'hoje',   label: 'Hoje' },
+  { value: '', label: 'Todos' },
+  { value: '1h', label: 'Última hora' },
+  { value: 'hoje', label: 'Hoje' },
   { value: 'semana', label: 'Esta semana' },
-  { value: 'mes',    label: 'Este mês' },
-  { value: 'ano',    label: 'Este ano' },
+  { value: 'mes', label: 'Este mês' },
+  { value: 'ano', label: 'Este ano' },
 ];
 
 const ORDENACOES = [
   { value: 'desc', label: 'Mais recentes primeiro' },
-  { value: 'asc',  label: 'Mais antigas primeiro' },
+  { value: 'asc', label: 'Mais antigas primeiro' },
 ];
 
 const PAGE_SIZE = 15;
 
 function calcularDataLimite(periodo) {
   const agora = new Date();
-  if (periodo === '1h')     return new Date(agora - 60 * 60 * 1000);
-  if (periodo === 'hoje')   return new Date(agora.setHours(0, 0, 0, 0));
+  if (periodo === '1h') return new Date(agora - 60 * 60 * 1000);
+  if (periodo === 'hoje') return new Date(agora.setHours(0, 0, 0, 0));
   if (periodo === 'semana') return new Date(agora - 7 * 24 * 60 * 60 * 1000);
-  if (periodo === 'mes')    return new Date(agora.getFullYear(), agora.getMonth(), 1);
-  if (periodo === 'ano')    return new Date(agora.getFullYear(), 0, 1);
+  if (periodo === 'mes') return new Date(agora.getFullYear(), agora.getMonth(), 1);
+  if (periodo === 'ano') return new Date(agora.getFullYear(), 0, 1);
   return null;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function AuditoriaView() {
+  const { hasPerm } = usePapel();
+  const canExportPdf = hasPerm('PDF_EXPORTAR', 'NIVEL_5');
+  const toast = useToast();
+
   const [registros, setRegistros] = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [equipe, setEquipe]       = useState([]);
+  const [totalNoBanco, setTotalNoBanco] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [equipe, setEquipe] = useState([]);
+  const [clinica, setClinica] = useState(null);
 
   const [filtroRoleUserId, setFiltroRoleUserId] = useState('');
-  const [filtroPeriodo, setFiltroPeriodo]       = useState('');
-  const [busca, setBusca]                       = useState('');
-  const [filtroSuspeito, setFiltroSuspeito]     = useState(false);
-  const [ordenacao, setOrdenacao]               = useState('desc');
-  const [pagina, setPagina]                     = useState(1);
+  const [filtroPeriodo, setFiltroPeriodo] = useState('');
+  const [busca, setBusca] = useState('');
+  const [filtroSuspeito, setFiltroSuspeito] = useState(false);
+  const [ordenacao, setOrdenacao] = useState('desc');
+  const [pagina, setPagina] = useState(1);
   const [selectedRegistro, setSelectedRegistro] = useState(null);
 
   useEffect(() => {
     fetchEquipe();
     fetchAuditoria();
+    fetchClinica();
   }, []);
 
   useEffect(() => {
@@ -70,11 +79,23 @@ export function AuditoriaView() {
     }
   }
 
+  async function fetchClinica() {
+    try {
+      // Import dinâmico da api para não quebrar dependências caso não exista
+      const { configuracoesClinicaApi } = await import('../../services/api');
+      const res = await configuracoesClinicaApi.buscar();
+      setClinica(res);
+    } catch (err) {
+      console.error('Erro ao buscar clínica:', err);
+    }
+  }
+
   async function fetchAuditoria() {
     setLoading(true);
     try {
       const res = await auditoriaApi.list({ page: 0, size: 200 });
       setRegistros(res?.content || []);
+      setTotalNoBanco(res?.totalElements ?? (res?.content || []).length);
     } catch (err) {
       console.error('Erro ao buscar auditoria:', err);
     } finally {
@@ -93,7 +114,7 @@ export function AuditoriaView() {
     }
     if (busca.trim()) {
       const q = busca.toLowerCase();
-      lista = lista.filter(r => 
+      lista = lista.filter(r =>
         r.nomeUsuario?.toLowerCase().includes(q) ||
         r.acao?.toLowerCase().includes(q) ||
         r.entidade?.toLowerCase().includes(q) ||
@@ -110,8 +131,9 @@ export function AuditoriaView() {
     });
   }, [registros, filtroPeriodo, filtroRoleUserId, busca, filtroSuspeito, ordenacao]);
 
-  const totalPaginas  = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const itensDaPagina = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
+  const registrosTruncados = totalNoBanco > registros.length;
 
   const selectCls =
     'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10 appearance-none shadow-sm';
@@ -158,25 +180,47 @@ export function AuditoriaView() {
     </div>
   );
 
-  const exportarParaPDF = () => {
+  const exportarParaPDF = async () => {
+    try {
+      await auditoriaApi.registrarExportacao();
+    } catch (err) {
+      console.error('Erro ao registrar exportação na auditoria:', err);
+      toast.error('Não foi possível registrar a auditoria da exportação. PDF não gerado.');
+      return;
+    }
+
     import('jspdf').then(({ default: jsPDF }) => {
       import('jspdf-autotable').then(({ default: autoTable }) => {
         const doc = new jsPDF('landscape');
-        
+
         doc.setFontSize(18);
         doc.text('Relatório de Auditoria e Segurança', 14, 22);
-        
-        doc.setFontSize(11);
-        doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 30);
 
-        const tableColumn = ["Data", "Profissional", "Ação", "Módulo", "Descrição", "IP", "Suspeito?"];
+        doc.setFontSize(11);
+        let linhaAtual = 30;
+        if (clinica && clinica.nomeFantasia) {
+          doc.text(`${clinica.nomeFantasia}${clinica.cnpj ? ` - CNPJ: ${clinica.cnpj}` : ''}`, 14, linhaAtual);
+          linhaAtual += 6;
+        }
+        doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`, 14, linhaAtual);
+        linhaAtual += 6;
+        if (registrosTruncados) {
+          doc.setTextColor(180, 60, 0);
+          doc.text(`Mostrando as ${registros.length} ações mais recentes de ${totalNoBanco} no total. Use os filtros de período para reduzir o intervalo.`, 14, linhaAtual);
+          doc.setTextColor(0, 0, 0);
+          linhaAtual += 6;
+        }
+
+        const tableColumn = ["Data e Hora", "Profissional", "Ação", "Módulo", "Descrição", "IP", "Suspeito?"];
         const tableRows = [];
 
         filtrados.forEach(item => {
+          const acaoMap = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação' };
+
           const rowData = [
             formatData(item.criadoEm),
             item.nomeUsuario,
-            item.acao,
+            acaoMap.label,
             item.entidade,
             item.descricao || '-',
             item.ipOrigem || 'Desconhecido',
@@ -188,9 +232,18 @@ export function AuditoriaView() {
         autoTable(doc, {
           head: [tableColumn],
           body: tableRows,
-          startY: 35,
+          startY: linhaAtual,
           styles: { fontSize: 9 },
-          headStyles: { fillColor: [0, 168, 142] }
+          headStyles: { fillColor: [0, 168, 142] },
+          columnStyles: {
+            0: { cellWidth: 32 },
+            1: { cellWidth: 35 },
+            2: { cellWidth: 35 },
+            3: { cellWidth: 25 },
+            4: { cellWidth: 'auto' },
+            5: { cellWidth: 28 },
+            6: { cellWidth: 20 }
+          }
         });
 
         doc.save('relatorio_auditoria.pdf');
@@ -201,20 +254,30 @@ export function AuditoriaView() {
   return (
     <div className="flex flex-col gap-6">
       {/* ── Botões de Ação ── */}
-      <div className="flex justify-end">
-        <button
-          onClick={exportarParaPDF}
-          disabled={loading || filtrados.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 transition disabled:opacity-50"
-        >
-          <FileText className="w-4 h-4" />
-          Exportar para PDF
-        </button>
-      </div>
+      {canExportPdf && (
+        <div className="flex justify-end">
+          <button
+            onClick={exportarParaPDF}
+            disabled={loading || filtrados.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 transition disabled:opacity-50"
+          >
+            <FileText className="w-4 h-4" />
+            Exportar para PDF
+          </button>
+        </div>
+      )}
+
+      {/* ── Aviso de corte por volume ── */}
+      {!loading && registrosTruncados && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          Mostrando as {registros.length} ações mais recentes de {totalNoBanco} no total. Use os filtros de período para reduzir o intervalo.
+        </div>
+      )}
 
       {/* ── Filtros ── */}
       <div className="grid grid-cols-1 gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
-        
+
         {/* Busca */}
         <div className="flex flex-col gap-2 lg:col-span-2">
           <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
@@ -292,11 +355,11 @@ export function AuditoriaView() {
         {/* Ações Suspeitas */}
         <div className="flex flex-col gap-2 justify-end sm:col-span-2 lg:col-span-5 border-t border-slate-100 pt-3 mt-1">
           <label className="flex items-center gap-2 cursor-pointer w-max">
-            <input 
-              type="checkbox" 
-              className="hidden" 
-              checked={filtroSuspeito} 
-              onChange={() => setFiltroSuspeito(!filtroSuspeito)} 
+            <input
+              type="checkbox"
+              className="hidden"
+              checked={filtroSuspeito}
+              onChange={() => setFiltroSuspeito(!filtroSuspeito)}
             />
             <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${filtroSuspeito ? 'bg-red-500' : 'bg-slate-200'}`}>
               <div className={`w-4 h-4 bg-white rounded-full transition-transform ${filtroSuspeito ? 'translate-x-4' : 'translate-x-0'}`} />
@@ -316,63 +379,63 @@ export function AuditoriaView() {
           emptyState
         ) : (
           itensDaPagina.map((item) => {
-          const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
-          return (
-            <div
-              key={item.id}
-              className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-            >
-              {/* linha 1: avatar + nome + badge */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00a88e] to-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
-                    {item.nomeUsuario?.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-bold text-base text-slate-900 truncate leading-tight">
-                      {item.nomeUsuario}
+            const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
+            return (
+              <div
+                key={item.id}
+                className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+              >
+                {/* linha 1: avatar + nome + badge */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00a88e] to-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
+                      {item.nomeUsuario?.charAt(0).toUpperCase()}
                     </div>
-                    <div className="text-xs font-medium text-slate-400 truncate mt-0.5">{item.papel}</div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-base text-slate-900 truncate leading-tight">
+                        {item.nomeUsuario}
+                      </div>
+                      <div className="text-xs font-medium text-slate-400 truncate mt-0.5">{item.papel}</div>
+                    </div>
                   </div>
+                  <span className={`shrink-0 px-2.5 py-1 border rounded-md text-[10px] uppercase tracking-wider font-bold ${BADGE_CORES[acao.cor]}`}>
+                    {acao.label}
+                  </span>
                 </div>
-                <span className={`shrink-0 px-2.5 py-1 border rounded-md text-[10px] uppercase tracking-wider font-bold ${BADGE_CORES[acao.cor]}`}>
-                  {acao.label}
-                </span>
-              </div>
-              {item.suspeito && (
-                <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg border border-red-100 text-[11px] font-bold">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  AÇÃO SUSPEITA DETECTADA
+                {item.suspeito && (
+                  <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg border border-red-100 text-[11px] font-bold">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    AÇÃO SUSPEITA DETECTADA
+                  </div>
+                )}
+
+                {/* linha 2: data + entidade */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100/50">
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
+                    <Clock className="h-4 w-4 text-slate-400" />
+                    {formatData(item.criadoEm)}
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
+                    <div className="text-slate-400">{getIconForEntidade(item.entidade)}</div>
+                    {formatarEntidade(item.entidade)}
+                  </span>
                 </div>
-              )}
 
-              {/* linha 2: data + entidade */}
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100/50">
-                <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
-                  <Clock className="h-4 w-4 text-slate-400" />
-                  {formatData(item.criadoEm)}
-                </span>
-                <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
-                  <div className="text-slate-400">{getIconForEntidade(item.entidade)}</div>
-                  {formatarEntidade(item.entidade)}
-                </span>
+                {/* linha 3: descrição + botão de detalhes */}
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-[13px] text-slate-500 leading-relaxed truncate max-w-[70%]" title={item.descricao || ''}>
+                    {item.descricao || '-'}
+                  </p>
+                  <button
+                    onClick={() => setSelectedRegistro(item)}
+                    className="shrink-0 text-teal-600 hover:text-teal-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-teal-100 bg-teal-50/50 hover:bg-teal-100/50 transition-colors"
+                  >
+                    Ver Detalhes
+                  </button>
+                </div>
               </div>
-
-              {/* linha 3: descrição + botão de detalhes */}
-              <div className="mt-3 flex items-center justify-between">
-                <p className="text-[13px] text-slate-500 leading-relaxed truncate max-w-[70%]" title={item.descricao || ''}>
-                  {item.descricao || '-'}
-                </p>
-                <button
-                  onClick={() => setSelectedRegistro(item)}
-                  className="shrink-0 text-teal-600 hover:text-teal-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-teal-100 bg-teal-50/50 hover:bg-teal-100/50 transition-colors"
-                >
-                  Ver Detalhes
-                </button>
-              </div>
-            </div>
-          );
-        })
+            );
+          })
         )}
 
         {/* paginação mobile */}
@@ -489,9 +552,9 @@ export function AuditoriaView() {
         {paginacaoFooter}
       </div>
 
-      <AuditoriaDetailsModal 
-        registro={selectedRegistro} 
-        onClose={() => setSelectedRegistro(null)} 
+      <AuditoriaDetailsModal
+        registro={selectedRegistro}
+        onClose={() => setSelectedRegistro(null)}
       />
     </div>
   );
