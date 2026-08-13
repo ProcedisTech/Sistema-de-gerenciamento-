@@ -1518,6 +1518,14 @@ export const auditoriaApi = {
     const qs = params.toString();
     return request(`/api/v1/auditoria${qs ? `?${qs}` : ''}`);
   },
+  /**
+   * Registra (bloqueante) a exportação do relatório de auditoria em PDF.
+   * Deve ser chamada e ter sucesso ANTES de gerar o PDF no frontend.
+   */
+  registrarExportacao: () =>
+    request('/api/v1/auditoria/registrar-exportacao', {
+      method: 'POST',
+    }),
 };
 
 // ── Perfil Clínico do Paciente ─────────────────────────────

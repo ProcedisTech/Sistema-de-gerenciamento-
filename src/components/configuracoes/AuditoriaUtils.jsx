@@ -64,6 +64,36 @@ export const ACOES_MAP = {
   DESATIVAR_FERIADO:      { label: 'Removeu feriado',        cor: 'red' },
   EDITAR_TEMPLATE_LEMBRETE: { label: 'Editou lembrete',      cor: 'blue' },
   EDITAR_TEMPLATE_CONFIRMACAO: { label: 'Editou confirmação', cor: 'blue' },
+
+  // Auditoria
+  EXPORTAR_RELATORIO_AUDITORIA: { label: 'Exportou relatório de auditoria', cor: 'purple' },
+
+  // Perfil Clínico
+  EDITAR_PERFIL_CLINICO:  { label: 'Editou perfil clínico',  cor: 'blue' },
+
+  // Estoque
+  CRIAR_ITEM_ESTOQUE:     { label: 'Criou item de estoque',  cor: 'green' },
+  EDITAR_ITEM_ESTOQUE:    { label: 'Editou item de estoque', cor: 'blue' },
+  DESATIVAR_ITEM_ESTOQUE: { label: 'Desativou item de estoque', cor: 'red' },
+  CRIAR_LOTE_ESTOQUE:     { label: 'Criou lote de estoque',  cor: 'green' },
+  CRIAR_MOVIMENTACAO_ESTOQUE: { label: 'Movimentou estoque', cor: 'blue' },
+
+  // Assinatura Externa (link/OTP)
+  GERAR_ENVIO_ASSINATURA_EXTERNA: { label: 'Gerou link de assinatura', cor: 'green' },
+  VALIDAR_OTP_ASSINATURA_EXTERNA: { label: 'Validou código OTP',   cor: 'blue' },
+  ASSINAR_TERMO_EXTERNO:  { label: 'Assinou termo (externo)',  cor: 'purple' },
+
+  // Agenda
+  CONFIRMAR_AGENDA:       { label: 'Confirmou agendamento',   cor: 'blue' },
+  REALIZAR_AGENDA:        { label: 'Marcou agendamento como realizado', cor: 'purple' },
+
+  // Termo de Assinatura
+  VINCULAR_PROCEDIMENTO_TERMO_ASSINATURA: { label: 'Vinculou termo a procedimento', cor: 'blue' },
+
+  // Anamnese
+  REORDENAR_ALTERNATIVAS_ANAMNESE: { label: 'Reordenou alternativas', cor: 'blue' },
+  ADICIONAR_ALTERNATIVAS_ANAMNESE: { label: 'Adicionou alternativas', cor: 'green' },
+  ATUALIZAR_OBSERVACOES_ANAMNESE:  { label: 'Editou observações da anamnese', cor: 'blue' },
 };
 
 export const BADGE_CORES = {
@@ -86,7 +116,7 @@ export function formatData(iso) {
   if (!iso) return '-';
   return new Date(iso).toLocaleString('pt-BR', {
     day: '2-digit',
-    month: 'short',
+    month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
