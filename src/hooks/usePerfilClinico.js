@@ -26,6 +26,7 @@ export function mapGetToState(data) {
           codigo: item.codigo,
           nome: item.nome,
           observacao: item.observacao ?? '',
+          tipoCodigo: item.tipoCodigo ?? undefined,
           dose: item.dose ?? '',
           frequencia: item.frequencia ?? '',
           usoContinuo: item.usoContinuo ?? true,
@@ -100,6 +101,7 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [tiposByCodigo, setTiposByCodigo] = useState({});
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -140,6 +142,23 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    catalogoClinicoApi.tiposAntecedente()
+      .then((d) => {
+        if (cancelled || !Array.isArray(d)) return;
+        const map = {};
+        d.forEach((t) => {
+          if (t?.codigo) map[t.codigo] = t.nome;
+        });
+        setTiposByCodigo(map);
+      })
+      .catch(() => {
+        if (!cancelled) setTiposByCodigo({});
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const save = useCallback(async () => {
     if (!pacienteId || !roleUserId) {
@@ -238,5 +257,6 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
     buscarPrincipiosAtivos,
     buscarMedicamentos,
     buscarAntecedentes,
+    tiposByCodigo,
   };
 }

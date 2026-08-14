@@ -1592,6 +1592,10 @@ export const catalogoClinicoApi = {
     return request(`/api/v1/catalogo-clinico/antecedentes-pessoais${qs ? `?${qs}` : ''}`, { needsOrg: false });
   },
 
+  /** Domínio de tipos de antecedente pessoal (inclui OUTRO com ativo=false). */
+  tiposAntecedente: () =>
+    request('/api/v1/catalogo-clinico/tipos-antecedente', { needsOrg: false }),
+
   /** Outras alergias (não alimentares e não por PA). `q` opcional. */
   outrasAlergias: (q = '') => {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';

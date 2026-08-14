@@ -14,7 +14,8 @@ const DEBOUNCE_MS = 300;
  * - onUpdateObservacao(id, texto): void
  * - searchFn(q): Promise<CatalogoItemDTO[]> — busca debounced externamente
  * - renderChipExtra?(item, onChange): ReactNode — extra para medicamentos
- * - placeholder?: string
+ * - minQueryLength?: number — abaixo disso não dispara busca (antecedentes: 2)
+ * - tiposByCodigo?: Record<string, string> — rótulo do tipo no chip
  */
 export function CatalogoChipSection({
   titulo,
@@ -27,19 +28,27 @@ export function CatalogoChipSection({
   renderChipTop,
   placeholder = 'Buscar…',
   readOnly = false,
+  minQueryLength = 0,
+  tiposByCodigo = {},
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [expandedChip, setExpandedChip] = useState(null);
+  const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
   const debounceRef = useRef(null);
 
-  /** Busca com debounce. Query vazia busca o catálogo completo (sem CID-10). */
   const runSearch = useCallback((q) => {
     clearTimeout(debounceRef.current);
+    if (q.length < minQueryLength) {
+      setResults([]);
+      setShowResults(false);
+      setLoadingSearch(false);
+      return;
+    }
     debounceRef.current = setTimeout(async () => {
       setLoadingSearch(true);
       try {
@@ -54,7 +63,7 @@ export function CatalogoChipSection({
         setLoadingSearch(false);
       }
     }, DEBOUNCE_MS);
-  }, [searchFn]);
+  }, [searchFn, minQueryLength]);
 
   const handleQueryChange = useCallback((e) => {
     const q = e.target.value;
@@ -81,14 +90,12 @@ export function CatalogoChipSection({
       codigo: item.codigo,
       nome: item.nome,
       observacao: '',
+      tipoCodigo: item.tipoCodigo,
       dose: '',
       frequencia: '',
       usoContinuo: true,
       fabricanteId: null,
       fabricanteNome: null,
-      // Preserva a origem do item (CATALOGO | CID10). Necessário para o backend
-      // resolver a FK correta e para exibir o seletor de variante CID-10.
-      tipo: item.tipo ?? 'CATALOGO',
     };
     onAdd(chip);
     setExpandedChip(chip.id); // abre automaticamente ao selecionar
@@ -119,6 +126,9 @@ export function CatalogoChipSection({
                   className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5"
                 >
                   <span className="text-[12px] font-medium text-slate-700">{item.nome}</span>
+                  {tiposByCodigo[item.tipoCodigo] ? (
+                    <p className="mt-0.5 text-[11px] text-slate-500">{tiposByCodigo[item.tipoCodigo]}</p>
+                  ) : null}
                   {extras.length > 0 ? (
                     <p className="mt-0.5 text-[11px] text-slate-500">{extras.join(' · ')}</p>
                   ) : null}
@@ -147,10 +157,13 @@ export function CatalogoChipSection({
             value={query}
             onChange={handleQueryChange}
             onFocus={() => {
+              setInputFocused(true);
               if (results.length > 0) { setShowResults(true); return; }
-              // Abre catálogo na primeira vez que o usuário clica no campo vazio
-              runSearch(query.trim());
+              if (query.trim().length >= minQueryLength) {
+                runSearch(query.trim());
+              }
             }}
+            onBlur={() => setInputFocused(false)}
             placeholder={placeholder}
             className="flex-1 bg-transparent text-[13px] text-slate-700 placeholder:text-slate-400 outline-none"
           />
@@ -158,6 +171,9 @@ export function CatalogoChipSection({
             <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-[#00a88e]" />
           )}
         </div>
+        {minQueryLength > 0 && inputFocused && query.trim().length < minQueryLength ? (
+          <p className="mt-1 text-[11px] text-slate-400">Digite pelo menos {minQueryLength} caracteres</p>
+        ) : null}
 
         {/* Dropdown de resultados */}
         {showResults && results.length > 0 && (
@@ -206,6 +222,11 @@ export function CatalogoChipSection({
               >
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5">
                   <span className="text-[12px] font-medium text-slate-700">{item.nome}</span>
+                  {tiposByCodigo[item.tipoCodigo] ? (
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                      {tiposByCodigo[item.tipoCodigo]}
+                    </span>
+                  ) : null}
 
                   {/* Botão expandir chip (observação / extras) */}
                   <button

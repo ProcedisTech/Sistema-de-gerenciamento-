@@ -271,6 +271,7 @@ function buildAnamneseEsteticaFromRespostas(respostas) {
   return out;
 }
 
+// TODO V127 — remapear para códigos CID após revisão dos nomes (Z34, Z391, N951, L910, Z721)
 const ANTECEDENTE_CODIGOS_GESTACAO_LACTACAO = ['ant_gestacao', 'ant_amamentacao', 'ant_menopausa'];
 const ANTECEDENTE_CODIGOS_CICATRIZACAO = ['ant_cicatriz_queloide', 'ant_queloides'];
 const ANTECEDENTE_CODIGOS_ETILISMO = ['ant_etilismo'];
@@ -569,6 +570,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                 buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
                 buscarMedicamentos={perfilClinico.buscarMedicamentos}
                 buscarAntecedentes={perfilClinico.buscarAntecedentes}
+                tiposByCodigo={perfilClinico.tiposByCodigo}
                 readOnly
               />
             </div>
@@ -615,6 +617,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
               buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
               buscarMedicamentos={perfilClinico.buscarMedicamentos}
               buscarAntecedentes={perfilClinico.buscarAntecedentes}
+              tiposByCodigo={perfilClinico.tiposByCodigo}
               readOnly
             />
           </div>

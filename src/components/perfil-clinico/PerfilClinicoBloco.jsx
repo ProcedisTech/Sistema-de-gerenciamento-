@@ -35,6 +35,7 @@ export function PerfilClinicoBloco({
   buscarPrincipiosAtivos,
   buscarMedicamentos,
   buscarAntecedentes,
+  tiposByCodigo = {},
   readOnly = false,
 }) {
   const errorMessage = useMemo(
@@ -257,7 +258,9 @@ export function PerfilClinicoBloco({
             onRemove={(id) => removeItem('antecedentes', id)}
             onUpdateObservacao={(id, texto) => updateObservacao('antecedentes', id, texto)}
             searchFn={buscarAntecedentes}
-            placeholder="Buscar antecedente (ex.: hipertensão, diabetes…)"
+            placeholder="Buscar antecedente (mín. 2 letras: hipertensão, diabetes…)"
+            minQueryLength={2}
+            tiposByCodigo={tiposByCodigo}
             readOnly={readOnly}
           />
         </section>
