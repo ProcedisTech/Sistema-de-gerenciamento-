@@ -103,6 +103,9 @@ export function mapAgendaDtoToDashboardRow(dto) {
     tipoProcedimentoNome: dto.tipoProcedimentoNome || '',
     profissionalNome: dto.profissionalNome || '',
     observacao: dto.observacao != null ? String(dto.observacao) : '',
+    criadoEm: dto.criadoEm || null,
+    atualizadoEm: dto.atualizadoEm || null,
+    dataAgendamento: dto.dataAgendamento || null,
     rawSlot: dto,
     rawAgendamento: null,
   };
