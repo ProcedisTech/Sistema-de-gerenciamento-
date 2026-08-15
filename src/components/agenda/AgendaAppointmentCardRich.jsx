@@ -1,4 +1,4 @@
-import { Lock, X } from 'lucide-react';
+import { Clock3, Lock, Stethoscope, X } from 'lucide-react';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { getRailCardActions } from '../../utils/agendaCardActions.js';
 import {
@@ -6,6 +6,7 @@ import {
   getRailStripeClass,
   getStatusBadgePresentation,
 } from '../../utils/agendaRailHelpers.js';
+import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBadges.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
@@ -104,9 +105,18 @@ export function AgendaAppointmentCardRich({
     );
   }
 
-  const badge = getStatusBadgePresentation(appointment);
+  const rawBadge = getStatusBadgePresentation(appointment);
+  const isRealizado = appointment.status === 'realizado';
+  
+  // Status neutro para realizado
+  const badge = isRealizado
+    ? { label: 'Concluída', pillClass: 'bg-ink-100 text-ink-600', dotClass: 'bg-ink-400' }
+    : rawBadge;
+
   const stripe = getRailStripeClass(appointment);
   const actions = getRailCardActions(appointment.status, canStartAnamnese);
+  const execSummary = getExecutionSummary(appointment);
+  const timingBadge = execSummary?.badge || getTimingBadge(appointment);
 
   return (
     <article
@@ -126,26 +136,34 @@ export function AgendaAppointmentCardRich({
         >
           {formatHm(appointment.horaInicio)}
         </p>
-        <p className="font-mono text-[11px] text-ink-500">{Number(appointment.duracaoMin) || 0} min</p>
+        {!isRealizado ? (
+          <p className="font-mono text-[11px] text-ink-500">{Number(appointment.duracaoMin) || 0} min</p>
+        ) : null}
       </div>
 
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <AgendaAvatarInitials name={appointment.pacienteNome} size={28} className="!text-[10px]" />
-          <p className="min-w-0 truncate text-[13.5px] font-semibold text-ink-900">
-            {appointment.pacienteNome || 'Paciente'}
-          </p>
+          <div className="min-w-0">
+            <span className="block text-[9.5px] font-medium uppercase tracking-wider text-ink-400 leading-none mb-0.5">
+              paciente
+            </span>
+            <p className="truncate text-[13.5px] font-bold text-ink-900 leading-tight">
+              {appointment.pacienteNome || 'Paciente'}
+            </p>
+          </div>
         </div>
         <p
-          className="mt-0.5 line-clamp-2 text-[12.5px] font-medium leading-snug text-ink-700 [overflow-wrap:anywhere]"
+          className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-snug text-ink-700 [overflow-wrap:anywhere]"
           title={appointment.procedimentoNome || 'Sem procedimento'}
         >
           {appointment.procedimentoNome || 'Sem procedimento'}
         </p>
         {appointment.profissionalNome ? (
-          <p className="truncate text-[11.5px] font-normal text-ink-500" title={appointment.profissionalNome}>
-            por: {appointment.profissionalNome}
-          </p>
+          <div className="mt-0.5 flex items-center gap-1 text-[11.5px] font-normal text-ink-500" title={appointment.profissionalNome}>
+            <Stethoscope className="h-3.5 w-3.5 text-ink-400 shrink-0" />
+            <span className="truncate">{appointment.profissionalNome}</span>
+          </div>
         ) : null}
         {!isNivel1 ? (
           <AgendaRailCardActions
@@ -182,6 +200,20 @@ export function AgendaAppointmentCardRich({
           {formatAgendaShortId(appointment.agendaId || appointment.id)}
         </span>
       </div>
+
+      {(isRealizado || execSummary?.hasExecution) ? (
+        <div className="col-span-full mt-2.5 border-t border-ink-200 pt-2.5 flex items-center justify-between gap-2 text-[11.5px] text-ink-700">
+          <div className="flex items-center gap-1.5 font-medium">
+            <Clock3 className="h-3.5 w-3.5 text-ink-400 shrink-0" />
+            <span>{execSummary.fullText || `${execSummary.rangeText} (${execSummary.duracaoText})`}</span>
+          </div>
+          {timingBadge ? (
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${timingBadge.badgeClass}`}>
+              {timingBadge.label}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

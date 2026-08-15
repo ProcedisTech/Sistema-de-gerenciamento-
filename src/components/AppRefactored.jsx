@@ -51,7 +51,6 @@ import {
   agendasApi,
   anamneseApi,
   catalogosApi,
-  getApiErrorDetail,
   getApiErrorToastMessage,
   orientacoesApi,
   pacientesGaleriaApi,
@@ -126,7 +125,6 @@ import {
   formatClockHHMM,
   formatAntecedenciaText,
   formatAtrasoText,
-  formatNowHHMM,
 } from '../utils/agendaStartTolerance.js';
 
 function normalizeTermosList(raw) {
@@ -1531,26 +1529,12 @@ function AppRefactoredInner() {
     if (!m || m.variant !== 'early' || !m.options?.agendaId) return;
     setIniciarTolAdiantarSubmitting(true);
     try {
-      await agendasApi.adiantar(m.options.agendaId, formatNowHHMM());
-      await agendaSchedule.refreshDashboard();
+      // Preserva o horário agendado oficial (ex: 19:00) sem alterar a horaInicio na tb_agenda
       closeIniciarTolModal();
       handleStartAttendance(m.patient, m.options);
-    } catch (e) {
-      const status = e?.status;
-      if (status === 409) {
-        setIniciarTolModal((prev) =>
-          prev ? { ...prev, variant: 'conflict', detailMessage: getApiErrorDetail(e) } : null,
-        );
-      } else if (status === 404) {
-        toast.error(getApiErrorToastMessage(e, 'Agendamento não encontrado.'));
-        closeIniciarTolModal();
-      } else if (status === 400) {
-        toast.error(getApiErrorToastMessage(e, 'Não foi possível validar o horário.'));
-        closeIniciarTolModal();
-      } else {
-        toast.error(getApiErrorToastMessage(e, 'Não foi possível adiantar o horário.'));
-        closeIniciarTolModal();
-      }
+    } catch {
+      toast.error('Não foi possível iniciar o atendimento.');
+      closeIniciarTolModal();
     } finally {
       setIniciarTolAdiantarSubmitting(false);
     }
@@ -2925,10 +2909,8 @@ function AppRefactoredInner() {
             const newM = total % 60;
             actualEndHh = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
           }
-          const updatePayload = {
-            ...(actualStartHh ? { horaInicio: actualStartHh } : {}),
-            horaFim: actualEndHh,
-          };
+          // Preserva horaInicio e horaFim previstos no banco para nao alterar a reserva do agendamento
+          const updatePayload = {};
 
           const agendaIdsToUpdate = new Set();
           if (targetAgendaId) agendaIdsToUpdate.add(String(targetAgendaId));

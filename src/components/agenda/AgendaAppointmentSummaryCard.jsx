@@ -1,8 +1,9 @@
-import { Clock3, Lock, UserRound } from 'lucide-react';
+import { Clock3, Lock, Stethoscope, UserRound } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel.js';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
+import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBadges.js';
 import {
   BLOQUEIO_HATCH_BG,
   bloqueioHoraFimLabel,
@@ -190,12 +191,19 @@ export function AgendaAppointmentSummaryCard({
   const statusTone = getStatusColors(appointment.status);
   const grad = hashGradient(appointment.pacienteNome);
   const avatarStyle = { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
-  const badgeClass = STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
   const statusBadgeLabel = isReagendado
     ? 'Reagendado'
     : isNoShow
       ? 'No-show'
       : statusTone.label || appointment.status;
+
+  const execSummary = getExecutionSummary(appointment);
+  const timingBadge = execSummary?.badge || getTimingBadge(appointment);
+  const isRealizado = appointment.status === 'realizado';
+
+  const badgeClass = isRealizado
+    ? 'bg-ink-100 text-ink-600 font-medium'
+    : STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   const isPanel = variant === 'panel' || variant === 'highlight';
   const highlightClass =
@@ -206,7 +214,7 @@ export function AgendaAppointmentSummaryCard({
   if (isPanel) {
     const metaLine = [
       appointment.horaInicio,
-      appointment.duracaoMin ? `${appointment.duracaoMin} min` : null,
+      !isRealizado && appointment.duracaoMin ? `${appointment.duracaoMin} min` : null,
       appointment.procedimentoNome || 'Sem procedimento',
     ]
       .filter(Boolean)
@@ -227,30 +235,51 @@ export function AgendaAppointmentSummaryCard({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
-                <p className="truncate text-sm font-bold text-[#1A1A2E]">{appointment.pacienteNome}</p>
+                <div className="min-w-0">
+                  <span className="block text-[9.5px] font-medium uppercase tracking-wider text-ink-400 leading-none mb-0.5">
+                    paciente
+                  </span>
+                  <p className="truncate text-sm font-bold text-ink-900 leading-tight">{appointment.pacienteNome}</p>
+                </div>
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] ${
                     isReagendado
-                      ? 'bg-purple-100 text-purple-800'
+                      ? 'bg-purple-100 text-purple-800 font-semibold'
                       : isNoShow
-                        ? 'bg-orange-100 text-orange-800'
+                        ? 'bg-orange-100 text-orange-800 font-semibold'
                         : badgeClass
                   }`}
                 >
-                  {statusBadgeLabel}
+                  {isRealizado ? 'Concluída' : statusBadgeLabel}
                 </span>
               </div>
               <p
-                className="mt-0.5 line-clamp-2 text-xs font-medium leading-snug text-slate-600 [overflow-wrap:anywhere]"
+                className="mt-1 line-clamp-2 text-xs font-medium leading-snug text-ink-700 [overflow-wrap:anywhere]"
                 title={metaLine}
               >
                 {metaLine}
               </p>
               {(showProfissional || appointment.profissionalNome) && appointment.profissionalNome ? (
-                <p className="mt-0.5 truncate text-xs text-slate-500">por: {appointment.profissionalNome}</p>
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-ink-500" title={appointment.profissionalNome}>
+                  <Stethoscope className="h-3.5 w-3.5 text-ink-400 shrink-0" />
+                  <span className="truncate">{appointment.profissionalNome}</span>
+                </div>
               ) : null}
             </div>
           </div>
+          {(isRealizado || execSummary?.hasExecution) ? (
+            <div className="mt-2.5 border-t border-ink-200 pt-2.5 flex items-center justify-between gap-2 text-[11.5px] text-ink-700">
+              <div className="flex items-center gap-1.5 font-medium">
+                <Clock3 className="h-3.5 w-3.5 text-ink-400 shrink-0" />
+                <span>{execSummary.fullText || `${execSummary.rangeText} (${execSummary.duracaoText})`}</span>
+              </div>
+              {timingBadge ? (
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${timingBadge.badgeClass}`}>
+                  {timingBadge.label}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           {isValidAdvanceOffer(appointment, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (
             <button
               type="button"
@@ -417,9 +446,24 @@ export function AgendaAppointmentSummaryCard({
           <div className="flex items-center gap-2">
             <Clock3 className="h-3.5 w-3.5 text-[#888888]" />
             <span>
-              {appointment.horaInicio} ({appointment.duracaoMin} min)
+              {appointment.horaInicio} ({appointment.duracaoMin} min previstos)
             </span>
           </div>
+          {(appointment.status === 'realizado' || execSummary?.hasExecution) ? (
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-1.5 rounded-lg border border-teal-100 bg-teal-50/70 px-2.5 py-1.5 text-[11px] font-medium text-slate-700">
+              <div className="flex items-center gap-1.5">
+                <Clock3 className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                <span>
+                  Realizado: <strong className="font-semibold text-slate-900">{execSummary.rangeText || appointment.horaInicio}</strong> ({execSummary.duracaoText || '1 min'})
+                </span>
+              </div>
+              {execSummary?.badge ? (
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${execSummary.badge.badgeClass}`}>
+                  {execSummary.badge.label}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <UserRound className="h-3.5 w-3.5 text-[#888888]" />
             <span>{appointment.profissionalNome}</span>
