@@ -3,6 +3,14 @@ import { resolveApiUrl } from '../../config/apiEnv';
 import { SignatureFullscreenModal } from '../../components/journey/Step4LGPD';
 import { TermoVisualizacao } from '../../components/termos/TermoVisualizacao';
 import { PenLine, Calendar } from 'lucide-react';
+import { DynamicQuestion } from '../../components/anamnese/DynamicQuestion.jsx';
+import {
+  isRespostaPreenchida,
+  serializeRespostaPublica,
+  toPerguntaFromPublica,
+} from '../../components/anamnese/anamneseFichaUtils.js';
+import { aplicarMudancaResposta, perguntaFilhaVisivel } from '../../components/anamnese/anamneseCondicional.js';
+import { searchCatalogoPublico } from '../../components/anamnese/anamneseCatalogoSearch.js';
 
 // Simple CPF formatter: 000.000.000-00
 const formatCPF = (val) => {
@@ -105,19 +113,10 @@ export const AnamnesePage = () => {
     }
   };
 
-  const handleChangeResposta = (perguntaId, valor, tipo) => {
-    if (tipo === 'checkbox') {
-      setRespostas(prev => {
-        const selected = prev[perguntaId] || [];
-        if (selected.includes(valor)) {
-          return { ...prev, [perguntaId]: selected.filter(v => v !== valor) };
-        } else {
-          return { ...prev, [perguntaId]: [...selected, valor] };
-        }
-      });
-    } else {
-      setRespostas(prev => ({ ...prev, [perguntaId]: valor }));
-    }
+  const handleRespostaChange = (resposta) => {
+    const perguntas = (lookupData?.modelo?.categorias || [])
+      .flatMap((c) => (c.perguntas || []).map(toPerguntaFromPublica));
+    setRespostas((prev) => aplicarMudancaResposta(prev, perguntas, resposta));
   };
 
   const handleGoToSignature = (e) => {
@@ -128,15 +127,18 @@ export const AnamnesePage = () => {
     
     let allAnswered = true;
     for (const cat of modelo.categorias) {
-      for (const p of cat.perguntas) {
-        if (p.obrigatorio) {
-          const val = respostas[p.perguntaId];
-          if (val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+      for (const raw of cat.perguntas) {
+        const p = toPerguntaFromPublica(raw);
+        if (!perguntaFilhaVisivel(p, respostas)) continue;
+        if (raw.obrigatorio) {
+          const val = respostas[p.id] ?? respostas[String(p.id)];
+          if (!isRespostaPreenchida(p, val)) {
             allAnswered = false;
             break;
           }
         }
       }
+      if (!allAnswered) break;
     }
     
     if (!allAnswered) {
@@ -169,9 +171,15 @@ export const AnamnesePage = () => {
     try {
       const modelo = lookupData?.modelo;
       const formattedRespostas = {};
-      Object.entries(respostas).forEach(([key, val]) => {
-        formattedRespostas[key] = val;
-      });
+      for (const cat of modelo.categorias || []) {
+        for (const raw of cat.perguntas || []) {
+          const p = toPerguntaFromPublica(raw);
+          if (!perguntaFilhaVisivel(p, respostas)) continue;
+          const val = respostas[p.id] ?? respostas[String(p.id)];
+          const serialized = serializeRespostaPublica(p, val);
+          if (serialized !== undefined) formattedRespostas[p.id] = serialized;
+        }
+      }
 
       const body = {
         cpf: cpf.replace(/\D/g, ''),
@@ -224,124 +232,21 @@ export const AnamnesePage = () => {
           <div key={cat.categoriaId} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
             <h3 className="text-lg font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-100">{cat.nome}</h3>
             <div className="flex flex-col gap-5">
-              {cat.perguntas.map(p => {
-                const isTexto = p.tipo === 'texto' || !p.tipo;
-                const isTextarea = p.tipo === 'textarea';
-                const isSelect = p.tipo === 'select' || p.tipo === 'escolha_unica';
-                const isCheckbox = p.tipo === 'checkbox' || p.tipo === 'multipla_escolha';
-                const isEscala = p.tipo === 'escala';
-                const isNumero = p.tipo === 'numero';
-                const isBooleano = p.tipo === 'booleano';
-                
-                const val = respostas[p.perguntaId];
-
+              {cat.perguntas.map((raw) => {
+                const p = toPerguntaFromPublica(raw);
+                if (!perguntaFilhaVisivel(p, respostas)) return null;
                 return (
-                  <div key={p.perguntaId} className={`flex flex-col gap-3 p-5 rounded-2xl border transition-all ${p.alerta ? 'border-red-200 bg-red-50/10' : 'border-slate-100 bg-slate-50/20'}`}>
-                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 flex-wrap">
-                      {p.alerta && <span className="text-red-500 font-bold" title="Alerta clínico">⚠️</span>}
-                      {p.texto}
-                      {p.obrigatorio && <span className="text-red-500 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded-md border border-red-100" title="Obrigatório">obrigatório *</span>}
-                    </label>
-                    
-                    {isTexto && (
-                      <input 
-                        type="text" 
-                        className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all bg-white"
-                        value={val || ''}
-                        onChange={e => handleChangeResposta(p.perguntaId, e.target.value, 'texto')}
-                        placeholder="Sua resposta"
-                      />
-                    )}
-
-                    {isTextarea && (
-                      <textarea 
-                        className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all resize-none bg-white"
-                        rows={3}
-                        value={val || ''}
-                        onChange={e => handleChangeResposta(p.perguntaId, e.target.value, 'textarea')}
-                        placeholder="Sua resposta"
-                      />
-                    )}
-
-                    {isSelect && (
-                      <select 
-                        className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all bg-white text-slate-800 font-medium"
-                        value={val || ''}
-                        onChange={e => handleChangeResposta(p.perguntaId, e.target.value, 'select')}
-                      >
-                        <option value="" disabled>Selecione uma opção</option>
-                        {p.opcoes?.map(opt => (
-                          <option key={opt.opcaoId} value={opt.opcaoId}>{opt.texto}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {isCheckbox && (
-                      <div className="flex flex-col gap-2">
-                        {p.opcoes?.map(opt => (
-                          <label key={opt.opcaoId} className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors bg-white">
-                            <input 
-                              type="checkbox"
-                              className="w-5 h-5 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer"
-                              checked={(val || []).includes(opt.opcaoId)}
-                              onChange={() => handleChangeResposta(p.perguntaId, opt.opcaoId, 'checkbox')}
-                            />
-                            <span className="text-sm font-medium text-slate-700">{opt.texto}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-
-                    {isEscala && (
-                      <div className="flex flex-col gap-3 mt-1">
-                        <input 
-                          type="range"
-                          min="0"
-                          max="10"
-                          step="1"
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
-                          value={val || 0}
-                          onChange={e => handleChangeResposta(p.perguntaId, e.target.value, 'escala')}
-                        />
-                        <div className="flex justify-between text-xs font-semibold text-slate-500">
-                          <span>0</span>
-                          <span className="text-teal-600 text-lg px-2 py-0.5 bg-teal-50 rounded-md">{val || 0}</span>
-                          <span>10</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {isNumero && (
-                      <input 
-                        type="number" 
-                        className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all bg-white"
-                        value={val ?? ''}
-                        onChange={e => handleChangeResposta(p.perguntaId, e.target.value === '' ? '' : Number(e.target.value), 'numero')}
-                        placeholder="0"
-                      />
-                    )}
-
-                    {isBooleano && (
-                      <div className="flex gap-3">
-                        {[{ label: 'Sim', value: 'true' }, { label: 'Não', value: 'false' }].map(({ label, value }) => {
-                          const ativo = String(val) === value;
-                          return (
-                            <button
-                              key={label}
-                              type="button"
-                              onClick={() => handleChangeResposta(p.perguntaId, value, 'booleano')}
-                              className={`flex-1 py-2.5 px-4 rounded-xl border text-[14px] font-semibold transition-all shadow-sm ${
-                                ativo 
-                                  ? 'border-teal-600 bg-teal-50 text-teal-700 font-bold ring-2 ring-teal-500/20' 
-                                  : 'border-slate-200 text-slate-600 bg-white hover:bg-slate-50'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                  <div key={p.id} className={`flex flex-col gap-3 p-5 rounded-2xl border transition-all ${raw.alerta ? 'border-red-200 bg-red-50/10' : 'border-slate-100 bg-slate-50/20'}`}>
+                    <DynamicQuestion
+                      pergunta={p}
+                      resposta={respostas[p.id] ?? respostas[String(p.id)]}
+                      onChange={handleRespostaChange}
+                      alerta={Boolean(raw.alerta)}
+                      obrigatorio={Boolean(raw.obrigatorio)}
+                      searchFn={searchCatalogoPublico(p.tipoResposta, {
+                        tipoAntecedenteCodigo: p.tipoAntecedenteCodigo,
+                      })}
+                    />
                   </div>
                 );
               })}

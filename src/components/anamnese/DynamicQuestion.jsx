@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Check } from 'lucide-react';
+import { AnamneseCatalogoPicker } from './AnamneseCatalogoPicker.jsx';
+import { isTipoCatalogo } from './anamneseTipoLabels';
 
 /** Label da pergunta com numeração inline, obrigatório* e ícone de alerta. */
 export function QuestionLabel({ numero, descricao, obrigatorio = false, alerta = false }) {
@@ -27,9 +29,19 @@ export function DynamicQuestion({
   readOnly = false,
   obrigatorio = false,
   numero = null,
+  searchFn = null,
 }) {
   const tipo = pergunta.tipoResposta;
   const fieldBase = `w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors${readOnly ? ' cursor-default bg-slate-50 opacity-90' : ''}`;
+
+  const handleCatalogo = useCallback((next) => {
+    onChange({
+      perguntaId: pergunta.id,
+      catalogoItens: next.catalogoItens,
+      textosLivres: next.textosLivres,
+      declarouAusencia: next.declarouAusencia,
+    });
+  }, [onChange, pergunta.id]);
 
   if (tipo === 'texto') {
     return (
@@ -126,6 +138,57 @@ export function DynamicQuestion({
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  if (tipo === 'sim_nao_naosei') {
+    const valor = resposta?.respostaTrivalente ?? null;
+    return (
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: 'Sim', value: 'SIM' },
+            { label: 'Não', value: 'NAO' },
+            { label: 'Não sei', value: 'NAO_SEI' },
+          ].map(({ label, value }) => {
+            const ativo = valor === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                disabled={readOnly}
+                aria-pressed={ativo}
+                onClick={() => {
+                  if (readOnly) return;
+                  onChange({ perguntaId: pergunta.id, respostaTrivalente: ativo ? null : value });
+                }}
+                className={`max-w-[160px] flex-1 rounded-lg border px-4 py-2 text-[13px] font-medium transition-all ${
+                  readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
+                }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-500 hover:border-[#00a88e]/40'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (isTipoCatalogo(tipo)) {
+    return (
+      <div className="flex w-full min-w-0 flex-col">
+        <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
+        <AnamneseCatalogoPicker
+          searchFn={searchFn}
+          catalogoItens={resposta?.catalogoItens || []}
+          textosLivres={resposta?.textosLivres || []}
+          declarouAusencia={Boolean(resposta?.declarouAusencia)}
+          onChange={handleCatalogo}
+          readOnly={readOnly}
+        />
       </div>
     );
   }

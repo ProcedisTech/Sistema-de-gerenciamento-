@@ -16,12 +16,14 @@ import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
 import {
   buildPerguntaTipoById,
-  buildRespostaApiRow,
+  buildRespostaApiRows,
   groupItensByCategoria,
   isFullWidthItem,
   isRespostaPreenchida,
   mergeApiRespostasToMap,
 } from '../anamnese/anamneseFichaUtils.js';
+import { aplicarMudancaResposta, categoriaVisivelParaSexo, perguntaFilhaVisivel } from '../anamnese/anamneseCondicional.js';
+import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -147,7 +149,19 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     [fichaSelecionada],
   );
 
-  const itensPorSecao = useMemo(() => groupItensByCategoria(itensOrdenados), [itensOrdenados]);
+  const itensFiltrados = useMemo(
+    () =>
+      itensOrdenados.filter((item) => {
+        const p = item.pergunta;
+        if (!p) return false;
+        if (!categoriaVisivelParaSexo(p.categoriaSexoAplicavel, pacienteSexo)) return false;
+        if (!perguntaFilhaVisivel(p, respostas)) return false;
+        return true;
+      }),
+    [itensOrdenados, pacienteSexo, respostas],
+  );
+
+  const itensPorSecao = useMemo(() => groupItensByCategoria(itensFiltrados), [itensFiltrados]);
 
   const mostrarQueixaExpectativas = !fichaSelecionada || itensOrdenados.length === 0;
   /** Ficha personalizada com perguntas: complemento opcional no final (motivo da visita). */
@@ -163,8 +177,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       for (const r of Object.values(respostas)) {
         const pergunta = perguntaById.get(String(r.perguntaId));
         if (!pergunta) continue;
-        const row = buildRespostaApiRow(pergunta, r);
-        if (row) rows.push(row);
+        const row = buildRespostaApiRows(pergunta, r);
+        if (row.length) rows.push(...row);
       }
       return {
         anamneseId: fichaSelecionadaId,
@@ -183,6 +197,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         if (!item.obrigatorio) continue;
         const pid = item.pergunta?.id;
         if (pid == null) continue;
+        if (!categoriaVisivelParaSexo(item.pergunta?.categoriaSexoAplicavel, pacienteSexo)) continue;
+        if (!perguntaFilhaVisivel(item.pergunta, respostas)) continue;
         const resposta = respostas[pid] ?? respostas[String(pid)];
         if (!isRespostaPreenchida(item.pergunta, resposta)) faltando.push(pid);
       }
@@ -215,7 +231,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       const hasFichaDropdown = Boolean(fichaDropdownNovo);
       return hasRespostas || hasFichaDropdown;
     },
-  }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior, perfilClinico, itensOrdenados, fichaDropdownNovo]);
+  }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior, perfilClinico, itensOrdenados, fichaDropdownNovo, pacienteSexo]);
   const [loadingFichas, setLoadingFichas] = useState(true);
   const [loadingFicha, setLoadingFicha] = useState(false);
   const [historicoPaciente, setHistoricoPaciente] = useState([]);
@@ -481,7 +497,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     if (modoVisualizacao) return;
     const key = String(resposta.perguntaId);
     const normalized = { ...resposta, perguntaId: resposta.perguntaId };
-    const next = { ...respostasRef.current, [key]: normalized };
+    const perguntas = itensOrdenados.map((item) => item.pergunta).filter(Boolean);
+    const next = aplicarMudancaResposta(respostasRef.current, perguntas, normalized);
     respostasRef.current = next;
     setRespostas(next);
     setErrosObrigatorias((prev) => {
@@ -507,6 +524,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     fichaSelecionadaId,
     fichaDropdownNovo,
     preenchimentoAnterior,
+    itensOrdenados,
   ]);
 
   const toggleModoVisualizacao = useCallback(() => {
@@ -952,6 +970,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                         alerta={isAlerta}
                         obrigatorio={showObrigatorio}
                         readOnly={modoVisualizacao}
+                        searchFn={searchCatalogoHub(item.pergunta?.tipoResposta, {
+                          sexo: pacienteSexo,
+                          tipoAntecedenteCodigo: item.pergunta?.tipoAntecedenteCodigo,
+                        })}
                       />
                     </div>
                   );
