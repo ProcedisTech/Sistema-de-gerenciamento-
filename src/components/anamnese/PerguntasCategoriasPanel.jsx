@@ -3,8 +3,9 @@ import {
   Plus, Search, Loader2, ChevronDown, ChevronUp,
   Pencil, Trash2, Check, X, Tag, HelpCircle, AlertTriangle,
 } from 'lucide-react';
-import { anamneseApi, dimensoesApi, getApiErrorDetail } from '../../services/api';
+import { anamneseApi, dimensoesApi, catalogoClinicoApi, getApiErrorDetail } from '../../services/api';
 import { HabitoEditModal } from './HabitoEditModal';
+import { PerguntaMoldeExtraFields } from './PerguntaMoldeExtraFields';
 import {
   HabitoModalShell,
   HABITO_INPUT_CLASS,
@@ -44,7 +45,7 @@ function TipoBadge({ tipo }) {
 
 // ── CreateHabitoModal ─────────────────────────────────────────────────────────
 
-function CreateHabitoModal({ categorias, tiposResposta, preCategoriaId, onClose, onSaved }) {
+function CreateHabitoModal({ categorias, tiposResposta, tiposAntecedente = [], perguntasPai = [], preCategoriaId, onClose, onSaved }) {
   const [categoriaId, setCategoriaId] = useState(preCategoriaId || '');
   const [tipoRespostaId, setTipoRespostaId] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -53,6 +54,10 @@ function CreateHabitoModal({ categorias, tiposResposta, preCategoriaId, onClose,
   const [novaAlt, setNovaAlt] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [tipoAntecedentePessoalId, setTipoAntecedentePessoalId] = useState(null);
+  const [antecedenteCatalogoId, setAntecedenteCatalogoId] = useState(null);
+  const [antecedenteCatalogoNome, setAntecedenteCatalogoNome] = useState('');
+  const [perguntaPaiId, setPerguntaPaiId] = useState(null);
 
   const DESCRICAO_MAX = 300;
   const TIPOS_ESCOLHA = ['escolha_unica', 'multipla_escolha'];
@@ -100,6 +105,9 @@ function CreateHabitoModal({ categorias, tiposResposta, preCategoriaId, onClose,
         tipoRespostaId,
         descricao: descricao.trim().slice(0, DESCRICAO_MAX),
         prioridade,
+        tipoAntecedentePessoalId: tipoAntecedentePessoalId || null,
+        antecedenteCatalogoId: antecedenteCatalogoId || null,
+        perguntaPaiId: perguntaPaiId || null,
       });
       if (precisaAlts && alternativas.length > 0) {
         await anamneseApi.addAlternativas(habito.id, alternativas);
@@ -209,6 +217,22 @@ function CreateHabitoModal({ categorias, tiposResposta, preCategoriaId, onClose,
             />
           </div>
 
+          <PerguntaMoldeExtraFields
+            tipoSelecionado={tipoSelecionado}
+            tipoAntecedentePessoalId={tipoAntecedentePessoalId}
+            onTipoAntecedenteChange={setTipoAntecedentePessoalId}
+            antecedenteCatalogoId={antecedenteCatalogoId}
+            antecedenteCatalogoNome={antecedenteCatalogoNome}
+            onAntecedenteCatalogoChange={(id, nome) => {
+              setAntecedenteCatalogoId(id);
+              setAntecedenteCatalogoNome(nome || '');
+            }}
+            perguntaPaiId={perguntaPaiId}
+            onPerguntaPaiChange={setPerguntaPaiId}
+            tiposAntecedente={tiposAntecedente}
+            perguntasPai={perguntasPai}
+          />
+
           {precisaAlts ? (
             <div className="space-y-3 rounded-xl border border-fuchsia-200 bg-[#f8fbfb] p-4">
               <label className="ml-1 text-[13px] font-bold text-[#a855f7]">Alternativas *</label>
@@ -257,6 +281,7 @@ export function PerguntasCategoriasPanel() {
   const [categorias, setCategorias] = useState([]);
   const [perguntasPorCat, setPerguntasPorCat] = useState({}); // { [catId]: HabitoDTO[] }
   const [tiposResposta, setTiposResposta] = useState([]);
+  const [tiposAntecedente, setTiposAntecedente] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -267,10 +292,12 @@ export function PerguntasCategoriasPanel() {
 
   // ── CRUD Categoria ──
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
+  const [novaCategoriaSexo, setNovaCategoriaSexo] = useState('');
   const [criandoCategoria, setCriandoCategoria] = useState(false);
   const [erroCategoria, setErroCategoria] = useState('');
   const [editandoCatId, setEditandoCatId] = useState(null);
   const [editandoCatNome, setEditandoCatNome] = useState('');
+  const [editandoCatSexo, setEditandoCatSexo] = useState('');
   const [salvandoCat, setSalvandoCat] = useState(false);
   const [deletandoCatId, setDeletandoCatId] = useState(null);
   const [excluindoCat, setExcluindoCat] = useState(false);
@@ -293,13 +320,15 @@ export function PerguntasCategoriasPanel() {
     setLoading(true);
     setLoadError('');
     try {
-      const [cats, tipos] = await Promise.all([
+      const [cats, tipos, tiposAnt] = await Promise.all([
         anamneseApi.listCategorias().catch(() => []),
         dimensoesApi.tiposResposta().catch(() => []),
+        catalogoClinicoApi.tiposAntecedente().catch(() => []),
       ]);
       const catList = Array.isArray(cats) ? cats : [];
       setCategorias(catList);
       setTiposResposta(Array.isArray(tipos) ? tipos : []);
+      setTiposAntecedente(Array.isArray(tiposAnt) ? tiposAnt : []);
 
       // Eager: carrega perguntas de todas as categorias em paralelo
       const resultados = await Promise.all(
@@ -359,6 +388,14 @@ export function PerguntasCategoriasPanel() {
       .filter(({ matchCat, perguntas }) => matchCat || perguntas.length > 0);
   }, [categorias, perguntasPorCat, termoBusca]);
 
+  const perguntasPai = useMemo(
+    () =>
+      Object.values(perguntasPorCat)
+        .flat()
+        .filter((p) => p.tipoResposta === 'sim_nao_naosei'),
+    [perguntasPorCat],
+  );
+
   // ── Acordeão ──────────────────────────────────────────────────────────────
 
   const toggleExpand = useCallback((catId) => {
@@ -384,8 +421,9 @@ export function PerguntasCategoriasPanel() {
     setErroCategoria('');
     setCriandoCategoria(true);
     try {
-      await anamneseApi.createCategoria({ nome });
+      await anamneseApi.createCategoria({ nome, sexoAplicavel: novaCategoriaSexo || null });
       setNovaCategoriaNome('');
+      setNovaCategoriaSexo('');
       await fetchTudo();
     } catch (err) {
       setErroCategoria(
@@ -403,6 +441,7 @@ export function PerguntasCategoriasPanel() {
     setDeletandoCatId(null);
     setEditandoCatId(cat.id);
     setEditandoCatNome(cat.nome);
+    setEditandoCatSexo(cat.sexoAplicavel || '');
   };
 
   const handleSalvarEdicaoCategoria = async (id) => {
@@ -411,7 +450,7 @@ export function PerguntasCategoriasPanel() {
     setErroCatInline(null);
     setSalvandoCat(true);
     try {
-      const updated = await anamneseApi.updateCategoria(id, { nome });
+      const updated = await anamneseApi.updateCategoria(id, { nome, sexoAplicavel: editandoCatSexo || null });
       setCategorias((prev) => prev.map((c) => (c.id === id ? updated : c)));
       setEditandoCatId(null);
     } catch (err) {
@@ -524,6 +563,8 @@ export function PerguntasCategoriasPanel() {
           pergunta={editandoPergunta}
           categorias={categorias}
           tiposResposta={tiposResposta}
+          tiposAntecedente={tiposAntecedente}
+          perguntasPai={perguntasPai.filter((p) => String(p.id) !== String(editandoPergunta.id))}
           onClose={() => setEditandoPergunta(null)}
           onSaved={handleEditSaved}
         />
@@ -534,6 +575,8 @@ export function PerguntasCategoriasPanel() {
         <CreateHabitoModal
           categorias={categorias}
           tiposResposta={tiposResposta}
+          tiposAntecedente={tiposAntecedente}
+          perguntasPai={perguntasPai}
           preCategoriaId={createForm.preCategoriaId}
           onClose={() => setCreateForm({ open: false, preCategoriaId: null })}
           onSaved={handleCreateSaved}
@@ -624,6 +667,21 @@ export function PerguntasCategoriasPanel() {
               }`}
             />
           </div>
+          <div className="space-y-1 w-full sm:w-40">
+            <label htmlFor="nova-cat-sexo" className="text-[12px] font-bold text-[#00a88e] ml-1">
+              Sexo
+            </label>
+            <select
+              id="nova-cat-sexo"
+              value={novaCategoriaSexo}
+              onChange={(e) => setNovaCategoriaSexo(e.target.value)}
+              className="w-full px-3 py-2.5 bg-[#f8fbfb] border border-[#00a88e]/25 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 focus:border-[#00a88e]"
+            >
+              <option value="">Todos</option>
+              <option value="F">Feminino</option>
+              <option value="M">Masculino</option>
+            </select>
+          </div>
           <button
             type="submit"
             disabled={criandoCategoria}
@@ -688,6 +746,15 @@ export function PerguntasCategoriasPanel() {
                           }}
                           className="flex-1 min-w-0 px-2 py-1 bg-white border-2 border-[#00a88e]/40 rounded-lg text-[13px] font-medium focus:ring-2 focus:ring-[#00a88e]/20 focus:border-[#00a88e] outline-none"
                         />
+                        <select
+                          value={editandoCatSexo}
+                          onChange={(e) => setEditandoCatSexo(e.target.value)}
+                          className="w-28 px-2 py-1 bg-white border-2 border-[#00a88e]/40 rounded-lg text-[12px] font-medium outline-none"
+                        >
+                          <option value="">Todos</option>
+                          <option value="F">F</option>
+                          <option value="M">M</option>
+                        </select>
                         <button
                           type="button"
                           onClick={() => handleSalvarEdicaoCategoria(cat.id)}

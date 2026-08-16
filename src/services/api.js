@@ -1186,10 +1186,10 @@ export const anamneseApi = {
   listCategorias: () => request('/api/v1/anamnese/categorias'),
   createCategoria: (data) =>
     request('/api/v1/anamnese/categorias', { method: 'POST', body: JSON.stringify(data) }),
-  updateCategoria: (id, { nome }) =>
+  updateCategoria: (id, { nome, sexoAplicavel }) =>
     request(`/api/v1/anamnese/categorias/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ nome }),
+      body: JSON.stringify({ nome, sexoAplicavel: sexoAplicavel || null }),
     }),
   deleteCategoria: (id) =>
     request(`/api/v1/anamnese/categorias/${id}`, { method: 'DELETE' }),
@@ -1584,10 +1584,11 @@ export const catalogoClinicoApi = {
    * @param {string} q
    * @param {'M'|'F'|null|undefined} sexo
    */
-  antecedentesPessoais: (q = '', sexo) => {
+  antecedentesPessoais: (q = '', sexo, tipo) => {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (sexo && sexo !== 'N') params.set('sexo', sexo);
+    if (tipo) params.set('tipo', tipo);
     const qs = params.toString();
     return request(`/api/v1/catalogo-clinico/antecedentes-pessoais${qs ? `?${qs}` : ''}`, { needsOrg: false });
   },

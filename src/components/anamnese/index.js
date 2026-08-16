@@ -6,6 +6,7 @@ export { HabitoEditModal } from './HabitoEditModal';
 export { AnamneseConfigPublicaPanel } from './AnamneseConfigPublicaPanel';
 export { AnamneseFichaReadonlyView } from './AnamneseFichaReadonlyView.jsx';
 export { DynamicQuestion, QuestionLabel } from './DynamicQuestion.jsx';
+export { AnamneseCatalogoPicker } from './AnamneseCatalogoPicker.jsx';
 
 // Aposentados — mantidos para compatibilidade; remover após validação em produção
 export { AnamneseAdminView } from './AnamneseAdminView';

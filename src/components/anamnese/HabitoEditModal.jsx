@@ -19,6 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { anamneseApi } from '../../services/api';
 import { tipoLabel } from './anamneseTipoLabels';
+import { PerguntaMoldeExtraFields } from './PerguntaMoldeExtraFields';
 import {
   HabitoModalShell,
   HABITO_INPUT_CLASS,
@@ -129,7 +130,7 @@ function resolveTipoRespostaId(pergunta, tiposResposta) {
  * @param {() => void} props.onClose
  * @param {(updated: object | null) => void} props.onSaved — null = refetch completo
  */
-export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel: tipoLabelProp, onClose, onSaved }) {
+export function HabitoEditModal({ pergunta, categorias, tiposResposta, tiposAntecedente = [], perguntasPai = [], tipoLabel: tipoLabelProp, onClose, onSaved }) {
   const resolveTipo = tipoLabelProp || tipoLabel;
 
   const [categoriaId, setCategoriaId] = useState(String(pergunta.categoriaId || ''));
@@ -142,6 +143,10 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
   );
   const [novaAlt, setNovaAlt] = useState('');
   const [prioridade, setPrioridade] = useState(() => pergunta.prioridade ?? 'NORMAL');
+  const [tipoAntecedentePessoalId, setTipoAntecedentePessoalId] = useState(pergunta.tipoAntecedentePessoalId || null);
+  const [antecedenteCatalogoId, setAntecedenteCatalogoId] = useState(pergunta.antecedenteCatalogoId || null);
+  const [antecedenteCatalogoNome, setAntecedenteCatalogoNome] = useState('');
+  const [perguntaPaiId, setPerguntaPaiId] = useState(pergunta.perguntaPaiId || null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [dupWarning, setDupWarning] = useState('');
@@ -225,6 +230,9 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
         tipoRespostaId,
         descricao: descricao.trim().slice(0, DESCRICAO_MAX_CHARS),
         prioridade,
+        tipoAntecedentePessoalId: tipoAntecedentePessoalId || null,
+        antecedenteCatalogoId: antecedenteCatalogoId || null,
+        perguntaPaiId: perguntaPaiId || null,
       };
       if (mostrarAlternativas) {
         body.alternativas = alternativas.map((a, i) => {
@@ -328,6 +336,22 @@ export function HabitoEditModal({ pergunta, categorias, tiposResposta, tipoLabel
               className={HABITO_INPUT_CLASS}
             />
           </div>
+
+          <PerguntaMoldeExtraFields
+            tipoSelecionado={tipoSelecionado || tipoStrOriginal}
+            tipoAntecedentePessoalId={tipoAntecedentePessoalId}
+            onTipoAntecedenteChange={setTipoAntecedentePessoalId}
+            antecedenteCatalogoId={antecedenteCatalogoId}
+            antecedenteCatalogoNome={antecedenteCatalogoNome}
+            onAntecedenteCatalogoChange={(id, nome) => {
+              setAntecedenteCatalogoId(id);
+              setAntecedenteCatalogoNome(nome || '');
+            }}
+            perguntaPaiId={perguntaPaiId}
+            onPerguntaPaiChange={setPerguntaPaiId}
+            tiposAntecedente={tiposAntecedente}
+            perguntasPai={perguntasPai}
+          />
 
           {mostrarAlternativas ? (() => {
             const editDupeIndices = findDuplicateIndices(alternativas);

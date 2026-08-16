@@ -109,11 +109,13 @@ import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
 import {
   mergeApiRespostasToMap,
   buildPerguntaTipoById,
-  buildRespostaApiRow,
+  buildRespostaApiRows,
   sortFichaItens,
   groupItensByCategoria,
   isFullWidthItem,
 } from '../anamnese/anamneseFichaUtils.js';
+import { aplicarMudancaResposta } from '../anamnese/anamneseCondicional.js';
+import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco.jsx';
 import { usePerfilClinico, mapGetToState as mapPerfilClinicoResponseToState } from '../../hooks/usePerfilClinico';
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
@@ -474,14 +476,18 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
 
   const handleRespostaChange = useCallback((resposta) => {
     const key = String(resposta.perguntaId);
-    setEditingRespostas((prev) => ({ ...prev, [key]: { ...resposta, perguntaId: resposta.perguntaId } }));
+    setEditingRespostas((prev) => {
+      const ficha = fichaByAnId[editingAnamneseId];
+      const perguntas = (ficha?.itens || []).map((i) => i.pergunta).filter(Boolean);
+      return aplicarMudancaResposta(prev, perguntas, { ...resposta, perguntaId: resposta.perguntaId });
+    });
     setErrosObrigatorias((prev) => {
       if (!prev.has(key)) return prev;
       const cleared = new Set(prev);
       cleared.delete(key);
       return cleared;
     });
-  }, []);
+  }, [fichaByAnId, editingAnamneseId]);
 
   const handleSaveEdit = useCallback(async () => {
     const ficha = fichaByAnId[editingAnamneseId];
@@ -498,9 +504,9 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
       const pid = item.pergunta?.id;
       if (!pid) continue;
       const r = editingRespostas[pid] ?? editingRespostas[String(pid)];
-      const row = buildRespostaApiRow(item.pergunta, r);
-      if (row) {
-        rowsApi.push(row);
+      const rows = buildRespostaApiRows(item.pergunta, r);
+      if (rows.length) {
+        rowsApi.push(...rows);
       } else if (item.obrigatorio) {
         errors.add(String(pid));
       }
@@ -729,6 +735,10 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                                     onChange={handleRespostaChange}
                                     alerta={isAlerta}
                                     obrigatorio={item.obrigatorio}
+                                    searchFn={searchCatalogoHub(item.pergunta?.tipoResposta, {
+                                      sexo: pacienteSexo,
+                                      tipoAntecedenteCodigo: item.pergunta?.tipoAntecedenteCodigo,
+                                    })}
                                   />
                                 </div>
                               );

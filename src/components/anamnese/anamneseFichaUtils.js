@@ -1,4 +1,5 @@
-/** Mapa perguntaId → tipoResposta a partir do GET ficha (item.pergunta embutida). */
+import { canalCatalogoPublico, isTipoCatalogo } from './anamneseTipoLabels';
+
 export function buildPerguntaTipoById(ficha) {
   const map = {};
   for (const item of ficha?.itens ?? []) {
@@ -20,11 +21,21 @@ export function mapApiRespostaToEstado(r) {
     row.respostaNumero = Number.isFinite(n) ? n : null;
   }
   if (r.respostaBoolean === true || r.respostaBoolean === false) row.respostaBoolean = r.respostaBoolean;
+  if (r.respostaTrivalente) row.respostaTrivalente = r.respostaTrivalente;
+  if (r.declarouAusencia === true) row.declarouAusencia = true;
   const po = r.perguntaOpcaoId ?? r.opcaoId ?? r.pergunta_opcao_id;
   if (po != null && po !== '') row.perguntaOpcaoId = po;
   const multi = r.opcoesSelecionadas ?? r.opcoes_selecionadas;
   if (Array.isArray(multi) && multi.length > 0) {
     row.opcoesSelecionadas = multi.map((x) => (typeof x === 'object' && x != null && x.id != null ? x.id : x));
+  }
+  const catalogId =
+    r.alergiaCatalogoId
+    || r.principioAtivoId
+    || r.medicamentoCatalogoId
+    || r.antecedenteCatalogoId;
+  if (catalogId) {
+    row.catalogoItens = [{ id: catalogId, nome: r.opcaoSelecionada || String(catalogId), fonte: 'catalogo' }];
   }
   return row;
 }
@@ -47,6 +58,35 @@ export function mergeApiRespostasToMap(respostasApi, perguntaTipoById = {}) {
       const ids = new Set((prev?.opcoesSelecionadas || []).map(String));
       mapped.opcoesSelecionadas.forEach((id) => ids.add(String(id)));
       map[key] = { perguntaId: mapped.perguntaId, opcoesSelecionadas: [...ids] };
+      continue;
+    }
+
+    const tipoPergunta = perguntaTipoById[key] || '';
+    const isCat = tipoPergunta.startsWith('catalogo_');
+
+    if (mapped.declarouAusencia) {
+      map[key] = { perguntaId: mapped.perguntaId, declarouAusencia: true };
+      continue;
+    }
+
+    if (mapped.respostaTrivalente) {
+      map[key] = { perguntaId: mapped.perguntaId, respostaTrivalente: mapped.respostaTrivalente };
+      continue;
+    }
+
+    if (isCat) {
+      const prev = map[key] || { perguntaId: mapped.perguntaId, catalogoItens: [], textosLivres: [] };
+      const catalogoItens = [...(prev.catalogoItens || [])];
+      const textosLivres = [...(prev.textosLivres || [])];
+      if (mapped.catalogoItens) {
+        for (const it of mapped.catalogoItens) {
+          if (!catalogoItens.some((c) => String(c.id) === String(it.id))) catalogoItens.push(it);
+        }
+      }
+      if (mapped.respostaTexto) {
+        textosLivres.push({ idLocal: `api-${key}-${textosLivres.length}`, texto: mapped.respostaTexto, fonte: 'livre' });
+      }
+      map[key] = { perguntaId: mapped.perguntaId, catalogoItens, textosLivres };
       continue;
     }
 
@@ -102,6 +142,7 @@ function isCompactChoice(alternativas) {
 export function isFullWidthItem(item) {
   const tipo = item.pergunta?.tipoResposta;
   if (tipo === 'texto') return true;
+  if (isTipoCatalogo(tipo)) return true;
   if (tipo === 'escolha_unica' || tipo === 'multipla_escolha') {
     return !isCompactChoice(item.pergunta?.alternativas);
   }
@@ -144,31 +185,117 @@ export function isRespostaPreenchida(pergunta, resposta) {
   if (tipo === 'multipla_escolha') {
     return Array.isArray(resposta.opcoesSelecionadas) && resposta.opcoesSelecionadas.length > 0;
   }
+  if (tipo === 'sim_nao_naosei') {
+    return Boolean(resposta.respostaTrivalente);
+  }
+  if (isTipoCatalogo(tipo)) {
+    if (resposta.declarouAusencia) return true;
+    const hasCat = Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0;
+    const hasTxt = Array.isArray(resposta.textosLivres) && resposta.textosLivres.some((t) => String(t.texto || '').trim());
+    return hasCat || hasTxt;
+  }
   return false;
 }
 
-/** Monta uma linha do POST /anamnese/paciente conforme tipo da pergunta. */
-export function buildRespostaApiRow(pergunta, resposta) {
-  if (!isRespostaPreenchida(pergunta, resposta)) return null;
-  const base = { perguntaId: resposta.perguntaId };
+/** Monta N linhas XOR do POST autenticado. */
+export function buildRespostaApiRows(pergunta, resposta) {
+  if (!isRespostaPreenchida(pergunta, resposta)) return [];
+  const perguntaId = resposta.perguntaId ?? pergunta.id;
   const tipo = pergunta.tipoResposta;
 
   if (tipo === 'texto') {
-    return { ...base, respostaTexto: resposta.respostaTexto };
+    return [{ perguntaId, respostaTexto: resposta.respostaTexto }];
   }
   if (tipo === 'numero') {
-    return { ...base, respostaNumero: resposta.respostaNumero };
+    return [{ perguntaId, respostaNumero: resposta.respostaNumero }];
   }
   if (tipo === 'booleano') {
-    return { ...base, respostaBoolean: resposta.respostaBoolean };
+    return [{ perguntaId, respostaBoolean: resposta.respostaBoolean }];
   }
   if (tipo === 'escolha_unica') {
-    return { ...base, perguntaOpcaoId: resposta.perguntaOpcaoId };
+    return [{ perguntaId, perguntaOpcaoId: resposta.perguntaOpcaoId }];
   }
   if (tipo === 'multipla_escolha') {
-    return { ...base, opcoesSelecionadas: resposta.opcoesSelecionadas };
+    return [{ perguntaId, opcoesSelecionadas: resposta.opcoesSelecionadas }];
   }
-  return null;
+  if (tipo === 'sim_nao_naosei') {
+    return [{ perguntaId, respostaTrivalente: resposta.respostaTrivalente }];
+  }
+  if (isTipoCatalogo(tipo)) {
+    if (resposta.declarouAusencia) {
+      return [{ perguntaId, declarouAusencia: true }];
+    }
+    const rows = [];
+    const fkField =
+      tipo === 'catalogo_alergia' ? 'alergiaCatalogoId'
+      : tipo === 'catalogo_principio_ativo' ? 'principioAtivoId'
+      : tipo === 'catalogo_medicamento' ? 'medicamentoCatalogoId'
+      : 'antecedenteCatalogoId';
+    for (const it of resposta.catalogoItens || []) {
+      rows.push({ perguntaId, [fkField]: it.id });
+    }
+    for (const t of resposta.textosLivres || []) {
+      const texto = String(t.texto || '').trim();
+      if (texto) rows.push({ perguntaId, respostaTexto: texto });
+    }
+    return rows;
+  }
+  return [];
+}
+
+/** @deprecated use buildRespostaApiRows — uma pergunta de catálogo vira N linhas. */
+export function buildRespostaApiRow(pergunta, resposta) {
+  const rows = buildRespostaApiRows(pergunta, resposta);
+  return rows.length === 1 ? rows[0] : rows.length > 1 ? rows : null;
+}
+
+/** Valor do Map público (escalar legado ou List `{tipo,valor}`). */
+export function serializeRespostaPublica(pergunta, resposta) {
+  if (!isRespostaPreenchida(pergunta, resposta)) return undefined;
+  const tipo = pergunta.tipoResposta || pergunta.tipo;
+  if (tipo === 'texto') return resposta.respostaTexto;
+  if (tipo === 'numero') return resposta.respostaNumero;
+  if (tipo === 'booleano') return resposta.respostaBoolean;
+  if (tipo === 'escolha_unica') return resposta.perguntaOpcaoId;
+  if (tipo === 'multipla_escolha') return resposta.opcoesSelecionadas;
+  if (tipo === 'sim_nao_naosei') {
+    return [{ tipo: 'trivalente', valor: resposta.respostaTrivalente }];
+  }
+  if (isTipoCatalogo(tipo)) {
+    if (resposta.declarouAusencia) {
+      return [{ tipo: 'declarou_ausencia', valor: true }];
+    }
+    const canal = canalCatalogoPublico(tipo);
+    const list = [];
+    for (const it of resposta.catalogoItens || []) {
+      list.push({ tipo: canal, valor: it.id });
+    }
+    for (const t of resposta.textosLivres || []) {
+      const texto = String(t.texto || '').trim();
+      if (texto) list.push({ tipo: 'texto', valor: texto });
+    }
+    return list;
+  }
+  return undefined;
+}
+
+export function toPerguntaFromPublica(p) {
+  return {
+    id: p.perguntaId,
+    descricao: p.texto,
+    tipoResposta: p.tipo,
+    perguntaPaiId: p.perguntaPaiId,
+    tipoAntecedentePessoalId: p.tipoAntecedentePessoalId,
+    tipoAntecedenteCodigo: p.tipoAntecedenteCodigo,
+    antecedenteCatalogoId: p.antecedenteCatalogoId,
+    obrigatorio: p.obrigatorio,
+    prioridade: p.alerta ? 'ALERTA' : 'NORMAL',
+    alternativas: (p.opcoes || []).map((o, i) => ({
+      id: o.opcaoId,
+      alternativa: o.texto,
+      ordem: i,
+    })),
+  };
 }
 
 /** Itens da ficha ordenados por `ordem`. */
