@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ClipboardList,
   Copy,
   FileText,
-  Layers,
   Loader2,
   Pencil,
   Plus,
   Search,
-  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
@@ -37,96 +34,24 @@ function EspecialidadeBadge({ nome }) {
   );
 }
 
-function StartScreen({ starters, onFromStarter, onMontarSecoes, onDoZero, loading }) {
-  const fichaStarters = starters.filter((s) => s.tipo === 'FICHA');
-
-  return (
-    <div className="mx-auto max-w-2xl space-y-6 py-8">
-      <div className="text-center">
-        <ClipboardList className="mx-auto mb-3 h-10 w-10 text-[#00a88e] opacity-80" strokeWidth={1.5} />
-        <h3 className="text-[18px] font-bold text-[#0f172a]">Como deseja começar?</h3>
-        <p className="mt-1 text-[13px] text-[#64748b]">Escolha um ponto de partida para sua ficha de anamnese.</p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-1">
-        <div className="rounded-2xl border border-app-border bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-600" />
-            <h4 className="text-[14px] font-bold text-[#0f172a]">Partir de ficha pronta</h4>
-          </div>
-          <div className="space-y-2">
-            {fichaStarters.map((s) => (
-              <button
-                key={s.codigo}
-                type="button"
-                disabled={loading}
-                onClick={() => onFromStarter(s.codigo)}
-                className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left transition-colors hover:border-[#00a88e]/30 hover:bg-[#f0fdfa] disabled:opacity-60"
-              >
-                <div>
-                  <p className="text-[13px] font-bold text-[#0f766e]">{s.nome}</p>
-                  <p className="text-[11px] text-[#64748b]">{s.descricao}</p>
-                </div>
-                <span className="text-[11px] font-bold text-[#64748b]">{s.contagemPerguntas} perg.</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          disabled={loading}
-          onClick={onMontarSecoes}
-          className="flex items-start gap-3 rounded-2xl border border-app-border bg-white p-4 text-left shadow-sm transition-colors hover:border-[#00a88e]/30 hover:bg-[#f0fdfa] disabled:opacity-60"
-        >
-          <Layers className="mt-0.5 h-5 w-5 shrink-0 text-[#00a88e]" />
-          <div>
-            <p className="text-[14px] font-bold text-[#0f172a]">Montar por seções</p>
-            <p className="text-[12px] text-[#64748b]">Ficha vazia — adicione blocos prontos no editor.</p>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          disabled={loading}
-          onClick={onDoZero}
-          className="flex items-start gap-3 rounded-2xl border border-app-border bg-white p-4 text-left shadow-sm transition-colors hover:border-[#00a88e]/30 hover:bg-[#f0fdfa] disabled:opacity-60"
-        >
-          <FileText className="mt-0.5 h-5 w-5 shrink-0 text-[#00a88e]" />
-          <div>
-            <p className="text-[14px] font-bold text-[#0f172a]">Escrever do zero</p>
-            <p className="text-[12px] text-[#64748b]">Comece com uma seção em branco.</p>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /**
- * Hub unificado de Fichas: listagem + tela inicial + editor de documento.
+ * Hub de Fichas: listagem das fichas salvas. "Nova Ficha" abre o editor local-first (sem POST).
  */
-export function AnamneseFichasHome({ onFichaNomeChange }) {
+export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
   const toast = useToast();
   const [fichas, setFichas] = useState([]);
-  const [starters, setStarters] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [busca, setBusca] = useState('');
   const [view, setView] = useState('list');
-  const [editorFichaId, setEditorFichaId] = useState(null);
+  const [editorFichaId, setEditorFichaId] = useState(undefined);
   const [fichaParaExcluir, setFichaParaExcluir] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
 
   const fetchDados = useCallback(async () => {
     setLoading(true);
     try {
-      const [fs, st] = await Promise.all([
-        anamneseApi.listFichas().catch(() => []),
-        anamneseApi.listStarters().catch(() => []),
-      ]);
+      const fs = await anamneseApi.listFichas().catch(() => []);
       setFichas(Array.isArray(fs) ? fs : []);
-      setStarters(Array.isArray(st) ? st : []);
     } finally {
       setLoading(false);
     }
@@ -137,8 +62,11 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
   }, [fetchDados]);
 
   useEffect(() => {
-    if (view === 'list') onFichaNomeChange?.(null);
-  }, [view, onFichaNomeChange]);
+    if (view === 'list') {
+      onFichaNomeChange?.(null);
+      onDirtyFichaChange?.(false);
+    }
+  }, [view, onFichaNomeChange, onDirtyFichaChange]);
 
   const fichasFiltradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -155,31 +83,9 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
     setView('editor');
   };
 
-  const handleCreateEmpty = async (nome = 'Nova ficha') => {
-    setCreating(true);
-    try {
-      const ficha = await anamneseApi.createFicha({ nome, itens: [] });
-      await fetchDados();
-      openEditor(ficha.id);
-    } catch (err) {
-      toast.error(err.message || 'Erro ao criar ficha.');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleFromStarter = async (codigo) => {
-    setCreating(true);
-    try {
-      const ficha = await anamneseApi.fromStarter(codigo);
-      await fetchDados();
-      openEditor(ficha.id);
-      toast.success('Ficha criada a partir do modelo.');
-    } catch (err) {
-      toast.error(err.message || 'Erro ao materializar starter.');
-    } finally {
-      setCreating(false);
-    }
+  const handleNovaFicha = () => {
+    setEditorFichaId(null);
+    setView('editor');
   };
 
   const handleDuplicar = async (id, e) => {
@@ -201,7 +107,7 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
       await anamneseApi.removeFicha(fichaParaExcluir);
       setFichaParaExcluir(null);
       await fetchDados();
-      toast.success('Ficha desativada.');
+      toast.success('Ficha arquivada');
     } catch (err) {
       toast.error(err.message || 'Erro ao desativar ficha.');
     } finally {
@@ -209,45 +115,25 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
     }
   };
 
-  if (view === 'editor' && editorFichaId) {
+  if (view === 'editor') {
     return (
       <AnamneseDocumentoEditor
         fichaId={editorFichaId}
         onBack={() => {
           setView('list');
-          setEditorFichaId(null);
+          setEditorFichaId(undefined);
           fetchDados();
         }}
         onFichaNomeChange={onFichaNomeChange}
         onSaved={() => fetchDados()}
+        onDirtyChange={onDirtyFichaChange}
       />
-    );
-  }
-
-  if (view === 'start') {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() => setView('list')}
-          className="mb-4 text-[13px] font-bold text-[#64748b] hover:text-[#00a88e]"
-        >
-          ← Voltar à lista
-        </button>
-        <StartScreen
-          starters={starters}
-          loading={creating}
-          onFromStarter={handleFromStarter}
-          onMontarSecoes={() => handleCreateEmpty('Ficha por seções')}
-          onDoZero={() => handleCreateEmpty('Nova ficha')}
-        />
-      </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="anamnese-sora flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="h-10 max-w-sm flex-1 animate-pulse rounded-xl bg-[#f1f5f9]" />
           <div className="h-10 w-32 animate-pulse rounded-xl bg-[#f1f5f9]" />
@@ -258,9 +144,9 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
   }
 
   return (
-    <>
+    <div className="anamnese-sora">
       {fichaParaExcluir && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+        <div className="anamnese-sora fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="flex w-full max-w-md flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="border-b border-[#e2e8f0] px-6 py-4">
               <h3 className="text-[16px] font-bold text-[#0f172a]">Desativar ficha</h3>
@@ -307,11 +193,10 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
           </div>
           <button
             type="button"
-            onClick={() => setView('start')}
-            disabled={creating}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-[#00a88e] px-5 py-2.5 text-[13px] font-bold text-white shadow-md hover:bg-[#00967f] disabled:opacity-50"
+            onClick={handleNovaFicha}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-[#00a88e] px-5 py-2.5 text-[13px] font-bold text-white shadow-md hover:bg-[#00967f]"
           >
-            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" strokeWidth={2.5} />}
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
             Nova Ficha
           </button>
         </div>
@@ -325,7 +210,7 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
             {!busca && (
               <button
                 type="button"
-                onClick={() => setView('start')}
+                onClick={handleNovaFicha}
                 className="mt-2 text-[13px] font-bold text-[#00a88e] hover:underline"
               >
                 Criar primeira ficha
@@ -407,6 +292,6 @@ export function AnamneseFichasHome({ onFichaNomeChange }) {
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }

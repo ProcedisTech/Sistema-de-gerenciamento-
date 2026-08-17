@@ -1251,6 +1251,10 @@ export const anamneseApi = {
       method: 'POST',
     }),
   listStarters: () => request('/api/v1/anamnese/starters'),
+  getStarterDocumento: (codigo) =>
+    request(`/api/v1/anamnese/fichas/starters/${encodeURIComponent(codigo)}/documento`, {
+      needsOrg: false,
+    }),
   fromStarter: (codigo) =>
     request(`/api/v1/anamnese/fichas/from-starter/${encodeURIComponent(codigo)}`, {
       method: 'POST',

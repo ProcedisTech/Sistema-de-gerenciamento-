@@ -996,6 +996,7 @@ function AppRefactoredInner() {
 
   // ── Guard de alterações não salvas no Horário de Atendimento ───────────────
   const [isDirtyHorarios, setIsDirtyHorarios] = React.useState(false);
+  const [isDirtyFicha, setIsDirtyFicha] = React.useState(false);
   const [isUnsavedNavModalOpen, setIsUnsavedNavModalOpen] = React.useState(false);
   const pendingNavAction = useRef(null);
 
@@ -1004,14 +1005,14 @@ function AppRefactoredInner() {
    * está em Configurações > Horário de Atendimento com alterações não salvas.
    */
   const goToViewWithGuard = React.useCallback((view) => {
-    if (isDirtyHorarios && activeView === 'configuracoes') {
+    if ((isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes') {
       pendingNavAction.current = () => goToView(view);
       setIsUnsavedNavModalOpen(true);
       return;
     }
     goToView(view);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirtyHorarios, activeView, canSeeConfig, canSeeConfigEquipe]);
+  }, [isDirtyHorarios, isDirtyFicha, activeView, canSeeConfig, canSeeConfigEquipe]);
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || !journeyState.isAgendaRetorno) return;
@@ -3168,6 +3169,13 @@ function AppRefactoredInner() {
           pendingNavAction.current = null;
           action?.();
         }}
+        message={
+          isDirtyFicha && isDirtyHorarios
+            ? 'Você tem alterações não salvas na ficha e no horário de atendimento. Deseja sair sem salvar?'
+            : isDirtyFicha
+              ? 'Você tem alterações não salvas na ficha de anamnese. Deseja sair sem salvar?'
+              : undefined
+        }
       />
 
       {/* Sidebar */}
@@ -4177,6 +4185,7 @@ function AppRefactoredInner() {
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}
                       onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                       onDirtyHorariosChange={setIsDirtyHorarios}
+                      onDirtyFichaChange={setIsDirtyFicha}
                     />
                   </RoleGuard>
                 )}
