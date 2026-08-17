@@ -14,6 +14,7 @@ import { anamneseApi } from '../../services/api';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
+import { AnamneseDocumentoAssinadoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import {
   buildPerguntaTipoById,
   buildRespostaApiRows,
@@ -134,6 +135,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     () => (draftValido ? savedAnamneseState?.fichaDropdownNovo ?? '' : '')
   );
   const [errosObrigatorias, setErrosObrigatorias] = useState(() => new Set());
+  const [showSignedDoc, setShowSignedDoc] = useState(false);
 
   // ── Perfil Clínico (Bloco 1) ─────────────────────────────
   const perfilClinico = usePerfilClinico(pacienteId, roleUserId, pacienteSexo, {
@@ -444,7 +446,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               ?? preenchimento.createdAt
               ?? preenchimento.dataCriacao
               ?? null;
-            syncedPreenchimento = { id: preenchimento.id, dataHora: dh };
+            syncedPreenchimento = {
+              id: preenchimento.id,
+              dataHora: dh,
+              assinaturaPaciente: preenchimento.assinaturaPaciente ?? detalhes?.assinaturaPaciente,
+              status: preenchimento.status ?? detalhes?.status,
+            };
             syncedModo = true;
             setRespostas(respostasCarregadas);
             respostasRef.current = respostasCarregadas;
@@ -914,13 +921,35 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 : 'data não registrada'}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={toggleModoVisualizacao}
-            className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
-          >
-            {modoVisualizacao ? 'Modificar' : 'Cancelar'}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {(preenchimentoAnterior.assinaturaPaciente
+              || preenchimentoAnterior.status === 'finalizada'
+              || preenchimentoAnterior.status === 'FINALIZADO') && pacienteId && (
+              <button
+                type="button"
+                onClick={() => setShowSignedDoc((v) => !v)}
+                className="text-sm font-bold text-[#0f766e] hover:underline"
+              >
+                {showSignedDoc ? 'Ocultar documento' : 'Ver documento assinado'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={toggleModoVisualizacao}
+              className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
+            >
+              {modoVisualizacao ? 'Modificar' : 'Cancelar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showSignedDoc && preenchimentoAnterior?.id && pacienteId && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+          <AnamneseDocumentoAssinadoView
+            pacienteId={pacienteId}
+            preenchimentoId={preenchimentoAnterior.id}
+          />
         </div>
       )}
 

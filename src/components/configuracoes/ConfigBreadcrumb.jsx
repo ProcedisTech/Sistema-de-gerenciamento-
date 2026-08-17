@@ -6,7 +6,7 @@ import { ChevronRight, Settings } from 'lucide-react';
  * "Configurações" é clicável e volta ao hub (activeCategory = null).
  * Quando categoryLabel é fornecido, exibe "Configurações › [Categoria]".
  */
-export function ConfigBreadcrumb({ categoryLabel, onBackToHub }) {
+export function ConfigBreadcrumb({ categoryLabel, detailLabel, onBackToHub }) {
   return (
     <nav aria-label="Navegação de configurações" className="flex items-center gap-1 text-[13px]">
       <button
@@ -22,6 +22,13 @@ export function ConfigBreadcrumb({ categoryLabel, onBackToHub }) {
         <>
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
           <span className="font-semibold text-[#0f172a]">{categoryLabel}</span>
+        </>
+      )}
+
+      {detailLabel && (
+        <>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+          <span className="font-medium text-[#64748b]">{detailLabel}</span>
         </>
       )}
     </nav>

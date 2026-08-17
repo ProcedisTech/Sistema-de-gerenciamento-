@@ -1,6 +1,11 @@
 // Novos painéis (ativos)
 export { PerguntasCategoriasPanel } from './PerguntasCategoriasPanel';
 export { FichasPanel } from './FichasPanel';
+export { AnamneseFichasHome } from './AnamneseFichasHome.jsx';
+export { AnamneseDocumentoEditor } from './AnamneseDocumentoEditor.jsx';
+export { AnamneseCompartilhamentoModal } from './AnamneseCompartilhamentoModal.jsx';
+export { AnamneseFillLayout } from './AnamneseFillLayout.jsx';
+export { AnamneseDocumentoAssinadoView } from './AnamneseDocumentoAssinadoView.jsx';
 export { tipoLabel } from './anamneseTipoLabels';
 export { HabitoEditModal } from './HabitoEditModal';
 export { AnamneseConfigPublicaPanel } from './AnamneseConfigPublicaPanel';

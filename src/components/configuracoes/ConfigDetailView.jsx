@@ -5,7 +5,7 @@ import { CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
 import { UnsavedChangesModal } from '../shared/UnsavedChangesModal';
 
 // Painéis de conteúdo
-import { AnamneseConfigPublicaPanel, PerguntasCategoriasPanel, FichasPanel } from '../anamnese';
+import { AnamneseConfigPublicaPanel, AnamneseFichasHome } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
 import { MetodosAssinaturaPanel } from './MetodosAssinaturaPanel';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
@@ -73,6 +73,7 @@ export function ConfigDetailView({
   // no <div> interno L90, não neste componente).
   const [isDirtyHorarios, setIsDirtyHorarios] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [fichaDetailLabel, setFichaDetailLabel] = useState(null);
   const pendingAction = useRef(null);
 
   const handleDirtyChange = (dirty) => {
@@ -119,6 +120,7 @@ export function ConfigDetailView({
         <div className="mb-4">
           <ConfigBreadcrumb
             categoryLabel={categoryDef?.label}
+            detailLabel={effectiveSection === 'fichas' ? fichaDetailLabel : null}
             onBackToHub={handleBackToHub}
           />
         </div>
@@ -151,6 +153,7 @@ export function ConfigDetailView({
               onPacientesCatalogRefresh={onPacientesCatalogRefresh}
               onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
               onDirtyHorariosChange={handleDirtyChange}
+              onFichaDetailLabelChange={setFichaDetailLabel}
             />
           </div>
         </div>
@@ -177,6 +180,7 @@ function PainelAtivo({
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
+  onFichaDetailLabelChange,
 }) {
   if (configSection === 'procedimentos' && canSeeProcedimentos) {
     return <BancoProcedimentosPanel />;
@@ -187,11 +191,8 @@ function PainelAtivo({
   if (configSection === 'metodos-assinatura' && canSeeTermos) {
     return <MetodosAssinaturaPanel />;
   }
-  if (configSection === 'perguntas-categorias' && canSeeAnamnese) {
-    return <PerguntasCategoriasPanel />;
-  }
   if (configSection === 'fichas' && canSeeAnamnese) {
-    return <FichasPanel />;
+    return <AnamneseFichasHome onFichaNomeChange={onFichaDetailLabelChange} />;
   }
   if (configSection === 'anamnese-publica' && canSeeAnamnese) {
     return <AnamneseConfigPublicaPanel />;

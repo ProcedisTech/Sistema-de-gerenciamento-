@@ -7,7 +7,6 @@ import {
   Users,
   FileText,
   PenLine,
-  HelpCircle,
   Globe,
   Clock,
   MessageCircle,
@@ -37,12 +36,11 @@ export const CATEGORY_DEFS = [
   {
     key: 'anamnese',
     label: 'Anamnese',
-    description: 'Fichas, perguntas e acesso público',
+    description: 'Fichas e acesso público',
     icon: ClipboardList,
     color: '#7C3AED',
     items: [
-      { id: 'perguntas-categorias', label: 'Perguntas & Categorias', subtitle: 'Banco de perguntas por categoria', icon: HelpCircle, requireFlag: 'canSeeAnamnese' },
-      { id: 'fichas', label: 'Fichas', subtitle: 'Modelos de anamnese', icon: ClipboardList, requireFlag: 'canSeeAnamnese' },
+      { id: 'fichas', label: 'Fichas', subtitle: 'Editor de anamnese', icon: ClipboardList, requireFlag: 'canSeeAnamnese' },
       { id: 'anamnese-publica', label: 'Acesso Público', subtitle: 'Configurações de acesso', icon: Globe, requireFlag: 'canSeeAnamnese' },
     ],
   },

@@ -105,6 +105,7 @@ import { GaleriaTab } from './galeria/GaleriaTab.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
 import { AnamneseFichaReadonlyView } from '../anamnese/AnamneseFichaReadonlyView.jsx';
+import { AnamneseDocumentoAssinadoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
 import {
   mergeApiRespostasToMap,
@@ -394,6 +395,13 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
   const [editingObservacoes, setEditingObservacoes] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [errosObrigatorias, setErrosObrigatorias] = useState(new Set());
+  const [signedDocAnId, setSignedDocAnId] = useState(null);
+
+  const isAnamneseFinalizada = (an) =>
+    an.status === 'finalizada' || an.status === 'finalizado' || an.status === 'FINALIZADO';
+
+  const canShowSignedDoc = (an) =>
+    isAnamneseFinalizada(an) || Boolean(an.assinaturaPaciente);
 
   const perfilClinico = usePerfilClinico(pacienteId, null, pacienteSexo);
 
@@ -679,6 +687,16 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                 <div className="p-4 border-t border-app-border space-y-3">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-[14px] font-bold text-[#0f172a]">Respostas</h4>
+                    <div className="flex items-center gap-2">
+                      {canShowSignedDoc(an) && editingAnamneseId !== an.id && (
+                        <button
+                          type="button"
+                          onClick={() => setSignedDocAnId(signedDocAnId === an.id ? null : an.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0f766e] hover:bg-[#f0fdfa] transition-colors"
+                        >
+                          {signedDocAnId === an.id ? 'Ver respostas' : 'Documento assinado'}
+                        </button>
+                      )}
                     {!an.preenchidoPorPaciente ? (
                       editingAnamneseId !== an.id ? (
                         <button
@@ -700,6 +718,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                         Editar Respostas
                       </span>
                     )}
+                    </div>
                   </div>
 
                   {editingAnamneseId === an.id ? (
@@ -772,7 +791,13 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                         <AnamneseObservacoesBlock texto={detalhe.observacoes} />
                       ) : null}
 
-                      {respostas.length > 0 ? (
+                      {signedDocAnId === an.id && canShowSignedDoc(an) ? (
+                        <AnamneseDocumentoAssinadoView
+                          pacienteId={pacienteId}
+                          preenchimentoId={an.id}
+                          className="max-w-5xl xl:max-w-6xl"
+                        />
+                      ) : respostas.length > 0 ? (
                         <AnamneseFichaReadonlyView
                           ficha={fichaByAnId[an.id]}
                           respostasApi={respostas}

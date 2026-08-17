@@ -24,7 +24,7 @@ export function readStoredSection() {
     if (v === 'agenda-horarios') return 'horarios-funcionamento';
     if (v === 'usuarios-acessos') return 'gestao-equipe';
     // Mapeamento de seções legadas de anamnese para o novo painel unificado
-    if (v === 'categorias' || v === 'perguntas') return 'perguntas-categorias';
+    if (v === 'categorias' || v === 'perguntas' || v === 'perguntas-categorias') return 'fichas';
     if (v && VALID_SECTIONS.has(v)) return v;
     const legacy = sessionStorage.getItem(LEGACY_TAB_KEY);
     if (legacy === 'termos') return 'termos';

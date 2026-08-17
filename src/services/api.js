@@ -1239,6 +1239,27 @@ export const anamneseApi = {
   updateFicha: (id, data) => request(`/api/v1/anamnese/fichas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   removeFicha: (id) => request(`/api/v1/anamnese/fichas/${id}`, { method: 'DELETE' }),
 
+  salvarDocumento: (id, payload) =>
+    request(`/api/v1/anamnese/fichas/${id}/documento`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  duplicarFicha: (id) =>
+    request(`/api/v1/anamnese/fichas/${id}/duplicar`, { method: 'POST' }),
+  destacarPergunta: (fichaId, perguntaId) =>
+    request(`/api/v1/anamnese/fichas/${fichaId}/perguntas/${perguntaId}/destacar`, {
+      method: 'POST',
+    }),
+  listStarters: () => request('/api/v1/anamnese/starters'),
+  fromStarter: (codigo) =>
+    request(`/api/v1/anamnese/fichas/from-starter/${encodeURIComponent(codigo)}`, {
+      method: 'POST',
+    }),
+  getGravada: (pacienteId, preenchimentoId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada`),
+  verificarGravada: (pacienteId, preenchimentoId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada/verificar`),
+
   listPaciente: (pid) => request(`/api/v1/anamnese/paciente/${pid}`),
   getPaciente: (pid, aid) => request(`/api/v1/anamnese/paciente/${pid}/${aid}`),
   createPaciente: (pid, roleId, data) =>
