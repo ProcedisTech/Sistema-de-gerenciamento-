@@ -6,6 +6,18 @@ import { SignatureFullscreenModal } from '../journey/Step4LGPD.jsx';
 import { AgendaAvatarInitials } from '../agenda/AgendaAvatarInitials.jsx';
 import { formatBrNationalParentheses } from '../../utils/phoneUtils';
 import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
+import {
+  maskCPF,
+  normalizeCpf,
+  isCpfValidCheckDigits,
+  isCpfIncomplete,
+  sanitizeBirthDateDigits,
+  formatBirthDigitsBR,
+  validateBirthDateDigits8,
+} from '../utils/formatters';
+import { EnderecoFields } from '../common/EnderecoFields.jsx';
+import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
+import { formatCargoLabel } from './gestaoUsuariosUtils.js';
 
 const STATUS_OPTIONS = [
   { value: 'online', label: 'Online', color: '#22c55e' },
@@ -36,7 +48,24 @@ function mapPerfilFromDto(data) {
     apelido: String(pick(data, 'apelido') ?? '').trim(),
     telefone: String(pick(data, 'telefone') ?? '').trim(),
     statusPresenca,
+    cpf: String(pick(data, 'cpf') ?? '').trim(),
+    dataNascimento: String(pick(data, 'dataNascimento', 'data_nascimento') ?? '').trim(),
+    estadoCivilId: String(pick(data, 'estadoCivilId', 'estado_civil_id') ?? '').trim(),
+    cargoNome: String(pick(data, 'cargoNome', 'cargo_nome') ?? '').trim(),
+    cep: String(pick(data, 'cep') ?? '').trim(),
+    logradouro: String(pick(data, 'logradouro') ?? '').trim(),
+    numero: String(pick(data, 'numero') ?? '').trim(),
+    complemento: String(pick(data, 'complemento') ?? '').trim(),
+    bairro: String(pick(data, 'bairro') ?? '').trim(),
+    cidade: String(pick(data, 'cidade') ?? '').trim(),
+    uf: String(pick(data, 'uf') ?? '').trim(),
   };
+}
+
+/** ISO "YYYY-MM-DD" (retorno do backend) -> exibição "DD/MM/AAAA". */
+function isoToDisplayDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
 }
 
 function resolveFotoSrc(fotoUrl) {
@@ -72,6 +101,24 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
   const [apelido, setApelido] = useState('');
   const [telefone, setTelefone] = useState('');
   const [statusPresenca, setStatusPresenca] = useState('offline');
+
+  const [cpf, setCpf] = useState('');
+  const [cpfSavedOnServer, setCpfSavedOnServer] = useState(false);
+  const [cpfUnlocked, setCpfUnlocked] = useState(false);
+  const cpfReadOnly = cpfSavedOnServer && !cpfUnlocked;
+
+  const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
+  const [dataNascimentoIso, setDataNascimentoIso] = useState('');
+  const [estadoCivilId, setEstadoCivilId] = useState('');
+  const [cargoNome, setCargoNome] = useState('');
+
+  const [cep, setCep] = useState('');
+  const [logradouro, setLogradouro] = useState('');
+  const [numero, setNumero] = useState('');
+  const [complemento, setComplemento] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [uf, setUf] = useState('');
 
   /** URL persistida no servidor (para PUT quando o preview local é base64). */
   const [fotoUrlServidor, setFotoUrlServidor] = useState('');
@@ -140,6 +187,21 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         m.fotoUrl != null && typeof m.fotoUrl === 'string' ? m.fotoUrl.trim() : '';
       setFotoUrlServidor(srv);
       setFotoUrlPreview(srv ? resolveFotoSrc(srv) : '');
+
+      setCpf(m.cpf ? maskCPF(m.cpf) : '');
+      setCpfSavedOnServer(Boolean(m.cpf));
+      setCpfUnlocked(false);
+      setDataNascimentoDisplay(isoToDisplayDate(m.dataNascimento));
+      setDataNascimentoIso(m.dataNascimento || '');
+      setEstadoCivilId(m.estadoCivilId || '');
+      setCargoNome(m.cargoNome || '');
+      setCep(m.cep);
+      setLogradouro(m.logradouro);
+      setNumero(m.numero);
+      setComplemento(m.complemento);
+      setBairro(m.bairro);
+      setCidade(m.cidade);
+      setUf(m.uf);
     } catch {
       if (!silent) setLoadError('Falha de rede ao carregar o perfil.');
     } finally {
@@ -279,6 +341,18 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     }
   };
 
+  const handleDataNascimentoChange = (raw) => {
+    const digits = sanitizeBirthDateDigits(raw);
+    setDataNascimentoDisplay(formatBirthDigitsBR(digits));
+    clearError('dataNascimento');
+    if (digits.length === 8) {
+      const r = validateBirthDateDigits8(digits);
+      setDataNascimentoIso(r.ok ? r.iso : '');
+    } else {
+      setDataNascimentoIso('');
+    }
+  };
+
   // --- Submit (PUT /api/v1/perfil) ---
 
   const handleSubmit = async (ev) => {
@@ -288,6 +362,9 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     const e = {};
     if (!nomeCompleto.trim()) e.nome = true;
     if (!telefone.trim()) e.telefone = true;
+    if (!isCpfValidCheckDigits(cpf)) e.cpf = true;
+    if (!dataNascimentoIso) e.dataNascimento = true;
+    if (!estadoCivilId) e.estadoCivil = true;
     if (Object.keys(e).length) {
       setErrors(e);
       return;
@@ -302,6 +379,16 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
         telefone: telefone.replace(/\D/g, ''),
         statusPresenca,
         fotoUrl: fotoUrlServidor,
+        cpf: normalizeCpf(cpf),
+        dataNascimento: dataNascimentoIso,
+        estadoCivilId,
+        cep: cep.trim() || null,
+        logradouro: logradouro.trim() || null,
+        numero: numero.trim() || null,
+        complemento: complemento.trim() || null,
+        bairro: bairro.trim() || null,
+        cidade: cidade.trim() || null,
+        uf: uf.trim() || null,
       };
 
       const res = await fetch(resolveApiUrl('/api/v1/perfil'), {
@@ -315,7 +402,13 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
       });
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(errBody?.message || errBody?.detail || errBody?.error || `Erro ao salvar (${res.status}).`);
+        if (res.status === 409) {
+          setErrors((prev) => ({ ...prev, cpf: true }));
+          setCpfUnlocked(true);
+          toast.error(errBody?.error || 'Já existe um usuário cadastrado com este CPF.');
+        } else {
+          toast.error(errBody?.error || errBody?.message || errBody?.detail || `Erro ao salvar (${res.status}).`);
+        }
         return;
       }
       onPerfilAtualizado?.({
@@ -379,7 +472,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
               <div key={`sk-pill-${i}`} className="h-7 w-20 animate-pulse rounded-full bg-[#f1f5f9]" />
             ))}
           </div>
-          <ConfigFormSectionsSkeleton sections={2} cardRounded="2xl" />
+          <ConfigFormSectionsSkeleton sections={4} cardRounded="2xl" />
         </>
       ) : (
         <>
@@ -442,7 +535,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
                 1
               </div>
-              <h4 className="text-[18px] font-bold text-[#0f766e]">Informações Pessoais</h4>
+              <h4 className="text-[18px] font-bold text-[#0f766e]">Informações Pessoais &amp; Documentos</h4>
             </div>
             <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
               <div className="md:col-span-2 space-y-1.5">
@@ -504,14 +597,157 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
                   </p>
                 ) : null}
               </div>
+              <div className="space-y-1.5">
+                <label htmlFor={`${formId}-cpf`} className={labelCls('text-[#00a88e]')}>
+                  CPF <span className="text-red-500">*</span>
+                </label>
+                {cpfReadOnly ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      id={`${formId}-cpf`}
+                      type="text"
+                      value={cpf}
+                      readOnly
+                      disabled
+                      className={`${inputClass('cpf')} cursor-not-allowed bg-slate-100 text-slate-500`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCpfUnlocked(true)}
+                      className="shrink-0 whitespace-nowrap text-[12px] font-bold text-[#00a88e] underline underline-offset-2 hover:text-[#00967f]"
+                    >
+                      Alterar CPF
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    id={`${formId}-cpf`}
+                    type="text"
+                    inputMode="numeric"
+                    value={cpf}
+                    onChange={(e) => {
+                      setCpf(maskCPF(e.target.value));
+                      clearError('cpf');
+                    }}
+                    onBlur={() => {
+                      if (isCpfIncomplete(cpf)) {
+                        setErrors((prev) => ({ ...prev, cpf: true }));
+                      }
+                    }}
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                    className={inputClass('cpf')}
+                    autoComplete="off"
+                    aria-invalid={Boolean(errors.cpf)}
+                  />
+                )}
+                {errors.cpf ? (
+                  <p className="text-[12px] font-semibold text-red-600" role="alert">
+                    CPF inválido ou já utilizado por outro usuário.
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor={`${formId}-nascimento`} className={labelCls('text-[#00a88e]')}>
+                  Data de nascimento <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id={`${formId}-nascimento`}
+                  type="text"
+                  inputMode="numeric"
+                  value={dataNascimentoDisplay}
+                  onChange={(e) => handleDataNascimentoChange(e.target.value)}
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  className={inputClass('dataNascimento')}
+                  autoComplete="bday"
+                  aria-invalid={Boolean(errors.dataNascimento)}
+                />
+                {errors.dataNascimento ? (
+                  <p className="text-[12px] font-semibold text-red-600" role="alert">
+                    Data de nascimento é obrigatória e deve ser válida.
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor={`${formId}-estado-civil`} className={labelCls('text-[#00a88e]')}>
+                  Estado civil <span className="text-red-500">*</span>
+                </label>
+                <EstadoCivilSelect
+                  id={`${formId}-estado-civil`}
+                  value={estadoCivilId}
+                  onChange={(v) => {
+                    setEstadoCivilId(v);
+                    clearError('estadoCivil');
+                  }}
+                  error={Boolean(errors.estadoCivil)}
+                  selectClassName={inputClass('estadoCivil')}
+                />
+                {errors.estadoCivil ? (
+                  <p className="text-[12px] font-semibold text-red-600" role="alert">
+                    Estado civil é obrigatório.
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          {/* Card 2 — Identidade Profissional */}
+          {/* Card 2 — Endereço Completo com ViaCEP */}
+          <div className="rounded-2xl border border-amber-200 bg-white p-6 transition-colors">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
+                2
+              </div>
+              <div>
+                <h4 className="text-[18px] font-bold text-[#b45309]">Endereço</h4>
+                <p className="text-[12px] font-medium text-[#92400e]">
+                  Opcional — informe o CEP para preencher automaticamente
+                </p>
+              </div>
+            </div>
+            <EnderecoFields
+              variant="profile"
+              cep={cep}
+              onCepChange={setCep}
+              rua={logradouro}
+              onRuaChange={setLogradouro}
+              numero={numero}
+              onNumeroChange={setNumero}
+              complemento={complemento}
+              onComplementoChange={setComplemento}
+              bairro={bairro}
+              onBairroChange={setBairro}
+              cidade={cidade}
+              onCidadeChange={setCidade}
+              estado={uf}
+              onEstadoChange={setUf}
+            />
+          </div>
+
+          {/* Card 3 — Cargo & Função */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 transition-colors">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-500 text-[14px] font-bold text-white shadow-sm">
+                3
+              </div>
+              <h4 className="text-[18px] font-bold text-slate-700">Cargo &amp; Função</h4>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[15px] font-bold text-[#0f172a]">
+                {cargoNome ? formatCargoLabel(cargoNome) : 'Sem cargo atribuído'}
+              </p>
+            </div>
+            <p className="mt-2 text-[12px] font-medium text-[#64748b]">
+              O cargo é definido pela administração da clínica. Apenas o proprietário pode alterá-lo na Gestão de
+              Equipe.
+            </p>
+          </div>
+
+          {/* Card 4 — Identidade Profissional */}
           <div className="rounded-2xl border border-blue-200 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
-                2
+                4
               </div>
               <h4 className="text-[18px] font-bold text-[#1d4ed8]">Identidade Profissional</h4>
             </div>
