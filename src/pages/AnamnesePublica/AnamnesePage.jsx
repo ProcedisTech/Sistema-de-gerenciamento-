@@ -31,7 +31,7 @@ export const AnamnesePage = () => {
   const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [estado, setEstado] = useState('ENTRADA_CPF'); // ENTRADA_CPF | VALIDA | FORMULARIO | ASSINATURA | SUCESSO
+  const [estado, setEstado] = useState('ENTRADA_CPF'); // ENTRADA_CPF | VALIDA | SEM_SOLICITACAO | FORMULARIO | ASSINATURA | SUCESSO
   const [lookupData, setLookupData] = useState(null);
   
   const [respostas, setRespostas] = useState({});
@@ -47,10 +47,14 @@ export const AnamnesePage = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const slug = params.get('clinic');
+    const cpfParam = params.get('cpf');
     if (slug) {
       setClinicSlug(slug);
     } else {
       setErrorMsg('O link acessado é inválido (parâmetro clinic ausente).');
+    }
+    if (cpfParam) {
+      setCpf(formatCPF(cpfParam));
     }
   }, []);
 
@@ -103,9 +107,41 @@ export const AnamnesePage = () => {
       
       if (data.status === 'VALIDA') {
         setEstado('VALIDA');
+      } else if (data.status === 'INEXISTENTE') {
+        setEstado('SEM_SOLICITACAO');
       } else {
         setEstado('FORMULARIO');
       }
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecusar = async () => {
+    if (!clinicSlug) return;
+    const cleanCpf = cpf.replace(/\D/g, '');
+    if (cleanCpf.length !== 11) {
+      setErrorMsg('CPF inválido. Digite 11 números.');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch(resolveApiUrl('/api/public/anamnese/recusar'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ cpf: cleanCpf, clinic: clinicSlug }),
+      });
+      if (!res.ok) {
+        if (res.status === 409) throw new Error('Não há solicitação ativa de anamnese.');
+        throw new Error('Não foi possível registrar a recusa. Tente novamente.');
+      }
+      setEstado('SEM_SOLICITACAO');
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
@@ -199,7 +235,7 @@ export const AnamnesePage = () => {
       });
       
       if (!res.ok) {
-        if (res.status === 409) throw new Error('Sua anamnese já está em dia.');
+        if (res.status === 409) throw new Error('Não há solicitação ativa de anamnese. Peça à recepção para liberar o acesso.');
         throw new Error('Erro ao enviar respostas. Tente novamente.');
       }
       
@@ -269,6 +305,14 @@ export const AnamnesePage = () => {
               </svg>
             </>
           )}
+        </button>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={handleRecusar}
+          className="w-full h-10 rounded-xl border border-slate-200 text-slate-500 font-semibold text-sm hover:bg-slate-50 transition-colors disabled:opacity-70"
+        >
+          Não desejo preencher
         </button>
       </form>
     );
@@ -464,6 +508,21 @@ Data do preenchimento: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'Ame
               Olá, {lookupData.pacienteNome}.<br/>
               Sua ficha está válida até <strong className="font-semibold">{new Date(lookupData.validadeAte).toLocaleDateString('pt-BR')}</strong>.<br/>
               Não é necessário preencher novamente.
+            </p>
+          </div>
+        )}
+
+        {estado === 'SEM_SOLICITACAO' && (
+          <div className="bg-white rounded-[24px] shadow-sm border border-slate-200 p-8 w-full max-w-[480px] mx-auto text-center animate-in fade-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Peça à recepção</h2>
+            <p className="text-slate-600 text-sm leading-relaxed">
+              Olá{lookupData?.pacienteNome ? `, ${lookupData.pacienteNome}` : ''}. Para preencher sua ficha, peça à recepção para liberar o acesso.
+              Elas vão gerar um QR na hora ou enviar o link no WhatsApp.
             </p>
           </div>
         )}

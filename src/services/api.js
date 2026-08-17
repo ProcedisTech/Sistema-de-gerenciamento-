@@ -1285,6 +1285,15 @@ export const anamneseApi = {
     }),
 };
 
+export const anamneseEnvioApi = {
+  gerar: (payload) =>
+    request('/api/v1/anamnese/envios', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  status: (envioId) => request(`/api/v1/anamnese/envios/${envioId}/status`),
+};
+
   // 🟨🟨 Configurações de Acesso Público 🟨🟨
   export const acessoPublicoApi = {
     buscar: () => request('/api/v1/configuracoes/acesso-publico'),
