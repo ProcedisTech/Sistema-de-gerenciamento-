@@ -131,13 +131,16 @@ function groupByCategoria(itens) {
 }
 
 /**
- * Documento assinado (layout renderDoc do protótipo v6.4).
+ * Documento da anamnese (layout renderDoc do protótipo v6.4).
+ * Assinada: snapshot imutável. Respondida sem assinatura: mesmas respostas
+ * com estado "Aguardando assinatura do paciente".
  */
-export function AnamneseDocumentoAssinadoView({
+export function AnamneseDocumentoView({
   pacienteId,
   preenchimentoId,
   onVoltar,
-  voltarLabel = 'Voltar à ficha',
+  voltarLabel = 'Voltar',
+  onModificar,
   className = '',
 }) {
   const toast = useToast();
@@ -153,7 +156,7 @@ export function AnamneseDocumentoAssinadoView({
     setLoading(true);
     setError(null);
     anamneseApi
-      .getGravada(pacienteId, preenchimentoId)
+      .getDocumento(pacienteId, preenchimentoId)
       .then(setGravada)
       .catch((err) => {
         setError(err);
@@ -219,7 +222,7 @@ export function AnamneseDocumentoAssinadoView({
     return (
       <div className={`flex items-center justify-center py-8 ${className}`}>
         <Loader2 className="h-5 w-5 animate-spin text-[#00a88e]" />
-        <span className="ml-2 text-[13px] text-[#64748b]">Carregando documento assinado...</span>
+        <span className="ml-2 text-[13px] text-[#64748b]">Carregando documento...</span>
       </div>
     );
   }
@@ -237,7 +240,7 @@ export function AnamneseDocumentoAssinadoView({
             {voltarLabel}
           </button>
         ) : null}
-        <p>Documento gravado não disponível para este preenchimento.</p>
+        <p>Documento não disponível para este preenchimento.</p>
       </div>
     );
   }
@@ -247,6 +250,8 @@ export function AnamneseDocumentoAssinadoView({
   const assinadoEm = gravada.pacienteAssinouEm || gravada.gravadoEm;
   const dias = diasRestantes(gravada.validadeAte);
   const hashOk = integridade?.valido === true;
+  const assinada = Boolean(gravada.assinaturaPaciente);
+  const imutavel = Boolean(gravada.conteudoHash);
 
   return (
     <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafa] ${className}`}>
@@ -286,11 +291,24 @@ export function AnamneseDocumentoAssinadoView({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
-            {formatStamp(assinadoEm) ? (
+            {assinada && formatStamp(assinadoEm) ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-3 py-1.5 text-[11px] font-bold tracking-wide text-[#0f766e]">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {formatStamp(assinadoEm)}
               </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-bold tracking-wide text-amber-800">
+                Aguardando assinatura do paciente
+              </span>
+            )}
+            {!imutavel && typeof onModificar === 'function' ? (
+              <button
+                type="button"
+                onClick={onModificar}
+                className="text-[12px] font-bold text-[#00a88e] hover:underline"
+              >
+                Modificar
+              </button>
             ) : null}
             <p className="text-right text-[10.5px] leading-snug text-[#64748b]">
               {gravada.validadeAte ? (
@@ -430,6 +448,8 @@ export function AnamneseDocumentoAssinadoView({
         )}
 
         <div className="rounded-xl border border-slate-200 bg-white">
+          {assinada ? (
+            <>
           <div className="border-b border-slate-100 px-4 py-3 text-[13px] font-bold text-[#0f172a]">
             Declaração assinada
           </div>
@@ -511,12 +531,32 @@ export function AnamneseDocumentoAssinadoView({
               Hash divergente
             </div>
           ) : null}
+            </>
+          ) : (
+            <div className="px-4 py-6 text-center">
+              {(conteudo.texto_declaracao || gravada.textoDeclaracao) ? (
+                <blockquote className="mb-4 text-left text-[13px] italic leading-relaxed text-[#475569]">
+                  “{conteudo.texto_declaracao || gravada.textoDeclaracao}”
+                </blockquote>
+              ) : null}
+              <p className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] font-bold text-amber-800">
+                Aguardando assinatura do paciente
+              </p>
+              <p className="mt-2 text-[12px] text-[#64748b]">
+                Preenchimento respondido. A assinatura ainda não foi coletada.
+              </p>
+            </div>
+          )}
         </div>
 
         <p className="text-center text-[11px] text-[#94a3b8]">
-          Documento imutável. Correções entram como nova anamnese, preservando esta.
+          {imutavel
+            ? 'Documento imutável. Correções entram como nova anamnese, preservando esta.'
+            : 'Ainda não assinado — é possível modificar as respostas.'}
         </p>
       </div>
     </div>
   );
 }
+
+export { AnamneseDocumentoView as AnamneseDocumentoAssinadoView };

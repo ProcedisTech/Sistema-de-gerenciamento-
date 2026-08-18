@@ -1,50 +1,142 @@
 import { useEffect, useMemo, useState } from 'react';
-import { anamneseApi } from '../services/api';
-import { usePerfilClinico } from './usePerfilClinico';
+import { perfilClinicoApi } from '../services/api';
+
+export const EMPTY_RESUMO = Object.freeze({
+  temVigente: false,
+  vigenteEm: null,
+  vigenteAssinada: false,
+  alergiasAlimentares: [],
+  alergiasPrincipioAtivo: [],
+  medicamentosEmUso: [],
+  condicoesSaude: [],
+  declaracoesCriticas: [],
+  declaracoesDemais: [],
+  historicoFamiliar: [],
+  historico: [],
+});
+
+function asList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function valorItem(item) {
+  if (!item?.nome) return '';
+  const parts = [item.nome];
+  if (item.dose) parts.push(item.dose);
+  if (item.frequencia) parts.push(item.frequencia);
+  if (item.observacao) parts.push(item.observacao);
+  return parts.join(' · ');
+}
+
+export function normalizeResumo(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ...EMPTY_RESUMO };
+  }
+  return {
+    temVigente: raw.temVigente === true,
+    vigenteEm: raw.vigenteEm ?? null,
+    vigenteAssinada: raw.vigenteAssinada === true,
+    alergiasAlimentares: asList(raw.alergiasAlimentares),
+    alergiasPrincipioAtivo: asList(raw.alergiasPrincipioAtivo),
+    medicamentosEmUso: asList(raw.medicamentosEmUso),
+    condicoesSaude: asList(raw.condicoesSaude),
+    declaracoesCriticas: asList(raw.declaracoesCriticas),
+    declaracoesDemais: asList(raw.declaracoesDemais),
+    historicoFamiliar: asList(raw.historicoFamiliar),
+    historico: asList(raw.historico),
+  };
+}
+
+function chipsPerfil(lista, secao, titulo, keyPrefix) {
+  return lista
+    .filter((chip) => chip?.nome)
+    .map((chip) => ({
+      key: `${keyPrefix}-${chip.id ?? chip.nome}`,
+      titulo,
+      valor: valorItem(chip),
+      secao,
+      origem: 'perfil',
+      nome: chip.nome,
+    }));
+}
 
 /**
- * Alertas clínicos de um paciente: fatos do backend (GET fatos-clinicos) mais itens
- * do perfil clínico. Perfil é dono de alergia/med/antecedente persistente — fatos
- * com o mesmo texto não se repetem como “pergunta”.
+ * Deriva os arrays legados da sidebar/modal a partir do resumo (já filtrado pelo vigente).
+ * `criticosCount` = alergias alimentares + PA + declarações críticas — mesmo critério do selo da faixa.
  */
-export function useAlertasClinicos(pacienteId, { sexoPaciente, refreshKey } = {}) {
-  const [alertasAnamnese, setAlertasAnamnese] = useState([]);
-  const [alertasAlergia, setAlertasAlergia] = useState([]);
-  const [isLoadingAnamnese, setIsLoadingAnamnese] = useState(false);
+export function mapResumoToLegacy(resumo) {
+  const r = normalizeResumo(resumo);
+  const alertasPerfil = [
+    ...chipsPerfil(r.alergiasAlimentares, 'alergias', 'Alergia alimentar', 'perfil-alergia'),
+    ...chipsPerfil(r.alergiasPrincipioAtivo, 'alergiasPrincipioAtivo', 'Alergia a princípio ativo', 'perfil-pa'),
+    ...chipsPerfil(r.medicamentosEmUso, 'medicamentos', 'Medicamento em uso', 'perfil-med'),
+    ...chipsPerfil(r.condicoesSaude, 'antecedentes', 'Antecedente', 'perfil-ant'),
+  ];
+  const alertasAnamnese = [
+    ...r.declaracoesCriticas.map((texto, idx) => ({
+      key: `fato-critica-${idx}`,
+      titulo: texto,
+      valor: texto,
+      origem: 'anamnese',
+      severidade: 'critica',
+      familiar: false,
+    })),
+    ...r.declaracoesDemais.map((texto, idx) => ({
+      key: `fato-alerta-${idx}`,
+      titulo: texto,
+      valor: texto,
+      origem: 'anamnese',
+      severidade: 'alerta',
+      familiar: false,
+    })),
+    ...r.historicoFamiliar.map((texto, idx) => ({
+      key: `fato-familiar-${idx}`,
+      titulo: `Histórico familiar: ${texto}`,
+      valor: `Histórico familiar: ${texto}`,
+      origem: 'anamnese',
+      severidade: 'alerta',
+      familiar: true,
+    })),
+  ];
+  const criticosCount =
+    r.alergiasAlimentares.length + r.alergiasPrincipioAtivo.length + r.declaracoesCriticas.length;
+  return {
+    resumo: r,
+    alertasPerfil,
+    alertasAnamnese,
+    alertasAlergia: [],
+    criticosCount,
+    temAnamneseVigente: r.temVigente,
+    vigenteEm: r.vigenteEm,
+    vigenteAssinada: r.vigenteAssinada,
+    totalCount: alertasPerfil.length + alertasAnamnese.length,
+  };
+}
 
-  const perfilClinico = usePerfilClinico(pacienteId, null, sexoPaciente);
+/**
+ * Fonte única da faixa clínica: GET /resumo-clinico (só o declarado no vigente).
+ * `sexoPaciente` e `onAlergiasResumo` permanecem na assinatura por compatibilidade com os call sites.
+ */
+export function useAlertasClinicos(pacienteId, { refreshKey } = {}) {
+  const [resumoRaw, setResumoRaw] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!pacienteId) {
-      setAlertasAnamnese([]);
-      setAlertasAlergia([]);
-      setIsLoadingAnamnese(false);
+      setResumoRaw(null);
+      setIsLoading(false);
       return undefined;
     }
     let cancelled = false;
-    setIsLoadingAnamnese(true);
+    setIsLoading(true);
     (async () => {
       try {
-        const fatos = await anamneseApi.listFatosClinicos(pacienteId);
-        if (cancelled) return;
-        const criticos = Array.isArray(fatos?.fatosCriticos) ? fatos.fatosCriticos : [];
-        const alertas = Array.isArray(fatos?.fatosAlerta) ? fatos.fatosAlerta : [];
-        const mapped = [...criticos, ...alertas].map((fato, idx) => ({
-          key: `fato-${String(fato.texto || '').toLowerCase()}-${idx}`,
-          titulo: fato.texto,
-          valor: fato.texto,
-          icone: fato.icone,
-          origem: 'anamnese',
-        }));
-        setAlertasAnamnese(mapped);
-        setAlertasAlergia([]);
+        const dto = await perfilClinicoApi.resumo(pacienteId);
+        if (!cancelled) setResumoRaw(dto);
       } catch {
-        if (!cancelled) {
-          setAlertasAnamnese([]);
-          setAlertasAlergia([]);
-        }
+        if (!cancelled) setResumoRaw(null);
       } finally {
-        if (!cancelled) setIsLoadingAnamnese(false);
+        if (!cancelled) setIsLoading(false);
       }
     })();
     return () => {
@@ -52,48 +144,10 @@ export function useAlertasClinicos(pacienteId, { sexoPaciente, refreshKey } = {}
     };
   }, [pacienteId, refreshKey]);
 
-  const alertasPerfil = useMemo(() => {
-    const s = perfilClinico.state;
-    if (!s) return [];
-    const items = [];
-    (s.alergias ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-alergia-${chip.id ?? chip.nome}`, titulo: 'Alergia alimentar', valor: val, secao: 'alergias', origem: 'perfil', nome: chip.nome });
-    });
-    (s.alergiasPrincipioAtivo ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-pa-${chip.id ?? chip.nome}`, titulo: 'Alergia a princípio ativo', valor: val, secao: 'alergiasPrincipioAtivo', origem: 'perfil', nome: chip.nome });
-    });
-    (s.medicamentosEmUso ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const parts = [chip.nome];
-      if (chip.dose) parts.push(chip.dose);
-      if (chip.frequencia) parts.push(chip.frequencia);
-      if (chip.observacao) parts.push(chip.observacao);
-      items.push({ key: `perfil-med-${chip.id ?? chip.nome}`, titulo: 'Medicamento em uso', valor: parts.join(' · '), secao: 'medicamentos', origem: 'perfil', nome: chip.nome });
-    });
-    (s.antecedentes ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-ant-${chip.id ?? chip.nome}`, titulo: 'Antecedente', valor: val, secao: 'antecedentes', origem: 'perfil', nome: chip.nome });
-    });
-    return items;
-  }, [perfilClinico.state]);
-
-  const alertasAnamneseSemDuplicata = useMemo(() => {
-    const nomesPerfil = new Set(
-      alertasPerfil.map((p) => String(p.nome || p.valor || '').split(' · ')[0].trim().toLowerCase()).filter(Boolean)
-    );
-    return alertasAnamnese.filter((a) => !nomesPerfil.has(String(a.titulo || '').trim().toLowerCase()));
-  }, [alertasAnamnese, alertasPerfil]);
+  const mapped = useMemo(() => mapResumoToLegacy(resumoRaw), [resumoRaw]);
 
   return {
-    alertasAnamnese: alertasAnamneseSemDuplicata,
-    alertasAlergia,
-    alertasPerfil,
-    isLoading: isLoadingAnamnese || perfilClinico.isLoading,
-    totalCount: alertasPerfil.length + alertasAnamneseSemDuplicata.length,
+    ...mapped,
+    isLoading,
   };
 }

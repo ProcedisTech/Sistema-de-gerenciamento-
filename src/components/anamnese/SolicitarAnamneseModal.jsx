@@ -2,6 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
 import { anamneseEnvioApi } from '../../services/api';
+import {
+  chaveGerarAnamneseEnvio,
+  obterGerarInFlight,
+  registrarGerarInFlight,
+  liberarGerarInFlight,
+  montarUrlWhatsAppAnamnese,
+} from './solicitarAnamneseEnvio.js';
 
 /**
  * @param {{ metodoCodigo: string, canalCodigo?: string|null }} escolha
@@ -24,6 +31,8 @@ export function SolicitarAnamneseModal({
   const canalCodigo = escolha?.canalCodigo ?? null;
   const isQr = !canalCodigo;
   const isWhatsApp = canalCodigo === 'WHATSAPP';
+  const pacienteId = payload?.pacienteId;
+  const telefonePaciente = payload?.telefonePaciente;
 
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
@@ -37,32 +46,14 @@ export function SolicitarAnamneseModal({
   }
 
   useEffect(() => {
+    const key = chaveGerarAnamneseEnvio(pacienteId, canalCodigo, telefonePaciente);
     if (!open) {
       if (pollingRef.current) clearInterval(pollingRef.current);
-      return;
+      liberarGerarInFlight(key);
+      return undefined;
     }
 
     let isSubscribed = true;
-
-    const gerar = async () => {
-      try {
-        const data = await anamneseEnvioApi.gerar({
-          pacienteId: payload.pacienteId,
-          canalCodigo: canalCodigo || null,
-          telefonePaciente: canalCodigo ? (payload.telefonePaciente || null) : null,
-        });
-        if (isSubscribed) {
-          setSessaoData(data);
-          setLoading(false);
-          iniciarPolling(data.envioId);
-        }
-      } catch (err) {
-        if (isSubscribed) {
-          setError(err.message || 'Falha ao gerar solicitação');
-          setLoading(false);
-        }
-      }
-    };
 
     const iniciarPolling = (envioId) => {
       pollingRef.current = setInterval(async () => {
@@ -84,30 +75,47 @@ export function SolicitarAnamneseModal({
       }, 3000);
     };
 
-    gerar();
+    const aplicar = (data) => {
+      if (!isSubscribed) return;
+      setSessaoData(data);
+      setLoading(false);
+      if (data?.envioId) iniciarPolling(data.envioId);
+    };
+
+    let pending = obterGerarInFlight(key);
+    if (!pending) {
+      pending = anamneseEnvioApi.gerar({
+        pacienteId,
+        canalCodigo: canalCodigo || null,
+        telefonePaciente: canalCodigo ? (telefonePaciente || null) : null,
+      });
+      registrarGerarInFlight(key, pending);
+    }
+
+    pending
+      .then(aplicar)
+      .catch((err) => {
+        if (isSubscribed) {
+          setError(err.message || 'Falha ao gerar solicitação');
+          setLoading(false);
+        }
+        liberarGerarInFlight(key);
+      });
 
     return () => {
       isSubscribed = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [open, canalCodigo, payload]);
+  }, [open, canalCodigo, pacienteId, telefonePaciente, onConcluido]);
 
   if (!open) return null;
 
-  const urlWhatsApp = () => {
-    const phone = (payload.telefonePaciente || '').replace(/\D/g, '');
-    const finalPhone = phone.startsWith('55') ? phone : `55${phone}`;
-    const cpf = (payload.pacienteCpf || '').replace(/\D/g, '');
-    let link = sessaoData?.urlPublica || '';
-    if (cpf && link && !link.includes('cpf=')) {
-      link += (link.includes('?') ? '&' : '?') + `cpf=${cpf}`;
-    }
-    const nome = payload.pacienteNome || 'Paciente';
-    const text = sessaoData?.otpCode
-      ? `Olá ${nome}, segue o link da sua ficha de anamnese: ${link}\n\nSeu código de verificação é: ${sessaoData.otpCode}\n\nPor favor, preencha a ficha antes da sua consulta.`
-      : `Olá ${nome}, segue o link da sua ficha de anamnese: ${link}\n\nPor favor, preencha a ficha antes da sua consulta.`;
-    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(text)}`;
-  };
+  const urlWhatsApp = () => montarUrlWhatsAppAnamnese({
+    telefonePaciente: payload.telefonePaciente,
+    pacienteCpf: payload.pacienteCpf,
+    pacienteNome: payload.pacienteNome,
+    urlPublica: sessaoData?.urlPublica,
+  });
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
@@ -174,11 +182,6 @@ export function SolicitarAnamneseModal({
                   >
                     Enviar via WhatsApp
                   </a>
-                  {sessaoData.otpCode && (
-                    <p className="mt-2 text-xs text-emerald-700">
-                      Código de verificação: <span className="font-mono font-bold">{sessaoData.otpCode}</span>
-                    </p>
-                  )}
                 </div>
               )}
 

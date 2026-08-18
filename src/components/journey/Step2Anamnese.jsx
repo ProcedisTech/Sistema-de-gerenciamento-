@@ -8,14 +8,13 @@ import {
   Search,
   Check,
   Stethoscope,
-  FileText,
   X,
 } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
-import { AnamneseDocumentoAssinadoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
+import { AnamneseDocumentoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import {
   buildPerguntaTipoById,
   buildRespostaApiRows,
@@ -136,7 +135,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     () => (draftValido ? savedAnamneseState?.fichaDropdownNovo ?? '' : '')
   );
   const [errosObrigatorias, setErrosObrigatorias] = useState(() => new Set());
-  const [showSignedDoc, setShowSignedDoc] = useState(false);
+  const [forcarNovoPreenchimento, setForcarNovoPreenchimento] = useState(false);
 
   // ── Perfil Clínico (Bloco 1) ─────────────────────────────
   const perfilClinico = usePerfilClinico(pacienteId, roleUserId, pacienteSexo, {
@@ -647,13 +646,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const basicaFichaFiltered = fichasFiltered.find(isConsultaBasicaFicha);
   const fichasCustomFiltered = fichasFiltered.filter((f) => !isConsultaBasicaFicha(f));
   const showSplitSections = fichas.length > 1;
-  const signedDocDisponivel = Boolean(
-    pacienteId
-    && preenchimentoAnterior?.id
-    && (preenchimentoAnterior.assinaturaPaciente
-      || preenchimentoAnterior.status === 'finalizada'
-      || preenchimentoAnterior.status === 'FINALIZADO')
-  );
   const fillWidthCls = consultaMode
     ? 'mb-6 w-full min-w-0'
     : 'mb-6 w-full min-w-0 max-w-5xl xl:max-w-6xl';
@@ -661,14 +653,37 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     ? 'grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2'
     : 'grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2';
 
-  if (showSignedDoc && signedDocDisponivel) {
+  const vigente = preenchimentoAnterior || ultimaAnamnese?.ultimo || null;
+  const mostrarDocumentoUnico = Boolean(
+    pacienteId && !loadingHistoricoPaciente && vigente?.id && !forcarNovoPreenchimento
+  );
+
+  if (mostrarDocumentoUnico) {
     return (
       <div className="min-w-0">
-        <AnamneseDocumentoAssinadoView
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-[16px] font-semibold text-slate-800">Anamnese</h3>
+          <button
+            type="button"
+            onClick={() => {
+              setForcarNovoPreenchimento(true);
+              setPreenchimentoAnterior(null);
+              setModoVisualizacao(false);
+            }}
+            className="text-[12.5px] font-bold text-[#00a88e] hover:underline"
+          >
+            Nova ficha
+          </button>
+        </div>
+        <AnamneseDocumentoView
           pacienteId={pacienteId}
-          preenchimentoId={preenchimentoAnterior.id}
-          onVoltar={() => setShowSignedDoc(false)}
-          voltarLabel="Voltar à ficha"
+          preenchimentoId={vigente.id}
+          onModificar={async () => {
+            const fichaId = ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente);
+            if (fichaId) await consultarUltimoPreenchimento(fichaId);
+            setModoVisualizacao(false);
+            setForcarNovoPreenchimento(true);
+          }}
         />
       </div>
     );
@@ -949,16 +964,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {signedDocDisponivel ? (
-              <button
-                type="button"
-                onClick={() => setShowSignedDoc(true)}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#0f766e] px-3 py-2 text-sm font-bold text-white hover:bg-[#0d5f59]"
-              >
-                <FileText className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-                Ver documento assinado
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={toggleModoVisualizacao}

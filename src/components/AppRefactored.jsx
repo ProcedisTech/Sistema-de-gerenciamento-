@@ -3672,14 +3672,14 @@ function AppRefactoredInner() {
                 onBack={consultaModule !== 'hub' ? handleBackToHub : undefined}
                 getPatientInitials={getPatientInitials}
               />
-              {alertasClinicosConsulta.totalCount > 0 ? (
-                <AlertasClinicosPanel
-                  alertasPerfil={alertasClinicosConsulta.alertasPerfil}
-                  alertasAnamnese={alertasClinicosConsulta.alertasAnamnese}
-                  isLoading={alertasClinicosConsulta.isLoading}
-                  variant="hub"
-                />
-              ) : null}
+              {/* Sempre visível: ausência de dado ≠ ausência de risco — o painel decide
+                  o estado (crítico / vigente sem críticos / nenhuma anamnese preenchida). */}
+              <AlertasClinicosPanel
+                variant="hub"
+                resumo={alertasClinicosConsulta.resumo}
+                isLoading={alertasClinicosConsulta.isLoading}
+                onSolicitarAnamnese={() => setConsultaModule('anamnese')}
+              />
             </header>
             <ConsultaViewShell compact={consultaModule === 'anamnese'}>
               <div key={consultaModule} className="animate-in fade-in slide-in-from-right-4 duration-200">

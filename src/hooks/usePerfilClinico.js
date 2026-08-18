@@ -30,6 +30,9 @@ export function mapGetToState(data) {
           dose: item.dose ?? '',
           frequencia: item.frequencia ?? '',
           usoContinuo: item.usoContinuo ?? true,
+          origemDeclaracao: item.origemDeclaracao ?? null,
+          confirmadoEm: item.confirmadoEm ?? null,
+          registradoPorNome: item.registradoPorNome ?? null,
         }))
       : [];
 

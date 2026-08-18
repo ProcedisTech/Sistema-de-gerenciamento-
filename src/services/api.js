@@ -1261,6 +1261,8 @@ export const anamneseApi = {
     }),
   getGravada: (pacienteId, preenchimentoId) =>
     request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada`),
+  getDocumento: (pacienteId, preenchimentoId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/documento`),
   verificarGravada: (pacienteId, preenchimentoId) =>
     request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada/verificar`),
   listFatosClinicos: (pacienteId) =>
@@ -1577,6 +1579,14 @@ export const perfilClinicoApi = {
    */
   get: (pacienteId) =>
     request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/perfil-clinico`),
+
+  /**
+   * Resumo clínico unificado (anamnese vigente + perfil) — fonte da faixa do hub.
+   * @param {string} pacienteId
+   * @returns {Promise<ResumoClinicoDTO>}
+   */
+  resumo: (pacienteId) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/resumo-clinico`),
 
   /**
    * Atualiza perfil clínico (replace-por-seção).
