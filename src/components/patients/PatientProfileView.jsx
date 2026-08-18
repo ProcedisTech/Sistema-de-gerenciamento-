@@ -694,7 +694,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                           onClick={() => setSignedDocAnId(signedDocAnId === an.id ? null : an.id)}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0f766e] hover:bg-[#f0fdfa] transition-colors"
                         >
-                          {signedDocAnId === an.id ? 'Ver respostas' : 'Documento assinado'}
+                          {signedDocAnId === an.id ? 'Voltar às respostas' : 'Ver documento assinado'}
                         </button>
                       )}
                     {!an.preenchidoPorPaciente ? (
@@ -795,6 +795,8 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
                         <AnamneseDocumentoAssinadoView
                           pacienteId={pacienteId}
                           preenchimentoId={an.id}
+                          onVoltar={() => setSignedDocAnId(null)}
+                          voltarLabel="Voltar às respostas"
                           className="max-w-5xl xl:max-w-6xl"
                         />
                       ) : respostas.length > 0 ? (

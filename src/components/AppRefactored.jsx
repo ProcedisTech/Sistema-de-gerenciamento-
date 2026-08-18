@@ -3681,7 +3681,7 @@ function AppRefactoredInner() {
                 />
               ) : null}
             </header>
-            <ConsultaViewShell>
+            <ConsultaViewShell compact={consultaModule === 'anamnese'}>
               <div key={consultaModule} className="animate-in fade-in slide-in-from-right-4 duration-200">
                 {consultaModule === 'hub' ? (
                   <ConsultaHub

@@ -8,6 +8,7 @@ import {
   Search,
   Check,
   Stethoscope,
+  FileText,
   X,
 } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
@@ -646,6 +647,32 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const basicaFichaFiltered = fichasFiltered.find(isConsultaBasicaFicha);
   const fichasCustomFiltered = fichasFiltered.filter((f) => !isConsultaBasicaFicha(f));
   const showSplitSections = fichas.length > 1;
+  const signedDocDisponivel = Boolean(
+    pacienteId
+    && preenchimentoAnterior?.id
+    && (preenchimentoAnterior.assinaturaPaciente
+      || preenchimentoAnterior.status === 'finalizada'
+      || preenchimentoAnterior.status === 'FINALIZADO')
+  );
+  const fillWidthCls = consultaMode
+    ? 'mb-6 w-full min-w-0'
+    : 'mb-6 w-full min-w-0 max-w-5xl xl:max-w-6xl';
+  const fillGridCls = consultaMode
+    ? 'grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2'
+    : 'grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2';
+
+  if (showSignedDoc && signedDocDisponivel) {
+    return (
+      <div className="min-w-0">
+        <AnamneseDocumentoAssinadoView
+          pacienteId={pacienteId}
+          preenchimentoId={preenchimentoAnterior.id}
+          onVoltar={() => setShowSignedDoc(false)}
+          voltarLabel="Voltar à ficha"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0">
@@ -657,8 +684,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       </div>
 
-      {/* Bloco 1 — Perfil Clínico Persistente */}
-      {pacienteId && (
+      {/* Bloco 1 — Perfil Clínico Persistente (dono: perfil do paciente; no hub já está no header) */}
+      {pacienteId && !consultaMode && (
         <div className="mb-6 min-w-0 rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
           <div className="rounded-t-[11px] border-b border-slate-200/80 bg-slate-100/60 px-4 py-2.5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
@@ -922,17 +949,16 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {(preenchimentoAnterior.assinaturaPaciente
-              || preenchimentoAnterior.status === 'finalizada'
-              || preenchimentoAnterior.status === 'FINALIZADO') && pacienteId && (
+            {signedDocDisponivel ? (
               <button
                 type="button"
-                onClick={() => setShowSignedDoc((v) => !v)}
-                className="text-sm font-bold text-[#0f766e] hover:underline"
+                onClick={() => setShowSignedDoc(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0f766e] px-3 py-2 text-sm font-bold text-white hover:bg-[#0d5f59]"
               >
-                {showSignedDoc ? 'Ocultar documento' : 'Ver documento assinado'}
+                <FileText className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+                Ver documento assinado
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               onClick={toggleModoVisualizacao}
@@ -941,15 +967,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               {modoVisualizacao ? 'Modificar' : 'Cancelar'}
             </button>
           </div>
-        </div>
-      )}
-
-      {showSignedDoc && preenchimentoAnterior?.id && pacienteId && (
-        <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
-          <AnamneseDocumentoAssinadoView
-            pacienteId={pacienteId}
-            preenchimentoId={preenchimentoAnterior.id}
-          />
         </div>
       )}
 
@@ -962,7 +979,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
-        <div className="mb-6 w-full min-w-0 max-w-5xl xl:max-w-6xl">
+        <div className={fillWidthCls}>
           {/* Título da ficha — discreto */}
           <p className="mb-5 text-[15px] font-semibold text-slate-700">{fichaSelecionada.nome}</p>
 
@@ -977,9 +994,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               ) : null}
 
               {/* Grid responsivo */}
-              <div className="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2">
+              <div className={fillGridCls}>
                 {secaoItens.map((item) => {
-                  const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+                  const isAlerta = item.pergunta?.prioridade === 'ALERTA'
+                    || item.pergunta?.prioridade === 'CRITICA';
                   const showObrigatorio = Boolean(item.obrigatorio);
                   const perguntaId = item.pergunta?.id;
                   const hasError = perguntaId != null && errosObrigatorias.has(String(perguntaId));
@@ -1045,7 +1063,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
       {/* Complemento da visita — ficha personalizada: motivo opcional no final */}
       {mostrarComplementoVisita ? (
-        <div className="mt-6 w-full min-w-0 max-w-5xl xl:max-w-6xl">
+        <div className={`mt-6 w-full min-w-0 ${consultaMode ? '' : 'max-w-5xl xl:max-w-6xl'}`}>
           <div className="border-t border-slate-100 pt-5">
             <label className="mb-2 block text-[13px] font-semibold text-slate-700" htmlFor="complemento-visita-queixa">
               Motivo da consulta

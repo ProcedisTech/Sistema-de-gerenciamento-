@@ -1263,6 +1263,8 @@ export const anamneseApi = {
     request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada`),
   verificarGravada: (pacienteId, preenchimentoId) =>
     request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada/verificar`),
+  listFatosClinicos: (pacienteId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/fatos-clinicos`),
 
   listPaciente: (pid) => request(`/api/v1/anamnese/paciente/${pid}`),
   getPaciente: (pid, aid) => request(`/api/v1/anamnese/paciente/${pid}/${aid}`),
