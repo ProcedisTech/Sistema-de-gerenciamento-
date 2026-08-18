@@ -2301,7 +2301,7 @@ export function PatientProfileView({
               <div
                 role="dialog"
                 aria-modal="true"
-                className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+                className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
               >
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
                   <div className="flex min-w-0 items-center gap-3">
