@@ -227,6 +227,11 @@ export function CatalogoChipSection({
                       {tiposByCodigo[item.tipoCodigo]}
                     </span>
                   ) : null}
+                  {item.origemDeclaracao === 'PACIENTE_DECLAROU' && !item.confirmadoEm ? (
+                    <span className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                      declarado pela paciente
+                    </span>
+                  ) : null}
 
                   {/* Botão expandir chip (observação / extras) */}
                   <button

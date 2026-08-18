@@ -1,169 +1,153 @@
 import { useEffect, useMemo, useState } from 'react';
-import { anamneseApi } from '../services/api';
-import { usePerfilClinico } from './usePerfilClinico';
-import {
-  getPerguntaIdFromResp,
-  isRespostaCategoria,
-  isRespostaPositiva,
-  isRespostaPreocupante,
-  isRespostaPrioridadeAlerta,
-  renderRespostaValue,
-  textoPerguntaResposta,
-} from '../utils/anamneseAlertUtils';
+import { perfilClinicoApi } from '../services/api';
+
+export const EMPTY_RESUMO = Object.freeze({
+  temVigente: false,
+  vigenteEm: null,
+  vigenteAssinada: false,
+  alergiasAlimentares: [],
+  alergiasPrincipioAtivo: [],
+  medicamentosEmUso: [],
+  condicoesSaude: [],
+  declaracoesCriticas: [],
+  declaracoesDemais: [],
+  historicoFamiliar: [],
+  historico: [],
+});
+
+function asList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function valorItem(item) {
+  if (!item?.nome) return '';
+  const parts = [item.nome];
+  if (item.dose) parts.push(item.dose);
+  if (item.frequencia) parts.push(item.frequencia);
+  if (item.observacao) parts.push(item.observacao);
+  return parts.join(' · ');
+}
+
+export function normalizeResumo(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ...EMPTY_RESUMO };
+  }
+  return {
+    temVigente: raw.temVigente === true,
+    vigenteEm: raw.vigenteEm ?? null,
+    vigenteAssinada: raw.vigenteAssinada === true,
+    alergiasAlimentares: asList(raw.alergiasAlimentares),
+    alergiasPrincipioAtivo: asList(raw.alergiasPrincipioAtivo),
+    medicamentosEmUso: asList(raw.medicamentosEmUso),
+    condicoesSaude: asList(raw.condicoesSaude),
+    declaracoesCriticas: asList(raw.declaracoesCriticas),
+    declaracoesDemais: asList(raw.declaracoesDemais),
+    historicoFamiliar: asList(raw.historicoFamiliar),
+    historico: asList(raw.historico),
+  };
+}
+
+function chipsPerfil(lista, secao, titulo, keyPrefix) {
+  return lista
+    .filter((chip) => chip?.nome)
+    .map((chip) => ({
+      key: `${keyPrefix}-${chip.id ?? chip.nome}`,
+      titulo,
+      valor: valorItem(chip),
+      secao,
+      origem: 'perfil',
+      nome: chip.nome,
+    }));
+}
 
 /**
- * Alertas clínicos de um paciente: respostas de anamnese marcadas como ALERTA
- * (ou de categoria "alergias") mais itens do perfil clínico (alergias, alergias a
- * princípio ativo, medicamentos em uso, antecedentes). Busca de forma independente —
- * não depende de o PatientProfileView já ter sido montado para este paciente.
- *
- * `onAlergiasResumo(texto)` é chamado (se fornecido) sempre que o fetch encontra
- * respostas de alergia, com o resumo em texto já formatado — quem chamar o hook decide
- * o que fazer com isso (ex.: sincronizar de volta no paciente em memória).
+ * Deriva os arrays legados da sidebar/modal a partir do resumo (já filtrado pelo vigente).
+ * `criticosCount` = alergias alimentares + PA + declarações críticas — mesmo critério do selo da faixa.
  */
-export function useAlertasClinicos(pacienteId, { sexoPaciente, onAlergiasResumo, refreshKey } = {}) {
-  const [alertasAnamnese, setAlertasAnamnese] = useState([]);
-  const [alertasAlergia, setAlertasAlergia] = useState([]);
-  const [isLoadingAnamnese, setIsLoadingAnamnese] = useState(false);
+export function mapResumoToLegacy(resumo) {
+  const r = normalizeResumo(resumo);
+  const alertasPerfil = [
+    ...chipsPerfil(r.alergiasAlimentares, 'alergias', 'Alergia alimentar', 'perfil-alergia'),
+    ...chipsPerfil(r.alergiasPrincipioAtivo, 'alergiasPrincipioAtivo', 'Alergia a princípio ativo', 'perfil-pa'),
+    ...chipsPerfil(r.medicamentosEmUso, 'medicamentos', 'Medicamento em uso', 'perfil-med'),
+    ...chipsPerfil(r.condicoesSaude, 'antecedentes', 'Antecedente', 'perfil-ant'),
+  ];
+  const alertasAnamnese = [
+    ...r.declaracoesCriticas.map((texto, idx) => ({
+      key: `fato-critica-${idx}`,
+      titulo: texto,
+      valor: texto,
+      origem: 'anamnese',
+      severidade: 'critica',
+      familiar: false,
+    })),
+    ...r.declaracoesDemais.map((texto, idx) => ({
+      key: `fato-alerta-${idx}`,
+      titulo: texto,
+      valor: texto,
+      origem: 'anamnese',
+      severidade: 'alerta',
+      familiar: false,
+    })),
+    ...r.historicoFamiliar.map((texto, idx) => ({
+      key: `fato-familiar-${idx}`,
+      titulo: `Histórico familiar: ${texto}`,
+      valor: `Histórico familiar: ${texto}`,
+      origem: 'anamnese',
+      severidade: 'alerta',
+      familiar: true,
+    })),
+  ];
+  const criticosCount =
+    r.alergiasAlimentares.length + r.alergiasPrincipioAtivo.length + r.declaracoesCriticas.length;
+  return {
+    resumo: r,
+    alertasPerfil,
+    alertasAnamnese,
+    alertasAlergia: [],
+    criticosCount,
+    temAnamneseVigente: r.temVigente,
+    vigenteEm: r.vigenteEm,
+    vigenteAssinada: r.vigenteAssinada,
+    totalCount: alertasPerfil.length + alertasAnamnese.length,
+  };
+}
 
-  const perfilClinico = usePerfilClinico(pacienteId, null, sexoPaciente);
+/**
+ * Fonte única da faixa clínica: GET /resumo-clinico (só o declarado no vigente).
+ * `sexoPaciente` e `onAlergiasResumo` permanecem na assinatura por compatibilidade com os call sites.
+ */
+export function useAlertasClinicos(pacienteId, { refreshKey } = {}) {
+  const [resumoRaw, setResumoRaw] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!pacienteId) {
-      setAlertasAnamnese([]);
-      setAlertasAlergia([]);
-      setIsLoadingAnamnese(false);
+      setResumoRaw(null);
+      setIsLoading(false);
       return undefined;
     }
     let cancelled = false;
-    setIsLoadingAnamnese(true);
+    setIsLoading(true);
     (async () => {
       try {
-        const list = await anamneseApi.listPaciente(pacienteId);
-        const arr = Array.isArray(list) ? list : [];
-
-        // Manter apenas o preenchimento mais recente por ficha (anamneseId/fichaId)
-        const maisRecentePorFicha = new Map();
-        for (const an of arr) {
-          const fichaId = an.anamneseId ?? an.fichaId ?? an.anamneseFichaId ?? an.id;
-          const ts = an.dataHora ? new Date(an.dataHora).getTime() : 0;
-          const prev = maisRecentePorFicha.get(String(fichaId));
-          if (!prev || ts > (prev.dataHora ? new Date(prev.dataHora).getTime() : 0)) {
-            maisRecentePorFicha.set(String(fichaId), an);
-          }
-        }
-        const arrFiltrado = Array.from(maisRecentePorFicha.values());
-
-        const pairs = await Promise.all(
-          arrFiltrado.map((an) =>
-            anamneseApi
-              .getPaciente(pacienteId, an.id)
-              .then((det) => ({ an, det }))
-              .catch(() => ({ an, det: null }))
-          )
-        );
-        if (cancelled) return;
-        const alergiasDetectadas = [];
-        const itemsAlergia = [];
-        const itemsGeral = [];
-        for (const { an, det } of pairs) {
-          if (!det || !Array.isArray(det.respostas)) continue;
-          const ts = an.dataHora ? new Date(an.dataHora).getTime() : 0;
-          const nome = an.anamneseNome || 'Anamnese';
-          det.respostas.forEach((resp, rIdx) => {
-            if (isRespostaCategoria(resp, 'alergias') && isRespostaPositiva(resp)) {
-              const valorAlergia = renderRespostaValue(resp);
-              const perguntaTexto = textoPerguntaResposta(resp);
-              alergiasDetectadas.push(`${perguntaTexto}: ${valorAlergia}`);
-              const pidA = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
-              itemsAlergia.push({
-                key: `${pidA}`,
-                titulo: textoPerguntaResposta(resp),
-                valor: renderRespostaValue(resp),
-                fichaNome: nome,
-                dataHora: an.dataHora,
-                ts,
-              });
-            }
-            if (!isRespostaPrioridadeAlerta(resp)) return;
-            if (!isRespostaPreocupante(resp)) return;
-            const pid = resp.id ?? getPerguntaIdFromResp(resp) ?? rIdx;
-            itemsGeral.push({
-              key: `${pid}`,
-              titulo: textoPerguntaResposta(resp),
-              valor: renderRespostaValue(resp),
-              fichaNome: nome,
-              dataHora: an.dataHora,
-              ts,
-            });
-          });
-        }
-        itemsAlergia.sort((a, b) => b.ts - a.ts);
-        itemsGeral.sort((a, b) => b.ts - a.ts);
-        const seen = new Set();
-        const merged = [];
-        for (const it of [...itemsAlergia, ...itemsGeral]) {
-          if (seen.has(it.key)) continue;
-          seen.add(it.key);
-          merged.push(it);
-        }
-        merged.sort((a, b) => b.ts - a.ts);
-        if (!cancelled) setAlertasAlergia(itemsAlergia);
-        if (!cancelled) setAlertasAnamnese(merged);
-
-        if (alergiasDetectadas.length > 0 && typeof onAlergiasResumo === 'function') {
-          onAlergiasResumo(alergiasDetectadas.join(' · '));
-        }
+        const dto = await perfilClinicoApi.resumo(pacienteId);
+        if (!cancelled) setResumoRaw(dto);
       } catch {
-        if (!cancelled) {
-          setAlertasAnamnese([]);
-          setAlertasAlergia([]);
-        }
+        if (!cancelled) setResumoRaw(null);
       } finally {
-        if (!cancelled) setIsLoadingAnamnese(false);
+        if (!cancelled) setIsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pacienteId, refreshKey]);
 
-  const alertasPerfil = useMemo(() => {
-    const s = perfilClinico.state;
-    if (!s) return [];
-    const items = [];
-    (s.alergias ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-alergia-${chip.id ?? chip.nome}`, titulo: 'Alergia alimentar', valor: val, secao: 'alergias', origem: 'perfil' });
-    });
-    (s.alergiasPrincipioAtivo ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-pa-${chip.id ?? chip.nome}`, titulo: 'Alergia a princípio ativo', valor: val, secao: 'alergiasPrincipioAtivo', origem: 'perfil' });
-    });
-    (s.medicamentosEmUso ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const parts = [chip.nome];
-      if (chip.dose) parts.push(chip.dose);
-      if (chip.frequencia) parts.push(chip.frequencia);
-      if (chip.observacao) parts.push(chip.observacao);
-      items.push({ key: `perfil-med-${chip.id ?? chip.nome}`, titulo: 'Medicamento em uso', valor: parts.join(' · '), secao: 'medicamentos', origem: 'perfil' });
-    });
-    (s.antecedentes ?? []).forEach((chip) => {
-      if (!chip.nome) return;
-      const val = chip.observacao ? `${chip.nome} · ${chip.observacao}` : chip.nome;
-      items.push({ key: `perfil-ant-${chip.id ?? chip.nome}`, titulo: 'Antecedente', valor: val, secao: 'antecedentes', origem: 'perfil' });
-    });
-    return items;
-  }, [perfilClinico.state]);
+  const mapped = useMemo(() => mapResumoToLegacy(resumoRaw), [resumoRaw]);
 
   return {
-    alertasAnamnese,
-    alertasAlergia,
-    alertasPerfil,
-    isLoading: isLoadingAnamnese || perfilClinico.isLoading,
-    totalCount: alertasPerfil.length + alertasAnamnese.length,
+    ...mapped,
+    isLoading,
   };
 }

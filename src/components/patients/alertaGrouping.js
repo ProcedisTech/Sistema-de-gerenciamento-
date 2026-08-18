@@ -11,9 +11,8 @@ const GROUP_DEFS = [
 
 /**
  * Agrupa alertas de perfil clínico + anamnese por campo (alimentar, princípio ativo,
- * medicamento, antecedente, anamnese). Usado tanto na barra fixa do hub quanto no modal
- * "Todos os alertas clínicos" e no cartão "Alertas" do perfil — mesma estrutura de dados
- * para as três telas.
+ * medicamento, antecedente, anamnese). Usado na sidebar do perfil e no modal
+ * "Todos os alertas clínicos".
  */
 export function buildGroupedChips(alertasPerfil, alertasAnamnese) {
   const groups = GROUP_DEFS.map((def) => ({

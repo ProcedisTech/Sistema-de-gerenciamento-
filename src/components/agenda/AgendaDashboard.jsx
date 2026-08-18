@@ -7,6 +7,8 @@ import { AgendaSummaryEntryCard } from './AgendaSummaryEntryCard.jsx';
 import { AgendaWeekSlotDetailModal } from './AgendaWeekSlotDetailModal.jsx';
 import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
 import { AgendaNovoChoiceModal } from './AgendaNovoChoiceModal.jsx';
+import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
+import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
 import { AgendaTopbar } from './AgendaTopbar.jsx';
 import { AgendaControlStrip } from './AgendaControlStrip.jsx';
 import { AgendaCalendarGrid } from './AgendaCalendarGrid.jsx';
@@ -183,6 +185,8 @@ export function AgendaDashboard({
   const [advancePending, setAdvancePending] = React.useState(null);
   const [novoChoiceOpen, setNovoChoiceOpen] = React.useState(false);
   const [showEntrance, setShowEntrance] = React.useState(true);
+  const [anamneseEscolhaOpen, setAnamneseEscolhaOpen] = React.useState(false);
+  const [anamneseSolicitacao, setAnamneseSolicitacao] = React.useState(null);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const isMobile = !isDesktop;
   const toast = useToast();
@@ -299,29 +303,42 @@ export function AgendaDashboard({
   const handleEnviarAnamnese = React.useCallback(
     (appointment) => {
       const patient = patients.find((item) => samePatient(item, appointment));
-      const phone = patient?.whatsapp || patient?.telefone || appointment?.pacienteTelefone;
-      const name = patient?.nomeCompleto || patient?.nome || appointment?.pacienteNome || 'Paciente';
-      
-      if (!phone) {
-        toast.error('Paciente sem telefone cadastrado.');
+      const pacienteId = patient?.id || appointment?.pacienteId;
+      if (!pacienteId) {
+        toast.error('Não foi possível identificar o paciente deste agendamento.');
         return;
       }
       if (!clinicaSlug) {
         toast.error('Para enviar a anamnese, primeiro configure o identificador (slug) da clínica em Configurações > Anamnese.');
         return;
       }
-
-      const link = `${window.location.origin}/anamnese?clinic=${clinicaSlug}`;
-      const text = `Olá ${name}, segue o link da sua ficha de anamnese: ${link}\n\n*Como preencher:*\n1. Clique no link acima\n2. Digite seu CPF para acessar\n3. Responda às perguntas com atenção\n4. Clique em "Finalizar Anamnese" no final\n\nPor favor, preencha a ficha antes da sua consulta para agilizar seu atendimento.`;
-      
-      const cleanPhone = phone.replace(/\D/g, '');
-      const finalPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-      
-      const url = `https://api.whatsapp.com/send?phone=${finalPhone}&text=${encodeURIComponent(text)}`;
-      window.open(url, '_blank');
+      const phone = patient?.whatsapp || patient?.telefone || appointment?.pacienteTelefone;
+      const name = patient?.nomeCompleto || patient?.nome || appointment?.pacienteNome || 'Paciente';
+      const cpf = patient?.cpf || appointment?.pacienteCpf || '';
+      setAnamneseSolicitacao({
+        pacienteId: String(pacienteId),
+        telefonePaciente: phone || '',
+        pacienteNome: name,
+        pacienteCpf: cpf,
+      });
+      setAnamneseEscolhaOpen(true);
     },
     [patients, clinicaSlug, toast]
   );
+
+  const handleEscolherAnamneseQr = React.useCallback(() => {
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) => (curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null } } : curr));
+  }, []);
+
+  const handleEscolherAnamneseWhatsApp = React.useCallback(() => {
+    if (!anamneseSolicitacao?.telefonePaciente) {
+      toast.error('Paciente sem telefone cadastrado.');
+      return;
+    }
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) => (curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' } } : curr));
+  }, [anamneseSolicitacao, toast]);
 
   const handleConfirmAdvance = React.useCallback(async () => {
     const { appointment, targetHoraInicio } = advancePending || {};
@@ -827,6 +844,29 @@ export function AgendaDashboard({
         onClose={closeNovoChoice}
         onEscolherAgendamento={handleEscolherAgendamento}
         onEscolherBloqueio={handleEscolherBloqueio}
+      />
+
+      <ModalEscolhaAssinatura
+        open={anamneseEscolhaOpen}
+        onClose={() => {
+          setAnamneseEscolhaOpen(false);
+          setAnamneseSolicitacao(null);
+        }}
+        opcoes={{ tablet: false, qrCode: true, link: true }}
+        onSelectQrCode={handleEscolherAnamneseQr}
+        onSelectLink={handleEscolherAnamneseWhatsApp}
+      />
+
+      <SolicitarAnamneseModal
+        open={Boolean(anamneseSolicitacao?.escolha)}
+        escolha={anamneseSolicitacao?.escolha}
+        payload={anamneseSolicitacao}
+        onClose={() => setAnamneseSolicitacao(null)}
+        onCancelar={() => {
+          setAnamneseSolicitacao((curr) => (curr ? { ...curr, escolha: undefined } : null));
+          setAnamneseEscolhaOpen(true);
+        }}
+        onConcluido={() => setAnamneseSolicitacao(null)}
       />
     </div>
   );

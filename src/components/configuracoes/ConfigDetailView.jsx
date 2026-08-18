@@ -5,7 +5,7 @@ import { CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
 import { UnsavedChangesModal } from '../shared/UnsavedChangesModal';
 
 // Painéis de conteúdo
-import { AnamneseConfigPublicaPanel, PerguntasCategoriasPanel, FichasPanel } from '../anamnese';
+import { AnamneseConfigPublicaPanel, AnamneseFichasHome } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
 import { MetodosAssinaturaPanel } from './MetodosAssinaturaPanel';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
@@ -39,6 +39,7 @@ import { authHeadersForFetch } from '../../services/api';
  * @param {() => void} [props.onPacientesCatalogRefresh]
  * @param {(opts?) => void} [props.onDisponibilidadeInvalidate]
  * @param {(isDirty: boolean) => void} [props.onDirtyHorariosChange]
+ * @param {(isDirty: boolean) => void} [props.onDirtyFichaChange]
  */
 export function ConfigDetailView({
   categoryKey,
@@ -57,6 +58,7 @@ export function ConfigDetailView({
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
+  onDirtyFichaChange,
 }) {
   const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
 
@@ -72,17 +74,26 @@ export function ConfigDetailView({
   // isDirtyHorarios sobrevive à remontagem do painel (key={effectiveSection} está
   // no <div> interno L90, não neste componente).
   const [isDirtyHorarios, setIsDirtyHorarios] = useState(false);
+  const [isDirtyFicha, setIsDirtyFicha] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [fichaDetailLabel, setFichaDetailLabel] = useState(null);
   const pendingAction = useRef(null);
 
-  const handleDirtyChange = (dirty) => {
+  const handleDirtyHorariosChange = (dirty) => {
     setIsDirtyHorarios(dirty);
     onDirtyHorariosChange?.(dirty);
   };
 
+  const handleDirtyFichaChange = (dirty) => {
+    setIsDirtyFicha(dirty);
+    onDirtyFichaChange?.(dirty);
+  };
+
+  const hasUnsavedChanges = isDirtyHorarios || isDirtyFicha;
+
   /** Intercepta qualquer navegação quando há alterações não salvas. */
   const guardedNavigate = (action) => {
-    if (isDirtyHorarios) {
+    if (hasUnsavedChanges) {
       pendingAction.current = action;
       setModalOpen(true);
     } else {
@@ -112,6 +123,13 @@ export function ConfigDetailView({
         isOpen={modalOpen}
         onContinue={handleModalContinue}
         onDiscard={handleModalDiscard}
+        message={
+          isDirtyFicha && isDirtyHorarios
+            ? 'Você tem alterações não salvas na ficha e no horário de atendimento. Deseja sair sem salvar?'
+            : isDirtyFicha
+              ? 'Você tem alterações não salvas na ficha de anamnese. Deseja sair sem salvar?'
+              : undefined
+        }
       />
 
       <div className="flex min-h-0 flex-1 flex-col">
@@ -119,6 +137,7 @@ export function ConfigDetailView({
         <div className="mb-4">
           <ConfigBreadcrumb
             categoryLabel={categoryDef?.label}
+            detailLabel={effectiveSection === 'fichas' ? fichaDetailLabel : null}
             onBackToHub={handleBackToHub}
           />
         </div>
@@ -150,7 +169,9 @@ export function ConfigDetailView({
               onPerfilAtualizado={onPerfilAtualizado}
               onPacientesCatalogRefresh={onPacientesCatalogRefresh}
               onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
-              onDirtyHorariosChange={handleDirtyChange}
+              onDirtyHorariosChange={handleDirtyHorariosChange}
+              onDirtyFichaChange={handleDirtyFichaChange}
+              onFichaDetailLabelChange={setFichaDetailLabel}
             />
           </div>
         </div>
@@ -177,6 +198,8 @@ function PainelAtivo({
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
+  onDirtyFichaChange,
+  onFichaDetailLabelChange,
 }) {
   if (configSection === 'procedimentos' && canSeeProcedimentos) {
     return <BancoProcedimentosPanel />;
@@ -187,11 +210,8 @@ function PainelAtivo({
   if (configSection === 'metodos-assinatura' && canSeeTermos) {
     return <MetodosAssinaturaPanel />;
   }
-  if (configSection === 'perguntas-categorias' && canSeeAnamnese) {
-    return <PerguntasCategoriasPanel />;
-  }
   if (configSection === 'fichas' && canSeeAnamnese) {
-    return <FichasPanel />;
+    return <AnamneseFichasHome onFichaNomeChange={onFichaDetailLabelChange} onDirtyFichaChange={onDirtyFichaChange} />;
   }
   if (configSection === 'anamnese-publica' && canSeeAnamnese) {
     return <AnamneseConfigPublicaPanel />;

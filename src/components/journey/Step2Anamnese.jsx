@@ -14,6 +14,7 @@ import { anamneseApi } from '../../services/api';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
+import { AnamneseDocumentoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import {
   buildPerguntaTipoById,
   buildRespostaApiRows,
@@ -134,6 +135,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     () => (draftValido ? savedAnamneseState?.fichaDropdownNovo ?? '' : '')
   );
   const [errosObrigatorias, setErrosObrigatorias] = useState(() => new Set());
+  const [forcarNovoPreenchimento, setForcarNovoPreenchimento] = useState(false);
 
   // ── Perfil Clínico (Bloco 1) ─────────────────────────────
   const perfilClinico = usePerfilClinico(pacienteId, roleUserId, pacienteSexo, {
@@ -444,7 +446,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               ?? preenchimento.createdAt
               ?? preenchimento.dataCriacao
               ?? null;
-            syncedPreenchimento = { id: preenchimento.id, dataHora: dh };
+            syncedPreenchimento = {
+              id: preenchimento.id,
+              dataHora: dh,
+              assinaturaPaciente: preenchimento.assinaturaPaciente ?? detalhes?.assinaturaPaciente,
+              status: preenchimento.status ?? detalhes?.status,
+            };
             syncedModo = true;
             setRespostas(respostasCarregadas);
             respostasRef.current = respostasCarregadas;
@@ -639,6 +646,48 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const basicaFichaFiltered = fichasFiltered.find(isConsultaBasicaFicha);
   const fichasCustomFiltered = fichasFiltered.filter((f) => !isConsultaBasicaFicha(f));
   const showSplitSections = fichas.length > 1;
+  const fillWidthCls = consultaMode
+    ? 'mb-6 w-full min-w-0'
+    : 'mb-6 w-full min-w-0 max-w-5xl xl:max-w-6xl';
+  const fillGridCls = consultaMode
+    ? 'grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2'
+    : 'grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2';
+
+  const vigente = preenchimentoAnterior || ultimaAnamnese?.ultimo || null;
+  const mostrarDocumentoUnico = Boolean(
+    pacienteId && !loadingHistoricoPaciente && vigente?.id && !forcarNovoPreenchimento
+  );
+
+  if (mostrarDocumentoUnico) {
+    return (
+      <div className="min-w-0">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-[16px] font-semibold text-slate-800">Anamnese</h3>
+          <button
+            type="button"
+            onClick={() => {
+              setForcarNovoPreenchimento(true);
+              setPreenchimentoAnterior(null);
+              setModoVisualizacao(false);
+            }}
+            className="text-[12.5px] font-bold text-[#00a88e] hover:underline"
+          >
+            Nova ficha
+          </button>
+        </div>
+        <AnamneseDocumentoView
+          pacienteId={pacienteId}
+          preenchimentoId={vigente.id}
+          onModificar={async () => {
+            const fichaId = ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente);
+            if (fichaId) await consultarUltimoPreenchimento(fichaId);
+            setModoVisualizacao(false);
+            setForcarNovoPreenchimento(true);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0">
@@ -650,8 +699,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         </div>
       </div>
 
-      {/* Bloco 1 — Perfil Clínico Persistente */}
-      {pacienteId && (
+      {/* Bloco 1 — Perfil Clínico Persistente (dono: perfil do paciente; no hub já está no header) */}
+      {pacienteId && !consultaMode && (
         <div className="mb-6 min-w-0 rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
           <div className="rounded-t-[11px] border-b border-slate-200/80 bg-slate-100/60 px-4 py-2.5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
@@ -914,13 +963,15 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 : 'data não registrada'}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={toggleModoVisualizacao}
-            className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
-          >
-            {modoVisualizacao ? 'Modificar' : 'Cancelar'}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleModoVisualizacao}
+              className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
+            >
+              {modoVisualizacao ? 'Modificar' : 'Cancelar'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -933,7 +984,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       )}
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
-        <div className="mb-6 w-full min-w-0 max-w-5xl xl:max-w-6xl">
+        <div className={fillWidthCls}>
           {/* Título da ficha — discreto */}
           <p className="mb-5 text-[15px] font-semibold text-slate-700">{fichaSelecionada.nome}</p>
 
@@ -948,9 +999,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               ) : null}
 
               {/* Grid responsivo */}
-              <div className="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2">
+              <div className={fillGridCls}>
                 {secaoItens.map((item) => {
-                  const isAlerta = item.pergunta?.prioridade === 'ALERTA';
+                  const isAlerta = item.pergunta?.prioridade === 'ALERTA'
+                    || item.pergunta?.prioridade === 'CRITICA';
                   const showObrigatorio = Boolean(item.obrigatorio);
                   const perguntaId = item.pergunta?.id;
                   const hasError = perguntaId != null && errosObrigatorias.has(String(perguntaId));
@@ -1016,7 +1068,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
       {/* Complemento da visita — ficha personalizada: motivo opcional no final */}
       {mostrarComplementoVisita ? (
-        <div className="mt-6 w-full min-w-0 max-w-5xl xl:max-w-6xl">
+        <div className={`mt-6 w-full min-w-0 ${consultaMode ? '' : 'max-w-5xl xl:max-w-6xl'}`}>
           <div className="border-t border-slate-100 pt-5">
             <label className="mb-2 block text-[13px] font-semibold text-slate-700" htmlFor="complemento-visita-queixa">
               Motivo da consulta

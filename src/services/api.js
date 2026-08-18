@@ -1239,6 +1239,35 @@ export const anamneseApi = {
   updateFicha: (id, data) => request(`/api/v1/anamnese/fichas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   removeFicha: (id) => request(`/api/v1/anamnese/fichas/${id}`, { method: 'DELETE' }),
 
+  salvarDocumento: (id, payload) =>
+    request(`/api/v1/anamnese/fichas/${id}/documento`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  duplicarFicha: (id) =>
+    request(`/api/v1/anamnese/fichas/${id}/duplicar`, { method: 'POST' }),
+  destacarPergunta: (fichaId, perguntaId) =>
+    request(`/api/v1/anamnese/fichas/${fichaId}/perguntas/${perguntaId}/destacar`, {
+      method: 'POST',
+    }),
+  listStarters: () => request('/api/v1/anamnese/starters'),
+  getStarterDocumento: (codigo) =>
+    request(`/api/v1/anamnese/fichas/starters/${encodeURIComponent(codigo)}/documento`, {
+      needsOrg: false,
+    }),
+  fromStarter: (codigo) =>
+    request(`/api/v1/anamnese/fichas/from-starter/${encodeURIComponent(codigo)}`, {
+      method: 'POST',
+    }),
+  getGravada: (pacienteId, preenchimentoId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada`),
+  getDocumento: (pacienteId, preenchimentoId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/documento`),
+  verificarGravada: (pacienteId, preenchimentoId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/${preenchimentoId}/gravada/verificar`),
+  listFatosClinicos: (pacienteId) =>
+    request(`/api/v1/anamnese/paciente/${pacienteId}/fatos-clinicos`),
+
   listPaciente: (pid) => request(`/api/v1/anamnese/paciente/${pid}`),
   getPaciente: (pid, aid) => request(`/api/v1/anamnese/paciente/${pid}/${aid}`),
   createPaciente: (pid, roleId, data) =>
@@ -1258,6 +1287,15 @@ export const anamneseApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+};
+
+export const anamneseEnvioApi = {
+  gerar: (payload) =>
+    request('/api/v1/anamnese/envios', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  status: (envioId) => request(`/api/v1/anamnese/envios/${envioId}/status`),
 };
 
   // 🟨🟨 Configurações de Acesso Público 🟨🟨
@@ -1541,6 +1579,14 @@ export const perfilClinicoApi = {
    */
   get: (pacienteId) =>
     request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/perfil-clinico`),
+
+  /**
+   * Resumo clínico unificado (anamnese vigente + perfil) — fonte da faixa do hub.
+   * @param {string} pacienteId
+   * @returns {Promise<ResumoClinicoDTO>}
+   */
+  resumo: (pacienteId) =>
+    request(`/api/v1/pacientes/${encodeURIComponent(pacienteId)}/resumo-clinico`),
 
   /**
    * Atualiza perfil clínico (replace-por-seção).
