@@ -17,7 +17,7 @@ export function PatientActiveFilterChips({ ctx, onFilterChange }) {
             type="button"
             onClick={() => {
               def.deactivate(ctx);
-              onFilterChange?.();
+              onFilterChange?.(def, false);
             }}
             className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-[#94a3b8] hover:bg-[#e2e8f0] hover:text-[#475569]"
             aria-label={`Remover filtro ${def.label}`}

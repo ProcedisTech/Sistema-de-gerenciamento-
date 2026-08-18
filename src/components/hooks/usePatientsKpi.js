@@ -8,7 +8,6 @@ import {
 } from '../../utils/agendaDashboardMapping';
 import { isKpiCountableAgendaDto } from '../../utils/agendaKpiDrilldown';
 import { toLocalDateIso } from '../../utils/agendaDateUtils';
-import { isSemRetornoMarcado } from '../patients/patientListStatusConfig.js';
 
 /**
  * Busca os 5 KPIs da tela Pacientes + listas para o PulseSidebar em paralelo.
@@ -24,8 +23,8 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
   const [totalAniversariantes, setTotalAniversariantes] = useState(null);
   const [aniversariantesList, setAniversariantesList] = useState([]);
   const [agendamentosHoje, setAgendamentosHoje] = useState([]);
-  const [semRetornoMarcadoList, setSemRetornoMarcadoList] = useState([]);
-  const [totalSemRetornoMarcado, setTotalSemRetornoMarcado] = useState(null);
+  const [semPlanoList, setSemPlanoList] = useState([]);
+  const [totalSemPlano, setTotalSemPlano] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const fetchAll = useCallback(async () => {
@@ -37,8 +36,8 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       setTotalAniversariantes(null);
       setAniversariantesList([]);
       setAgendamentosHoje([]);
-      setSemRetornoMarcadoList([]);
-      setTotalSemRetornoMarcado(null);
+      setSemPlanoList([]);
+      setTotalSemPlano(null);
       setLoading(false);
       return;
     }
@@ -61,16 +60,18 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       pageNovos,
       pageAniversariantesMes,
       rawAgenda,
-      pagePacientesSidebar,
+      pageSemPlanoLista,
+      pageSemPlanoTotal,
       pageProximosAniversarios,
     ] = await Promise.all([
       safe(() => pacientesApi.list({ size: 1 })),
-      safe(() => pacientesApi.list({ size: 1, semRetorno: true })),
+      safe(() => pacientesApi.list({ size: 1, semAgendamentoFuturo: true })),
       safe(() => pacientesApi.list({ size: 1, statusPlano: 'plano_ativo' })),
       safe(() => pacientesApi.list({ size: 1, ehNovo: true })),
       safe(() => pacientesApi.list({ size: 1, ehAniversarianteMes: true })),
       safe(() => agendasApi.byRange(hoje, hoje, { excluirCancelado: true })),
-      safe(() => pacientesApi.list({ size: 100, order: 'nome_asc' })),
+      safe(() => pacientesApi.list({ size: 5, order: 'nome_asc', statusPlano: 'sem_plano' })),
+      safe(() => pacientesApi.list({ size: 1, statusPlano: 'sem_plano' })),
       safe(() => pacientesApi.list({ size: 5, order: 'birthday_asc' })),
     ]);
 
@@ -85,14 +86,11 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       : [];
     setAniversariantesList(proximosAniversarios);
 
-    const pacientesSidebar = Array.isArray(pagePacientesSidebar?.content)
-      ? pagePacientesSidebar.content.map(mapBackendPatient).filter(Boolean)
+    const semPlano = Array.isArray(pageSemPlanoLista?.content)
+      ? pageSemPlanoLista.content.map(mapBackendPatient).filter(Boolean)
       : [];
-    const semRetornoMarcado = pacientesSidebar.filter((p) =>
-      isSemRetornoMarcado(p, { excluirPlanoAtivo: true })
-    );
-    setSemRetornoMarcadoList(semRetornoMarcado.slice(0, 5));
-    setTotalSemRetornoMarcado(semRetornoMarcado.length);
+    setSemPlanoList(semPlano);
+    setTotalSemPlano(pageSemPlanoTotal?.totalElements ?? null);
 
     const agendaDtos = normalizeApiList(rawAgenda)
       .filter(isKpiCountableAgendaDto)
@@ -120,8 +118,8 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
     totalAniversariantes,
     aniversariantesList,
     agendamentosHoje,
-    semRetornoMarcadoList,
-    totalSemRetornoMarcado,
+    semPlanoList,
+    totalSemPlano,
     loading,
     refresh: fetchAll,
   };

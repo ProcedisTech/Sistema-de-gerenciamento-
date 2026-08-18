@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Users,
-  AlertCircle,
+  CalendarOff,
   BadgeCheck,
   UserPlus,
   Cake,
@@ -19,13 +19,13 @@ const CARDS = [
   },
   {
     id: 'risco',
-    label: 'Em risco',
-    sublabel: 'sem retorno 60d+',
-    icon: AlertCircle,
-    iconBg: 'bg-red-50',
-    iconColor: 'text-red-500',
-    valueBorder: 'border-red-100',
-    activeBorder: 'ring-2 ring-red-300/50',
+    label: 'Sem agenda',
+    sublabel: 'sem agendamento futuro',
+    icon: CalendarOff,
+    iconBg: 'bg-amber-50',
+    iconColor: 'text-amber-500',
+    valueBorder: 'border-amber-100',
+    activeBorder: 'ring-2 ring-amber-300/50',
   },
   {
     id: 'planos',

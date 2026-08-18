@@ -150,6 +150,7 @@ export const usePatientState = (opts = {}) => {
   const [statusPlanoFilter, setStatusPlanoFilter] = useState(''); // '' | 'sem_plano' | 'plano_ativo'
   const [anamneseDesatualizadaFilter, setAnamneseDesatualizadaFilter] = useState(false);
   const [semRetornoFilter, setSemRetornoFilter] = useState(false);
+  const [semAgendamentoFuturoFilter, setSemAgendamentoFuturoFilter] = useState(false);
   const [ehNovoFilter, setEhNovoFilter] = useState(false);
   const [ehAniversarianteFilter, setEhAniversarianteFilter] = useState(false);
 
@@ -203,14 +204,17 @@ export const usePatientState = (opts = {}) => {
   /* Voltar à primeira página ao mudar filtro ou ordenação */
   useEffect(() => {
     setPatientListPage(0);
-  }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter, ehNovoFilter, ehAniversarianteFilter]);
+  }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter, semAgendamentoFuturoFilter, ehNovoFilter, ehAniversarianteFilter]);
 
-  /* birthday-asc ignora semRetorno no backend — limpar filtro ao trocar para esse sort */
+  /* birthday-asc ignora semRetorno/semAgendamentoFuturo no backend — limpar filtro ao trocar para esse sort */
   useEffect(() => {
     if (patientListSortBy === 'birthday-asc' && semRetornoFilter) {
       setSemRetornoFilter(false);
     }
-  }, [patientListSortBy, semRetornoFilter]);
+    if (patientListSortBy === 'birthday-asc' && semAgendamentoFuturoFilter) {
+      setSemAgendamentoFuturoFilter(false);
+    }
+  }, [patientListSortBy, semRetornoFilter, semAgendamentoFuturoFilter]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -290,6 +294,7 @@ export const usePatientState = (opts = {}) => {
           statusPlano: statusPlanoFilter || undefined,
           anamneseDesatualizada: anamneseDesatualizadaFilter || undefined,
           semRetorno: !isBirthday && semRetornoFilter ? true : undefined,
+          semAgendamentoFuturo: !isBirthday && semAgendamentoFuturoFilter ? true : undefined,
           ehNovo: ehNovoFilter || undefined,
           ehAniversarianteMes: ehAniversarianteFilter || undefined,
         })
@@ -365,6 +370,7 @@ export const usePatientState = (opts = {}) => {
     statusPlanoFilter,
     anamneseDesatualizadaFilter,
     semRetornoFilter,
+    semAgendamentoFuturoFilter,
     ehNovoFilter,
     ehAniversarianteFilter,
   ]);
@@ -542,6 +548,8 @@ export const usePatientState = (opts = {}) => {
     setAnamneseDesatualizadaFilter,
     semRetornoFilter,
     setSemRetornoFilter,
+    semAgendamentoFuturoFilter,
+    setSemAgendamentoFuturoFilter,
     ehNovoFilter,
     setEhNovoFilter,
     ehAniversarianteFilter,
