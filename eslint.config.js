@@ -84,6 +84,12 @@ export default defineConfig([
     },
   },
   {
+    files: ['vite.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     files: ['**/*.{test,spec}.{js,jsx}'],
     languageOptions: {
       globals: {

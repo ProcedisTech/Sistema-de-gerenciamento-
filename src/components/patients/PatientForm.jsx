@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Save, Loader2, UserRound, Plus, AlertTriangle, Calendar, ChevronRight } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Save, Loader2, UserRound, Plus, Camera, AlertTriangle, Calendar, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   maskCPF,
   maskRG,
@@ -224,8 +224,21 @@ export function PatientForm({
         : `${idade} anos`
       : '';
 
+  const isWideModal = variant === 'modal';
+  const requiredFieldValues = [nome, dataNascimentoDisplay, sexo, estadoCivilId, profissaoId, cpf, telefoneNumero, email];
+  const requiredFilledCount = requiredFieldValues.filter(
+    (v) => v !== null && v !== undefined && String(v).trim() !== '',
+  ).length;
+  const requiredTotal = requiredFieldValues.length;
+  const hasComplementaryData = Boolean(instagram || tiktok || nomeMae || nomePai || indicacao);
+  const [complementaryOpen, setComplementaryOpen] = useState(hasComplementaryData);
+
   return (
-    <form onSubmit={onSubmit} className={isModalVariant ? 'space-y-5' : 'space-y-6'} aria-busy={salvando || undefined}>
+    <form
+      onSubmit={onSubmit}
+      className={isWideModal ? 'space-y-4' : isModalVariant ? 'space-y-5' : 'space-y-6'}
+      aria-busy={salvando || undefined}
+    >
       {showFormHeading ? (
         <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
           <h4 className="text-[17px] font-bold text-[#0f172a]">{formHeading}</h4>
@@ -242,7 +255,7 @@ export function PatientForm({
         </div>
       ) : null}
 
-      {showPhotoUpload && mode === 'create' ? (
+      {showPhotoUpload && mode === 'create' && !isWideModal ? (
         <>
           <div className={`flex justify-center ${isModalVariant ? '-mt-1 mb-1' : 'mb-2'}`}>
             <label className="group relative cursor-pointer" title="Adicionar foto de perfil">
@@ -296,6 +309,485 @@ export function PatientForm({
         </div>
       )}
 
+      {isWideModal ? (
+        <>
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              {showPhotoUpload && mode === 'create' ? (
+                <label
+                  className="group flex shrink-0 cursor-pointer flex-col items-center gap-1"
+                  title="Adicionar foto de perfil"
+                >
+                  <div className="relative">
+                    <div
+                      className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-full shadow-sm transition-all ${
+                        fotoPerfilPreview
+                          ? 'border-2 border-[#00a88e] bg-white'
+                          : 'border-2 border-dashed border-[#00a88e]/50 bg-[#e6f7f5] group-hover:border-[#00a88e] group-hover:bg-[#d9f2ee]'
+                      }`}
+                    >
+                      {fotoPerfilPreview ? (
+                        <img src={fotoPerfilPreview} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <Camera className="h-6 w-6 text-[#00a88e]" strokeWidth={1.75} />
+                      )}
+                    </div>
+                    {!fotoPerfilPreview ? (
+                      <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#00a88e] shadow">
+                        <Plus className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="text-[11px] font-bold leading-none text-[#00a88e]">Foto</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={onFotoChange}
+                  />
+                </label>
+              ) : null}
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-[#00a88e]">
+                  {requiredFilledCount} de {requiredTotal} campos obrigatórios preenchidos
+                </p>
+                <div className="mt-1.5 h-1.5 w-full max-w-[260px] overflow-hidden rounded-full bg-[#00a88e]/15">
+                  <div
+                    className="h-full rounded-full bg-[#00a88e] transition-all"
+                    style={{ width: `${Math.round((requiredFilledCount / requiredTotal) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div
+              className={`rounded-xl border bg-white p-4 transition-colors ${
+                hasPersonalSectionError ? 'border-red-300 bg-red-50/30' : 'border-slate-200'
+              }`}
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
+                  1
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#0f766e]')}>Dados Pessoais</h4>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="space-y-1.5">
+                  <label className={labelCls('text-[#00a88e]')}>
+                    Nome Completo <FieldReq />
+                  </label>
+                  <input
+                    type="text"
+                    value={nome}
+                    disabled={readOnly}
+                    maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
+                      onNomeChange(value);
+                      clearError?.('nome');
+                    }}
+                    placeholder="Nome completo do paciente"
+                    className={inputClass('nome')}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#00a88e]')}>
+                      Nascimento <FieldReq />
+                    </label>
+                    <div className="flex items-stretch gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="bday"
+                        value={dataNascimentoDisplay}
+                        disabled={readOnly}
+                        onChange={(e) => {
+                          onDataNascimentoDisplayChange(e.target.value);
+                          clearError?.('dataNascimento');
+                        }}
+                        placeholder="dd/mm/aaaa"
+                        maxLength={10}
+                        className={`min-w-0 flex-1 ${inputClass('dataNascimento')}`}
+                      />
+                      {showBirthCalendarIcon ? (
+                        <label
+                          className="relative flex shrink-0 cursor-pointer items-center px-2 text-slate-400 transition hover:text-[#00a88e]"
+                          title="Escolher data no calendário"
+                        >
+                          <Calendar className="h-4 w-4" strokeWidth={2} />
+                          <input
+                            type="date"
+                            value={dataNascimentoIso || ''}
+                            max={new Date().toISOString().slice(0, 10)}
+                            disabled={readOnly}
+                            onChange={(e) => {
+                              const iso = e.target.value;
+                              if (!iso) return;
+                              const [y, m, d] = iso.split('-');
+                              onDataNascimentoDisplayChange(`${d}/${m}/${y}`);
+                              clearError?.('dataNascimento');
+                            }}
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            aria-label="Escolher data de nascimento no calendário"
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                    {dataNascimentoFieldMessage ? (
+                      <p className="text-[12px] font-bold text-red-600" role="alert">
+                        {dataNascimentoFieldMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#00a88e]')}>Idade</label>
+                    <input
+                      type="text"
+                      value={idadeInputValue}
+                      placeholder="Automática"
+                      disabled
+                      className={idadeInputClass()}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#00a88e]')}>
+                      Sexo <FieldReq />
+                    </label>
+                    <select
+                      value={sexo}
+                      disabled={readOnly}
+                      onChange={(e) => {
+                        onSexoChange(e.target.value);
+                        clearError?.('sexo');
+                      }}
+                      className={selectPersonalClass('sexo')}
+                    >
+                      <option value="">Selecione...</option>
+                      <option value="F">Feminino</option>
+                      <option value="M">Masculino</option>
+                      <option value="N">Prefiro não dizer</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#00a88e]')}>
+                      Estado Civil <FieldReq />
+                    </label>
+                    <EstadoCivilSelect
+                      id="patient-form-estado-civil"
+                      value={estadoCivilId}
+                      disabled={readOnly}
+                      error={Boolean(errors?.estadoCivil)}
+                      onChange={(value) => {
+                        onEstadoCivilChange(value);
+                        clearError?.('estadoCivil');
+                      }}
+                      selectClassName={selectPersonalClass('estadoCivil')}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className={labelCls('text-[#00a88e]')}>
+                    Profissão <FieldReq />
+                  </label>
+                  <ProfissaoSelect
+                    value={profissaoId ?? null}
+                    disabled={readOnly}
+                    onChange={(uuid) => {
+                      onProfissaoIdChange(uuid);
+                      clearError?.('profissao');
+                    }}
+                    error={Boolean(errors?.profissao)}
+                    variant={isModalVariant ? 'modal' : 'default'}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className={labelCls('text-[#00a88e]')}>Gênero</label>
+                  <input
+                    type="text"
+                    value={genero}
+                    disabled={readOnly}
+                    maxLength={PACIENTE_FIELD_MAX.genero}
+                    onChange={(e) => onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))}
+                    placeholder="Como se identifica"
+                    className={inputClass()}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-5">
+              <div className="rounded-xl border border-slate-200 bg-white p-6">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
+                    2
+                  </div>
+                  <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#1d4ed8]')}>Documentos</h4>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#3b82f6]')}>
+                      CPF <FieldReq />
+                    </label>
+                    <input
+                      id={cpfInputId}
+                      type="text"
+                      name="cpf"
+                      value={cpf}
+                      readOnly={cpfDisabled}
+                      aria-readonly={cpfDisabled || undefined}
+                      maxLength={PACIENTE_FIELD_MAX.cpfFormatado}
+                      onChange={(e) => {
+                        if (cpfDisabled) return;
+                        onCpfChange(maskCPF(e.target.value));
+                        clearError?.('cpf');
+                      }}
+                      onBlur={cpfDisabled ? undefined : onCpfBlur}
+                      placeholder="000.000.000-00"
+                      autoComplete="off"
+                      aria-invalid={Boolean(errors.cpf || cpfErrorText)}
+                      aria-describedby={cpfErrorText ? `${cpfInputId}-error` : undefined}
+                      className={cpfDisabled || readOnly ? idadeInputClass() : docInputClass('cpf')}
+                    />
+                    {cpfDisabled ? (
+                      <p className="text-[12px] font-medium text-slate-500">Não pode ser alterado.</p>
+                    ) : null}
+                    {cpfErrorText ? (
+                      <p id={`${cpfInputId}-error`} className="text-[12px] font-bold text-red-600" role="alert">
+                        {cpfErrorText}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#3b82f6]')}>RG</label>
+                    <input
+                      type="text"
+                      value={rg}
+                      disabled={readOnly}
+                      maxLength={PACIENTE_FIELD_MAX.rgFormatado}
+                      onChange={(e) => onRgChange(maskRG(e.target.value))}
+                      placeholder="00.000.000-0"
+                      className={rgInputClass()}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`flex flex-1 flex-col rounded-xl border p-6 transition-colors ${
+                  errors.telefone || errors.email ? 'border-red-300 bg-red-50/30' : 'border-slate-200'
+                } bg-white`}
+              >
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
+                    3
+                  </div>
+                  <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#7e22ce]')}>Contato</h4>
+                </div>
+                <div className="flex flex-1 flex-col justify-center gap-5">
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#a855f7]')}>
+                      Telefone <FieldReq />
+                    </label>
+                    <div className={phoneWrapClass()}>
+                      <select
+                        value={telefoneCountryCode}
+                        disabled={readOnly}
+                        title={getCountryByCode(telefoneCountryCode).name}
+                        onChange={(e) => {
+                          onTelefoneCountryChange(e.target.value);
+                          clearError?.('telefone');
+                        }}
+                        className={
+                          isModalVariant
+                            ? 'max-w-[5.75rem] min-w-0 shrink-0 truncate rounded-l-lg border-0 bg-transparent py-2.5 pl-2 pr-1 text-[12px] font-medium text-slate-600 outline-none sm:max-w-[7.25rem]'
+                            : 'max-w-[5.75rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none sm:max-w-[7.25rem]'
+                        }
+                        aria-label="País"
+                      >
+                        {[
+                          COUNTRY_PHONE_CODES.find((c) => c.code === 'BR'),
+                          ...COUNTRY_PHONE_CODES.filter((c) => c.code !== 'BR'),
+                        ]
+                          .filter(Boolean)
+                          .map((c) => (
+                            <option key={c.code} value={c.code} title={c.name}>
+                              {countrySelectDisplayLabel(c)}
+                            </option>
+                          ))}
+                      </select>
+                      <div className="flex min-w-0 flex-1 items-stretch gap-0.5">
+                        <span
+                          className={
+                            isModalVariant
+                              ? 'flex shrink-0 items-center tabular-nums text-[13px] font-semibold text-slate-500'
+                              : 'flex shrink-0 items-center tabular-nums text-[13px] font-semibold text-[#a855f7]'
+                          }
+                        >
+                          {getDdi(telefoneCountryCode)}
+                        </span>
+                        <input
+                          type="tel"
+                          value={telefoneNumero}
+                          disabled={readOnly}
+                          maxLength={PACIENTE_FIELD_MAX.telefoneNumero}
+                          autoComplete="tel-national"
+                          onChange={(e) => {
+                            onTelefoneNumeroChange(formatPhoneAsYouType(telefoneCountryCode, e.target.value));
+                            clearError?.('telefone');
+                          }}
+                          onBlur={onTelefoneBlur}
+                          placeholder={telefoneCountryCode === 'BR' ? '(00) 00000-0000' : 'Número'}
+                          className={
+                            isModalVariant
+                              ? 'min-w-0 flex-1 rounded-r-lg bg-transparent py-2.5 pr-3 text-[14px] font-medium text-slate-900 outline-none'
+                              : 'min-w-0 flex-1 rounded-r-[9px] bg-transparent py-3 pr-3 text-[14px] font-medium outline-none'
+                          }
+                        />
+                      </div>
+                    </div>
+                    {telefoneTouched && !isPhoneValid(telefoneCountryCode ?? 'BR', telefoneNumero) && (
+                      <p className="text-[12px] font-bold text-red-600">Número inválido para este país</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelCls('text-[#a855f7]')}>
+                      E-mail <FieldReq />
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      disabled={readOnly}
+                      maxLength={PACIENTE_FIELD_MAX.email}
+                      onChange={(e) => {
+                        onEmailChange(e.target.value);
+                        clearError?.('email');
+                      }}
+                      placeholder="email@exemplo.com"
+                      className={emailInputClass()}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
+                  4
+                </div>
+                <h4 className={sectionHeadingCls('text-[18px] font-bold text-[#b45309]')}>Endereço</h4>
+              </div>
+              <EnderecoFields
+                variant={variant === 'page' ? 'page' : variant === 'profile' ? 'profile' : 'modal'}
+                readOnly={readOnly}
+                cep={cep}
+                onCepChange={onCepChange}
+                rua={enderecoRua}
+                onRuaChange={onEnderecoRuaChange}
+                numero={enderecoNumero}
+                onNumeroChange={onEnderecoNumeroChange}
+                complemento={enderecoComplemento}
+                onComplementoChange={onEnderecoComplementoChange}
+                bairro={enderecoBairro}
+                onBairroChange={onEnderecoBairroChange}
+                cidade={enderecoCidade}
+                onCidadeChange={onEnderecoCidadeChange}
+                estado={enderecoEstado}
+                onEstadoChange={onEnderecoEstadoChange}
+                pageColorClass="text-[#f59e0b]"
+                errors={errors}
+                clearError={clearError}
+              />
+
+              <div className="mt-4 border-t border-dashed border-slate-200 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setComplementaryOpen((v) => !v)}
+                  className="flex w-full items-center justify-between rounded-lg border border-dashed border-amber-300 bg-amber-50/60 px-3 py-2.5 text-[12.5px] font-bold text-amber-700 transition hover:bg-amber-50"
+                  aria-expanded={complementaryOpen}
+                >
+                  <span>+ Informações Complementares (5)</span>
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${complementaryOpen ? 'rotate-180' : ''}`}
+                    strokeWidth={2.5}
+                  />
+                </button>
+
+                {complementaryOpen ? (
+                  <div className="mt-4 flex flex-col gap-5">
+                    <div className="space-y-1.5">
+                      <label className={labelCls('text-[#a855f7]')}>Instagram</label>
+                      <input
+                        type="text"
+                        value={instagram}
+                        disabled={readOnly}
+                        maxLength={PACIENTE_FIELD_MAX.instagram}
+                        onChange={(e) => onInstagramChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.instagram))}
+                        placeholder="@usuario"
+                        className={socialInputClass()}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={labelCls('text-[#a855f7]')}>TikTok</label>
+                      <input
+                        type="text"
+                        value={tiktok}
+                        disabled={readOnly}
+                        maxLength={PACIENTE_FIELD_MAX.tiktok}
+                        onChange={(e) => onTiktokChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.tiktok))}
+                        placeholder="@usuario"
+                        className={socialInputClass()}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={labelCls('text-[#f59e0b]')}>Nome da Mãe</label>
+                      <input
+                        type="text"
+                        value={nomeMae}
+                        disabled={readOnly}
+                        maxLength={PACIENTE_FIELD_MAX.nomeMae}
+                        onChange={(e) => onNomeMaeChange(e.target.value)}
+                        placeholder="Nome completo"
+                        className={complementInputClass()}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={labelCls('text-[#f59e0b]')}>Nome do Pai</label>
+                      <input
+                        type="text"
+                        value={nomePai}
+                        disabled={readOnly}
+                        maxLength={PACIENTE_FIELD_MAX.nomePai}
+                        onChange={(e) => onNomePaiChange(e.target.value)}
+                        placeholder="Nome completo"
+                        className={complementInputClass()}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={labelCls('text-[#f59e0b]')}>Indicação</label>
+                      <input
+                        type="text"
+                        value={indicacao}
+                        disabled={readOnly}
+                        maxLength={PACIENTE_FIELD_MAX.indicacao}
+                        onChange={(e) => onIndicacaoChange(e.target.value)}
+                        placeholder="Quem indicou o paciente?"
+                        className={complementInputClass()}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
       <div
         className={sectionCardCls(
           hasPersonalSectionError,
@@ -349,9 +841,27 @@ export function PatientForm({
                 className={`min-w-0 flex-1 ${inputClass('dataNascimento')}`}
               />
               {showBirthCalendarIcon ? (
-                <span className="flex shrink-0 items-center text-slate-300" aria-hidden>
+                <label
+                  className="relative flex shrink-0 cursor-pointer items-center px-2 text-slate-400 transition hover:text-[#00a88e]"
+                  title="Escolher data no calendário"
+                >
                   <Calendar className="h-4 w-4" strokeWidth={2} />
-                </span>
+                  <input
+                    type="date"
+                    value={dataNascimentoIso || ''}
+                    max={new Date().toISOString().slice(0, 10)}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const iso = e.target.value;
+                      if (!iso) return;
+                      const [y, m, d] = iso.split('-');
+                      onDataNascimentoDisplayChange(`${d}/${m}/${y}`);
+                      clearError?.('dataNascimento');
+                    }}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label="Escolher data de nascimento no calendário"
+                  />
+                </label>
               ) : null}
             </div>
             {dataNascimentoFieldMessage ? (
@@ -526,8 +1036,8 @@ export function PatientForm({
                 }}
                 className={
                   isModalVariant
-                    ? 'max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-lg border-0 bg-transparent py-2.5 pl-2 pr-1 text-[12px] font-medium text-slate-600 outline-none'
-                    : 'max-w-[7.25rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none'
+                    ? 'max-w-[5.75rem] min-w-0 shrink-0 truncate rounded-l-lg border-0 bg-transparent py-2.5 pl-2 pr-1 text-[12px] font-medium text-slate-600 outline-none sm:max-w-[7.25rem]'
+                    : 'max-w-[5.75rem] min-w-0 shrink-0 truncate rounded-l-[9px] border-0 bg-transparent py-3 pl-2 pr-1 text-[12px] font-medium text-[#475569] outline-none sm:max-w-[7.25rem]'
                 }
                 aria-label="País"
               >
@@ -689,6 +1199,8 @@ export function PatientForm({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       <div
         className={
