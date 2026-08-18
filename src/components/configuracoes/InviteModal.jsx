@@ -9,12 +9,13 @@ import { getPresetProfileId, getPermissoesPadraoPorPerfilId, formatCargoLabel } 
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
+import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
 
 export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesList, onClose, onSuccess, fetchHeaders, onEditarPerfilNaAba }) {
   const toast = useToast();
   const [form, setForm] = useState({
     nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '',
-    dataNascimento: '', estadoCivil: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', especialidades: []
+    dataNascimento: '', estadoCivilId: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', especialidades: []
   });
   const [saving, setSaving] = useState(false);
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
@@ -203,7 +204,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
           telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
           cpf: form.cpf,
           dataNascimento: form.dataNascimento || null,
-          estadoCivil: form.estadoCivil || null,
+          estadoCivilId: form.estadoCivilId || null,
           cep: form.cep || null,
           logradouro: form.logradouro || null,
           numero: form.numero || null,
@@ -321,18 +322,11 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Estado Civil <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
-                  <select
-                    value={form.estadoCivil}
-                    onChange={e => setForm({...form, estadoCivil: e.target.value})}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                  >
-                    <option value="">Selecione...</option>
-                    <option value="Solteiro(a)">Solteiro(a)</option>
-                    <option value="Casado(a)">Casado(a)</option>
-                    <option value="Divorciado(a)">Divorciado(a)</option>
-                    <option value="Viúvo(a)">Viúvo(a)</option>
-                    <option value="Separado(a)">Separado(a)</option>
-                  </select>
+                  <EstadoCivilSelect
+                    value={form.estadoCivilId}
+                    onChange={v => setForm({...form, estadoCivilId: v})}
+                    selectClassName="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  />
                 </div>
               </div>
             </div>
