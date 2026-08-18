@@ -101,8 +101,9 @@ export function GaleriaCategoriaSection({
           const gridItem = fotoToGridItem(foto);
           const selected =
             modoComparar &&
-            (compararSelecionadas?.antes?.serverId === foto.serverId ||
-              compararSelecionadas?.depois?.serverId === foto.serverId);
+            (compararSelecionadas?.avaliacao?.serverId === foto.serverId ||
+              compararSelecionadas?.posImediato?.serverId === foto.serverId ||
+              compararSelecionadas?.retorno?.serverId === foto.serverId);
           return (
             <div key={foto.serverId} className="relative min-w-0">
               <button

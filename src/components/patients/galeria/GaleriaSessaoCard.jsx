@@ -40,9 +40,22 @@ export function GaleriaSessaoCard({
         tabIndex={0}
       >
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-bold text-[#0f172a]">
-            Sessão {totalSessions - sessionIndex} — {formatMesAnoSessao(sess.dataISO)}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="text-[14px] font-bold text-[#0f172a]">
+              Sessão {totalSessions - sessionIndex} — {formatMesAnoSessao(sess.dataISO)}
+            </div>
+            {sess.isRetorno ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#0ea5e9]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0369a1]">
+                🔄 Retorno
+              </span>
+            ) : null}
           </div>
+          {sess.isRetorno && sess.origemProcedimentoNome ? (
+            <p className="text-[11px] text-[#64748b] mt-0.5">
+              {sess.origemProcedimentoNome}
+              {sess.origemDataLabel ? ` (Aplicação em ${sess.origemDataLabel})` : ''}
+            </p>
+          ) : null}
           <p
             className="text-[12px] text-[#64748b] mt-0.5 line-clamp-2"
             title={tituloSessao}

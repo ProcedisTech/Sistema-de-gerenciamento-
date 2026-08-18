@@ -64,14 +64,17 @@ export function nestProcedimentosTimeline(items) {
   return roots;
 }
 
-/** Lista achatada: raiz (depth 0) seguida dos retornos (depth 1). */
+/** Lista achatada: raiz (depth 0) seguida recursivamente de cada retorno aninhado. */
 export function flattenNestedTimelineRoots(forest) {
   const out = [];
-  for (const root of forest || []) {
-    out.push({ proc: root, depth: 0 });
-    for (const child of root.retornos || []) {
-      out.push({ proc: child, depth: 1 });
+  const walk = (node, depth) => {
+    out.push({ proc: node, depth });
+    for (const child of node.retornos || []) {
+      walk(child, depth + 1);
     }
+  };
+  for (const root of forest || []) {
+    walk(root, 0);
   }
   return out;
 }

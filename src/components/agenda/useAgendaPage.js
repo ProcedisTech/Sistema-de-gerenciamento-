@@ -812,16 +812,16 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         paciente?.telefoneNumero ||
         paciente?.telefonePrincipal ||
         '';
-      const temPlano = Boolean(String(planejamentoItemIdVinculoRef.current ?? '').trim());
+      const temOrigemConcreta = Boolean(String(form.procedimentoFeitoOrigemId || '').trim());
       const isRetorno = form.tipoAtendimento === TIPO_ATENDIMENTO_RETORNO;
-      const precisaCarregarRaizes = isRetorno && Boolean(id) && !temPlano;
+      const precisaCarregarRaizes = isRetorno && Boolean(id) && !temOrigemConcreta;
 
       setForm((prev) => ({
         ...prev,
         pacienteId: id,
         pacienteNome: nome,
         telefone,
-        procedimentoFeitoOrigemId: isRetorno && !temPlano ? '' : prev.procedimentoFeitoOrigemId,
+        procedimentoFeitoOrigemId: isRetorno && !temOrigemConcreta ? '' : prev.procedimentoFeitoOrigemId,
         procedimentosFeitosRaiz: precisaCarregarRaizes ? [] : isRetorno ? prev.procedimentosFeitosRaiz : [],
         procedimentosRaizLoading: precisaCarregarRaizes,
         procedimentosRaizError: '',
@@ -836,7 +836,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         carregarProcedimentosRaiz(id);
       }
     },
-    [carregarProcedimentosRaiz, form.tipoAtendimento],
+    [carregarProcedimentosRaiz, form.tipoAtendimento, form.procedimentoFeitoOrigemId],
   );
 
   const clearPacienteSelection = useCallback(() => {
@@ -866,9 +866,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       if (form.tipoAtendimento === tipo) return;
 
       const pacienteId = String(form.pacienteId || '').trim();
-      const temPlano = Boolean(String(planejamentoItemIdVinculoRef.current ?? '').trim());
       const precisaCarregarRaizes =
-        tipo === TIPO_ATENDIMENTO_RETORNO && Boolean(pacienteId) && !temPlano;
+        tipo === TIPO_ATENDIMENTO_RETORNO && Boolean(pacienteId);
 
       setForm((prev) => {
         if (prev.tipoAtendimentoLocked) return prev;
@@ -1970,8 +1969,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const vinculoExplicito = String(opts.planejamentoItemId ?? '').trim();
       planejamentoItemIdVinculoRef.current = vinculoExplicito || null;
       const paiPreselecionado = String(opts.procedimentoFeitoOrigemId ?? '').trim();
-      const precisaCarregarRaizes =
-        Boolean(opts.modoRetorno) && !vinculoExplicito && !paiPreselecionado;
+      const precisaCarregarRaizes = Boolean(opts.modoRetorno) && !paiPreselecionado;
       const isModoRetorno = Boolean(opts.modoRetorno);
       setForm({
         ...base,
@@ -1983,7 +1981,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         tipoAtendimento: isModoRetorno ? TIPO_ATENDIMENTO_RETORNO : TIPO_ATENDIMENTO_PROCEDIMENTO,
         tipoAtendimentoLocked: isModoRetorno,
         agendamentoTipoRetorno: isModoRetorno,
-        retornoPaiLocked: isModoRetorno && (Boolean(paiPreselecionado) || Boolean(vinculoExplicito)),
+        retornoPaiLocked: isModoRetorno && Boolean(paiPreselecionado),
         procedimentoFeitoOrigemId: paiPreselecionado,
         procedimentosFeitosRaiz: [],
         procedimentosRaizLoading: precisaCarregarRaizes,
@@ -1996,10 +1994,21 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
           .listarProcedimentosFeitosRaiz(patient.id)
           .then((raw) => {
             const list = normalizeApiList(raw);
+            // Se o retorno veio de um item de plano, tenta pré-resolver a origem
+            // automaticamente (só quando há exatamente 1 candidato inequívoco —
+            // caso contrário o usuário escolhe manualmente no seletor).
+            let autoOrigemId = '';
+            if (vinculoExplicito) {
+              const matches = list.filter(
+                (r) => String(r.planejamentoItemId || '').trim() === vinculoExplicito
+              );
+              if (matches.length === 1) autoOrigemId = String(matches[0].id);
+            }
             setForm((f) => ({
               ...f,
               procedimentosFeitosRaiz: list,
               procedimentosRaizLoading: false,
+              procedimentoFeitoOrigemId: autoOrigemId || f.procedimentoFeitoOrigemId,
             }));
           })
           .catch((err) => {
@@ -2111,9 +2120,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         nextErrors.catalogoProcedimentoSaudeIds = 'Selecione ao menos um procedimento.';
       }
     } else if (tipo === TIPO_ATENDIMENTO_RETORNO) {
-      const temPlano = Boolean(String(planejamentoItemIdVinculoRef.current ?? '').trim());
       const temPaiPreselecionado = Boolean(String(form.procedimentoFeitoOrigemId || '').trim());
-      if (!temPlano && !temPaiPreselecionado) {
+      if (!temPaiPreselecionado) {
         if (!String(form.pacienteId || '').trim()) {
           nextErrors.procedimentoFeitoOrigemId =
             'Escolha o paciente primeiro. A origem do retorno vem do histórico dele.';

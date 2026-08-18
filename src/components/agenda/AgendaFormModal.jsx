@@ -237,11 +237,11 @@ export function AgendaFormModal({ agenda }) {
   const tipoAtendimentoLocked = Boolean(agenda.form.tipoAtendimentoLocked);
   const isModoRetorno = tipoAtendimento === TIPO_ATENDIMENTO_RETORNO;
   const isModoProcedimento = tipoAtendimento === TIPO_ATENDIMENTO_PROCEDIMENTO;
+  const origemId = String(agenda.form.procedimentoFeitoOrigemId || '').trim();
   const isRetornoSemSeletorPai =
-    isModoRetorno && (agenda.retornoTemVinculoPlano || agenda.retornoPaiPreselecionado);
+    isModoRetorno && Boolean(origemId) && (agenda.retornoTemVinculoPlano || agenda.retornoPaiPreselecionado);
 
   const temPaciente = Boolean(String(agenda.form.pacienteId || '').trim());
-  const origemId = String(agenda.form.procedimentoFeitoOrigemId || '').trim();
   const raizes = agenda.form.procedimentosFeitosRaiz || [];
   const raizesLoading = Boolean(agenda.form.procedimentosRaizLoading);
   const raizesVazias =
@@ -605,7 +605,7 @@ export function AgendaFormModal({ agenda }) {
                 </p>
               </div>
             </div>
-          ) : origemId ? (
+          ) : (
             (() => {
               const pai = raizes.find((r) => String(r.id) === origemId);
               const nome = pai ? nomeProcedimentoRaiz(pai) : 'Procedimento de origem';
@@ -623,10 +623,6 @@ export function AgendaFormModal({ agenda }) {
                 </div>
               );
             })()
-          ) : (
-            <p className="rounded-xl border border-[#e6f7f5] bg-[#f8fbfb] px-2.5 py-2 text-[12px] font-medium text-[#0f766e]">
-              Retorno vinculado ao item do plano — origem automática.
-            </p>
           )
         ) : raizesVazias ? (
           <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] font-medium text-amber-900">

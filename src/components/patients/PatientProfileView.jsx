@@ -42,6 +42,7 @@ import { convertToWebP } from '../../utils/imageUtils.js';
 import {
   fetchNextAppointmentIsoForPaciente,
   latestProcedureOccurredInstantIso,
+  procedureOccurredInstantIso,
 } from '../../utils/patientProfileDerivedDates.js';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
@@ -774,7 +775,11 @@ export function PatientProfileView({
   const [sessoesExpandidas, setSessoesExpandidas] = useState({});
   const [categoriasEmEdicao, setCategoriasEmEdicao] = useState({});
   const [modoComparar, setModoComparar] = useState(false);
-  const [compararSelecionadas, setCompararSelecionadas] = useState({ antes: null, depois: null });
+  const [compararSelecionadas, setCompararSelecionadas] = useState({
+    avaliacao: null,
+    posImediato: null,
+    retorno: null,
+  });
   const [compararModalOpen, setCompararModalOpen] = useState(false);
   const [quickNoteText, setQuickNoteText] = useState('');
   /** 'loading' | 'api' = lista no servidor; 'local' = fallback (fotos da jornada / legado). */
@@ -856,11 +861,15 @@ export function PatientProfileView({
   }, [proximoRetornoKpiDisplay]);
 
   const handleCompararFotoClick = (foto) => {
+    if (foto._isRetornoSession) {
+      setCompararSelecionadas((prev) => ({ ...prev, retorno: foto }));
+      return;
+    }
     const cat = foto.categoria || 'outro';
-    if (cat === 'antes') {
-      setCompararSelecionadas((prev) => ({ ...prev, antes: foto }));
+    if (cat === 'antes' || cat === 'avaliacao') {
+      setCompararSelecionadas((prev) => ({ ...prev, avaliacao: foto }));
     } else if (cat === 'depois') {
-      setCompararSelecionadas((prev) => ({ ...prev, depois: foto }));
+      setCompararSelecionadas((prev) => ({ ...prev, posImediato: foto }));
     }
   };
 
@@ -882,7 +891,12 @@ export function PatientProfileView({
   }, [selectedPatient?.id]);
 
   useEffect(() => {
-    if (compararSelecionadas.antes && compararSelecionadas.depois) {
+    const preenchidos = [
+      compararSelecionadas.avaliacao,
+      compararSelecionadas.posImediato,
+      compararSelecionadas.retorno,
+    ].filter(Boolean).length;
+    if (preenchidos >= 2) {
       setCompararModalOpen(true);
     }
   }, [compararSelecionadas]);
@@ -1523,6 +1537,14 @@ export function PatientProfileView({
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [apiGaleriaItems]);
 
+  const proceduresById = useMemo(() => {
+    const map = new Map();
+    (apiProcedures || []).forEach((p) => {
+      if (p?.id != null) map.set(String(p.id), p);
+    });
+    return map;
+  }, [apiProcedures]);
+
   const galeriaSessionsForView = useMemo(() => {
     if (galeriaBackend !== 'api') return [];
     const filtered = filterGaleriaItemsForUi(apiGaleriaItems, {
@@ -1530,8 +1552,25 @@ export function PatientProfileView({
       mesAno: galeriaFilterMes,
       procedimentoToken: galeriaFilterProcedimento,
     });
-    return groupGaleriaItemsBySession(filtered);
-  }, [galeriaBackend, apiGaleriaItems, galeriaFilterCategoria, galeriaFilterMes, galeriaFilterProcedimento]);
+    const sessions = groupGaleriaItemsBySession(filtered);
+    return sessions.map((sess) => {
+      const proc = proceduresById.get(String(sess.fotos[0]?.procedimentoFeitoId));
+      const origemId = proc?.procedimentoFeitoOrigemId ?? proc?.procedimento_feito_origem_id;
+      const origem = origemId != null ? proceduresById.get(String(origemId)) : null;
+      const isRetorno = Boolean(origem);
+      const origemDataIso = origem ? procedureOccurredInstantIso(origem) : null;
+      const fotos = isRetorno
+        ? sess.fotos.map((f) => ({ ...f, _isRetornoSession: true }))
+        : sess.fotos;
+      return {
+        ...sess,
+        fotos,
+        isRetorno,
+        origemProcedimentoNome: origem?.procedimentoNome || null,
+        origemDataLabel: origemDataIso ? formatDataSessaoPtBr(origemDataIso.slice(0, 10)) : null,
+      };
+    });
+  }, [galeriaBackend, apiGaleriaItems, galeriaFilterCategoria, galeriaFilterMes, galeriaFilterProcedimento, proceduresById]);
 
   const dismissBirthdayModal = useCallback(() => {
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
@@ -2116,7 +2155,7 @@ export function PatientProfileView({
               <div
                 role="dialog"
                 aria-modal="true"
-                className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+                className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
               >
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
                   <div className="flex min-w-0 items-center gap-3">
