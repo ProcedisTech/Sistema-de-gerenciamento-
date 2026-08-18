@@ -10,6 +10,7 @@ import { getPresetProfileId, getPermissoesPadraoPorPerfilId, formatCargoLabel } 
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
+import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
 
 export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especialidadesList, onClose, onSuccess, fetchHeaders, readOnly = false, onEditarPerfilNaAba }) {
   const { roleUserId: currentRoleUserId, papel } = useOrg();
@@ -32,7 +33,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
 
   const [email, setEmail] = useState(usuario.email || '');
   const [dataNascimento, setDataNascimento] = useState(usuario.dataNascimento || '');
-  const [estadoCivil, setEstadoCivil] = useState(usuario.estadoCivil || '');
+  const [estadoCivilId, setEstadoCivilId] = useState(usuario.estadoCivilId || '');
   const [cep, setCep] = useState(usuario.cep || '');
   const [logradouro, setLogradouro] = useState(usuario.logradouro || '');
   const [numero, setNumero] = useState(usuario.numero || '');
@@ -169,7 +170,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
         roleId: roleId || null,
         perfilAcessoId: perfilAcessoId || null,
         dataNascimento: dataNascimento || null,
-        estadoCivil: estadoCivil || "",
+        estadoCivilId: estadoCivilId || null,
         cep: cep || "",
         logradouro: logradouro || "",
         numero: numero || "",
@@ -281,19 +282,12 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Estado Civil</label>
-                  <select
-                    value={estadoCivil}
+                  <EstadoCivilSelect
+                    value={estadoCivilId}
                     disabled={readOnly}
-                    onChange={e => setEstadoCivil(e.target.value)}
-                    className={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm appearance-none ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
-                  >
-                    <option value="">Selecione...</option>
-                    <option value="SOLTEIRO">Solteiro(a)</option>
-                    <option value="CASADO">Casado(a)</option>
-                    <option value="DIVORCIADO">Divorciado(a)</option>
-                    <option value="VIUVO">Viúvo(a)</option>
-                    <option value="SEPARADO">Separado(a)</option>
-                  </select>
+                    onChange={setEstadoCivilId}
+                    selectClassName={`w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all shadow-sm appearance-none ${readOnly ? 'bg-slate-50/70 cursor-default' : 'bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10'}`}
+                  />
                 </div>
               </div>
             </div>
