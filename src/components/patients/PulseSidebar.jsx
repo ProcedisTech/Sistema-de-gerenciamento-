@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cake, CalendarDays, CalendarOff, ChevronRight, Clock } from 'lucide-react';
+import { Cake, CalendarDays, ChevronRight, Clock, FileX } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
 import { formatCartaoDiaPtBr } from '../../utils/patientProfileDerivedDates.js';
 import {
@@ -41,11 +41,11 @@ function buildAtendimentosSegment(n) {
   );
 }
 
-function buildRetornoSegment(n) {
+function buildSemPlanoSegment(n) {
   return (
     <>
       <WelcomeTealNum n={n} />{' '}
-      {n === 1 ? 'paciente precisa de retorno' : 'pacientes precisam de retorno'}
+      {n === 1 ? 'paciente sem plano definido' : 'pacientes sem plano definido'}
     </>
   );
 }
@@ -81,10 +81,10 @@ function joinWelcomeSegments(segments) {
   );
 }
 
-function buildWelcomeResumo({ nAtendimentos, nRetorno, nAniversarios }) {
+function buildWelcomeResumo({ nAtendimentos, nSemPlano, nAniversarios }) {
   const segments = [];
   if (nAtendimentos > 0) segments.push(buildAtendimentosSegment(nAtendimentos));
-  if (nRetorno > 0) segments.push(buildRetornoSegment(nRetorno));
+  if (nSemPlano > 0) segments.push(buildSemPlanoSegment(nSemPlano));
   if (nAniversarios > 0) segments.push(buildAniversariosSegment(nAniversarios));
   return joinWelcomeSegments(segments);
 }
@@ -272,15 +272,15 @@ export function PulseSidebar({
   const nome = primeiroNome(nomeUsuario);
 
   const agendamentos = kpi?.agendamentosHoje ?? [];
-  const semRetornoMarcado = kpi?.semRetornoMarcadoList ?? [];
-  const totalSemRetornoMarcado = kpi?.totalSemRetornoMarcado ?? 0;
+  const semPlano = kpi?.semPlanoList ?? [];
+  const totalSemPlano = kpi?.totalSemPlano ?? 0;
   const aniversariantes = kpi?.aniversariantesList ?? [];
 
   const nAtendimentos = agendamentos.length;
-  const nRetorno = totalSemRetornoMarcado ?? 0;
+  const nSemPlano = totalSemPlano ?? 0;
   const nAniversarios = countAniversariantesEstaSemana(aniversariantes);
-  const welcomeResumo = buildWelcomeResumo({ nAtendimentos, nRetorno, nAniversarios });
-  const resumoVazio = !loading && nAtendimentos === 0 && nRetorno === 0 && nAniversarios === 0;
+  const welcomeResumo = buildWelcomeResumo({ nAtendimentos, nSemPlano, nAniversarios });
+  const resumoVazio = !loading && nAtendimentos === 0 && nSemPlano === 0 && nAniversarios === 0;
 
   return (
     <aside className="hidden w-[min(100%,340px)] shrink-0 flex-col gap-4 lg:flex xl:w-[380px]">
@@ -345,24 +345,24 @@ export function PulseSidebar({
           )}
         </div>
 
-        {/* Sem retorno marcado — atendido, sem próxima consulta, sem plano ativo */}
+        {/* Sem plano — pacientes ativos com statusPaciente.codigo = 'sem_plano' */}
         <div className="shrink-0">
           <SectionHeader
-            icon={CalendarOff}
-            title="Sem retorno marcado"
-            count={totalSemRetornoMarcado > 0 ? totalSemRetornoMarcado : undefined}
-            iconBg="bg-amber-50"
-            iconColor="text-amber-500"
+            icon={FileX}
+            title="Sem plano"
+            count={totalSemPlano > 0 ? totalSemPlano : undefined}
+            iconBg="bg-ink-100"
+            iconColor="text-ink-500"
           />
           {loading ? (
             <SidebarSkeleton />
-          ) : semRetornoMarcado.length === 0 ? (
+          ) : semPlano.length === 0 ? (
             <p className="px-1 py-3 text-center text-[12px] leading-relaxed text-[#94a3b8]">
-              Nenhum paciente sem retorno marcado
+              Nenhum paciente sem plano
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              {semRetornoMarcado.slice(0, 5).map((p) => {
+              {semPlano.slice(0, 5).map((p) => {
                 const ultimaVisitaLabel = p.ultimaVinda
                   ? `Última visita · ${formatCartaoDiaPtBr(p.ultimaVinda)}`
                   : p.ultimaVisita && p.ultimaVisita !== '-'

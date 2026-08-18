@@ -473,8 +473,8 @@ function AppRefactoredInner() {
     setStatusPlanoFilter,
     anamneseDesatualizadaFilter,
     setAnamneseDesatualizadaFilter,
-    semRetornoFilter,
-    setSemRetornoFilter,
+    semAgendamentoFuturoFilter,
+    setSemAgendamentoFuturoFilter,
     ehNovoFilter,
     setEhNovoFilter,
     ehAniversarianteFilter,
@@ -4143,8 +4143,8 @@ function AppRefactoredInner() {
                       setStatusPlanoFilter={setStatusPlanoFilter}
                       anamneseDesatualizadaFilter={anamneseDesatualizadaFilter}
                       setAnamneseDesatualizadaFilter={setAnamneseDesatualizadaFilter}
-                      semRetornoFilter={semRetornoFilter}
-                      setSemRetornoFilter={setSemRetornoFilter}
+                      semAgendamentoFuturoFilter={semAgendamentoFuturoFilter}
+                      setSemAgendamentoFuturoFilter={setSemAgendamentoFuturoFilter}
                       ehNovoFilter={ehNovoFilter}
                       setEhNovoFilter={setEhNovoFilter}
                       ehAniversarianteFilter={ehAniversarianteFilter}

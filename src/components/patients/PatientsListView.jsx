@@ -29,7 +29,7 @@ import {
   countActivePatientFilters,
   applyPatientQuickFilter,
   clearAllPatientFilters,
-  resolveActiveKpiCardFromFilters,
+  resolveActiveKpiCardAfterToggle,
   activateFilterByKpiCardId,
   deactivateFilterByKpiCardId,
 } from './patientListFilters.js';
@@ -402,8 +402,8 @@ export function PatientsListView({
   setStatusPlanoFilter,
   anamneseDesatualizadaFilter = false,
   setAnamneseDesatualizadaFilter,
-  semRetornoFilter = false,
-  setSemRetornoFilter,
+  semAgendamentoFuturoFilter = false,
+  setSemAgendamentoFuturoFilter,
   ehNovoFilter = false,
   setEhNovoFilter,
   ehAniversarianteFilter = false,
@@ -451,7 +451,7 @@ export function PatientsListView({
         patientListSortBy,
         statusPlanoFilter,
         anamneseDesatualizadaFilter,
-        semRetornoFilter,
+        semAgendamentoFuturoFilter,
         ehNovoFilter,
         ehAniversarianteFilter,
         quickFilter,
@@ -461,7 +461,7 @@ export function PatientsListView({
       patientListSortBy,
       statusPlanoFilter,
       anamneseDesatualizadaFilter,
-      semRetornoFilter,
+      semAgendamentoFuturoFilter,
       ehNovoFilter,
       ehAniversarianteFilter,
       quickFilter,
@@ -475,8 +475,8 @@ export function PatientsListView({
       setStatusPlanoFilter,
       anamneseDesatualizadaFilter,
       setAnamneseDesatualizadaFilter,
-      semRetornoFilter,
-      setSemRetornoFilter,
+      semAgendamentoFuturoFilter,
+      setSemAgendamentoFuturoFilter,
       ehNovoFilter,
       setEhNovoFilter,
       ehAniversarianteFilter,
@@ -491,8 +491,8 @@ export function PatientsListView({
       setStatusPlanoFilter,
       anamneseDesatualizadaFilter,
       setAnamneseDesatualizadaFilter,
-      semRetornoFilter,
-      setSemRetornoFilter,
+      semAgendamentoFuturoFilter,
+      setSemAgendamentoFuturoFilter,
       ehNovoFilter,
       setEhNovoFilter,
       ehAniversarianteFilter,
@@ -502,8 +502,13 @@ export function PatientsListView({
     ]
   );
 
-  const onFilterChange = () => {
-    setActiveKpiCard(resolveActiveKpiCardFromFilters(filterCtx));
+  /**
+   * `def`/`willBeActive` chegam de quem chamou activate/deactivate no mesmo evento — usar isso
+   * em vez de reler `filterCtx` evita resolver com o valor antigo (o setState do toggle ainda não
+   * foi commitado quando este callback roda). `def` null = "limpar tudo" (handleClearAll).
+   */
+  const onFilterChange = (def, willBeActive) => {
+    setActiveKpiCard(def ? resolveActiveKpiCardAfterToggle(filterCtx, def, willBeActive) : null);
   };
 
   const handleActivateFilter = (cardId) => {
