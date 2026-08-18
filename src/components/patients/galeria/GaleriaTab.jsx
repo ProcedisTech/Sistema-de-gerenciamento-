@@ -95,7 +95,12 @@ export function GaleriaTab({
 
   const handleCancelComparar = () => {
     setModoComparar(false);
-    setCompararSelecionadas({ antes: null, depois: null });
+    setCompararSelecionadas({ avaliacao: null, posImediato: null, retorno: null });
+    setCompararModalOpen(false);
+  };
+
+  // Fecha só o modal (mantém seleções) para permitir voltar e escolher a foto que falta.
+  const handleCloseCompararModal = () => {
     setCompararModalOpen(false);
   };
 
@@ -110,7 +115,7 @@ export function GaleriaTab({
               onClick={() => {
                 setModoComparar((prev) => {
                   if (prev) {
-                    setCompararSelecionadas({ antes: null, depois: null });
+                    setCompararSelecionadas({ avaliacao: null, posImediato: null, retorno: null });
                     setCompararModalOpen(false);
                   }
                   return !prev;
@@ -171,13 +176,18 @@ export function GaleriaTab({
           {modoComparar ? (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#fffbeb] border-[2px] border-[#f59e0b]/40 text-[13px] font-medium text-[#b45309]">
               <span>
-                {!compararSelecionadas.antes && !compararSelecionadas.depois
-                  ? 'Clique em uma foto de Antes e uma foto de Depois para comparar.'
-                  : !compararSelecionadas.antes
-                    ? '✓ Depois selecionado — agora clique em uma foto de Antes.'
-                    : !compararSelecionadas.depois
-                      ? '✓ Antes selecionado — agora clique em uma foto de Depois.'
-                      : 'Abrindo comparação…'}
+                {(() => {
+                  const faltantes = [
+                    !compararSelecionadas.avaliacao ? 'Avaliação' : null,
+                    !compararSelecionadas.posImediato ? 'Pós-Imediato' : null,
+                    !compararSelecionadas.retorno ? 'Retorno' : null,
+                  ].filter(Boolean);
+                  if (faltantes.length === 0) return 'Abrindo comparação…';
+                  if (faltantes.length === 3) {
+                    return 'Clique em fotos de Avaliação, Pós-Imediato e/ou Retorno para comparar (mínimo 2).';
+                  }
+                  return `Faltam: ${faltantes.join(', ')} (ou clique em "Fechar comparação" para ver com o que já foi selecionado).`;
+                })()}
               </span>
             </div>
           ) : null}
@@ -264,48 +274,79 @@ export function GaleriaTab({
             <p className="text-center py-8 text-[#94a3b8] text-[14px]">Nenhuma foto registrada</p>
           )}
 
-          {compararModalOpen && compararSelecionadas.antes && compararSelecionadas.depois ? (
-            <div
-              className="fixed inset-0 z-[300] bg-black/90 flex flex-col items-center justify-center p-4 gap-4"
-              onClick={handleCancelComparar}
-            >
-              <div
-                className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-5xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                  <span className="text-[12px] font-bold uppercase tracking-wide text-[#00a88e] bg-[#00a88e]/20 px-3 py-1 rounded-full">
-                    Antes
-                  </span>
-                  <ProtectedPatientMedia
-                    src={compararSelecionadas.antes.url}
-                    alt="Antes"
-                    className="max-h-[75dvh] max-w-full rounded-xl"
-                    imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
-                  />
-                </div>
-                <div className="w-px h-full bg-white/20 hidden sm:block" />
-                <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                  <span className="text-[12px] font-bold uppercase tracking-wide text-[#f59e0b] bg-[#f59e0b]/20 px-3 py-1 rounded-full">
-                    Depois
-                  </span>
-                  <ProtectedPatientMedia
-                    src={compararSelecionadas.depois.url}
-                    alt="Depois"
-                    className="max-h-[75dvh] max-w-full rounded-xl"
-                    imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleCancelComparar}
-                className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
-              >
-                Fechar comparação
-              </button>
-            </div>
-          ) : null}
+          {compararModalOpen
+            ? (() => {
+                const slots = [
+                  {
+                    key: 'avaliacao',
+                    label: 'Avaliação',
+                    color: '#00a88e',
+                    foto: compararSelecionadas.avaliacao,
+                  },
+                  {
+                    key: 'posImediato',
+                    label: 'Pós-Imediato',
+                    color: '#f59e0b',
+                    foto: compararSelecionadas.posImediato,
+                  },
+                  {
+                    key: 'retorno',
+                    label: 'Retorno',
+                    color: '#0ea5e9',
+                    foto: compararSelecionadas.retorno,
+                  },
+                ].filter((s) => s.foto);
+                if (slots.length < 2) return null;
+                return (
+                  <div
+                    className="fixed inset-0 z-[300] bg-black/90 flex flex-col items-center justify-center p-4 gap-4"
+                    onClick={handleCloseCompararModal}
+                  >
+                    <div
+                      className={`grid gap-4 w-full max-w-6xl ${
+                        slots.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {slots.map((s) => (
+                        <div key={s.key} className="flex flex-col items-center gap-2 min-w-0">
+                          <span
+                            className="text-[12px] font-bold uppercase tracking-wide px-3 py-1 rounded-full"
+                            style={{ color: s.color, backgroundColor: `${s.color}33` }}
+                          >
+                            {s.label}
+                          </span>
+                          <ProtectedPatientMedia
+                            src={s.foto.url}
+                            alt={s.label}
+                            className="max-h-[75dvh] max-w-full rounded-xl"
+                            imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {slots.length < 3 ? (
+                        <button
+                          type="button"
+                          onClick={handleCloseCompararModal}
+                          className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
+                        >
+                          Escolher mais uma foto
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={handleCancelComparar}
+                        className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
+                      >
+                        Fechar comparação
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()
+            : null}
 
           <GaleriaCategoriaLightbox
             key={
