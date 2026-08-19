@@ -61,6 +61,7 @@ export default defineConfig([
       '**/hooks/usePacienteGaleriaArquivoBlobUrl.js',
       '**/hooks/usePatientProfilePhotoSrc.js',
       '**/hooks/useProcedimentosOptions.js',
+      '**/hooks/useAnamneseStatusPaciente.js',
       '**/hooks/agenda/useDisponibilidadeDoDia.js',
       '**/hooks/agenda/useDiasComDisponibilidade.js',
       '**/components/agenda/AgendaDashboard.jsx',

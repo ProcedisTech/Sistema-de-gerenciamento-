@@ -38,4 +38,16 @@ describe('ConsultaProcedimentoFlow — gate de termos', () => {
     const btn = screen.getByRole('button', { name: /Ir para Finalização e Orientações/i });
     expect(btn).toBeDisabled();
   });
+
+  it('Ir para Finalização habilita quando o parent já tem PF do catálogo (gate derivado false)', () => {
+    render(
+      <ConsultaProcedimentoFlow
+        {...baseProps}
+        execucaoBloqueadaPorTermos={false}
+        onValidarTermosCatalogo={vi.fn()}
+      />
+    );
+    const btn = screen.getByRole('button', { name: /Ir para Finalização e Orientações/i });
+    expect(btn).not.toBeDisabled();
+  });
 });

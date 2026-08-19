@@ -74,6 +74,7 @@ function buildAgendaSlotOptions(slot) {
     fromAgendaSlot: true,
     procedimentoNome: slot.procedimentoNome,
     catalogoProcedimentoSaudeId: slot.catalogoProcedimentoSaudeId,
+    planejamentoItemId: slot.planejamentoItemId ?? null,
     tipoProcedimentoCodigo: slot.tipoProcedimentoCodigo,
     procedimentoFeitoOrigemId: slot.procedimentoFeitoOrigemId,
     isAgendaRetorno: String(slot.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno',

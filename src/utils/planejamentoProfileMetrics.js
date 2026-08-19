@@ -1,10 +1,13 @@
-import { isItemFinalizado } from './planejamentoStatusUi.js';
+import { isItemFinalizado, isItemCancelado } from './planejamentoStatusUi.js';
 
-/** Contagem de sessões realizadas vs total de itens do plano. */
+/** Contagem de sessões realizadas vs total de itens não-cancelados do plano. */
 export function calcSessoesPlano(itens) {
   const list = Array.isArray(itens) ? itens : [];
-  const total = list.length;
-  const feitas = list.filter((item) =>
+  const naoCancelados = list.filter(
+    (item) => !isItemCancelado(item?.statusItem ?? item?.statusItemNome),
+  );
+  const total = naoCancelados.length;
+  const feitas = naoCancelados.filter((item) =>
     isItemFinalizado(item?.statusItem ?? item?.statusItemNome),
   ).length;
   return { feitas, total };

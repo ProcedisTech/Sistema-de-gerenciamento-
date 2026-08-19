@@ -48,3 +48,13 @@ export function resolveAnamneseDesatualizada(patient, anamneseList) {
   if (!latest) return false;
   return isOlderThanMonths(latest, MESES_LIMITE_ANAMNESE);
 }
+
+/**
+ * Pendência de ficha: lista ao vivo ganha do DTO da listagem (que fica stale no pin da consulta).
+ * Mesma regra do backend: novo sem preenchimento. Se já há preenchimento, nunca é pendente.
+ */
+export function resolveAnamnesePendente(patient, anamneseList) {
+  const n = Array.isArray(anamneseList) ? anamneseList.length : 0;
+  if (n > 0) return false;
+  return patient?.ehNovo === true || patient?.anamnesePendente === true;
+}

@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   abortarEncerrarPorTermos,
+  bloqueioExecucaoTermos,
   catalogoIdsDoAtendimento,
   consentimentosAguardandoExecucao,
   deveCriarProcedimentoNoEncerrar,
   idsFilaExigida,
   isAssinaturaResolvida,
   parseTermosBloqueioError,
+  pfIdNestaSessaoParaCatalogo,
   procedimentoBloqueadoPorTermos,
+  sessaoComPfDoCatalogo,
   temFaltantes,
   titulosFaltantes,
 } from './termoResolucao.js';
@@ -135,5 +138,46 @@ describe('termoResolucao — consome o endpoint, não a natureza', () => {
   it('deveCriarProcedimentoNoEncerrar é falso quando o termo falta', () => {
     expect(deveCriarProcedimentoNoEncerrar(true)).toBe(false);
     expect(deveCriarProcedimentoNoEncerrar(false)).toBe(true);
+  });
+});
+
+describe('termoResolucao — PF desta sessão por catálogo (T1)', () => {
+  const sessao = [
+    { catalogoProcedimentoSaudeId: 'cat-a', id: 'pf-a' },
+    { nomeProcedimentoCatalogoId: 'cat-b' },
+  ];
+  const faltantesB = { faltantes: [{ termoId: 't-b', titulo: 'Termo B' }] };
+
+  it('dois procedimentos: PF do primeiro não libera o segundo', () => {
+    expect(pfIdNestaSessaoParaCatalogo('cat-a', sessao)).toBe('pf-a');
+    expect(pfIdNestaSessaoParaCatalogo('cat-b', sessao)).toBeNull();
+    expect(bloqueioExecucaoTermos({ resolucao: faltantesB, pfIdNestaSessao: pfIdNestaSessaoParaCatalogo('cat-a', sessao) })).toBe(false);
+    expect(bloqueioExecucaoTermos({ resolucao: faltantesB, pfIdNestaSessao: pfIdNestaSessaoParaCatalogo('cat-b', sessao) })).toBe(true);
+  });
+
+  it('linha com id e sem catálogo não libera ninguém', () => {
+    expect(pfIdNestaSessaoParaCatalogo('cat-a', [{ id: 'pf-x' }])).toBeNull();
+    expect(bloqueioExecucaoTermos({ resolucao: faltantesB, pfIdNestaSessao: null })).toBe(true);
+  });
+
+  it('não usa posição de lote: PF em outro índice só conta com catálogo na mesma linha', () => {
+    const misturado = [
+      { catalogoProcedimentoSaudeId: 'cat-a', id: 'pf-a' },
+      { catalogoProcedimentoSaudeId: 'cat-b', id: 'pf-b' },
+    ];
+    expect(pfIdNestaSessaoParaCatalogo('cat-b', misturado)).toBe('pf-b');
+    expect(pfIdNestaSessaoParaCatalogo('cat-a', misturado)).toBe('pf-a');
+  });
+
+  it('sessaoComPfDoCatalogo grava id e catálogo na mesma linha', () => {
+    const next = sessaoComPfDoCatalogo(
+      [{ catalogoProcedimentoSaudeId: 'cat-a' }, { catalogoProcedimentoSaudeId: 'cat-b' }],
+      'cat-b',
+      'pf-b',
+      0,
+    );
+    expect(pfIdNestaSessaoParaCatalogo('cat-a', next)).toBeNull();
+    expect(pfIdNestaSessaoParaCatalogo('cat-b', next)).toBe('pf-b');
+    expect(next[1].nomeProcedimentoCatalogoId).toBe('cat-b');
   });
 });

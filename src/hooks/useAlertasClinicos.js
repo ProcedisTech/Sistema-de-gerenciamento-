@@ -123,7 +123,6 @@ export function useAlertasClinicos(pacienteId, { refreshKey } = {}) {
 
   useEffect(() => {
     if (!pacienteId) {
-      setResumoRaw(null);
       setIsLoading(false);
       return undefined;
     }

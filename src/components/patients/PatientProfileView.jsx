@@ -728,6 +728,7 @@ export function PatientProfileView({
   onStartAttendance,
   onAgendarPaciente,
   onReagendarPlanoItem,
+  onPlanoConcluido,
   onUpdatePatient,
   onAddGalleryFiles: _onAddGalleryFiles,
   onDeleteGalleryPhoto,
@@ -2783,6 +2784,7 @@ export function PatientProfileView({
                   onReagendarItem={(item, plano, onSaved) =>
                     onReagendarPlanoItem?.(selectedPatient, item, plano, onSaved)
                   }
+                  onPlanoConcluido={() => onPlanoConcluido?.(selectedPatient)}
                 />
               )}
 

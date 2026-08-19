@@ -141,7 +141,7 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
           statusItem: 'finalizado',
           statusItemNome: 'Realizado',
         });
-        await refresh();
+        return await refresh();
       } catch (e) {
         const msg = getApiErrorDetail(e) || e?.message || 'Operação falhou.';
         setError(msg);
