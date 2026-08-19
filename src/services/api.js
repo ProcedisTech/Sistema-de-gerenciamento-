@@ -1315,6 +1315,16 @@ export const termosApi = {
   update: (id, data) =>
     request(`/api/v1/termos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/termos/${id}`, { method: 'DELETE' }),
+  resolver: ({ pacienteId, catalogoIds = [] } = {}) => {
+    const params = new URLSearchParams();
+    if (pacienteId) params.set('pacienteId', String(pacienteId));
+    (Array.isArray(catalogoIds) ? catalogoIds : [])
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+      .forEach((id) => params.append('catalogoProcedimentoSaudeIds', id));
+    const qs = params.toString();
+    return request(`/api/v1/termos/resolucao${qs ? `?${qs}` : ''}`);
+  },
 };
 
 export const termoAssinaturaApi = {
@@ -1334,6 +1344,8 @@ export const termoAssinaturaApi = {
       method: 'PATCH',
       body: JSON.stringify({ procedimentoFeitoId }),
     }),
+
+  verificarGravada: (id) => request(`/api/v1/termos/assinaturas/${id}/gravada/verificar`),
 };
 
 /** Normaliza corpo de GET /api/v1/organizacoes/minhas para lista. */

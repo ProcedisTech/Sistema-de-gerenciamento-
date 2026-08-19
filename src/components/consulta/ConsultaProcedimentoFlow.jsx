@@ -9,6 +9,7 @@ export function ConsultaProcedimentoFlow({
   nomeProcedimento,
   setNomeProcedimento,
   setNomeProcedimentoCatalogoId,
+  setProcedimentoDoCatalogo,
   procedimentosLote = [],
   activeProcedimentoIndex = 0,
   setActiveProcedimentoIndex = () => {},
@@ -37,6 +38,11 @@ export function ConsultaProcedimentoFlow({
   onMapaCaptureConsumed = () => {},
   onPrepareMapaCapture = () => {},
   onEnsureProcedimento = () => Promise.resolve(null),
+  onValidarTermosCatalogo,
+  execucaoBloqueadaPorTermos = false,
+  titulosTermosFaltantes = [],
+  onIrParaTermosGate,
+  consentimentosAguardandoExecucao = [],
   sugestaoProcedimentoEnviada = false,
   onSugestaoEnviada = () => {},
   onProcedureOpenCamera,
@@ -100,7 +106,7 @@ export function ConsultaProcedimentoFlow({
     }
   }, [activeProcedimentoIndex, procedimentosLote, mapaState, procedureCapturedPhotos, setProcedureCapturedPhotos, updateProcedureByIndex]);
 
-  const handleContinuar = () => {
+  const handleContinuar = async () => {
     const nomeP = String(nomeProcedimento || '').trim();
     const catId =
       catalogoId != null && String(catalogoId).trim() !== ''
@@ -113,6 +119,10 @@ export function ConsultaProcedimentoFlow({
       });
       toast.error('Selecione o procedimento no catálogo para continuar.');
       return;
+    }
+    if (typeof onValidarTermosCatalogo === 'function' && catId) {
+      const ok = await onValidarTermosCatalogo(catId, nomeP);
+      if (!ok) return;
     }
     setStep4Errors({});
     
@@ -140,6 +150,10 @@ export function ConsultaProcedimentoFlow({
       }
       setStep5Errors({});
       
+      if (execucaoBloqueadaPorTermos) {
+        toast.error('Assine os termos obrigatórios antes de finalizar o procedimento.');
+        return;
+      }
       if (typeof encerrarAtendimento === 'function') {
         await encerrarAtendimento();
       }
@@ -176,6 +190,12 @@ export function ConsultaProcedimentoFlow({
           nomeProcedimento={procedimentosLote?.[activeProcedimentoIndex]?.procedimentoNome || nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
           setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoId}
+          setProcedimentoDoCatalogo={setProcedimentoDoCatalogo}
+          onValidarTermosCatalogo={onValidarTermosCatalogo}
+          execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+          titulosTermosFaltantes={titulosTermosFaltantes}
+          onIrParaTermosGate={onIrParaTermosGate}
+          consentimentosAguardandoExecucao={consentimentosAguardandoExecucao}
           observacoesExecucao={observacoesExecucao}
           setObservacoesExecucao={setObservacoesExecucao}
           procedureCapturedPhotos={procedureCapturedPhotos}
@@ -200,14 +220,14 @@ export function ConsultaProcedimentoFlow({
           onPrepareMapaCapture={onPrepareMapaCapture}
           onEnsureProcedimento={onEnsureProcedimento}
           onSugestaoEnviada={onSugestaoEnviada}
-          onProcedureOpenCamera={onProcedureOpenCamera}
+          onProcedureOpenCamera={execucaoBloqueadaPorTermos ? undefined : onProcedureOpenCamera}
           onClearMapaCaptureIntent={onClearMapaCaptureIntent}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button
             type="button"
             onClick={handleContinuar}
-            disabled={isSalvandoProcedimento}
+            disabled={isSalvandoProcedimento || execucaoBloqueadaPorTermos}
             className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSalvandoProcedimento 

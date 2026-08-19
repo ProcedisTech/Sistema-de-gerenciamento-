@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   Shield,
   RotateCw,
@@ -16,11 +15,8 @@ import {
   Calendar,
   Eye,
   AlertTriangle,
-  MessageCircle,
-  Mail,
-  Link2,
-  QrCode,
   Search,
+  XCircle,
 } from 'lucide-react';
 import {
   authHeadersForFetch,
@@ -35,8 +31,17 @@ import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
-import { buildLgpdConsentText } from './lgpd/lgpdConsentText';
-import { isAssinaturaResolvida, isTermoExigido } from '../../utils/termoResolucao';
+import { consentimentosAguardandoExecucao, idsFilaExigida } from '../../utils/termoResolucao';
+import {
+  idsAssinadosNestaJornada,
+  idsPendentesSemAssinadosNestaJornada,
+  linhasDropdownTermos,
+  mesclarFilaExigida,
+  proximoTermoPendente,
+  ROTULO_DROPDOWN_TERMOS,
+  seloLinhaTermo,
+  termosDropdownSelecionaveis,
+} from '../../utils/termoJornadaLista.js';
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
@@ -48,12 +53,6 @@ import { generateTermoPdf } from '../../utils/pdfGenerator';
 
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
-
-/**
- * ID virtual usado para o Termo LGPD padrão do Procedi.
- * Começa com '__' para não colidir com IDs numéricos do backend.
- */
-const LGPD_VIRTUAL_ID = '__lgpd_padrao';
 
 function formatTimestamp(ts) {
   if (!ts) return '';
@@ -287,11 +286,14 @@ export function Step3Termos({
   clinicaCtx,
   profissionalCtx,
   onConcluir,
+  catalogoIds = [],
+  exigirFilaVinculo = true,
+  termoFocoId = null,
+  onAbrirMetodosAssinatura,
 }) {
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
   const [termosLoading, setTermosLoading] = useState(true);
-  const [termosResolvidosIds, setTermosResolvidosIds] = useState(() => new Set());
   const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
   const [termoSelecionado, setTermoSelecionado] = useState(null);
   const [termoMenuOpen, setTermoMenuOpen] = useState(false);
@@ -317,8 +319,11 @@ export function Step3Termos({
   const [pendingNextTermoId, setPendingNextTermoId] = useState(null);
   const [termoToCancel, setTermoToCancel] = useState(null);
   const [backendAssinaturaId, setBackendAssinaturaId] = useState(null);
-  const [showQr, setShowQr] = useState(false);
   const [showConcluirConfirm, setShowConcluirConfirm] = useState(false);
+  const [procedimentosSemVinculo, setProcedimentosSemVinculo] = useState([]);
+  const [idsFilaExigidaAtual, setIdsFilaExigidaAtual] = useState(() => new Set());
+  const [consentimentosAguardando, setConsentimentosAguardando] = useState([]);
+  const focoAplicadoRef = useRef(null);
   const [autoSignatureApplied, setAutoSignatureApplied] = useState(false);
   const assinaturaProfRecenteRef = useRef('');
 
@@ -364,7 +369,7 @@ export function Step3Termos({
         }
 
         const resultado = await termoAssinaturaApi.criar({
-          termoId: termoSelecionado?._virtual ? null : termoSelecionadoId,
+          termoId: termoSelecionadoId,
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
@@ -394,13 +399,78 @@ export function Step3Termos({
     setAssinaturaPersistida(false);
   }, [termoSelecionadoId]);
 
+  const registrarTermoNaJornada = useCallback((resultado) => {
+    const recusou = resultado?.statusCodigo === 'RECUSADO' || Boolean(resultado?.recusadoEm);
+    if (resultado?.id) {
+      setBackendAssinaturaId(resultado.id);
+    }
+    if (recusou) {
+      toast.error('O paciente recusou assinar o documento.');
+    } else {
+      toast.success('Termo assinado e salvo com sucesso.');
+    }
+    onAssinaturaSalva?.(resultado);
+    const titulo =
+      termoSelecionado?.titulo ??
+      termoSelecionado?.title ??
+      (typeof termoTitulo === 'string' && termoTitulo.trim() ? termoTitulo.trim() : 'Termo de Consentimento');
+    setTermosAssinados((prev) => [
+      ...prev,
+      {
+        termoId: termoSelecionadoId ?? resultado?.termoId ?? null,
+        termoTitulo: titulo,
+        backendAssinaturaId: resultado?.id,
+        resultadoCompleto: resultado,
+      },
+    ]);
+    setTermosPendentesIds((prev) => {
+      const idsRemover = [termoSelecionadoId, resultado?.termoId];
+      const aposAssinar = [
+        ...(termosAssinados || []),
+        {
+          termoId: termoSelecionadoId ?? resultado?.termoId,
+          resultadoCompleto: resultado,
+        },
+      ];
+      const newList = idsPendentesSemAssinadosNestaJornada(prev, aposAssinar).filter(
+        (id) => !idsRemover.some((r) => r != null && String(r) === id),
+      );
+      const next = proximoTermoPendente(newList, aposAssinar, idsRemover);
+      if (next) setPendingNextTermoId(next);
+      return newList;
+    });
+    setProfissionalAssinaturaDataUrl('');
+    setTermoAssinaturaDataUrl('');
+    setProfAssinaturaTimestamp(null);
+    setPatAssinaturaTimestamp(null);
+    setPacienteRecusou(false);
+    if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
+    setTermoSelecionadoId(null);
+    setTermoSelecionado(null);
+    setAssinaturaPersistida(false);
+    setBackendAssinaturaId(null);
+  }, [
+    onAssinaturaSalva,
+    setProfissionalAssinaturaDataUrl,
+    setTermoAssinaturaDataUrl,
+    setTermoAssinado,
+    setTermosAssinados,
+    setTermosPendentesIds,
+    termoSelecionado,
+    termoSelecionadoId,
+    termoTitulo,
+    termosAssinados,
+    toast,
+  ]);
+
   useEffect(() => {
     if (
       !profissionalAssinaturaDataUrl ||
       (!termoAssinaturaDataUrl && !pacienteRecusou) ||
       !termoSelecionadoId ||
       !pacienteId ||
-      assinaturaPersistida
+      assinaturaPersistida ||
+      backendAssinaturaId
     ) {
       return;
     }
@@ -408,10 +478,6 @@ export function Step3Termos({
     const salvar = async () => {
       try {
         setAssinaturaPersistida(true);
-        // O conteúdo do termo selecionado é enviado como snapshot imutável
-        // para garantir validade jurídica (o paciente assinou ESTE texto).
-        // Usamos conteudoExibicao para garantir que as interpolações
-        // (como [NOME DO PACIENTE]) já estejam aplicadas no snapshot salvo.
         const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
 
         let ipAddress = null;
@@ -426,9 +492,7 @@ export function Step3Termos({
         }
 
         const resultado = await termoAssinaturaApi.criar({
-          // Para termos virtuais (LGPD padrão) não há ID numérico no banco;
-          // enviamos null e o backend persiste somente via conteudoSnapshot.
-          termoId: termoSelecionado?._virtual ? null : termoSelecionadoId,
+          termoId: termoSelecionadoId,
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
           roleUserId: roleUserId ?? null,
@@ -450,39 +514,7 @@ export function Step3Termos({
           ipAddress,
         });
 
-        if (resultado?.id) {
-          setBackendAssinaturaId(resultado.id);
-        }
-        toast.success('Termo assinado e salvo com sucesso.');
-        onAssinaturaSalva?.(resultado);
-
-        const novoTermoAssinado = {
-          termoId: termoSelecionado?._virtual ? null : termoSelecionadoId,
-          termoTitulo: tituloExibicao,
-          backendAssinaturaId: resultado?.id,
-          resultadoCompleto: resultado,
-        };
-        setTermosAssinados(prev => [...prev, novoTermoAssinado]);
-        
-        // Remover da fila de pendentes se estiver lá
-        setTermosPendentesIds(prev => {
-          const newList = prev.filter(id => String(id) !== String(termoSelecionadoId));
-          if (newList.length > 0) {
-            setPendingNextTermoId(newList[0]);
-          }
-          return newList;
-        });
-        
-        // Limpar para permitir um novo termo
-        setProfissionalAssinaturaDataUrl('');
-        setTermoAssinaturaDataUrl('');
-        setProfAssinaturaTimestamp(null);
-        setPatAssinaturaTimestamp(null);
-        setPacienteRecusou(false);
-        if (typeof setTermoAssinado === 'function') setTermoAssinado(false);
-        setTermoSelecionadoId(null);
-        setTermoSelecionado(null);
-        setAssinaturaPersistida(false);
+        registrarTermoNaJornada(resultado);
       } catch (e) {
         setAssinaturaPersistida(false);
         toast.error('Erro ao salvar assinatura: ' + (e?.message || 'Tente novamente'));
@@ -496,70 +528,68 @@ export function Step3Termos({
     termoSelecionadoId,
     pacienteId,
     assinaturaPersistida,
+    backendAssinaturaId,
     procedimentoFeitoId,
     roleUserId,
     profAssinaturaTimestamp,
     patAssinaturaTimestamp,
     pacienteRecusou,
-    onAssinaturaSalva,
+    registrarTermoNaJornada,
     toast,
   ]);
 
+  const termosAssinadosRef = useRef(termosAssinados);
+  termosAssinadosRef.current = termosAssinados;
+
+  const catalogoKey = (catalogoIds || []).map(String).join(',');
+
   useEffect(() => {
-    termosApi
-      .list()
-      .then(async (raw) => {
+    let cancelled = false;
+    setTermosLoading(true);
+    (async () => {
+      try {
+        const listPromise = termosApi.list();
+        const resolucaoPromise = pacienteId
+          ? termosApi.resolver({ pacienteId, catalogoIds })
+          : Promise.resolve(null);
+        const [raw, resolucaoRaw] = await Promise.all([listPromise, resolucaoPromise]);
+        if (cancelled) return;
+
         const list = Array.isArray(raw) ? raw : raw?.content ?? [];
         const ativos = list.filter((t) => t.ativo !== false);
-        // Se a clínica ainda não cadastrou nenhum termo, injetamos o template
-        // LGPD como item virtual para que o fluxo não fique bloqueado.
-        if (ativos.length === 0) {
-          setTermosDisponiveis([
-            {
-              id: LGPD_VIRTUAL_ID,
-              titulo: 'Termo de Consentimento LGPD (Padrão Procedi)',
-              conteudo: buildLgpdConsentText({}),
-              ativo: true,
-              _virtual: true, // marca para tratamento especial ao salvar
-            },
-          ]);
-          setTermosResolvidosIds(new Set());
-          return;
-        }
         setTermosDisponiveis(ativos);
 
-        if (!pacienteId) {
-          setTermosResolvidosIds(new Set());
+        if (!pacienteId || !resolucaoRaw) {
+          setProcedimentosSemVinculo([]);
+          setIdsFilaExigidaAtual(new Set());
+          setConsentimentosAguardando([]);
           return;
         }
-        try {
-          const assinaturasRaw = await termoAssinaturaApi.listarPorPaciente(pacienteId);
-          const assinaturas = Array.isArray(assinaturasRaw) ? assinaturasRaw : assinaturasRaw?.content ?? [];
-          const resolvidos = new Set(
-            ativos
-              .filter((t) => assinaturas.some((a) => a.termoId === t.id && isAssinaturaResolvida(a)))
-              .map((t) => String(t.id))
-          );
-          setTermosResolvidosIds(resolvidos);
 
-          // Termos de natureza PROCEDIMENTO sem assinatura válida entram sozinhos
-          // em "aguardando assinatura" — não dependem do profissional lembrar de selecioná-los.
-          const idsObrigatoriosPendentes = ativos
-            .filter((t) => isTermoExigido(t) && !resolvidos.has(String(t.id)))
-            .map((t) => String(t.id));
-          if (idsObrigatoriosPendentes.length === 0) return;
-          setTermosPendentesIds((prev) => {
-            const set = new Set(prev.map(String));
-            idsObrigatoriosPendentes.forEach((id) => set.add(id));
-            return Array.from(set);
-          });
-        } catch {
-          // Falha nessa checagem não deve bloquear o fluxo de assinatura.
+        setProcedimentosSemVinculo(
+          Array.isArray(resolucaoRaw?.procedimentosSemVinculo) ? resolucaoRaw.procedimentosSemVinculo : []
+        );
+
+        const idsObrigatorios = idsFilaExigida(resolucaoRaw);
+        setIdsFilaExigidaAtual(new Set(idsObrigatorios));
+        setConsentimentosAguardando(consentimentosAguardandoExecucao(resolucaoRaw));
+        if (!exigirFilaVinculo) return;
+        setTermosPendentesIds((prev) =>
+          mesclarFilaExigida(prev, idsObrigatorios, termosAssinadosRef.current),
+        );
+      } catch {
+        if (!cancelled) {
+          setTermosDisponiveis([]);
+          setConsentimentosAguardando([]);
         }
-      })
-      .catch(() => setTermosDisponiveis([]))
-      .finally(() => setTermosLoading(false));
-  }, [pacienteId, setTermosPendentesIds]);
+      } finally {
+        if (!cancelled) setTermosLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pacienteId, catalogoKey, exigirFilaVinculo, setTermosPendentesIds]);
 
   useEffect(() => {
     if (!termoMenuOpen) return undefined;
@@ -603,6 +633,24 @@ export function Step3Termos({
 
   const _temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
 
+  const idsAssinadosJornada = useMemo(
+    () => idsAssinadosNestaJornada(termosAssinados),
+    [termosAssinados],
+  );
+
+  const termosPendentesFila = useMemo(
+    () => idsPendentesSemAssinadosNestaJornada(termosPendentesIds, termosAssinados),
+    [termosPendentesIds, termosAssinados],
+  );
+
+  useEffect(() => {
+    setTermosPendentesIds((prev) => {
+      const next = idsPendentesSemAssinadosNestaJornada(prev, termosAssinados);
+      if (next.length === prev.length && next.every((id, i) => id === String(prev[i]))) return prev;
+      return next;
+    });
+  }, [termosAssinados, setTermosPendentesIds]);
+
   const termosFiltradosBusca = useMemo(() => {
     const q = termoSearch.trim().toLowerCase();
     if (!q) return termosDisponiveis;
@@ -613,18 +661,22 @@ export function Step3Termos({
     );
   }, [termosDisponiveis, termoSearch]);
 
-  const termosNaoObrigatoriosPendentes = useMemo(() => {
-    if (termosDisponiveis.length === 0 || termosDisponiveis[0]?._virtual) return [];
-    return termosDisponiveis.filter(
-      (t) => !isTermoExigido(t) && !termosResolvidosIds.has(String(t.id))
-    );
-  }, [termosDisponiveis, termosResolvidosIds]);
+  const termosDropdownListados = useMemo(
+    () => termosDropdownSelecionaveis(termosFiltradosBusca, idsAssinadosJornada),
+    [termosFiltradosBusca, idsAssinadosJornada],
+  );
+
+  const linhasDropdown = useMemo(
+    () => linhasDropdownTermos(termosDropdownListados, idsFilaExigidaAtual),
+    [termosDropdownListados, idsFilaExigidaAtual],
+  );
 
   const toggleTermoPendente = useCallback((termo) => {
     if (!termo) return;
     const id = termo.id != null ? String(termo.id) : null;
     if (!id) return;
-    
+    if (idsAssinadosJornada.has(id)) return;
+
     setTermosPendentesIds((prev) => {
       if (prev.includes(id)) {
         const novo = prev.filter((pId) => String(pId) !== id);
@@ -637,10 +689,11 @@ export function Step3Termos({
         return [...prev, id];
       }
     });
-  }, [setTermosPendentesIds, termoSelecionadoId]);
+  }, [setTermosPendentesIds, termoSelecionadoId, idsAssinadosJornada]);
 
   const abrirTermoParaAssinatura = useCallback(
     (id) => {
+      if (idsAssinadosJornada.has(String(id))) return;
       const termo = termosDisponiveis.find((t) => String(t.id) === String(id));
       if (!termo) return;
       if (typeof onTermoChange === 'function') onTermoChange(String(id));
@@ -658,8 +711,17 @@ export function Step3Termos({
         setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
       }
     },
-    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis]
+    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis, idsAssinadosJornada]
   );
+
+  useEffect(() => {
+    if (!termoFocoId || termosDisponiveis.length === 0) return;
+    if (focoAplicadoRef.current === String(termoFocoId)) return;
+    const id = String(termoFocoId);
+    if (!termosDisponiveis.some((t) => String(t.id) === id)) return;
+    focoAplicadoRef.current = id;
+    abrirTermoParaAssinatura(id);
+  }, [termoFocoId, termosDisponiveis, abrirTermoParaAssinatura]);
 
   const applyProfissionalSignature = useCallback((dataUrl, { auto = false } = {}) => {
     assinaturaProfRecenteRef.current = dataUrl;
@@ -687,7 +749,7 @@ export function Step3Termos({
     if (!termoSelecionado) return;
     // O preenchimento automático só ocorre se o termo for virtual (LGPD padrão) 
     // ou se a flag autoAssinarProfissional estiver ativada no termo.
-    if (!termoSelecionado._virtual && !termoSelecionado.autoAssinarProfissional) return;
+    if (!termoSelecionado.autoAssinarProfissional) return;
 
     let cancelled = false;
     (async () => {
@@ -727,28 +789,20 @@ export function Step3Termos({
     toast.success('Assinatura do paciente registrada');
   };
 
-  const linkUrl = useMemo(() => {
-    if (!clinicaCtx?.clinicSlug || !backendAssinaturaId) return '';
-    const base = window.location.origin;
-    // O CPF é informado pelo próprio paciente na página de destino (não trafega na URL).
-    return `${base}/documento?clinic=${encodeURIComponent(clinicaCtx.clinicSlug)}&tipo=TERMO_SESSAO&documento_id=${backendAssinaturaId}`;
-  }, [backendAssinaturaId, clinicaCtx?.clinicSlug]);
-
   const handleVerificarAssinaturaRemota = async () => {
     if (!backendAssinaturaId) return;
     try {
       const res = await termoAssinaturaApi.buscar(backendAssinaturaId);
-      if (res && res.assinaturaPaciente) {
-        setTermoAssinaturaDataUrl(res.assinaturaPaciente);
-        setPatAssinaturaTimestamp(res.pacienteAssinouEm ? new Date(res.pacienteAssinouEm).getTime() : Date.now());
-        if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
-        toast.success('Assinatura do paciente recebida!');
-      } else if (res && (res.statusCodigo === 'RECUSADO' || res.recusadoEm)) {
-        setPacienteRecusou(true);
-        toast.error('O paciente recusou assinar o documento.');
-      } else {
-        toast.info('Aguardando assinatura. O paciente ainda não assinou.');
+      const recusou = res && (res.statusCodigo === 'RECUSADO' || res.recusadoEm);
+      if (res && recusou) {
+        registrarTermoNaJornada(res);
+        return;
       }
+      if (res && (res.assinaturaPaciente || res.statusCodigo === 'ASSINADO')) {
+        registrarTermoNaJornada(res);
+        return;
+      }
+      toast.info('Aguardando assinatura. O paciente ainda não assinou.');
     } catch {
       toast.error('Erro ao verificar assinatura remota.');
     }
@@ -802,7 +856,7 @@ export function Step3Termos({
   const handleConcluirClick = () => {
     if (typeof onConcluir !== 'function') return;
     const nenhumAssinado = termosAssinados.length === 0;
-    const temPendentes = termosPendentesIds.length > 0;
+    const temPendentes = termosPendentesFila.length > 0;
     if (nenhumAssinado || temPendentes) {
       setShowConcluirConfirm(true);
       return;
@@ -812,14 +866,14 @@ export function Step3Termos({
 
   const concluirConfirmMessage = (() => {
     const nenhumAssinado = termosAssinados.length === 0;
-    const temPendentes = termosPendentesIds.length > 0;
+    const temPendentes = termosPendentesFila.length > 0;
     if (nenhumAssinado && temPendentes) {
-      return `Nenhum termo foi assinado. Ainda há ${termosPendentesIds.length} termo(s) aguardando assinatura. Deseja sair mesmo assim?`;
+      return `Nenhum termo foi assinado. Ainda há ${termosPendentesFila.length} termo(s) aguardando assinatura. Deseja sair mesmo assim?`;
     }
     if (nenhumAssinado) {
       return 'Nenhum termo foi assinado. Deseja sair mesmo assim?';
     }
-    return `Ainda há ${termosPendentesIds.length} termo(s) aguardando assinatura. Deseja sair mesmo assim?`;
+    return `Ainda há ${termosPendentesFila.length} termo(s) aguardando assinatura. Deseja sair mesmo assim?`;
   })();
 
   return (
@@ -831,23 +885,62 @@ export function Step3Termos({
           </div>
           <div>
             <h3 className="text-[20px] font-bold text-[#0f172a]">Termos de consentimento</h3>
-            <p className="text-[14px] font-medium text-[#64748b]">Leitura e assinaturas (profissional e paciente)</p>
-          </div>
+          <p className="text-[14px] font-medium text-[#64748b]">Leitura e assinaturas (profissional e paciente)</p>
         </div>
+      </div>
+
+      {consentimentosAguardando.length > 0 ? (
+        <div className="mb-6 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <h4 className="text-[13px] font-bold text-emerald-900">Aguardando execução</h4>
+          {consentimentosAguardando.map((c) => (
+            <p key={c.termoId} className="text-[13px] font-medium text-emerald-800">
+              Termo já assinado — {c.titulo}
+              {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm)}` : ''}
+            </p>
+          ))}
+        </div>
+      ) : null}
       </div>
 
       {termosAssinados.length > 0 && (
         <div className="mb-8 space-y-3">
-          <h4 className="text-[14px] font-bold text-[#0f172a]">Termos assinados nesta jornada</h4>
-          {termosAssinados.map((t, index) => (
-            <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <h4 className="text-[14px] font-bold text-[#0f172a]">Termos desta jornada</h4>
+          {termosAssinados.map((t, index) => {
+            const recusado =
+              t.resultadoCompleto?.statusCodigo === 'RECUSADO' || Boolean(t.resultadoCompleto?.recusadoEm);
+            const recusaData = t.resultadoCompleto?.recusadoEm
+              ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+              : null;
+            return (
+            <div
+              key={index}
+              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border px-4 py-3 ${
+                recusado
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-emerald-200 bg-emerald-50'
+              }`}
+            >
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-                  <Check className="h-4 w-4" strokeWidth={3} />
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                    recusado ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+                  }`}
+                >
+                  {recusado ? (
+                    <XCircle className="h-4 w-4" strokeWidth={3} />
+                  ) : (
+                    <Check className="h-4 w-4" strokeWidth={3} />
+                  )}
                 </div>
                 <div>
-                  <p className="text-[14px] font-bold text-emerald-900">{t.termoTitulo || 'Termo de Consentimento'}</p>
-                  <p className="text-[12px] text-emerald-700">Assinado e salvo com sucesso.</p>
+                  <p className={`text-[14px] font-bold ${recusado ? 'text-red-900' : 'text-emerald-900'}`}>
+                    {t.termoTitulo || 'Termo de Consentimento'}
+                  </p>
+                  <p className={`text-[12px] ${recusado ? 'text-red-700' : 'text-emerald-700'}`}>
+                    {recusado
+                      ? `Termo recusado pelo paciente${recusaData ? ` em ${recusaData}` : '.'}`
+                      : 'Assinado e salvo com sucesso.'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -881,7 +974,11 @@ export function Step3Termos({
                       });
                     });
                   }}
-                  className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                  className={`rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold border transition-colors ${
+                    recusado
+                      ? 'text-red-700 border-red-200 hover:bg-red-100'
+                      : 'text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  }`}
                 >
                   Ver PDF
                 </button>
@@ -896,19 +993,15 @@ export function Step3Termos({
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       <div className="relative mb-6" ref={termoMenuRef}>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94a3b8]">
-          {termosAssinados.length > 0 ? 'Adicionar outro termo' : 'Selecionar termo de consentimento'}
+        <p className="mb-2 text-[13px] font-medium text-[#64748b]">
+          {ROTULO_DROPDOWN_TERMOS}
         </p>
-        {termosNaoObrigatoriosPendentes.length > 0 ? (
-          <p className="mb-2 text-[12px] font-medium text-[#b45309]">
-            {termosNaoObrigatoriosPendentes.length} termo(s) pendente(s) não obrigatório(s) — selecione acima para assinar agora.
-          </p>
-        ) : null}
         {termosLoading ? (
           <div className="flex h-12 items-center gap-2 rounded-xl border border-[#e2e8f0] bg-white px-4 text-[13px] text-[#64748b]">
             Carregando termos…
@@ -938,17 +1031,17 @@ export function Step3Termos({
                 />
               </div>
               <div className="min-w-0 flex-1 text-left">
-                {termosPendentesIds.length > 0 ? (
+                {termosPendentesFila.length > 0 ? (
                   <>
                     <p className="text-[14px] font-semibold text-[#0f172a]">
-                      {termosPendentesIds.length} termo(s) selecionado(s)
+                      {termosPendentesFila.length} termo(s) selecionado(s)
                     </p>
                     <p className="mt-0.5 text-[12px] text-[#64748b]">
                       Clique para adicionar ou remover termos
                     </p>
                   </>
                 ) : (
-                  <p className="text-[14px] text-[#94a3b8]">Selecione os termos...</p>
+                  <p className="text-[14px] text-[#94a3b8]">{ROTULO_DROPDOWN_TERMOS}</p>
                 )}
               </div>
               <ChevronDown
@@ -980,18 +1073,15 @@ export function Step3Termos({
                   </div>
                 ) : null}
                 <div className="max-h-[240px] overflow-y-auto [-webkit-overflow-scrolling:touch]">
-                  {termosFiltradosBusca.length === 0 ? (
+                  {linhasDropdown.length === 0 ? (
                     <div className="px-4 py-6 text-center text-[13px] text-[#94a3b8]">Nenhum termo encontrado</div>
                   ) : (
-                    termosFiltradosBusca.map((t) => {
-                      const sel = termosPendentesIds.includes(String(t.id));
-                      const preview = String(t.conteudo ?? t.content ?? '')
-                        .replace(/\s+/g, ' ')
-                        .trim()
-                        .slice(0, 96);
+                    linhasDropdown.map((linha) => {
+                      const t = termosDropdownListados.find((item) => String(item.id) === linha.id);
+                      const sel = termosPendentesFila.includes(linha.id);
                       return (
                         <button
-                          key={String(t.id)}
+                          key={linha.id}
                           type="button"
                           onClick={(e) => { e.stopPropagation(); toggleTermoPendente(t); }}
                           className="flex w-full items-start gap-3 border-b border-[#f8fafc] px-3 py-2.5 text-left last:border-0 hover:bg-[#f8fafc]"
@@ -1001,20 +1091,14 @@ export function Step3Termos({
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <p className="text-[14px] font-semibold text-[#0f172a]">{t.titulo ?? t.title ?? '—'}</p>
-                              {!t._virtual ? (
-                                <span
-                                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                                    termosResolvidosIds.has(String(t.id))
-                                      ? 'bg-emerald-50 text-emerald-700'
-                                      : 'bg-amber-50 text-amber-700'
-                                  }`}
-                                >
-                                  {termosResolvidosIds.has(String(t.id)) ? 'Assinado' : 'Pendente'}
+                              <p className="text-[14px] font-semibold text-[#0f172a]">{linha.titulo}</p>
+                              {linha.selo === 'OBRIGATORIO' ? (
+                                <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                                  Obrigatório
                                 </span>
                               ) : null}
                             </div>
-                            <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">{preview || '—'}</p>
+                            <p className="mt-0.5 line-clamp-1 text-[12px] text-[#64748b]">{linha.preview}</p>
                           </div>
                         </button>
                       );
@@ -1028,18 +1112,26 @@ export function Step3Termos({
       </div>
 
       {/* Lista de Termos Pendentes */}
-      {termosPendentesIds.length > 0 && (
+      {termosPendentesFila.length > 0 && (
         <div className="mb-6 space-y-3">
           <h4 className="text-[14px] font-bold text-[#0f172a]">Termos aguardando assinatura</h4>
-          {termosPendentesIds.map((pId) => {
+          {termosPendentesFila.map((pId) => {
             const t = termosDisponiveis.find((item) => String(item.id) === String(pId));
             if (!t) return null;
             const isOpen = String(termoSelecionadoId) === String(pId);
+            const obrigatorio = seloLinhaTermo(pId, idsFilaExigidaAtual) === 'OBRIGATORIO';
             return (
               <div key={pId} className={`rounded-xl border ${isOpen ? 'border-[#00a88e] ring-2 ring-[#00a88e]/20' : 'border-[#e2e8f0]'} bg-white px-4 py-3 shadow-sm transition-all`}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-bold text-[#0f172a] truncate">{t.titulo ?? t.title ?? '—'}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="text-[14px] font-bold text-[#0f172a] truncate">{t.titulo ?? t.title ?? '—'}</p>
+                      {obrigatorio ? (
+                        <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                          Obrigatório
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="text-[12px] text-[#64748b]">Aguardando leitura e assinatura</p>
                   </div>
                   <div className="shrink-0">
@@ -1065,18 +1157,13 @@ export function Step3Termos({
 
       {!termosLoading && termosDisponiveis.length === 0 ? (
         <div className="mb-6 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-4 text-[13px] font-medium text-[#92400e]">
-          Nenhum termo cadastrado. Crie termos em Configurações → Clínica → Termos
+          Nenhum termo cadastrado. Crie termos em Configurações → Clínica → Termos.
         </div>
       ) : null}
 
-      {/* Banner informativo quando o Termo LGPD virtual está ativo */}
-      {!termosLoading && termosDisponiveis.length > 0 && termosDisponiveis[0]?._virtual ? (
-        <div className="mb-6 flex gap-3 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-[13px] text-[#1e40af]">
-          <Shield className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-          <span>
-            Usando o <strong>Termo LGPD padrão do Procedi</strong>. Para criar um termo personalizado da sua clínica,
-            acesse <strong>Configurações → Clínica → Termos</strong>.
-          </span>
+      {!termosLoading && procedimentosSemVinculo.length > 0 ? (
+        <div className="mb-6 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-4 py-3 text-[13px] text-[#64748b]">
+          Este procedimento não exige termo vinculado.
         </div>
       ) : null}
 
@@ -1286,63 +1373,6 @@ export function Step3Termos({
                           >
                             Solicitar Assinatura
                           </button>
-                          
-                          {linkUrl && (
-                            <>
-                              {permiteLink && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const msg = `Olá! Acesse o link abaixo para assinar o documento da clínica:\n${linkUrl}`;
-                                      const phone = pacienteCtx?.telefone?.replace(/\D/g, '') || '';
-                                      window.open(`https://wa.me/${phone ? `55${phone}` : ''}?text=${encodeURIComponent(msg)}`, '_blank');
-                                    }}
-                                    className="flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#1ebd5b]"
-                                  >
-                                    <MessageCircle className="h-4 w-4" />
-                                    WhatsApp
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const subject = 'Assinatura de Documento';
-                                      const body = `Olá!\n\nAcesse o link abaixo para assinar seu documento:\n${linkUrl}`;
-                                      const email = pacienteCtx?.email || '';
-                                      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                    }}
-                                    className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                                  >
-                                    <Mail className="h-4 w-4" />
-                                    Email
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (navigator.clipboard) {
-                                        navigator.clipboard.writeText(linkUrl);
-                                        toast.success('Link copiado!');
-                                      }
-                                    }}
-                                    className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                                  >
-                                    <Link2 className="h-4 w-4" />
-                                    Copiar Link
-                                  </button>
-                                </>
-                              )}
-                              {permiteQrCode && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowQr(!showQr)}
-                                  className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                                >
-                                  <QrCode className="h-4 w-4" />
-                                  {showQr ? 'Ocultar QR Code' : 'Mostrar QR Code'}
-                                </button>
-                              )}
-                            </>
-                          )}
 
                           <button
                             type="button"
@@ -1356,15 +1386,7 @@ export function Step3Termos({
                             Recusar a assinar
                           </button>
                         </div>
-                        {showQr && permiteQrCode && linkUrl ? (
-                          <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                            <QRCodeSVG value={linkUrl} size={200} />
-                            <p className="text-center text-[11px] text-slate-400">
-                              O paciente pode escanear este QR Code para acessar o documento
-                            </p>
-                          </div>
-                        ) : null}
-                        {linkUrl && backendAssinaturaId && (
+                        {backendAssinaturaId ? (
                           <div className="mt-2 text-center">
                             <button
                               type="button"
@@ -1374,7 +1396,7 @@ export function Step3Termos({
                               Atualizar status (Verificar assinatura remota)
                             </button>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1420,6 +1442,7 @@ export function Step3Termos({
           canalCodigo: 'WHATSAPP',
         })}
         opcoes={{ tablet: permiteTablet, qrCode: permiteQrCode, link: permiteLink }}
+        onAbrirConfiguracoes={onAbrirMetodosAssinatura}
       />
 
       <AguardandoPacienteModal
@@ -1475,12 +1498,12 @@ export function Step3Termos({
       ) : null}
 
       {/* Popup de Próximo Termo */}
-      {pendingNextTermoId ? (
+      {pendingNextTermoId && termosPendentesFila.includes(String(pendingNextTermoId)) ? (
         <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
           <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
             <h4 className="text-[16px] font-bold text-[#0f172a]">Termo salvo com sucesso!</h4>
             <p className="mt-2 text-[14px] text-[#475569]">
-              Ainda há {termosPendentesIds.length} termo(s) aguardando assinatura. Deseja abrir o próximo agora?
+              Ainda há {termosPendentesFila.length} termo(s) aguardando assinatura. Deseja abrir o próximo agora?
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -1626,6 +1649,12 @@ export function Step4Procedimento({
   nomeProcedimento = '',
   setNomeProcedimento = () => {},
   setNomeProcedimentoCatalogoId = () => {},
+  setProcedimentoDoCatalogo,
+  onValidarTermosCatalogo,
+  execucaoBloqueadaPorTermos = false,
+  titulosTermosFaltantes = [],
+  onIrParaTermosGate,
+  consentimentosAguardandoExecucao: consentimentosAguardando = [],
   observacoesExecucao = '',
   setObservacoesExecucao = () => {},
   procedureCapturedPhotos = [],
@@ -1654,6 +1683,15 @@ export function Step4Procedimento({
   onProcedureOpenCamera,
   onClearMapaCaptureIntent,
 }) {
+  const gravarProcedimentoCatalogo = (nome, id) => {
+    if (typeof setProcedimentoDoCatalogo === 'function') {
+      setProcedimentoDoCatalogo(nome, id);
+      return;
+    }
+    setNomeProcedimento(nome);
+    setNomeProcedimentoCatalogoId(id);
+  };
+
   const [obsaveStatus, setObsaveStatus] = React.useState(''); // '' | 'saving' | 'saved'
   const uploadInputRef = React.useRef(null);
   const toast = useToast();
@@ -1692,6 +1730,7 @@ export function Step4Procedimento({
   }, [fotoCategoria, onProcedureFotoCategoriaSync]);
 
   const handleActionSheetOption = (option) => {
+    if (execucaoBloqueadaPorTermos) return;
     const cat = intendedCategoryRef.current;
     if (!cat) return;
     
@@ -1757,6 +1796,10 @@ export function Step4Procedimento({
   }, [photos]);
 
   const handleImageUpload = (event) => {
+    if (execucaoBloqueadaPorTermos) {
+      event.target.value = '';
+      return;
+    }
     const files = Array.from(event.target.files || []).filter((f) => String(f.type || '').startsWith('image/'));
     event.target.value = '';
     if (!files.length) return;
@@ -1765,6 +1808,7 @@ export function Step4Procedimento({
   };
 
   const handleLaneUploadClick = (files, category, isFocusOnly = false) => {
+    if (execucaoBloqueadaPorTermos) return;
     setFotoCategoria(category);
     onProcedureFotoCategoriaSync(category);
     intendedCategoryRef.current = category;
@@ -1806,6 +1850,35 @@ export function Step4Procedimento({
         </div>
       </div>
 
+      {execucaoBloqueadaPorTermos ? (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-[13px] font-semibold text-amber-900">
+            Procedimento bloqueado até a assinatura de:{' '}
+            {titulosTermosFaltantes.length > 0 ? titulosTermosFaltantes.join(', ') : 'termos obrigatórios'}
+          </p>
+          {typeof onIrParaTermosGate === 'function' ? (
+            <button
+              type="button"
+              onClick={onIrParaTermosGate}
+              className="mt-2 text-[13px] font-bold text-[#00a88e] hover:underline"
+            >
+              Ir para Termos
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!execucaoBloqueadaPorTermos && consentimentosAguardando.length > 0 ? (
+        <div className="mb-6 space-y-1 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          {consentimentosAguardando.map((c) => (
+            <p key={c.termoId} className="text-[13px] font-semibold text-emerald-900">
+              Termo já assinado — {c.titulo}
+              {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm)}` : ''}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
       <div
         className={`mb-6 space-y-5 rounded-2xl border bg-white p-4 sm:p-6 ${
           step4Errors.nomeProcedimento || step4Errors.catalogoId
@@ -1823,19 +1896,23 @@ export function Step4Procedimento({
               showDuracao={false}
               procedimentoOptions={procedimentoSearchOptions}
               procedimentosSelecionados={procedimentosSelecionados}
-              onSelect={(proc) => {
-                setNomeProcedimento(proc.nome);
-                setNomeProcedimentoCatalogoId(String(proc.id));
+              onSelect={async (proc) => {
+                gravarProcedimentoCatalogo(proc.nome, String(proc.id));
                 setStep4Errors((prev) => ({
                   ...prev,
                   nomeProcedimento: false,
                   catalogoId: false,
                 }));
+                if (typeof onValidarTermosCatalogo === 'function') {
+                  await onValidarTermosCatalogo(String(proc.id), proc.nome);
+                }
               }}
               onToggle={() => {}}
               onRemover={() => {
-                setNomeProcedimento('');
-                setNomeProcedimentoCatalogoId(null);
+                gravarProcedimentoCatalogo('', null);
+                if (typeof onValidarTermosCatalogo === 'function') {
+                  void onValidarTermosCatalogo('', '');
+                }
               }}
             />
             {sugestaoEnviada ? (
@@ -1971,7 +2048,7 @@ export function Step4Procedimento({
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
         onAnnotate={onProcedureAnnotatePhoto}
-        showUpload={true}
+        showUpload={!execucaoBloqueadaPorTermos}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.antes}' adicionada.`}
       />
 
@@ -1984,7 +2061,7 @@ export function Step4Procedimento({
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
         onAnnotate={onProcedureAnnotatePhoto}
-        showUpload={true}
+        showUpload={!execucaoBloqueadaPorTermos}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.depois}' adicionada.`}
       />
 
@@ -2012,7 +2089,7 @@ export function Step4Procedimento({
           onUpload={handleLaneUploadClick}
           onRemove={onProcedureRemovePhoto}
           onAnnotate={onProcedureAnnotatePhoto}
-          showUpload={true}
+          showUpload={!execucaoBloqueadaPorTermos}
           emptyHint="Nenhuma foto diversa adicionada."
         />
       )}
@@ -2034,8 +2111,12 @@ export function Step4Procedimento({
             onCaptureConsumed={onMapaCaptureConsumed}
             onPrepareCapture={onPrepareMapaCapture}
             onEnsureProcedimento={onEnsureProcedimento}
-            disabled={!String(nomeProcedimento || '').trim() || !catalogoId}
-            disabledHint="Selecione um procedimento do catálogo para habilitar o mapa de aplicação."
+            disabled={!String(nomeProcedimento || '').trim() || !catalogoId || execucaoBloqueadaPorTermos}
+            disabledHint={
+              execucaoBloqueadaPorTermos
+                ? 'Assine os termos obrigatórios para habilitar o mapa de aplicação.'
+                : 'Selecione um procedimento do catálogo para habilitar o mapa de aplicação.'
+            }
           />
         </div>
       ) : null}
@@ -2044,8 +2125,9 @@ export function Step4Procedimento({
         <div className="mt-4 flex justify-end">
            <button
              type="button"
+             disabled={execucaoBloqueadaPorTermos}
              onClick={() => handleLaneUploadClick(null, GALERIA_CATEGORIA.OUTRO, false)}
-             className="flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] transition-colors"
+             className="flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
            >
              <Camera className="h-4 w-4" />
              + Adicionar Outras Fotos (Durante/Produtos)
