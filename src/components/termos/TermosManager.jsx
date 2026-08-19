@@ -21,16 +21,10 @@ import { useToast } from '../../contexts/useToast.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
 import { TermoFolha } from './TermoFolha';
+import { stripHtml } from '../../utils/stripHtml.js';
 
 const NATUREZA_PROCEDIMENTO = 'PROCEDIMENTO';
 const NATUREZA_INSTITUCIONAL = 'INSTITUCIONAL';
-
-function stripHtml(html) {
-  if (!html) return '';
-  const tmp = document.createElement('DIV');
-  tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || '';
-}
 
 function normalizeList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -122,6 +116,17 @@ export function TermosManager() {
       ),
     [items, searchQuery]
   );
+
+  const procedimentosSemVinculo = useMemo(() => {
+    const linked = new Set();
+    for (const t of items) {
+      for (const p of t.procedimentosVinculados || []) {
+        const id = String(p.catalogoProcedimentoSaudeId ?? p.id ?? '').trim();
+        if (id) linked.add(id);
+      }
+    }
+    return procedimentoOptions.filter((o) => o.id && !linked.has(String(o.id)));
+  }, [items, procedimentoOptions]);
 
   const openNew = () => {
     setEditingId(null);
@@ -444,6 +449,25 @@ export function TermosManager() {
           </button>
         </div>
       </div>
+
+      {!loading && procedimentosSemVinculo.length > 0 ? (
+        <div className="mb-6 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-4 py-3">
+          <p className="text-[12px] font-bold uppercase tracking-wide text-[#64748b]">Cobertura</p>
+          <p className="mt-1 text-[13px] text-[#475569]">
+            Procedimentos do catálogo sem termo vinculado — não exigem termo na execução:
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {procedimentosSemVinculo.map((o) => (
+              <li
+                key={o.id}
+                className="rounded-full border border-[#e2e8f0] bg-white px-2.5 py-0.5 text-[12px] text-[#64748b]"
+              >
+                {o.nomeProcedimento}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* Loading */}
       {loading ? (

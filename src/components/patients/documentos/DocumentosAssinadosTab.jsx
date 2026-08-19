@@ -6,6 +6,7 @@ import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
 import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
+import { TermoIntegridadeSelo } from '../../termos/TermoIntegridadeSelo.jsx';
 import 'react-quill-new/dist/quill.snow.css';
 
 /** Retorna { expirado, data } a partir de vigencia/expiradaEm, ou null se vigente indefinidamente. */
@@ -292,6 +293,13 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
                         </div>
                       </div>
                     </div>
+
+                    {!isRecusado(doc) && doc.id ? (
+                      <TermoIntegridadeSelo
+                        assinaturaId={doc.id}
+                        conteudoHash={doc.conteudoHash}
+                      />
+                    ) : null}
 
                     {!isRecusado(doc) && doc.selfieUrl && (
                       <div>

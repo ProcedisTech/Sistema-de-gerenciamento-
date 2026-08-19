@@ -2,6 +2,7 @@ import React from 'react';
 import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { useTermosPendentes } from '../../hooks/useTermosPendentes';
+import { temFaltantes, consentimentosAguardandoExecucao } from '../../utils/termoResolucao';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -16,6 +17,20 @@ const MODULE_CARDS = [
     icon: RotateCcw,
   },
 ];
+
+function getCardConsentDot(cardId, termosPendentes, hasCatalogo) {
+  if (!hasCatalogo) return null;
+  if (temFaltantes(termosPendentes?.resolucao)) return null;
+  const credits = consentimentosAguardandoExecucao(termosPendentes?.resolucao);
+  if (credits.length === 0) return null;
+  if (cardId !== 'termos' && cardId !== 'procedimento') return null;
+  return {
+    badgeClass: 'bg-emerald-50 text-emerald-800',
+    tooltipClass: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    tooltip: 'Consentimento válido aguardando execução',
+    label: 'Válido',
+  };
+}
 
 function getCardPendingDot(cardId, paciente, termosPendentes) {
   if (!paciente) return null;
@@ -77,12 +92,30 @@ export function ConsultaHub({
   onIniciarRetornoAvulso,
   onEncerrarConsulta,
   getPatientInitials,
-  termosSelecionadosIds,
+  catalogoIds = [],
+  exigirFilaVinculo = true,
+  nomeProcedimento,
+  onTermosBloqueio,
 }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
   const cards = buildModuleCards(isRetorno);
-  const termosPendentes = useTermosPendentes(paciente?.id, { termosSelecionadosIds });
+  const termosPendentes = useTermosPendentes(paciente?.id, {
+    catalogoIds,
+    exigirFilaVinculo,
+  });
+  const semVinculo = termosPendentes.resolucao?.procedimentosSemVinculo || [];
+
+  const handleSelectModule = (id) => {
+    if (id === 'procedimento' && exigirFilaVinculo && temFaltantes(termosPendentes.resolucao)) {
+      onTermosBloqueio?.({
+        nomeProcedimento: nomeProcedimento || 'procedimento',
+        faltantes: termosPendentes.resolucao.faltantes,
+      });
+      return;
+    }
+    onSelectModule?.(id);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -122,6 +155,11 @@ export function ConsultaHub({
         {cards.map((card) => {
           const ModuleIcon = card.icon;
           const pendingDot = getCardPendingDot(card.id, paciente, termosPendentes);
+          const consentDot =
+            pendingDot == null
+              ? getCardConsentDot(card.id, termosPendentes, (catalogoIds || []).length > 0)
+              : null;
+          const statusDot = pendingDot || consentDot;
           return (
             <button
               key={card.id}
@@ -131,24 +169,24 @@ export function ConsultaHub({
                   onIniciarRetornoAvulso?.();
                   return;
                 }
-                onSelectModule?.(card.id);
+                handleSelectModule(card.id);
               }}
               className="group relative flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
             >
-              {pendingDot ? (
+              {statusDot ? (
                 <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5">
                   <span
                     tabIndex={0}
-                    aria-label={pendingDot.tooltip}
-                    className={`block animate-pulse rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${pendingDot.badgeClass}`}
+                    aria-label={statusDot.tooltip}
+                    className={`block animate-pulse rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${statusDot.badgeClass}`}
                   >
-                    Pendência
+                    {statusDot.label || 'Pendência'}
                   </span>
                   <span
                     role="tooltip"
-                    className={`pointer-events-none absolute right-0 top-6 z-20 hidden w-max max-w-[200px] whitespace-normal rounded-md border px-2 py-1 text-[11px] font-semibold leading-snug shadow-md group-hover:block group-focus-visible:block ${pendingDot.tooltipClass}`}
+                    className={`pointer-events-none absolute right-0 top-6 z-20 hidden w-max max-w-[200px] whitespace-normal rounded-md border px-2 py-1 text-[11px] font-semibold leading-snug shadow-md group-hover:block group-focus-visible:block ${statusDot.tooltipClass}`}
                   >
-                    {pendingDot.tooltip}
+                    {statusDot.tooltip}
                   </span>
                 </span>
               ) : null}
@@ -163,6 +201,16 @@ export function ConsultaHub({
           );
         })}
       </div>
+      {termosPendentes.resolucao?.clinicaSemTermosAtivos ? (
+        <p className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[13px] font-medium text-[#92400e]">
+          Nenhum termo cadastrado. Configure em Configurações → Clínica → Termos.
+        </p>
+      ) : null}
+      {!isRetorno && semVinculo.length > 0 ? (
+        <p className="text-[12px] text-[#94a3b8]">
+          Este procedimento não exige termo vinculado.
+        </p>
+      ) : null}
     </div>
   );
 }

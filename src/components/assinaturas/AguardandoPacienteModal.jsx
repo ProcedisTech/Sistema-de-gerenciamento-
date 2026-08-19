@@ -21,6 +21,7 @@ export function AguardandoPacienteModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [concluido, setConcluido] = useState(false);
+  const [recusado, setRecusado] = useState(false);
   const pollingRef = useRef(null);
 
   const metodoCodigo = escolha?.metodoCodigo ?? null;
@@ -35,6 +36,7 @@ export function AguardandoPacienteModal({
       setLoading(true);
       setError(null);
       setConcluido(false);
+      setRecusado(false);
       return;
     }
 
@@ -81,6 +83,23 @@ export function AguardandoPacienteModal({
           const data = await res.json();
           if (data.status === 'CONCLUIDO') {
             clearInterval(pollingRef.current);
+            let recusou = false;
+            const termoId = sessaoExternaPayload?.termoAssinaturaId;
+            if (termoId) {
+              try {
+                const taRes = await fetch(resolveApiUrl(`/api/v1/termos/assinaturas/${termoId}`), {
+                  credentials: 'include',
+                  headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
+                });
+                if (taRes.ok) {
+                  const ta = await taRes.json();
+                  recusou = ta.statusCodigo === 'RECUSADO' || Boolean(ta.recusadoEm);
+                }
+              } catch {
+                // parent still verifica o status jurídico
+              }
+            }
+            setRecusado(recusou);
             setConcluido(true);
             setTimeout(() => {
               if (onAssinaturaConcluida) onAssinaturaConcluida();
@@ -119,6 +138,15 @@ export function AguardandoPacienteModal({
 
         <div className="px-6 pb-8 text-center flex flex-col items-center">
           {concluido ? (
+            recusado ? (
+            <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-500">
+                <X className="h-10 w-10" strokeWidth={2.5} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Termo recusado</h3>
+              <p className="text-sm text-slate-500">O paciente recusou assinar o documento.</p>
+            </div>
+            ) : (
             <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-500">
                 <CheckCircle2 className="h-10 w-10" strokeWidth={2.5} />
@@ -126,6 +154,7 @@ export function AguardandoPacienteModal({
               <h3 className="text-xl font-bold text-slate-900">Assinatura Recebida!</h3>
               <p className="text-sm text-slate-500">O documento foi assinado com sucesso pelo paciente.</p>
             </div>
+            )
           ) : loading ? (
             <div className="flex flex-col items-center gap-4 py-8">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />

@@ -1,14 +1,36 @@
 import React from 'react';
 
-export function ConsultaEncerrarConfirmModal({ open, message, onCancel, onConfirm, finishingMode }) {
+export const COPY_ENCERRAR_SEM_TERMO =
+  'Há um procedimento selecionado que ainda não tem termo assinado. Se encerrar agora, ele não será registrado como realizado no prontuário.';
+
+export function ConsultaEncerrarConfirmModal({
+  open,
+  message,
+  onCancel,
+  onConfirm,
+  finishingMode,
+  procedimentoSemTermo = false,
+}) {
   if (!open) return null;
   const isBusy = finishingMode != null;
 
   return (
-    <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
+    <div
+      className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="encerrar-consulta-title"
+    >
       <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-6 shadow-2xl">
-        <h4 className="text-[16px] font-bold text-[#0f172a]">Encerrar ou Sair da consulta?</h4>
+        <h4 id="encerrar-consulta-title" className="text-[16px] font-bold text-[#0f172a]">
+          Encerrar ou Sair da consulta?
+        </h4>
         <p className="mt-2 text-[14px] text-[#475569]">{message}</p>
+        {procedimentoSemTermo ? (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] leading-relaxed text-amber-900">
+            {COPY_ENCERRAR_SEM_TERMO}
+          </p>
+        ) : null}
         <div className="mt-6 flex flex-col gap-3">
           <button
             type="button"

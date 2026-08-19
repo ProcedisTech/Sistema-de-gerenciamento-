@@ -195,6 +195,29 @@ export const useJourneyState = () => {
     });
   }, [activeProcedureIndex]);
 
+  const setProcedimentoDoCatalogo = useCallback((nome, catalogoId) => {
+    setProcedimentosSessao((prev) => {
+      const nextArr = [...prev];
+      const cur = nextArr[activeProcedureIndex] || {};
+      const nextNome = nome != null ? String(nome) : '';
+      const prevTrim = String(cur.nomeProcedimento || '').trim();
+      const nextTrim = nextNome.trim();
+      if (prevTrim !== nextTrim) {
+        queueMicrotask(() => {
+          setOrientacoesCarregadas(false);
+          setOrientacoesItens([]);
+        });
+      }
+      nextArr[activeProcedureIndex] = {
+        ...cur,
+        nomeProcedimento: nextNome,
+        nomeProcedimentoCatalogoId:
+          catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null,
+      };
+      return nextArr;
+    });
+  }, [activeProcedureIndex]);
+
   // ============ FOTOS ============
   const EVALUATION_PHOTO_MAX = 30;
   const [evaluationCapturedPhotos, setEvaluationCapturedPhotos] = useState([]);
@@ -278,6 +301,7 @@ export const useJourneyState = () => {
     setNomeProcedimento,
     nomeProcedimentoCatalogoId,
     setNomeProcedimentoCatalogoId,
+    setProcedimentoDoCatalogo,
     tipoAtendimento,
     setTipoAtendimento,
     procedimentoFeitoOrigemId,
