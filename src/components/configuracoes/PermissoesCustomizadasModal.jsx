@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Sparkles, Loader2 } from 'lucide-react';
 
 /**
@@ -10,7 +11,7 @@ export function PermissoesCustomizadasModal({ perfilNome, saving, onClose, onCri
   const [modo, setModo] = useState(null); // null | 'nomear'
   const [nomePerfil, setNomePerfil] = useState('');
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md"
       onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}
@@ -94,6 +95,7 @@ export function PermissoesCustomizadasModal({ perfilNome, saving, onClose, onCri
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

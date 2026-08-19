@@ -375,7 +375,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
   const logoSrcResolvido = imagemExibida ? resolveLogoSrc(imagemExibida) : '';
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-3xl space-y-6">
+    <form onSubmit={handleSubmit} className="mx-auto max-w-5xl space-y-6">
       {dis ? (
         <div
           role="status"
@@ -448,6 +448,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
             </>
           ) : null}
 
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* Card 1 — Identificação */}
           <div className="rounded-2xl border border-[#00a88e]/25 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
@@ -617,7 +618,9 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
               </div>
             </div>
           </div>
+          </div>
 
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* Card 3 — Endereço */}
           <div className="rounded-2xl border border-amber-200 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
@@ -812,6 +815,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                 />
               </div>
             </div>
+          </div>
           </div>
 
           {isAdmin ? (
