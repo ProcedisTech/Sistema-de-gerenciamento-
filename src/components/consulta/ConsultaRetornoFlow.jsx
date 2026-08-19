@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, ImageIcon, Loader2, Lock, RotateCcw, Trash2 } from 'lucide-react';
+import { Camera, ImageIcon, Loader2, Lock, RotateCcw, Trash2, ZoomIn, X } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { mapasApi, pacientesGaleriaApi, procedimentosApi } from '../../services/api.js';
 import { normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
 import { buildGrupoPontosVista, hydrateMapaFromGet } from '../../utils/procedimentoMapaPayload.js';
 import { VISTA_MAPA_APLICACAO_PADRAO } from '../../constants/vistasMapaAplicacao.js';
-import { FotoVistaCanvas } from '../journey/mapeamento/FotoVistaCanvas.jsx';
+import { FotoVistaCanvas, FotoVistaCanvasCore } from '../journey/mapeamento/FotoVistaCanvas.jsx';
+import { MapeamentoFullscreenOverlay } from '../journey/mapeamento/MapeamentoFullscreenOverlay.jsx';
 import { VistaAtivaHeader, VistaChipsBar } from '../journey/mapeamento/VistaChipsBar.jsx';
+import { ZoomableGalleryLightbox } from '../patients/ZoomableGalleryLightbox.jsx';
 
 const SATISFACAO_OPTS = [1, 2, 3, 4, 5];
 const SIMETRIA_OPTS = [
@@ -48,14 +50,18 @@ export function ConsultaRetornoFlow({
   pacienteId,
   procedimentoFeitoOrigemId,
   mapaRetornoState,
-  retornoAvaliacao = {},
-  setRetornoAvaliacao,
+  _retornoAvaliacao = {},
+  _setRetornoAvaliacao,
   houveRetoque = false,
   setHouveRetoque,
   evaluationCapturedPhotos = [],
   evaluationPhotoMax = 30,
   onEvaluationUploadFiles,
   onEvaluationRemovePhoto,
+  procedureCapturedPhotos = [],
+  onProcedureUploadFiles,
+  onProcedureRemovePhoto,
+  onProcedureOpenCamera,
   onConcluirRetorno,
   isConcluirBusy = false,
   pendingMapaCapture = null,
@@ -64,9 +70,18 @@ export function ConsultaRetornoFlow({
 }) {
   const toast = useToast();
   const uploadInputRef = useRef(null);
+  const uploadPreRef = useRef(null);
+  const uploadPosRef = useRef(null);
   const blobUrlsRef = useRef([]);
   const photos = evaluationCapturedPhotos || [];
-  const av = retornoAvaliacao || {};
+
+  const procedurePhotos = procedureCapturedPhotos || [];
+  const preRetoquePhotos = procedurePhotos.filter(
+    (p) => (p.meta?.categoria || 'antes') === 'antes',
+  );
+  const posRetoquePhotos = procedurePhotos.filter(
+    (p) => p.meta?.categoria === 'pos_imediato',
+  );
 
   const [parentLoading, setParentLoading] = useState(false);
   const [parentError, setParentError] = useState(null);
@@ -76,10 +91,9 @@ export function ConsultaRetornoFlow({
   const [parentFotosPorVista, setParentFotosPorVista] = useState({});
   const [parentPontosPorVista, setParentPontosPorVista] = useState({});
   const [vistaPai, setVistaPai] = useState(VISTA_MAPA_APLICACAO_PADRAO);
-
-  const patchAvaliacao = (patch) => {
-    setRetornoAvaliacao?.((prev) => ({ ...(prev || {}), ...patch }));
-  };
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [parentMapaFullscreen, setParentMapaFullscreen] = useState(false);
+  const [retornoFullscreenOpen, setRetornoFullscreenOpen] = useState(false);
 
   const handleImageUpload = (e) => {
     const files = e.target.files;
@@ -272,325 +286,436 @@ export function ConsultaRetornoFlow({
         <div>
           <h3 className="text-[18px] font-bold text-app-ink">Retorno</h3>
           <p className="text-[13px] font-medium text-[#64748b]">
-            Procedimento original + avaliação desta visita
+            Procedimento original + fotos e mapa desta visita
           </p>
         </div>
       </div>
 
       <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-2">
-        {/* Coluna esquerda — procedimento pai (A4 + B4) */}
-        <div className="flex min-h-0 flex-col rounded-2xl border border-[#e2e8f0] bg-white p-5">
-          <div className="mb-4 flex items-start justify-between gap-2">
-            <div>
-              <h4 className="text-[15px] font-bold text-[#0f172a]">Procedimento original</h4>
-              <p className="text-[12px] text-[#64748b]">Referência da sessão anterior</p>
+        {/* Coluna esquerda — procedimento pai + fotos do resultado */}
+        <div className="flex min-h-0 flex-col gap-6">
+          <div className="flex min-h-0 flex-col rounded-2xl border border-[#e2e8f0] bg-white p-5">
+            <div className="mb-4 flex items-start justify-between gap-2">
+              <div>
+                <h4 className="text-[15px] font-bold text-[#0f172a]">Procedimento original</h4>
+                <p className="text-[12px] text-[#64748b]">Referência da sessão anterior</p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#cbd5e1] bg-[#f8fafc] px-2.5 py-1 text-[11px] font-semibold text-[#64748b]">
+                <Lock className="h-3 w-3" aria-hidden />
+                Somente leitura
+              </span>
             </div>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#cbd5e1] bg-[#f8fafc] px-2.5 py-1 text-[11px] font-semibold text-[#64748b]">
-              <Lock className="h-3 w-3" aria-hidden />
-              Somente leitura
-            </span>
+
+            {!procedimentoFeitoOrigemId ? (
+              <p className="text-[13px] text-[#94a3b8]">Nenhum procedimento de origem vinculado.</p>
+            ) : parentLoading ? (
+              <div className="flex items-center gap-2 py-8 text-[13px] text-[#64748b]">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando procedimento original…
+              </div>
+            ) : parentError ? (
+              <p className="text-[13px] text-[#dc2626]">{parentError}</p>
+            ) : (
+              <>
+                <dl className="mb-4 space-y-2 text-[13px]">
+                  <div>
+                    <dt className="font-semibold text-[#64748b]">Procedimento</dt>
+                    <dd className="font-bold text-[#0f172a]">{nomeProcedimentoPai}</dd>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <dt className="font-semibold text-[#64748b]">Data</dt>
+                      <dd className="text-[#0f172a]">{formatDataHora(parentMeta?.horaInicio)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-[#64748b]">Profissional</dt>
+                      <dd className="text-[#0f172a]">
+                        {String(parentMeta?.profissionalNome || '').trim() || '—'}
+                      </dd>
+                    </div>
+                  </div>
+                  {parentMeta?.observacao ? (
+                    <div>
+                      <dt className="font-semibold text-[#64748b]">Observações</dt>
+                      <dd className="whitespace-pre-wrap text-[#0f172a]">{parentMeta.observacao}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+
+                <div className="mb-4 space-y-4">
+                  <p className="text-[12px] font-bold uppercase tracking-wide text-[#00a88e]">Fotos de referência</p>
+                  {FOTO_TIPOS_COLUNA.map(({ codigo, label }) => {
+                    const items = fotosPorTipo[codigo] || [];
+                    return (
+                      <div key={codigo}>
+                        <p className="mb-1.5 text-[12px] font-semibold text-[#64748b]">{label}</p>
+                        {items.length === 0 ? (
+                          <p className="text-[11px] text-[#94a3b8]">Sem fotos</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-3">
+                            {items.map((item) => {
+                              const imgUrl = item.thumbUrl || item.url;
+                              return (
+                                <button
+                                  key={item.serverId}
+                                  type="button"
+                                  onClick={() => {
+                                    if (imgUrl) {
+                                      setLightboxPhoto({
+                                        url: imgUrl,
+                                        alt: `${label} — ${nomeProcedimentoPai}`,
+                                        serverId: item.serverId,
+                                      });
+                                    }
+                                  }}
+                                  className="group relative h-28 w-28 sm:h-36 sm:w-36 overflow-hidden rounded-xl border border-[#cbd5e1] bg-[#f1f5f9] shadow-sm transition-all hover:border-[#00a88e] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#00a88e]"
+                                  title={`Clique para ampliar: ${label}`}
+                                >
+                                  {imgUrl ? (
+                                    <>
+                                      <img src={imgUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/0 transition-colors group-hover:bg-black/40">
+                                        <ZoomIn className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100 drop-shadow-md" />
+                                        <span className="text-[11px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 drop-shadow-md">
+                                          Ampliar
+                                        </span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[#94a3b8]">
+                                      <ImageIcon className="h-6 w-6" />
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {parentSemMapa ? (
+                  <p className="rounded-xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-6 text-center text-[13px] text-[#64748b]">
+                    Procedimento original sem mapa registrado.
+                  </p>
+                ) : (
+                  <>
+                    <VistaChipsBar
+                      vistasPreenchidas={vistasPaiPreenchidas}
+                      vistaAtual={vistaPai}
+                      onSelectVista={setVistaPai}
+                      countPontosVista={countPontosPai}
+                    />
+                    <div className="mt-3 min-h-0">
+                      <VistaAtivaHeader vistaAtual={vistaPai} />
+                      <FotoVistaCanvas
+                        readOnly
+                        showToolbar={false}
+                        vistaAtual={vistaPai}
+                        foto={parentFotosPorVista[vistaPai] ?? null}
+                        procedimentoArmado={procedimentoArmadoPai}
+                        pontosVista={gruposPontosPai}
+                        emptyTitle="Sem foto nesta vista"
+                        emptySubtitle="O mapa do procedimento original não possui imagem para esta vista."
+                        onRequestFullscreen={() => setParentMapaFullscreen(true)}
+                        className="border-0 p-0 shadow-none"
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
 
-          {!procedimentoFeitoOrigemId ? (
-            <p className="text-[13px] text-[#94a3b8]">Nenhum procedimento de origem vinculado.</p>
-          ) : parentLoading ? (
-            <div className="flex items-center gap-2 py-8 text-[13px] text-[#64748b]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando procedimento original…
-            </div>
-          ) : parentError ? (
-            <p className="text-[13px] text-[#dc2626]">{parentError}</p>
-          ) : (
-            <>
-              <dl className="mb-4 space-y-2 text-[13px]">
-                <div>
-                  <dt className="font-semibold text-[#64748b]">Procedimento</dt>
-                  <dd className="font-bold text-[#0f172a]">{nomeProcedimentoPai}</dd>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <dt className="font-semibold text-[#64748b]">Data</dt>
-                    <dd className="text-[#0f172a]">{formatDataHora(parentMeta?.horaInicio)}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-[#64748b]">Profissional</dt>
-                    <dd className="text-[#0f172a]">
-                      {String(parentMeta?.profissionalNome || '').trim() || '—'}
-                    </dd>
-                  </div>
-                </div>
-                {parentMeta?.observacao ? (
-                  <div>
-                    <dt className="font-semibold text-[#64748b]">Observações</dt>
-                    <dd className="whitespace-pre-wrap text-[#0f172a]">{parentMeta.observacao}</dd>
-                  </div>
-                ) : null}
-              </dl>
-
-              <div className="mb-4 space-y-3">
-                <p className="text-[12px] font-bold uppercase tracking-wide text-[#00a88e]">Fotos</p>
-                {FOTO_TIPOS_COLUNA.map(({ codigo, label }) => {
-                  const items = fotosPorTipo[codigo] || [];
-                  return (
-                    <div key={codigo}>
-                      <p className="mb-1.5 text-[12px] font-semibold text-[#64748b]">{label}</p>
-                      {items.length === 0 ? (
-                        <p className="text-[11px] text-[#94a3b8]">Sem fotos</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {items.map((item) => (
-                            <div
-                              key={item.serverId}
-                              className="h-14 w-14 overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f1f5f9]"
-                            >
-                              {item.thumbUrl ? (
-                                <img src={item.thumbUrl} alt="" className="h-full w-full object-cover" />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-[#94a3b8]">
-                                  <ImageIcon className="h-4 w-4" />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {parentSemMapa ? (
-                <p className="rounded-xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-6 text-center text-[13px] text-[#64748b]">
-                  Procedimento original sem mapa registrado.
-                </p>
-              ) : (
-                <>
-                  <VistaChipsBar
-                    vistasPreenchidas={vistasPaiPreenchidas}
-                    vistaAtual={vistaPai}
-                    onSelectVista={setVistaPai}
-                    countPontosVista={countPontosPai}
-                  />
-                  <div className="mt-3 min-h-0">
-                    <VistaAtivaHeader vistaAtual={vistaPai} />
-                    <FotoVistaCanvas
-                      readOnly
-                      showToolbar={false}
-                      vistaAtual={vistaPai}
-                      foto={parentFotosPorVista[vistaPai] ?? null}
-                      procedimentoArmado={procedimentoArmadoPai}
-                      pontosVista={gruposPontosPai}
-                      emptyTitle="Sem foto nesta vista"
-                      emptySubtitle="O mapa do procedimento original não possui imagem para esta vista."
-                      className="border-0 p-0 shadow-none"
-                    />
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Coluna direita — avaliação + retoque */}
-        <div className="flex min-h-0 flex-col">
-          <div className="mb-6 space-y-6 rounded-2xl border border-[#00a88e]/25 bg-white p-6">
-            <div>
-              <h4 className="mb-3 text-[15px] font-bold text-[#0f172a]">Avaliação</h4>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-2 text-[13px] font-bold text-[#00a88e]">Satisfação (1–5)</p>
-                  <div className="flex flex-wrap gap-2">
-                    {SATISFACAO_OPTS.map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => patchAvaliacao({ satisfacao: n })}
-                        className={`min-h-[40px] min-w-[40px] rounded-full px-3 text-[14px] font-bold transition-colors ${
-                          av.satisfacao === n
-                            ? 'bg-[#00a88e] text-white shadow-sm'
-                            : 'border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] hover:border-[#00a88e]/40'
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-[13px] font-bold text-[#00a88e]">Simetria</p>
-                  <div className="flex flex-wrap gap-2">
-                    {SIMETRIA_OPTS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => patchAvaliacao({ simetria: opt.value })}
-                        className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                          av.simetria === opt.value
-                            ? 'bg-[#00a88e] text-white'
-                            : 'border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] hover:border-[#00a88e]/40'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-[13px] font-bold text-[#00a88e]">Dor</p>
-                  <div className="flex flex-wrap gap-2">
-                    {DOR_OPTS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => patchAvaliacao({ dor: opt.value })}
-                        className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                          av.dor === opt.value
-                            ? 'bg-[#00a88e] text-white'
-                            : 'border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] hover:border-[#00a88e]/40'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] px-4 py-3">
+          {/* Fotos do Resultado (Posicionado na Esquerda) */}
+          <div className="rounded-2xl border border-[#cbd5e1] bg-white p-5">
+            <div className="mb-4 flex items-center justify-between gap-2">
               <div>
-                <p className="text-[14px] font-bold text-[#0f172a]">Houve retoque nesta visita?</p>
-                <p className="text-[12px] text-[#64748b]">
-                  Marque Sim para registrar mapa corretivo com foto nova desta visita
-                </p>
+                <h4 className="text-[15px] font-bold text-[#0f172a]">Foto do resultado</h4>
+                <p className="text-[12px] text-[#64748b]">Fotos do resultado final desta consulta de retorno</p>
               </div>
+              <span className="text-[12px] font-semibold text-[#64748b]">
+                {photos.length}/{evaluationPhotoMax}
+              </span>
+            </div>
+
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleImageUpload}
+            />
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {photos.map((ph, idx) => (
+                <div key={ph.url ? `${ph.url}_${idx}` : idx} className="min-w-0">
+                  <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
+                    <img src={ph.url} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => onEvaluationRemovePhoto?.(idx)}
+                      className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
+                      aria-label="Remover imagem"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              ))}
               <button
                 type="button"
-                role="switch"
-                aria-checked={houveRetoque}
-                onClick={() => setHouveRetoque?.(!houveRetoque)}
-                className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
-                  houveRetoque ? 'bg-[#00a88e]' : 'bg-[#cbd5e1]'
-                }`}
+                onClick={() => uploadInputRef.current?.click()}
+                className="col-span-2 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#cbd5e1] bg-[#fafafa] px-4 py-2 text-[#64748b] transition-colors active:border-[#00a88e]/50 active:bg-[#f0fdf9] active:text-[#00a88e] sm:col-span-1 sm:aspect-square sm:min-h-0 sm:hover:border-[#00a88e]/50 sm:hover:bg-[#f0fdf9] sm:hover:text-[#00a88e]"
               >
-                <span
-                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                    houveRetoque ? 'left-7' : 'left-1'
-                  }`}
-                />
+                <Camera className="h-6 w-6" strokeWidth={2} />
+                <span className="px-1 text-center text-[11px] font-semibold leading-tight">
+                  Upload de imagens
+                </span>
               </button>
             </div>
-          </div>
 
-          {houveRetoque ? (
-            <div className="mb-6 rounded-2xl border border-[#00a88e]/25 bg-white p-4">
-              <h4 className="mb-1 text-[15px] font-bold text-[#0f172a]">Mapa de retoque</h4>
-              <p className="mb-4 text-[12px] text-[#64748b]">
-                Tire ou envie uma foto nova desta visita e marque pontos e traços sobre ela.
+            {photos.length === 0 ? (
+              <p className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#94a3b8]">
+                <ImageIcon className="h-4 w-4 shrink-0" />
+                Registre fotos do resultado final deste retorno.
               </p>
-              {mapaRetornoState ? (
-                <>
-                  <VistaChipsBar
-                    vistasPreenchidas={
-                      retornoVistasPreenchidas.length
-                        ? retornoVistasPreenchidas
-                        : [retornoVistaAtual]
-                    }
-                    vistaAtual={retornoVistaAtual}
-                    onSelectVista={(v) => mapaRetornoState.setVistaAtual(v)}
-                    countPontosVista={mapaRetornoState.countPontosVista}
-                  />
-                  <div className="mt-3">
-                    <VistaAtivaHeader vistaAtual={retornoVistaAtual} />
-                    <FotoVistaCanvas
-                      vistaAtual={retornoVistaAtual}
-                      foto={retornoFotoAtual}
-                      procedimentoArmado={procedimentoArmadoPai}
-                      pontosVista={retornoGruposPontos}
-                      onAddPonto={mapaRetornoState.adicionarPonto}
-                      onEditarPonto={(_catId, vista, localId, patch) =>
-                        mapaRetornoState.editarPonto(vista, localId, patch)
-                      }
-                      onRemovePonto={(_catId, vista, localId) =>
-                        mapaRetornoState.removerPonto(vista, localId)
-                      }
-                      onRequestCapture={() => {
-                        onPrepareMapaCapture?.(retornoVistaAtual);
-                        toast.info(
-                          'Use o botão da câmera flutuante para capturar a foto desta vista.',
-                        );
-                      }}
-                      onRequestUpload={(file) => {
-                        if (!file) return;
-                        mapaRetornoState.setFotoVista(retornoVistaAtual, {
-                          displayUrl: URL.createObjectURL(file),
-                          blob: file,
-                          source: 'upload',
-                        });
-                      }}
-                      className="border-0 p-0 shadow-none"
-                    />
-                  </div>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h4 className="text-[13px] font-bold text-[#00a88e]">Foto do resultado</h4>
-            <span className="text-[12px] font-semibold text-[#64748b]">
-              {photos.length}/{evaluationPhotoMax}
-            </span>
+            ) : null}
           </div>
+        </div>
 
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={handleImageUpload}
-          />
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {photos.map((ph, idx) => (
-              <div key={ph.url ? `${ph.url}_${idx}` : idx} className="min-w-0">
-                <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
-                  <img src={ph.url} alt="" className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => onEvaluationRemovePhoto?.(idx)}
-                    className="absolute right-1 top-1 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md active:bg-[#b91c1c] sm:h-7 sm:w-7 sm:hover:bg-[#b91c1c]"
-                    aria-label="Remover imagem"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* Coluna direita — retoque + conclusão */}
+        <div className="flex min-h-0 flex-col">
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-[#00a88e]/25 bg-white p-6 shadow-sm">
+            <div>
+              <p className="text-[15px] font-bold text-[#0f172a]">Houve retoque nesta visita?</p>
+              <p className="text-[12px] text-[#64748b]">
+                Marque Sim para registrar fotos de retoque e mapa corretivo desta visita
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => uploadInputRef.current?.click()}
-              className="col-span-2 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#cbd5e1] bg-[#fafafa] px-4 py-2 text-[#64748b] transition-colors active:border-[#00a88e]/50 active:bg-[#f0fdf9] active:text-[#00a88e] sm:col-span-1 sm:aspect-square sm:min-h-0 sm:hover:border-[#00a88e]/50 sm:hover:bg-[#f0fdf9] sm:hover:text-[#00a88e]"
+              role="switch"
+              aria-checked={houveRetoque}
+              onClick={() => setHouveRetoque?.(!houveRetoque)}
+              className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${
+                houveRetoque ? 'bg-[#00a88e]' : 'bg-[#cbd5e1]'
+              }`}
             >
-              <Camera className="h-6 w-6" strokeWidth={2} />
-              <span className="px-1 text-center text-[11px] font-semibold leading-tight">
-                Upload de imagens
-              </span>
+              <span
+                className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  houveRetoque ? 'left-7' : 'left-1'
+                }`}
+              />
             </button>
           </div>
 
-          {photos.length === 0 ? (
-            <p className="mt-3 flex items-center gap-2 text-[12px] font-medium text-[#94a3b8]">
-              <ImageIcon className="h-4 w-4 shrink-0" />
-              Registre fotos do resultado final deste retorno.
-            </p>
+          {houveRetoque ? (
+            <div className="mb-6 space-y-6">
+              {/* Fotos de Retoque (Pré e Pós-imediato) */}
+              <div className="rounded-2xl border border-[#00a88e]/25 bg-white p-5 shadow-sm">
+                <h4 className="mb-1 text-[15px] font-bold text-[#0f172a]">Fotos do retoque</h4>
+                <p className="mb-4 text-[12px] text-[#64748b]">
+                  Registre fotos do paciente antes de aplicar o retoque e pós-imediato desta visita.
+                </p>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Pré-retoque (Antes) */}
+                  <div className="rounded-xl border border-[#cbd5e1] bg-[#f8fafc] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div>
+                        <h5 className="text-[13px] font-bold text-[#0f172a]">Pré-retoque (Antes)</h5>
+                        <p className="text-[11px] text-[#64748b]">Antes de aplicar o retoque</p>
+                      </div>
+                      <span className="text-[11px] font-semibold text-[#64748b]">
+                        {preRetoquePhotos.length} foto(s)
+                      </span>
+                    </div>
+
+                    <input
+                      ref={uploadPreRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) {
+                          onProcedureUploadFiles?.(e.target.files, 'antes');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+
+                    <div className="flex flex-wrap gap-2.5">
+                      {preRetoquePhotos.map((ph) => {
+                        const globalIdx = procedurePhotos.indexOf(ph);
+                        return (
+                          <div key={ph.url} className="group relative h-20 w-20 overflow-hidden rounded-xl border border-[#cbd5e1] bg-[#f1f5f9]">
+                            <img src={ph.url} alt="" className="h-full w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => onProcedureRemovePhoto?.(globalIdx)}
+                              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md hover:bg-[#b91c1c]"
+                              title="Remover foto"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() => onProcedureOpenCamera?.('antes')}
+                        className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-app-accent/40 bg-app-nav-active text-[#00a88e] hover:bg-[#e6f7f5] transition-colors"
+                        title="Tirar foto com a câmera"
+                      >
+                        <Camera className="h-5 w-5" />
+                        <span className="text-[10px] font-semibold">Câmera</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => uploadPreRef.current?.click()}
+                        className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#cbd5e1] bg-white text-[#64748b] hover:border-[#00a88e]/50 hover:bg-[#f0fdf9] hover:text-[#00a88e] transition-colors"
+                        title="Upload de arquivo de imagem"
+                      >
+                        <ImageIcon className="h-5 w-5" />
+                        <span className="text-[10px] font-semibold">Arquivo</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pós-imediato (Retoque) */}
+                  <div className="rounded-xl border border-[#cbd5e1] bg-[#f8fafc] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div>
+                        <h5 className="text-[13px] font-bold text-[#0f172a]">Pós-imediato (Retoque)</h5>
+                        <p className="text-[11px] text-[#64748b]">Logo após aplicar o retoque</p>
+                      </div>
+                      <span className="text-[11px] font-semibold text-[#64748b]">
+                        {posRetoquePhotos.length} foto(s)
+                      </span>
+                    </div>
+
+                    <input
+                      ref={uploadPosRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) {
+                          onProcedureUploadFiles?.(e.target.files, 'pos_imediato');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+
+                    <div className="flex flex-wrap gap-2.5">
+                      {posRetoquePhotos.map((ph) => {
+                        const globalIdx = procedurePhotos.indexOf(ph);
+                        return (
+                          <div key={ph.url} className="group relative h-20 w-20 overflow-hidden rounded-xl border border-[#cbd5e1] bg-[#f1f5f9]">
+                            <img src={ph.url} alt="" className="h-full w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => onProcedureRemovePhoto?.(globalIdx)}
+                              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#dc2626] text-white shadow-md hover:bg-[#b91c1c]"
+                              title="Remover foto"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() => onProcedureOpenCamera?.('pos_imediato')}
+                        className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-app-accent/40 bg-app-nav-active text-[#00a88e] hover:bg-[#e6f7f5] transition-colors"
+                        title="Tirar foto com a câmera"
+                      >
+                        <Camera className="h-5 w-5" />
+                        <span className="text-[10px] font-semibold">Câmera</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => uploadPosRef.current?.click()}
+                        className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#cbd5e1] bg-white text-[#64748b] hover:border-[#00a88e]/50 hover:bg-[#f0fdf9] hover:text-[#00a88e] transition-colors"
+                        title="Upload de arquivo de imagem"
+                      >
+                        <ImageIcon className="h-5 w-5" />
+                        <span className="text-[10px] font-semibold">Arquivo</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mapa de retoque */}
+              <div className="rounded-2xl border border-[#00a88e]/25 bg-white p-5 shadow-sm">
+                <h4 className="mb-1 text-[15px] font-bold text-[#0f172a]">Mapa de retoque</h4>
+                <p className="mb-4 text-[12px] text-[#64748b]">
+                  Tire ou envie uma foto nova desta visita e marque pontos e traços sobre ela.
+                </p>
+                {mapaRetornoState ? (
+                  <>
+                    <VistaChipsBar
+                      vistasPreenchidas={
+                        retornoVistasPreenchidas.length
+                          ? retornoVistasPreenchidas
+                          : [retornoVistaAtual]
+                      }
+                      vistaAtual={retornoVistaAtual}
+                      onSelectVista={(v) => mapaRetornoState.setVistaAtual(v)}
+                      countPontosVista={mapaRetornoState.countPontosVista}
+                    />
+                    <div className="mt-3">
+                      <VistaAtivaHeader vistaAtual={retornoVistaAtual} />
+                      <FotoVistaCanvas
+                        previewMode={true}
+                        showToolbar={true}
+                        vistaAtual={retornoVistaAtual}
+                        foto={retornoFotoAtual}
+                        procedimentoArmado={procedimentoArmadoPai}
+                        pontosVista={retornoGruposPontos}
+                        onAddPonto={mapaRetornoState.adicionarPonto}
+                        onEditarPonto={(_catId, vista, localId, patch) =>
+                          mapaRetornoState.editarPonto(vista, localId, patch)
+                        }
+                        onRemovePonto={(_catId, vista, localId) =>
+                          mapaRetornoState.removerPonto(vista, localId)
+                        }
+                        onRequestCapture={() => {
+                          onPrepareMapaCapture?.(retornoVistaAtual);
+                          toast.info(
+                            'Use o botão da câmera flutuante para capturar a foto desta vista.',
+                          );
+                        }}
+                        onRequestUpload={(file) => {
+                          if (!file) return;
+                          mapaRetornoState.setFotoVista(retornoVistaAtual, {
+                            displayUrl: URL.createObjectURL(file),
+                            blob: file,
+                            source: 'upload',
+                          });
+                        }}
+                        onRequestFullscreen={() => setRetornoFullscreenOpen(true)}
+                        className="border-0 p-0 shadow-none"
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
           ) : null}
 
-          <div className="mt-8 flex justify-end border-t border-app-border pt-6">
+          <div className="mt-auto flex justify-end border-t border-app-border pt-6">
             <button
               type="button"
               onClick={() => onConcluirRetorno?.()}
@@ -602,6 +727,121 @@ export function ConsultaRetornoFlow({
           </div>
         </div>
       </div>
+
+      {/* Modal de Lightbox para foto de referência */}
+      {lightboxPhoto ? (
+        <div
+          className="fixed inset-0 z-[300] flex flex-col bg-black/90 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightboxPhoto.alt || 'Foto ampliada'}
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <div
+            className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 pb-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="min-w-0">
+              <h3 className="truncate text-[15px] font-bold text-white">{lightboxPhoto.alt}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLightboxPhoto(null)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              aria-label="Fechar"
+            >
+              <X className="h-5 w-5" strokeWidth={2.5} />
+            </button>
+          </div>
+          <div
+            className="relative mx-auto flex min-h-0 flex-1 items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ZoomableGalleryLightbox
+              url={lightboxPhoto.url}
+              alt={lightboxPhoto.alt}
+              pacienteId={pacienteId}
+              fotoId={lightboxPhoto.serverId}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal de Zoom/Inspeção em Tela Cheia do Mapa Original (Somente Leitura) */}
+      {parentMapaFullscreen ? (
+        <div
+          className="fixed inset-0 z-[300] flex flex-col bg-[#0f172a] p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Zoom do Mapa Original"
+          onClick={() => setParentMapaFullscreen(false)}
+        >
+          <div
+            className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 pb-3 border-b border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-[15px] font-bold text-white">
+                Mapa do procedimento original ({vistaPai})
+              </h3>
+              <p className="text-[12px] font-medium text-white/60">
+                Modo de visualização e zoom — Somente leitura
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setParentMapaFullscreen(false)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              aria-label="Fechar"
+            >
+              <X className="h-5 w-5" strokeWidth={2.5} />
+            </button>
+          </div>
+          <div
+            className="relative mx-auto flex h-[82vh] w-full max-w-6xl items-center justify-center pt-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <FotoVistaCanvasCore
+              readOnly={true}
+              vistaAtual={vistaPai}
+              foto={parentFotosPorVista[vistaPai] ?? null}
+              procedimentoArmado={procedimentoArmadoPai}
+              pontosVista={gruposPontosPai}
+              showToolbar={false}
+              fillViewport={true}
+              externalModo="mover"
+              className="h-full w-full"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Fullscreen Mapeamento de Retoque Overlay */}
+      {retornoFullscreenOpen ? (
+        <MapeamentoFullscreenOverlay
+          open={retornoFullscreenOpen}
+          vistaAtual={retornoVistaAtual}
+          foto={retornoFotoAtual}
+          procedimentoArmado={procedimentoArmadoPai}
+          hideProcedimentoPicker={true}
+          onArmar={() => {}}
+          procedimentosUsados={[]}
+          pontosVista={retornoGruposPontos}
+          gruposSessao={[]}
+          countPontosVista={mapaRetornoState?.countPontosVista?.(retornoVistaAtual) ?? 0}
+          onAddPonto={mapaRetornoState?.adicionarPonto}
+          onEditarPonto={(_catId, vista, localId, patch) =>
+            mapaRetornoState?.editarPonto(vista, localId, patch)
+          }
+          onRemovePonto={(_catId, vista, localId) =>
+            mapaRetornoState?.removerPonto(vista, localId)
+          }
+          onDesfazerUltimo={() => mapaRetornoState?.desfazerUltimoPonto?.(retornoVistaAtual)}
+          onClearVista={() => mapaRetornoState?.limparPontosVista?.(retornoVistaAtual)}
+          onRemoverFotoVista={() => mapaRetornoState?.removerFotoVista?.(retornoVistaAtual)}
+          onClose={() => setRetornoFullscreenOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

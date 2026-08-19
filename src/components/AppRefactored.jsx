@@ -2374,6 +2374,11 @@ function AppRefactoredInner() {
         dataRefSessao: toLocalISODate(new Date()),
         tipoFotoCodigo: 'DEPOIS',
       });
+      await uploadProcedureCapturedPhotos(
+        paciente,
+        [pid],
+        toLocalISODate(new Date()),
+      );
       await procedimentosApi.finalizar(pid);
       setConsultaModule(null);
       await finalizarAtendimentoNavegacao(sCpf, {
@@ -2390,16 +2395,14 @@ function AppRefactoredInner() {
   }, [
     finalizarAtendimentoNavegacao,
     iniciarProcedimentoRetorno,
-    journeyState.houveRetoque,
-    journeyState.procedimentoFeitoOrigemId,
-    journeyState.retornoAvaliacao,
-    journeyState.setObservacoesExecucao,
     mapaRetornoState,
     pacienteAtual?.cpf,
     resolvePacienteAtendimento,
     roleUserId,
     selectedPatientCpf,
     uploadEvaluationCapturedPhotos,
+    uploadProcedureCapturedPhotos,
+    journeyState,
     toast,
   ]);
 
@@ -2551,15 +2554,15 @@ function AppRefactoredInner() {
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
             const uploadsForThisPhoto = ids.map(async (pid) => {
               try {
-                const categoria = foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS;
+                const categoria = String(foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS).toLowerCase();
                 const tipoFotoCodigo =
-                  categoria === GALERIA_CATEGORIA.ANTES
+                  categoria === 'antes' || categoria === GALERIA_CATEGORIA.ANTES
                     ? 'ANTES'
-                    : categoria === GALERIA_CATEGORIA.MAPA
-                      ? 'MAPA'
-                      : categoria === GALERIA_CATEGORIA.DEPOIS
-                        ? 'POS_IMEDIATO'
-                        : null;
+                    : categoria === 'pos_imediato'
+                      ? 'POS_IMEDIATO'
+                      : categoria === 'mapa' || categoria === GALERIA_CATEGORIA.MAPA
+                        ? 'MAPA'
+                        : 'POS_IMEDIATO';
                 const uploadOpts = {
                   roleUserId: ridUpload,
                   procedimentoFeitoId: pid,
@@ -3707,6 +3710,13 @@ function AppRefactoredInner() {
                     evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
                     onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
+                    procedureCapturedPhotos={cameraState.procedureCapturedPhotos ?? []}
+                    onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
+                    onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
+                    onProcedureOpenCamera={(cat) => {
+                      if (cat) cameraState.setProcedureFotoCategoria(cat);
+                      cameraState.openPhotoModal();
+                    }}
                     onConcluirRetorno={handleConcluirRetorno}
                     isConcluirBusy={isSalvandoRetorno}
                     pendingMapaCapture={pendingMapaRetornoCapture}

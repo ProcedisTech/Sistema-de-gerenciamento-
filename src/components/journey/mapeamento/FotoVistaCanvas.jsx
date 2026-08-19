@@ -241,7 +241,10 @@ export function FotoVistaCanvasCore({
 
 
   const handlePointerDown = (e) => {
-    if (readOnly) return;
+    if (readOnly) {
+      if (onRequestFullscreen) onRequestFullscreen();
+      return;
+    }
 
     if (previewMode && onRequestFullscreen) {
       onRequestFullscreen();
@@ -573,7 +576,7 @@ export function FotoVistaCanvasCore({
             <TransformWrapper
               panning={{ disabled: modo !== 'mover' }}
               doubleClick={{ disabled: true }}
-              wheel={{ step: 0.05, smoothStep: 0.01 }}
+              wheel={{ disabled: modo !== 'mover', step: 0.05, smoothStep: 0.01 }}
               minScale={1}
               maxScale={5}
             >
@@ -582,7 +585,7 @@ export function FotoVistaCanvasCore({
                   <div
                     ref={containerRef}
 
-              className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${canMark ? 'cursor-crosshair' : ''} touch-none`}
+              className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${previewMode && onRequestFullscreen ? 'cursor-pointer' : canMark ? 'cursor-crosshair' : readOnly && onRequestFullscreen ? 'cursor-zoom-in' : ''} touch-none`}
               style={{
                 ...(effectiveAspect ? { aspectRatio: effectiveAspect } : {}),
                 ...(nativeMaxWidthPx ? { maxWidth: `${nativeMaxWidthPx}px` } : {}),
@@ -593,6 +596,33 @@ export function FotoVistaCanvasCore({
               onPointerCancel={handlePointerUpOrCancel}
               role="presentation"
             >
+              {readOnly && onRequestFullscreen ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestFullscreen();
+                  }}
+                  className="absolute right-3 top-3 z-[30] flex items-center gap-1.5 rounded-lg border border-white/20 bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-md backdrop-blur transition-colors hover:bg-slate-900 hover:border-white/40"
+                  title="Clique para abrir em tela cheia e dar zoom"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 text-[#00a88e]" />
+                  <span>Ampliar e dar zoom</span>
+                </button>
+              ) : previewMode && onRequestFullscreen ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestFullscreen();
+                  }}
+                  className="absolute right-3 top-3 z-[30] flex items-center gap-1.5 rounded-lg border border-app-accent/40 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] shadow-md backdrop-blur transition-all hover:bg-app-nav-active"
+                  title="Clique no mapa para abrir o mapeamento em tela cheia"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  <span>Abrir Mapeamento</span>
+                </button>
+              ) : null}
               <ProtectedPatientMedia
                 ref={imgRef}
                 interactive={true}
