@@ -188,7 +188,7 @@ export function BancoProcedimentosPanel() {
       ) : (
         <>
           {/* Desktop: tabela */}
-          <div className="hidden overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-[#e2e8f0] bg-white shadow-sm md:block">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-[#e2e8f0] bg-[#f8fafc]">

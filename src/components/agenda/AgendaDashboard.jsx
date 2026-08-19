@@ -720,9 +720,9 @@ export function AgendaDashboard({
         onSelectDay={(iso) => handleSelectDay(iso, true)}
       />
 
-      <div className="grid min-h-0 flex-1 flex-col gap-3 lg:max-[1199px]:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] min-[1200px]:max-[1439px]:grid-cols-[minmax(0,1fr)_minmax(400px,440px)] min-[1440px]:grid-cols-[minmax(0,7fr)_minmax(420px,480px)] 2xl:grid-cols-[minmax(0,1fr)_440px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         <section
-          className={`relative flex min-h-0 flex-col overflow-hidden md:max-lg:shrink-0 ${
+          className={`relative flex min-h-0 flex-col overflow-hidden md:max-lg:shrink-0 lg:min-w-0 lg:flex-1 ${
             agenda.viewMode === 'grid'
               ? 'flex-1 border-0 bg-transparent p-0 shadow-none md:max-lg:h-auto'
               : 'rounded-xl border border-[#E8E8E8] bg-white p-3 shadow-sm md:max-lg:h-[42vh]'
@@ -789,7 +789,7 @@ export function AgendaDashboard({
           </div>
         </section>
 
-        <aside className={`hidden min-h-0 lg:flex lg:flex-col ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}>
+        <aside className={`hidden min-h-0 shrink-0 lg:flex lg:w-[380px] lg:flex-col min-[1200px]:w-[440px] min-[1440px]:w-[480px] 4xl:w-[520px] ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}>
           <AgendaDayRail {...railProps} />
         </aside>
       </div>

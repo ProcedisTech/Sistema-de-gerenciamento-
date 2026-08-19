@@ -90,6 +90,7 @@ export function mapAgendaDtoToDashboardRow(dto) {
     corHex: '#00a88e',
     pacienteNome: dto.pacienteNome || (tipo === 'bloqueio' ? '' : 'Sem paciente'),
     pacienteId,
+    pacienteFotoUrl: dto.pacienteFotoUrl || '',
     telefone: '',
     procedimentoNome,
     catalogoProcedimentoSaudeId: catId,

@@ -2695,6 +2695,89 @@ function AppRefactoredInner() {
     ],
   );
 
+  const uploadProcedureCapturedPhotos = React.useCallback(
+    async (paciente, pidsArray, dataRefSessao, explicitFotos = null) => {
+      const ids = Array.isArray(pidsArray) ? pidsArray : [pidsArray].filter(Boolean);
+      if (!ids.length) return;
+
+      const ridUpload = roleUserId;
+      const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
+      const fotosProcedimento = explicitFotos || cameraState.procedureCapturedPhotos || [];
+      if (fotosProcedimento.length > 0 && paciente?.id && ridOk) {
+        const uploads = fotosProcedimento.map(async (foto) => {
+          try {
+            let fileToUpload = foto.blob;
+            if (!fileToUpload && foto.url) {
+              const resp = await fetch(foto.url);
+              const blob = await resp.blob();
+              fileToUpload = new File([blob], 'foto-procedimento.jpg', {
+                type: blob.type || 'image/jpeg',
+              });
+            }
+            if (!fileToUpload) return false;
+            const webp = await convertToWebP(fileToUpload, 0.85, 1920);
+            const uploadsForThisPhoto = ids.map(async (pid) => {
+              try {
+                const categoria = String(foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS).toLowerCase();
+                const tipoFotoCodigo =
+                  categoria === 'antes' || categoria === GALERIA_CATEGORIA.ANTES
+                    ? 'ANTES'
+                    : categoria === 'pos_imediato'
+                      ? 'POS_IMEDIATO'
+                      : categoria === 'mapa' || categoria === GALERIA_CATEGORIA.MAPA
+                        ? 'MAPA'
+                        : 'POS_IMEDIATO';
+                const uploadOpts = {
+                  roleUserId: ridUpload,
+                  procedimentoFeitoId: pid,
+                  legenda: formatGaleriaLegendaForUpload(
+                    categoria,
+                    journeyState.nomeProcedimento.trim() || 'Foto do procedimento'
+                  ),
+                  dataReferencia: dataRefSessao,
+                };
+                if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
+                await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
+                return true;
+              } catch (e) {
+                console.warn('Erro ao salvar foto para procedimento:', pid, e);
+                return false;
+              }
+            });
+            const photoResults = await Promise.all(uploadsForThisPhoto);
+            return photoResults.every(Boolean);
+          } catch (e) {
+            console.warn('Erro ao preparar foto:', e);
+            return false;
+          }
+        });
+        const results = await Promise.allSettled(uploads);
+        const sentPhotos = new Set(
+          fotosProcedimento.filter((_, idx) => results[idx].status === 'fulfilled' && results[idx].value === true)
+        );
+        const attempted = results.length;
+        const succeeded = sentPhotos.size;
+        if (succeeded > 0) {
+          // Filtro por referência: se fotosProcedimento veio de um fotosSnapshot de outra aba do lote,
+          // os objetos não existem no buffer ao vivo (de outra aba) e o filter é um no-op seguro.
+          cameraState.setProcedureCapturedPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
+        }
+        if (succeeded < attempted) {
+          toast.error(
+            succeeded === 0
+              ? 'Não foi possível enviar as fotos do procedimento. Elas continuam salvas para nova tentativa.'
+              : `${attempted - succeeded} foto(s) do procedimento não puderam ser enviadas e continuam salvas para nova tentativa.`
+          );
+        }
+      } else if (fotosProcedimento.length > 0 && paciente?.id && !ridOk) {
+        console.warn(
+          'Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.'
+        );
+      }
+    },
+    [cameraState, journeyState.nomeProcedimento, roleUserId, toast]
+  );
+
   const handleConcluirRetorno = React.useCallback(async () => {
     if (finishJourneyLockRef.current) return;
     finishJourneyLockRef.current = true;
@@ -2767,6 +2850,11 @@ function AppRefactoredInner() {
         dataRefSessao: toLocalISODate(new Date()),
         tipoFotoCodigo: 'DEPOIS',
       });
+      await uploadProcedureCapturedPhotos(
+        paciente,
+        [pid],
+        toLocalISODate(new Date()),
+      );
       const dtoFinalizar = await procedimentosApi.finalizar(pid);
       if (loteConcluiuPlano([dtoFinalizar])) {
         const escolha = await askPlanoConcluidoClinica(paciente);
@@ -2805,16 +2893,14 @@ function AppRefactoredInner() {
   }, [
     finalizarAtendimentoNavegacao,
     iniciarProcedimentoRetorno,
-    journeyState.houveRetoque,
-    journeyState.procedimentoFeitoOrigemId,
-    journeyState.retornoAvaliacao,
-    journeyState.setObservacoesExecucao,
     mapaRetornoState,
     pacienteAtual?.cpf,
     resolvePacienteAtendimento,
     roleUserId,
     selectedPatientCpf,
     uploadEvaluationCapturedPhotos,
+    uploadProcedureCapturedPhotos,
+    journeyState,
     toast,
     askPlanoConcluidoClinica,
     abrirAgendaRetornoClinica,
@@ -2954,88 +3040,7 @@ function AppRefactoredInner() {
     ]
   );
 
-  const uploadProcedureCapturedPhotos = React.useCallback(
-    async (paciente, pidsArray, dataRefSessao, explicitFotos = null) => {
-      const ids = Array.isArray(pidsArray) ? pidsArray : [pidsArray].filter(Boolean);
-      if (!ids.length) return;
 
-      const ridUpload = roleUserId;
-      const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
-      const fotosProcedimento = explicitFotos || cameraState.procedureCapturedPhotos || [];
-      if (fotosProcedimento.length > 0 && paciente?.id && ridOk) {
-        const uploads = fotosProcedimento.map(async (foto) => {
-          try {
-            let fileToUpload = foto.blob;
-            if (!fileToUpload && foto.url) {
-              const resp = await fetch(foto.url);
-              const blob = await resp.blob();
-              fileToUpload = new File([blob], 'foto-procedimento.jpg', {
-                type: blob.type || 'image/jpeg',
-              });
-            }
-            if (!fileToUpload) return false;
-            const webp = await convertToWebP(fileToUpload, 0.85, 1920);
-            const uploadsForThisPhoto = ids.map(async (pid) => {
-              try {
-                const categoria = foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS;
-                const tipoFotoCodigo =
-                  categoria === GALERIA_CATEGORIA.ANTES
-                    ? 'ANTES'
-                    : categoria === GALERIA_CATEGORIA.MAPA
-                      ? 'MAPA'
-                      : categoria === GALERIA_CATEGORIA.DEPOIS
-                        ? 'POS_IMEDIATO'
-                        : null;
-                const uploadOpts = {
-                  roleUserId: ridUpload,
-                  procedimentoFeitoId: pid,
-                  legenda: formatGaleriaLegendaForUpload(
-                    categoria,
-                    journeyState.nomeProcedimento.trim() || 'Foto do procedimento'
-                  ),
-                  dataReferencia: dataRefSessao,
-                };
-                if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
-                await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
-                return true;
-              } catch (e) {
-                console.warn('Erro ao salvar foto para procedimento:', pid, e);
-                return false;
-              }
-            });
-            const photoResults = await Promise.all(uploadsForThisPhoto);
-            return photoResults.every(Boolean);
-          } catch (e) {
-            console.warn('Erro ao preparar foto:', e);
-            return false;
-          }
-        });
-        const results = await Promise.allSettled(uploads);
-        const sentPhotos = new Set(
-          fotosProcedimento.filter((_, idx) => results[idx].status === 'fulfilled' && results[idx].value === true)
-        );
-        const attempted = results.length;
-        const succeeded = sentPhotos.size;
-        if (succeeded > 0) {
-          // Filtro por referência: se fotosProcedimento veio de um fotosSnapshot de outra aba do lote,
-          // os objetos não existem no buffer ao vivo (de outra aba) e o filter é um no-op seguro.
-          cameraState.setProcedureCapturedPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
-        }
-        if (succeeded < attempted) {
-          toast.error(
-            succeeded === 0
-              ? 'Não foi possível enviar as fotos do procedimento. Elas continuam salvas para nova tentativa.'
-              : `${attempted - succeeded} foto(s) do procedimento não puderam ser enviadas e continuam salvas para nova tentativa.`
-          );
-        }
-      } else if (fotosProcedimento.length > 0 && paciente?.id && !ridOk) {
-        console.warn(
-          'Fotos do procedimento não enviadas: selecione o profissional (roleUserId) na barra de contexto.'
-        );
-      }
-    },
-    [cameraState, journeyState.nomeProcedimento, roleUserId, toast]
-  );
 
   const persistirEncerramentoConsulta = React.useCallback(
     async (pidsInput) => {
@@ -4201,6 +4206,13 @@ function AppRefactoredInner() {
                     evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
                     onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
+                    procedureCapturedPhotos={cameraState.procedureCapturedPhotos ?? []}
+                    onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
+                    onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
+                    onProcedureOpenCamera={(cat) => {
+                      if (cat) cameraState.setProcedureFotoCategoria(cat);
+                      cameraState.openPhotoModal();
+                    }}
                     onConcluirRetorno={handleConcluirRetorno}
                     isConcluirBusy={isSalvandoRetorno}
                     pendingMapaCapture={pendingMapaRetornoCapture}
@@ -4612,18 +4624,18 @@ function AppRefactoredInner() {
             />
             <div
               className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
-                  ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
+                  ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] 3xl:max-w-[min(100%,1960px)] 4xl:max-w-[min(100%,2200px)]'
                   : isAgendaView
-                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)]'
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-2 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)] 3xl:max-w-[min(100%,1880px)] 4xl:max-w-[min(100%,2080px)]'
                     : activeView === 'pacientes'
-                      ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
-                      : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
+                      ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] 3xl:max-w-[min(100%,2080px)] 4xl:max-w-[min(100%,2320px)] flex flex-col'
+                      : 'p-3 sm:p-6 md:p-8 max-w-[1600px] 3xl:max-w-[2000px]'
                 }`}
             >
               <div
                 className={
                   isAgendaView
-                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5'
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-3'
                     : activeView === 'pacientes'
                       ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
                       : activeView === 'configuracoes' || activeView === 'gestao-equipe'

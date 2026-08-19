@@ -22,7 +22,7 @@ export function AgendaKbdHint({ showEntrance = false, className = '' }) {
 
   return (
     <aside
-      className={`pointer-events-none absolute bottom-3.5 left-6 z-40 hidden items-center gap-3 font-mono text-[10.5px] text-ink-500 lg:flex ${enterClass} ${className}`}
+      className={`pointer-events-none hidden shrink-0 items-center gap-3 pl-6 pt-1 font-mono text-[10.5px] text-ink-500 lg:flex ${enterClass} ${className}`}
       aria-hidden
     >
       <HintGroup keys={['←', '→']} label="mês" />

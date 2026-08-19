@@ -73,10 +73,10 @@ export function AgendaTopbar({
   const crumbText = crumbProf ? `${crumbClinica} · ${crumbProf}` : crumbClinica;
 
   return (
-    <header className="flex shrink-0 flex-col gap-3 px-[22px] pt-[22px] lg:grid lg:grid-cols-[1fr_auto] lg:items-start lg:gap-4 lg:pt-3">
+    <header className="flex shrink-0 flex-col gap-3 px-[22px] pt-[22px] lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-4 lg:pt-2">
       <div className="flex min-w-0 flex-col gap-1 lg:gap-0.5">
         <h1
-          className="font-display text-[28px] font-bold leading-tight text-ink-900 lg:text-[34px]"
+          className="font-display text-[28px] font-bold leading-tight text-ink-900 lg:text-[24px]"
           style={{ fontVariationSettings: '"wdth" 90' }}
         >
           Agenda

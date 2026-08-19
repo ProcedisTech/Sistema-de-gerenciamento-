@@ -449,7 +449,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
   const fotoInputId = `${formId}-foto`;
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="mx-auto max-w-3xl space-y-6">
+    <form onSubmit={handleSubmit} noValidate className="mx-auto max-w-5xl space-y-6">
       <div className="mb-2 flex items-center gap-4">
         <div className="rounded-2xl border border-app-border bg-[#e6f7f5] p-3 text-[#00a88e]">
           <User className="h-7 w-7" strokeWidth={2.5} aria-hidden />
@@ -529,6 +529,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
             </div>
           </div>
 
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* Card 1 — Informações Pessoais */}
           <div className="rounded-2xl border border-[#00a88e]/25 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
@@ -723,7 +724,9 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
               onEstadoChange={setUf}
             />
           </div>
+          </div>
 
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* Card 3 — Cargo & Função */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 transition-colors">
             <div className="mb-4 flex items-center gap-3">
@@ -805,6 +808,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
                 </button>
               ) : null}
             </div>
+          </div>
           </div>
 
           <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t-[3px] border-[#00a88e]/15 pt-4 sm:flex-row sm:items-center">

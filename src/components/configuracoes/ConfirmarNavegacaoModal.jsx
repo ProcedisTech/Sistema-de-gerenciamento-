@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
 
 /**
@@ -6,7 +7,7 @@ import { AlertTriangle } from 'lucide-react';
  * pra navegar até a aba Perfis de Acesso.
  */
 export function ConfirmarNavegacaoModal({ onCancel, onConfirm }) {
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}
@@ -34,6 +35,7 @@ export function ConfirmarNavegacaoModal({ onCancel, onConfirm }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

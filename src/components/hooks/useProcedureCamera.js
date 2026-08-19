@@ -4,13 +4,15 @@ import { GALERIA_CATEGORIA } from '../../utils/pacienteGaleria.js';
 
 const STEP4_FOTO_CATEGORIAS = new Set([
   GALERIA_CATEGORIA.ANTES,
+  'pos_imediato',
   GALERIA_CATEGORIA.DEPOIS,
   GALERIA_CATEGORIA.MAPA,
   GALERIA_CATEGORIA.OUTRO,
 ]);
 
 function normalizeStep4FotoCategoria(categoria) {
-  return STEP4_FOTO_CATEGORIAS.has(categoria) ? categoria : GALERIA_CATEGORIA.ANTES;
+  const norm = String(categoria || '').trim().toLowerCase();
+  return STEP4_FOTO_CATEGORIAS.has(norm) ? norm : GALERIA_CATEGORIA.ANTES;
 }
 
 export function useProcedureCamera({

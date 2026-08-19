@@ -49,14 +49,14 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
               return (
                 <label
                   key={p.permissaoId}
-                  className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${checked ? 'border-teal-200 bg-teal-50/40 shadow-sm' : 'border-transparent hover:bg-slate-50'}`}
+                  className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${checked ? 'border-teal-200 bg-teal-50/40 shadow-sm' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
                 >
                   <div className="mt-0.5 text-teal-600 shrink-0">
-                    {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-300" />}
+                    {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-500" />}
                   </div>
                   <div className="flex flex-col">
-                    <span className={`text-[13px] font-bold ${checked ? 'text-teal-900' : 'text-slate-700'}`}>{p.nome}</span>
-                    {p.descricao && <span className="text-[11px] text-slate-500 leading-snug mt-1">{p.descricao}</span>}
+                    <span className={`text-[13px] font-bold ${checked ? 'text-teal-900' : 'text-slate-900'}`}>{p.nome}</span>
+                    {p.descricao && <span className="text-[11px] text-slate-600 leading-snug mt-1">{p.descricao}</span>}
                   </div>
                   <input
                     type="checkbox"
