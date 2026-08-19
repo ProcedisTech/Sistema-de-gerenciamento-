@@ -165,7 +165,7 @@ export function AgendaView({
           </div>
         </div>
 
-        <div className="w-full lg:w-[420px]">
+        <div className="w-full lg:w-[420px] 3xl:w-[460px] 4xl:w-[500px]">
           <div className="bg-white border border-app-border rounded-2xl p-3 sm:p-4 mt-2 lg:mt-0">
             <div className="flex items-center justify-between mb-2 sm:mb-3">
               <h4 className="text-[16px] font-bold text-[#0f172a]">{selectedDay}</h4>

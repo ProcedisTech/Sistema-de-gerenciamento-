@@ -143,7 +143,7 @@ function SectionHeader({
   );
 }
 
-function AgendaRow({ slot, agendaSchedule, onStartAttendance }) {
+function AgendaRow({ slot, agendaSchedule, onStartAttendance, getPatientInitials }) {
   const { isNivel1, canStartAnamnese } = usePapel();
   const nome = slot?.pacienteNome || 'Paciente';
   const hora = slot?.horaInicio ? String(slot.horaInicio).slice(0, 5) : '';
@@ -152,9 +152,13 @@ function AgendaRow({ slot, agendaSchedule, onStartAttendance }) {
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2.5">
       <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#e6f7f5] text-[11px] font-bold text-[#00a88e]">
-          {nome.charAt(0).toUpperCase()}
-        </div>
+        <PatientAvatar
+          patient={{ id: slot?.pacienteId, nome: slot?.pacienteNome, fotoPerfilUrl: slot?.pacienteFotoUrl }}
+          getPatientInitials={getPatientInitials}
+          className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e6f7f5]"
+          initialsClassName="text-[11px] font-bold"
+          spinnerClassName="h-3 w-3"
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold leading-snug text-[#0f172a]">{nome}</p>
           {procedimento ? (
@@ -329,7 +333,7 @@ export function PulseSidebar({
           ) : (
             <div className="flex flex-col gap-2">
               {agendamentos.slice(0, 5).map((slot) => (
-                <AgendaRow key={slot.id} slot={slot} agendaSchedule={agendaSchedule} onStartAttendance={onStartAttendance} />
+                <AgendaRow key={slot.id} slot={slot} agendaSchedule={agendaSchedule} onStartAttendance={onStartAttendance} getPatientInitials={getPatientInitials} />
               ))}
               {agendamentos.length > 5 ? (
                 <button

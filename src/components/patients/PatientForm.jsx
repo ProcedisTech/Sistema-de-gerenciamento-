@@ -361,7 +361,7 @@ export function PatientForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2 lg:grid-cols-3">
             <div
               className={`rounded-xl border bg-white p-4 transition-colors ${
                 hasPersonalSectionError ? 'border-red-300 bg-red-50/30' : 'border-slate-200'

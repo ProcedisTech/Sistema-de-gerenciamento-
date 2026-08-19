@@ -4086,18 +4086,18 @@ function AppRefactoredInner() {
             />
             <div
               className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
-                  ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)]'
+                  ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] 3xl:max-w-[min(100%,1960px)] 4xl:max-w-[min(100%,2200px)]'
                   : isAgendaView
-                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-4 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)]'
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-2 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)] 3xl:max-w-[min(100%,1880px)] 4xl:max-w-[min(100%,2080px)]'
                     : activeView === 'pacientes'
-                      ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] flex flex-col'
-                      : 'p-3 sm:p-6 md:p-8 max-w-[1600px]'
+                      ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] 3xl:max-w-[min(100%,2080px)] 4xl:max-w-[min(100%,2320px)] flex flex-col'
+                      : 'p-3 sm:p-6 md:p-8 max-w-[1600px] 3xl:max-w-[2000px]'
                 }`}
             >
               <div
                 className={
                   isAgendaView
-                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5'
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-3'
                     : activeView === 'pacientes'
                       ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
                       : activeView === 'configuracoes' || activeView === 'gestao-equipe'
