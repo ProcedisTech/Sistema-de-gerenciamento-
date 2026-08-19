@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { UserPlus, X, Loader2, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorToastMessage, equipeApi } from '../../services/api';
@@ -252,7 +253,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
       : 'border-slate-200 focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10'
   }`;
 
-  return (
+  return createPortal(
     <>
     <div
       className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]"
@@ -631,6 +632,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
         onConfirm={confirmarEditarNivel}
       />
     )}
-    </>
+    </>,
+    document.body
   );
 }

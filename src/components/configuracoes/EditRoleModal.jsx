@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Edit2, X, Loader2, Eye, EyeOff, MapPin, Phone, Stethoscope, Shield, ExternalLink } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorToastMessage, equipeApi } from '../../services/api';
@@ -201,7 +202,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
       : 'border-slate-200 focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10'
   }`;
 
-  return (
+  return createPortal(
     <>
     <div
       className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-slate-900/60 sm:p-4 md:p-6 backdrop-blur-md"
@@ -619,6 +620,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
         onConfirm={confirmarEditarPerfil}
       />
     )}
-    </>
+    </>,
+    document.body
   );
 }

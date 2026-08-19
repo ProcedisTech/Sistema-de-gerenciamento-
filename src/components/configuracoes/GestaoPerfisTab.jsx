@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Settings2, Plus, Edit2, Trash2, Shield, Crown, Loader2, X } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorDetail } from '../../services/api';
@@ -148,7 +149,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
         const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
         setEditingPerfil(null);
         setCargoPreenchimento('');
-        setFormData({ nome: '', descricao: '' });
+        setFormData({ nome: perfil.nome || '', descricao: perfil.descricao || '' });
         setSelectedPermissoes(permissoesAtuais);
         setPerfilBaseCriacao(perfil.nome);
         setWizardStep(1);
@@ -169,7 +170,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       setPerfilEscolha(null);
       setEditingPerfil(null);
       setCargoPreenchimento('');
-      setFormData({ nome: nomeNovo, descricao: '' });
+      setFormData({ nome: nomeNovo, descricao: perfilOrigem.descricao || '' });
       setSelectedPermissoes(permissoesAtuais);
       setPerfilBaseCriacao(perfilOrigem.nome);
       setWizardStep(1);
@@ -179,15 +180,24 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     }
   };
 
-  // Preenche os checkboxes automaticamente com a norma do Nível global equivalente ao cargo
-  // escolhido (mesmo mapeamento já usado no Convidar/Editar Membro). O usuário pode editar
-  // livremente depois — é só um ponto de partida.
+  // Preenche Nome/Descrição e os checkboxes automaticamente com a norma do Nível global
+  // equivalente ao cargo escolhido (mesmo mapeamento já usado no Convidar/Editar Membro).
+  // Só sugere Nome/Descrição se o usuário ainda não tiver digitado nada — não sobrescreve
+  // o que ele já preencheu. O usuário pode editar tudo livremente depois.
   const handleCargoChange = async (cargoId) => {
     setCargoPreenchimento(cargoId);
     if (!cargoId) return;
     const cargo = (roles || []).find(r => String(r.id) === String(cargoId));
     if (!cargo) return;
     const perfilPresetId = getPresetProfileId(cargo.nome, perfisAcesso);
+    const perfilPreset = perfilPresetId ? (perfisAcesso || []).find(p => String(p.id) === String(perfilPresetId)) : null;
+    const cargoLabel = formatCargoLabel(cargo.nome);
+
+    setFormData(prev => ({
+      nome: prev.nome.trim() ? prev.nome : cargoLabel,
+      descricao: prev.descricao.trim() ? prev.descricao : (perfilPreset?.descricao || `Acesso equivalente ao cargo de ${cargoLabel}.`)
+    }));
+
     if (!perfilPresetId) return;
     setLoadingPermissoes(true);
     try {
@@ -423,9 +433,9 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
         </div>
       </div>
 
-      {showModal && (
+      {showModal && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-4xl bg-white rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-4xl bg-white rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-4 shrink-0">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">
@@ -458,7 +468,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
 
             <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0">
               {wizardStep === 1 ? (
-                <div className="w-full max-w-md mx-auto space-y-4 py-2 flex-1">
+                <div className="w-full max-w-md mx-auto space-y-4 py-2 flex-1 min-h-0 overflow-y-auto">
                   {!editingPerfil && (
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Preencher a partir do Cargo</label>
@@ -548,10 +558,11 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showDeleteModal && perfilToDelete && (
+      {showDeleteModal && perfilToDelete && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md">
           <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center">
             <div className="h-14 w-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
@@ -583,7 +594,8 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {perfilEscolha && (
