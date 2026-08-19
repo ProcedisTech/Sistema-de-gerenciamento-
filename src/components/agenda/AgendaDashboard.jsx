@@ -494,10 +494,12 @@ export function AgendaDashboard({
         isAgendaRetorno:
           String(appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '')
             .toLowerCase() === 'retorno',
+        planejamentoItemId: appointment.planejamentoItemId ?? null,
         lote: items.map(a => ({
           agendaId: a.id || a.agendaId,
           procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
           catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+          planejamentoItemId: a.planejamentoItemId ?? null,
         })),
       });
       return;

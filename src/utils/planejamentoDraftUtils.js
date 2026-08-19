@@ -53,6 +53,23 @@ export function normalizePlanoItemIdMap(raw) {
  * Resolve planejamentoItemId para um procedimento no save de agenda.
  * Fallback: mapa por catálogo → único valor do mapa (1 proc) → vínculo explícito.
  */
+/** Mapa catálogo → item de plano a partir das options de iniciar atendimento (slot/lote). */
+export function itemIdByCatalogoFromAttendanceOptions(options = {}) {
+  const out = {};
+  const add = (catRaw, itemRaw) => {
+    const cat = catRaw != null ? String(catRaw).trim() : '';
+    const item = itemRaw != null ? String(itemRaw).trim() : '';
+    if (cat && item) out[cat] = item;
+  };
+  add(options.catalogoProcedimentoSaudeId, options.planejamentoItemId);
+  if (Array.isArray(options.lote)) {
+    for (const row of options.lote) {
+      add(row?.catalogoProcedimentoSaudeId, row?.planejamentoItemId);
+    }
+  }
+  return out;
+}
+
 export function resolvePlanejamentoItemIdForCatalogo(catalogoProcedimentoSaudeId, mapa, vinculoExplicito) {
   const catId = String(catalogoProcedimentoSaudeId ?? '').trim();
   const map = normalizePlanoItemIdMap(mapa);

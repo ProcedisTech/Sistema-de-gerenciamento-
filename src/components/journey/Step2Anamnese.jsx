@@ -291,12 +291,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       setLoadingHistoricoPaciente(false);
       return;
     }
-    console.debug('[Step2Anamnese] hydrate', {
-      pacienteId,
-      draftPacienteId: savedAnamneseState?.pacienteId,
-      draftValido: savedAnamneseState?.pacienteId === pacienteId,
-      historicoLen: historicoPaciente?.length,
-    });
     let cancelled = false;
     setLoadingHistoricoPaciente(true);
     anamneseApi

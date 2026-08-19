@@ -35,6 +35,64 @@ export function procedimentoBloqueadoPorTermos(resolucao) {
   return temFaltantes(resolucao);
 }
 
+function catalogoIdDoItemSessao(item) {
+  const a = item?.catalogoProcedimentoSaudeId != null ? String(item.catalogoProcedimentoSaudeId).trim() : '';
+  const b = item?.nomeProcedimentoCatalogoId != null ? String(item.nomeProcedimentoCatalogoId).trim() : '';
+  return a || b || '';
+}
+
+/**
+ * PF desta sessão só conta para o catálogo gravado na mesma linha.
+ * Sem catálogo na linha ou sem id → null (gate permanece).
+ */
+export function pfIdNestaSessaoParaCatalogo(catalogoId, procedimentosSessao) {
+  const cat = catalogoId != null ? String(catalogoId).trim() : '';
+  if (!cat || !Array.isArray(procedimentosSessao)) return null;
+  for (const item of procedimentosSessao) {
+    if (!item) continue;
+    const itemCat = catalogoIdDoItemSessao(item);
+    if (!itemCat || itemCat !== cat) continue;
+    const pid = item.id != null ? String(item.id).trim() : '';
+    if (pid) return pid;
+  }
+  return null;
+}
+
+/** Faltantes só bloqueiam se ainda não existe PF deste catálogo na sessão. */
+export function bloqueioExecucaoTermos({ resolucao, pfIdNestaSessao } = {}) {
+  const pf = pfIdNestaSessao != null ? String(pfIdNestaSessao).trim() : '';
+  if (pf) return false;
+  return temFaltantes(resolucao);
+}
+
+/** Grava PF + catálogo do POST na mesma linha; nunca usa índice de lote de IDs. */
+export function sessaoComPfDoCatalogo(procedimentosSessao, catalogoId, pfId, activeIndex = 0) {
+  const cat = catalogoId != null ? String(catalogoId).trim() : '';
+  const id = pfId != null ? String(pfId).trim() : '';
+  const prev = Array.isArray(procedimentosSessao) ? procedimentosSessao.slice() : [];
+  if (!cat || !id) return prev;
+  const patch = {
+    id,
+    nomeProcedimentoCatalogoId: cat,
+    catalogoProcedimentoSaudeId: cat,
+  };
+  const idx = prev.findIndex((item) => catalogoIdDoItemSessao(item) === cat);
+  if (idx >= 0) {
+    prev[idx] = { ...prev[idx], ...patch };
+    return prev;
+  }
+  const ai = Number.isInteger(activeIndex) && activeIndex >= 0 ? activeIndex : 0;
+  const active = prev[ai] || {};
+  const activeCat = catalogoIdDoItemSessao(active);
+  if (!activeCat || activeCat === cat) {
+    while (prev.length <= ai) prev.push({});
+    prev[ai] = { ...prev[ai], ...patch };
+    return prev;
+  }
+  prev.push(patch);
+  return prev;
+}
+
 /**
  * Encerrar administrativo (modal do hub/footer) pode sair mesmo com termo pendente.
  * Finalizar o ato clínico (orientações / jornada) continua abortando.

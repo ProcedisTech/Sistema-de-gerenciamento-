@@ -78,6 +78,7 @@ import {
   normalizePlanoItemIdMap,
   resolvePlanejamentoItemIdForCatalogo,
 } from '../../utils/planejamentoDraftUtils.js';
+import { resolveAgendaCreateModalPatch } from '../../utils/agendaCreateModalOpts.js';
 import {
   ALL_STATUS_FILTERS,
   countAppointmentsByStatusBucket,
@@ -1971,16 +1972,14 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       const paiPreselecionado = String(opts.procedimentoFeitoOrigemId ?? '').trim();
       const precisaCarregarRaizes = Boolean(opts.modoRetorno) && !paiPreselecionado;
       const isModoRetorno = Boolean(opts.modoRetorno);
+      const modalPatch = resolveAgendaCreateModalPatch(opts, { catIds, baseData: base.data });
       setForm({
         ...base,
         pacienteId: String(patient.id),
         pacienteNome: patient.nome || '',
         telefone: patient.telefone || '',
         procedimentoNome: '',
-        catalogoProcedimentoSaudeIds: catIds,
-        tipoAtendimento: isModoRetorno ? TIPO_ATENDIMENTO_RETORNO : TIPO_ATENDIMENTO_PROCEDIMENTO,
-        tipoAtendimentoLocked: isModoRetorno,
-        agendamentoTipoRetorno: isModoRetorno,
+        ...modalPatch,
         retornoPaiLocked: isModoRetorno && Boolean(paiPreselecionado),
         procedimentoFeitoOrigemId: paiPreselecionado,
         procedimentosFeitosRaiz: [],

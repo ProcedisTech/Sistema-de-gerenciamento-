@@ -61,7 +61,7 @@ import {
   termosApi,
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
-import { isRealUuid } from '../utils/planejamentoDraftUtils.js';
+import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
 import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
@@ -84,7 +84,7 @@ import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
 import { TermoBloqueioModal } from './termos/TermoBloqueioModal.jsx';
-import { abortarEncerrarPorTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, deveCriarProcedimentoNoEncerrar, idsFilaExigida, parseTermosBloqueioError, procedimentoBloqueadoPorTermos, temFaltantes, titulosFaltantes } from '../utils/termoResolucao.js';
+import { abortarEncerrarPorTermos, bloqueioExecucaoTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, deveCriarProcedimentoNoEncerrar, idsFilaExigida, parseTermosBloqueioError, pfIdNestaSessaoParaCatalogo, sessaoComPfDoCatalogo, temFaltantes, titulosFaltantes } from '../utils/termoResolucao.js';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -111,6 +111,11 @@ import {
   getEncerrarConsultaMessage,
 } from './consulta';
 import { PlanosTab } from './planos';
+import { PlanoConcluidoClinicaModal } from './planos/PlanoConcluidoClinicaModal.jsx';
+import {
+  aplicarCenaAntesDoPlanoConcluido,
+  loteConcluiuPlano,
+} from './planos/planoConcluidoClinica.js';
 import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
 import {
   normalizeOrientacoesTemplateResponse,
@@ -120,6 +125,7 @@ import {
 // Utilitarios
 import { getPatientInitials } from './utils';
 import { toDateKey } from '../utils/agendaDateUtils';
+import { TIPO_ATENDIMENTO_CONSULTA } from '../utils/agendaTipoProcedimento.js';
 import {
   MARGEM_TECNICA_MIN,
   parseSlotLocalDateTime,
@@ -326,6 +332,12 @@ function AppRefactoredInner() {
   const [loteProcedimentosFeitosIds, setLoteProcedimentosFeitosIds] = React.useState([]);
   /** Array com IDs das assinaturas persistidas no Step 3 (para vincular ao procedimento no finalizar). */
   const [assinaturasRealizadasIds, setAssinaturasRealizadasIds] = React.useState([]);
+  const planoConcluidoResolverRef = useRef(null);
+  const [planoConcluidoModal, setPlanoConcluidoModal] = useState({
+    open: false,
+    pacienteNome: '',
+    paciente: null,
+  });
 
   const handleTermoAssinaturaSalva = React.useCallback((assinaturaObj) => {
     if (assinaturaObj?.id && assinaturaObj.statusCodigo === 'ASSINADO') {
@@ -344,6 +356,7 @@ function AppRefactoredInner() {
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [consultaModule, setConsultaModule] = React.useState(null);
+  const [alertasClinicosRefreshKey, setAlertasClinicosRefreshKey] = React.useState(0);
   const [termoBloqueio, setTermoBloqueio] = React.useState({
     open: false,
     nomeProcedimento: '',
@@ -518,6 +531,50 @@ function AppRefactoredInner() {
         '',
     };
   }, []);
+
+  const askPlanoConcluidoClinica = React.useCallback((paciente) => {
+    return new Promise((resolve) => {
+      aplicarCenaAntesDoPlanoConcluido({
+        setEncerrarConsultaOpen,
+        setFinishingMode,
+      });
+      planoConcluidoResolverRef.current = resolve;
+      setPlanoConcluidoModal({
+        open: true,
+        pacienteNome: paciente?.nome || '',
+        paciente,
+      });
+    });
+  }, []);
+
+  const closePlanoConcluidoModal = React.useCallback((escolha) => {
+    const resolver = planoConcluidoResolverRef.current;
+    planoConcluidoResolverRef.current = null;
+    setPlanoConcluidoModal({ open: false, pacienteNome: '', paciente: null });
+    resolver?.(escolha);
+  }, []);
+
+  const abrirAgendaRetornoClinica = React.useCallback(
+    (paciente) => {
+      const snapshot = buildAgendaPacienteFromRecord(paciente);
+      if (!snapshot) return;
+      setActiveView('agenda');
+      agendaSchedule.openCreateModalForPatient(snapshot, {
+        tipoAtendimento: TIPO_ATENDIMENTO_CONSULTA,
+        semDataInicial: true,
+        profissionalRoleUserId: roleUserId,
+      });
+    },
+    [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, setActiveView],
+  );
+
+  const handlePlanoConcluidoAposBaixa = React.useCallback(
+    async (paciente) => {
+      const escolha = await askPlanoConcluidoClinica(paciente);
+      if (escolha === 'aceitar') abrirAgendaRetornoClinica(paciente);
+    },
+    [askPlanoConcluidoClinica, abrirAgendaRetornoClinica],
+  );
 
   const handleAgendarPlanoItem = React.useCallback(
     (paciente, item, onSaved) => {
@@ -750,6 +807,31 @@ function AppRefactoredInner() {
 
   const exigirFilaTermos = !journeyState.isAgendaRetorno || Boolean(journeyState.houveRetoque);
 
+  const pfIdCatalogoAtivo = pfIdNestaSessaoParaCatalogo(
+    journeyState.nomeProcedimentoCatalogoId,
+    journeyState.procedimentosSessao,
+  );
+  const execucaoBloqueadaPorTermos = bloqueioExecucaoTermos({
+    resolucao: termosExecucaoBloqueio.resolucao,
+    pfIdNestaSessao: pfIdCatalogoAtivo,
+  });
+
+  const persistirPfSessao = React.useCallback((catalogoId, pfId) => {
+    const cat = catalogoId != null ? String(catalogoId).trim() : '';
+    const id = pfId != null ? String(pfId).trim() : '';
+    if (!cat || !id) return;
+    journeyState.setProcedimentosSessao((prev) => {
+      const base = Array.isArray(prev) && prev.length > 0 ? prev : (procedimentosLote || []);
+      return sessaoComPfDoCatalogo(base, cat, id, journeyState.activeProcedureIndex);
+    });
+  }, [journeyState, procedimentosLote]);
+
+  const appendLotePfId = React.useCallback((pfId) => {
+    const id = pfId != null ? String(pfId).trim() : '';
+    if (!id) return;
+    setLoteProcedimentosFeitosIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }, []);
+
   const validarTermosDoCatalogo = React.useCallback(
     async (catalogoId, nomeProc, { abrirModal = true } = {}) => {
       if (!exigirFilaTermos) {
@@ -759,6 +841,9 @@ function AppRefactoredInner() {
       const cat = catalogoId != null ? String(catalogoId).trim() : '';
       if (!cat || !pacienteAtual?.id) {
         setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
+        return true;
+      }
+      if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) {
         return true;
       }
       try {
@@ -785,16 +870,18 @@ function AppRefactoredInner() {
       }
       return true;
     },
-    [exigirFilaTermos, pacienteAtual?.id, journeyState.nomeProcedimento],
+    [exigirFilaTermos, pacienteAtual?.id, journeyState.nomeProcedimento, journeyState.procedimentosSessao],
   );
 
-  const execucaoBloqueadaPorTermos = procedimentoBloqueadoPorTermos(termosExecucaoBloqueio.resolucao);
   const termosExecucaoBloqueioRef = React.useRef(termosExecucaoBloqueio);
   termosExecucaoBloqueioRef.current = termosExecucaoBloqueio;
 
   const garantirTermosAntesDeIniciar = React.useCallback(
     async (catalogoId, nomeProc) => {
       const cat = catalogoId != null ? String(catalogoId).trim() : '';
+      if (cat && pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) {
+        return true;
+      }
       const cached = termosExecucaoBloqueioRef.current;
       if (cat && cached.catalogoId && String(cached.catalogoId) === cat && cached.resolucao) {
         if (temFaltantes(cached.resolucao)) {
@@ -809,13 +896,14 @@ function AppRefactoredInner() {
       }
       return validarTermosDoCatalogo(catalogoId, nomeProc);
     },
-    [validarTermosDoCatalogo, journeyState.nomeProcedimento],
+    [validarTermosDoCatalogo, journeyState.nomeProcedimento, journeyState.procedimentosSessao],
   );
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || consultaModule !== 'procedimento') return;
     const cat = journeyState.nomeProcedimentoCatalogoId;
     if (!cat) return;
+    if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) return;
     void validarTermosDoCatalogo(cat, journeyState.nomeProcedimento, { abrirModal: false });
     // Revalida ao voltar da aba Termos; o select já faz o GET na escolha.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só troca de módulo
@@ -905,6 +993,14 @@ function AppRefactoredInner() {
     prevJourneyPacienteIdRef.current = newId;
     if (prevId === undefined) return; // primeiro mount — nao resetar
     if (prevId === newId) return; // mesmo paciente (ex: lista atualizou)
+    // Primeiro resolve do paciente depois de Iniciar (Agenda → consulta): não apagar agenda/catálogo/anamnese.
+    if (
+      prevId == null &&
+      newId != null &&
+      (activeView === 'consulta' || consultaModule != null)
+    ) {
+      return;
+    }
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
     journeyState.setStep2AnamneseDraft({
@@ -1405,6 +1501,26 @@ function AppRefactoredInner() {
       }
     }
 
+    const hidratarJourneyPlanejamentoCtx = (opts, { merge } = { merge: true }) => {
+      const map = itemIdByCatalogoFromAttendanceOptions(opts);
+      if (!merge) {
+        journeyState.setJourneyPlanejamentoCtx(
+          Object.keys(map).length > 0
+            ? { planejamentoId: null, itemIdByCatalogo: map, procedimentosComPontos: [] }
+            : null
+        );
+        return;
+      }
+      if (Object.keys(map).length === 0) return;
+      journeyState.setJourneyPlanejamentoCtx((prev) => ({
+        planejamentoId: prev?.planejamentoId ?? null,
+        itemIdByCatalogo: { ...(prev?.itemIdByCatalogo || {}), ...map },
+        procedimentosComPontos: Array.isArray(prev?.procedimentosComPontos)
+          ? prev.procedimentosComPontos
+          : [],
+      }));
+    };
+
     setSelectedPatientCpf(cpf);
     if (!isSameDayResume) {
       setJourneyProcedureDateIso(todayIso);
@@ -1421,20 +1537,30 @@ function AppRefactoredInner() {
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
       );
+      hidratarJourneyPlanejamentoCtx(options, { merge: false });
       if (wantsRetorno) {
         journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
         journeyState.setHouveRetoque(false);
       }
-    } else if (wantsRetorno) {
-      /* Same-day: preserva fotos/canvas, mas arma modo retorno (C1 avulso / C2 agenda). */
-      journeyState.setAgendaId(options.agendaId ?? null);
-      journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
-      journeyState.setTipoAtendimento('retorno');
-      journeyState.setProcedimentoFeitoOrigemId(
-        options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
-      );
-      journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
-      journeyState.setHouveRetoque(false);
+    } else {
+      const nomeAgenda = options.procedimentoNome != null ? String(options.procedimentoNome).trim() : '';
+      const catAgenda =
+        options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== ''
+          ? String(options.catalogoProcedimentoSaudeId).trim()
+          : null;
+      if (options.agendaId != null) journeyState.setAgendaId(options.agendaId ?? null);
+      if (catAgenda) journeyState.setNomeProcedimentoCatalogoId(catAgenda);
+      if (nomeAgenda) journeyState.setNomeProcedimento(nomeAgenda);
+      hidratarJourneyPlanejamentoCtx(options, { merge: true });
+      if (wantsRetorno) {
+        journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
+        journeyState.setTipoAtendimento('retorno');
+        journeyState.setProcedimentoFeitoOrigemId(
+          options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
+        );
+        journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
+        journeyState.setHouveRetoque(false);
+      }
     }
     const mod = wantsRetorno
       ? (options.initialModule ?? 'hub')
@@ -1442,6 +1568,7 @@ function AppRefactoredInner() {
     setConsultaModule(mod);
     setActiveView('consulta');
     setPatientView('list');
+    setAlertasClinicosRefreshKey((n) => n + 1);
   };
 
   const handleIniciarRetornoAvulso = React.useCallback(() => {
@@ -1618,6 +1745,7 @@ function AppRefactoredInner() {
             agendaId: a.id || a.agendaId,
             procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
             catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+            planejamentoItemId: a.planejamentoItemId ?? null,
             isAgendaRetorno:
               String(a.tipoProcedimentoCodigo ?? a.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() ===
               'retorno',
@@ -2022,6 +2150,7 @@ function AppRefactoredInner() {
       }
     }
 
+    setAlertasClinicosRefreshKey((n) => n + 1);
     return true;
   }, [
     journeyState,
@@ -2049,11 +2178,14 @@ function AppRefactoredInner() {
 
     if (currentStep === 3) {
       const catalogoIds = catalogoIdsConsulta;
-      if (pacienteAtual?.id && catalogoIds.length > 0) {
+      const aindaSemPf = catalogoIds.filter(
+        (id) => !pfIdNestaSessaoParaCatalogo(id, journeyState.procedimentosSessao),
+      );
+      if (pacienteAtual?.id && aindaSemPf.length > 0) {
         try {
           const resolucao = await termosApi.resolver({
             pacienteId: pacienteAtual.id,
-            catalogoIds,
+            catalogoIds: aindaSemPf,
           });
           if (temFaltantes(resolucao)) {
             setTermoBloqueio({
@@ -2062,7 +2194,7 @@ function AppRefactoredInner() {
               faltantes: resolucao.faltantes,
             });
             setTermosExecucaoBloqueio({
-              catalogoId: catalogoIds[0] || null,
+              catalogoId: aindaSemPf[0] || null,
               resolucao,
             });
             return;
@@ -2216,12 +2348,19 @@ function AppRefactoredInner() {
       const ok = await salvarAnamneseAntesDeAvancar();
       if (ok) {
         toast.success('Anamnese salva com sucesso.');
+        if (pacienteAtual?.id) {
+          mergePatientById?.(pacienteAtual.id, {
+            anamnesePendente: false,
+            anamneseDesatualizada: false,
+          });
+        }
+        refreshPatientsAndPagedList();
         setConsultaModule('hub');
       }
     } finally {
       setStep1Busy(false);
     }
-  }, [salvarAnamneseAntesDeAvancar, toast]);
+  }, [salvarAnamneseAntesDeAvancar, toast, refreshPatientsAndPagedList, mergePatientById, pacienteAtual?.id]);
 
   /**
    * Intercepta o "Voltar para o Hub" quando o módulo de Anamnese está ativo.
@@ -2397,7 +2536,11 @@ function AppRefactoredInner() {
         console.info('[termo-perf] POST iniciar', Math.round(performance.now() - tIniciar), 'ms');
         const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
         const idStr = pid != null && pid !== '' ? String(pid) : null;
-        if (idStr) await vincularAssinaturasAoProcedimento(idStr);
+        if (idStr) {
+          await vincularAssinaturasAoProcedimento(idStr);
+          persistirPfSessao(catalogoId, idStr);
+          appendLotePfId(idStr);
+        }
         return idStr;
       }
 
@@ -2413,7 +2556,11 @@ function AppRefactoredInner() {
       console.info('[termo-perf] POST registrarManual', Math.round(performance.now() - tManual), 'ms');
       const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
       const idStr = pid != null && pid !== '' ? String(pid) : null;
-      if (idStr) await vincularAssinaturasAoProcedimento(idStr);
+      if (idStr) {
+        await vincularAssinaturasAoProcedimento(idStr);
+        persistirPfSessao(catalogoId, idStr);
+        appendLotePfId(idStr);
+      }
       return idStr;
       } catch (e) {
         const parsed = parseTermosBloqueioError(e);
@@ -2435,13 +2582,21 @@ function AppRefactoredInner() {
         throw e;
       }
     },
-    [roleUserId, vincularAssinaturasAoProcedimento],
+    [roleUserId, vincularAssinaturasAoProcedimento, persistirPfSessao, appendLotePfId],
   );
 
   const getOrCreateProcedimentoFeitoId = React.useCallback(
     async (paciente, opts = {}) => {
-      const existing = loteProcedimentosFeitosIds[0];
-      if (existing) return String(existing);
+      const catalogoId =
+        opts.catalogoId != null && String(opts.catalogoId).trim() !== ''
+          ? String(opts.catalogoId).trim()
+          : null;
+      if (catalogoId) {
+        const existingByCat = pfIdNestaSessaoParaCatalogo(catalogoId, journeyState.procedimentosSessao);
+        if (existingByCat) return existingByCat;
+      } else if (journeyState.isAgendaRetorno && loteProcedimentosFeitosIds[0]) {
+        return String(loteProcedimentosFeitosIds[0]);
+      }
 
       if (!opts.allowCreate) return null;
       if (!paciente?.id || !roleUserId) return null;
@@ -2453,10 +2608,6 @@ function AppRefactoredInner() {
           : null;
       if (!agendaIdValido) return null;
 
-      const catalogoId =
-        opts.catalogoId != null && String(opts.catalogoId).trim() !== ''
-          ? String(opts.catalogoId).trim()
-          : null;
       const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
 
       const body = {
@@ -2476,8 +2627,8 @@ function AppRefactoredInner() {
         if (pid != null && pid !== '') {
           const idStr = String(pid);
           await vincularAssinaturasAoProcedimento(idStr);
-          setLoteProcedimentosFeitosIds([idStr]);
-          journeyState.updateActiveProcedure({ id: idStr });
+          persistirPfSessao(catalogoId, idStr);
+          appendLotePfId(idStr);
           return idStr;
         }
       } catch (e) {
@@ -2498,7 +2649,7 @@ function AppRefactoredInner() {
       }
       return null;
     },
-    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds, vincularAssinaturasAoProcedimento],
+    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds, vincularAssinaturasAoProcedimento, persistirPfSessao, appendLotePfId],
   );
 
   const iniciarProcedimentoRetorno = React.useCallback(
@@ -2616,7 +2767,16 @@ function AppRefactoredInner() {
         dataRefSessao: toLocalISODate(new Date()),
         tipoFotoCodigo: 'DEPOIS',
       });
-      await procedimentosApi.finalizar(pid);
+      const dtoFinalizar = await procedimentosApi.finalizar(pid);
+      if (loteConcluiuPlano([dtoFinalizar])) {
+        const escolha = await askPlanoConcluidoClinica(paciente);
+        if (escolha === 'aceitar') {
+          setConsultaModule(null);
+          abrirAgendaRetornoClinica(paciente);
+          resetJourney();
+          return;
+        }
+      }
       setConsultaModule(null);
       await finalizarAtendimentoNavegacao(sCpf, {
         successMessage: 'Retorno registrado com sucesso.',
@@ -2656,6 +2816,9 @@ function AppRefactoredInner() {
     selectedPatientCpf,
     uploadEvaluationCapturedPhotos,
     toast,
+    askPlanoConcluidoClinica,
+    abrirAgendaRetornoClinica,
+    resetJourney,
   ]);
 
   const ensurePfInFlightRef = useRef(null);
@@ -2700,7 +2863,8 @@ function AppRefactoredInner() {
           ...(planejamentoItemId ? { planejamentoItemId } : {}),
         });
         if (idStr) {
-          setLoteProcedimentosFeitosIds([idStr]);
+          persistirPfSessao(catalogoId, idStr);
+          appendLotePfId(idStr);
           return idStr;
         }
         return null;
@@ -2725,18 +2889,22 @@ function AppRefactoredInner() {
       journeyState.observacoesExecucao,
       resolvePlanejamentoItemId,
       roleUserId,
+      persistirPfSessao,
+      appendLotePfId,
       loteProcedimentosFeitosIds[0],
     ],
   );
 
   const registrarProcedimentoManual = React.useCallback(
     async (paciente, isApenasSair = false) => {
-      let procedimentoFeitoIdParaVinculo = loteProcedimentosFeitosIds[0];
       const snapshotCatalogoId =
         journeyState.nomeProcedimentoCatalogoId != null &&
           String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
+      let procedimentoFeitoIdParaVinculo = snapshotCatalogoId
+        ? pfIdNestaSessaoParaCatalogo(snapshotCatalogoId, journeyState.procedimentosSessao)
+        : null;
 
       if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
         if (procedimentoFeitoIdParaVinculo) {
@@ -2766,7 +2934,8 @@ function AppRefactoredInner() {
         });
         if (pid) {
           procedimentoFeitoIdParaVinculo = String(pid);
-          setLoteProcedimentosFeitosIds([String(pid)]);
+          persistirPfSessao(snapshotCatalogoId, pid);
+          appendLotePfId(pid);
         }
       }
       return procedimentoFeitoIdParaVinculo;
@@ -2777,9 +2946,11 @@ function AppRefactoredInner() {
       journeyState.nomeProcedimento,
       journeyState.nomeProcedimentoCatalogoId,
       journeyState.observacoesExecucao,
+      journeyState.procedimentosSessao,
       resolvePlanejamentoItemId,
       roleUserId,
-      loteProcedimentosFeitosIds[0],
+      persistirPfSessao,
+      appendLotePfId,
     ]
   );
 
@@ -2991,7 +3162,14 @@ function AppRefactoredInner() {
     setIsFinishing(true);
     try {
       const pularGateTermos = Boolean(opts.pularGateTermos);
-      const bloqueadoPorTermos = procedimentoBloqueadoPorTermos(termosExecucaoBloqueio.resolucao);
+      const pfDoCatalogoAtivo = pfIdNestaSessaoParaCatalogo(
+        journeyState.nomeProcedimentoCatalogoId,
+        journeyState.procedimentosSessao,
+      );
+      const bloqueadoPorTermos = bloqueioExecucaoTermos({
+        resolucao: termosExecucaoBloqueio.resolucao,
+        pfIdNestaSessao: pfDoCatalogoAtivo,
+      });
       if (abortarEncerrarPorTermos({ bloqueadoPorTermos, isApenasSair, pularGateTermos })) {
         setTermoBloqueio({
           open: true,
@@ -3017,7 +3195,8 @@ function AppRefactoredInner() {
       if (listaParaSalvar && listaParaSalvar.length > 0) {
         for (let i = 0; i < listaParaSalvar.length; i++) {
           const proc = listaParaSalvar[i];
-          const existingId = proc.id || loteProcedimentosFeitosIds[i];
+          const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+          const existingId = pfIdNestaSessaoParaCatalogo(catId, listaParaSalvar);
           if (existingId) {
             todosIds.push(String(existingId));
             if (proc.observacoesExecucao) {
@@ -3079,6 +3258,7 @@ function AppRefactoredInner() {
       }
 
       const novosIdsValidos = todosIds.filter(Boolean);
+      let respostasFinalizar = [];
 
       if (journeyState.procedimentosSessao?.length > 0 && novosIdsValidos.length > 0) {
         journeyState.setProcedimentosSessao(prev =>
@@ -3121,10 +3301,15 @@ function AppRefactoredInner() {
           }
         }
 
+        let respostasDoLote = [];
         if (!isApenasSair) {
-          const finalizarPromises = novosIdsValidos.map(id => procedimentosApi.finalizar(id).catch(e => console.warn('Erro ao finalizar proc', id, e)));
-          await Promise.all(finalizarPromises);
+          const finalizarPromises = novosIdsValidos.map(id => procedimentosApi.finalizar(id).catch(e => {
+            console.warn('Erro ao finalizar proc', id, e);
+            return null;
+          }));
+          respostasDoLote = await Promise.all(finalizarPromises);
         }
+        respostasFinalizar = respostasDoLote;
       }
 
       if (cameraState.evaluationCapturedPhotos?.length > 0) {
@@ -3223,6 +3408,16 @@ function AppRefactoredInner() {
             : Promise.resolve(),
         ]);
 
+        if (loteConcluiuPlano(respostasFinalizar)) {
+          const escolha = await askPlanoConcluidoClinica(paciente);
+          if (escolha === 'aceitar') {
+            setConsultaModule(null);
+            abrirAgendaRetornoClinica(paciente);
+            resetJourney();
+            return;
+          }
+        }
+
         setConsultaModule(null);
         await finalizarAtendimentoNavegacao(sCpf);
       }
@@ -3255,6 +3450,9 @@ function AppRefactoredInner() {
     onSairConsulta,
     toast,
     termosExecucaoBloqueio,
+    askPlanoConcluidoClinica,
+    abrirAgendaRetornoClinica,
+    resetJourney,
   ]);
 
   const finishJourney = async () => {
@@ -3326,6 +3524,7 @@ function AppRefactoredInner() {
   const isJornadaView = activeView === 'jornada';
   const isConsultaView = activeView === 'consulta';
   const alertasClinicosConsulta = useAlertasClinicos(pacienteAtual?.id, {
+    refreshKey: alertasClinicosRefreshKey,
     sexoPaciente: pacienteAtual?.sexo,
     onAlergiasResumo: (texto) => {
       mergePatientById?.(pacienteAtual?.id, (prev) => ({ ...prev, alergias: texto }));
@@ -3975,6 +4174,7 @@ function AppRefactoredInner() {
                     catalogoIds={catalogoIdsConsulta}
                     exigirFilaVinculo={exigirFilaTermos}
                     nomeProcedimento={journeyState.nomeProcedimento}
+                    atoJaIniciado={Boolean(pfIdCatalogoAtivo)}
                     onTermosBloqueio={({ nomeProcedimento, faltantes }) => {
                       setTermoBloqueio({
                         open: true,
@@ -4071,6 +4271,7 @@ function AppRefactoredInner() {
                     onConcluirComRetorno={(plano, refresh) =>
                       handleConcluirPlanoComRetorno(pacienteAtual, plano, refresh)
                     }
+                    onPlanoConcluido={() => handlePlanoConcluidoAposBaixa(pacienteAtual)}
                   />
                 ) : null}
                 {consultaModule === 'termos' ? (
@@ -4449,6 +4650,7 @@ function AppRefactoredInner() {
                       onStartAttendance={handleAgendaStartAttendance}
                       onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
                       onReagendarPlanoItem={handleReagendarPlanoItem}
+                      onPlanoConcluido={handlePlanoConcluidoAposBaixa}
                       onUpdatePatient={handleUpdatePatientProfile}
                       onAddGalleryFiles={handleAddGalleryFiles}
                       onDeleteGalleryPhoto={handleDeleteGalleryPhoto}
@@ -4582,6 +4784,13 @@ function AppRefactoredInner() {
         faltantes={termoBloqueio.faltantes}
         onClose={() => setTermoBloqueio((prev) => ({ ...prev, open: false }))}
         onIrParaTermos={irParaTermosFaltantes}
+      />
+
+      <PlanoConcluidoClinicaModal
+        open={planoConcluidoModal.open}
+        pacienteNome={planoConcluidoModal.pacienteNome}
+        onRecusar={() => closePlanoConcluidoModal('recusar')}
+        onAceitar={() => closePlanoConcluidoModal('aceitar')}
       />
 
       {finishJourneyModal ? (

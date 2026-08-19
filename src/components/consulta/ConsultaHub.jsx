@@ -2,7 +2,10 @@ import React from 'react';
 import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { useTermosPendentes } from '../../hooks/useTermosPendentes';
+import { useAnamneseStatusPaciente } from '../../hooks/useAnamneseStatusPaciente';
 import { temFaltantes, consentimentosAguardandoExecucao } from '../../utils/termoResolucao';
+import { usePlanosPaciente } from '../planos/usePlanosPaciente.js';
+import { calcSessoesPlano } from '../../utils/planejamentoProfileMetrics.js';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -32,7 +35,7 @@ function getCardConsentDot(cardId, termosPendentes, hasCatalogo) {
   };
 }
 
-function getCardPendingDot(cardId, paciente, termosPendentes) {
+function getCardPendingDot(cardId, paciente, termosPendentes, progressoPlano, anamneseStatus) {
   if (!paciente) return null;
   if (cardId === 'termos' && (termosPendentes?.count ?? 0) > 0) {
     const n = termosPendentes.count;
@@ -42,18 +45,27 @@ function getCardPendingDot(cardId, paciente, termosPendentes) {
       tooltip: `${n} termo${n > 1 ? 's' : ''} pendente${n > 1 ? 's' : ''} de assinatura`,
     };
   }
-  if (cardId === 'anamnese' && paciente.anamnesePendente === true) {
+  if (cardId === 'anamnese' && anamneseStatus?.pendente === true) {
     return {
       badgeClass: 'bg-status-danger-bg text-status-danger-ink',
       tooltipClass: 'border-status-danger-ink/30 bg-status-danger-bg text-status-danger-ink',
       tooltip: 'Paciente novo sem ficha de anamnese preenchida',
     };
   }
-  if (cardId === 'anamnese' && paciente.anamneseDesatualizada === true) {
+  if (cardId === 'anamnese' && anamneseStatus?.desatualizada === true) {
     return {
       badgeClass: 'bg-status-danger-bg text-status-danger-ink',
       tooltipClass: 'border-status-danger-ink/30 bg-status-danger-bg text-status-danger-ink',
       tooltip: 'Anamnese desatualizada — revisar antes de continuar',
+    };
+  }
+  if (cardId === 'planejamento' && progressoPlano) {
+    const { feitas, total } = progressoPlano;
+    return {
+      badgeClass: 'bg-status-warn-bg text-status-warn-ink',
+      tooltipClass: 'border-status-warn-ink/30 bg-status-warn-bg text-status-warn-ink',
+      tooltip: `Plano em andamento: ${feitas} de ${total} sessões`,
+      label: `${feitas} de ${total}`,
     };
   }
   if (
@@ -95,6 +107,7 @@ export function ConsultaHub({
   catalogoIds = [],
   exigirFilaVinculo = true,
   nomeProcedimento,
+  atoJaIniciado = false,
   onTermosBloqueio,
 }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
@@ -104,10 +117,26 @@ export function ConsultaHub({
     catalogoIds,
     exigirFilaVinculo,
   });
+  const { planos } = usePlanosPaciente({ pacienteId: paciente?.id, enabled: Boolean(paciente?.id) && !isRetorno });
+  const anamneseStatus = useAnamneseStatusPaciente(paciente, {
+    enabled: Boolean(paciente?.id) && !isRetorno,
+  });
+  const progressoPlano = (() => {
+    const ativo = (planos || []).find((p) => p.statusCodigo === 'ativo');
+    if (!ativo) return null;
+    const { feitas, total } = calcSessoesPlano(ativo.itens);
+    if (!total) return null;
+    return { feitas, total };
+  })();
   const semVinculo = termosPendentes.resolucao?.procedimentosSemVinculo || [];
 
   const handleSelectModule = (id) => {
-    if (id === 'procedimento' && exigirFilaVinculo && temFaltantes(termosPendentes.resolucao)) {
+    if (
+      id === 'procedimento' &&
+      exigirFilaVinculo &&
+      !atoJaIniciado &&
+      temFaltantes(termosPendentes.resolucao)
+    ) {
       onTermosBloqueio?.({
         nomeProcedimento: nomeProcedimento || 'procedimento',
         faltantes: termosPendentes.resolucao.faltantes,
@@ -154,7 +183,7 @@ export function ConsultaHub({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const ModuleIcon = card.icon;
-          const pendingDot = getCardPendingDot(card.id, paciente, termosPendentes);
+          const pendingDot = getCardPendingDot(card.id, paciente, termosPendentes, progressoPlano, anamneseStatus);
           const consentDot =
             pendingDot == null
               ? getCardConsentDot(card.id, termosPendentes, (catalogoIds || []).length > 0)
