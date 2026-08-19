@@ -20,6 +20,8 @@ export const PATIENT_FILTER_SECTIONS = [
  * @property {(v: boolean | ((prev: boolean) => boolean)) => void} [setAnamneseDesatualizadaFilter]
  * @property {boolean} semRetornoFilter
  * @property {(v: boolean | ((prev: boolean) => boolean)) => void} [setSemRetornoFilter]
+ * @property {boolean} semAgendamentoFuturoFilter
+ * @property {(v: boolean | ((prev: boolean) => boolean)) => void} [setSemAgendamentoFuturoFilter]
  * @property {boolean} ehNovoFilter
  * @property {(v: boolean | ((prev: boolean) => boolean)) => void} [setEhNovoFilter]
  * @property {boolean} ehAniversarianteFilter
@@ -67,16 +69,16 @@ export const PATIENT_FILTER_DEFINITIONS = [
     disabled: (ctx) => ctx.isSearching || !ctx.setAnamneseDesatualizadaFilter,
   },
   {
-    id: 'sem_retorno_60d',
-    label: 'Sem retorno 60d',
+    id: 'sem_agendamento_futuro',
+    label: 'Sem agendamento futuro',
     section: 'status',
     scope: 'server',
     kpiCardId: 'risco',
-    isActive: (ctx) => Boolean(ctx.semRetornoFilter),
-    activate: (ctx) => ctx.setSemRetornoFilter?.(true),
-    deactivate: (ctx) => ctx.setSemRetornoFilter?.(false),
+    isActive: (ctx) => Boolean(ctx.semAgendamentoFuturoFilter),
+    activate: (ctx) => ctx.setSemAgendamentoFuturoFilter?.(true),
+    deactivate: (ctx) => ctx.setSemAgendamentoFuturoFilter?.(false),
     disabled: (ctx) =>
-      ctx.isSearching || isBirthdaySort(ctx) || !ctx.setSemRetornoFilter,
+      ctx.isSearching || isBirthdaySort(ctx) || !ctx.setSemAgendamentoFuturoFilter,
     disabledTitle: (ctx) =>
       isBirthdaySort(ctx) ? 'Indisponível com ordenação por aniversário' : undefined,
   },
@@ -116,7 +118,7 @@ export const PATIENT_FILTER_DEFINITIONS = [
 ];
 
 const KPI_TO_FILTER_ID = {
-  risco: 'sem_retorno_60d',
+  risco: 'sem_agendamento_futuro',
   planos: 'plano_ativo',
   novos: 'novos',
   aniversariantes: 'aniversariantes_mes',
@@ -141,10 +143,24 @@ export function getActivePatientFilters(ctx) {
 export function clearAllPatientFilters(ctx) {
   ctx.setStatusPlanoFilter?.('');
   ctx.setAnamneseDesatualizadaFilter?.(false);
-  ctx.setSemRetornoFilter?.(false);
+  ctx.setSemAgendamentoFuturoFilter?.(false);
   ctx.setEhNovoFilter?.(false);
   ctx.setEhAniversarianteFilter?.(false);
   ctx.setQuickFilter?.('todos');
+}
+
+/**
+ * Resolve qual card de KPI deveria ficar em destaque LOGO APÓS ativar/desativar `toggledDef`,
+ * sem depender do state React já ter sido re-renderizado — `def.activate/deactivate(ctx)` só
+ * agenda a atualização (assíncrona), então ler `ctx` de novo no mesmo tick ainda reflete o valor
+ * ANTIGO. Em vez de reler `ctx`, aplica a mudança sobre a lista de filtros ativos atual.
+ * @returns {null | 'risco' | 'planos' | 'novos' | 'aniversariantes'}
+ */
+export function resolveActiveKpiCardAfterToggle(ctx, toggledDef, willBeActive) {
+  const others = getActivePatientFilters(ctx).filter((d) => d.id !== toggledDef.id);
+  const next = willBeActive ? [...others, toggledDef] : others;
+  if (next.length === 1 && next[0].kpiCardId) return next[0].kpiCardId;
+  return null;
 }
 
 /**
@@ -185,6 +201,8 @@ export function buildPatientFilterContext(props) {
     setAnamneseDesatualizadaFilter: props.setAnamneseDesatualizadaFilter,
     semRetornoFilter: props.semRetornoFilter ?? false,
     setSemRetornoFilter: props.setSemRetornoFilter,
+    semAgendamentoFuturoFilter: props.semAgendamentoFuturoFilter ?? false,
+    setSemAgendamentoFuturoFilter: props.setSemAgendamentoFuturoFilter,
     ehNovoFilter: props.ehNovoFilter ?? false,
     setEhNovoFilter: props.setEhNovoFilter,
     ehAniversarianteFilter: props.ehAniversarianteFilter ?? false,

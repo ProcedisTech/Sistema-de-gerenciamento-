@@ -34,12 +34,12 @@ export const PatientFilterPanel = forwardRef(function PatientFilterPanel(
     } else {
       def.deactivate(ctx);
     }
-    onFilterChange?.();
+    onFilterChange?.(def, checked);
   };
 
   const handleClearAll = () => {
     clearAllPatientFilters(ctx);
-    onFilterChange?.();
+    onFilterChange?.(null, false);
   };
 
   return (

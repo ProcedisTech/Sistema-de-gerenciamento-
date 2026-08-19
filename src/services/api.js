@@ -565,6 +565,7 @@ function buildPacientesListQuery(opts = {}) {
   }
   if (opts.anamneseDesatualizada === true) params.set('anamneseDesatualizada', 'true');
   if (opts.semRetorno === true) params.set('semRetorno', 'true');
+  if (opts.semAgendamentoFuturo === true) params.set('semAgendamentoFuturo', 'true');
   if (opts.ehNovo === true) params.set('ehNovo', 'true');
   if (opts.ehAniversariante === true) params.set('ehAniversariante', 'true');
   if (opts.ehAniversarianteMes === true) params.set('ehAniversarianteMes', 'true');
@@ -584,6 +585,7 @@ export const pacientesApi = {
    *   statusPlano?: 'sem_plano' | 'plano_ativo',
    *   anamneseDesatualizada?: boolean,
    *   semRetorno?: boolean,
+   *   semAgendamentoFuturo?: boolean,
    *   ehNovo?: boolean,
    *   ehAniversariante?: boolean,
    *   ehAniversarianteMes?: boolean,
