@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tablet, QrCode, MessageCircle, X } from 'lucide-react';
+import { Tablet, QrCode, MessageCircle, X, Settings } from 'lucide-react';
 
 export function ModalEscolhaAssinatura({
   open,
@@ -7,9 +7,12 @@ export function ModalEscolhaAssinatura({
   onSelectTablet,
   onSelectQrCode,
   onSelectLink,
-  opcoes = { tablet: true, qrCode: true, link: true }
+  opcoes = { tablet: true, qrCode: true, link: true },
+  onAbrirConfiguracoes,
 }) {
   if (!open) return null;
+
+  const nenhumAtivo = !opcoes.tablet && !opcoes.qrCode && !opcoes.link;
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
@@ -28,6 +31,26 @@ export function ModalEscolhaAssinatura({
         </header>
 
         <div className="p-5 flex flex-col gap-3">
+          {nenhumAtivo ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-[14px] font-semibold text-amber-950">
+                Nenhum método de assinatura ativo para esta clínica
+              </p>
+              <p className="mt-1 text-[13px] text-amber-800">
+                Ative tablet, QR Code ou link em Configurações para solicitar a assinatura do paciente.
+              </p>
+              {typeof onAbrirConfiguracoes === 'function' ? (
+                <button
+                  type="button"
+                  onClick={onAbrirConfiguracoes}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#0f172a] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#1e293b]"
+                >
+                  <Settings className="h-4 w-4" />
+                  Configurações &gt; métodos de assinatura
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {opcoes.tablet && (
             <button
               onClick={onSelectTablet}

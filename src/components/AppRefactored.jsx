@@ -66,6 +66,7 @@ import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
+import { clearTermosJornadaState } from '../utils/termoJornadaLista.js';
 import { registrarAgendaAvulsa, enriquecerAgendaAgendada, registrarRetornoFuturo } from '../utils/registrarAgendaAvulsa.js';
 
 import { PatientsView } from './patients';
@@ -81,8 +82,9 @@ import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { DisponibilidadeRevisionProvider } from '../contexts/DisponibilidadeRevisionProvider.jsx';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
-import { DocumentoPublicoPage } from '../pages/DocumentoPublico/DocumentoPublicoPage';
 import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
+import { TermoBloqueioModal } from './termos/TermoBloqueioModal.jsx';
+import { abortarEncerrarPorTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, deveCriarProcedimentoNoEncerrar, idsFilaExigida, parseTermosBloqueioError, procedimentoBloqueadoPorTermos, temFaltantes, titulosFaltantes } from '../utils/termoResolucao.js';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -287,6 +289,7 @@ function AppRefactoredInner() {
                 telefone: String(clinicaJson?.telefone ?? clinicaJson?.celular ?? '').trim(),
                 cnpj: String(clinicaJson?.cnpj ?? '').trim(),
                 slug: String(clinicaJson?.slug ?? '').trim(),
+                anamnesePadraoId: clinicaJson?.anamnesePadraoId ?? null,
               }));
             }
           }
@@ -325,7 +328,7 @@ function AppRefactoredInner() {
   const [assinaturasRealizadasIds, setAssinaturasRealizadasIds] = React.useState([]);
 
   const handleTermoAssinaturaSalva = React.useCallback((assinaturaObj) => {
-    if (assinaturaObj?.id) {
+    if (assinaturaObj?.id && assinaturaObj.statusCodigo === 'ASSINADO') {
       setAssinaturasRealizadasIds((prev) => [...prev, assinaturaObj.id]);
     }
   }, []);
@@ -341,6 +344,17 @@ function AppRefactoredInner() {
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [consultaModule, setConsultaModule] = React.useState(null);
+  const [termoBloqueio, setTermoBloqueio] = React.useState({
+    open: false,
+    nomeProcedimento: '',
+    faltantes: [],
+  });
+  const [termosExecucaoBloqueio, setTermosExecucaoBloqueio] = React.useState({
+    catalogoId: null,
+    resolucao: null,
+  });
+  const [termoFocoId, setTermoFocoId] = React.useState(null);
+  const [catalogoOrigemRetornoId, setCatalogoOrigemRetornoId] = React.useState(null);
   const [retornoAvulsoPickerOpen, setRetornoAvulsoPickerOpen] = React.useState(false);
   const [encerrarConsultaOpen, setEncerrarConsultaOpen] = React.useState(false);
   const [finishingMode, setFinishingMode] = React.useState(null);
@@ -720,6 +734,147 @@ function AppRefactoredInner() {
     return null;
   }, [patients, patientListItems, selectedPatientCpf]);
 
+  const catalogoIdsConsulta = React.useMemo(
+    () =>
+      catalogoIdsDoAtendimento({
+        nomeProcedimentoCatalogoId: journeyState.nomeProcedimentoCatalogoId,
+        procedimentosSessao: journeyState.procedimentosSessao,
+        catalogoOrigemId: catalogoOrigemRetornoId,
+      }),
+    [
+      journeyState.nomeProcedimentoCatalogoId,
+      journeyState.procedimentosSessao,
+      catalogoOrigemRetornoId,
+    ]
+  );
+
+  const exigirFilaTermos = !journeyState.isAgendaRetorno || Boolean(journeyState.houveRetoque);
+
+  const validarTermosDoCatalogo = React.useCallback(
+    async (catalogoId, nomeProc, { abrirModal = true } = {}) => {
+      if (!exigirFilaTermos) {
+        setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
+        return true;
+      }
+      const cat = catalogoId != null ? String(catalogoId).trim() : '';
+      if (!cat || !pacienteAtual?.id) {
+        setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
+        return true;
+      }
+      try {
+        const t0 = performance.now();
+        const resolucao = await termosApi.resolver({
+          pacienteId: pacienteAtual.id,
+          catalogoIds: [cat],
+        });
+        console.info('[termo-perf] GET resolucao', Math.round(performance.now() - t0), 'ms');
+        setTermosExecucaoBloqueio({ catalogoId: cat, resolucao });
+        if (temFaltantes(resolucao)) {
+          if (abrirModal) {
+            setTermoBloqueio({
+              open: true,
+              nomeProcedimento: nomeProc || journeyState.nomeProcedimento || 'procedimento',
+              faltantes: resolucao.faltantes || [],
+            });
+          }
+          return false;
+        }
+        setTermoBloqueio((prev) => ({ ...prev, open: false }));
+      } catch {
+        /* rede: o gate do backend ainda bloqueia iniciar */
+      }
+      return true;
+    },
+    [exigirFilaTermos, pacienteAtual?.id, journeyState.nomeProcedimento],
+  );
+
+  const execucaoBloqueadaPorTermos = procedimentoBloqueadoPorTermos(termosExecucaoBloqueio.resolucao);
+  const termosExecucaoBloqueioRef = React.useRef(termosExecucaoBloqueio);
+  termosExecucaoBloqueioRef.current = termosExecucaoBloqueio;
+
+  const garantirTermosAntesDeIniciar = React.useCallback(
+    async (catalogoId, nomeProc) => {
+      const cat = catalogoId != null ? String(catalogoId).trim() : '';
+      const cached = termosExecucaoBloqueioRef.current;
+      if (cat && cached.catalogoId && String(cached.catalogoId) === cat && cached.resolucao) {
+        if (temFaltantes(cached.resolucao)) {
+          setTermoBloqueio({
+            open: true,
+            nomeProcedimento: nomeProc || journeyState.nomeProcedimento || 'procedimento',
+            faltantes: cached.resolucao.faltantes || [],
+          });
+          return false;
+        }
+        return true;
+      }
+      return validarTermosDoCatalogo(catalogoId, nomeProc);
+    },
+    [validarTermosDoCatalogo, journeyState.nomeProcedimento],
+  );
+
+  React.useEffect(() => {
+    if (activeView !== 'consulta' || consultaModule !== 'procedimento') return;
+    const cat = journeyState.nomeProcedimentoCatalogoId;
+    if (!cat) return;
+    void validarTermosDoCatalogo(cat, journeyState.nomeProcedimento, { abrirModal: false });
+    // Revalida ao voltar da aba Termos; o select já faz o GET na escolha.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só troca de módulo
+  }, [activeView, consultaModule]);
+
+  const vincularAssinaturasAoProcedimento = React.useCallback(
+    async (pid) => {
+      if (!pid || assinaturasRealizadasIds.length === 0) return;
+      for (const assinaturaId of assinaturasRealizadasIds) {
+        try {
+          await termoAssinaturaApi.vincularProcedimento(assinaturaId, pid);
+        } catch (e) {
+          console.warn(`Não foi possível vincular assinatura ${assinaturaId} ao procedimento ${pid}:`, e);
+        }
+      }
+    },
+    [assinaturasRealizadasIds],
+  );
+
+  React.useEffect(() => {
+    const origemId = journeyState.procedimentoFeitoOrigemId;
+    const pid = pacienteAtual?.id;
+    if (!origemId || !pid) {
+      setCatalogoOrigemRetornoId(null);
+      return undefined;
+    }
+    let cancelled = false;
+    procedimentosApi
+      .byPaciente(pid)
+      .then((raw) => {
+        if (cancelled) return;
+        const list = Array.isArray(raw) ? raw : raw?.content ?? [];
+        const pai = list.find((p) => String(p.id) === String(origemId));
+        const cat = pai?.catalogoProcedimentoSaudeId;
+        setCatalogoOrigemRetornoId(cat != null && String(cat).trim() ? String(cat).trim() : null);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogoOrigemRetornoId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [journeyState.procedimentoFeitoOrigemId, pacienteAtual?.id]);
+
+  const irParaTermosFaltantes = React.useCallback(
+    ({ termoId, termoIds, nomeProcedimento }) => {
+      const ids = Array.isArray(termoIds) ? termoIds.map(String).filter(Boolean) : [];
+      if (ids.length) journeyState.setTermosPendentesIds(ids);
+      setTermoFocoId(termoId || ids[0] || null);
+      setTermoBloqueio((prev) => ({
+        ...prev,
+        open: false,
+        nomeProcedimento: nomeProcedimento || prev.nomeProcedimento,
+      }));
+      if (activeView === 'consulta') setConsultaModule('termos');
+    },
+    [activeView, journeyState]
+  );
+
   // moved to line 683 below cameraState
 
   const step5RetornoBloqueiaFinal = React.useMemo(
@@ -833,6 +988,15 @@ function AppRefactoredInner() {
         setPendingMapeamentoCapture({ vista, blob });
       }
       mapeamentoCaptureVistaRef.current = null;
+      cameraState.closePhotoModal();
+      return;
+    }
+
+    if (
+      execucaoBloqueadaPorTermos &&
+      ((activeView === 'consulta' && consultaModule === 'procedimento') ||
+        (activeView === 'jornada' && currentStep === 4))
+    ) {
       cameraState.closePhotoModal();
       return;
     }
@@ -1144,6 +1308,8 @@ function AppRefactoredInner() {
             endereco: endCompleto,
             telefone: String(c?.telefone ?? c?.celular ?? '').trim(),
             cnpj: String(c?.cnpj ?? '').trim(),
+            slug: String(c?.slug ?? '').trim(),
+            anamnesePadraoId: c?.anamnesePadraoId ?? null,
           }));
         }
       } catch {
@@ -1202,6 +1368,8 @@ function AppRefactoredInner() {
       journeyState.setNomeProcedimento('');
       journeyState.setNomeProcedimentoCatalogoId(null);
       journeyState.setObservacoesExecucao('');
+      clearTermosJornadaState(journeyState);
+      setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
 
       /* Evita ERR_FILE_NOT_FOUND em blob: após reset — canvas ainda apontava para URLs revogadas. */
       revokeBlobUrlIfAny(journeyState.evaluationAnnotatedPhotoUrl);
@@ -1600,6 +1768,12 @@ function AppRefactoredInner() {
     setConfigSection('procedimentos');
   }, [canSeeConfig, goToViewWithGuard, setConfigSection]);
 
+  const handleNavigateToMetodosAssinatura = React.useCallback(() => {
+    if (!canSeeConfig) return;
+    goToViewWithGuard('configuracoes');
+    setConfigSection('metodos-assinatura');
+  }, [canSeeConfig, goToViewWithGuard, setConfigSection]);
+
   const handleNavigateToAgenda = React.useCallback(() => {
     goToViewWithGuard('agenda');
   }, [goToViewWithGuard]);
@@ -1874,9 +2048,28 @@ function AppRefactoredInner() {
     }
 
     if (currentStep === 3) {
-      if (!journeyState.termosAssinados || journeyState.termosAssinados.length === 0) {
-        toast.error('Para prosseguir, assine pelo menos um termo de consentimento.');
-        return;
+      const catalogoIds = catalogoIdsConsulta;
+      if (pacienteAtual?.id && catalogoIds.length > 0) {
+        try {
+          const resolucao = await termosApi.resolver({
+            pacienteId: pacienteAtual.id,
+            catalogoIds,
+          });
+          if (temFaltantes(resolucao)) {
+            setTermoBloqueio({
+              open: true,
+              nomeProcedimento: journeyState.nomeProcedimento || 'procedimento',
+              faltantes: resolucao.faltantes,
+            });
+            setTermosExecucaoBloqueio({
+              catalogoId: catalogoIds[0] || null,
+              resolucao,
+            });
+            return;
+          }
+        } catch {
+          /* rede: o gate do backend ainda bloqueia iniciar */
+        }
       }
 
       journeyState.setTermoAssinado(true);
@@ -1898,6 +2091,10 @@ function AppRefactoredInner() {
         });
         toast.error('Selecione o procedimento no catálogo para continuar.');
         return;
+      }
+      if (catId) {
+        const ok = await validarTermosDoCatalogo(catId, nomeP);
+        if (!ok) return;
       }
       journeyState.setStep4Errors({});
       upsertPatientLocal({ ensureSelected: true });
@@ -2091,7 +2288,8 @@ function AppRefactoredInner() {
     journeyState.setStep5Errors({});
     anamnesePreenchimentoIdRef.current = null;
     pendingAnnotatedGalleryBlobsRef.current = [];
-    journeyState.setTermoSelecionadoId(null);
+    clearTermosJornadaState(journeyState);
+    setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
     setLoteProcedimentosFeitosIds([]);
     setAssinaturasRealizadasIds([]);
     patientState.setSelectedPatientCpf(null);
@@ -2165,6 +2363,7 @@ function AppRefactoredInner() {
     async (paciente, opts = {}) => {
       if (!paciente?.id || !roleUserId) return null;
 
+      try {
       const agendaIdRaw = opts.agendaId != null ? String(opts.agendaId).trim() : '';
       const agendaIdValido =
         agendaIdRaw && UUID_REGEX_PROC.test(agendaIdRaw) ? agendaIdRaw : null;
@@ -2193,12 +2392,17 @@ function AppRefactoredInner() {
           ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
           ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
         };
+        const tIniciar = performance.now();
         const res = await procedimentosApi.iniciar(body);
+        console.info('[termo-perf] POST iniciar', Math.round(performance.now() - tIniciar), 'ms');
         const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-        return pid != null && pid !== '' ? String(pid) : null;
+        const idStr = pid != null && pid !== '' ? String(pid) : null;
+        if (idStr) await vincularAssinaturasAoProcedimento(idStr);
+        return idStr;
       }
 
       if (!nome) return null;
+      const tManual = performance.now();
       const res = await procedimentosApi.registrarManual(paciente.id, {
         nome,
         roleUserId,
@@ -2206,10 +2410,32 @@ function AppRefactoredInner() {
         catalogoProcedimentoSaudeId: catalogoId,
         ...(planejamentoItemId ? { planejamentoItemId } : {}),
       });
+      console.info('[termo-perf] POST registrarManual', Math.round(performance.now() - tManual), 'ms');
       const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-      return pid != null && pid !== '' ? String(pid) : null;
+      const idStr = pid != null && pid !== '' ? String(pid) : null;
+      if (idStr) await vincularAssinaturasAoProcedimento(idStr);
+      return idStr;
+      } catch (e) {
+        const parsed = parseTermosBloqueioError(e);
+        if (parsed) {
+          setTermoBloqueio({
+            open: true,
+            nomeProcedimento: parsed.nomeProcedimento || opts.nome || 'procedimento',
+            faltantes: parsed.faltantes,
+          });
+          setTermosExecucaoBloqueio((prev) => ({
+            catalogoId:
+              prev.catalogoId ||
+              (opts.catalogoProcedimentoSaudeId != null
+                ? String(opts.catalogoProcedimentoSaudeId).trim()
+                : null),
+            resolucao: { faltantes: parsed.faltantes || [] },
+          }));
+        }
+        throw e;
+      }
     },
-    [roleUserId],
+    [roleUserId, vincularAssinaturasAoProcedimento],
   );
 
   const getOrCreateProcedimentoFeitoId = React.useCallback(
@@ -2243,20 +2469,36 @@ function AppRefactoredInner() {
       if (planejamentoItemId) body.planejamentoItemId = planejamentoItemId;
 
       try {
+        const tIniciar = performance.now();
         const res = await procedimentosApi.iniciar(body);
+        console.info('[termo-perf] POST iniciar', Math.round(performance.now() - tIniciar), 'ms');
         const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
         if (pid != null && pid !== '') {
           const idStr = String(pid);
+          await vincularAssinaturasAoProcedimento(idStr);
           setLoteProcedimentosFeitosIds([idStr]);
           journeyState.updateActiveProcedure({ id: idStr });
           return idStr;
         }
       } catch (e) {
+        const parsed = parseTermosBloqueioError(e);
+        if (parsed) {
+          setTermoBloqueio({
+            open: true,
+            nomeProcedimento: parsed.nomeProcedimento || 'procedimento',
+            faltantes: parsed.faltantes,
+          });
+          setTermosExecucaoBloqueio((prev) => ({
+            catalogoId: prev.catalogoId,
+            resolucao: { faltantes: parsed.faltantes || [] },
+          }));
+          throw e;
+        }
         console.warn('iniciar procedimento falhou:', e);
       }
       return null;
     },
-    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds],
+    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds, vincularAssinaturasAoProcedimento],
   );
 
   const iniciarProcedimentoRetorno = React.useCallback(
@@ -2386,6 +2628,19 @@ function AppRefactoredInner() {
         refreshFalhaNaoBloqueia: true,
       });
     } catch (error) {
+      const parsed = parseTermosBloqueioError(error);
+      if (parsed) {
+        setTermoBloqueio({
+          open: true,
+          nomeProcedimento: parsed.nomeProcedimento || 'procedimento',
+          faltantes: parsed.faltantes,
+        });
+        setTermosExecucaoBloqueio((prev) => ({
+          catalogoId: prev.catalogoId,
+          resolucao: { faltantes: parsed.faltantes || [] },
+        }));
+        return;
+      }
       console.error('Erro ao concluir retorno:', error);
       toast.error(error?.message || 'Erro ao concluir retorno.');
     } finally {
@@ -2733,11 +2988,24 @@ function AppRefactoredInner() {
     ]
   );
 
-  const encerrarAtendimento = React.useCallback(async (isApenasSair = false) => {
+  const encerrarAtendimento = React.useCallback(async (isApenasSair = false, opts = {}) => {
     if (finishJourneyLockRef.current) return;
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
+      const pularGateTermos = Boolean(opts.pularGateTermos);
+      const bloqueadoPorTermos = procedimentoBloqueadoPorTermos(termosExecucaoBloqueio.resolucao);
+      if (abortarEncerrarPorTermos({ bloqueadoPorTermos, isApenasSair, pularGateTermos })) {
+        setTermoBloqueio({
+          open: true,
+          nomeProcedimento: journeyState.nomeProcedimento || 'procedimento',
+          faltantes: termosExecucaoBloqueio.resolucao?.faltantes || [],
+        });
+        toast.error('Assine os termos obrigatórios antes de finalizar o procedimento.');
+        return;
+      }
+      const criarProcedimento = deveCriarProcedimentoNoEncerrar(bloqueadoPorTermos);
+
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
       const paciente = resolvePacienteAtendimento();
 
@@ -2766,7 +3034,7 @@ function AppRefactoredInner() {
             const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
             const isRetorno = proc.isAgendaRetorno || proc.tipoAtendimento === 'retorno';
             // Apenas envia ao lote se possuir um catálogo selecionado OU for atendimento de retorno
-            if (catId || isRetorno) {
+            if ((catId || isRetorno) && criarProcedimento) {
               const body = {
                 nome: (proc.nomeProcedimento || proc.procedimentoNome || '').trim(),
                 roleUserId,
@@ -2804,7 +3072,7 @@ function AppRefactoredInner() {
             throw new Error('Falha ao salvar um ou mais procedimentos do lote.');
           }
         }
-      } else {
+      } else if (criarProcedimento) {
         const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente, isApenasSair);
         if (procedimentoFeitoIdParaVinculo) {
           todosIds.push(procedimentoFeitoIdParaVinculo);
@@ -2989,6 +3257,7 @@ function AppRefactoredInner() {
     setIsFinishing,
     onSairConsulta,
     toast,
+    termosExecucaoBloqueio,
   ]);
 
   const finishJourney = async () => {
@@ -3017,7 +3286,7 @@ function AppRefactoredInner() {
       await autoSaveAnamneseSilently();
 
       if (decision === 'finalizar') {
-        await encerrarAtendimento(false);
+        await encerrarAtendimento(false, { pularGateTermos: true });
       } else {
         await encerrarAtendimento(true);
       }
@@ -3070,8 +3339,6 @@ function AppRefactoredInner() {
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
   const isAnamnesePublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/anamnese');
-  const isDocumentoPublico =
-    typeof window !== 'undefined' && window.location.pathname.startsWith('/documento');
   const isAssinaturaPublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/assinar');
 
@@ -3081,9 +3348,6 @@ function AppRefactoredInner() {
   }
   if (isAnamnesePublica) {
     return <AnamnesePage />;
-  }
-  if (isDocumentoPublico) {
-    return <DocumentoPublicoPage />;
   }
   if (isAssinaturaPublica) {
     return <PublicSignatureFlow />;
@@ -3351,6 +3615,10 @@ function AppRefactoredInner() {
                           procedimentoFeitoId={loteProcedimentosFeitosIds[0] ?? null}
                           roleUserId={roleUserId ?? null}
                           onAssinaturaSalva={handleTermoAssinaturaSalva}
+                          catalogoIds={catalogoIdsConsulta}
+                          exigirFilaVinculo
+                          termoFocoId={termoFocoId}
+                          onAbrirMetodosAssinatura={handleNavigateToMetodosAssinatura}
                           pacienteCtx={{
                             nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
                             cpf: pacienteAtual?.cpf,
@@ -3382,6 +3650,11 @@ function AppRefactoredInner() {
                           nomeProcedimento={journeyState.nomeProcedimento}
                           setNomeProcedimento={journeyState.setNomeProcedimento}
                           setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
+                          setProcedimentoDoCatalogo={journeyState.setProcedimentoDoCatalogo}
+                          onValidarTermosCatalogo={validarTermosDoCatalogo}
+                          execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+                          titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
+                          consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
                           observacoesExecucao={journeyState.observacoesExecucao}
                           setObservacoesExecucao={journeyState.setObservacoesExecucao}
                           procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
@@ -3389,7 +3662,9 @@ function AppRefactoredInner() {
                           onProcedureUploadFiles={(files, cat) =>
                             cameraState.uploadProcedureFiles(files, cat)
                           }
-                          onProcedureOpenCamera={cameraState.openPhotoModal}
+                          onProcedureOpenCamera={
+                            execucaoBloqueadaPorTermos ? undefined : cameraState.openPhotoModal
+                          }
                           onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
                           onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
                           step4Errors={journeyState.step4Errors}
@@ -3412,9 +3687,15 @@ function AppRefactoredInner() {
                           pendingMapaCapture={pendingMapaAplicacaoCapture}
                           onMapaCaptureConsumed={() => setPendingMapaAplicacaoCapture(null)}
                           onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
-                          onEnsureProcedimento={() =>
-                            ensureProcedimentoFeitoForMapa(pacienteAtual)
-                          }
+                          onEnsureProcedimento={async () => {
+                            const cat = journeyState.nomeProcedimentoCatalogoId;
+                            const ok = await garantirTermosAntesDeIniciar(
+                              cat,
+                              journeyState.nomeProcedimento
+                            );
+                            if (!ok) return null;
+                            return ensureProcedimentoFeitoForMapa(pacienteAtual);
+                          }}
                           onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                         />
                       )}
@@ -3694,7 +3975,20 @@ function AppRefactoredInner() {
                     onIniciarRetornoAvulso={handleIniciarRetornoAvulso}
                     onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
-                    termosSelecionadosIds={journeyState.termosPendentesIds}
+                    catalogoIds={catalogoIdsConsulta}
+                    exigirFilaVinculo={exigirFilaTermos}
+                    nomeProcedimento={journeyState.nomeProcedimento}
+                    onTermosBloqueio={({ nomeProcedimento, faltantes }) => {
+                      setTermoBloqueio({
+                        open: true,
+                        nomeProcedimento: nomeProcedimento || 'procedimento',
+                        faltantes: faltantes || [],
+                      });
+                      setTermosExecucaoBloqueio({
+                        catalogoId: catalogoIdsConsulta[0] || null,
+                        resolucao: { faltantes: faltantes || [] },
+                      });
+                    }}
                   />
                 ) : null}
                 {consultaModule === 'retorno' ? (
@@ -3725,6 +4019,12 @@ function AppRefactoredInner() {
                   />
                 ) : null}
                 {consultaModule === 'anamnese' && !journeyState.isAgendaRetorno ? (
+                  <>
+                    {!clinicaInfo?.anamnesePadraoId ? (
+                      <div className="mb-4 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[13px] font-medium text-[#92400e]">
+                        Nenhuma ficha padrão de anamnese configurada. Defina em Configurações → Anamnese → Fichas.
+                      </div>
+                    ) : null}
                   <Step2Anamnese
                     onAutoSaveAnamnese={autoSaveAnamneseSilently}
                     ref={anamneseRef}
@@ -3749,6 +4049,7 @@ function AppRefactoredInner() {
                     onConcluirAnamnese={handleConcluirAnamnese}
                     isConcluirAnamneseBusy={step1Busy}
                   />
+                  </>
                 ) : null}
                 {consultaModule === 'avaliacao' && !journeyState.isAgendaRetorno ? (
                   <ConsultaAvaliacaoFlow
@@ -3804,6 +4105,10 @@ function AppRefactoredInner() {
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0] ?? null}
                     roleUserId={roleUserId ?? null}
                     onAssinaturaSalva={handleTermoAssinaturaSalva}
+                    catalogoIds={catalogoIdsConsulta}
+                    exigirFilaVinculo={exigirFilaTermos}
+                    termoFocoId={termoFocoId}
+                    onAbrirMetodosAssinatura={handleNavigateToMetodosAssinatura}
                     pacienteCtx={{
                       nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
                       cpf: pacienteAtual?.cpf,
@@ -3833,6 +4138,7 @@ function AppRefactoredInner() {
                     nomeProcedimento={journeyState.nomeProcedimento}
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
+                    setProcedimentoDoCatalogo={journeyState.setProcedimentoDoCatalogo}
                     procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
                     activeProcedimentoIndex={journeyState.activeProcedureIndex}
                     setActiveProcedimentoIndex={journeyState.setActiveProcedureIndex}
@@ -3843,7 +4149,9 @@ function AppRefactoredInner() {
                     setProcedureCapturedPhotos={cameraState.setProcedureCapturedPhotos}
                     procedurePhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
-                    onProcedureOpenCamera={cameraState.openPhotoModal}
+                    onProcedureOpenCamera={
+                      execucaoBloqueadaPorTermos ? undefined : cameraState.openPhotoModal
+                    }
                     onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
                     onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
                     step4Errors={journeyState.step4Errors}
@@ -3866,9 +4174,25 @@ function AppRefactoredInner() {
                     pendingMapaCapture={pendingMapaAplicacaoCapture}
                     onMapaCaptureConsumed={() => setPendingMapaAplicacaoCapture(null)}
                     onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
-                    onEnsureProcedimento={() =>
-                      ensureProcedimentoFeitoForMapa(pacienteAtual)
+                    onValidarTermosCatalogo={validarTermosDoCatalogo}
+                    execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+                    titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
+                    consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
+                    onIrParaTermosGate={() =>
+                      irParaTermosFaltantes({
+                        termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
+                        nomeProcedimento: journeyState.nomeProcedimento,
+                      })
                     }
+                    onEnsureProcedimento={async () => {
+                      const cat = journeyState.nomeProcedimentoCatalogoId;
+                      const ok = await garantirTermosAntesDeIniciar(
+                        cat,
+                        journeyState.nomeProcedimento
+                      );
+                      if (!ok) return null;
+                      return ensureProcedimentoFeitoForMapa(pacienteAtual);
+                    }}
                     sugestaoProcedimentoEnviada={sugestaoProcedimentoEnviada}
                     onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                     procedureDateIso={journeyProcedureDateIso}
@@ -3919,6 +4243,7 @@ function AppRefactoredInner() {
               onCancel={cancelEncerrarConsulta}
               onConfirm={confirmEncerrarConsulta}
               finishingMode={finishingMode}
+              procedimentoSemTermo={execucaoBloqueadaPorTermos}
             />
 
             {/* Modal: alterações não salvas na Anamnese */}
@@ -4261,6 +4586,14 @@ function AppRefactoredInner() {
         />
       ) : null}
 
+      <TermoBloqueioModal
+        open={termoBloqueio.open}
+        nomeProcedimento={termoBloqueio.nomeProcedimento}
+        faltantes={termoBloqueio.faltantes}
+        onClose={() => setTermoBloqueio((prev) => ({ ...prev, open: false }))}
+        onIrParaTermos={irParaTermosFaltantes}
+      />
+
       {finishJourneyModal ? (
         <div className="fixed inset-0 z-[400] flex items-center justify-center bg-slate-900/45 px-4">
           <div
@@ -4305,8 +4638,13 @@ function AppRefactoredInner() {
 
       <ProcedureCameraWidget
         visible={
-          (isConsultaView && ['avaliacao', 'procedimento', 'termos'].includes(consultaModule)) ||
-          (activeView === 'jornada' && currentStep >= 2 && currentStep <= 4)
+          (isConsultaView &&
+            ['avaliacao', 'procedimento', 'termos'].includes(consultaModule) &&
+            !(consultaModule === 'procedimento' && execucaoBloqueadaPorTermos)) ||
+          (activeView === 'jornada' &&
+            currentStep >= 2 &&
+            currentStep <= 4 &&
+            !(currentStep === 4 && execucaoBloqueadaPorTermos))
         }
         photoThumbUrl={cameraState.anamnesePhotoUrl}
         photoModalOpen={cameraState.photoModalOpen}

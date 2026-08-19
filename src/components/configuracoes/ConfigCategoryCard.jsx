@@ -19,6 +19,7 @@ export function ConfigCategoryCard({
   label,
   description,
   itemCount,
+  badge,
   onClick,
   entranceDelayMs,
 }) {
@@ -37,11 +38,18 @@ export function ConfigCategoryCard({
         >
           {React.createElement(icon, { className: 'h-5 w-5', strokeWidth: 2, 'aria-hidden': true })}
         </div>
-        <ChevronRight
-          className="h-4 w-4 shrink-0 text-[#94a3b8] transition-transform group-hover:translate-x-0.5 group-hover:text-[#64748b]"
-          strokeWidth={2}
-          aria-hidden
-        />
+        <div className="flex items-center gap-2">
+          {badge ? (
+            <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
+              {badge}
+            </span>
+          ) : null}
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-[#94a3b8] transition-transform group-hover:translate-x-0.5 group-hover:text-[#64748b]"
+            strokeWidth={2}
+            aria-hidden
+          />
+        </div>
       </div>
 
       {/* Texto */}

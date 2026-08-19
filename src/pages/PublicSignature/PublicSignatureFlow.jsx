@@ -23,6 +23,9 @@ export function PublicSignatureFlow() {
   const [cameraError, setCameraError] = useState('');
   const [assinaturaIp, setAssinaturaIp] = useState('');
   const [assinaturaDataHora, setAssinaturaDataHora] = useState('');
+  const [showConfirmRecusa, setShowConfirmRecusa] = useState(false);
+  const [recusando, setRecusando] = useState(false);
+  const [recusado, setRecusado] = useState(false);
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
   const drawingRef = useRef(false);
@@ -286,6 +289,23 @@ export function PublicSignatureFlow() {
     }
   };
 
+  const handleRecusar = async () => {
+    setRecusando(true);
+    try {
+      const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/recusar`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      if (!res.ok) throw new Error('Não foi possível registrar a recusa.');
+      setRecusado(true);
+      setShowConfirmRecusa(false);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setRecusando(false);
+    }
+  };
+
   const handleDownloadPdf = async () => {
     try {
       const metadados = {
@@ -343,6 +363,18 @@ export function PublicSignatureFlow() {
     );
   }
 
+  if (recusado) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4 text-center">
+        <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
+        <h2 className="text-xl font-bold text-slate-900">Assinatura recusada</h2>
+        <p className="mt-2 max-w-md text-slate-600">
+          Você recusou assinar este documento. O procedimento não poderá ser realizado sem o consentimento.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center bg-slate-100 font-sans sm:pb-10 print:bg-white print:pb-0 print:color-adjust-exact" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
       <header className="w-full bg-teal-700 p-4 text-center text-white shadow-md shrink-0" style={{ backgroundColor: '#0f766e' }}>
@@ -354,18 +386,20 @@ export function PublicSignatureFlow() {
         {step === 1 && (
           <form onSubmit={handleValidarOtp} className="rounded-2xl bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-slate-800">Validação de Segurança</h2>
-            <p className="mt-2 text-sm text-slate-500">Digite o código de 4 dígitos enviado para o seu celular.</p>
+            <p className="mt-2 text-sm text-slate-500">Digite o código de 6 dígitos enviado para o seu celular.</p>
             <input
               type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               className="mt-6 w-full rounded-xl border-2 border-slate-200 p-4 text-center text-2xl font-bold tracking-widest outline-none focus:border-teal-700"
-              placeholder="0000"
+              placeholder="000000"
             />
             <button
               type="submit"
-              disabled={otpValidando || otp.length < 4}
+              disabled={otpValidando || otp.length !== 6}
               className="mt-6 w-full rounded-xl bg-teal-700 py-4 text-center font-bold text-white transition hover:bg-teal-800 disabled:opacity-50"
             >
               {otpValidando ? 'Validando...' : 'Confirmar'}
@@ -416,6 +450,40 @@ export function PublicSignatureFlow() {
             >
               Avançar para Identificação
             </button>
+            <button
+              type="button"
+              onClick={() => setShowConfirmRecusa(true)}
+              className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 py-3 text-center font-bold text-red-700 transition hover:bg-red-100"
+            >
+              Recusar
+            </button>
+            {showConfirmRecusa ? (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-left">
+                <p className="text-sm font-semibold text-red-800">
+                  Confirma recusar a assinatura deste documento?
+                </p>
+                <p className="mt-1 text-xs text-red-700">
+                  Sem o consentimento, o procedimento não poderá ser realizado.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmRecusa(false)}
+                    className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-sm font-bold text-slate-600"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRecusar}
+                    disabled={recusando}
+                    className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    {recusando ? 'Registrando…' : 'Confirmar recusa'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
