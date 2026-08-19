@@ -481,7 +481,7 @@ export function FichasPanel() {
         ) : (
           <>
             {/* ── Tabela desktop (md+) ── */}
-            <div className="hidden md:block rounded-2xl border border-app-border overflow-hidden bg-white shadow-sm">
+            <div className="hidden md:block rounded-2xl border border-app-border overflow-x-auto bg-white shadow-sm">
               <table className="w-full text-left text-[13px]">
                 <thead>
                   <tr className="bg-[#f8fbfb] border-b border-app-border">

@@ -7,6 +7,10 @@ export default {
     ],
     theme: {
       extend: {
+        screens: {
+          '3xl': '1920px',
+          '4xl': '2560px',
+        },
         fontFamily: {
           sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'system-ui', 'sans-serif'],
           display: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'],
@@ -118,6 +122,6 @@ export default {
         },
       },
     },
-    // eslint-disable-next-line no-undef
+     
     plugins: [require('@tailwindcss/typography')],
   }

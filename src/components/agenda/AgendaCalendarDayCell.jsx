@@ -134,7 +134,7 @@ function AgendaCalendarDayCellInner({
         ) : null}
       </div>
 
-      <div className="mt-1 hidden min-h-0 flex-1 space-y-0.5 overflow-hidden lg:block">
+      <div className="mt-1 hidden min-h-0 flex-1 space-y-0.5 overflow-hidden lg:[@media(min-height:840px)]:block">
         {visibleEvents.map((item) => {
           const bucket = item.tipo === 'bloqueio' ? 'bloqueio' : getAppointmentStatusBucket(item);
           return (

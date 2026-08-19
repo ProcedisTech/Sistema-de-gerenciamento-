@@ -92,7 +92,7 @@ export function AgendaCalendarGrid({
   useEffect(() => () => clearHoverTimer(), [clearHoverTimer]);
 
   return (
-    <div className={`flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-ink-200 bg-white p-2 shadow-agenda-sm lg:p-3 ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}>
+    <div className={`flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-ink-200 bg-white p-2 shadow-agenda-sm ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}>
       <header className="cal-head flex shrink-0 flex-wrap items-center justify-between gap-3 pb-2">
         <div className="month-nav flex items-center gap-2">
           <button
@@ -144,7 +144,7 @@ export function AgendaCalendarGrid({
         </div>
       </header>
 
-      <div role="row" className="grid shrink-0 grid-cols-7 px-1 pt-3 pb-2 text-center text-[11px] font-bold uppercase tracking-wide text-ink-500">
+      <div role="row" className="grid shrink-0 grid-cols-7 px-1 pt-2 pb-1 text-center text-[11px] font-bold uppercase tracking-wide text-ink-500">
         {WEEK_DAYS.map((day, index) => (
           <div
             key={day}
