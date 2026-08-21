@@ -1,6 +1,7 @@
 import { buildCalendarCells, formatMonthYearLabel, toLocalDateIso } from './agendaDateUtils.js';
 import {
   AGENDA_SLOT_STEP_MIN,
+  getBrasiliaNow,
   intervalsOverlap,
   minutesToHhmm,
   parseHhmmToMinutes,
@@ -215,6 +216,8 @@ export function buildDaySlotList({
   selectedFormHora,
   selectedRangeFimSlot,
   stepMin = AGENDA_SLOT_STEP_MIN,
+  todayIso: customTodayIso,
+  currentBrasiliaMinutes: customCurrentMin,
 }) {
   if (!iso) {
     return {
@@ -240,6 +243,10 @@ export function buildDaySlotList({
   const step = Math.max(5, Number(stepMin) || AGENDA_SLOT_STEP_MIN);
   const segOpts = { profissionalRoleUserId, excludeAgendaId };
   const segments = segmentsForDayIso(dtos, iso, segOpts);
+
+  const brasiliaNow = getBrasiliaNow();
+  const todayIso = customTodayIso || brasiliaNow.todayIso;
+  const currentBrasiliaMinutes = customCurrentMin != null ? customCurrentMin : brasiliaNow.currentMinutes;
 
   const selectedHm = String(selectedFormHora || '').slice(0, 5);
   const selectedMin =
@@ -267,7 +274,12 @@ export function buildDaySlotList({
     let observacao = '';
     let agendaId;
 
-    if (
+    const isPast = iso < todayIso || (iso === todayIso && t < currentBrasiliaMinutes);
+
+    if (isPast) {
+      state = 'passado';
+      observacao = 'horário já passou';
+    } else if (
       selectedMin != null &&
       selectedFimMin != null &&
       t < selectedFimMin &&

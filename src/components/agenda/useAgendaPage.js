@@ -53,6 +53,7 @@ import {
   dayBoundsFromWindows,
   getDayWindowsForIso,
 } from '../../utils/disponibilidadeDayWindows.js';
+import { useBrasiliaTime } from '../../hooks/useBrasiliaTime.js';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
@@ -319,7 +320,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const { bumpRevision } = useDisponibilidadeRevision();
   const { isNivel1 } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
-  const todayIso = toLocalDateIso();
+  const { todayIso, currentMinutes: currentBrasiliaMinutes } = useBrasiliaTime();
   const [monthDate, setMonthDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1074,6 +1075,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       selectedFormIso: form.data,
       selectedFormHora: form.horaInicio,
       selectedRangeFimSlot: form.horaFimSlot,
+      todayIso,
+      currentBrasiliaMinutes,
     });
   }, [
     modalMode,
@@ -1084,6 +1087,8 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     dispMonthDtos,
     editingAppointment?.agendaId,
     roleUserIdAgenda,
+    todayIso,
+    currentBrasiliaMinutes,
   ]);
 
   const clearRangeSelection = useCallback(() => {
@@ -2143,9 +2148,15 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     if (!form.data) nextErrors.data = 'Selecione um dia no calendário.';
     else if (form.data < todayIso) {
       nextErrors.data = 'Data inválida — não é possível agendar para o passado.';
+    } else if (
+      form.data === todayIso &&
+      form.horaInicio &&
+      parseHhmmToMinutes(form.horaInicio) < currentBrasiliaMinutes - 5
+    ) {
+      nextErrors.horaInicio = 'Este horário já passou. Selecione um horário futuro.';
     }
     if (!form.horaInicio || !form.horaFimSlot) {
-      nextErrors.horaInicio = 'Selecione início e término do atendimento (2 cliques).';
+      nextErrors.horaInicio = nextErrors.horaInicio || 'Selecione início e término do atendimento (2 cliques).';
     }
     const dur = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
     if (dur < 30 || dur % 30 !== 0) {
