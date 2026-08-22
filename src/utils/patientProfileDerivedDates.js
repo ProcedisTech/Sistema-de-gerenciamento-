@@ -80,6 +80,10 @@ export function dashboardRowToUtcApproxIso(row) {
 export function procedureOccurredInstantIso(proc) {
   if (!proc || typeof proc !== 'object') return null;
   const keys = [
+    'horaFim',
+    'hora_fim',
+    'horaInicio',
+    'hora_inicio',
     'criadoEm',
     'finalizadoEm',
     'dataInicio',

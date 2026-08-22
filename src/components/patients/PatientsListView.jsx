@@ -40,6 +40,7 @@ import {
   activateFilterByKpiCardId,
   deactivateFilterByKpiCardId,
 } from './patientListFilters.js';
+import { PatientListPagination } from './PatientListPagination.jsx';
 import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
 import { usePlanosPaciente } from '../planos/usePlanosPaciente.js';
@@ -623,21 +624,40 @@ function PatientPreviewPanel({
       <PlanoAtivoDrawerBlock patientId={selectedPatient?.id} />
       <NotasDrawerBlock patient={selectedPatient} />
 
-      {canStartAnamnese && (
+      <div className="grid grid-cols-2 gap-2">
+        {canStartAnamnese && (
+          <button
+            type="button"
+            onClick={handleIniciarAtendimentoClick}
+            disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
+            className="flex min-h-[42px] w-full flex-row items-center justify-center gap-1.5 rounded-xl bg-[#00a88e] px-2 py-2 text-[12px] font-bold text-white shadow-xs transition-all hover:bg-[#00967f] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-60 sm:text-[12.5px]"
+            title="Iniciar Atendimento"
+          >
+            {previewAnamneseLoading ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
+            ) : (
+              <Play className="h-3.5 w-3.5 shrink-0 fill-white" strokeWidth={2.5} aria-hidden />
+            )}
+            <span className="truncate">Iniciar Atendimento</span>
+          </button>
+        )}
+
         <button
           type="button"
-          onClick={handleIniciarAtendimentoClick}
-          disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
-          className="flex min-h-[46px] w-full flex-row items-center justify-center gap-2 rounded-xl bg-[#00a88e] px-4 py-2.5 text-[14px] font-bold text-white shadow-sm transition-all hover:bg-[#00967f] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-60"
+          onClick={() => {
+            if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
+            setPatientDetailTab('planos');
+            setPatientView('profile');
+          }}
+          className={`flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#00a88e]/35 bg-[#e6f7f5]/40 px-2 py-2 text-[12px] font-bold text-[#007463] shadow-2xs transition-all hover:border-[#00a88e]/70 hover:bg-[#e6f7f5]/90 active:scale-[0.99] sm:text-[12.5px] ${
+            !canStartAnamnese ? 'col-span-2' : ''
+          }`}
+          title={isNivel1 ? 'Ver Cadastro' : 'Ver Perfil'}
         >
-          {previewAnamneseLoading ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
-          ) : (
-            <Play className="h-4 w-4 shrink-0 fill-white" strokeWidth={2.5} aria-hidden />
-          )}
-          <span>Iniciar Atendimento</span>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2.25} />
+          <span className="truncate">{isNivel1 ? 'Ver Cadastro' : 'Ver Perfil'}</span>
         </button>
-      )}
+      </div>
 
       {previewAgendaSlot && !isNivel1 ? (
         <div className="flex flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-4">
@@ -791,21 +811,6 @@ function PatientPreviewPanel({
         ) : (
           <p className="py-6 text-center text-[13px] font-normal text-[#64748b]">Nenhum procedimento registrado</p>
         )}
-      </div>
-
-      <div className="max-lg:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-        <button
-          type="button"
-          onClick={() => {
-            if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
-            setPatientDetailTab('planos');
-            setPatientView('profile');
-          }}
-          className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-        >
-          <ExternalLink className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2.25} />
-          {isNivel1 ? 'Ver Cadastro do Paciente' : 'Ver Visão Geral Completa do Paciente'}
-        </button>
       </div>
     </div>
   );
