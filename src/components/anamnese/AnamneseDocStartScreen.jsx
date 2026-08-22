@@ -100,15 +100,11 @@ export function AnamneseDocStartScreen({
   onUseFicha,
   onAppendModulo,
   onEspiar,
-  onForkChange,
 }) {
   const [fork, setFork] = useState(null);
 
   const toggleFork = (f) => {
-    const next = fork === f ? null : f;
-    setFork(next);
-    if (next === 'ficha') onForkChange?.('fichas');
-    if (next === 'secao') onForkChange?.('secoes');
+    setFork((prev) => (prev === f ? null : f));
   };
 
   return (
@@ -151,7 +147,7 @@ export function AnamneseDocStartScreen({
           <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.09em] text-[#64748b]">
             Escolha o modelo
           </div>
-          <div className="fgrid grid gap-3 sm:grid-cols-2">
+          <div className="fgrid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {fichas.map((f) => (
               <FichaCard key={f.codigo} ficha={f} onUse={onUseFicha} onEspiar={onEspiar} />
             ))}
@@ -164,7 +160,7 @@ export function AnamneseDocStartScreen({
           <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.09em] text-[#64748b]">
             Clique nos blocos que você quer — some quantos precisar
           </div>
-          <div className="mgrid grid gap-2 sm:grid-cols-2">
+          <div className="mgrid grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-2">
             {modulos.map((m) => (
               <button
                 key={m.nome}

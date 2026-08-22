@@ -1,6 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   CornerDownRight,
   CornerUpLeft,
   GripVertical,
@@ -19,6 +21,9 @@ import {
   TAG_CRITICA,
   TAG_HIST,
   TAG_COND,
+  IA,
+  IA_DANGER,
+  isTipoEscolha,
 } from './editorDocumentoTokens.js';
 import {
   getTipoMeta,
@@ -32,6 +37,7 @@ import {
   PopoverItem,
 } from './AnamneseDocPopover.jsx';
 import { AnamneseDocTipoMenu } from './AnamneseDocTipoMenu.jsx';
+import { AnamneseDocAlternativas } from './AnamneseDocAlternativas.jsx';
 
 function prioClass(prioridade) {
   const p = String(prioridade || 'NORMAL').toUpperCase();
@@ -49,24 +55,39 @@ function qRowClass(q) {
   return cls;
 }
 
+function autoResize(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+}
+
 export function AnamneseDocPergunta({
   q,
   displayNum,
   isFirst,
+  isLast,
   editavel,
   dispatch,
   onBlur,
   onKeyDown,
+  onMoveUp,
+  onMoveDown,
 }) {
   const toast = useToast();
   const [openMenu, setOpenMenu] = useState(null);
   const tipoRef = useRef(null);
   const prioRef = useRef(null);
+  const textRef = useRef(null);
 
   const tipoMeta = getTipoMeta(q.tipoRespostaCodigo);
   const prioKey = String(q.prioridade || 'NORMAL').toUpperCase();
   const prioMeta = PRIO_META[prioKey] || PRIO_META.NORMAL;
   const feed = tipoMeta.feed;
+  const showAlts = isTipoEscolha(q.tipoRespostaCodigo);
+
+  useEffect(() => {
+    autoResize(textRef.current);
+  }, [q.descricao]);
 
   const handleIndent = () => {
     if (q.perguntaPaiClientKey) {
@@ -87,66 +108,70 @@ export function AnamneseDocPergunta({
 
   return (
     <div className={qRowClass(q)}>
-      <span className="mt-0.5 shrink-0 cursor-grab text-[#cbd5e1] opacity-60" aria-hidden>
+      <span className="mt-0.5 hidden shrink-0 cursor-grab text-[#cbd5e1] opacity-60 lg:inline" aria-hidden>
         <GripVertical className="h-3 w-3" />
       </span>
       <span className={QNUM}>{q.perguntaPaiClientKey ? '↳' : displayNum}</span>
       <div className="min-w-0 flex-1">
-        <input
-          type="text"
+        <textarea
+          ref={textRef}
+          rows={1}
           value={q.descricao}
           disabled={!editavel}
           placeholder="Escreva a pergunta..."
           className={QTEXT}
           onFocus={() => dispatch({ type: EDITOR_ACTIONS.SET_FOCUS, focusKey: q.clientKey })}
-          onKeyDown={(e) => onKeyDown(e, q.clientKey, q)}
-          onChange={(e) =>
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              onKeyDown?.(e, q.clientKey, q);
+              return;
+            }
+            onKeyDown?.(e, q.clientKey, q);
+          }}
+          onChange={(e) => {
             dispatch({
               type: EDITOR_ACTIONS.UPDATE_PERGUNTA,
               clientKey: q.clientKey,
               patch: { descricao: e.target.value },
-            })
-          }
+            });
+            autoResize(e.target);
+          }}
           onBlur={() => onBlur?.(q)}
         />
-        <div className="mt-1.5 flex flex-wrap items-center gap-1">
-          {/* a) tipo */}
+        <div className="mt-1.5 flex flex-row flex-wrap items-center gap-1.5">
           <button
             ref={tipoRef}
             type="button"
             disabled={!editavel}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setOpenMenu(openMenu === 'tipo' ? null : 'tipo')}
-            className={TAG}
+            className={`${TAG} whitespace-nowrap`}
           >
             {tipoMeta.n}
           </button>
 
-          {/* b) prioridade */}
           <button
             ref={prioRef}
             type="button"
             disabled={!editavel}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setOpenMenu(openMenu === 'prio' ? null : 'prio')}
-            className={`${TAG} ${prioClass(q.prioridade)}`}
+            className={`${TAG} whitespace-nowrap ${prioClass(q.prioridade)}`}
           >
             {prioMeta.n}
           </button>
 
-          {/* c) registro */}
           {feed ? (
             <span className={`${TAG} ${TAG_HIST}`}>
-              ★ o que ela escolher → {feed}
+              ★ → {feed}
             </span>
           ) : null}
 
-          {/* e) cond */}
           {q.perguntaPaiClientKey ? (
-            <span className={`${TAG} ${TAG_COND}`}>aparece se responder SIM</span>
+            <span className={`${TAG} ${TAG_COND} whitespace-nowrap`}>aparece se SIM</span>
           ) : null}
 
-          {/* f) obrigatório — deviação consciente */}
           <button
             type="button"
             disabled={!editavel}
@@ -158,14 +183,52 @@ export function AnamneseDocPergunta({
                 patch: { obrigatorio: !q.obrigatorio },
               })
             }
-            className={`${TAG} ${q.obrigatorio ? 'border-teal-200 bg-teal-50 text-teal-700' : ''}`}
+            className={`${TAG} whitespace-nowrap ${q.obrigatorio ? 'border-teal-200 bg-teal-50 text-teal-700' : ''}`}
           >
             {q.obrigatorio ? 'obrigatório' : 'opcional'}
           </button>
         </div>
+
+        {showAlts ? (
+          <AnamneseDocAlternativas
+            alternativas={q.alternativas}
+            editavel={editavel}
+            onChange={(alternativas) =>
+              dispatch({
+                type: EDITOR_ACTIONS.UPDATE_PERGUNTA,
+                clientKey: q.clientKey,
+                patch: { alternativas },
+              })
+            }
+          />
+        ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 flex-col items-center gap-0.5 sm:flex-row">
+        {editavel ? (
+          <>
+            <button
+              type="button"
+              disabled={isFirst}
+              title="Subir pergunta"
+              aria-label="Subir pergunta"
+              onClick={onMoveUp}
+              className={`${IA} disabled:opacity-[0.38]`}
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={isLast}
+              title="Descer pergunta"
+              aria-label="Descer pergunta"
+              onClick={onMoveDown}
+              className={`${IA} disabled:opacity-[0.38]`}
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           disabled={!editavel}
@@ -175,7 +238,7 @@ export function AnamneseDocPergunta({
               : 'Só perguntar se a anterior for SIM'
           }
           onClick={handleIndent}
-          className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-[#94a3b8] hover:bg-[#f1f5f9] hover:text-[#475569]"
+          className={IA}
         >
           {q.perguntaPaiClientKey ? (
             <CornerUpLeft className="h-3.5 w-3.5" />
@@ -191,7 +254,7 @@ export function AnamneseDocPergunta({
             dispatch({ type: EDITOR_ACTIONS.REMOVE_PERGUNTA, clientKey: q.clientKey });
             toast.success('Pergunta removida');
           }}
-          className="grid h-7 w-7 place-items-center rounded-[7px] border-0 bg-transparent text-[#94a3b8] hover:bg-rose-50 hover:text-rose-600"
+          className={`${IA} ${IA_DANGER}`}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>

@@ -3633,6 +3633,8 @@ function AppRefactoredInner() {
         }}
         onDiscard={() => {
           setIsUnsavedNavModalOpen(false);
+          setIsDirtyFicha(false);
+          setIsDirtyHorarios(false);
           const action = pendingNavAction.current;
           pendingNavAction.current = null;
           action?.();
