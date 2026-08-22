@@ -514,7 +514,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                   <div className="flex justify-between items-end mb-4 shrink-0">
                     <div>
                       <h4 className="text-sm font-bold text-slate-900">Permissões de Acesso</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">Selecione o que usuários com este perfil poderão fazer no sistema.</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Clique em "Ver" em cada módulo para configurar suas funções — a visualização daquele módulo já é liberada automaticamente.</p>
                     </div>
                   </div>
 
