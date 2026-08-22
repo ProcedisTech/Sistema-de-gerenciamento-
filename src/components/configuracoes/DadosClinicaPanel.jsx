@@ -342,10 +342,16 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
   const dis = !isAdmin;
   const readonlyInputClass =
     'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-600 outline-none cursor-not-allowed';
-  const inputClass =
-    'w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-[14px] text-slate-900 font-medium focus:ring-4 focus:ring-slate-900/10 focus:border-slate-900 outline-none transition-all';
-  const inputCls = dis ? readonlyInputClass : inputClass;
-  const labelCls = 'text-[13px] font-bold text-slate-800';
+  const greenInput =
+    'w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 transition-all border-[#00a88e]/25 focus:border-[#00a88e]';
+  const purpleInput =
+    'w-full px-4 py-3 bg-[#faf5ff] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#a855f7]/20 transition-all border-[#a855f7]/30 focus:border-[#a855f7]';
+  const amberInput =
+    'w-full px-4 py-3 bg-[#fffbeb] border border-amber-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#f59e0b]/20 transition-all focus:border-[#f59e0b] text-[#0f172a]';
+  const blueInput =
+    'w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] text-[#0f172a] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all border-[#3b82f6]/30 focus:border-[#3b82f6]';
+  const inputCls = (themeClass) => (dis ? readonlyInputClass : themeClass);
+  const labelCls = (color) => `text-[13px] font-bold ${color}`;
   const gridGapClass = 'gap-x-6 gap-y-5';
   const cep8Ok = onlyDigitsCep(cep).length === 8;
 
@@ -444,16 +450,16 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* Card 1 — Identificação */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-[#00a88e]/25 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white font-bold text-[14px]">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a88e] text-[14px] font-bold text-white shadow-sm">
                 1
               </div>
-              <h4 className="text-[18px] font-bold text-slate-900">Identificação</h4>
+              <h4 className="text-[18px] font-bold text-[#0f766e]">Identificação</h4>
             </div>
             <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
               <div className="md:col-span-2 space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-razao`}>
+                <label className={labelCls('text-[#00a88e]')} htmlFor={`${formId}-razao`}>
                   Razão social <span className="text-red-600">*</span>
                 </label>
                 <input
@@ -463,12 +469,12 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setRazaoSocial(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(greenInput)}
                   autoComplete="organization"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-fantasia`}>
+                <label className={labelCls('text-[#00a88e]')} htmlFor={`${formId}-fantasia`}>
                   Nome fantasia <span className="text-red-600">*</span>
                 </label>
                 <input
@@ -478,11 +484,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setNomeFantasia(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(greenInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-cnpj`}>
+                <label className={labelCls('text-[#00a88e]')} htmlFor={`${formId}-cnpj`}>
                   CNPJ <span className="text-red-600">*</span>
                 </label>
                 <input
@@ -493,11 +499,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setCnpjDisplay(formatCnpjInput(e.target.value))}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(greenInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-ie`}>
+                <label className={labelCls('text-[#00a88e]')} htmlFor={`${formId}-ie`}>
                   Inscrição estadual
                 </label>
                 <input
@@ -507,11 +513,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setInscricaoEstadual(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(greenInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-im`}>
+                <label className={labelCls('text-[#00a88e]')} htmlFor={`${formId}-im`}>
                   Inscrição municipal
                 </label>
                 <input
@@ -521,23 +527,23 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setInscricaoMunicipal(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(greenInput)}
                 />
               </div>
             </div>
           </div>
 
           {/* Card 2 — Contato */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-[#a855f7]/25 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white font-bold text-[14px]">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
                 2
               </div>
-              <h4 className="text-[18px] font-bold text-slate-900">Contato</h4>
+              <h4 className="text-[18px] font-bold text-[#7e22ce]">Contato</h4>
             </div>
             <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-telp`}>
+                <label className={labelCls('text-[#a855f7]')} htmlFor={`${formId}-telp`}>
                   Telefone principal
                 </label>
                 <input
@@ -547,12 +553,12 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setTelefonePrincipal(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(purpleInput)}
                   autoComplete="tel"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-wa`}>
+                <label className={labelCls('text-[#a855f7]')} htmlFor={`${formId}-wa`}>
                   WhatsApp
                 </label>
                 <input
@@ -562,11 +568,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setWhatsapp(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(purpleInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-mail`}>
+                <label className={labelCls('text-[#a855f7]')} htmlFor={`${formId}-mail`}>
                   E-mail
                 </label>
                 <input
@@ -576,12 +582,12 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEmail(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(purpleInput)}
                   autoComplete="email"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-site`}>
+                <label className={labelCls('text-[#a855f7]')} htmlFor={`${formId}-site`}>
                   Site
                 </label>
                 <input
@@ -591,12 +597,12 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setSiteUrl(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(purpleInput)}
                   autoComplete="url"
                 />
               </div>
               <div className="space-y-1.5 md:col-span-2">
-                <label className={labelCls} htmlFor={`${formId}-ig`}>
+                <label className={labelCls('text-[#a855f7]')} htmlFor={`${formId}-ig`}>
                   Instagram (@handle)
                 </label>
                 <input
@@ -606,7 +612,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setInstagramHandle(e.target.value.replace(/^@+/, ''))}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(purpleInput)}
                   placeholder="ex.: minha_clinica"
                 />
               </div>
@@ -616,16 +622,16 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           {/* Card 3 — Endereço */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-amber-200 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white font-bold text-[14px]">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f59e0b] text-[14px] font-bold text-white shadow-sm">
                 3
               </div>
-              <h4 className="text-[18px] font-bold text-slate-900">Endereço</h4>
+              <h4 className="text-[18px] font-bold text-[#b45309]">Endereço</h4>
             </div>
             <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
               <div className="md:col-span-2 space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-cep`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-cep`}>
                   CEP
                 </label>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -637,7 +643,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                     onChange={dis ? undefined : (e) => setCep(maskCep(e.target.value))}
                     disabled={dis}
                     readOnly={dis}
-                    className={`${inputCls} sm:min-w-0 sm:flex-1`}
+                    className={`${inputCls(amberInput)} sm:min-w-0 sm:flex-1`}
                     autoComplete="postal-code"
                     placeholder="00000-000"
                   />
@@ -664,7 +670,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                 ) : null}
               </div>
               <div className="md:col-span-2 space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-log`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-log`}>
                   Logradouro
                 </label>
                 <input
@@ -674,11 +680,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEnderecoLogradouro(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-num`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-num`}>
                   Número
                 </label>
                 <input
@@ -688,11 +694,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEnderecoNumero(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-comp`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-comp`}>
                   Complemento
                 </label>
                 <input
@@ -702,11 +708,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEnderecoComplemento(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-bairro`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-bairro`}>
                   Bairro
                 </label>
                 <input
@@ -716,11 +722,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEnderecoBairro(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-cidade`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-cidade`}>
                   Cidade
                 </label>
                 <input
@@ -730,11 +736,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEnderecoCidade(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-uf`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-uf`}>
                   Estado (UF)
                 </label>
                 <input
@@ -750,11 +756,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   }
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-pais`}>
+                <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-pais`}>
                   País
                 </label>
                 <input
@@ -764,23 +770,23 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setEnderecoPais(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(amberInput)}
                 />
               </div>
             </div>
           </div>
 
           {/* Card 4 — Responsável Técnico */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-blue-200 bg-white p-6 transition-colors">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white font-bold text-[14px]">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
                 4
               </div>
-              <h4 className="text-[18px] font-bold text-slate-900">Responsável Técnico</h4>
+              <h4 className="text-[18px] font-bold text-[#1d4ed8]">Responsável Técnico</h4>
             </div>
             <div className={`grid grid-cols-1 md:grid-cols-2 ${gridGapClass}`}>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-rt-nome`}>
+                <label className={labelCls('text-[#3b82f6]')} htmlFor={`${formId}-rt-nome`}>
                   Nome do responsável
                 </label>
                 <input
@@ -790,11 +796,11 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setResponsavelTecnicoNome(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(blueInput)}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className={labelCls} htmlFor={`${formId}-rt-reg`}>
+                <label className={labelCls('text-[#3b82f6]')} htmlFor={`${formId}-rt-reg`}>
                   Registro profissional
                 </label>
                 <input
@@ -804,7 +810,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                   onChange={dis ? undefined : (e) => setResponsavelTecnicoRegistro(e.target.value)}
                   disabled={dis}
                   readOnly={dis}
-                  className={inputCls}
+                  className={inputCls(blueInput)}
                   placeholder="ex.: CRBM-DF 12345"
                 />
               </div>
