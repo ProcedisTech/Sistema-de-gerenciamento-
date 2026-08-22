@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Settings2, Plus, Edit2, Trash2, Shield, Crown, Loader2, X } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
@@ -34,6 +34,14 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   // Só pra pré-preencher os checkboxes a partir do cargo escolhido — não é salvo no perfil.
   const [cargoPreenchimento, setCargoPreenchimento] = useState('');
 
+  // Guarda a última sugestão de nome/descrição que o próprio handleCargoChange aplicou,
+  // pra distinguir "usuário editou por conta própria" (não sobrescreve mais) de "ainda é
+  // a sugestão do cargo anterior" (pode trocar pela sugestão do novo cargo escolhido).
+  const cargoSugestaoRef = useRef({ nome: '', descricao: '' });
+  // Evita que a resposta de uma troca de cargo antiga (mais lenta) sobrescreva, ao
+  // chegar depois, o resultado de uma troca mais recente.
+  const cargoRequestIdRef = useRef(0);
+
   // Pop-up de escolha (criar novo vs editar existente), só pra perfis já customizados.
   const [perfilEscolha, setPerfilEscolha] = useState(null);
   const [carregandoEscolha, setCarregandoEscolha] = useState(false);
@@ -53,6 +61,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     setEditingPerfil(null);
     setPerfilBaseCriacao(null);
     setCargoPreenchimento('');
+    cargoSugestaoRef.current = { nome: '', descricao: '' };
     setFormData({ nome: '', descricao: '' });
     setSelectedPermissoes([]);
     setWizardStep(1);
@@ -63,6 +72,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     setEditingPerfil(perfil);
     setPerfilBaseCriacao(null);
     setCargoPreenchimento('');
+    cargoSugestaoRef.current = { nome: '', descricao: '' };
     setFormData({ nome: perfil.nome || '', descricao: perfil.descricao || '' });
     setSelectedPermissoes([]);
     setWizardStep(1);
@@ -149,6 +159,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
         const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
         setEditingPerfil(null);
         setCargoPreenchimento('');
+        cargoSugestaoRef.current = { nome: '', descricao: '' };
         setFormData({ nome: perfil.nome || '', descricao: perfil.descricao || '' });
         setSelectedPermissoes(permissoesAtuais);
         setPerfilBaseCriacao(perfil.nome);
@@ -170,6 +181,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       setPerfilEscolha(null);
       setEditingPerfil(null);
       setCargoPreenchimento('');
+      cargoSugestaoRef.current = { nome: '', descricao: '' };
       setFormData({ nome: nomeNovo, descricao: perfilOrigem.descricao || '' });
       setSelectedPermissoes(permissoesAtuais);
       setPerfilBaseCriacao(perfilOrigem.nome);
@@ -192,19 +204,31 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     const perfilPresetId = getPresetProfileId(cargo.nome, perfisAcesso);
     const perfilPreset = perfilPresetId ? (perfisAcesso || []).find(p => String(p.id) === String(perfilPresetId)) : null;
     const cargoLabel = formatCargoLabel(cargo.nome);
+    const descricaoSugerida = perfilPreset?.descricao || `Acesso equivalente ao cargo de ${cargoLabel}.`;
+    const requestId = ++cargoRequestIdRef.current;
+
+    // A mutação do ref fica FORA do updater do setState: em StrictMode o React chama o
+    // updater duas vezes pra checar pureza, e mutar o ref lá dentro faz a 2ª chamada ver
+    // um ref já alterado pela 1ª, descartando a atualização (foi exatamente o bug visto).
+    const sugestaoAnterior = cargoSugestaoRef.current;
+    cargoSugestaoRef.current = { nome: cargoLabel, descricao: descricaoSugerida };
 
     setFormData(prev => ({
-      nome: prev.nome.trim() ? prev.nome : cargoLabel,
-      descricao: prev.descricao.trim() ? prev.descricao : (perfilPreset?.descricao || `Acesso equivalente ao cargo de ${cargoLabel}.`)
+      // Só herda a sugestão anterior (não sobrescreve) se o campo ainda estiver vazio ou
+      // for exatamente a sugestão do cargo anterior — se o usuário editou por conta
+      // própria, o valor dele diverge da última sugestão e paramos de mexer nele.
+      nome: (!prev.nome.trim() || prev.nome === sugestaoAnterior.nome) ? cargoLabel : prev.nome,
+      descricao: (!prev.descricao.trim() || prev.descricao === sugestaoAnterior.descricao) ? descricaoSugerida : prev.descricao,
     }));
 
     if (!perfilPresetId) return;
     setLoadingPermissoes(true);
     try {
       const permissoesPreset = await buscarPermissoesAtuais(perfilPresetId);
+      if (cargoRequestIdRef.current !== requestId) return;
       setSelectedPermissoes(permissoesPreset);
     } finally {
-      setLoadingPermissoes(false);
+      if (cargoRequestIdRef.current === requestId) setLoadingPermissoes(false);
     }
   };
 
