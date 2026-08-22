@@ -11,8 +11,12 @@ import {
   ClipboardList,
   FileText,
   Image as ImageIcon,
+  Layers,
   Loader2,
+  Sparkles,
+  Stethoscope,
   StickyNote,
+  Syringe,
   Trash2,
   Pencil,
   Plus,
@@ -294,10 +298,145 @@ function buildIntercorrenciaMapFromRelatos(relatos) {
   return map;
 }
 
-/** Região (ângulos de foto marcados) a partir do mapa de aplicação de um procedimento — "técnica" não é derivável. */
-// Reativar junto com a coluna "Região e técnica" da Ficha quando existir um campo de
-// região aplicada de verdade (o mapa de aplicação hoje guarda ângulo de foto, não região).
-// function buildRegiaoDisplayFromMapa(mapa) {
+function ProntuarioSessionPhotos({ fotosProc, onPreviewPhoto, selectedPatientId }) {
+  const [selectedStage, setSelectedStage] = useState('todas');
+
+  const grouped = useMemo(() => {
+    const list = Array.isArray(fotosProc) ? fotosProc : [];
+    return {
+      todas: list,
+      avaliacao: list.filter((f) => f.categoria === GALERIA_CATEGORIA.AVALIACAO),
+      antes: list.filter((f) => f.categoria === GALERIA_CATEGORIA.ANTES),
+      mapa: list.filter((f) => f.categoria === GALERIA_CATEGORIA.MAPA || Boolean(f?.mapaOverlay?.marcacoes?.length)),
+      depois: list.filter((f) => f.categoria === GALERIA_CATEGORIA.DEPOIS || f.categoria === 'pos_imediato'),
+      outro: list.filter(
+        (f) =>
+          f.categoria !== GALERIA_CATEGORIA.AVALIACAO &&
+          f.categoria !== GALERIA_CATEGORIA.ANTES &&
+          f.categoria !== GALERIA_CATEGORIA.MAPA &&
+          !f?.mapaOverlay?.marcacoes?.length &&
+          f.categoria !== GALERIA_CATEGORIA.DEPOIS &&
+          f.categoria !== 'pos_imediato',
+      ),
+    };
+  }, [fotosProc]);
+
+  const activePhotos = grouped[selectedStage] || grouped.todas;
+  const visiblePhotos = activePhotos.slice(0, 4);
+  const remainingCount = Math.max(0, activePhotos.length - 4);
+
+  const stageTabs = [
+    { id: 'todas', label: 'Todas', count: grouped.todas.length },
+    { id: 'avaliacao', label: 'Avaliação', count: grouped.avaliacao.length },
+    { id: 'antes', label: 'Pré / Antes', count: grouped.antes.length },
+    { id: 'mapa', label: 'Mapa', count: grouped.mapa.length },
+    { id: 'depois', label: 'Pós / Depois', count: grouped.depois.length },
+    { id: 'outro', label: 'Outras', count: grouped.outro.length },
+  ].filter((t) => t.id === 'todas' || t.count > 0);
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
+          Fotos e Registros Visuais da Sessão ({fotosProc.length})
+        </div>
+      </div>
+
+      {fotosProc.length === 0 ? (
+        <p className="text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada a este procedimento.</p>
+      ) : (
+        <>
+          {stageTabs.length > 2 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {stageTabs.map((tab) => {
+                const active = selectedStage === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedStage(tab.id);
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                      active
+                        ? 'bg-[#00a88e] text-white shadow-2xs'
+                        : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                        active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {visiblePhotos.map((foto, idx) => {
+              const showMapa =
+                Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
+                foto?.categoria === GALERIA_CATEGORIA.MAPA;
+              const isLastWithOverflow = idx === 3 && remainingCount > 0;
+
+              return (
+                <button
+                  key={foto.serverId || `foto-${idx}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPreviewPhoto(foto);
+                  }}
+                  className="group relative aspect-square w-full overflow-hidden rounded-xl border border-[#00a88e]/15 bg-[#e6f7f5] text-left transition-transform hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-[#00a88e]"
+                >
+                  {showMapa ? (
+                    <GaleriaMapaThumb
+                      url={foto.url}
+                      mapaOverlay={foto.mapaOverlay}
+                      alt=""
+                      className="h-full w-full"
+                      density="thumb"
+                      pacienteId={selectedPatientId}
+                      fotoId={foto.serverId}
+                    />
+                  ) : (
+                    <GaleriaArquivoImage
+                      url={foto.url}
+                      alt=""
+                      className="h-full w-full"
+                      imgClassName="h-full w-full object-cover"
+                      pacienteId={selectedPatientId}
+                      fotoId={foto.serverId}
+                    />
+                  )}
+
+                  {foto.categoria && (
+                    <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur-xs">
+                      {GALERIA_CATEGORIA_LABELS[foto.categoria] || foto.categoria}
+                    </span>
+                  )}
+
+                  {isLastWithOverflow && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/65 text-white backdrop-blur-xs transition-opacity group-hover:bg-black/75">
+                      <span className="text-[18px] font-black leading-none">+{remainingCount + 1}</span>
+                      <span className="mt-1 text-[11px] font-bold">Ver todas</span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 //   if (!mapa || !Array.isArray(mapa.marcacoes) || mapa.marcacoes.length === 0) return '';
 //   const angulos = [...new Set(mapa.marcacoes.map((m) => humanizeCode(m.anguloFotoCodigo)).filter(Boolean))];
 //   return angulos.join(', ');
@@ -794,7 +933,6 @@ export function PatientProfileView({
   const [gerarPdfBusy, setGerarPdfBusy] = useState(false);
   const gerarPdfInFlightRef = useRef(false);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
-  const [showAllProntuario, setShowAllProntuario] = useState(false);
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
   const [manualAlerts, setManualAlerts] = useState([]);
   const [manualAlertsLoading, setManualAlertsLoading] = useState(false);
@@ -910,7 +1048,7 @@ export function PatientProfileView({
     setSessoesExpandidas({});
     setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
-    setShowAllProntuario(false);
+    setProntuarioVisibleCount(PRONTUARIO_PAGE_SIZE);
     setApiProcedures([]);
     setProximoAgendaIso(null);
     setApiNotes([]);
@@ -1777,18 +1915,61 @@ export function PatientProfileView({
     [nestedApiProcedures],
   );
 
-  const proximoRetornoResumoDisplay = proximoRetornoKpiDisplay;
+  const [prontuarioFilter, setProntuarioFilter] = useState('todos');
+  const [expandedProntuarioRetornosMap, setExpandedProntuarioRetornosMap] = useState({});
+  const PRONTUARIO_PAGE_SIZE = 15;
+  const [prontuarioVisibleCount, setProntuarioVisibleCount] = useState(PRONTUARIO_PAGE_SIZE);
 
-  const prontuarioListMax = 3;
-  const prontuarioListTruncated =
-    nestedApiProcedures.length > prontuarioListMax && !showAllProntuario;
-  const prontuarioRootsVisible = prontuarioListTruncated
-    ? nestedApiProcedures.slice(0, prontuarioListMax)
-    : nestedApiProcedures;
-  const flatProntuarioVisible = useMemo(
-    () => flattenNestedTimelineRoots(prontuarioRootsVisible),
-    [prontuarioRootsVisible],
-  );
+  const toggleProntuarioRetornos = useCallback((rootId) => {
+    setExpandedProntuarioRetornosMap((prev) => ({
+      ...prev,
+      [rootId]: !prev[rootId],
+    }));
+  }, []);
+
+  const filteredProntuarioRoots = useMemo(() => {
+    if (prontuarioFilter === 'todos') return nestedApiProcedures;
+    if (prontuarioFilter === 'procedimentos') {
+      return nestedApiProcedures.filter(
+        (p) =>
+          String(p.tipoProcedimentoCodigo || '').toLowerCase() !== 'retorno' &&
+          String(p.tipoProcedimentoCodigo || '').toLowerCase() !== 'consulta',
+      );
+    }
+    if (prontuarioFilter === 'consultas') {
+      return nestedApiProcedures.filter(
+        (p) => String(p.tipoProcedimentoCodigo || '').toLowerCase() === 'consulta',
+      );
+    }
+    if (prontuarioFilter === 'retornos') {
+      return nestedApiProcedures.filter(
+        (p) =>
+          String(p.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno' ||
+          Boolean(p.isRetoque) ||
+          (Array.isArray(p.retornos) && p.retornos.length > 0),
+      );
+    }
+    return nestedApiProcedures;
+  }, [nestedApiProcedures, prontuarioFilter]);
+
+  const hasMoreProntuario = prontuarioVisibleCount < filteredProntuarioRoots.length;
+  const prontuarioRootsVisible = hasMoreProntuario
+    ? filteredProntuarioRoots.slice(0, prontuarioVisibleCount)
+    : filteredProntuarioRoots;
+
+  const flatProntuarioVisible = useMemo(() => {
+    const out = [];
+    for (const root of prontuarioRootsVisible) {
+      out.push({ proc: root, depth: 0, rootId: root.id });
+      const isRetornosOpen = Boolean(expandedProntuarioRetornosMap[root.id]);
+      if (isRetornosOpen && Array.isArray(root.retornos)) {
+        for (const child of root.retornos) {
+          out.push({ proc: child, depth: 1, rootId: root.id });
+        }
+      }
+    }
+    return out;
+  }, [prontuarioRootsVisible, expandedProntuarioRetornosMap]);
 
   const galeriaItemsForProcedure = useCallback(
     (proc) => {
@@ -2397,7 +2578,7 @@ export function PatientProfileView({
                       <div className="rounded-lg border border-[#f1f5f9] bg-[#f8fafc] p-3">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-[#94a3b8]">Próximo retorno</div>
                         <div className="mt-0.5 text-[14px] font-semibold text-[#0f172a]">
-                          {proximoRetornoResumoDisplay}
+                          {selectedPatient?.proximoRetorno || selectedPatient?.proximo_retorno || '—'}
                         </div>
                       </div>
                     </div>
@@ -2445,42 +2626,92 @@ export function PatientProfileView({
                               : '';
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                             const retornoCount = (root.retornos || []).length;
-                            const isLast = idx === perfilRecentRoots.length - 1;
-                            const showVerMais =
-                              isLast && nestedApiProcedures.length > perfilRecentRoots.length;
+                            const fotosProc = galeriaItemsForProcedure(proc);
+                            const assinaturaVinculada = (assinaturas || []).find(
+                              (a) =>
+                                a &&
+                                a.procedimentoFeitoId != null &&
+                                proc.id != null &&
+                                String(a.procedimentoFeitoId) === String(proc.id),
+                            );
+                            const hasObservacao = Boolean(proc.observacao && String(proc.observacao).trim());
+                            const isExpanded = Boolean(expandedProntuarioRetornosMap[root.id]);
+
                             return (
-                              <ProcedureTimelineEntry key={rowKey}>
-                                <ProcedureTimelinePreviewCard
-                                  dateLabel={dateLabel}
-                                  timeLabel={timeLabel}
-                                  procedureName={
-                                    retornoCount > 0
-                                      ? `${nomeProc} (+${retornoCount} retorno${retornoCount > 1 ? 's' : ''})`
-                                      : nomeProc
-                                  }
-                                  professionalName={proc.profissionalNome || '—'}
-                                  onPress={
-                                    showVerMais
-                                      ? () => setPatientDetailTab('prontuario')
-                                      : undefined
-                                  }
-                                  fusedVerMais={showVerMais}
-                                  verMaisLabel="Ver prontuário completo"
-                                />
-                              </ProcedureTimelineEntry>
+                              <React.Fragment key={rowKey}>
+                                <ProcedureTimelineEntry>
+                                  <ProcedureTimelinePreviewCard
+                                    dateLabel={dateLabel}
+                                    timeLabel={timeLabel}
+                                    procedureName={nomeProc}
+                                    professionalName={proc.profissionalNome || '—'}
+                                    retornoCount={retornoCount}
+                                    statusNome={proc.statusNome || ''}
+                                    fotosCount={fotosProc.length}
+                                    hasTermo={Boolean(assinaturaVinculada)}
+                                    hasObservacao={hasObservacao}
+                                    onToggleRetornos={() => toggleProntuarioRetornos(root.id)}
+                                    isRetornosExpanded={isExpanded}
+                                    onPress={() => setPatientDetailTab('prontuario')}
+                                  />
+                                </ProcedureTimelineEntry>
+                                {isExpanded &&
+                                  Array.isArray(root.retornos) &&
+                                  root.retornos.map((child, cIdx) => {
+                                    const childCriado = child.criadoEm ? new Date(child.criadoEm) : null;
+                                    const childDateLabel = childCriado
+                                      ? childCriado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                                      : '—';
+                                    const childTimeLabel = childCriado
+                                      ? childCriado.toLocaleTimeString('pt-BR', {
+                                          timeZone: 'America/Sao_Paulo',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })
+                                      : '';
+                                    const childNomeProc = child.procedimentoNome || child.nome || 'Procedimento';
+                                    const childFotos = galeriaItemsForProcedure(child);
+                                    const childAssinatura = (assinaturas || []).find(
+                                      (a) =>
+                                        a &&
+                                        a.procedimentoFeitoId != null &&
+                                        child.id != null &&
+                                        String(a.procedimentoFeitoId) === String(child.id),
+                                    );
+                                    return (
+                                      <ProcedureTimelineEntry key={child.id || `child-${cIdx}`} depth={1}>
+                                        <ProcedureTimelinePreviewCard
+                                          dateLabel={childDateLabel}
+                                          timeLabel={childTimeLabel}
+                                          procedureName={childNomeProc}
+                                          professionalName={child.profissionalNome || '—'}
+                                          depth={1}
+                                          isRetoque={Boolean(child.isRetoque)}
+                                          statusNome={child.statusNome || ''}
+                                          fotosCount={childFotos.length}
+                                          hasTermo={Boolean(childAssinatura)}
+                                          hasObservacao={Boolean(child.observacao && String(child.observacao).trim())}
+                                          onPress={() => setPatientDetailTab('prontuario')}
+                                        />
+                                      </ProcedureTimelineEntry>
+                                    );
+                                  })}
+                              </React.Fragment>
                             );
                           })}
                         </ProcedureTimelineRail>
-                        {nestedApiProcedures.length <= perfilRecentRoots.length ? (
-                          <button
-                            type="button"
-                            onClick={() => setPatientDetailTab('prontuario')}
-                            className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-3 py-2.5 text-[13px] font-semibold text-[#00a88e] transition-colors hover:border-[#cbd5e1] hover:bg-[#f1f5f9]"
-                          >
-                            Ver prontuário completo
-                            <ChevronDown className="h-4 w-4 shrink-0 -rotate-90" strokeWidth={2.25} aria-hidden />
-                          </button>
-                        ) : null}
+                        {nestedApiProcedures.length > 0 && (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setPatientDetailTab('prontuario')}
+                              className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-4 py-2.5 text-[13px] font-bold text-[#00a88e] shadow-2xs transition-all hover:border-[#cbd5e1] hover:bg-[#f8fafc]"
+                            >
+                              <span>Ver prontuário completo ({nestedApiProcedures.length} {nestedApiProcedures.length === 1 ? 'procedimento' : 'procedimentos'})</span>
+                              <ChevronRight className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2498,6 +2729,68 @@ export function PatientProfileView({
                       </span>
                     ) : null}
                   </div>
+
+                  {canSeeProntuario && nestedApiProcedures.length >= 3 && (
+                    <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                      {[
+                        { id: 'todos', label: 'Todos', count: nestedApiProcedures.length },
+                        {
+                          id: 'procedimentos',
+                          label: 'Procedimentos',
+                          count: nestedApiProcedures.filter(
+                            (p) =>
+                              String(p.tipoProcedimentoCodigo || '').toLowerCase() !== 'retorno' &&
+                              String(p.tipoProcedimentoCodigo || '').toLowerCase() !== 'consulta',
+                          ).length,
+                        },
+                        {
+                          id: 'consultas',
+                          label: 'Consultas',
+                          count: nestedApiProcedures.filter(
+                            (p) => String(p.tipoProcedimentoCodigo || '').toLowerCase() === 'consulta',
+                          ).length,
+                        },
+                        {
+                          id: 'retornos',
+                          label: 'Retornos',
+                          count: nestedApiProcedures.filter(
+                            (p) =>
+                              String(p.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno' ||
+                              Boolean(p.isRetoque) ||
+                              (Array.isArray(p.retornos) && p.retornos.length > 0),
+                          ).length,
+                        },
+                      ]
+                        .filter((f) => f.id === 'todos' || f.count > 0)
+                        .map((f) => {
+                          const active = prontuarioFilter === f.id;
+                          return (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => {
+                                setProntuarioFilter(f.id);
+                                setProntuarioVisibleCount(PRONTUARIO_PAGE_SIZE);
+                              }}
+                              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                active
+                                  ? 'bg-[#00a88e] text-white shadow-2xs'
+                                  : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                              }`}
+                            >
+                              <span>{f.label}</span>
+                              <span
+                                className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                                  active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {f.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
                   {!canSeeProntuario ? (
                     <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-[#e2e8f0] rounded-[18px]">
                       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 mb-4 border border-rose-100/60 shadow-inner">
@@ -2509,11 +2802,11 @@ export function PatientProfileView({
                       </p>
                     </div>
                   ) : (
-                    <>
-                      {!sortedApiProcedures.length ? (
-                        <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
-                      ) : (
-                        <ProcedureTimelineRail>
+                    !sortedApiProcedures.length ? (
+                      <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
+                    ) : (
+                        <>
+                          <ProcedureTimelineRail>
                           {flatProntuarioVisible.map(({ proc, depth }, idx) => {
                             const rowKey =
                               proc.id != null && proc.id !== ''
@@ -2521,17 +2814,13 @@ export function PatientProfileView({
                                 : `proc-${idx}`;
                             const open = Boolean(prontuarioExpanded[rowKey]);
                             const dataLabel = proc.criadoEm
-                              ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                              ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) +
+                                ' · ' +
+                                new Date(proc.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
                               : '—';
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                             const fotosProc = galeriaItemsForProcedure(proc);
                             const procId = proc.id ?? proc.procedimentoId;
-                            const lastRootId = prontuarioRootsVisible[prontuarioRootsVisible.length - 1]?.id;
-                            const showVerMaisHere =
-                              prontuarioListTruncated &&
-                              depth === 0 &&
-                              lastRootId != null &&
-                              String(proc.id) === String(lastRootId);
                             const assinaturaVinculada = (assinaturas || []).find(
                               (a) =>
                                 a &&
@@ -2558,34 +2847,69 @@ export function PatientProfileView({
                               assinaturaVinculada?.paciente_assinou_em;
                             return (
                               <ProcedureTimelineEntry key={rowKey} depth={depth}>
-                                <div className="overflow-hidden rounded-lg border border-[#e2e8f0] bg-[#f8fafc] shadow-sm">
+                                <div
+                                  className={`overflow-hidden rounded-xl border transition-all ${
+                                    depth > 0
+                                      ? 'border-sky-200/80 border-l-4 border-l-sky-500 bg-[#f0f9ff]/40 shadow-2xs hover:shadow-xs'
+                                      : 'border-[#e2e8f0] border-l-4 border-l-[#00a88e] bg-white shadow-xs hover:shadow-sm'
+                                  }`}
+                                >
                                   <button
                                     type="button"
                                     onClick={() => toggleProntuarioRow(rowKey)}
-                                    className="flex w-full min-h-[44px] items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#f1f5f9] sm:gap-3 sm:px-4 sm:py-3"
+                                    className={`flex w-full min-h-[44px] items-start gap-2.5 px-3.5 py-3 text-left transition-colors sm:gap-3.5 sm:px-4 sm:py-3.5 ${
+                                      depth > 0 ? 'hover:bg-sky-50/50' : 'hover:bg-[#f8fafc]'
+                                    }`}
                                     aria-expanded={open}
                                   >
                                     <div className="min-w-0 flex-1">
-                                      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-[#64748b] sm:text-[13px]">
+                                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium text-[#64748b] sm:text-[13px]">
                                         <Calendar className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
                                         <span className="truncate">{dataLabel}</span>
+                                        {depth === 0 && Array.isArray(proc.retornos) && proc.retornos.length > 0 && (
+                                          <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50/80 px-2 py-0.2 text-[10px] font-bold text-sky-800">
+                                            <span>🔄</span>
+                                            <span>
+                                              {proc.retornos.length}{' '}
+                                              {proc.retornos.length === 1 ? 'retorno' : 'retornos'}
+                                            </span>
+                                          </span>
+                                        )}
                                       </div>
-                                      <p className="mt-1 truncate text-[13px] font-bold leading-snug text-[#0f172a] sm:text-[14px]" title={nomeProc}>
+                                      <p className="mt-1 truncate text-[14px] font-bold leading-snug text-[#0f172a] sm:text-[15px]" title={nomeProc}>
                                         {nomeProc}
                                       </p>
-                                      <p
-                                        className="mt-0.5 truncate text-[12px] font-medium text-[#64748b]"
-                                        title={proc.profissionalNome || undefined}
-                                      >
-                                        Realizado por {proc.profissionalNome || '—'}
-                                      </p>
+                                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-[#64748b]">
+                                        <p className="flex items-center gap-1.5 truncate font-medium" title={proc.profissionalNome || undefined}>
+                                          <Stethoscope className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
+                                          <span className="truncate">Realizado por {proc.profissionalNome || '—'}</span>
+                                        </p>
+                                        {fotosProc.length > 0 && (
+                                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+                                            <ImageIcon className="h-3 w-3 text-slate-400" />
+                                            {fotosProc.length} {fotosProc.length === 1 ? 'foto' : 'fotos'}
+                                          </span>
+                                        )}
+                                        {assinaturaVinculada && (
+                                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200/80 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                            <FileText className="h-3 w-3 text-emerald-600" />
+                                            Termo assinado
+                                          </span>
+                                        )}
+                                        {proc.observacao && String(proc.observacao).trim() && (
+                                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+                                            <StickyNote className="h-3 w-3 text-slate-400" />
+                                            Obs
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                     <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
                                       {depth > 0 ? (
                                         <RetornoTimelineBadge isRetoque={Boolean(proc.isRetoque)} />
                                       ) : null}
                                       {proc.statusNome ? (
-                                        <span className="shrink-0 rounded-full border border-[#00a88e]/25 bg-[#e6f7f5] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#0f766e]">
+                                        <span className="shrink-0 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
                                           {proc.statusNome}
                                         </span>
                                       ) : (
@@ -2600,6 +2924,47 @@ export function PatientProfileView({
                                       />
                                     </div>
                                   </button>
+
+                                  {/* Botão de expansão/recolhimento explícito de retornos (paleta azul claro com bom contraste) */}
+                                  {depth === 0 && Array.isArray(proc.retornos) && proc.retornos.length > 0 && (
+                                    <div className="border-t border-sky-200/80 bg-[#f0f9ff]/50 px-3.5 py-2 sm:px-4">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleProntuarioRetornos(proc.id);
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
+                                          expandedProntuarioRetornosMap[proc.id]
+                                            ? 'border-2 border-sky-400 bg-sky-100 text-sky-950 shadow-xs'
+                                            : 'border-2 border-sky-300/90 bg-sky-50/90 text-sky-950 shadow-2xs hover:border-sky-400 hover:bg-sky-100'
+                                        }`}
+                                      >
+                                        <span className="flex items-center gap-1.5">
+                                          <span>🔄</span>
+                                          <span>
+                                            {expandedProntuarioRetornosMap[proc.id]
+                                              ? `Ocultar ${proc.retornos.length} ${
+                                                  proc.retornos.length === 1 ? 'retorno vinculado' : 'retornos vinculados'
+                                                }`
+                                              : `Ver ${proc.retornos.length} ${
+                                                  proc.retornos.length === 1 ? 'retorno vinculado' : 'retornos vinculados'
+                                                }`}
+                                          </span>
+                                        </span>
+                                        <span className="flex items-center gap-1 text-[10px] font-bold text-sky-800">
+                                          <span>{expandedProntuarioRetornosMap[proc.id] ? 'Recolher' : 'Expandir'}</span>
+                                          <ChevronDown
+                                            className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                                              expandedProntuarioRetornosMap[proc.id] ? 'rotate-180' : ''
+                                            }`}
+                                            strokeWidth={2.5}
+                                          />
+                                        </span>
+                                      </button>
+                                    </div>
+                                  )}
+
                                   {open ? (
                                     <div className="space-y-4 border-t border-[#e2e8f0] bg-[#fafafa] px-3 py-4 sm:px-4">
                                       <div>
@@ -2695,78 +3060,61 @@ export function PatientProfileView({
                                           </div>
                                         </div>
                                       ) : null}
-                                      <div className="flex flex-wrap gap-2">
-                                        <ModuloFuturoBadge>Cadastro de produtos em breve</ModuloFuturoBadge>
-                                        <ModuloFuturoBadge>Módulo financeiro em breve</ModuloFuturoBadge>
+                                      <div className="rounded-xl border border-[#e2e8f0] bg-white p-3.5 shadow-2xs">
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#0f766e]">
+                                          <Syringe className="h-3.5 w-3.5 text-[#00a88e]" />
+                                          Substâncias e Doses Aplicadas
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] font-semibold text-[#0f172a]">
+                                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/20 bg-[#e6f7f5]/40 px-2.5 py-1 text-[12px] font-semibold text-[#0f766e]">
+                                            {nomeProc}
+                                          </span>
+                                          <span className="text-[12px] font-medium text-[#64748b]">
+                                            🏷️ Lote / Validade: <span className="font-normal text-[#94a3b8]">—</span>
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div>
-                                        <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">Fotos da sessão</div>
-                                        {fotosProc.length ? (
-                                          <div className="mt-2 grid grid-cols-4 gap-2">
-                                            {fotosProc.map((foto) => {
-                                              const showMapa =
-                                                Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
-                                                foto?.categoria === GALERIA_CATEGORIA.MAPA;
-                                              return (
-                                                <button
-                                                  key={foto.serverId}
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setGalleryPreview({
-                                                      url: foto.url,
-                                                      authFetch: true,
-                                                      caption: foto.legenda || foto.fileName,
-                                                      mapaOverlay: foto.mapaOverlay || null,
-                                                      categoria: foto.categoria || null,
-                                                      serverId: foto.serverId || null,
-                                                    })
-                                                  }
-                                                  className="aspect-square w-full overflow-hidden rounded-lg border border-[#00a88e]/15 bg-[#e6f7f5]"
-                                                >
-                                                  {showMapa ? (
-                                                    <GaleriaMapaThumb
-                                                      url={foto.url}
-                                                      mapaOverlay={foto.mapaOverlay}
-                                                      alt=""
-                                                      className="h-full w-full"
-                                                      density="thumb"
-                                                      pacienteId={selectedPatient?.id}
-                                                      fotoId={foto.serverId}
-                                                    />
-                                                  ) : (
-                                                    <GaleriaArquivoImage
-                                                      url={foto.url}
-                                                      alt=""
-                                                      className="h-full w-full"
-                                                      imgClassName="h-full w-full object-cover"
-                                                      pacienteId={selectedPatient?.id}
-                                                      fotoId={foto.serverId}
-                                                    />
-                                                  )}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        ) : (
-                                          <p className="mt-2 text-[13px] font-medium text-[#94a3b8]">Nenhuma foto vinculada</p>
-                                        )}
-                                      </div>
+
+                                      <ProntuarioSessionPhotos
+                                        fotosProc={fotosProc}
+                                        selectedPatientId={selectedPatient?.id}
+                                        onPreviewPhoto={(foto) =>
+                                          setGalleryPreview({
+                                            url: foto.url,
+                                            authFetch: true,
+                                            caption: foto.legenda || foto.fileName,
+                                            mapaOverlay: foto.mapaOverlay || null,
+                                            categoria: foto.categoria || null,
+                                            serverId: foto.serverId || null,
+                                          })
+                                        }
+                                      />
                                     </div>
                                   ) : null}
-                                  <ProcedureTimelineProfileVerMaisStrip
-                                    hidden={!showVerMaisHere}
-                                    onExpand={() => setShowAllProntuario(true)}
-                                  />
                                 </div>
                               </ProcedureTimelineEntry>
                             );
                           })}
                         </ProcedureTimelineRail>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                        {hasMoreProntuario && (
+                          <div className="pt-3">
+                            <ProcedureTimelineProfileVerMaisStrip
+                              onExpand={() =>
+                                setProntuarioVisibleCount((prev) => prev + PRONTUARIO_PAGE_SIZE)
+                              }
+                              label={`Carregar mais procedimentos (+${Math.min(
+                                PRONTUARIO_PAGE_SIZE,
+                                filteredProntuarioRoots.length - prontuarioRootsVisible.length,
+                              )}) · Exibindo ${prontuarioRootsVisible.length} de ${
+                                filteredProntuarioRoots.length
+                              }`}
+                            />
+                          </div>
+                        )}
+                      </>
+                    ))}
+                  </div>
+                )}
 
               {patientDetailTab === 'anamnese' && (
                 <AnamneseTab

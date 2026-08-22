@@ -177,7 +177,16 @@ export function mapBackendPatient(dto) {
     condicoesSaude: dtoPick(dto, 'condicoesSaude', 'condicoes_saude'),
     queixasEsteticas: [],
     cirurgiasAnteriores: '',
-    observacoesImportantes: '',
+    observacoes:
+      dtoPick(dto, 'observacoes', 'observacoes') ||
+      dtoPick(dto, 'observacao', 'observacao') ||
+      dtoPick(dto, 'notas', 'notas') ||
+      dtoPick(dto, 'observacoesImportantes', 'observacoes_importantes') ||
+      '',
+    observacoesImportantes:
+      dtoPick(dto, 'observacoesImportantes', 'observacoes_importantes') ||
+      dtoPick(dto, 'observacoes', 'observacoes') ||
+      '',
     procedures: [],
     notas: [],
     galeria: [],

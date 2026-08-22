@@ -1,16 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   ArrowUpDown,
+  Cake,
+  CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ExternalLink,
   Filter,
   Loader2,
+  MessageCircle,
   Play,
   Plus,
   Search,
   Shield,
   ShieldAlert,
+  Stethoscope,
+  StickyNote,
   X,
 } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
@@ -36,6 +43,9 @@ import {
 import { PatientListPagination } from './PatientListPagination.jsx';
 import { usePapel } from '../../hooks/usePapel';
 import { anamneseApi, procedimentosApi } from '../../services/api';
+import { usePlanosPaciente } from '../planos/usePlanosPaciente.js';
+import { useAlertasClinicos } from '../../hooks/useAlertasClinicos.js';
+import { calcSessoesPlano } from '../../utils/planejamentoProfileMetrics.js';
 import {
   ProcedureTimelineHeading,
   ProcedureTimelineLoading,
@@ -43,7 +53,9 @@ import {
   ProcedureTimelineEntry,
   ProcedureTimelinePreviewCard,
 } from './ProcedureTimelineBlock.jsx';
-import { sortProcedimentosPorCriadoEmDesc } from './procedureTimelineUtils.js';
+import {
+  nestProcedimentosTimeline,
+} from './procedureTimelineUtils.js';
 import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
 
 function hasClinicalAlert(p) {
@@ -112,9 +124,9 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
       <PatientAvatar
         patient={patient}
         getPatientInitials={getPatientInitials}
-        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] sm:h-11 sm:w-11 lg:h-12 lg:w-12"
-        initialsClassName="text-[12px] font-bold sm:text-[13px] lg:text-sm"
-        spinnerClassName="h-4 w-4 lg:h-[18px] lg:w-[18px]"
+        className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app-border bg-[#e6f7f5] sm:h-12 sm:w-12"
+        initialsClassName="text-[12px] font-bold sm:text-[14px]"
+        spinnerClassName="h-4 w-4 sm:h-5 sm:w-5"
       />
       <div className="min-w-0 flex-1 overflow-hidden">
         <p
@@ -187,6 +199,294 @@ function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
   );
 }
 
+function AlertasClinicosDrawerBlock({ patient, patientId }) {
+  const [expanded, setExpanded] = useState(false);
+  const { alertasPerfil, alertasAnamnese, resumo, isLoading } = useAlertasClinicos(
+    patientId || patient?.id,
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-2.5 text-[12px] text-[#64748b]">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00a88e]" />
+        <span>Verificando alertas clínicos…</span>
+      </div>
+    );
+  }
+
+  // 1. Alergias (alimentar + princípio ativo + declarações críticas de alergia)
+  const alergiasFromPerfil = (alertasPerfil || []).filter(
+    (c) => c.secao === 'alergias' || c.secao === 'alergiasPrincipioAtivo',
+  );
+  const alergiasFromAnamnese = (alertasAnamnese || []).filter(
+    (c) => c.severidade === 'critica' || /alerg/i.test(c.titulo || c.valor || ''),
+  );
+  const alergiasPatient = String(patient?.alergias || '').trim();
+
+  // 2. Condições de risco / antecedentes / medicamentos
+  const riscoFromPerfil = (alertasPerfil || []).filter(
+    (c) =>
+      c.secao === 'antecedentes' ||
+      c.secao === 'medicamentos' ||
+      c.secao === 'condicoesSaude',
+  );
+  const riscoFromAnamnese = (alertasAnamnese || []).filter(
+    (c) => c.severidade !== 'critica' && !/alerg/i.test(c.titulo || c.valor || ''),
+  );
+  const riscoPatient = String(patient?.condicoesSaude || '').trim();
+
+  const totalAlergias = [
+    ...alergiasFromPerfil.map((a) => a.valor || a.titulo || a.nome),
+    ...alergiasFromAnamnese.map((a) => a.valor || a.titulo),
+    ...(alergiasPatient ? alergiasPatient.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : []),
+  ];
+  const uniqueAlergias = [...new Set(totalAlergias.filter(Boolean))];
+
+  const totalRiscos = [
+    ...riscoFromPerfil.map((r) => r.valor || r.titulo || r.nome),
+    ...riscoFromAnamnese.map((r) => r.valor || r.titulo),
+    ...(riscoPatient ? riscoPatient.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean) : []),
+  ];
+  const uniqueRiscos = [...new Set(totalRiscos.filter(Boolean))];
+
+  const hasAlertas = uniqueAlergias.length > 0 || uniqueRiscos.length > 0;
+
+  if (!hasAlertas) {
+    if (!resumo?.temVigente && !alergiasPatient && !riscoPatient) {
+      return (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/70 px-3.5 py-2 text-[12px] font-medium text-slate-600">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span>Nenhuma anamnese preenchida ainda</span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3.5 py-2 text-[12px] font-medium text-emerald-800">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+        <span>Sem restrições ou alergias anotadas</span>
+      </div>
+    );
+  }
+
+  const isCritical = uniqueAlergias.length > 0;
+
+  return (
+    <div
+      className={`rounded-2xl border transition-all ${
+        isCritical
+          ? 'border-rose-200/90 bg-rose-50/40'
+          : 'border-amber-200/90 bg-amber-50/40'
+      }`}
+    >
+      {/* Barra de resumo minimalista estilo Hub */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full min-h-[42px] items-center justify-between gap-2 px-3.5 py-2.5 text-left transition-colors hover:bg-white/40 rounded-2xl"
+        aria-expanded={expanded}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={`flex h-2 w-2 shrink-0 rounded-full ${
+              isCritical ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'
+            }`}
+          />
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px]">
+            <span
+              className={`font-bold ${
+                isCritical ? 'text-rose-900' : 'text-amber-900'
+              }`}
+            >
+              {isCritical
+                ? `${uniqueAlergias.length} ${
+                    uniqueAlergias.length === 1 ? 'alerta crítico' : 'alertas críticos'
+                  }`
+                : 'Alertas de saúde'}
+            </span>
+            {uniqueRiscos.length > 0 && (
+              <span
+                className={`text-[11px] font-medium ${
+                  isCritical ? 'text-rose-700/80' : 'text-amber-800/80'
+                }`}
+              >
+                · {uniqueRiscos.length} {uniqueRiscos.length === 1 ? 'risco' : 'riscos'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+              isCritical
+                ? 'bg-rose-100/80 text-rose-800'
+                : 'bg-amber-100/80 text-amber-800'
+            }`}
+          >
+            {expanded ? 'Ocultar' : 'Ver detalhes'}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform ${
+              isCritical ? 'text-rose-600' : 'text-amber-600'
+            } ${expanded ? 'rotate-180' : ''}`}
+            strokeWidth={2.25}
+          />
+        </div>
+      </button>
+
+      {/* Detalhes expandidos sob demanda (estilo lista limpa com bullets) */}
+      {expanded && (
+        <div
+          className={`space-y-2.5 border-t px-3.5 py-3 text-[12px] ${
+            isCritical
+              ? 'border-rose-200/60 bg-white/60'
+              : 'border-amber-200/60 bg-white/60'
+          } rounded-b-2xl`}
+        >
+          {uniqueAlergias.length > 0 && (
+            <div>
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-rose-800">
+                <span>🔴</span>
+                <span>Declarações Críticas / Alergias ({uniqueAlergias.length})</span>
+              </div>
+              <ul className="space-y-1 pl-1">
+                {uniqueAlergias.map((a, i) => (
+                  <li
+                    key={`alergia-item-${i}`}
+                    className="flex items-start gap-2 text-[12px] font-semibold leading-snug text-slate-800"
+                  >
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {uniqueRiscos.length > 0 && (
+            <div className={uniqueAlergias.length > 0 ? 'border-t border-slate-200/60 pt-2' : ''}>
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                <span>🟡</span>
+                <span>Demais Declarações / Riscos ({uniqueRiscos.length})</span>
+              </div>
+              <ul className="space-y-1 pl-1">
+                {uniqueRiscos.map((r, i) => (
+                  <li
+                    key={`risco-item-${i}`}
+                    className="flex items-start gap-2 text-[12px] font-medium leading-snug text-slate-700"
+                  >
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanoAtivoDrawerBlock({ patientId }) {
+  const { planos, loading } = usePlanosPaciente({
+    pacienteId: patientId,
+    enabled: Boolean(patientId),
+  });
+
+  const planoAtivo = useMemo(() => {
+    return (
+      (Array.isArray(planos) ? planos : []).find(
+        (p) => p.statusCodigo === 'em_andamento' || p.statusCodigo === 'ativo',
+      ) || null
+    );
+  }, [planos]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-2.5 text-[12px] text-[#64748b]">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00a88e]" />
+        <span>Verificando planos de tratamento…</span>
+      </div>
+    );
+  }
+
+  const { feitas: concluidos, total } = calcSessoesPlano(planoAtivo?.itens);
+
+  if (!loading && (!planoAtivo || total === 0)) {
+    return (
+      <div className="flex items-center justify-between rounded-xl border border-slate-200/90 bg-slate-50/70 px-3.5 py-2 text-[12px]">
+        <div className="flex items-center gap-2 text-slate-600">
+          <Activity className="h-3.5 w-3.5 text-slate-400" />
+          <span className="font-semibold text-slate-700">Plano de Tratamento:</span>
+          <span className="font-medium text-slate-500">Sem plano ativo</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!planoAtivo || total === 0) return null;
+
+  const pct = total > 0 ? Math.min(100, Math.max(0, Math.round((concluidos / total) * 100))) : 0;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-[#00a88e]/20 bg-[#e6f7f5]/40 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[12px] font-bold text-[#0f766e]">
+          <Activity className="h-3.5 w-3.5 text-[#00a88e]" />
+          <span className="truncate">Plano: {planoAtivo.observacao || 'Tratamento em Andamento'}</span>
+        </div>
+        <span className="shrink-0 rounded-full bg-[#00a88e] px-2 py-0.5 text-[10px] font-bold text-white">
+          {pct}%
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#00a88e]/15">
+        <div
+          className="h-full rounded-full bg-[#00a88e] transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[11px] font-medium text-[#0f766e]/90">
+        {concluidos} de {total} sessões realizadas
+      </p>
+    </div>
+  );
+}
+
+function NotasDrawerBlock({ patient }) {
+  const notaTexto =
+    patient?.observacoes ||
+    patient?.observacao ||
+    patient?.notasGerais ||
+    patient?.observacoesImportantes ||
+    (typeof patient?.notas === 'string' ? patient?.notas : '') ||
+    '';
+
+  const indicacao = patient?.indicacao ? String(patient.indicacao).trim() : '';
+
+  if (!notaTexto.trim() && !indicacao) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-700">
+        <StickyNote className="h-3.5 w-3.5 text-slate-500" />
+        Nota Rápida / Observação
+      </div>
+      {notaTexto.trim() ? (
+        <p className="whitespace-pre-wrap text-[12px] font-medium leading-relaxed text-slate-700">
+          {notaTexto.trim()}
+        </p>
+      ) : null}
+      {indicacao ? (
+        <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+          <span>Indicação:</span>
+          <span className="font-bold text-slate-700">{indicacao}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PatientPreviewPanel({
   selectedPatient,
   detailTitleId,
@@ -194,7 +494,7 @@ function PatientPreviewPanel({
   getPatientInitials,
   setPatientDetailTab,
   setPatientView,
-  shellClassName,
+  shellClassName = '',
   previewProcedures = [],
   loadingPreviewProcedures = false,
   onStartAttendance,
@@ -205,39 +505,32 @@ function PatientPreviewPanel({
 }) {
   const { isNivel1, canSeeProntuario, canStartAnamnese } = usePapel();
 
-  /** Origem ordenada mais recentes primeiro — API ou legado `{ data, nome, … }`. */
-  const procedureSourceSorted = useMemo(() => {
+  const [expandedRetornosMap, setExpandedRetornosMap] = useState({});
+
+  const toggleRetornosExpanded = (procId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setExpandedRetornosMap((prev) => ({
+      ...prev,
+      [String(procId)]: !prev[String(procId)],
+    }));
+  };
+
+  /** Árvore aninhada de procedimentos com retornos vinculados. */
+  const nestedTimeline = useMemo(() => {
     const raw =
       previewProcedures.length > 0 ? previewProcedures : (selectedPatient.procedures || []);
-    return sortProcedimentosPorCriadoEmDesc(raw);
+    return nestProcedimentosTimeline(raw);
   }, [previewProcedures, selectedPatient.procedures]);
 
-  /** Linhas já formatadas pt-BR; mesma ordem que `procedureSourceSorted`. */
-  const timelineRows = useMemo(
-    () =>
-      procedureSourceSorted.map((proc) => ({
-        data: proc.criadoEm
-          ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-          : proc.data != null
-            ? String(proc.data).trim() || '-'
-            : '-',
-        hora: proc.criadoEm
-          ? new Date(proc.criadoEm).toLocaleTimeString('pt-BR', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'America/Sao_Paulo',
-            })
-          : proc.hora != null
-            ? String(proc.hora).trim()
-            : '',
-        nome: proc.procedimentoNome || proc.nome || 'Procedimento',
-        profissional: proc.profissionalNome || proc.profissional || '—',
-      })),
-    [procedureSourceSorted],
-  );
-
   const PREVIEW_TIMELINE_MAX = 3;
-  const previewTimelineTruncated = timelineRows.length > PREVIEW_TIMELINE_MAX;
+  const previewTimelineTruncated = nestedTimeline.length > PREVIEW_TIMELINE_MAX;
+  const visibleRoots = useMemo(
+    () => (previewTimelineTruncated ? nestedTimeline.slice(0, PREVIEW_TIMELINE_MAX) : nestedTimeline),
+    [nestedTimeline, previewTimelineTruncated],
+  );
 
   const goToPacienteProntuario = () => {
     if (!canSeeProntuario) return;
@@ -251,55 +544,119 @@ function PatientPreviewPanel({
     onStartAttendance(selectedPatient, previewAgendaSlot ? buildAgendaSlotOptions(previewAgendaSlot) : {});
   };
 
+  const rawPhone = String(selectedPatient?.telefone || '').replace(/\D/g, '');
+  const waUrl = rawPhone
+    ? `https://wa.me/55${rawPhone.startsWith('55') ? rawPhone.slice(2) : rawPhone}`
+    : null;
+
+  const idadeLabel =
+    selectedPatient?.idade != null ? `${selectedPatient.idade} anos` : null;
+
+  const dataNascFormatted = selectedPatient?.dataNascimento
+    ? new Date(selectedPatient.dataNascimento).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    : null;
+
   return (
     <div
-      className={`relative flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-lg ${shellClassName}`}
+      className={`relative flex w-full min-w-0 flex-col gap-3.5 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-lg ${shellClassName}`}
     >
       <button
         type="button"
         onClick={closeDetail}
-        className="absolute right-4 top-4 z-30 flex h-9 w-9 items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] transition-colors hover:border-[#cbd5e1] hover:text-[#0f172a]"
+        className="absolute right-4 top-4 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-[#e2e8f0] bg-white text-[#64748b] shadow-2xs transition-all hover:bg-slate-50 hover:text-[#0f172a]"
         aria-label="Fechar painel"
       >
-        <X className="h-4 w-4" strokeWidth={2.5} />
+        <X className="h-4 w-4" strokeWidth={2.25} />
       </button>
 
-      <div className="flex w-full min-w-0 flex-wrap items-start gap-3 border-b border-[#f1f5f9] pb-4 pr-12 sm:pr-24 lg:pr-[7.25rem]">
+      <div className="flex w-full min-w-0 items-start gap-3.5 border-b border-[#f1f5f9] pb-4 pr-10">
         <PatientAvatar
           patient={selectedPatient}
           getPatientInitials={getPatientInitials}
-          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e2e8f0] bg-[#e6f7f5]"
-          initialsClassName="text-[11px] font-bold"
-          spinnerClassName="h-4 w-4"
+          className="flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#e2e8f0] bg-[#e6f7f5] shadow-xs"
+          initialsClassName="text-[16px] sm:text-[18px] font-bold text-white"
+          spinnerClassName="h-5 w-5"
         />
-        <div className="min-w-0 flex-1 basis-[min(100%,12rem)]">
-          <h3 id={detailTitleId} className="text-[16px] font-bold leading-snug text-[#0f172a] break-words">
-            {selectedPatient.nome}
-          </h3>
-          {selectedPatient.email ? (
-            <p className="mt-1 text-[13px] font-normal text-[#64748b] break-all">{selectedPatient.email}</p>
-          ) : null}
-          <p className={`text-[13px] font-normal text-[#64748b] ${selectedPatient.email ? 'mt-0.5' : 'mt-1'}`}>
-            {selectedPatient.telefone || '—'}
-          </p>
-        </div>
-        {canStartAnamnese && (
-          <div className="flex w-full shrink-0 flex-col items-stretch justify-start sm:ml-auto sm:w-auto sm:max-w-[13rem] sm:items-end">
-            <button
-              type="button"
-              onClick={handleIniciarAtendimentoClick}
-              disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
-              className="flex min-h-[48px] w-full flex-row items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-3 py-2 text-[13px] font-semibold leading-snug text-white transition-colors hover:bg-[#00967f] active:bg-[#00967f] disabled:pointer-events-none disabled:opacity-60 sm:min-h-[44px] sm:w-auto sm:max-w-full sm:px-3.5 sm:text-[12px] sm:leading-tight"
-            >
-              {previewAnamneseLoading ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
-              ) : (
-                <Play className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-              )}
-              <span className="min-w-0 whitespace-normal text-center sm:text-right">Iniciar Atendimento</span>
-            </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 id={detailTitleId} className="text-[17px] font-bold capitalize leading-snug text-[#0f172a] break-words">
+              {selectedPatient.nome}
+            </h3>
+            {selectedPatient.ehAniversariante && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-pink-700 shadow-2xs">
+                <Cake className="h-3 w-3" />
+                Aniversariante hoje!
+              </span>
+            )}
           </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] font-medium text-[#64748b]">
+            {idadeLabel && (
+              <span className="font-semibold text-[#00a88e]">
+                {idadeLabel} {dataNascFormatted ? `(${dataNascFormatted})` : ''}
+              </span>
+            )}
+            {selectedPatient.telefone && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span>{selectedPatient.telefone}</span>
+                {waUrl && (
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+                    title="Abrir conversa no WhatsApp"
+                  >
+                    <MessageCircle className="h-3 w-3" />
+                    WhatsApp
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+          {selectedPatient.email && (
+            <p className="mt-0.5 text-[12px] text-[#64748b] break-all">{selectedPatient.email}</p>
+          )}
+        </div>
+      </div>
+
+      <AlertasClinicosDrawerBlock patient={selectedPatient} patientId={selectedPatient?.id} />
+      <PlanoAtivoDrawerBlock patientId={selectedPatient?.id} />
+      <NotasDrawerBlock patient={selectedPatient} />
+
+      <div className="grid grid-cols-2 gap-2">
+        {canStartAnamnese && (
+          <button
+            type="button"
+            onClick={handleIniciarAtendimentoClick}
+            disabled={previewAnamneseLoading || typeof onStartAttendance !== 'function'}
+            className="flex min-h-[42px] w-full flex-row items-center justify-center gap-1.5 rounded-xl bg-[#00a88e] px-2 py-2 text-[12px] font-bold text-white shadow-xs transition-all hover:bg-[#00967f] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-60 sm:text-[12.5px]"
+            title="Iniciar Atendimento"
+          >
+            {previewAnamneseLoading ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.25} aria-hidden />
+            ) : (
+              <Play className="h-3.5 w-3.5 shrink-0 fill-white" strokeWidth={2.5} aria-hidden />
+            )}
+            <span className="truncate">Iniciar Atendimento</span>
+          </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
+            setPatientDetailTab('planos');
+            setPatientView('profile');
+          }}
+          className={`flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#00a88e]/35 bg-[#e6f7f5]/40 px-2 py-2 text-[12px] font-bold text-[#007463] shadow-2xs transition-all hover:border-[#00a88e]/70 hover:bg-[#e6f7f5]/90 active:scale-[0.99] sm:text-[12.5px] ${
+            !canStartAnamnese ? 'col-span-2' : ''
+          }`}
+          title={isNivel1 ? 'Ver Cadastro' : 'Ver Perfil'}
+        >
+          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#00a88e]" strokeWidth={2.25} />
+          <span className="truncate">{isNivel1 ? 'Ver Cadastro' : 'Ver Perfil'}</span>
+        </button>
       </div>
 
       {previewAgendaSlot && !isNivel1 ? (
@@ -316,6 +673,7 @@ function PatientPreviewPanel({
             onEnviarAnamnese={() => agendaSchedule?.openDaySheet(previewAgendaSlot.data, previewAgendaSlot)}
             onReagendar={() => agendaSchedule?.openReagendarModal(previewAgendaSlot, [previewAgendaSlot])}
             onCancelar={() => agendaSchedule?.handleCancelar(previewAgendaSlot.agendaId)}
+            className="w-full"
           />
         </div>
       ) : null}
@@ -334,47 +692,125 @@ function PatientPreviewPanel({
           </div>
         ) : loadingPreviewProcedures ? (
           <ProcedureTimelineLoading message="Carregando procedimentos…" />
-        ) : timelineRows.length > 0 ? (
-          <ProcedureTimelineRail>
-            {(previewTimelineTruncated ? timelineRows.slice(0, PREVIEW_TIMELINE_MAX) : timelineRows).map(
-              (proc, idx, arr) => {
-                const fusedTail = previewTimelineTruncated && idx === arr.length - 1;
-                const key =
-                  fusedTail ? `preview-proc-tail-${idx}` : `${idx}-${proc.data}-${proc.nome}-${proc.profissional}`;
+        ) : visibleRoots.length > 0 ? (
+          <>
+            <ProcedureTimelineRail>
+              {visibleRoots.map((root, idx) => {
+                const rootKey =
+                  root.id != null && root.id !== ''
+                    ? `drawer-proc-${root.id}`
+                    : `drawer-proc-idx-${idx}`;
+                const criado = root.criadoEm ? new Date(root.criadoEm) : null;
+                const dateLabel = criado
+                  ? criado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                  : root.data != null
+                    ? String(root.data).trim() || '-'
+                    : '-';
+                const timeLabel = criado
+                  ? criado.toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: 'America/Sao_Paulo',
+                    })
+                  : root.hora != null
+                    ? String(root.hora).trim()
+                    : '';
+                const nomeProc = root.procedimentoNome || root.nome || 'Procedimento';
+                const retornos = Array.isArray(root.retornos) ? root.retornos : [];
+                const retornoCount = retornos.length;
+                const isRetornosExpanded = Boolean(expandedRetornosMap[String(root.id)]);
+                const fotosCount = Array.isArray(root.fotos) ? root.fotos.length : 0;
+                const hasObservacao = Boolean(root.observacao && String(root.observacao).trim());
+                const hasTermo = Boolean(root.temTermo || root.termoAssinado || root.assinaturaVinculada);
+
                 return (
-                  <ProcedureTimelineEntry key={key}>
-                    <ProcedureTimelinePreviewCard
-                      dateLabel={proc.data}
-                      timeLabel={proc.hora}
-                      procedureName={proc.nome}
-                      professionalName={proc.profissional || '—'}
-                      fusedVerMais={fusedTail}
-                      verMaisLabel="Ver mais"
-                      onPress={goToPacienteProntuario}
-                    />
-                  </ProcedureTimelineEntry>
+                  <React.Fragment key={rootKey}>
+                    <ProcedureTimelineEntry depth={0}>
+                      <ProcedureTimelinePreviewCard
+                        dateLabel={dateLabel}
+                        timeLabel={timeLabel}
+                        procedureName={nomeProc}
+                        professionalName={root.profissionalNome || root.profissional || '—'}
+                        depth={0}
+                        retornoCount={retornoCount}
+                        isRetoque={Boolean(root.isRetoque)}
+                        statusNome={root.statusNome || ''}
+                        fotosCount={fotosCount}
+                        hasTermo={hasTermo}
+                        hasObservacao={hasObservacao}
+                        onToggleRetornos={retornoCount > 0 ? (e) => toggleRetornosExpanded(root.id, e) : undefined}
+                        isRetornosExpanded={isRetornosExpanded}
+                        onPress={goToPacienteProntuario}
+                      />
+                    </ProcedureTimelineEntry>
+
+                    {isRetornosExpanded &&
+                      retornos.map((child, childIdx) => {
+                        const childKey =
+                          child.id != null && child.id !== ''
+                            ? `drawer-retorno-${child.id}`
+                            : `drawer-retorno-${root.id}-${childIdx}`;
+                        const childCriado = child.criadoEm ? new Date(child.criadoEm) : null;
+                        const childDate = childCriado
+                          ? childCriado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                          : child.data != null
+                            ? String(child.data).trim() || '-'
+                            : '-';
+                        const childHora = childCriado
+                          ? childCriado.toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              timeZone: 'America/Sao_Paulo',
+                            })
+                          : child.hora != null
+                            ? String(child.hora).trim()
+                            : '';
+                        const childNome = child.procedimentoNome || child.nome || 'Retorno';
+                        const childFotos = Array.isArray(child.fotos) ? child.fotos.length : 0;
+                        const childObs = Boolean(child.observacao && String(child.observacao).trim());
+                        const childTermo = Boolean(
+                          child.temTermo || child.termoAssinado || child.assinaturaVinculada,
+                        );
+
+                        return (
+                          <ProcedureTimelineEntry key={childKey} depth={1}>
+                            <ProcedureTimelinePreviewCard
+                              dateLabel={childDate}
+                              timeLabel={childHora}
+                              procedureName={childNome}
+                              professionalName={child.profissionalNome || child.profissional || '—'}
+                              depth={1}
+                              retornoCount={0}
+                              isRetoque={Boolean(child.isRetoque)}
+                              statusNome={child.statusNome || ''}
+                              fotosCount={childFotos}
+                              hasTermo={childTermo}
+                              hasObservacao={childObs}
+                              onPress={goToPacienteProntuario}
+                            />
+                          </ProcedureTimelineEntry>
+                        );
+                      })}
+                  </React.Fragment>
                 );
-              },
+              })}
+            </ProcedureTimelineRail>
+            {previewTimelineTruncated && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={goToPacienteProntuario}
+                  className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-[12.5px] font-bold text-[#00a88e] shadow-2xs transition-all hover:border-[#cbd5e1] hover:bg-[#f8fafc]"
+                >
+                  <span>Ver mais no prontuário ({nestedTimeline.length} {nestedTimeline.length === 1 ? 'procedimento' : 'procedimentos'})</span>
+                  <ChevronRight className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                </button>
+              </div>
             )}
-          </ProcedureTimelineRail>
+          </>
         ) : (
           <p className="py-6 text-center text-[13px] font-normal text-[#64748b]">Nenhum procedimento registrado</p>
         )}
-      </div>
-
-      <div className="max-lg:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-        <button
-          type="button"
-          onClick={() => {
-            if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
-            setPatientDetailTab('planos');
-            setPatientView('profile');
-          }}
-          className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#00a88e] px-4 text-[14px] font-semibold text-white transition-colors hover:bg-[#00967f]"
-        >
-          <ExternalLink className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2.25} />
-          {isNivel1 ? 'Ver Cadastro do Paciente' : 'Ver Visão Geral Completa do Paciente'}
-        </button>
       </div>
     </div>
   );
@@ -912,15 +1348,20 @@ export function PatientsListView({
               </div>
             </div>
 
-            {/* sm+: drawer direita (overlay em todas as larguras) */}
-            <div className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex" role="dialog" aria-modal="true" aria-label="Resumo do paciente">
+            {/* sm+: drawer direita flutuante com bordas suaves e arredondadas (sem quinas pontudas na tela) */}
+            <div
+              className="hidden sm:fixed sm:inset-0 sm:z-[200] sm:flex sm:justify-end sm:p-3 sm:pr-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Resumo do paciente"
+            >
               <button
                 type="button"
-                className="absolute inset-0 bg-black/30"
+                className="absolute inset-0 bg-black/35 backdrop-blur-[2px] transition-opacity"
                 aria-label="Fechar resumo do paciente"
                 onClick={closeDetail}
               />
-              <aside className="relative ml-auto flex h-[100dvh] w-[min(380px,100%)] flex-col overflow-y-auto overflow-x-hidden border-l border-[#e2e8f0] bg-white shadow-xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
+              <aside className="relative z-10 flex h-full max-h-[calc(100dvh-1.5rem)] w-[min(410px,100%)] flex-col overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xl [-webkit-overflow-scrolling:touch] custom-scrollbar">
                 <PatientPreviewPanel
                   key={previewPatient.cpf || String(previewPatient.id || '')}
                   selectedPatient={previewPatient}

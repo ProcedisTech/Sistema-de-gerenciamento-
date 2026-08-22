@@ -113,27 +113,45 @@ export function mapResumoToLegacy(resumo) {
   };
 }
 
+const resumoClinicoCache = new Map();
+
+export function clearResumoClinicoCache(pacienteId) {
+  if (pacienteId) resumoClinicoCache.delete(String(pacienteId));
+  else resumoClinicoCache.clear();
+}
+
 /**
  * Fonte única da faixa clínica: GET /resumo-clinico (só o declarado no vigente).
- * `sexoPaciente` e `onAlergiasResumo` permanecem na assinatura por compatibilidade com os call sites.
+ * Utiliza cache SWR em memória para exibição instantânea (0ms) sem travar a interface.
  */
 export function useAlertasClinicos(pacienteId, { refreshKey } = {}) {
-  const [resumoRaw, setResumoRaw] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const cached = pacienteId ? resumoClinicoCache.get(String(pacienteId)) : null;
+  const [resumoRaw, setResumoRaw] = useState(cached ?? null);
+  const [isLoading, setIsLoading] = useState(Boolean(pacienteId && !cached));
 
   useEffect(() => {
     if (!pacienteId) {
       setIsLoading(false);
       return undefined;
     }
+    const currentCached = resumoClinicoCache.get(String(pacienteId));
+    if (currentCached && !refreshKey) {
+      setResumoRaw(currentCached);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
+
     let cancelled = false;
-    setIsLoading(true);
     (async () => {
       try {
         const dto = await perfilClinicoApi.resumo(pacienteId);
-        if (!cancelled) setResumoRaw(dto);
+        if (!cancelled) {
+          resumoClinicoCache.set(String(pacienteId), dto);
+          setResumoRaw(dto);
+        }
       } catch {
-        if (!cancelled) setResumoRaw(null);
+        if (!cancelled && !currentCached) setResumoRaw(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
