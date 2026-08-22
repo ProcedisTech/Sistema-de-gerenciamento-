@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Settings, ChevronDown } from 'lucide-react';
 import { ConfigHub } from './ConfigHub';
 import { getVisibleCategories, CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
@@ -22,6 +22,7 @@ import { ConfigDetailView } from './ConfigDetailView';
  * @param {() => void} [props.onPacientesCatalogRefresh]
  * @param {(opts?: { roleUserId?: string, scope?: 'all' | 'role' }) => void | Promise<void>} [props.onDisponibilidadeInvalidate]
  * @param {(isDirty: boolean) => void} [props.onDirtyHorariosChange]
+ * @param {(isDirty: boolean) => void} [props.onDirtyFichaChange]
  */
 export function ConfiguracoesView({
   canSeeAnamnese = false,
@@ -36,9 +37,12 @@ export function ConfiguracoesView({
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
+  onDirtyFichaChange,
   configSection,
   setConfigSection,
 }) {
+  const sectionGuardRef = useRef(null);
+
   const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
 
   // Categoria ativa: null = hub. Inicializa em detalhe se vier um deep-link (configSection não-null do pai).
@@ -115,7 +119,10 @@ export function ConfiguracoesView({
         <MobileSectionDropdown
           groups={mobileGroups}
           activeSection={configSection}
-          onSelectSection={setConfigSection}
+          onSelectSection={(id) => {
+            if (sectionGuardRef.current) sectionGuardRef.current(id);
+            else setConfigSection(id);
+          }}
         />
       )}
 
@@ -153,6 +160,8 @@ export function ConfiguracoesView({
             onPacientesCatalogRefresh={onPacientesCatalogRefresh}
             onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
             onDirtyHorariosChange={onDirtyHorariosChange}
+            onDirtyFichaChange={onDirtyFichaChange}
+            sectionGuardRef={sectionGuardRef}
           />
         )}
       </div>

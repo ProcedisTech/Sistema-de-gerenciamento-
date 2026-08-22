@@ -110,6 +110,7 @@ function linkPerguntaPaiClientKeys(secoes) {
 
 /** Converte estado do editor para payload PUT /documento. */
 export function secoesToDocumentoPayload({ nome, especialidadeId, textoDeclaracao, secoes, allowEmpty = false }) {
+  const TIPOS_ESCOLHA = new Set(['escolha_unica', 'multipla_escolha']);
   return {
     nome: nome?.trim() || '',
     especialidadeId: especialidadeId || null,
@@ -123,23 +124,54 @@ export function secoesToDocumentoPayload({ nome, especialidadeId, textoDeclaraca
       ordem: sec.ordem ?? si + 1,
       icone: sec.icone || undefined,
       descricao: sec.descricao || undefined,
-      perguntas: (sec.perguntas || []).map((q, qi) => ({
-        id: q.id || undefined,
-        clientKey: q.clientKey,
-        tipoRespostaId: q.tipoRespostaId || undefined,
-        tipoRespostaCodigo: q.tipoRespostaCodigo || 'texto',
-        descricao: q.descricao?.trim() || 'Pergunta',
-        prioridade: q.prioridade || 'NORMAL',
-        tipoAntecedentePessoalId: q.tipoAntecedentePessoalId || undefined,
-        antecedenteCatalogoId: q.antecedenteCatalogoId || undefined,
-        perguntaPaiId: q.perguntaPaiId || undefined,
-        perguntaPaiClientKey: q.perguntaPaiClientKey || undefined,
-        obrigatorio: Boolean(q.obrigatorio),
-        ordem: q.ordem ?? qi + 1,
-        alternativas: q.alternativas?.length ? q.alternativas : undefined,
-      })),
+      perguntas: (sec.perguntas || []).map((q, qi) => {
+        const tipo = q.tipoRespostaCodigo || 'texto';
+        const isEscolha = TIPOS_ESCOLHA.has(tipo);
+        const alts = Array.isArray(q.alternativas) ? q.alternativas : [];
+        const alternativasPayload =
+          isEscolha && alts.length
+            ? alts.map((a, ai) => {
+                const row = {
+                  alternativa: String(a.alternativa || '').trim(),
+                  ordem: a.ordem ?? ai + 1,
+                };
+                if (a.id) row.id = a.id;
+                return row;
+              }).filter((a) => a.alternativa)
+            : undefined;
+        return {
+          id: q.id || undefined,
+          clientKey: q.clientKey,
+          tipoRespostaId: q.tipoRespostaId || undefined,
+          tipoRespostaCodigo: tipo,
+          descricao: q.descricao?.trim() || 'Pergunta',
+          prioridade: q.prioridade || 'NORMAL',
+          tipoAntecedentePessoalId: q.tipoAntecedentePessoalId || undefined,
+          antecedenteCatalogoId: q.antecedenteCatalogoId || undefined,
+          perguntaPaiId: q.perguntaPaiId || undefined,
+          perguntaPaiClientKey: q.perguntaPaiClientKey || undefined,
+          obrigatorio: Boolean(q.obrigatorio),
+          ordem: q.ordem ?? qi + 1,
+          alternativas: alternativasPayload,
+        };
+      }),
     })),
   };
+}
+
+/** Valida perguntas de escolha com menos de 2 alternativas preenchidas. */
+export function findEscolhaSemAlternativas(secoes) {
+  const TIPOS = new Set(['escolha_unica', 'multipla_escolha']);
+  for (const s of secoes || []) {
+    for (const q of s.perguntas || []) {
+      if (!TIPOS.has(q.tipoRespostaCodigo)) continue;
+      const n = (q.alternativas || []).filter((a) => String(a.alternativa || '').trim()).length;
+      if (n < 2) {
+        return q;
+      }
+    }
+  }
+  return null;
 }
 
 export function computeCounts(secoes) {
@@ -188,6 +220,7 @@ export function reconcileDocumentoFromApi(state, ficha) {
 
     const perguntas = localPerguntas.map((localQ, qi) => {
       const apiQ = apiPerguntas[qi];
+      const apiAlts = apiQ?.alternativas;
       return {
         ...localQ,
         id: apiQ?.id ?? localQ.id,
@@ -195,6 +228,7 @@ export function reconcileDocumentoFromApi(state, ficha) {
         perguntaPaiId: apiQ?.perguntaPaiId ?? localQ.perguntaPaiId,
         perguntaPaiClientKey: apiQ?.perguntaPaiClientKey ?? localQ.perguntaPaiClientKey,
         outrasFichasCount: apiQ?.outrasFichasCount ?? localQ.outrasFichasCount,
+        alternativas: Array.isArray(apiAlts) ? apiAlts : localQ.alternativas ?? [],
       };
     });
 
@@ -375,6 +409,39 @@ export function isNomeVazio(nome) {
 }
 
 export const NOME_VAZIO_TOAST = 'Dê um nome para a ficha';
+export const COMPOSE_PENDENTE_TOAST =
+  'Você tem uma pergunta não finalizada. Use Adicionar pergunta para incluí-la.';
+export const COMPOSE_TITULO_VAZIO_HINT = 'Escreva o texto da pergunta';
+export const SEM_PERGUNTAS_TOAST = 'Adicione ao menos uma pergunta antes de salvar.';
+export const ESCOLHA_INCOMPLETA_TOAST =
+  'Perguntas de lista precisam de pelo menos 2 opções de resposta.';
+
+const TIPOS_ESCOLHA = new Set(['escolha_unica', 'multipla_escolha']);
+
+function countAltsDraft(compose) {
+  return (compose?.alternativasDraft || []).filter((a) => String(a.alternativa || '').trim()).length;
+}
+
+/** Compose aberto com texto ou alternativas em draft — ainda não é pergunta. */
+export function composeHasPending(compose) {
+  if (!compose) return false;
+  if (String(compose.texto || '').trim()) return true;
+  return countAltsDraft(compose) > 0;
+}
+
+export function canCommitCompose(compose, stickyTipo) {
+  if (!compose) return false;
+  if (!String(compose.texto || '').trim()) return false;
+  if (TIPOS_ESCOLHA.has(stickyTipo)) return countAltsDraft(compose) >= 2;
+  return true;
+}
+
+export function composeCommitHint(compose, stickyTipo) {
+  if (canCommitCompose(compose, stickyTipo)) return '';
+  if (!String(compose?.texto || '').trim()) return COMPOSE_TITULO_VAZIO_HINT;
+  if (TIPOS_ESCOLHA.has(stickyTipo)) return ESCOLHA_INCOMPLETA_TOAST;
+  return COMPOSE_TITULO_VAZIO_HINT;
+}
 
 export function needsCreateShell(fichaId) {
   return !fichaId;

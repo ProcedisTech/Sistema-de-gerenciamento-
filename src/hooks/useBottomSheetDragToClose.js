@@ -7,8 +7,10 @@ const DRAG_ACTIVATION_PX = 8;
 const VELOCITY_WINDOW_MS = 100;
 const TRANSITION_MS = 320;
 
-function isTouchPointer(event) {
-  return event.pointerType === 'touch';
+function isAllowedPointer(event, allowMouse) {
+  if (event.pointerType === 'touch') return true;
+  if (allowMouse && (event.pointerType === 'mouse' || event.pointerType === 'pen')) return true;
+  return false;
 }
 
 function prefersReducedMotion() {
@@ -33,9 +35,17 @@ function createEmptyDragState() {
  *   open: boolean,
  *   onClose?: () => void,
  *   sheetRef: import('react').RefObject<HTMLElement | null>,
+ *   allowMouse?: boolean,
+ *   closeRatio?: number,
  * }} options
  */
-export function useBottomSheetDragToClose({ open, onClose, sheetRef }) {
+export function useBottomSheetDragToClose({
+  open,
+  onClose,
+  sheetRef,
+  allowMouse = false,
+  closeRatio = CLOSE_RATIO,
+}) {
   const [dragY, setDragY] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [sheetHeight, setSheetHeight] = useState(0);
@@ -61,8 +71,8 @@ export function useBottomSheetDragToClose({ open, onClose, sheetRef }) {
 
   const getCloseThreshold = useCallback(() => {
     const height = sheetRef.current?.offsetHeight ?? 0;
-    return height > 0 ? height * CLOSE_RATIO : CLOSE_FALLBACK_PX;
-  }, [sheetRef]);
+    return height > 0 ? height * closeRatio : CLOSE_FALLBACK_PX;
+  }, [closeRatio, sheetRef]);
 
   const setDragOffset = useCallback((nextY) => {
     const y = Math.max(0, nextY);
@@ -189,7 +199,7 @@ export function useBottomSheetDragToClose({ open, onClose, sheetRef }) {
 
   const onHeaderPointerDown = useCallback(
     (event) => {
-      if (!open || !isTouchPointer(event)) return;
+      if (!open || !isAllowedPointer(event, allowMouse)) return;
       if (event.target instanceof Element && event.target.closest('button, a, input, textarea, select')) {
         return;
       }
@@ -209,12 +219,12 @@ export function useBottomSheetDragToClose({ open, onClose, sheetRef }) {
         // ignore
       }
     },
-    [open],
+    [allowMouse, open],
   );
 
   const onHeaderPointerMove = useCallback(
     (event) => {
-      if (!open || !isTouchPointer(event)) return;
+      if (!open || !isAllowedPointer(event, allowMouse)) return;
       const state = dragRef.current;
       if (state.pointerId !== event.pointerId) return;
 
@@ -235,7 +245,7 @@ export function useBottomSheetDragToClose({ open, onClose, sheetRef }) {
         setDragOffset(0);
       }
     },
-    [open, pushVelocitySample, setDragOffset],
+    [allowMouse, open, pushVelocitySample, setDragOffset],
   );
 
   const onHeaderPointerUp = useCallback(

@@ -94,18 +94,18 @@ export function AnamneseDocPreviewOverlay({ open, onClose, state }) {
       role="dialog"
       aria-modal="true"
     >
-      <div className="absolute inset-x-0 top-0 z-[2] flex flex-wrap items-center gap-3 px-6 py-[18px]">
-        <div>
-          <h4 className="text-[13px] font-semibold text-white/90">{state.nome || 'Ficha'}</h4>
+      <div className="absolute inset-x-0 top-0 z-[2] flex flex-wrap items-center gap-3 px-4 py-[18px] sm:px-6">
+        <div className="min-w-0 flex-1">
+          <h4 className="truncate text-[13px] font-semibold text-white/90">{state.nome || 'Ficha'}</h4>
           <p className="mt-px text-[11.5px] text-white/40">{activeSeg.subtitle}</p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1 rounded-lg bg-white/10 p-1">
+        <div className="flex w-full flex-wrap items-center gap-1 rounded-lg bg-white/10 p-1 sm:ml-auto sm:w-auto">
           {SEGMENTS.map((seg) => (
             <button
               key={seg.id}
               type="button"
               onClick={() => setSegment(seg.id)}
-              className={`rounded-md px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${
+              className={`min-h-11 flex-1 rounded-md px-3 py-2 text-[11.5px] font-semibold transition-colors sm:min-h-0 sm:flex-none sm:py-1.5 ${
                 segment === seg.id ? 'bg-white text-[#0f172a]' : 'text-white/70 hover:text-white'
               }`}
             >
@@ -116,16 +116,18 @@ export function AnamneseDocPreviewOverlay({ open, onClose, state }) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-[11.5px] font-semibold text-white/80 hover:bg-white/20"
+          className="inline-flex min-h-11 items-center rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[12px] font-semibold text-white/90 hover:bg-white/20 sm:min-h-0 sm:py-1.5"
         >
           Fechar ✕
         </button>
       </div>
 
-      <div className="flex h-full items-center justify-center px-6 pb-6 pt-24">
+      <div className="flex h-full min-h-0 items-center justify-center px-4 pb-6 pt-28 sm:px-6 sm:pt-24">
         <div
           className={`relative overflow-hidden rounded-[28px] border-[10px] border-[#1e293b] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.45)] ${
-            activeSeg.wide ? 'h-[min(720px,85vh)] w-[min(920px,95vw)]' : 'h-[min(720px,85vh)] w-[min(390px,95vw)]'
+            activeSeg.wide
+              ? 'h-[min(720px,85dvh)] w-[min(920px,95vw)]'
+              : 'h-[min(720px,85dvh)] w-[min(390px,95vw)]'
           }`}
         >
           {!activeSeg.wide ? (

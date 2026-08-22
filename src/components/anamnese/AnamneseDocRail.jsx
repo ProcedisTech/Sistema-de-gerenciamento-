@@ -30,6 +30,7 @@ export function AnamneseDocRail({
   onAddModulo,
   onAddBank,
   onEspiar,
+  embedded = false,
 }) {
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('Todas');
@@ -49,15 +50,15 @@ export function AnamneseDocRail({
   }, [banco, search, filterCat]);
 
   return (
-    <aside className="w-full shrink-0 lg:w-[300px]">
-      <div className="overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white shadow-sm">
+    <aside className={embedded ? 'w-full min-w-0' : 'w-full min-w-0 shrink-0'}>
+      <div className={embedded ? 'overflow-hidden' : 'overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white shadow-sm'}>
         <div className="flex border-b border-[#f1f5f9] bg-[#fbfcfd] p-1">
           {RAIL_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => onRailTabChange(tab.id)}
-              className={`rt flex-1 rounded-lg py-2 text-[11px] font-bold transition-colors ${
+              className={`rt flex-1 rounded-lg py-2.5 text-[11px] font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 motion-reduce:transition-none ${
                 railTab === tab.id
                   ? 'on bg-white text-teal-700 shadow-sm'
                   : 'text-[#64748b] hover:text-[#475569]'
@@ -68,7 +69,7 @@ export function AnamneseDocRail({
           ))}
         </div>
 
-        <div className="custom-scrollbar max-h-[min(560px,calc(100vh-12rem))] overflow-y-auto p-3">
+        <div className="custom-scrollbar overflow-y-auto p-3">
           {railTab === 'fichas' ? (
             <>
               <div className="railbody mb-3">

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Check, PenLine } from 'lucide-react';
+import { Check, Library, PenLine } from 'lucide-react';
 import {
   DOCHEAD,
   DOCTITLE,
@@ -30,6 +30,7 @@ export function AnamneseDocHead({
   onTogglePadrao,
   onBack,
   especialidades,
+  onOpenBiblioteca,
 }) {
   const especRef = useRef(null);
   const [openEspec, setOpenEspec] = useState(false);
@@ -44,9 +45,21 @@ export function AnamneseDocHead({
 
   return (
     <div className={DOCHEAD}>
-      <button type="button" className={DOCBACK} onClick={onBack}>
-        ‹ Todas as fichas
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" className={DOCBACK} onClick={onBack}>
+          ‹ Todas as fichas
+        </button>
+        {onOpenBiblioteca ? (
+          <button
+            type="button"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-teal-600 bg-teal-600 px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_1px_3px_rgba(13,148,136,0.3)] hover:bg-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 sm:min-h-0"
+            onClick={onOpenBiblioteca}
+          >
+            <Library className="h-4 w-4" />
+            Biblioteca
+          </button>
+        ) : null}
+      </div>
 
       <input
         type="text"
@@ -66,7 +79,7 @@ export function AnamneseDocHead({
           disabled={!editavel}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setOpenEspec((v) => !v)}
-          className={`${CHIP} ${state.especialidadeId ? CHIP_ON : ''}`}
+          className={state.especialidadeId ? CHIP_ON : CHIP}
         >
           {state.especialidadeId ? especNome : 'Escolher especialidade'}
         </button>
@@ -74,7 +87,7 @@ export function AnamneseDocHead({
           type="button"
           disabled={!editavel}
           onClick={onTogglePadrao}
-          className={`${CHIP} ${state.padrao ? CHIP_ON : ''}`}
+          className={state.padrao ? CHIP_ON : CHIP}
         >
           {state.padrao ? 'É a ficha padrão da clínica' : 'Usar nos novos atendimentos'}
         </button>

@@ -2,6 +2,8 @@ import {
   applyEnter,
   applyEsc,
   applyTab,
+  canCommitCompose,
+  composeHasPending,
   cloneSecoesFromDocumento,
   DECL_PADRAO,
   emptyPergunta,
@@ -34,6 +36,7 @@ export const EDITOR_ACTIONS = {
   REPLACE_DOCUMENTO: 'REPLACE_DOCUMENTO',
   OPEN_COMPOSE: 'OPEN_COMPOSE',
   SET_COMPOSE_TEXT: 'SET_COMPOSE_TEXT',
+  SET_COMPOSE_ALTERNATIVAS: 'SET_COMPOSE_ALTERNATIVAS',
   TOGGLE_COMPOSE_CHILD: 'TOGGLE_COMPOSE_CHILD',
   CLOSE_COMPOSE: 'CLOSE_COMPOSE',
   COMMIT_COMPOSE: 'COMMIT_COMPOSE',
@@ -292,6 +295,7 @@ export function editorDocumentoReducer(state, action) {
           afterKey: action.afterKey ?? null,
           child: false,
           texto: '',
+          alternativasDraft: [],
         },
       };
     case EDITOR_ACTIONS.SET_COMPOSE_TEXT:
@@ -299,6 +303,12 @@ export function editorDocumentoReducer(state, action) {
       return {
         ...state,
         compose: { ...state.compose, texto: action.texto },
+      };
+    case EDITOR_ACTIONS.SET_COMPOSE_ALTERNATIVAS:
+      if (!state.compose) return state;
+      return {
+        ...state,
+        compose: { ...state.compose, alternativasDraft: action.alternativas || [] },
       };
     case EDITOR_ACTIONS.TOGGLE_COMPOSE_CHILD:
       if (!state.compose) return state;
@@ -311,11 +321,15 @@ export function editorDocumentoReducer(state, action) {
     case EDITOR_ACTIONS.COMMIT_COMPOSE: {
       if (!state.compose) return state;
       const texto = String(state.compose.texto || '').trim();
-      if (!texto) {
-        return { ...state, compose: null };
+      if (!canCommitCompose(state.compose, state.stickyTipo)) {
+        if (!texto && !composeHasPending(state.compose)) {
+          return { ...state, compose: null };
+        }
+        return state;
       }
-      const { secKey, afterKey, child } = state.compose;
+      const { secKey, afterKey, child, alternativasDraft } = state.compose;
       const tipo = state.stickyTipo || 'texto';
+      const isEscolha = tipo === 'escolha_unica' || tipo === 'multipla_escolha';
       const secoes = reindexPerguntas(
         state.secoes.map((s) => {
           if (s.clientKey !== secKey) return s;
@@ -326,6 +340,7 @@ export function editorDocumentoReducer(state, action) {
             prioridade: child && last ? last.prioridade : 'NORMAL',
             perguntaPaiClientKey: child && last ? last.clientKey : null,
             perguntaPaiId: child && last ? last.id ?? null : null,
+            alternativas: isEscolha ? (alternativasDraft || []) : [],
           };
           const perguntas = [...s.perguntas];
           if (afterKey == null) {
@@ -342,7 +357,7 @@ export function editorDocumentoReducer(state, action) {
         ...state,
         secoes,
         dirty: true,
-        compose: { secKey, afterKey: null, child: false, texto: '' },
+        compose: { secKey, afterKey: null, child: false, texto: '', alternativasDraft: [] },
       };
     }
     case EDITOR_ACTIONS.KEY_ENTER: {

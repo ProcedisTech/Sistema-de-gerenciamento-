@@ -12,10 +12,17 @@ import {
   isSaveGenerationCurrent,
   isNomeVazio,
   NOME_VAZIO_TOAST,
+  COMPOSE_PENDENTE_TOAST,
+  SEM_PERGUNTAS_TOAST,
+  ESCOLHA_INCOMPLETA_TOAST,
+  canCommitCompose,
+  composeCommitHint,
+  composeHasPending,
   needsCreateShell,
   planPadraoSync,
   usarFichaNeedsConfirm,
   secoesToDocumentoPayload,
+  findEscolhaSemAlternativas,
 } from './editorDocumentoState.js';
 import {
   EDITOR_ACTIONS,
@@ -282,6 +289,30 @@ describe('T2 save helpers', () => {
     expect(NOME_VAZIO_TOAST).toBe('Dê um nome para a ficha');
   });
 
+  it('compose pendente e ficha sem perguntas têm toasts explícitos', () => {
+    expect(composeHasPending(null)).toBe(false);
+    expect(composeHasPending({ texto: '', alternativasDraft: [] })).toBe(false);
+    expect(composeHasPending({ texto: '  Alergia?  ', alternativasDraft: [] })).toBe(true);
+    expect(
+      composeHasPending({
+        texto: '',
+        alternativasDraft: [{ alternativa: 'Sim', ordem: 1 }],
+      })
+    ).toBe(true);
+    expect(canCommitCompose({ texto: 'Alergia?' }, 'texto')).toBe(true);
+    expect(canCommitCompose({ texto: '', alternativasDraft: [] }, 'texto')).toBe(false);
+    expect(
+      canCommitCompose(
+        { texto: 'Cicatrização?', alternativasDraft: [{ alternativa: 'A', ordem: 1 }] },
+        'escolha_unica'
+      )
+    ).toBe(false);
+    expect(composeCommitHint({ texto: '' }, 'texto')).toMatch(/Escreva o texto/);
+    expect(COMPOSE_PENDENTE_TOAST).toMatch(/Adicionar pergunta/);
+    expect(SEM_PERGUNTAS_TOAST).toMatch(/ao menos uma pergunta/);
+    expect(ESCOLHA_INCOMPLETA_TOAST).toMatch(/2 opções/);
+  });
+
   it('1º save precisa criar casca; seguinte não', () => {
     expect(needsCreateShell(null)).toBe(true);
     expect(needsCreateShell(undefined)).toBe(true);
@@ -377,7 +408,13 @@ describe('ciclo compose', () => {
       secKey: 's1',
       afterKey: null,
     });
-    expect(next.compose).toEqual({ secKey: 's1', afterKey: null, child: false, texto: '' });
+    expect(next.compose).toEqual({
+      secKey: 's1',
+      afterKey: null,
+      child: false,
+      texto: '',
+      alternativasDraft: [],
+    });
     expect(next.dirty).toBe(false);
     expect(next.secoes[0].perguntas).toHaveLength(1);
   });
@@ -434,7 +471,150 @@ describe('ciclo compose', () => {
     expect(nova.prioridade).toBe('ALERTA');
     expect(nova.perguntaPaiClientKey).toBe('q1');
     expect(nova.tipoRespostaCodigo).toBe('texto');
-    expect(next.compose).toEqual({ secKey: 's1', afterKey: null, child: false, texto: '' });
+    expect(next.compose).toEqual({
+      secKey: 's1',
+      afterKey: null,
+      child: false,
+      texto: '',
+      alternativasDraft: [],
+    });
+  });
+
+  it('COMMIT_COMPOSE com escolha copia alternativasDraft (ordem 1-based)', () => {
+    let state = editorDocumentoReducer(base(), {
+      type: EDITOR_ACTIONS.OPEN_COMPOSE,
+      secKey: 's1',
+      afterKey: null,
+    });
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.SET_STICKY_TIPO,
+      tipo: 'escolha_unica',
+    });
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.SET_COMPOSE_TEXT,
+      texto: 'Cicatrização?',
+    });
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.SET_COMPOSE_ALTERNATIVAS,
+      alternativas: [
+        { alternativa: 'Rápida', ordem: 1 },
+        { alternativa: 'Normal', ordem: 2 },
+        { alternativa: 'Lenta', ordem: 3 },
+      ],
+    });
+    const next = editorDocumentoReducer(state, { type: EDITOR_ACTIONS.COMMIT_COMPOSE });
+    const nova = next.secoes[0].perguntas[1];
+    expect(nova.tipoRespostaCodigo).toBe('escolha_unica');
+    expect(nova.alternativas.map((a) => a.alternativa)).toEqual(['Rápida', 'Normal', 'Lenta']);
+  });
+
+  it('COMMIT_COMPOSE inválido (escolha com <2 opções) é no-op', () => {
+    let state = editorDocumentoReducer(base(), {
+      type: EDITOR_ACTIONS.OPEN_COMPOSE,
+      secKey: 's1',
+      afterKey: null,
+    });
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.SET_STICKY_TIPO,
+      tipo: 'escolha_unica',
+    });
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.SET_COMPOSE_TEXT,
+      texto: 'Cicatrização?',
+    });
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.SET_COMPOSE_ALTERNATIVAS,
+      alternativas: [{ alternativa: 'Rápida', ordem: 1 }],
+    });
+    const next = editorDocumentoReducer(state, { type: EDITOR_ACTIONS.COMMIT_COMPOSE });
+    expect(next.secoes[0].perguntas).toHaveLength(1);
+    expect(next.compose.texto).toBe('Cicatrização?');
+    expect(canCommitCompose(state.compose, 'escolha_unica')).toBe(false);
+    expect(composeCommitHint(state.compose, 'escolha_unica')).toMatch(/2 opções/);
+  });
+
+  it('UPDATE_PERGUNTA muda tipo sem limpar alternativas em memória', () => {
+    let state = editorDocumentoReducer(base(), {
+      type: EDITOR_ACTIONS.ADD_PERGUNTA,
+      secaoKey: 's1',
+      tipoRespostaCodigo: 'escolha_unica',
+      initialPatch: {
+        descricao: 'Lista',
+        alternativas: [
+          { alternativa: 'A', ordem: 1 },
+          { alternativa: 'B', ordem: 2 },
+        ],
+      },
+    });
+    const key = state.secoes[0].perguntas[1].clientKey;
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.UPDATE_PERGUNTA,
+      clientKey: key,
+      patch: { tipoRespostaCodigo: 'texto' },
+    });
+    expect(state.secoes[0].perguntas[1].alternativas).toHaveLength(2);
+    state = editorDocumentoReducer(state, {
+      type: EDITOR_ACTIONS.UPDATE_PERGUNTA,
+      clientKey: key,
+      patch: { tipoRespostaCodigo: 'escolha_unica' },
+    });
+    expect(state.secoes[0].perguntas[1].alternativas.map((a) => a.alternativa)).toEqual(['A', 'B']);
+  });
+});
+
+describe('secoesToDocumentoPayload alternativas', () => {
+  it('omite alternativas quando tipo não é escolha; envia 1-based quando é', () => {
+    const secoes = [
+      {
+        clientKey: 's1',
+        nome: 'Geral',
+        ordem: 1,
+        perguntas: [
+          {
+            clientKey: 'q1',
+            descricao: 'Texto',
+            tipoRespostaCodigo: 'texto',
+            prioridade: 'NORMAL',
+            ordem: 1,
+            alternativas: [
+              { alternativa: 'Ghost', ordem: 1 },
+              { alternativa: 'Ghost2', ordem: 2 },
+            ],
+          },
+          {
+            clientKey: 'q2',
+            descricao: 'Lista',
+            tipoRespostaCodigo: 'escolha_unica',
+            prioridade: 'NORMAL',
+            ordem: 2,
+            alternativas: [
+              { alternativa: 'Um', ordem: 1 },
+              { alternativa: 'Dois', ordem: 2 },
+            ],
+          },
+        ],
+      },
+    ];
+    const payload = secoesToDocumentoPayload({
+      nome: 'F',
+      especialidadeId: null,
+      textoDeclaracao: '',
+      secoes,
+    });
+    expect(payload.secoes[0].perguntas[0].alternativas).toBeUndefined();
+    expect(payload.secoes[0].perguntas[1].alternativas).toEqual([
+      { alternativa: 'Um', ordem: 1 },
+      { alternativa: 'Dois', ordem: 2 },
+    ]);
+    expect(findEscolhaSemAlternativas(secoes)).toBeNull();
+    expect(
+      findEscolhaSemAlternativas([
+        {
+          ...secoes[0],
+          perguntas: [{ ...secoes[0].perguntas[1], alternativas: [{ alternativa: 'Só', ordem: 1 }] }],
+        },
+      ])?.descricao
+    ).toBe('Lista');
   });
 });
 

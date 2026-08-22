@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Copy,
   FileText,
@@ -11,6 +11,7 @@ import {
 import { anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
 import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
+import { ViewportDialog } from '../shared/ViewportDialog.jsx';
 import { AnamneseDocumentoEditor } from './AnamneseDocumentoEditor.jsx';
 
 const ESPECIALIDADE_BADGE = {
@@ -37,7 +38,10 @@ function EspecialidadeBadge({ nome }) {
 /**
  * Hub de Fichas: listagem das fichas salvas. "Nova Ficha" abre o editor local-first (sem POST).
  */
-export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
+export const AnamneseFichasHome = forwardRef(function AnamneseFichasHome(
+  { onFichaNomeChange, onDirtyFichaChange },
+  ref,
+) {
   const toast = useToast();
   const [fichas, setFichas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +50,10 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
   const [editorFichaId, setEditorFichaId] = useState(undefined);
   const [fichaParaExcluir, setFichaParaExcluir] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
+  const onDirtyFichaChangeRef = useRef(onDirtyFichaChange);
+  const onFichaNomeChangeRef = useRef(onFichaNomeChange);
+  onDirtyFichaChangeRef.current = onDirtyFichaChange;
+  onFichaNomeChangeRef.current = onFichaNomeChange;
 
   const fetchDados = useCallback(async () => {
     setLoading(true);
@@ -63,10 +71,23 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
 
   useEffect(() => {
     if (view === 'list') {
-      onFichaNomeChange?.(null);
-      onDirtyFichaChange?.(false);
+      onFichaNomeChangeRef.current?.(null);
+      onDirtyFichaChangeRef.current?.(false);
     }
-  }, [view, onFichaNomeChange, onDirtyFichaChange]);
+  }, [view]);
+
+  useEffect(() => () => {
+    onFichaNomeChangeRef.current?.(null);
+    onDirtyFichaChangeRef.current?.(false);
+  }, []);
+
+  const exitToList = useCallback(() => {
+    setView('list');
+    setEditorFichaId(undefined);
+    fetchDados();
+  }, [fetchDados]);
+
+  useImperativeHandle(ref, () => ({ exitToList }), [exitToList]);
 
   const fichasFiltradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -119,11 +140,7 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
     return (
       <AnamneseDocumentoEditor
         fichaId={editorFichaId}
-        onBack={() => {
-          setView('list');
-          setEditorFichaId(undefined);
-          fetchDados();
-        }}
+        onBack={exitToList}
         onFichaNomeChange={onFichaNomeChange}
         onSaved={() => fetchDados()}
         onDirtyChange={onDirtyFichaChange}
@@ -133,7 +150,7 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
 
   if (loading) {
     return (
-      <div className="anamnese-sora flex flex-col gap-4">
+      <div className="anamnese-sora mx-auto flex w-full min-w-0 max-w-[1440px] flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="h-10 max-w-sm flex-1 animate-pulse rounded-xl bg-[#f1f5f9]" />
           <div className="h-10 w-32 animate-pulse rounded-xl bg-[#f1f5f9]" />
@@ -144,51 +161,56 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
   }
 
   return (
-    <div className="anamnese-sora">
-      {fichaParaExcluir && (
-        <div className="anamnese-sora fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="flex w-full max-w-md flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="border-b border-[#e2e8f0] px-6 py-4">
-              <h3 className="text-[16px] font-bold text-[#0f172a]">Desativar ficha</h3>
-            </div>
-            <div className="px-6 py-4">
-              <p className="text-[14px] font-medium leading-relaxed text-[#475569]">
-                Deseja desativar esta ficha? Ela não estará mais disponível para novas consultas.
-              </p>
-            </div>
-            <div className="flex justify-end gap-3 px-6 pb-6">
-              <button
-                type="button"
-                onClick={() => setFichaParaExcluir(null)}
-                disabled={excluindo}
-                className="rounded-xl border border-slate-200 px-5 py-3 text-[14px] font-bold text-[#64748b] hover:border-[#00a88e]/20 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmarExcluir}
-                disabled={excluindo}
-                className="flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-[14px] font-bold text-white shadow-md hover:bg-red-600 disabled:opacity-60"
-              >
-                {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                Desativar
-              </button>
-            </div>
+    <div className="anamnese-sora mx-auto w-full min-w-0 max-w-[1440px]">
+      {fichaParaExcluir ? (
+        <ViewportDialog
+          open
+          onDismiss={() => setFichaParaExcluir(null)}
+          titleId="desativar-ficha-title"
+        >
+          <div className="border-b border-[#e2e8f0] px-5 py-4">
+            <h3 id="desativar-ficha-title" className="text-[16px] font-bold text-[#0f172a]">
+              Desativar ficha
+            </h3>
           </div>
-        </div>
-      )}
+          <div className="px-5 py-4">
+            <p className="text-[14px] font-medium leading-relaxed text-[#475569]">
+              Deseja desativar esta ficha? Ela não estará mais disponível para novas consultas.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 px-5 pb-5">
+            <button
+              type="button"
+              data-dialog-initial-focus
+              onClick={() => setFichaParaExcluir(null)}
+              disabled={excluindo}
+              className="rounded-xl border border-slate-200 px-5 py-3 text-[14px] font-bold text-[#64748b] hover:border-[#00a88e]/20 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmarExcluir}
+              disabled={excluindo}
+              className="flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-[14px] font-bold text-white shadow-md hover:bg-red-600 disabled:opacity-60"
+            >
+              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Desativar
+            </button>
+          </div>
+        </ViewportDialog>
+      ) : null}
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative min-w-0 max-w-sm flex-1">
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#00a88e]/60" strokeWidth={2.5} />
             <input
               type="search"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar fichas..."
-              className="w-full rounded-xl border border-slate-200 bg-[#f8fbfb] py-2.5 pl-11 pr-4 text-[14px] font-medium outline-none focus:border-[#00a88e] focus:ring-4 focus:ring-[#00a88e]/20"
+              className="w-full rounded-xl border border-slate-200 bg-[#f8fbfb] py-2.5 pl-11 pr-4 text-base font-medium outline-none focus:border-[#00a88e] focus:ring-4 focus:ring-[#00a88e]/20 sm:text-[14px]"
             />
           </div>
           <button
@@ -220,13 +242,19 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
         ) : (
           <>
             <div className="hidden overflow-hidden rounded-2xl border border-app-border bg-white shadow-sm md:block">
-              <table className="w-full text-left text-[13px]">
+              <table className="w-full min-w-0 table-fixed text-left text-[13px]">
+                <colgroup>
+                  <col className="w-[46%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[20%]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-app-border bg-[#f8fbfb]">
                     <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Nome</th>
                     <th className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Especialidade</th>
                     <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Perguntas</th>
-                    <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Ações</th>
+                    <th className="w-[8.5rem] whitespace-nowrap px-5 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-[#64748b]">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-app-border/60">
@@ -236,10 +264,10 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
                       className="group cursor-pointer transition-colors hover:bg-[#f0fdfa]/50"
                       onClick={() => openEditor(ficha.id)}
                     >
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
+                      <td className="min-w-0 px-5 py-3.5">
+                        <div className="flex min-w-0 items-center gap-2">
                           <FileText className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} />
-                          <span className="font-bold text-[#0f172a]">{ficha.nome}</span>
+                          <span className="min-w-0 truncate font-bold text-[#0f172a]">{ficha.nome}</span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
@@ -248,15 +276,15 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
                       <td className="px-5 py-3.5 text-right font-medium tabular-nums text-[#64748b]">
                         {ficha.totalPerguntas ?? ficha.itens?.length ?? 0}
                       </td>
-                      <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <button type="button" onClick={() => openEditor(ficha.id)} title="Editar" className="rounded-lg p-1.5 text-[#64748b] hover:bg-[#f0fdfa] hover:text-[#00a88e]">
+                      <td className="w-[8.5rem] whitespace-nowrap px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1 opacity-100">
+                          <button type="button" onClick={() => openEditor(ficha.id)} title="Editar" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-1.5 text-[#64748b] hover:bg-[#f0fdfa] hover:text-[#00a88e]">
                             <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
                           </button>
-                          <button type="button" onClick={(e) => handleDuplicar(ficha.id, e)} title="Duplicar" className="rounded-lg p-1.5 text-[#64748b] hover:bg-violet-50 hover:text-violet-600">
+                          <button type="button" onClick={(e) => handleDuplicar(ficha.id, e)} title="Duplicar" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-1.5 text-[#64748b] hover:bg-violet-50 hover:text-violet-600">
                             <Copy className="h-3.5 w-3.5" strokeWidth={2} />
                           </button>
-                          <button type="button" onClick={() => setFichaParaExcluir(ficha.id)} title="Desativar" className="rounded-lg p-1.5 text-[#64748b] hover:bg-red-50 hover:text-red-500">
+                          <button type="button" onClick={() => setFichaParaExcluir(ficha.id)} title="Desativar" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-1.5 text-[#64748b] hover:bg-red-50 hover:text-red-500">
                             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
                           </button>
                         </div>
@@ -286,6 +314,35 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
                       </span>
                     </div>
                   </div>
+                  <div
+                    className="flex shrink-0 items-center gap-0.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openEditor(ficha.id)}
+                      title="Editar"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f0fdfa] hover:text-[#00a88e]"
+                    >
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDuplicar(ficha.id, e)}
+                      title="Duplicar"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#64748b] hover:bg-violet-50 hover:text-violet-600"
+                    >
+                      <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFichaParaExcluir(ficha.id)}
+                      title="Desativar"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#64748b] hover:bg-red-50 hover:text-red-500"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -294,4 +351,4 @@ export function AnamneseFichasHome({ onFichaNomeChange, onDirtyFichaChange }) {
       </div>
     </div>
   );
-}
+});
