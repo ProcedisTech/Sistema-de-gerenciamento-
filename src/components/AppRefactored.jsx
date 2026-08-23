@@ -714,19 +714,24 @@ function AppRefactoredInner() {
           if (result.allOk) {
             toast.success(`${group.length} agendamentos cancelados`);
             setScheduleCancelRow(null);
+            void kpiState.refresh();
           } else if (result.succeeded.length > 0) {
             toast.error(partialMsg || 'Cancelamento parcial');
             setScheduleCancelRow(null);
+            void kpiState.refresh();
           }
           return;
         }
         const ok = await agendaSchedule.handleCancelar(row.agendaId, payload);
-        if (ok) setScheduleCancelRow(null);
+        if (ok) {
+          setScheduleCancelRow(null);
+          void kpiState.refresh();
+        }
       } finally {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow, toast],
+    [agendaSchedule, scheduleCancelRow, toast, kpiState.refresh],
   );
 
   const handleSlotReagendar = React.useCallback(
@@ -4688,6 +4693,10 @@ function AppRefactoredInner() {
                       profileNav={profileNav}
                       clearProfileNavSnapshot={clearProfileNavSnapshot}
                       agendaSchedule={agendaSchedule}
+                      onSlotCancelar={(target) => {
+                        const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+                        if (row) setScheduleCancelRow(row);
+                      }}
                     />
                   </RoleGuard>
                 )}
