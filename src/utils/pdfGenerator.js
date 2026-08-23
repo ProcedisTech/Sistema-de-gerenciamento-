@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import DOMPurify from 'dompurify';
-import { replaceTermVariables } from './replaceTermVariables';
+import { replaceTermVariables, formatDateBR } from './replaceTermVariables';
 
 export const generateTermoPdf = async ({
   titulo,
@@ -379,6 +379,35 @@ function safe(value, fallback = '—') {
 }
 
 /**
+ * Cabeçalho fino compartilhado pelos PDFs no estilo editorial preto/cinza (ficha do paciente,
+ * solicitação de exames): nome da clínica + título em negrito numa linha, endereço/telefone +
+ * um rótulo à direita na linha de baixo, e uma linha divisória grossa fechando o bloco.
+ * `startX` deixa espaço pra um logo desenhado à parte antes de chamar isto (ex: Ficha do
+ * Paciente). Devolve o `y` logo abaixo do cabeçalho, pronto pro conteúdo começar.
+ */
+function drawThinHeader(doc, { startX, margin, pageWidth, clinica, titulo, rotulo, INK, GRAY }) {
+  let y = margin;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...INK);
+  doc.text(safe(clinica.nome, 'Clínica'), startX, y);
+  doc.text(titulo, pageWidth - margin - doc.getTextWidth(titulo), y);
+  y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
+  const enderecoTelefone = [clinica.endereco, clinica.telefone].filter(Boolean).join(' · ');
+  if (enderecoTelefone) doc.text(enderecoTelefone, startX, y);
+  if (rotulo) doc.text(rotulo, pageWidth - margin - doc.getTextWidth(rotulo), y);
+  y += 4;
+  doc.setDrawColor(...INK);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, pageWidth - margin, y);
+  doc.setTextColor(...INK);
+  return y + 10;
+}
+
+/**
  * Ficha do Paciente (v2), em A4, seguindo o leiaute editorial minimalista do design
  * handoff ("Ficha do Paciente v2.dc.html"): preto/branco/cinza, cabeçalho fino,
  * grade de identificação, seções numeradas finas (sem badges/caixas coloridas),
@@ -463,27 +492,17 @@ export const generateFichaPacientePdf = ({
   doc.line(dividerX, margin - 2, dividerX, margin - 2 + logoSize);
   const headerTextX = dividerX + 4;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...INK);
-  doc.text(safe(clinica.nome, 'Clínica'), headerTextX, y);
-  const fichaTitle = 'FICHA DO PACIENTE';
-  doc.text(fichaTitle, pageWidth - margin - doc.getTextWidth(fichaTitle), y);
-  y += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...GRAY);
-  const enderecoTelefone = [clinica.endereco, clinica.telefone].filter(Boolean).join(' · ');
-  if (enderecoTelefone) doc.text(enderecoTelefone, headerTextX, y);
   const emitidaEm = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  const nLabel = `Nº ${safe(numeroProntuario)} · emitida em ${emitidaEm}`;
-  doc.text(nLabel, pageWidth - margin - doc.getTextWidth(nLabel), y);
-  y += 4;
-  doc.setDrawColor(...INK);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, pageWidth - margin, y);
-  doc.setTextColor(...INK);
-  y += 10;
+  y = drawThinHeader(doc, {
+    startX: headerTextX,
+    margin,
+    pageWidth,
+    clinica,
+    titulo: 'FICHA DO PACIENTE',
+    rotulo: `Nº ${safe(numeroProntuario)} · emitida em ${emitidaEm}`,
+    INK,
+    GRAY,
+  });
 
   // ── Helpers de layout ───────────────────────────────────────────
   const colWidth = (maxWidth - 10) / 2;
@@ -733,4 +752,188 @@ export const generateFichaPacientePdf = ({
   }
 
   doc.save(fileName || buildFichaFileName(pac.nome));
+};
+
+/** Catálogo padrão de exames complementares (a partir da lista usada em clínica). */
+export const EXAMES_COMPLEMENTARES_CATALOGO = [
+  'Hemograma Completo',
+  'Coagulograma',
+  'Ferritina',
+  'Ácido fólico',
+  'Glicemia',
+  'Insulina',
+  'Hemoglobina glicada',
+  'Ácido Úrico',
+  'TGO/TGP',
+  'Triglicerídeos',
+  'Colesterol total',
+  'TSH',
+  'T3 reverso',
+  'T4 total',
+  'PCRus',
+  'Fibrinogênio',
+  'Homocisteína',
+  'Somatomedina (IGF-1)',
+  'Cortisol',
+  'SHBG',
+  'DHEA',
+  'Testosterona total',
+  'Progesterona',
+  'Estradiol',
+  'DHT',
+  'Vitamina D3',
+];
+
+/** Nome de arquivo seguro pra solicitação de exames. */
+function buildSolicitacaoExamesFileName(nomePaciente) {
+  const dataStr = new Date().toISOString().slice(0, 10);
+  const nomeSafe = String(nomePaciente || 'paciente')
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '_');
+  return `solicitacao_exames_${nomeSafe || 'paciente'}_${dataStr}.pdf`;
+}
+
+/**
+ * Solicitação de Exames Complementares — PDF timbrado com checklist dos exames
+ * marcados pelo profissional. Segue o mesmo leiaute editorial fino (preto/cinza)
+ * de `generateFichaPacientePdf`, sem reaproveitar o cabeçalho teal dos termos
+ * porque isto não é um documento de consentimento assinado pelo paciente.
+ */
+export const generateSolicitacaoExamesPdf = ({
+  fileName,
+  clinicaCtx,
+  pacienteCtx,
+  profissionalCtx,
+  examesSelecionados,
+  observacoes,
+}) => {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const margin = 20;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const maxWidth = pageWidth - margin * 2;
+  const INK = [26, 26, 26];
+  const GRAY = [118, 118, 118];
+  const BORDER = [230, 230, 230];
+
+  const clinica = clinicaCtx || {};
+  const pac = pacienteCtx || {};
+  const prof = profissionalCtx || {};
+  const exames = Array.isArray(examesSelecionados) ? examesSelecionados : [];
+
+  let y = margin;
+
+  const checkPage = (needed = 10) => {
+    if (y + needed > pageHeight - margin) {
+      doc.addPage();
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GRAY);
+      doc.text(`Solicitação de exames — ${safe(pac.nome, 'Paciente')} (continuação)`, margin, 12);
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.3);
+      doc.line(margin, 14, pageWidth - margin, 14);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...INK);
+      y = margin + 8;
+    }
+  };
+
+  const emitidaEm = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  y = drawThinHeader(doc, {
+    startX: margin,
+    margin,
+    pageWidth,
+    clinica,
+    titulo: 'SOLICITAÇÃO DE EXAMES COMPLEMENTARES',
+    rotulo: `Emitida em ${emitidaEm}`,
+    INK,
+    GRAY,
+  });
+
+  // Identificação do paciente
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(safe(pac.nome, 'Paciente'), margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY);
+  const identLinha = [
+    pac.cpf ? `CPF: ${pac.cpf}` : null,
+    pac.dataNascimento ? `Nascimento: ${formatDateBR(pac.dataNascimento)}` : null,
+  ].filter(Boolean).join('   ·   ');
+  if (identLinha) doc.text(identLinha, margin, y);
+  doc.setTextColor(...INK);
+  y += 10;
+
+  // Checklist de exames solicitados
+  const colWidth = maxWidth / 2 - 5;
+  const rowHeight = 7;
+  const itensParaImprimir = exames.length > 0 ? exames : EXAMES_COMPLEMENTARES_CATALOGO;
+  const alturaChecklist = Math.ceil(itensParaImprimir.length / 2) * rowHeight;
+  checkPage(10 + 8 + alturaChecklist);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.text('SOLICITO OS SEGUINTES EXAMES:', margin, y);
+  y += 2.5;
+  doc.setDrawColor(...INK);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.5);
+  itensParaImprimir.forEach((nome, idx) => {
+    const col = idx % 2;
+    const row = Math.floor(idx / 2);
+    const x = margin + col * (colWidth + 10);
+    const yRow = y + row * rowHeight;
+    doc.setDrawColor(...INK);
+    doc.setLineWidth(0.3);
+    doc.rect(x, yRow - 3.2, 3.5, 3.5, exames.length > 0 ? 'F' : 'D');
+    doc.text(nome, x + 6, yRow);
+  });
+  y += Math.ceil(itensParaImprimir.length / 2) * rowHeight + 6;
+
+  if (observacoes && observacoes.trim()) {
+    checkPage(4.5 + 5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...GRAY);
+    doc.text('OBSERVAÇÕES', margin, y);
+    y += 4.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...INK);
+    const obsWrapped = doc.splitTextToSize(observacoes.trim(), maxWidth);
+    obsWrapped.forEach((line) => {
+      checkPage(5);
+      doc.text(line, margin, y);
+      y += 5;
+    });
+    y += 4;
+  }
+
+  // Assinatura do profissional
+  checkPage(10 + 4.5 + 4.5);
+  y += 10;
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.3);
+  const sigWidth = 90;
+  doc.line(margin, y, margin + sigWidth, y);
+  y += 4.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GRAY);
+  const profissionalLabel = [safe(prof.nome, 'Profissional'), prof.cpf || prof.crm]
+    .filter(Boolean)
+    .join(' · ');
+  doc.text(profissionalLabel, margin, y);
+  doc.setTextColor(...INK);
+
+  doc.save(fileName || buildSolicitacaoExamesFileName(pac.nome));
 };

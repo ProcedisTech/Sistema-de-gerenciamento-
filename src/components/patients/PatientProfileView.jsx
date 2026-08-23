@@ -42,6 +42,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import { formatDateBR } from '../../utils/replaceTermVariables';
 import { convertToWebP } from '../../utils/imageUtils.js';
 import {
   fetchNextAppointmentIsoForPaciente,
@@ -149,12 +150,12 @@ function birthdayAlertSidebarCopy(alert) {
   return `Aniversário em ${alert.daysUntil} dias`;
 }
 
-/** ISO `YYYY-MM-DD` → exibição DD/MM/AAAA para o campo de data. */
+/** ISO `YYYY-MM-DD` → exibição DD/MM/AAAA para o campo de data (usa o mesmo parser de
+ *  replaceTermVariables.js — fonte única de conversão de data pro app inteiro). */
 function isoDateToBrazilianDisplay(iso) {
   if (!iso || typeof iso !== 'string') return '';
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return '';
-  return `${m[3]}/${m[2]}/${m[1]}`;
+  const formatted = formatDateBR(iso);
+  return /^\d{2}\/\d{2}\/\d{4}$/.test(formatted) ? formatted : '';
 }
 
 /** Normaliza sexo vindo do backend / seeds para o select F|M|N. */

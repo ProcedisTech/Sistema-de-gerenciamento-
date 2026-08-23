@@ -15,6 +15,9 @@ import {
   MoreVertical,
   Shield,
   Stethoscope,
+  Syringe,
+  Droplet,
+  Camera,
 } from 'lucide-react';
 import { termosApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
@@ -44,6 +47,9 @@ function isAtivo(row) {
 const CAMPOS_AUTOMATICOS = [
   { token: '[NOME DO PACIENTE]', desc: 'Nome completo' },
   { token: '[CPF DO PACIENTE]', desc: 'CPF formatado' },
+  { token: '[RG DO PACIENTE]', desc: 'RG do paciente' },
+  { token: '[DATA DE NASCIMENTO DO PACIENTE]', desc: 'Data de nascimento (DD/MM/AAAA)' },
+  { token: '[TELEFONE DO PACIENTE]', desc: 'Telefone / WhatsApp' },
   { token: '[NOME DA CLÍNICA]', desc: 'Razão social ou nome' },
   { token: '[CNPJ DA CLÍNICA]', desc: 'CNPJ formatado' },
   { token: '[NOME DO PROFISSIONAL]', desc: 'Nome do atendente' },
@@ -54,6 +60,75 @@ const INTRO_BASICA =
 
 const INTRO_LGPD =
   '<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):</p>';
+
+/** Converte texto puro (linhas separadas por \n) num HTML com cada linha em seu próprio <p>. */
+function paragraphizeTemplate(bruto) {
+  return bruto
+    .split('\n')
+    .map((p) => (p.trim() ? `<p>${p}</p>` : ''))
+    .join('');
+}
+
+const TCLE_TOXINA_TEMPLATE_BRUTO = `TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO — TOXINA BOTULÍNICA
+
+Eu, [NOME DO PACIENTE], portador do RG [RG DO PACIENTE] e CPF [CPF DO PACIENTE], declaro ter sido informado(a) e bem orientado(a) pelo(a) Dr.(a) [NOME DO PROFISSIONAL] sobre a ação da Toxina Botulínica do tipo A (que remove o relaxamento dos músculos), suas indicações e contraindicações, e que o efeito da mesma inicia-se cerca de 48 a 72 horas após a aplicação, e tem efeito máximo em torno de 15 dias após a aplicação. A indicação do tratamento com a Toxina Botulínica é preconizada para o relaxamento do músculo e diminuição da contração excessiva, e a mesma é transitória, geralmente por um período de 1 a 3 meses. Esse período depende de diferentes fatores associados ao paciente, à sua musculatura, ao tipo da patologia, bem como outros elementos.
+
+Os efeitos indesejáveis são raros e temporários e dependem, dentre outros fatores, da musculatura de cada paciente e da região aplicada, podendo ocasionar:
+- Equimoses ou hematomas (manchamento no local da aplicação, transitório de 5 a 7 dias) e sangramento e/ou dor durante a injeção;
+- Reação alérgica na pele, hipersensibilidade e/ou dor no local aplicado por horas ou dias, a depender da região aplicada;
+- Sensação de franqueza ao mastigar e/ou diminuição na amplitude do sorriso;
+- Diminuição na largura da face em pacientes com os músculos masseteres e/ou temporais hipertrofiados;
+- Assimetria;
+- Queda das pálpebras e/ou sobrancelhas (ptose), e/ou sensação de pálpebras inchadas;
+- Alargamento da área entre as sobrancelhas.
+
+Fui também claramente informado(a) a respeito das seguintes contraindicações e da previsibilidade dos tratamentos:
+- O tratamento não está indicado em caso de gravidez e/ou amamentação.
+
+Estou ciente de que o grau efetivo de melhora não pode ser previsto ou garantido pelo profissional, pois isso depende da reação fisiológica de cada paciente, podendo, inclusive, haver necessidade de uma nova avaliação.
+
+Declaro minha concordância em me submeter à aplicação de Toxina Botulínica, assumindo a responsabilidade e os riscos pelos eventuais efeitos indesejáveis, e autorizo o(a) Dr.(a) [NOME DO PROFISSIONAL] a aplicá-la. Declaro ter recebido todas as orientações necessárias sobre os cuidados que devo ter após a aplicação da Toxina Botulínica, bem como uma receita para controle de eventuais dores pós-aplicação.
+
+[NOME DA CLÍNICA] — CNPJ [CNPJ DA CLÍNICA]
+
+Paciente: [NOME DO PACIENTE]     Data de nascimento: [DATA DE NASCIMENTO DO PACIENTE]     Contato: [TELEFONE DO PACIENTE]`;
+
+const TCLE_PREENCHIMENTO_TEMPLATE_BRUTO = `TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO — PREENCHIMENTO COM ÁCIDO HIALURÔNICO
+
+Eu, [NOME DO PACIENTE], portador do CPF [CPF DO PACIENTE], declaro ter sido informado(a) e bem orientado(a) pelo(a) Dr.(a) [NOME DO PROFISSIONAL] sobre o procedimento de preenchimento orofacial com Ácido Hialurônico, suas indicações e contraindicações. O procedimento está indicado para correções de assimetria facial, bem como perda de tecido e/ou flacidez. Os biomateriais de preenchimento à base de ácido hialurônico apresentam durabilidade média de 6 meses a 1 ano e meio, dependendo das características do produto e de cada paciente.
+
+Os efeitos indesejáveis são raros e temporários e dependem, dentre outros fatores, das características de cada paciente e da região aplicada, podendo ocasionar:
+- Equimoses ou hematomas (manchamento no local da aplicação, transitório de 7 a 15 dias) e sangramento e/ou dor durante a injeção do material;
+- Inflamação, que vai diminuindo entre 48 e 72 horas, sendo mínima a partir da primeira semana;
+- Reação alérgica na pele, hipersensibilidade e/ou dor no local aplicado por horas ou dias, a depender da região aplicada;
+- O implante de biomaterial reabsorvível pode reabsorver de forma prematura;
+- Formação de nódulos e/ou fibrocimento na região de aplicação;
+- Possível assimetria;
+- Em caso de preenchimento de papilas, possível isquemia e hematoma.
+
+Fui também claramente informado(a) a respeito das seguintes contraindicações e da previsibilidade dos tratamentos:
+- O tratamento não está indicado em caso de gravidez e/ou amamentação;
+- Em caso de alergias pregressas, o procedimento não está indicado.
+
+Estou ciente de que o grau efetivo de melhora não pode ser previsto ou garantido pelo profissional, pois isso depende da reação fisiológica de cada paciente, podendo, inclusive, haver necessidade de nova aplicação.
+
+Declaro minha concordância em me submeter à aplicação de biomaterial preenchedor de Ácido Hialurônico, assumindo a responsabilidade e os riscos pelos eventuais efeitos indesejáveis, e autorizo o(a) Dr.(a) [NOME DO PROFISSIONAL] a aplicá-lo. Declaro ter recebido todas as orientações necessárias sobre os cuidados que devo ter após a aplicação do biomaterial preenchedor, bem como uma receita para controle de eventuais dores pós-aplicação.
+
+[NOME DA CLÍNICA] — CNPJ [CNPJ DA CLÍNICA]
+
+Paciente: [NOME DO PACIENTE]     Data de nascimento: [DATA DE NASCIMENTO DO PACIENTE]     Contato: [TELEFONE DO PACIENTE]`;
+
+const TERMO_IMAGEM_TEMPLATE_BRUTO = `TERMO DE CONSENTIMENTO DE USO DE IMAGEM
+
+Nome do Paciente: [NOME DO PACIENTE]
+CPF: [CPF DO PACIENTE]     RG: [RG DO PACIENTE]
+Contato: [TELEFONE DO PACIENTE]     Data de nascimento: [DATA DE NASCIMENTO DO PACIENTE]
+
+Autorizo a divulgação de fotos, imagens e vídeos dos procedimentos realizados em mim por [NOME DA CLÍNICA] (CNPJ [CNPJ DA CLÍNICA]). Estou ciente de que o resultado leva, em média, de 7 a 14 dias para se estabilizar, podendo haver edema, hematomas ou infecção, com necessidade de cuidados e uso dos medicamentos prescritos no pós-operatório. A revisão será feita em data agendada, podendo ou não haver necessidade de retoque.
+
+Descrição do tratamento: _____________________________________________
+
+Profissional: [NOME DO PROFISSIONAL]`;
 
 export function TermosManager() {
   const { success: toastSuccess, error: toastError } = useToast();
@@ -73,6 +148,19 @@ export function TermosManager() {
   const [viewingRow, setViewingRow] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState(null);
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const templateMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!templateMenuOpen) return undefined;
+    const onPointerDown = (e) => {
+      if (templateMenuRef.current && !templateMenuRef.current.contains(e.target)) {
+        setTemplateMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [templateMenuOpen]);
   // Painel de ajuda do editor: aberto por padrão em telas lg+, recolhido abaixo disso.
   const [helpOpen, setHelpOpen] = useState(
     () => typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches
@@ -143,10 +231,43 @@ export function TermosManager() {
   const openNewWithLgpdTemplate = () => {
     setEditingId(null);
     setTitulo('Termo de Consentimento LGPD');
-    const html = LGPD_TEMPLATE_BRUTO.split('\n')
-      .map((p) => (p.trim() ? `<p>${p}</p>` : ''))
-      .join('');
-    setConteudo(html);
+    setConteudo(paragraphizeTemplate(LGPD_TEMPLATE_BRUTO));
+    setAutoAssinarProfissional(true);
+    setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
+    setProcedimentosVinculados([]);
+    setFormErrors({});
+    setViewingRow(null);
+    setModo('edit');
+  };
+
+  const openNewWithTcleToxinaTemplate = () => {
+    setEditingId(null);
+    setTitulo('TCLE - Toxina Botulínica');
+    setConteudo(paragraphizeTemplate(TCLE_TOXINA_TEMPLATE_BRUTO));
+    setAutoAssinarProfissional(true);
+    setNaturezaCodigo(NATUREZA_PROCEDIMENTO);
+    setProcedimentosVinculados([]);
+    setFormErrors({});
+    setViewingRow(null);
+    setModo('edit');
+  };
+
+  const openNewWithTclePreenchimentoTemplate = () => {
+    setEditingId(null);
+    setTitulo('TCLE - Preenchimento com Ácido Hialurônico');
+    setConteudo(paragraphizeTemplate(TCLE_PREENCHIMENTO_TEMPLATE_BRUTO));
+    setAutoAssinarProfissional(true);
+    setNaturezaCodigo(NATUREZA_PROCEDIMENTO);
+    setProcedimentosVinculados([]);
+    setFormErrors({});
+    setViewingRow(null);
+    setModo('edit');
+  };
+
+  const openNewWithTermoImagemTemplate = () => {
+    setEditingId(null);
+    setTitulo('Termo de Consentimento de Uso de Imagem');
+    setConteudo(paragraphizeTemplate(TERMO_IMAGEM_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
     setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
     setProcedimentosVinculados([]);
@@ -405,6 +526,7 @@ export function TermosManager() {
           procedimentoOptionsLoading={procedimentoOptionsLoading}
           procedimentosVinculados={procedimentosVinculados}
           onChangeProcedimentosVinculados={setProcedimentosVinculados}
+          naturezaCodigo={naturezaCodigo}
         />
       </div>
     );
@@ -430,15 +552,75 @@ export function TermosManager() {
           />
         </div>
         <div className="ml-auto flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={openNewWithLgpdTemplate}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-[#00a88e] bg-white px-4 text-[13px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f0fdfa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-1"
-            title="Usar Template LGPD pré-preenchido"
-          >
-            <Shield className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-            Template LGPD
-          </button>
+          <div className="relative shrink-0" ref={templateMenuRef}>
+            <button
+              type="button"
+              onClick={() => setTemplateMenuOpen((v) => !v)}
+              aria-expanded={templateMenuOpen}
+              aria-haspopup="menu"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-[#00a88e] bg-white px-4 text-[13px] font-semibold text-[#00a88e] transition-colors hover:bg-[#f0fdfa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-1"
+              title="Começar a partir de um modelo pronto"
+            >
+              <Lightbulb className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              Usar Template
+              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+            </button>
+            {templateMenuOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-10 mt-1 w-64 rounded-lg border border-[#e2e8f0] bg-white py-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-[#0f172a] hover:bg-[#f8fafc]"
+                  onClick={() => {
+                    setTemplateMenuOpen(false);
+                    openNewWithLgpdTemplate();
+                  }}
+                >
+                  <Shield className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                  Template LGPD
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-[#0f172a] hover:bg-[#f8fafc]"
+                  onClick={() => {
+                    setTemplateMenuOpen(false);
+                    openNewWithTcleToxinaTemplate();
+                  }}
+                >
+                  <Syringe className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                  TCLE Toxina Botulínica
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-[#0f172a] hover:bg-[#f8fafc]"
+                  onClick={() => {
+                    setTemplateMenuOpen(false);
+                    openNewWithTclePreenchimentoTemplate();
+                  }}
+                >
+                  <Droplet className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                  TCLE Preenchimento
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-[#0f172a] hover:bg-[#f8fafc]"
+                  onClick={() => {
+                    setTemplateMenuOpen(false);
+                    openNewWithTermoImagemTemplate();
+                  }}
+                >
+                  <Camera className="h-4 w-4 shrink-0 text-[#00a88e]" strokeWidth={2} aria-hidden />
+                  Consentimento de Imagem
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={openNew}
@@ -839,7 +1021,9 @@ function TermoVinculosConfig({
   procedimentoOptionsLoading,
   procedimentosVinculados,
   onChangeProcedimentosVinculados,
+  naturezaCodigo,
 }) {
+  const semVinculo = naturezaCodigo === NATUREZA_PROCEDIMENTO && procedimentosVinculados.length === 0;
   return (
     <div className="rounded-xl border border-[#e2e8f0] bg-white p-4">
       <div className="mb-2 flex items-center gap-2">
@@ -854,6 +1038,12 @@ function TermoVinculosConfig({
         selectedIds={procedimentosVinculados}
         onChange={onChangeProcedimentosVinculados}
       />
+      {semVinculo ? (
+        <p className="mt-2 text-[12px] text-amber-700">
+          Sem procedimento vinculado, este termo não vai exigir assinatura em nenhum atendimento.
+          Selecione ao menos um procedimento acima antes de salvar.
+        </p>
+      ) : null}
     </div>
   );
 }

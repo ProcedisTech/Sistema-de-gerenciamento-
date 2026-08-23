@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { buildPacienteCtx } from '../utils/pacienteCtx';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 // Hooks de estado
@@ -3822,15 +3823,7 @@ function AppRefactoredInner() {
                           exigirFilaVinculo
                           termoFocoId={termoFocoId}
                           onAbrirMetodosAssinatura={handleNavigateToMetodosAssinatura}
-                          pacienteCtx={{
-                            nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
-                            cpf: pacienteAtual?.cpf,
-                            telefone:
-                              pacienteAtual?.telefone ||
-                              pacienteAtual?.phone ||
-                              pacienteAtual?.telefoneNumero ||
-                              pacienteAtual?.telefonePrincipal,
-                          }}
+                          pacienteCtx={buildPacienteCtx(pacienteAtual)}
                           clinicaCtx={{
                             nome: clinicaInfo?.nome,
                             cnpj: clinicaInfo?.cnpj,
@@ -4314,15 +4307,7 @@ function AppRefactoredInner() {
                     exigirFilaVinculo={exigirFilaTermos}
                     termoFocoId={termoFocoId}
                     onAbrirMetodosAssinatura={handleNavigateToMetodosAssinatura}
-                    pacienteCtx={{
-                      nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
-                      cpf: pacienteAtual?.cpf,
-                      telefone:
-                        pacienteAtual?.telefone ||
-                        pacienteAtual?.phone ||
-                        pacienteAtual?.telefoneNumero ||
-                        pacienteAtual?.telefonePrincipal,
-                    }}
+                    pacienteCtx={buildPacienteCtx(pacienteAtual)}
                     clinicaCtx={{
                       nome: clinicaInfo?.nome,
                       cnpj: clinicaInfo?.cnpj,

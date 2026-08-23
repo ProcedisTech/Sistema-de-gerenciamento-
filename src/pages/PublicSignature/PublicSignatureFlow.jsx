@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { Shield, Loader2, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
@@ -33,31 +33,42 @@ export function PublicSignatureFlow() {
 
   const sessaoId = window.location.pathname.split('/').pop();
 
+  // O backend só devolve RG/data de nascimento do paciente depois que o OTP é validado (dado
+  // mais sensível que nome/CPF/telefone). Por isso essa busca também roda de novo logo após o
+  // OTP validar, pra pegar esses campos e resolver os tokens que ficaram pendentes.
+  const fetchSessao = useCallback(async () => {
+    const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/status`));
+    if (!res.ok) throw new Error('Sessão inválida ou expirada');
+    const data = await res.json();
+
+    if (data.status !== 'PENDENTE') {
+      throw new Error(`Sessão indisponível (${data.status})`);
+    }
+
+    setSessaoData(data);
+    if (data.titulo) setDocumentoTitulo(data.titulo);
+
+    const conteudo = replaceTermVariables(data.conteudoSnapshot || '', {
+      pac: {
+        nome: data.pacienteNome,
+        cpf: data.pacienteCpf,
+        rg: data.pacienteRg,
+        dataNascimento: data.pacienteDataNascimento,
+        telefone: data.pacienteContato,
+      },
+      clinica: { nome: data.clinicaNome, cnpj: data.clinicaCnpj },
+      prof: { nome: data.profissionalNome }
+    });
+
+    setDocumentoConteudo(conteudo);
+    return data;
+  }, [sessaoId]);
+
   useEffect(() => {
     // 1. Validar se a sessão existe e precisa de OTP
-    const fetchSessao = async () => {
+    const carregar = async () => {
       try {
-        const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/status`));
-        if (!res.ok) throw new Error('Sessão inválida ou expirada');
-        const data = await res.json();
-        
-        if (data.status !== 'PENDENTE') {
-          throw new Error(`Sessão indisponível (${data.status})`);
-        }
-        
-        setSessaoData(data);
-        if (data.titulo) setDocumentoTitulo(data.titulo);
-        
-        let conteudo = data.conteudoSnapshot || '';
-        
-        conteudo = replaceTermVariables(conteudo, {
-          pac: { nome: data.pacienteNome, cpf: data.pacienteCpf },
-          clinica: { nome: data.clinicaNome, cnpj: data.clinicaCnpj },
-          prof: { nome: data.profissionalNome }
-        });
-        
-        setDocumentoConteudo(conteudo);
-
+        const data = await fetchSessao();
         const precisaOtp = Boolean(data.precisaOtp) && !data.otpValidado;
         setStep(precisaOtp ? 1 : 2);
         setLoading(false);
@@ -66,8 +77,8 @@ export function PublicSignatureFlow() {
         setLoading(false);
       }
     };
-    if (sessaoId) fetchSessao();
-  }, [sessaoId]);
+    if (sessaoId) carregar();
+  }, [sessaoId, fetchSessao]);
 
   const handleValidarOtp = async (e) => {
     e.preventDefault();
@@ -80,6 +91,7 @@ export function PublicSignatureFlow() {
       });
       const isValid = await res.json();
       if (!isValid) throw new Error('Código incorreto');
+      await fetchSessao(); // re-busca com RG/data de nascimento agora liberados pelo backend
       setStep(2);
     } catch (err) {
       alert(err.message);

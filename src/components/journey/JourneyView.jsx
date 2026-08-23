@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { toLocalISODate } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
+import { buildPacienteCtx } from '../../utils/pacienteCtx';
 import { Step2Anamnese } from './Step2Anamnese';
 import { Step3Evaluation } from './Step3Evaluation';
 import { Step3Termos, Step4Procedimento } from './Step4LGPD';
@@ -361,10 +362,7 @@ export function JourneyView({
           termoConteudo={termoConteudo}
           onTermoChange={(id) => setTermoSelecionadoId(id)}
           pacienteId={pacienteId ?? pacienteAtual?.id ?? null}
-          pacienteCtx={{ 
-            nome: pacienteAtual?.nome || pacienteAtual?.nomeCompleto || '', 
-            cpf: pacienteAtual?.cpf ?? cpf 
-          }}
+          pacienteCtx={buildPacienteCtx({ ...pacienteAtual, cpf: pacienteAtual?.cpf ?? cpf })}
           clinicaCtx={{}}
           profissionalCtx={{}}
         />
