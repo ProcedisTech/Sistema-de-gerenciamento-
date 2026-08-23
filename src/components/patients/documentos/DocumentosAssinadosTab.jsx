@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Download, FileText, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
+import { Download, FileText, FlaskConical, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
 import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
 import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
+import { replaceTermVariables } from '../../../utils/replaceTermVariables';
+import { buildPacienteCtx } from '../../../utils/pacienteCtx';
 import { TermoIntegridadeSelo } from '../../termos/TermoIntegridadeSelo.jsx';
+import { SolicitacaoExamesModal } from './SolicitacaoExamesModal.jsx';
 import 'react-quill-new/dist/quill.snow.css';
 
 /** Retorna { expirado, data } a partir de vigencia/expiradaEm, ou null se vigente indefinidamente. */
@@ -30,6 +33,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
   const { orgId } = useOrg();
   const toast = useToast();
   const [expandedDocId, setExpandedDocId] = useState(null);
+  const [examesModalOpen, setExamesModalOpen] = useState(false);
 
   useEffect(() => {
     if (!pacienteId || !orgId) return;
@@ -63,12 +67,25 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
     return () => { mounted = false; };
   }, [pacienteId, orgId]);
 
+  const pacienteCtx = useMemo(() => buildPacienteCtx(paciente), [paciente]);
+  const clinicaCtx = useMemo(() => ({
+    nome: clinicaInfo?.nome,
+    cnpj: clinicaInfo?.cnpj,
+    endereco: clinicaInfo?.endereco,
+    telefone: clinicaInfo?.telefone,
+  }), [clinicaInfo]);
+  const profissionalCtx = useMemo(() => ({
+    nome: perfilInfo?.nomeCompleto,
+    cpf: perfilInfo?.cpf || perfilInfo?.crm,
+    telefone: perfilInfo?.telefone,
+  }), [perfilInfo]);
+
   const handleDownloadPdf = (doc) => {
     if (!doc.conteudoSnapshot) {
       toast.error('O conteúdo deste documento não está disponível para download.');
       return;
     }
-    
+
     try {
       generateTermoPdf({
         titulo: doc.titulo || 'Documento',
@@ -85,56 +102,74 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
             : undefined,
         },
         fileName: `documento_${doc.titulo ? doc.titulo.replace(/\s+/g, '_').toLowerCase() : 'assinado'}_${new Date().getTime()}.pdf`,
-        pacienteCtx: {
-          nome: paciente?.nomeCompleto || paciente?.nome,
-          cpf: paciente?.cpf,
-          telefone: paciente?.telefone || paciente?.phone || paciente?.telefoneNumero || paciente?.telefonePrincipal
-        },
-        clinicaCtx: {
-          nome: clinicaInfo?.nome,
-          cnpj: clinicaInfo?.cnpj,
-          endereco: clinicaInfo?.endereco,
-          telefone: clinicaInfo?.telefone,
-        },
-        profissionalCtx: {
-          nome: perfilInfo?.nomeCompleto,
-          cpf: perfilInfo?.cpf || perfilInfo?.crm,
-          telefone: perfilInfo?.telefone,
-        }
+        pacienteCtx,
+        clinicaCtx,
+        profissionalCtx,
       });
     } catch {
       toast.error('Erro ao gerar o arquivo PDF.');
     }
   };
 
+  const header = (
+    <div className="flex justify-end">
+      <button
+        type="button"
+        onClick={() => setExamesModalOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] px-3 py-2 text-xs font-semibold text-[#334155] hover:bg-slate-50"
+      >
+        <FlaskConical className="h-4 w-4 text-[#00a88e]" />
+        Solicitar Exames
+      </button>
+      <SolicitacaoExamesModal
+        open={examesModalOpen}
+        onClose={() => setExamesModalOpen(false)}
+        clinicaCtx={clinicaCtx}
+        pacienteCtx={pacienteCtx}
+        profissionalCtx={profissionalCtx}
+      />
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="flex justify-center p-8">
-        <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
-      </div>
+      <>
+        {header}
+        <div className="flex justify-center p-8">
+          <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+        </div>
+      </>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100 mt-4 text-center">
-        {error}
-      </div>
+      <>
+        {header}
+        <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100 mt-4 text-center">
+          {error}
+        </div>
+      </>
     );
   }
 
   if (documentos.length === 0) {
     return (
-      <div className="bg-slate-50 text-slate-500 p-8 rounded-xl border border-slate-200 mt-4 text-center">
-        <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-        <p className="font-medium">Nenhum documento assinado encontrado</p>
-        <p className="text-sm mt-1">Quando o paciente assinar termos, eles aparecerão aqui.</p>
-      </div>
+      <>
+        {header}
+        <div className="bg-slate-50 text-slate-500 p-8 rounded-xl border border-slate-200 mt-4 text-center">
+          <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="font-medium">Nenhum documento assinado encontrado</p>
+          <p className="text-sm mt-1">Quando o paciente assinar termos, eles aparecerão aqui.</p>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="mt-4 space-y-4">
+    <>
+      {header}
+      <div className="mt-4 space-y-4">
       {documentos.map((doc) => {
         const isExpanded = expandedDocId === doc.id;
         return (
@@ -261,7 +296,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
                   <div className="md:col-span-2">
                     <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Conteúdo do Documento</h5>
                     <div className="bg-white border border-slate-200 rounded-lg max-h-[400px] overflow-y-auto text-sm text-slate-700 custom-scrollbar shadow-inner ql-snow">
-                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(doc.conteudoSnapshot || '<p>Conteúdo indisponível</p>') }} />
+                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(replaceTermVariables(doc.conteudoSnapshot, { pac: pacienteCtx, clinica: clinicaCtx, prof: profissionalCtx }) || '<p>Conteúdo indisponível</p>') }} />
                     </div>
                   </div>
                   
@@ -320,6 +355,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
           </div>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }
