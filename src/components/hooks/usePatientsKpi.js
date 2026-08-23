@@ -8,6 +8,8 @@ import {
 } from '../../utils/agendaDashboardMapping';
 import { isKpiCountableAgendaDto } from '../../utils/agendaKpiDrilldown';
 import { toLocalDateIso } from '../../utils/agendaDateUtils';
+import { sortAgendamentosHojePulse } from '../../utils/sortAgendamentosHojePulse.js';
+import { sortSemPlanoByUltimaVinda } from '../../utils/sortSemPlanoByUltimaVinda.js';
 
 /**
  * Busca os 5 KPIs da tela Pacientes + listas para o PulseSidebar em paralelo.
@@ -70,7 +72,8 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       safe(() => pacientesApi.list({ size: 1, ehNovo: true })),
       safe(() => pacientesApi.list({ size: 1, ehAniversarianteMes: true })),
       safe(() => agendasApi.byRange(hoje, hoje, { excluirCancelado: true })),
-      safe(() => pacientesApi.list({ size: 5, order: 'nome_asc', statusPlano: 'sem_plano' })),
+      // size 50 + sort client: backend stablePageable ignora sort (sempre nome). Ranking global = ticket backend.
+      safe(() => pacientesApi.list({ size: 50, statusPlano: 'sem_plano' })),
       safe(() => pacientesApi.list({ size: 1, statusPlano: 'sem_plano' })),
       safe(() => pacientesApi.list({ size: 5, order: 'birthday_asc' })),
     ]);
@@ -87,7 +90,7 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
     setAniversariantesList(proximosAniversarios);
 
     const semPlano = Array.isArray(pageSemPlanoLista?.content)
-      ? pageSemPlanoLista.content.map(mapBackendPatient).filter(Boolean)
+      ? sortSemPlanoByUltimaVinda(pageSemPlanoLista.content.map(mapBackendPatient).filter(Boolean)).slice(0, 5)
       : [];
     setSemPlanoList(semPlano);
     setTotalSemPlano(pageSemPlanoTotal?.totalElements ?? null);
@@ -99,9 +102,8 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       .filter(isAgendaVisibleOnDashboard)
       // Painel "Agendamentos de hoje" (Pacientes) não deve mostrar cancelados —
       // diferente da grade da Agenda, que os exibe riscados como referência.
-      .filter((row) => row.status !== 'cancelado')
-      .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
-    setAgendamentosHoje(agendaDtos);
+      .filter((row) => row.status !== 'cancelado');
+    setAgendamentosHoje(sortAgendamentosHojePulse(agendaDtos));
 
     setLoading(false);
   }, [authEnabled]);

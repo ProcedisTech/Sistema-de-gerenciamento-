@@ -57,6 +57,17 @@ import {
   nestProcedimentosTimeline,
 } from './procedureTimelineUtils.js';
 import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
+import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
+import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
+import { useToast } from '../../contexts/useToast.js';
+
+function samePatientForSlot(patient, appointment) {
+  if (!patient || !appointment) return false;
+  return (
+    String(patient.id || '') === String(appointment.pacienteId || '') ||
+    String(patient.nome || patient.nomeCompleto || '').trim() === String(appointment.pacienteNome || '').trim()
+  );
+}
 
 function hasClinicalAlert(p) {
   return Boolean(String(p?.alergias || '').trim() || String(p?.condicoesSaude || '').trim());
@@ -502,6 +513,8 @@ function PatientPreviewPanel({
   captureProfileNavSnapshot,
   agendaSchedule,
   previewAgendaSlot,
+  onSolicitarAnamnese,
+  onSlotCancelar,
 }) {
   const { isNivel1, canSeeProntuario, canStartAnamnese } = usePapel();
 
@@ -667,12 +680,11 @@ function PatientPreviewPanel({
             actions={getRailCardActions(previewAgendaSlot.status, canStartAnamnese)}
             compact={false}
             onConfirmar={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'confirmado')}
-            onCheckIn={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'paciente_chegou')}
             onIniciarAtendimento={() => onStartAttendance?.(selectedPatient, buildAgendaSlotOptions(previewAgendaSlot))}
             onWhatsApp={() => agendaSchedule?.handleEnviarWhatsApp(previewAgendaSlot.agendaId)}
-            onEnviarAnamnese={() => agendaSchedule?.openDaySheet(previewAgendaSlot.data, previewAgendaSlot)}
+            onEnviarAnamnese={() => onSolicitarAnamnese?.(previewAgendaSlot)}
             onReagendar={() => agendaSchedule?.openReagendarModal(previewAgendaSlot, [previewAgendaSlot])}
-            onCancelar={() => agendaSchedule?.handleCancelar(previewAgendaSlot.agendaId)}
+            onCancelar={() => onSlotCancelar?.(previewAgendaSlot)}
             className="w-full"
           />
         </div>
@@ -853,8 +865,13 @@ export function PatientsListView({
   setPatientQuickFilter,
   captureProfileNavSnapshot,
   agendaSchedule,
+  clinicaInfo = null,
+  onSlotCancelar,
 }) {
   const { isNivel1: _isNivel1, canCreatePacientes } = usePapel();
+  const toast = useToast();
+  const [anamneseEscolhaOpen, setAnamneseEscolhaOpen] = useState(false);
+  const [anamneseSolicitacao, setAnamneseSolicitacao] = useState(null);
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
   const isSearching = Boolean(patientSearchQuery?.trim());
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
@@ -1056,6 +1073,52 @@ export function PatientsListView({
       patients.find((p) => String(p.id) === pid) || patientListItems.find((p) => String(p.id) === pid);
     if (!fullPatient) return;
     onStartAttendance(fullPatient, buildAgendaSlotOptions(slot));
+  };
+
+  const clinicaSlug = clinicaInfo?.slug || '';
+
+  const handleSolicitarAnamnese = (appointment) => {
+    const pool = [...(patients || []), ...(patientListItems || [])];
+    const patient = pool.find((item) => samePatientForSlot(item, appointment));
+    const pacienteId = patient?.id || appointment?.pacienteId;
+    if (!pacienteId) {
+      toast.error('Não foi possível identificar o paciente deste agendamento.');
+      return;
+    }
+    if (!clinicaSlug) {
+      toast.error(
+        'Para enviar a anamnese, primeiro configure o identificador (slug) da clínica em Configurações > Anamnese.',
+      );
+      return;
+    }
+    const phone = patient?.whatsapp || patient?.telefone || appointment?.pacienteTelefone;
+    const name = patient?.nomeCompleto || patient?.nome || appointment?.pacienteNome || 'Paciente';
+    const cpf = patient?.cpf || appointment?.pacienteCpf || '';
+    setAnamneseSolicitacao({
+      pacienteId: String(pacienteId),
+      telefonePaciente: phone || '',
+      pacienteNome: name,
+      pacienteCpf: cpf,
+    });
+    setAnamneseEscolhaOpen(true);
+  };
+
+  const handleEscolherAnamneseQr = () => {
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) =>
+      curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null } } : curr,
+    );
+  };
+
+  const handleEscolherAnamneseWhatsApp = () => {
+    if (!anamneseSolicitacao?.telefonePaciente) {
+      toast.error('Paciente sem telefone cadastrado.');
+      return;
+    }
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) =>
+      curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' } } : curr,
+    );
   };
 
   useEffect(() => {
@@ -1343,6 +1406,8 @@ export function PatientsListView({
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
                   agendaSchedule={agendaSchedule}
                   previewAgendaSlot={previewAgendaSlot}
+                  onSolicitarAnamnese={handleSolicitarAnamnese}
+                  onSlotCancelar={onSlotCancelar}
                   shellClassName="patient-preview-sheet w-full border-0 shadow-none"
                 />
               </div>
@@ -1377,6 +1442,8 @@ export function PatientsListView({
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
                   agendaSchedule={agendaSchedule}
                   previewAgendaSlot={previewAgendaSlot}
+                  onSolicitarAnamnese={handleSolicitarAnamnese}
+                  onSlotCancelar={onSlotCancelar}
                   shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
                 />
               </aside>
@@ -1393,6 +1460,8 @@ export function PatientsListView({
               getPatientInitials={getPatientInitials}
               agendaSchedule={agendaSchedule}
               onStartAttendance={handleStartAttendanceFromSlot}
+              onSolicitarAnamnese={handleSolicitarAnamnese}
+              onSlotCancelar={onSlotCancelar}
             />
           </div>
         )}
@@ -1403,6 +1472,29 @@ export function PatientsListView({
         onClose={() => setFilterSheetOpen(false)}
         ctx={filterCtx}
         onFilterChange={onFilterChange}
+      />
+
+      <ModalEscolhaAssinatura
+        open={anamneseEscolhaOpen}
+        onClose={() => {
+          setAnamneseEscolhaOpen(false);
+          setAnamneseSolicitacao(null);
+        }}
+        opcoes={{ tablet: false, qrCode: true, link: true }}
+        onSelectQrCode={handleEscolherAnamneseQr}
+        onSelectLink={handleEscolherAnamneseWhatsApp}
+      />
+
+      <SolicitarAnamneseModal
+        open={Boolean(anamneseSolicitacao?.escolha)}
+        escolha={anamneseSolicitacao?.escolha}
+        payload={anamneseSolicitacao}
+        onClose={() => setAnamneseSolicitacao(null)}
+        onCancelar={() => {
+          setAnamneseSolicitacao((curr) => (curr ? { ...curr, escolha: undefined } : null));
+          setAnamneseEscolhaOpen(true);
+        }}
+        onConcluido={() => setAnamneseSolicitacao(null)}
       />
     </div>
   );
