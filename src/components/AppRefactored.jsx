@@ -3842,6 +3842,8 @@ function AppRefactoredInner() {
                             telefone: perfilInfo?.telefone
                           }}
                           nomeProcedimento={journeyState.nomeProcedimento}
+                          setNomeProcedimento={journeyState.setNomeProcedimento}
+                          setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                           procedimentos={journeyState.procedimentosSessao}
                         />
                       )}
@@ -4327,6 +4329,8 @@ function AppRefactoredInner() {
                       telefone: perfilInfo?.telefone,
                     }}
                     nomeProcedimento={journeyState.nomeProcedimento}
+                    setNomeProcedimento={journeyState.setNomeProcedimento}
+                    setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                     procedimentos={journeyState.procedimentosSessao}
                     onConcluir={() => setConsultaModule('hub')}
                   />
