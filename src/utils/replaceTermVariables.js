@@ -21,78 +21,106 @@ export function formatDateBR(isoDate) {
 export function normalizeTermHtml(inputHtml) {
   if (!inputHtml) return '';
   const str = String(inputHtml).trim();
-  const hadHtmlTags = /<[a-z][\s\S]*>/i.test(str);
+  const hasDocumentStructure = /<[a-z][\s\S]*>/i.test(str) || /\r?\n/.test(str);
 
-  if (!hadHtmlTags) {
+  if (!hasDocumentStructure) {
     return str;
   }
 
-  // 1. Extrai todos os blocos de texto
-  const rawParagraphs = [];
-  const pRegex = /<(?:p|div|li)[^>]*>([\s\S]*?)<\/(?:p|div|li)>/gi;
-  let match;
-  while ((match = pRegex.exec(str)) !== null) {
-    const text = match[1].replace(/<br\s*\/?>/gi, '').trim();
-    if (text) rawParagraphs.push(text);
-  }
+  // 1. Converte quebras de parágrafo duplas e tags em linhas brutas
+  const normalizedNewlines = str
+    .replace(/<\/(?:p|div)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
 
-  if (rawParagraphs.length === 0) {
-    const lines = str.split('\n');
-    for (const l of lines) {
-      if (l.trim()) rawParagraphs.push(l.trim());
-    }
-  }
+  const rawLines = normalizedNewlines
+    .split(/\r?\n/)
+    .map((l) => l.trim());
 
-  // 2. Primeiro passe: une palavras quebradas e pontuação órfã
+  // 2. Primeiro passe: une palavras partidas e quebras duras (\n no meio de parágrafo)
   const fixedLines = [];
-  for (let i = 0; i < rawParagraphs.length; i++) {
-    let line = rawParagraphs[i].trim();
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+
+    if (!line) {
+      if (fixedLines.length > 0 && fixedLines[fixedLines.length - 1] !== '') {
+        fixedLines.push('');
+      }
+      continue;
+    }
 
     if (fixedLines.length > 0) {
-      const prev = fixedLines[fixedLines.length - 1];
+      const prevIdx = fixedLines.length - 1;
+      const prev = fixedLines[prevIdx];
 
-      // Caso 1: Dr + .(a)
-      if (/(\b(Dr|Dra|Prof|Profa|Sr|Sra))\s*$/i.test(prev) && /^\.\(a\)/i.test(line)) {
-        fixedLines[fixedLines.length - 1] = prev + line;
-        continue;
-      }
-      // Caso 2: Ponto / vírgula órfão no início da linha (. A indicação, etc)
-      if (/^[.,;:]\s*[A-ZÁ-Ú0-9]/.test(line) && !prev.endsWith('.')) {
-        fixedLines[fixedLines.length - 1] = prev + line;
-        continue;
-      }
-      // Caso 3: Palavras cortadas ao meio com hífen
-      if (prev.endsWith('-')) {
-        fixedLines[fixedLines.length - 1] = prev.slice(0, -1) + '-' + line;
-        continue;
-      }
-      // Caso 4: Palavras cortadas ao meio sem hífen (san + gramento, sangrame + nto, dep + ender, hiper + trofiados, hipertrofiad + os;)
-      if (/(\b(san|sangrame|dep|hiper|hipertrofiad))\s*$/i.test(prev) && /^(gramento|nto\b|ender|trofiados|os;)/i.test(line)) {
-        fixedLines[fixedLines.length - 1] = prev + line;
-        continue;
-      }
-      if (/(\b(suas\s+i|e\s+d|da\s+pa))\s*$/i.test(prev) && /^(ndicações|iminuição|tologia)/i.test(line)) {
-        fixedLines[fixedLines.length - 1] = prev + line;
-        continue;
-      }
-      if (/\bdo\s*$/i.test(prev) && /^s\s+tratamentos/i.test(line)) {
-        fixedLines[fixedLines.length - 1] = prev + line;
-        continue;
-      }
-      // Caso 5: Se o prev era um item de lista finalizado com ';' e line não tem bullet, line é um NOVO item de lista!
-      if (/^[-•*]/.test(prev) && prev.endsWith(';') && !/^[-•*]/.test(line) && !line.endsWith(':') && line !== line.toUpperCase()) {
-        fixedLines.push('• ' + line);
-        continue;
-      }
-      // Caso 6: Se o prev é um item de lista e line é a continuação dele (antes de ponto e vírgula)
-      if (/^[-•*]/.test(prev) && !prev.endsWith(';') && !prev.endsWith('.') && !/^[-•*]/.test(line) && !line.endsWith(':') && line !== line.toUpperCase()) {
-        fixedLines[fixedLines.length - 1] = prev + ' ' + line;
-        continue;
-      }
-      // Caso 7: Se prev não termina com pontuação forte (. : ! ?) e line é continuação de frase
-      if (!/[.:!?]$/.test(prev) && !/^[-•*]/.test(prev) && !/^[-•*]/.test(line) && prev !== prev.toUpperCase() && line !== line.toUpperCase()) {
-        fixedLines[fixedLines.length - 1] = prev + ' ' + line;
-        continue;
+      if (prev !== '') {
+        // Caso 1: Dr + .(a)
+        if (/(\b(Dr|Dra|Prof|Profa|Sr|Sra))\s*$/i.test(prev) && /^\.\(a\)/i.test(line)) {
+          fixedLines[prevIdx] = prev + line;
+          continue;
+        }
+        // Caso 2: Ponto / vírgula órfão no início da linha (. A indicação, etc)
+        if (/^[.,;:]\s*[A-ZÁ-Ú0-9]/.test(line) && !prev.endsWith('.')) {
+          fixedLines[prevIdx] = prev + line;
+          continue;
+        }
+        // Caso 3: Palavras cortadas ao meio com hífen
+        if (prev.endsWith('-')) {
+          fixedLines[prevIdx] = prev.slice(0, -1) + '-' + line;
+          continue;
+        }
+        // Caso 4: Palavras cortadas ao meio sem hífen (san + gramento, sangrame + nto, dep + ender, hiper + trofiados, hipertrofiad + os;)
+        if (
+          /(\b(san|sangrame|dep|hiper|hipertrofiad))\s*$/i.test(prev) &&
+          /^(gramento|nto\b|ender|trofiados|os;)/i.test(line)
+        ) {
+          fixedLines[prevIdx] = prev + line;
+          continue;
+        }
+        if (/(\b(suas\s+i|e\s+d|da\s+pa))\s*$/i.test(prev) && /^(ndicações|iminuição|tologia)/i.test(line)) {
+          fixedLines[prevIdx] = prev + line;
+          continue;
+        }
+        if (/\bdo\s*$/i.test(prev) && /^s\s+tratamentos/i.test(line)) {
+          fixedLines[prevIdx] = prev + line;
+          continue;
+        }
+        // Caso 5: Se o prev era um item de lista finalizado com ';' e line não tem bullet, line é um NOVO item de lista!
+        if (
+          /^[-•*]/.test(prev) &&
+          prev.endsWith(';') &&
+          !/^[-•*]/.test(line) &&
+          !line.endsWith(':') &&
+          line !== line.toUpperCase()
+        ) {
+          fixedLines.push('• ' + line);
+          continue;
+        }
+        // Caso 6: Se o prev é um item de lista e line é a continuação dele (antes de ponto e vírgula)
+        if (
+          /^[-•*]/.test(prev) &&
+          !prev.endsWith(';') &&
+          !prev.endsWith('.') &&
+          !/^[-•*]/.test(line) &&
+          !line.endsWith(':') &&
+          line !== line.toUpperCase()
+        ) {
+          fixedLines[prevIdx] = prev + ' ' + line;
+          continue;
+        }
+        // Caso 7: Se prev não termina com pontuação forte (. : ! ?) e line é continuação de frase
+        if (
+          !/[.:!?]$/.test(prev) &&
+          !/^[-•*]/.test(prev) &&
+          !/^[-•*]/.test(line) &&
+          prev !== prev.toUpperCase() &&
+          line !== line.toUpperCase()
+        ) {
+          fixedLines[prevIdx] = prev + ' ' + line;
+          continue;
+        }
       }
     }
 
@@ -111,6 +139,10 @@ export function normalizeTermHtml(inputHtml) {
   };
 
   for (const line of fixedLines) {
+    if (!line) {
+      flushList();
+      continue;
+    }
     if (/^[-•*]/.test(line)) {
       const item = line.replace(/^[-•*]\s*/, '').trim();
       currentList.push(item);
