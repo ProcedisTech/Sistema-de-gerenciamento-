@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import DOMPurify from 'dompurify';
-import { replaceTermVariables, formatDateBR } from './replaceTermVariables';
+import { replaceTermVariables } from './replaceTermVariables';
 
 export const generateTermoPdf = async ({
   titulo,
@@ -910,9 +910,8 @@ function buildSolicitacaoExamesFileName(nomePaciente) {
 
 /**
  * Solicitação de Exames Complementares — PDF timbrado com checklist dos exames
- * marcados pelo profissional. Segue o mesmo leiaute editorial fino (preto/cinza)
- * de `generateFichaPacientePdf`, sem reaproveitar o cabeçalho teal dos termos
- * porque isto não é um documento de consentimento assinado pelo paciente.
+ * marcados pelo profissional. Segue a mesma identidade visual e proporções editoriais
+ * dos Termos de Consentimento (Cabeçalho Teal com Shield, Banner Menta, Tipografia e Rodapé).
  */
 export const generateSolicitacaoExamesPdf = ({
   fileName,
@@ -923,131 +922,225 @@ export const generateSolicitacaoExamesPdf = ({
   observacoes,
 }) => {
   const doc = new jsPDF('p', 'mm', 'a4');
-  const margin = 20;
+  const margin = 15;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const maxWidth = pageWidth - margin * 2;
-  const INK = [26, 26, 26];
-  const GRAY = [118, 118, 118];
-  const BORDER = [230, 230, 230];
+
+  const TEAL = [0, 168, 142];
+  const INK = [30, 41, 59];
+  const GRAY = [100, 116, 139];
+  const BORDER = [226, 232, 240];
 
   const clinica = clinicaCtx || {};
   const pac = pacienteCtx || {};
   const prof = profissionalCtx || {};
   const exames = Array.isArray(examesSelecionados) ? examesSelecionados : [];
 
-  let y = margin;
+  const nomeClinica = clinica.nome || '[Nome da Clínica]';
+  const enderecoClinica = clinica.endereco || '[Endereço da Clínica]';
+  const contatoClinica = clinica.telefone || '[Telefone da Clínica]';
 
-  const checkPage = (needed = 10) => {
-    if (y + needed > pageHeight - margin) {
-      doc.addPage();
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...GRAY);
-      doc.text(`Solicitação de exames — ${safe(pac.nome, 'Paciente')} (continuação)`, margin, 12);
-      doc.setDrawColor(...BORDER);
-      doc.setLineWidth(0.3);
-      doc.line(margin, 14, pageWidth - margin, 14);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10.5);
-      doc.setTextColor(...INK);
-      y = margin + 8;
-    }
-  };
+  const nomeProfissional = prof.nome || '[Nome do Profissional]';
+  const cpfCrmProfissional = prof.cpf || prof.crm || '[CPF/CRM do Profissional]';
 
-  const emitidaEm = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  y = drawThinHeader(doc, {
-    startX: margin,
-    margin,
-    pageWidth,
-    clinica,
-    titulo: 'SOLICITAÇÃO DE EXAMES COMPLEMENTARES',
-    rotulo: `Emitida em ${emitidaEm}`,
-    INK,
-    GRAY,
-  });
+  const nomePaciente = pac.nome || pac.nomeCompleto || '[Nome do Paciente]';
+  const cpfPaciente = pac.cpf || '[CPF do Paciente]';
+  const contatoPaciente = pac.telefone || pac.phone || pac.telefoneNumero || '[Telefone do Paciente]';
 
-  // Identificação do paciente
+  // 1. Cabeçalho Página 1 (Banner Teal)
+  const headerHeight = 20;
+  doc.setFillColor(TEAL[0], TEAL[1], TEAL[2]);
+  doc.rect(0, 0, pageWidth, headerHeight, 'F');
+
+  // Logo Quadrado Branco com Ícone de Escudo (Shield)
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(margin, 5.5, 9, 9, 1.2, 1.2, 'D');
+
+  const shieldCenterX = margin + 4.5;
+  const shieldCenterY = 10.0;
+  const sw = 2.4;
+  const topSy = shieldCenterY - 2.3;
+  const midSy = shieldCenterY + 0.2;
+  const botSy = shieldCenterY + 2.4;
+
+  doc.setLineWidth(0.5);
+  doc.setLineCap('round');
+  doc.setLineJoin('round');
+  doc.line(shieldCenterX - sw, topSy + 0.7, shieldCenterX, topSy);
+  doc.line(shieldCenterX, topSy, shieldCenterX + sw, topSy + 0.7);
+  doc.line(shieldCenterX + sw, topSy + 0.7, shieldCenterX + sw, midSy);
+  doc.line(shieldCenterX + sw, midSy, shieldCenterX + sw * 0.7, shieldCenterY + 1.5);
+  doc.line(shieldCenterX + sw * 0.7, shieldCenterY + 1.5, shieldCenterX, botSy);
+  doc.line(shieldCenterX, botSy, shieldCenterX - sw * 0.7, shieldCenterY + 1.5);
+  doc.line(shieldCenterX - sw * 0.7, shieldCenterY + 1.5, shieldCenterX - sw, midSy);
+  doc.line(shieldCenterX - sw, midSy, shieldCenterX - sw, topSy + 0.7);
+
+  const startX = margin + 12;
+  let yQualif = 7.5;
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(7.5);
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(safe(pac.nome, 'Paciente'), margin, y);
-  y += 6;
+  doc.text('CLÍNICA:', startX, yQualif);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...GRAY);
-  const identLinha = [
-    pac.cpf ? `CPF: ${pac.cpf}` : null,
-    pac.dataNascimento ? `Nascimento: ${formatDateBR(pac.dataNascimento)}` : null,
-  ].filter(Boolean).join('   ·   ');
-  if (identLinha) doc.text(identLinha, margin, y);
-  doc.setTextColor(...INK);
-  y += 10;
+  doc.text(`${nomeClinica} — ${enderecoClinica} — Contato: ${contatoClinica}`, startX + 13, yQualif);
 
-  // Checklist de exames solicitados
-  const colWidth = maxWidth / 2 - 5;
-  const rowHeight = 7;
-  const itensParaImprimir = exames.length > 0 ? exames : EXAMES_COMPLEMENTARES_CATALOGO;
-  const alturaChecklist = Math.ceil(itensParaImprimir.length / 2) * rowHeight;
-  checkPage(10 + 8 + alturaChecklist);
+  yQualif += 4.0;
+  doc.setFont('helvetica', 'bold');
+  doc.text('PROFISSIONAL:', startX, yQualif);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${nomeProfissional} — Registro/CPF: ${cpfCrmProfissional}`, startX + 22, yQualif);
 
+  yQualif += 4.0;
+  doc.setFont('helvetica', 'bold');
+  doc.text('PACIENTE:', startX, yQualif);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${nomePaciente} — CPF: ${cpfPaciente} — Contato: ${contatoPaciente}`, startX + 15, yQualif);
+
+  // 2. Faixa do Título
+  const bannerHeight = 8.5;
+  doc.setFillColor(240, 253, 250);
+  doc.rect(0, headerHeight, pageWidth, bannerHeight, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.line(0, headerHeight + bannerHeight, pageWidth, headerHeight + bannerHeight);
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  const titleY = headerHeight + 5.8;
+  doc.text('SOLICITAÇÃO DE EXAMES COMPLEMENTARES', pageWidth / 2, titleY, { align: 'center' });
+
+  let y = headerHeight + bannerHeight + 7;
+
+  // Subtítulo
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
-  doc.text('SOLICITO OS SEGUINTES EXAMES:', margin, y);
+  doc.setTextColor(15, 118, 110);
+  doc.text('EXAMES SOLICITADOS', margin, y);
   y += 2.5;
-  doc.setDrawColor(...INK);
+  doc.setDrawColor(0, 168, 142);
   doc.setLineWidth(0.4);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
+  doc.line(margin, y, margin + 40, y);
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.2);
+  doc.line(margin + 40, y, pageWidth - margin, y);
+  y += 6;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10.5);
+  // Grid de 2 colunas com os 26 exames
+  const colWidth = (maxWidth - 8) / 2;
+  const rowHeight = 6.2;
+  const selectedSet = new Set(exames);
+  const itensParaImprimir = EXAMES_COMPLEMENTARES_CATALOGO;
+
   itensParaImprimir.forEach((nome, idx) => {
-    const col = idx % 2;
-    const row = Math.floor(idx / 2);
-    const x = margin + col * (colWidth + 10);
-    const yRow = y + row * rowHeight;
-    doc.setDrawColor(...INK);
-    doc.setLineWidth(0.3);
-    doc.rect(x, yRow - 3.2, 3.5, 3.5, exames.length > 0 ? 'F' : 'D');
-    doc.text(nome, x + 6, yRow);
-  });
-  y += Math.ceil(itensParaImprimir.length / 2) * rowHeight + 6;
+    const isRightCol = idx % 2 === 1;
+    const rowIndex = Math.floor(idx / 2);
+    const x = margin + (isRightCol ? colWidth + 8 : 0);
+    const yRow = y + rowIndex * rowHeight;
+    const isSelected = selectedSet.has(nome);
 
+    if (isSelected) {
+      doc.setFillColor(240, 253, 250);
+      doc.setDrawColor(0, 168, 142);
+      doc.setLineWidth(0.35);
+      doc.roundedRect(x, yRow - 3.2, 3.8, 3.8, 0.6, 0.6, 'FD');
+
+      doc.setDrawColor(0, 168, 142);
+      doc.setLineWidth(0.5);
+      doc.line(x + 0.9, yRow - 1.2, x + 1.6, yRow - 0.5);
+      doc.line(x + 1.6, yRow - 0.5, x + 3.0, yRow - 2.4);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.0);
+      doc.setTextColor(15, 23, 42);
+    } else {
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, yRow - 3.2, 3.8, 3.8, 0.6, 0.6, 'D');
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.8);
+      doc.setTextColor(100, 116, 139);
+    }
+
+    doc.text(nome, x + 6.2, yRow - 0.3);
+  });
+
+  y += Math.ceil(itensParaImprimir.length / 2) * rowHeight + 5;
+
+  // Observações
   if (observacoes && observacoes.trim()) {
-    checkPage(4.5 + 5);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.setTextColor(...GRAY);
-    doc.text('OBSERVAÇÕES', margin, y);
-    y += 4.5;
+    doc.setTextColor(71, 85, 105);
+    const obsLines = doc.splitTextToSize(observacoes.trim(), maxWidth - 8);
+    const boxH = 7 + obsLines.length * 3.8 + 2;
+
+    doc.roundedRect(margin, y, maxWidth, boxH, 1.2, 1.2, 'FD');
+    doc.text('INDICAÇÃO CLÍNICA / OBSERVAÇÕES:', margin + 4, y + 4.8);
+
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...INK);
-    const obsWrapped = doc.splitTextToSize(observacoes.trim(), maxWidth);
-    obsWrapped.forEach((line) => {
-      checkPage(5);
-      doc.text(line, margin, y);
-      y += 5;
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    obsLines.forEach((line, i) => {
+      doc.text(line, margin + 4, y + 9.2 + i * 3.8);
     });
+
+    y += boxH + 6;
+  } else {
     y += 4;
   }
 
-  // Assinatura do profissional
-  checkPage(10 + 4.5 + 4.5);
-  y += 10;
+  // Bloco de Assinatura do Profissional
+  const sigColW = 90;
+  const sigX = margin + (maxWidth - sigColW) / 2;
+  const signatureY = Math.max(y + 8, 236);
+
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.4);
+  doc.line(sigX, signatureY, sigX + sigColW, signatureY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.0);
+  doc.setTextColor(...INK);
+  doc.text(nomeProfissional, sigX + sigColW / 2, signatureY + 4.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.0);
+  doc.setTextColor(...GRAY);
+  const regProf = cpfCrmProfissional !== '[CPF/CRM do Profissional]' ? cpfCrmProfissional : 'Registro Profissional';
+  doc.text(regProf, sigX + sigColW / 2, signatureY + 8.5, { align: 'center' });
+
+  // Rodapé Global de Página
+  const geradoEm = new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.3);
-  const sigWidth = 90;
-  doc.line(margin, y, margin + sigWidth, y);
-  y += 4.5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...GRAY);
-  const profissionalLabel = [safe(prof.nome, 'Profissional'), prof.cpf || prof.crm]
-    .filter(Boolean)
-    .join(' · ');
-  doc.text(profissionalLabel, margin, y);
-  doc.setTextColor(...INK);
+  doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`${nomeClinica} — Gerado em ${geradoEm}`, margin, pageHeight - 7.5);
+
+  const pageLabel = `Página 1 de 1`;
+  const pageLabelWidth = doc.getTextWidth(pageLabel);
+  doc.text(pageLabel, pageWidth - margin - pageLabelWidth, pageHeight - 7.5);
 
   doc.save(fileName || buildSolicitacaoExamesFileName(pac.nome));
 };
