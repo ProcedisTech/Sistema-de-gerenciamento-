@@ -496,36 +496,39 @@
   }
 
   .termo-folha .ql-editor p {
-    margin-bottom: 0.75rem;
-    line-height: 1.625;
+    margin-bottom: 0.65rem;
+    line-height: 1.6;
+    text-align: justify;
   }
 
   .termo-folha .ql-editor ul {
     padding-left: 1.5rem;
     list-style-type: disc !important;
-    margin-top: 0.5rem;
-    margin-bottom: 0.75rem;
+    margin-top: 0.35rem;
+    margin-bottom: 0.65rem;
   }
 
   .termo-folha .ql-editor ol {
     padding-left: 1.5rem;
     list-style-type: decimal !important;
-    margin-top: 0.5rem;
-    margin-bottom: 0.75rem;
+    margin-top: 0.35rem;
+    margin-bottom: 0.65rem;
   }
 
   .termo-folha .ql-editor ul li {
     display: list-item !important;
     list-style-type: disc !important;
-    margin-bottom: 0.35rem;
-    line-height: 1.6;
+    margin-bottom: 0.25rem;
+    line-height: 1.55;
+    text-align: left;
   }
 
   .termo-folha .ql-editor ol li {
     display: list-item !important;
     list-style-type: decimal !important;
-    margin-bottom: 0.35rem;
-    line-height: 1.6;
+    margin-bottom: 0.25rem;
+    line-height: 1.55;
+    text-align: left;
   }
 
   /* Edit: folha começa curta e cresce com o texto (view mantém 1123px) */
