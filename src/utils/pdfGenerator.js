@@ -1019,58 +1019,47 @@ export const generateSolicitacaoExamesPdf = ({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(15, 118, 110);
-  doc.text('EXAMES SOLICITADOS', margin, y);
+  const qtdTexto = exames.length > 0 ? ` (${exames.length} selecionado${exames.length > 1 ? 's' : ''})` : '';
+  doc.text(`EXAMES SOLICITADOS${qtdTexto}`, margin, y);
   y += 2.5;
   doc.setDrawColor(0, 168, 142);
   doc.setLineWidth(0.4);
-  doc.line(margin, y, margin + 40, y);
+  doc.line(margin, y, margin + 45, y);
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.2);
-  doc.line(margin + 40, y, pageWidth - margin, y);
-  y += 6;
+  doc.line(margin + 45, y, pageWidth - margin, y);
+  y += 7;
 
-  // Grid de 2 colunas com os 26 exames
+  // Lista APENAS dos exames selecionados pelo profissional (ou catálogo completo se nada selecionado)
+  const itensParaImprimir = exames.length > 0 ? exames : EXAMES_COMPLEMENTARES_CATALOGO;
   const colWidth = (maxWidth - 8) / 2;
-  const rowHeight = 6.2;
-  const selectedSet = new Set(exames);
-  const itensParaImprimir = EXAMES_COMPLEMENTARES_CATALOGO;
+  const rowHeight = 7.0;
 
   itensParaImprimir.forEach((nome, idx) => {
     const isRightCol = idx % 2 === 1;
     const rowIndex = Math.floor(idx / 2);
     const x = margin + (isRightCol ? colWidth + 8 : 0);
     const yRow = y + rowIndex * rowHeight;
-    const isSelected = selectedSet.has(nome);
 
-    if (isSelected) {
-      doc.setFillColor(240, 253, 250);
-      doc.setDrawColor(0, 168, 142);
-      doc.setLineWidth(0.35);
-      doc.roundedRect(x, yRow - 3.2, 3.8, 3.8, 0.6, 0.6, 'FD');
+    // Checkbox estilizado com checkmark verde
+    doc.setFillColor(240, 253, 250);
+    doc.setDrawColor(0, 168, 142);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(x, yRow - 3.5, 4.2, 4.2, 0.8, 0.8, 'FD');
 
-      doc.setDrawColor(0, 168, 142);
-      doc.setLineWidth(0.5);
-      doc.line(x + 0.9, yRow - 1.2, x + 1.6, yRow - 0.5);
-      doc.line(x + 1.6, yRow - 0.5, x + 3.0, yRow - 2.4);
+    // Checkmark vetorial
+    doc.setDrawColor(0, 168, 142);
+    doc.setLineWidth(0.6);
+    doc.line(x + 1.0, yRow - 1.2, x + 1.8, yRow - 0.4);
+    doc.line(x + 1.8, yRow - 0.4, x + 3.4, yRow - 2.6);
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9.0);
-      doc.setTextColor(15, 23, 42);
-    } else {
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(203, 213, 225);
-      doc.setLineWidth(0.3);
-      doc.roundedRect(x, yRow - 3.2, 3.8, 3.8, 0.6, 0.6, 'D');
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.8);
-      doc.setTextColor(100, 116, 139);
-    }
-
-    doc.text(nome, x + 6.2, yRow - 0.3);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.2);
+    doc.setTextColor(15, 23, 42);
+    doc.text(nome, x + 7.0, yRow - 0.2);
   });
 
-  y += Math.ceil(itensParaImprimir.length / 2) * rowHeight + 5;
+  y += Math.ceil(itensParaImprimir.length / 2) * rowHeight + 6;
 
   // Observações
   if (observacoes && observacoes.trim()) {
@@ -1081,43 +1070,60 @@ export const generateSolicitacaoExamesPdf = ({
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(71, 85, 105);
-    const obsLines = doc.splitTextToSize(observacoes.trim(), maxWidth - 8);
-    const boxH = 7 + obsLines.length * 3.8 + 2;
+    const obsLines = doc.splitTextToSize(observacoes.trim(), maxWidth - 10);
+    const boxH = 7 + obsLines.length * 4.0 + 3;
 
     doc.roundedRect(margin, y, maxWidth, boxH, 1.2, 1.2, 'FD');
-    doc.text('INDICAÇÃO CLÍNICA / OBSERVAÇÕES:', margin + 4, y + 4.8);
+    doc.text('INDICAÇÃO CLÍNICA / OBSERVAÇÕES:', margin + 4, y + 5.0);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(8.8);
     doc.setTextColor(30, 41, 59);
     obsLines.forEach((line, i) => {
-      doc.text(line, margin + 4, y + 9.2 + i * 3.8);
+      doc.text(line, margin + 4, y + 9.5 + i * 4.0);
     });
 
-    y += boxH + 6;
+    y += boxH + 8;
   } else {
-    y += 4;
+    y += 8;
   }
 
-  // Bloco de Assinatura do Profissional
-  const sigColW = 90;
+  // Bloco de Assinatura do Profissional Solicitante
+  const sigColW = 95;
   const sigX = margin + (maxWidth - sigColW) / 2;
-  const signatureY = Math.max(y + 8, 236);
+  const signatureY = Math.min(Math.max(y + 14, 215), pageHeight - 32);
 
-  doc.setDrawColor(...BORDER);
+  // Assinatura Digital (se houver imagem base64)
+  const assBase64 = prof.assinaturaBase64 || prof.assinaturaPadrao;
+  if (assBase64 && typeof assBase64 === 'string' && assBase64.startsWith('data:image')) {
+    try {
+      const sigImgH = 14;
+      const sigImgW = 36;
+      doc.addImage(assBase64, 'PNG', sigX + (sigColW - sigImgW) / 2, signatureY - sigImgH - 1, sigImgW, sigImgH);
+    } catch {
+      // fallback gracioso
+    }
+  }
+
+  doc.setDrawColor(...INK);
   doc.setLineWidth(0.4);
   doc.line(sigX, signatureY, sigX + sigColW, signatureY);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.0);
+  doc.setFontSize(9.5);
   doc.setTextColor(...INK);
-  doc.text(nomeProfissional, sigX + sigColW / 2, signatureY + 4.5, { align: 'center' });
+  doc.text(nomeProfissional, sigX + sigColW / 2, signatureY + 4.8, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.0);
+  doc.setFontSize(8.2);
   doc.setTextColor(...GRAY);
   const regProf = cpfCrmProfissional !== '[CPF/CRM do Profissional]' ? cpfCrmProfissional : 'Registro Profissional';
-  doc.text(regProf, sigX + sigColW / 2, signatureY + 8.5, { align: 'center' });
+  doc.text(regProf, sigX + sigColW / 2, signatureY + 9.0, { align: 'center' });
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Profissional Solicitante · Assinatura / Carimbo', sigX + sigColW / 2, signatureY + 13.0, { align: 'center' });
 
   // Rodapé Global de Página
   const geradoEm = new Date().toLocaleString('pt-BR', {

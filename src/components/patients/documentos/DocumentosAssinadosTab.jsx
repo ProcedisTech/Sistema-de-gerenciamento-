@@ -77,7 +77,9 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
   const profissionalCtx = useMemo(() => ({
     nome: perfilInfo?.nomeCompleto,
     cpf: perfilInfo?.cpf || perfilInfo?.crm,
+    crm: perfilInfo?.crm,
     telefone: perfilInfo?.telefone,
+    assinaturaBase64: perfilInfo?.assinaturaPadrao || perfilInfo?.assinaturaBase64,
   }), [perfilInfo]);
 
   const handleDownloadPdf = (doc) => {
