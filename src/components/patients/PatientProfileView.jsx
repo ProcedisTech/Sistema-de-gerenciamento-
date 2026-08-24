@@ -119,7 +119,7 @@ import {
   groupItensByCategoria,
   isFullWidthItem,
 } from '../anamnese/anamneseFichaUtils.js';
-import { aplicarMudancaResposta } from '../anamnese/anamneseCondicional.js';
+import { aplicarMudancaResposta, perguntaFilhaVisivel } from '../anamnese/anamneseCondicional.js';
 import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
 import { mapGetToState as mapPerfilClinicoResponseToState } from '../../hooks/usePerfilClinico';
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
@@ -634,6 +634,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
     for (const item of orderedItens) {
       const pid = item.pergunta?.id;
       if (!pid) continue;
+      if (!perguntaFilhaVisivel(item.pergunta, editingRespostas)) continue;
       const r = editingRespostas[pid] ?? editingRespostas[String(pid)];
       const rows = buildRespostaApiRows(item.pergunta, r);
       if (rows.length) {
@@ -730,6 +731,7 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
             ) : null}
             <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
               {itens.map((item) => {
+                if (!perguntaFilhaVisivel(item.pergunta, editingRespostas)) return null;
                 const isAlerta = item.pergunta?.prioridade === 'ALERTA';
                 const pid = item.pergunta?.id;
                 const hasErr = pid && errosObrigatorias.has(String(pid));
@@ -1436,11 +1438,14 @@ export function PatientProfileView({
   };
 
 
-  const createEditDraft = () => {
+  const openEditProfile = useCallback(() => {
+    setEditFormErrors({});
+    setProfileSaveError('');
+    setCadastroReadOnly(true);
     const { countryCode, nationalNumber } = parsePhoneFromApi(patient.telefone || '', 'BR');
     const cpfRaw = String(patient.cpf || '').replace(/\D/g, '');
     const rgStr = patient.rg != null ? String(patient.rg) : '';
-    return {
+    setEditing({
       nome: patient.nome || '',
       email: patient.email || '',
       telefoneCountryCode: countryCode,
@@ -1467,15 +1472,8 @@ export function PatientProfileView({
       dataNascimentoIso: patient.dataNascimento || '',
       dataNascimentoDisplay: isoDateToBrazilianDisplay(patient.dataNascimento || ''),
       idade: patient.idade ?? '',
-    };
-  };
-
-  const openEditProfile = useCallback(() => {
-    setEditFormErrors({});
-    setProfileSaveError('');
-    setCadastroReadOnly(true);
-    setEditing(createEditDraft());
-  }, [patient, createEditDraft]);
+    });
+  }, [patient]);
 
   const clearEditFieldError = (field) =>
     setEditFormErrors((prev) => ({ ...prev, [field]: false }));
@@ -1815,12 +1813,6 @@ export function PatientProfileView({
   }, [selectedPatient?.id, selectedPatient?.nome]);
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.log('galeriaBackend:', galeriaBackend);
-    }
-  }, [galeriaBackend]);
-
-  useEffect(() => {
     const id = selectedPatient?.id;
     if (!id) {
       setGaleriaBackend('local');
@@ -1832,9 +1824,6 @@ export function PatientProfileView({
     setApiGaleriaItems([]);
     (async () => {
       try {
-        if (import.meta.env.DEV) {
-          console.log('listando galeria para pacienteId:', selectedPatient?.id);
-        }
         const data = await pacientesGaleriaApi.list(id);
         if (cancelled) return;
         setApiGaleriaItems(normalizePacienteGaleriaResponse(data));

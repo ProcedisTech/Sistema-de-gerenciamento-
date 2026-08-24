@@ -13,6 +13,7 @@ import {
   reindexSecoes,
   reconcileDocumentoFromApi,
 } from './editorDocumentoState.js';
+import { ehTipoPaiCondicional } from './anamneseCondicional.js';
 
 export const EDITOR_ACTIONS = {
   LOAD: 'LOAD',
@@ -334,12 +335,13 @@ export function editorDocumentoReducer(state, action) {
         state.secoes.map((s) => {
           if (s.clientKey !== secKey) return s;
           const last = s.perguntas[s.perguntas.length - 1] || null;
+          const ligaPai = child && last && ehTipoPaiCondicional(last.tipoRespostaCodigo);
           const nova = {
             ...emptyPergunta(s.perguntas.length + 1, tipo),
             descricao: texto,
             prioridade: child && last ? last.prioridade : 'NORMAL',
-            perguntaPaiClientKey: child && last ? last.clientKey : null,
-            perguntaPaiId: child && last ? last.id ?? null : null,
+            perguntaPaiClientKey: ligaPai ? last.clientKey : null,
+            perguntaPaiId: ligaPai ? last.id ?? null : null,
             alternativas: isEscolha ? (alternativasDraft || []) : [],
           };
           const perguntas = [...s.perguntas];
