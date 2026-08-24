@@ -52,7 +52,6 @@ export function PublicSignatureFlow() {
       pac: {
         nome: data.pacienteNome,
         cpf: data.pacienteCpf,
-        rg: data.pacienteRg,
         dataNascimento: data.pacienteDataNascimento,
         telefone: data.pacienteContato,
       },

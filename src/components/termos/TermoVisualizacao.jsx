@@ -11,7 +11,6 @@ export function TermoVisualizacao({
   profissionalCtx,
   clinicaCtx,
   children,
-  canvasMode,
 }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
 
@@ -24,11 +23,10 @@ export function TermoVisualizacao({
   const enderecoClinica = clinica.endereco || '[Endereço da Clínica]';
   const contatoClinica = clinica.telefone || '[Telefone da Clínica]';
 
-
   const nomeProfissional = prof.nome || '[Nome do Profissional]';
   const cpfCrmProfissional = prof.cpf || prof.crm || '[CPF/CRM do Profissional]';
 
-  const nomePaciente = pac.nome || '[Nome do Paciente]';
+  const nomePaciente = pac.nome || pac.nomeCompleto || '[Nome do Paciente]';
   const cpfPaciente = pac.cpf || '[CPF do Paciente]';
   const contatoPaciente = pac.telefone || '[Telefone do Paciente]';
 
@@ -43,30 +41,27 @@ export function TermoVisualizacao({
 
   const temConteudoTexto = conteudoSanitizado.length > 0;
 
-  const canvasClassName =
-    canvasMode === 'static' ? 'a4-canvas a4-canvas--static' : 'a4-canvas';
-
   return (
-    <div className="overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-sm ring-1 ring-[#e2e8f0]">
+    <div className="termo-folha mx-auto overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white shadow-xl ring-1 ring-slate-900/5">
       {/* Cabeçalho de Qualificação (Teal Banner) */}
-      <div className="flex flex-col gap-3 bg-[#00a88e] px-5 py-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 bg-[#00a88e] px-6 py-4 sm:flex-row sm:items-center">
         <div className="flex shrink-0 items-center justify-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white shadow-sm">
-            <Shield className="h-5 w-5" strokeWidth={2.5} />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/25 bg-white/15 text-white shadow-sm">
+            <Shield className="h-6 w-6" strokeWidth={2.2} />
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 text-white">
-          <div className="text-[11px] leading-snug">
-            <span className="font-bold text-emerald-100 mr-1">CLÍNICA:</span>
+        <div className="flex flex-col gap-1 text-white">
+          <div className="text-[12px] leading-snug">
+            <span className="font-bold text-emerald-100 mr-1.5">CLÍNICA:</span>
             {nomeClinica} — {enderecoClinica} — Contato: {contatoClinica}
           </div>
-          <div className="text-[11px] leading-snug">
-            <span className="font-bold text-emerald-100 mr-1">PROFISSIONAL:</span>
+          <div className="text-[12px] leading-snug">
+            <span className="font-bold text-emerald-100 mr-1.5">PROFISSIONAL:</span>
             {nomeProfissional} — Registro/CPF: {cpfCrmProfissional}
           </div>
-          <div className="text-[11px] leading-snug">
-            <span className="font-bold text-emerald-100 mr-1">PACIENTE:</span>
+          <div className="text-[12px] leading-snug">
+            <span className="font-bold text-emerald-100 mr-1.5">PACIENTE:</span>
             {nomePaciente} — CPF: {cpfPaciente} — Contato: {contatoPaciente}
           </div>
         </div>
@@ -78,30 +73,29 @@ export function TermoVisualizacao({
           {tituloExibicao}
         </h3>
       </div>
+
       {/* Corpo do Documento */}
-      <div className={canvasClassName}>
-        <div className="a4-sheet">
-          {temConteudoTexto ? (
-            <div className="ql-snow">
-              <div
-                className="ql-editor p-0 prose prose-sm prose-slate max-w-none break-words text-[14px] leading-relaxed text-[#334155]"
-                dangerouslySetInnerHTML={{ __html: conteudoSanitizado }}
-              />
-            </div>
-          ) : (
-            <>
-              <p className="mb-3 text-[14px] leading-relaxed text-[#334155]">
-                Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta,
-                armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos
-                estéticos.
-              </p>
-              <p className="text-[14px] leading-relaxed text-[#334155]">
-                Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por
-                omitir qualquer condição de saúde que possa interferir no procedimento.
-              </p>
-            </>
-          )}
-        </div>
+      <div className="px-6 py-8 sm:px-12 sm:py-10">
+        {temConteudoTexto ? (
+          <div className="ql-snow">
+            <div
+              className="ql-editor p-0 prose prose-slate max-w-none text-[14px] leading-relaxed text-[#1e293b] space-y-3"
+              dangerouslySetInnerHTML={{ __html: conteudoSanitizado }}
+            />
+          </div>
+        ) : (
+          <div className="space-y-3 text-[14px] leading-relaxed text-[#334155]">
+            <p>
+              Autorizo o tratamento de meus dados pessoais conforme a LGPD (Lei 13.709/2018), incluindo a coleta,
+              armazenamento e uso de informações de saúde estritamente para a finalidade de realização dos procedimentos
+              estéticos.
+            </p>
+            <p>
+              Declaro que forneci informações verdadeiras sobre meu histórico médico e assumo a responsabilidade por
+              omitir qualquer condição de saúde que possa interferir no procedimento.
+            </p>
+          </div>
+        )}
       </div>
       
       {/* Área inferior para assinaturas e botões (se passada como children) */}

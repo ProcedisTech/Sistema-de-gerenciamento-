@@ -37,9 +37,20 @@ export function replaceTermVariables(html, ctx) {
     const complexRegex = new RegExp(`(\\[|&#91;)(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*${varPattern}(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*(\\]|&#93;)`, 'gi');
     out = out.replace(complexRegex, val);
 
-    // 2. Fallbacks Literais Simples (caso o regex complexo falhe por algum motivo bizarro de engine)
+    // 2. Fallbacks Literais Simples
     out = out.replace(new RegExp(`\\[${v.name}\\]`, 'gi'), val);
     out = out.replace(new RegExp(`&#91;${v.name}&#93;`, 'gi'), val);
+  }
+
+  // Fallback e limpeza graciosa para termos legados:
+  // Se o termo legado continha [RG DO PACIENTE] e o paciente não tem RG cadastrado (ou fluxo remoto/OTP),
+  // removemos o token e prefixos gramaticais para evitar vazamento de placeholders crus em documentos jurídicos.
+  if (!pac.rg) {
+    out = out.replace(/portador(\(a\))?\s+do\s+RG\s+(\[|&#91;)RG DO PACIENTE(\]|&#93;)\s+e\s+/gi, 'portador$1 do ');
+    out = out.replace(/portador(\(a\))?\s+do\s+RG\s+(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, 'portador$1');
+    out = out.replace(/RG:\s*(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, '');
+    out = out.replace(/RG\s+(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, '');
+    out = out.replace(/(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, '');
   }
 
   return out;
