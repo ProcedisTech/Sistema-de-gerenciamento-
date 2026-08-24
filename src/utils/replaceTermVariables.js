@@ -11,9 +11,58 @@ export function formatDateBR(isoDate) {
   return `${day}/${month}/${year}`;
 }
 
+/**
+ * Normaliza o HTML ou texto do termo de consentimento, reparando:
+ * 1. Palavras partidas com hífen ou quebra entre tags (ex: "inicia-</p><p>se" -> "inicia-se", "sangrame</p><p>nto" -> "sangramento").
+ * 2. Pontuação órfã no início de parágrafos (ex: "</p><p>.(a)" -> ".(a)").
+ * 3. Marcadores de tópicos isolados ("<p>-</p><p>Texto" -> "<li>Texto</li>").
+ * 4. Parágrafos quebrados no meio de frases por hard line wraps de PDFs ou templates legados.
+ */
+export function normalizeTermHtml(inputHtml) {
+  if (!inputHtml) return '';
+  let str = String(inputHtml).trim();
+
+  // Se não contém tags HTML, retorna string original
+  if (!/<[a-z][\s\S]*>/i.test(str)) {
+    return str;
+  }
+
+  // 1. Remove traços de hifenização de quebra de linha entre tags: "inicia-</p><p>se" -> "inicia-se"
+  str = str.replace(/([a-zA-Zá-úÁ-Ú])-+\s*<\/(?:p|div|span)>\s*<(?:p|div|span)[^>]*>\s*([a-zA-Zá-úÁ-Ú])/gi, '$1-$2');
+
+  // 2. Corrige quebra de palavras puras sem hífen entre tags: "suas i</p><p>ndicações" ou "sangrame</p><p>nto" ou "hipertrofiad</p><p>os"
+  str = str.replace(/([a-zA-Zá-úÁ-Ú]{1,15})\s*<\/(?:p|div|span)>\s*<(?:p|div|span)[^>]*>\s*([a-zA-Zá-úÁ-Ú]{1,15}(?:[;,.]|\s|$))/gi, (match, p1, p2) => {
+    // Se a junção forma continuação lógica de palavra
+    if (/^(ndicações|iminuição|tologia|nto|os;|da|se|mente)/i.test(p2) || p1.length <= 2) {
+      return `${p1}${p2}`;
+    }
+    return `${p1} ${p2}`;
+  });
+
+  // 3. Corrige pontuação órfã no início de parágrafo: "</p><p>.(a)" ou "</p><p>. A" ou "</p><p>, e"
+  str = str.replace(/<\/(?:p|div)>\s*<(?:p|div)[^>]*>\s*([.,;:(/])/gi, '$1');
+
+  // 4. Corrige marcadores isolados: "<p>-</p><p>Texto" ou "<p>- </p><p>Texto" -> "<li>Texto</li>"
+  str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s*<\/(?:p|div)>\s*<(?:p|div)[^>]*>(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
+
+  // 5. Converte parágrafos iniciados com traço ou bullet em <li>: "<p>- Texto</p>" -> "<li>Texto</li>"
+  str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s+(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
+
+  // 6. Envolve sequências de <li> em <ul>...</ul>
+  str = str.replace(/(?:<li>[\s\S]*?<\/li>\s*)+/gi, (match) => `<ul>${match}</ul>`);
+
+  // 7. Junta parágrafos quebrados no meio de frases onde a linha anterior não terminou com pontuação terminal (. ! ? : </ul> </ol>)
+  str = str.replace(/([a-zA-Zá-úÁ-Ú0-9,;/\\()_])\s*<\/(?:p|div)>\s*<(?:p|div)[^>]*>\s*([a-zA-Zá-úÁ-Ú0-9])/gi, '$1 $2');
+
+  // 8. Limpa duplicações de <ul> aninhadas
+  str = str.replace(/<ul>\s*<ul>/gi, '<ul>').replace(/<\/ul>\s*<\/ul>/gi, '</ul>');
+
+  return str;
+}
+
 export function replaceTermVariables(html, ctx) {
   if (!html) return '';
-  let out = String(html);
+  let out = normalizeTermHtml(String(html));
 
   const { pac = {}, clinica = {}, prof = {} } = ctx || {};
 

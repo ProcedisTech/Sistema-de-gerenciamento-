@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { replaceTermVariables, formatDateBR } from './replaceTermVariables';
 
 describe('replaceTermVariables utility', () => {
@@ -86,6 +86,18 @@ describe('replaceTermVariables utility', () => {
       expect(result).not.toContain('[RG DO PACIENTE]');
       expect(result).toContain('Nome: Ana Paula');
       expect(result).toContain('CPF: 222.333.444-55');
+    });
+
+    it('repara HTML quebrado com quebras de linha duras de PDF/Word e restaura listas', () => {
+      const brokenHtml =
+        '<p>declaro ter sido informado(a) pelo(a) Dr</p><p>.(a) guilherme</p>' +
+        '<p>suas i</p><p>ndicações e que o efeito da mesma inicia-</p><p>se cerca de 48 horas</p>' +
+        '<p>-</p><p>Equimoses ou hematomas;</p><p>-</p><p>Reação alérgica.</p>';
+
+      const result = replaceTermVariables(brokenHtml, {});
+      expect(result).toContain('pelo(a) Dr.(a) guilherme');
+      expect(result).toContain('suas indicações e que o efeito da mesma inicia-se cerca de 48 horas');
+      expect(result).toContain('<ul><li>Equimoses ou hematomas;</li><li>Reação alérgica.</li></ul>');
     });
   });
 });
