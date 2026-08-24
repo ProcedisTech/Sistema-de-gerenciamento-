@@ -107,6 +107,8 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
         pacienteCtx,
         clinicaCtx,
         profissionalCtx,
+        procedimentoCtx: doc.procedimentoNome || doc.nomeProcedimento || doc.procedimento || null,
+        nomeProcedimento: doc.procedimentoNome || doc.nomeProcedimento || doc.procedimento || '',
       });
     } catch {
       toast.error('Erro ao gerar o arquivo PDF.');
@@ -298,7 +300,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
                   <div className="md:col-span-2">
                     <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Conteúdo do Documento</h5>
                     <div className="bg-white border border-slate-200 rounded-lg max-h-[400px] overflow-y-auto text-sm text-slate-700 custom-scrollbar shadow-inner ql-snow">
-                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(replaceTermVariables(doc.conteudoSnapshot, { pac: pacienteCtx, clinica: clinicaCtx, prof: profissionalCtx }) || '<p>Conteúdo indisponível</p>') }} />
+                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(replaceTermVariables(doc.conteudoSnapshot, { pac: pacienteCtx, clinica: clinicaCtx, prof: profissionalCtx, procedimento: doc.procedimentoNome || doc.nomeProcedimento || doc.procedimento || '' }) || '<p>Conteúdo indisponível</p>') }} />
                     </div>
                   </div>
                   

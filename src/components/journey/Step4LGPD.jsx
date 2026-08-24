@@ -285,6 +285,9 @@ export function Step3Termos({
   pacienteCtx,
   clinicaCtx,
   profissionalCtx,
+  procedimentoCtx,
+  nomeProcedimento = '',
+  procedimentos = [],
   onConcluir,
   catalogoIds = [],
   exigirFilaVinculo = true,
@@ -955,6 +958,9 @@ export function Step3Termos({
                         pacienteCtx: pacienteCtx,
                         clinicaCtx: clinicaCtx,
                         profissionalCtx: profissionalCtx,
+                        procedimentoCtx: procedimentoCtx || nomeProcedimento,
+                        nomeProcedimento,
+                        procedimentos,
                         assinaturaProfissional: t.resultadoCompleto?.assinaturaProfissional,
                         assinaturaPaciente: t.resultadoCompleto?.assinaturaPaciente,
                         metadados: {
@@ -1180,7 +1186,10 @@ export function Step3Termos({
                     fileName: `termo_em_branco_${new Date().getTime()}.pdf`,
                     pacienteCtx,
                     clinicaCtx,
-                    profissionalCtx
+                    profissionalCtx,
+                    procedimentoCtx: procedimentoCtx || nomeProcedimento,
+                    nomeProcedimento,
+                    procedimentos,
                   });
                 });
               }}
@@ -1196,6 +1205,9 @@ export function Step3Termos({
               pacienteCtx={pacienteCtx}
               clinicaCtx={clinicaCtx}
               profissionalCtx={profissionalCtx}
+              procedimentoCtx={procedimentoCtx || nomeProcedimento}
+              nomeProcedimento={nomeProcedimento}
+              procedimentos={procedimentos}
             >
               {podeExibirAssinaturas ? (
                 <div className="space-y-6">
@@ -1281,6 +1293,12 @@ export function Step3Termos({
                                   conteudo: conteudoExibicao,
                                   assinaturaPaciente: termoAssinaturaDataUrl,
                                   assinaturaProfissional: profissionalAssinaturaDataUrl,
+                                  pacienteCtx,
+                                  clinicaCtx,
+                                  profissionalCtx,
+                                  procedimentoCtx: procedimentoCtx || nomeProcedimento,
+                                  nomeProcedimento,
+                                  procedimentos,
                                   metadados: {
                                     pacienteNome: pacienteCtx?.nome,
                                     profissionalNome: profissionalCtx?.nome,

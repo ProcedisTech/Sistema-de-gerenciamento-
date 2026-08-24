@@ -3841,6 +3841,8 @@ function AppRefactoredInner() {
                             cpf: perfilInfo?.cpf || perfilInfo?.crm,
                             telefone: perfilInfo?.telefone
                           }}
+                          nomeProcedimento={journeyState.nomeProcedimento}
+                          procedimentos={journeyState.procedimentosSessao}
                         />
                       )}
 
@@ -4324,6 +4326,8 @@ function AppRefactoredInner() {
                       cpf: perfilInfo?.cpf || perfilInfo?.crm,
                       telefone: perfilInfo?.telefone,
                     }}
+                    nomeProcedimento={journeyState.nomeProcedimento}
+                    procedimentos={journeyState.procedimentosSessao}
                     onConcluir={() => setConsultaModule('hub')}
                   />
                 ) : null}

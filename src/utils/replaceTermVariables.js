@@ -208,7 +208,23 @@ export function replaceTermVariables(html, ctx) {
   if (!html) return '';
   let out = String(html);
 
-  const { pac = {}, clinica = {}, prof = {} } = ctx || {};
+  const { pac = {}, clinica = {}, prof = {}, procedimento = {} } = ctx || {};
+
+  const nomeProc =
+    (typeof procedimento === 'string'
+      ? procedimento
+      : procedimento.nome ||
+        procedimento.nomeProcedimento ||
+        procedimento.procedimentoNome ||
+        ctx?.nomeProcedimento ||
+        ctx?.procedimentoNome ||
+        (Array.isArray(ctx?.procedimentos)
+          ? ctx.procedimentos
+              .map((p) => p?.nome || p?.nomeProcedimento || p)
+              .filter(Boolean)
+              .join(', ')
+          : '')
+    ) || '';
 
   const vars = [
     { name: 'NOME DO PACIENTE', value: pac.nome || pac.nomeCompleto },
@@ -219,6 +235,13 @@ export function replaceTermVariables(html, ctx) {
     { name: 'NOME DA CLÍNICA', value: clinica.nome },
     { name: 'CNPJ DA CLÍNICA', value: clinica.cnpj },
     { name: 'NOME DO PROFISSIONAL', value: prof.nome || prof.nomeCompleto },
+    { name: 'NOME DO PROCEDIMENTO', value: nomeProc },
+    { name: 'PROCEDIMENTO', value: nomeProc },
+    { name: 'DESCRICAO DO PROCEDIMENTO', value: nomeProc },
+    { name: 'DESCRIÇÃO DO PROCEDIMENTO', value: nomeProc },
+    { name: 'DESCRICAO DO TRATAMENTO', value: nomeProc },
+    { name: 'DESCRIÇÃO DO TRATAMENTO', value: nomeProc },
+    { name: 'TRATAMENTO', value: nomeProc },
   ];
 
   // 1. Substitui variáveis primeiro (para que os placeholders com colchetes não interfiram no dewrap)
@@ -246,7 +269,15 @@ export function replaceTermVariables(html, ctx) {
     out = out.replace(/(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, '');
   }
 
-  // 3. Executa de-wrapping e normalização semântica
+  // 3. Limpeza de tokens de procedimento caso não haja procedimento no contexto
+  if (!nomeProc) {
+    out = out.replace(
+      /(\[|&#91;)(NOME DO PROCEDIMENTO|PROCEDIMENTO|DESCRI[CÇ][AÃ]O DO (PROCEDIMENTO|TRATAMENTO)|TRATAMENTO)(\]|&#93;)/gi,
+      '_____________________________________________',
+    );
+  }
+
+  // 4. Executa de-wrapping e normalização semântica
   out = normalizeTermHtml(out);
 
   return out;

@@ -10,6 +10,9 @@ export function TermoVisualizacao({
   pacienteCtx,
   profissionalCtx,
   clinicaCtx,
+  procedimentoCtx,
+  nomeProcedimento,
+  procedimentos,
   children,
 }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
@@ -31,9 +34,16 @@ export function TermoVisualizacao({
   const contatoPaciente = pac.telefone || '[Telefone do Paciente]';
 
   let conteudoTexto = String(conteudo || '').trim();
-  
+
   // Substitui os placeholders pelos dados reais do contexto usando o utility centralizado
-  conteudoTexto = replaceTermVariables(conteudoTexto, { pac, clinica, prof });
+  conteudoTexto = replaceTermVariables(conteudoTexto, {
+    pac,
+    clinica,
+    prof,
+    procedimento: procedimentoCtx || nomeProcedimento,
+    nomeProcedimento,
+    procedimentos,
+  });
 
   const conteudoSanitizado = DOMPurify.sanitize(conteudoTexto, {
     ADD_ATTR: ['class'],

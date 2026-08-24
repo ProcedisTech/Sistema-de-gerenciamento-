@@ -176,5 +176,25 @@ describe('replaceTermVariables utility', () => {
       expect(result).toContain('Eu, <strong>gui</strong>, portador do CPF 53872906003, declaro ter sido informado pelo Dr.(a) <strong>guilherme barcelos</strong>');
       expect(result).toContain('sobre a ação da Toxina Botulínica, suas indicações e contraindicações, e que o efeito inicia-se cerca de 48 horas após aplicação.');
     });
+
+    it('substitui tokens de procedimento automaticamente quando informado no contexto', () => {
+      const template =
+        'Autorizo o procedimento para [NOME DO PROCEDIMENTO]. Descrição do tratamento: [DESCRIÇÃO DO TRATAMENTO].';
+
+      const ctx = {
+        procedimento: { nome: 'Preenchimento Facial' },
+      };
+
+      const result = replaceTermVariables(template, ctx);
+      expect(result).toBe(
+        'Autorizo o procedimento para Preenchimento Facial. Descrição do tratamento: Preenchimento Facial.'
+      );
+    });
+
+    it('substitui token de procedimento por linha tracejada quando nao informado no contexto', () => {
+      const template = 'Descrição do tratamento: [NOME DO PROCEDIMENTO]';
+      const result = replaceTermVariables(template, {});
+      expect(result).toBe('Descrição do tratamento: _____________________________________________');
+    });
   });
 });

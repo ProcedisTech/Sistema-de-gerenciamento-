@@ -11,7 +11,10 @@ export const generateTermoPdf = async ({
   fileName = 'termo_de_consentimento.pdf',
   pacienteCtx,
   clinicaCtx,
-  profissionalCtx
+  profissionalCtx,
+  procedimentoCtx,
+  nomeProcedimento,
+  procedimentos,
 }) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const margin = 15;
@@ -117,7 +120,14 @@ export const generateTermoPdf = async ({
     doc.setTextColor(30, 41, 59);
   };
 
-  let html = replaceTermVariables(String(conteudo || '').trim(), { pac: pacienteCtx, clinica: clinicaCtx, prof: profissionalCtx });
+  let html = replaceTermVariables(String(conteudo || '').trim(), {
+    pac: pacienteCtx,
+    clinica: clinicaCtx,
+    prof: profissionalCtx,
+    procedimento: procedimentoCtx || nomeProcedimento,
+    nomeProcedimento,
+    procedimentos,
+  });
 
   // Parse Inteligente de HTML para Array de Parágrafos
   const tempDiv = document.createElement("div");
