@@ -100,15 +100,15 @@ export function ConfiguracoesView({
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
       {/* Header */}
-      <div className="mb-5 flex items-start gap-3 border-b border-[#e2e8f0] pb-5 md:mb-6 md:pb-6">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b]">
+      <div className="mb-5 flex items-start gap-3 border-b border-[#e2e8f0] pb-4 md:mb-6 md:pb-5">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] lg:hidden">
           <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[18px] font-bold leading-tight text-[#0f172a] sm:text-[21px] md:text-[22px]">
+          <h2 className="text-[18px] font-bold leading-tight text-[#0f172a] sm:text-[21px] md:text-[22px] lg:sr-only">
             Configurações
           </h2>
-          <p className="mt-0.5 text-[12px] font-medium leading-snug text-[#64748b] sm:text-[13px] md:text-[14px]">
+          <p className="text-[12px] font-medium leading-snug text-[#64748b] sm:text-[13px] md:text-[14px]">
             {headerSubtitle}
           </p>
         </div>

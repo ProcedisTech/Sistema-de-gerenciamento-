@@ -1145,15 +1145,9 @@ export function PatientsListView({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <div
-        className={`flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 ${agendaEnterClass(showEntrance, 'agenda-delay-100')}`}
-      >
-        <h1 className="min-w-0 text-[22px] font-bold leading-tight text-[#0f172a] sm:text-2xl">
-          Pacientes
-        </h1>
-      </div>
+      <h1 className="sr-only">Pacientes</h1>
 
-      <div className={agendaEnterClass(showEntrance, 'agenda-delay-150')}>
+      <div className={agendaEnterClass(showEntrance, 'agenda-delay-100')}>
         <KpiCards
           kpi={kpi}
           loading={kpiLoading}

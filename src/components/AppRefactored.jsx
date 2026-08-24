@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { buildPacienteCtx } from '../utils/pacienteCtx';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, Settings, UserCog, Users, X } from 'lucide-react';
 
 // Hooks de estado
 import {
@@ -21,8 +21,7 @@ import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
 import { RoleGuard } from './auth/RoleGuard.jsx';
-import { Sidebar, Stepper, MobileNavigation } from './layout';
-import { GlobalHeader } from './layout/GlobalHeader.jsx';
+import { Sidebar, Stepper, MobileNavigation, GlobalHeader, PageSlot } from './layout';
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
@@ -3627,6 +3626,23 @@ function AppRefactoredInner() {
     );
   }
 
+  const renderGlobalPageSlot = () => {
+    switch (activeView) {
+      case 'pacientes':
+        return <PageSlot icon={Users} title="Pacientes" />;
+      case 'agenda':
+        return <PageSlot icon={CalendarDays} title="Agenda" />;
+      case 'gestao-equipe':
+        return <PageSlot icon={UserCog} title="Gestão de Equipe" />;
+      case 'configuracoes':
+        return <PageSlot icon={Settings} title="Configurações" />;
+      case 'notificacoes':
+        return <PageSlot icon={Bell} title="Notificações" />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex min-h-dvh md:h-screen flex-col md:flex-row font-sans overflow-x-hidden bg-app-canvas text-app-ink md:overflow-hidden">
 
@@ -4614,6 +4630,7 @@ function AppRefactoredInner() {
           <>
             <GlobalHeader
               activeView={activeView}
+              pageSlot={renderGlobalPageSlot()}
               onPatientSelect={handleGlobalPatientSelect}
               onNovoPaciente={handleGlobalNovoPaciente}
               onAgendamento={handleGlobalAgendamento}
