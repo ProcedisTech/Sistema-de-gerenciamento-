@@ -622,6 +622,10 @@
     overflow: hidden;
   }
 
+  .termo-folha--view {
+    min-height: auto;
+  }
+
   /* Quill des-estilizado: deixa de ser a folha */
   .termo-folha .ql-container {
     width: auto;
@@ -635,11 +639,64 @@
   }
 
   .termo-folha .ql-editor {
-    padding: 72px; /* igual em view e edit */
+    padding: 48px 56px;
     min-height: auto;
-    word-break: break-word;
+    word-break: normal;
     overflow-wrap: break-word;
-    hyphens: none;
+    hyphens: manual;
+  }
+
+  .termo-folha--view .ql-editor {
+    padding: 0 !important;
+  }
+
+  .termo-folha .ql-editor p {
+    margin-bottom: 0.65rem;
+    line-height: 1.6;
+  }
+
+  .termo-folha .ql-editor .ql-align-center {
+    text-align: center !important;
+  }
+
+  .termo-folha .ql-editor .ql-align-right {
+    text-align: right !important;
+  }
+
+  .termo-folha .ql-editor .ql-align-justify {
+    text-align: justify !important;
+    text-align-last: left;
+    text-justify: inter-word;
+  }
+
+  .termo-folha .ql-editor ul {
+    padding-left: 1.5rem;
+    list-style-type: disc !important;
+    margin-top: 0.35rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .termo-folha .ql-editor ol {
+    padding-left: 1.5rem;
+    list-style-type: decimal !important;
+    margin-top: 0.35rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .termo-folha .ql-editor ul li {
+    display: list-item !important;
+    list-style-type: disc !important;
+    margin-bottom: 0.25rem;
+    line-height: 1.55;
+    text-align: left;
+  }
+
+  .termo-folha .ql-editor ol li {
+    display: list-item !important;
+    list-style-type: decimal !important;
+    margin-bottom: 0.25rem;
+    line-height: 1.55;
+    text-align: left;
   }
 
   /* Edit: folha começa curta e cresce com o texto (view mantém 1123px) */
@@ -661,15 +718,14 @@
     .termo-folha .ql-editor {
       padding: 24px;
     }
+
+    .termo-folha--view .ql-editor {
+      padding: 0 !important;
+    }
   }
 }
 
-/* Fallback de marcador de lista para HTML "cru" do Quill (getSemanticHTML) renderizado
-   fora de uma instância viva do Quill (TermoVisualizacao, DocumentosAssinadosTab, etc).
-   O CSS nativo do Quill esconde o marcador padrão do navegador em todo <li> dentro de
-   .ql-editor e substitui por um ::before em um span.ql-ui — que só existe quando o Quill
-   está gerenciando o DOM ao vivo. Quando isso não existe (dangerouslySetInnerHTML puro),
-   restauramos o marcador nativo do navegador para o item não ficar sem marcador algum. */
+/* Fallback de marcador de lista para HTML "cru" do Quill */
 @layer components {
   .ql-editor ul li:not(:has(> .ql-ui)) {
     list-style-type: disc;

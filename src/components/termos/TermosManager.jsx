@@ -47,12 +47,12 @@ function isAtivo(row) {
 const CAMPOS_AUTOMATICOS = [
   { token: '[NOME DO PACIENTE]', desc: 'Nome completo' },
   { token: '[CPF DO PACIENTE]', desc: 'CPF formatado' },
-  { token: '[RG DO PACIENTE]', desc: 'RG do paciente' },
   { token: '[DATA DE NASCIMENTO DO PACIENTE]', desc: 'Data de nascimento (DD/MM/AAAA)' },
   { token: '[TELEFONE DO PACIENTE]', desc: 'Telefone / WhatsApp' },
   { token: '[NOME DA CLÍNICA]', desc: 'Razão social ou nome' },
   { token: '[CNPJ DA CLÍNICA]', desc: 'CNPJ formatado' },
   { token: '[NOME DO PROFISSIONAL]', desc: 'Nome do atendente' },
+  { token: '[NOME DO PROCEDIMENTO]', desc: 'Nome do procedimento' },
 ];
 
 const INTRO_BASICA =
@@ -61,17 +61,43 @@ const INTRO_BASICA =
 const INTRO_LGPD =
   '<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):</p>';
 
-/** Converte texto puro (linhas separadas por \n) num HTML com cada linha em seu próprio <p>. */
+/** Converte texto puro (linhas separadas por \n) num HTML semântico com <p> e <ul><li> para itens com marcador. */
 function paragraphizeTemplate(bruto) {
-  return bruto
-    .split('\n')
-    .map((p) => (p.trim() ? `<p>${p}</p>` : ''))
-    .join('');
+  if (!bruto) return '';
+  const lines = String(bruto).split('\n');
+  const result = [];
+  let currentList = [];
+
+  const flushList = () => {
+    if (currentList.length > 0) {
+      result.push(`<ul>${currentList.map((item) => `<li>${item}</li>`).join('')}</ul>`);
+      currentList = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      result.push('<p><br></p>');
+      continue;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+      currentList.push(trimmed.replace(/^[-•]\s*/, ''));
+    } else {
+      flushList();
+      result.push(`<p>${trimmed}</p>`);
+    }
+  }
+
+  flushList();
+  return result.join('');
 }
 
 const TCLE_TOXINA_TEMPLATE_BRUTO = `TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO — TOXINA BOTULÍNICA
 
-Eu, [NOME DO PACIENTE], portador do RG [RG DO PACIENTE] e CPF [CPF DO PACIENTE], declaro ter sido informado(a) e bem orientado(a) pelo(a) Dr.(a) [NOME DO PROFISSIONAL] sobre a ação da Toxina Botulínica do tipo A (que remove o relaxamento dos músculos), suas indicações e contraindicações, e que o efeito da mesma inicia-se cerca de 48 a 72 horas após a aplicação, e tem efeito máximo em torno de 15 dias após a aplicação. A indicação do tratamento com a Toxina Botulínica é preconizada para o relaxamento do músculo e diminuição da contração excessiva, e a mesma é transitória, geralmente por um período de 1 a 3 meses. Esse período depende de diferentes fatores associados ao paciente, à sua musculatura, ao tipo da patologia, bem como outros elementos.
+Eu, [NOME DO PACIENTE], portador(a) do CPF [CPF DO PACIENTE], declaro ter sido informado(a) e bem orientado(a) pelo(a) Dr.(a) [NOME DO PROFISSIONAL] sobre a ação da Toxina Botulínica do tipo A (que remove o relaxamento dos músculos), suas indicações e contraindicações, e que o efeito da mesma inicia-se cerca de 48 a 72 horas após a aplicação, e tem efeito máximo em torno de 15 dias após a aplicação. A indicação do tratamento com a Toxina Botulínica é preconizada para o relaxamento do músculo e diminuição da contração excessiva, e a mesma é transitória, geralmente por um período de 1 a 3 meses. Esse período depende de diferentes fatores associados ao paciente, à sua musculatura, ao tipo da patologia, bem como outros elementos.
 
 Os efeitos indesejáveis são raros e temporários e dependem, dentre outros fatores, da musculatura de cada paciente e da região aplicada, podendo ocasionar:
 - Equimoses ou hematomas (manchamento no local da aplicação, transitório de 5 a 7 dias) e sangramento e/ou dor durante a injeção;
@@ -121,14 +147,47 @@ Paciente: [NOME DO PACIENTE]     Data de nascimento: [DATA DE NASCIMENTO DO PACI
 const TERMO_IMAGEM_TEMPLATE_BRUTO = `TERMO DE CONSENTIMENTO DE USO DE IMAGEM
 
 Nome do Paciente: [NOME DO PACIENTE]
-CPF: [CPF DO PACIENTE]     RG: [RG DO PACIENTE]
-Contato: [TELEFONE DO PACIENTE]     Data de nascimento: [DATA DE NASCIMENTO DO PACIENTE]
+CPF: [CPF DO PACIENTE]     Data de nascimento: [DATA DE NASCIMENTO DO PACIENTE]
+Contato: [TELEFONE DO PACIENTE]
 
 Autorizo a divulgação de fotos, imagens e vídeos dos procedimentos realizados em mim por [NOME DA CLÍNICA] (CNPJ [CNPJ DA CLÍNICA]). Estou ciente de que o resultado leva, em média, de 7 a 14 dias para se estabilizar, podendo haver edema, hematomas ou infecção, com necessidade de cuidados e uso dos medicamentos prescritos no pós-operatório. A revisão será feita em data agendada, podendo ou não haver necessidade de retoque.
 
-Descrição do tratamento: _____________________________________________
+Descrição do tratamento: [NOME DO PROCEDIMENTO]
 
 Profissional: [NOME DO PROFISSIONAL]`;
+
+/**
+ * Localiza automaticamente os IDs de procedimentos ativos da clínica correspondentes ao template selecionado.
+ * Suporta correspondência flexível e normalizada (sem acentos).
+ */
+function findMatchingProcedimentoIds(templateType, options) {
+  if (!Array.isArray(options) || options.length === 0) return [];
+  const normalize = (s) =>
+    String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  if (templateType === 'TOXINA') {
+    return options
+      .filter((o) => {
+        const n = normalize(o.nomeProcedimento);
+        return n.includes('toxina') || n.includes('botul') || n.includes('botox');
+      })
+      .map((o) => String(o.id));
+  }
+
+  if (templateType === 'PREENCHIMENTO') {
+    return options
+      .filter((o) => {
+        const n = normalize(o.nomeProcedimento);
+        return n.includes('preenchimento') || n.includes('hialuron');
+      })
+      .map((o) => String(o.id));
+  }
+
+  return [];
+}
 
 export function TermosManager() {
   const { success: toastSuccess, error: toastError } = useToast();
@@ -241,27 +300,35 @@ export function TermosManager() {
   };
 
   const openNewWithTcleToxinaTemplate = () => {
+    const matchingIds = findMatchingProcedimentoIds('TOXINA', procedimentoOptions);
     setEditingId(null);
     setTitulo('TCLE - Toxina Botulínica');
     setConteudo(paragraphizeTemplate(TCLE_TOXINA_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
     setNaturezaCodigo(NATUREZA_PROCEDIMENTO);
-    setProcedimentosVinculados([]);
+    setProcedimentosVinculados(matchingIds);
     setFormErrors({});
     setViewingRow(null);
     setModo('edit');
+    if (matchingIds.length > 0) {
+      toastSuccess(`Template carregado com ${matchingIds.length} procedimento(s) vinculado(s) automaticamente.`);
+    }
   };
 
   const openNewWithTclePreenchimentoTemplate = () => {
+    const matchingIds = findMatchingProcedimentoIds('PREENCHIMENTO', procedimentoOptions);
     setEditingId(null);
     setTitulo('TCLE - Preenchimento com Ácido Hialurônico');
     setConteudo(paragraphizeTemplate(TCLE_PREENCHIMENTO_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
     setNaturezaCodigo(NATUREZA_PROCEDIMENTO);
-    setProcedimentosVinculados([]);
+    setProcedimentosVinculados(matchingIds);
     setFormErrors({});
     setViewingRow(null);
     setModo('edit');
+    if (matchingIds.length > 0) {
+      toastSuccess(`Template carregado com ${matchingIds.length} procedimento(s) vinculado(s) automaticamente.`);
+    }
   };
 
   const openNewWithTermoImagemTemplate = () => {

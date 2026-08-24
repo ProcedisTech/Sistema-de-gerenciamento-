@@ -145,7 +145,7 @@ export function ViewportDialog({
   return createPortal(
     <div className="anamnese-sora fixed inset-0 z-[160] flex items-center justify-center p-4">
       <div
-        className={`absolute inset-0 bg-ink-900/35 transition-opacity ${duration} ${motion} ${backdropCls}`}
+        className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity ${duration} ${motion} ${backdropCls}`}
         onClick={onDismiss}
         aria-hidden="true"
       />
