@@ -1,6 +1,7 @@
 /** @typedef {{ id?: string|null, clientKey: string, nome: string, sexoAplicavel?: string|null, ordem: number, perguntas: import('./editorDocumentoReducer.js').PerguntaEditor[] }} SecaoEditor */
 
 import { perguntaAlimentaProntuario } from './editorTipoMeta.js';
+import { ehTipoPaiCondicional } from './anamneseCondicional.js';
 
 let clientKeySeq = 0;
 
@@ -111,6 +112,7 @@ function linkPerguntaPaiClientKeys(secoes) {
 /** Converte estado do editor para payload PUT /documento. */
 export function secoesToDocumentoPayload({ nome, especialidadeId, textoDeclaracao, secoes, allowEmpty = false }) {
   const TIPOS_ESCOLHA = new Set(['escolha_unica', 'multipla_escolha']);
+  let ordemGlobal = 0;
   return {
     nome: nome?.trim() || '',
     especialidadeId: especialidadeId || null,
@@ -124,7 +126,7 @@ export function secoesToDocumentoPayload({ nome, especialidadeId, textoDeclaraca
       ordem: sec.ordem ?? si + 1,
       icone: sec.icone || undefined,
       descricao: sec.descricao || undefined,
-      perguntas: (sec.perguntas || []).map((q, qi) => {
+      perguntas: (sec.perguntas || []).map((q) => {
         const tipo = q.tipoRespostaCodigo || 'texto';
         const isEscolha = TIPOS_ESCOLHA.has(tipo);
         const alts = Array.isArray(q.alternativas) ? q.alternativas : [];
@@ -139,6 +141,7 @@ export function secoesToDocumentoPayload({ nome, especialidadeId, textoDeclaraca
                 return row;
               }).filter((a) => a.alternativa)
             : undefined;
+        ordemGlobal += 1;
         return {
           id: q.id || undefined,
           clientKey: q.clientKey,
@@ -151,7 +154,7 @@ export function secoesToDocumentoPayload({ nome, especialidadeId, textoDeclaraca
           perguntaPaiId: q.perguntaPaiId || undefined,
           perguntaPaiClientKey: q.perguntaPaiClientKey || undefined,
           obrigatorio: Boolean(q.obrigatorio),
-          ordem: q.ordem ?? qi + 1,
+          ordem: ordemGlobal,
           alternativas: alternativasPayload,
         };
       }),
@@ -300,6 +303,9 @@ export function applyTab(secoes, focusedKey) {
   const sec = next[loc.secaoIndex];
   const atual = sec.perguntas[loc.perguntaIndex];
   const anterior = sec.perguntas[loc.perguntaIndex - 1];
+  if (!ehTipoPaiCondicional(anterior.tipoRespostaCodigo)) {
+    return { secoes, focusKey: focusedKey, tabPaiMode: false };
+  }
   atual.perguntaPaiId = anterior.id ?? null;
   atual.perguntaPaiClientKey = anterior.clientKey;
   return { secoes: next, focusKey: focusedKey, tabPaiMode: true };

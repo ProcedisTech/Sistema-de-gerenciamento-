@@ -7,8 +7,18 @@ export function categoriaVisivelParaSexo(sexoAplicavel, pacienteSexo) {
   return cat === sexo;
 }
 
+export const TIPOS_PAI_CONDICIONAL = ['sim_nao_naosei', 'booleano'];
+
+export function ehTipoPaiCondicional(tipo) {
+  return TIPOS_PAI_CONDICIONAL.includes(tipo);
+}
+
 export function isPaiSim(resposta) {
-  return resposta?.respostaTrivalente === 'SIM';
+  if (!resposta) return false;
+  if (resposta.respostaTrivalente != null) {
+    return resposta.respostaTrivalente === 'SIM';
+  }
+  return resposta.respostaBoolean === true;
 }
 
 export function perguntaFilhaVisivel(pergunta, respostas = {}) {
@@ -31,7 +41,7 @@ export function aplicarMudancaResposta(respostas, perguntas, nextResposta) {
   const next = { ...respostas, [key]: { ...nextResposta, perguntaId: nextResposta.perguntaId } };
   const pergunta = (perguntas || []).find((p) => p && String(p.id) === key);
   const tipo = pergunta?.tipoResposta || pergunta?.tipo;
-  if (tipo === 'sim_nao_naosei' && nextResposta.respostaTrivalente !== 'SIM') {
+  if (ehTipoPaiCondicional(tipo) && !isPaiSim(nextResposta)) {
     for (const filha of filhasDe(perguntas, nextResposta.perguntaId)) {
       delete next[String(filha.id)];
     }

@@ -112,62 +112,64 @@ export function AnamneseDocSecao({
             })
           }
         />
-        <button
-          ref={quemRef}
-          type="button"
-          disabled={!editavel}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setOpenQuem((v) => !v)}
-          className={`${WHOBTN} ${whobtnCls}`}
-        >
-          <User className="h-3 w-3" />
-          {sexoToWhobtnLabel(secao.sexoAplicavel)}
-        </button>
-        <div className="ml-auto flex items-center gap-0.5">
-          {editavel ? (
-            <>
-              <button
-                type="button"
-                disabled={secaoIndex === 0}
-                aria-label="Subir seção"
-                title="Subir seção"
-                onClick={() => onMoveSecao?.(secaoIndex, -1)}
-                className={`${IA} disabled:opacity-[0.38]`}
-              >
-                <ChevronUp className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                disabled={secaoIndex >= secoesCount - 1}
-                aria-label="Descer seção"
-                title="Descer seção"
-                onClick={() => onMoveSecao?.(secaoIndex, 1)}
-                className={`${IA} disabled:opacity-[0.38]`}
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className={`${IA} hidden cursor-grab touch-none active:cursor-grabbing lg:grid`}
-                aria-label="Arrastar seção"
-                {...dragHandleProps}
-              >
-                <GripVertical className="h-4 w-4" />
-              </button>
-            </>
-          ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-2.5">
           <button
+            ref={quemRef}
             type="button"
             disabled={!editavel}
-            title="Remover"
-            onClick={() => {
-              dispatch({ type: EDITOR_ACTIONS.REMOVE_SECAO, secaoKey: secao.clientKey });
-              toast.success('Seção removida');
-            }}
-            className={`${IA} ${IA_DANGER}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setOpenQuem((v) => !v)}
+            className={`${WHOBTN} ${whobtnCls} shrink-0`}
           >
-            <Trash2 className="h-4 w-4" />
+            <User className="h-3 w-3" />
+            {sexoToWhobtnLabel(secao.sexoAplicavel)}
           </button>
+          <div className="flex items-center gap-0.5">
+            {editavel ? (
+              <>
+                <button
+                  type="button"
+                  disabled={secaoIndex === 0}
+                  aria-label="Subir seção"
+                  title="Subir seção"
+                  onClick={() => onMoveSecao?.(secaoIndex, -1)}
+                  className={`${IA} disabled:opacity-[0.38]`}
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={secaoIndex >= secoesCount - 1}
+                  aria-label="Descer seção"
+                  title="Descer seção"
+                  onClick={() => onMoveSecao?.(secaoIndex, 1)}
+                  className={`${IA} disabled:opacity-[0.38]`}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className={`${IA} hidden cursor-grab touch-none active:cursor-grabbing lg:grid`}
+                  aria-label="Arrastar seção"
+                  {...dragHandleProps}
+                >
+                  <GripVertical className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              disabled={!editavel}
+              title="Remover"
+              onClick={() => {
+                dispatch({ type: EDITOR_ACTIONS.REMOVE_SECAO, secaoKey: secao.clientKey });
+                toast.success('Seção removida');
+              }}
+              className={`${IA} ${IA_DANGER}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
