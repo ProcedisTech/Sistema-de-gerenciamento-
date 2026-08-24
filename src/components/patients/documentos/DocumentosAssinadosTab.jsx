@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Download, FileText, FlaskConical, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
+import { Download, FileText, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
 import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
@@ -9,7 +9,6 @@ import { generateTermoPdf } from '../../../utils/pdfGenerator';
 import { replaceTermVariables } from '../../../utils/replaceTermVariables';
 import { buildPacienteCtx } from '../../../utils/pacienteCtx';
 import { TermoIntegridadeSelo } from '../../termos/TermoIntegridadeSelo.jsx';
-import { SolicitacaoExamesModal } from './SolicitacaoExamesModal.jsx';
 import 'react-quill-new/dist/quill.snow.css';
 
 /** Retorna { expirado, data } a partir de vigencia/expiradaEm, ou null se vigente indefinidamente. */
@@ -33,7 +32,6 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
   const { orgId } = useOrg();
   const toast = useToast();
   const [expandedDocId, setExpandedDocId] = useState(null);
-  const [examesModalOpen, setExamesModalOpen] = useState(false);
 
   useEffect(() => {
     if (!pacienteId || !orgId) return;
@@ -115,65 +113,34 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
     }
   };
 
-  const header = (
-    <div className="flex justify-end">
-      <button
-        type="button"
-        onClick={() => setExamesModalOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] px-3 py-2 text-xs font-semibold text-[#334155] hover:bg-slate-50"
-      >
-        <FlaskConical className="h-4 w-4 text-[#00a88e]" />
-        Solicitar Exames
-      </button>
-      <SolicitacaoExamesModal
-        open={examesModalOpen}
-        onClose={() => setExamesModalOpen(false)}
-        clinicaCtx={clinicaCtx}
-        pacienteCtx={pacienteCtx}
-        profissionalCtx={profissionalCtx}
-      />
-    </div>
-  );
-
   if (loading) {
     return (
-      <>
-        {header}
-        <div className="flex justify-center p-8">
-          <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
-        </div>
-      </>
+      <div className="flex justify-center p-8">
+        <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <>
-        {header}
-        <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100 mt-4 text-center">
-          {error}
-        </div>
-      </>
+      <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100 mt-4 text-center">
+        {error}
+      </div>
     );
   }
 
   if (documentos.length === 0) {
     return (
-      <>
-        {header}
-        <div className="bg-slate-50 text-slate-500 p-8 rounded-xl border border-slate-200 mt-4 text-center">
-          <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <p className="font-medium">Nenhum documento assinado encontrado</p>
-          <p className="text-sm mt-1">Quando o paciente assinar termos, eles aparecerão aqui.</p>
-        </div>
-      </>
+      <div className="bg-slate-50 text-slate-500 p-8 rounded-xl border border-slate-200 mt-4 text-center">
+        <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+        <p className="font-medium">Nenhum documento assinado encontrado</p>
+        <p className="text-sm mt-1">Quando o paciente assinar termos, eles aparecerão aqui.</p>
+      </div>
     );
   }
 
   return (
-    <>
-      {header}
-      <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       {documentos.map((doc) => {
         const isExpanded = expandedDocId === doc.id;
         return (
@@ -359,7 +326,6 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
           </div>
         );
       })}
-      </div>
-    </>
+    </div>
   );
 }
