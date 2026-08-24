@@ -32,7 +32,6 @@ export function normalizeTermHtml(inputHtml) {
 
   // 2. Corrige quebra de palavras puras sem hífen entre tags: "suas i</p><p>ndicações" ou "sangrame</p><p>nto" ou "hipertrofiad</p><p>os"
   str = str.replace(/([a-zA-Zá-úÁ-Ú]{1,15})\s*<\/(?:p|div|span)>\s*<(?:p|div|span)[^>]*>\s*([a-zA-Zá-úÁ-Ú]{1,15}(?:[;,.]|\s|$))/gi, (match, p1, p2) => {
-    // Se a junção forma continuação lógica de palavra
     if (/^(ndicações|iminuição|tologia|nto|os;|da|se|mente)/i.test(p2) || p1.length <= 2) {
       return `${p1}${p2}`;
     }
@@ -45,14 +44,36 @@ export function normalizeTermHtml(inputHtml) {
   // 4. Corrige marcadores isolados: "<p>-</p><p>Texto" ou "<p>- </p><p>Texto" -> "<li>Texto</li>"
   str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s*<\/(?:p|div)>\s*<(?:p|div)[^>]*>(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
 
-  // 5. Converte parágrafos iniciados com traço ou bullet em <li>: "<p>- Texto</p>" -> "<li>Texto</li>"
-  str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s+(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
+  // 5. Converte parágrafos iniciados com traço ou bullet OU terminados em ';' em <li>
+  str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s*(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
+  str = str.replace(/<(?:p|div)[^>]*>\s*([a-zA-Zá-úÁ-Ú][^<]*;)\s*<\/(?:p|div)>/gi, '<li>$1</li>');
 
   // 6. Envolve sequências de <li> em <ul>...</ul>
   str = str.replace(/(?:<li>[\s\S]*?<\/li>\s*)+/gi, (match) => `<ul>${match}</ul>`);
 
-  // 7. Junta parágrafos quebrados no meio de frases onde a linha anterior não terminou com pontuação terminal (. ! ? : </ul> </ol>)
-  str = str.replace(/([a-zA-Zá-úÁ-Ú0-9,;/\\()_])\s*<\/(?:p|div)>\s*<(?:p|div)[^>]*>\s*([a-zA-Zá-úÁ-Ú0-9])/gi, '$1 $2');
+  // 7. Junta parágrafos quebrados no meio de frases normais (mas NUNCA junta títulos em caixa alta nem linhas que terminam em : ou .)
+  str = str.replace(/<p>(.*?)<\/p>\s*<p>(.*?)<\/p>/gi, (match, p1, p2) => {
+    const t1 = p1.trim();
+    const t2 = p2.trim();
+    if (!t1 || !t2) return match;
+
+    // Se t1 é um título em caixa alta (ex: TERMO DE CONSENTIMENTO...), não junta
+    const isT1Upper = t1.length > 5 && t1 === t1.toUpperCase();
+    if (isT1Upper) return match;
+
+    // Se t1 termina com pontuação terminal (. : ! ?), não junta
+    if (/[.:!?]$/.test(t1) || t1.endsWith('</li>') || t1.endsWith('</ul>')) return match;
+
+    // Se t2 começa com marcador de lista
+    if (/^[-•]/.test(t2) || t2.startsWith('<li>') || t2.startsWith('<ul>')) return match;
+
+    // Se t2 começa com pontuação órfã (ex: ".(a)", ". A", ", e") ou palavra continuação
+    if (/^[.,;:(/]/.test(t2) || /^[a-zá-ú]/.test(t2)) {
+      return `<p>${t1} ${t2}</p>`;
+    }
+
+    return match;
+  });
 
   // 8. Limpa duplicações de <ul> aninhadas
   str = str.replace(/<ul>\s*<ul>/gi, '<ul>').replace(/<\/ul>\s*<\/ul>/gi, '</ul>');

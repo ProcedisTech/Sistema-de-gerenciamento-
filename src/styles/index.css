@@ -514,7 +514,16 @@
     margin-bottom: 0.75rem;
   }
 
-  .termo-folha .ql-editor li {
+  .termo-folha .ql-editor ul li {
+    display: list-item !important;
+    list-style-type: disc !important;
+    margin-bottom: 0.35rem;
+    line-height: 1.6;
+  }
+
+  .termo-folha .ql-editor ol li {
+    display: list-item !important;
+    list-style-type: decimal !important;
     margin-bottom: 0.35rem;
     line-height: 1.6;
   }
