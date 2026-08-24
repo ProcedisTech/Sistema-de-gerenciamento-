@@ -27,58 +27,104 @@ export function normalizeTermHtml(inputHtml) {
   if (!inputHtml) return '';
   let str = String(inputHtml).trim();
 
-  const hasHtmlTags = /<[a-z][\s\S]*>/i.test(str);
+  // Se a string contém quebras de linha \n (seja Plain Text ou vindo de colar no Quill):
+  if (/\r?\n/.test(str)) {
+    // Normaliza tags de bloco e quebras em \n para reconstrução linear
+    str = str
+      .replace(/<\/(?:p|div)>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '\n• ')
+      .replace(/<\/li>/gi, '\n');
 
-  // CASO 1: Se for TEXTO PURO (sem tags HTML), converte quebras em <p> e <ul><li>
-  if (!hasHtmlTags) {
-    if (!/\r?\n/.test(str)) {
-      return str;
-    }
-    const lines = str.split(/\r?\n/).map((l) => l.trim());
+    const rawLines = str
+      .replace(/<[^>]+>/g, '')
+      .split(/\r?\n/)
+      .map((l) => l.trim());
+
     const fixedLines = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+
       if (!line) {
         if (fixedLines.length > 0 && fixedLines[fixedLines.length - 1] !== '') {
           fixedLines.push('');
         }
         continue;
       }
+
       if (fixedLines.length > 0) {
         const prevIdx = fixedLines.length - 1;
         const prev = fixedLines[prevIdx];
+
         if (prev !== '') {
-          // Dr + .(a)
+          // Caso 1: Dr + .(a)
           if (/(\b(Dr|Dra|Prof|Profa|Sr|Sra))\s*$/i.test(prev) && /^\.\(a\)/i.test(line)) {
             fixedLines[prevIdx] = prev + line;
             continue;
           }
-          // Pontuação órfã
+          // Caso 2: Pontuação órfã (. A indicação, etc)
           if (/^[.,;:]\s*[A-ZÁ-Ú0-9]/.test(line) && !prev.endsWith('.')) {
             fixedLines[prevIdx] = prev + line;
             continue;
           }
-          // Hífen de quebra
+          // Caso 3: Marcador isolado '-' ou '•'
+          if (/^[-•*]$/.test(prev)) {
+            fixedLines[prevIdx] = '• ' + line;
+            continue;
+          }
+          // Caso 4: Hífen de quebra no final (inicia- + se -> inicia-se, aplicá- + la -> aplicá-la)
           if (prev.endsWith('-')) {
             fixedLines[prevIdx] = prev.slice(0, -1) + '-' + line;
             continue;
           }
-          // Continuação genérica de palavra ou frase
-          if (!/[.:!?]$/.test(prev) && !/^[-•*]/.test(prev) && !/^[-•*]/.test(line)) {
-            if (/\b[a-zA-Zá-úÁ-Ú]{1,2}$/.test(prev) && /^[a-zá-ú]{3,}/.test(line)) {
+          // Caso 5: Se o item anterior era item de lista e line é a continuação dele
+          if (
+            /^[-•*]/.test(prev) &&
+            !prev.endsWith(';') &&
+            !prev.endsWith('.') &&
+            !/^[-•*]/.test(line) &&
+            !line.endsWith(':')
+          ) {
+            if (
+              /\b[a-zA-Zá-úÁ-Ú]{1,12}$/.test(prev) &&
+              /^[a-zá-ú]{2,}/.test(line) &&
+              (line.endsWith(';') || line.endsWith('.') || !line.includes(' '))
+            ) {
+              fixedLines[prevIdx] = prev + line;
+            } else if (
+              /\b(san|sangrame|dep|hiper|hipertrofiad|respons|aplic|suas\s+i|e\s+d|da\s+p)\s*$/i.test(prev)
+            ) {
               fixedLines[prevIdx] = prev + line;
             } else {
               fixedLines[prevIdx] = prev + ' ' + line;
             }
             continue;
           }
-          // Continuação de item de lista
-          if (/^[-•*]/.test(prev) && !prev.endsWith(';') && !prev.endsWith('.') && !/^[-•*]/.test(line)) {
-            fixedLines[prevIdx] = prev + ' ' + line;
+          // Caso 6: Se prev não termina com pontuação forte (. : ! ?) e line é continuação
+          if (
+            !/[.:!?]$/.test(prev) &&
+            !/^[-•*]/.test(prev) &&
+            !/^[-•*]/.test(line) &&
+            prev !== prev.toUpperCase() &&
+            line !== line.toUpperCase()
+          ) {
+            if (
+              /\b(san|sangrame|dep|hiper|hipertrofiad|responsa|aplic|po|um|suas\s+i|e\s+d|da\s+p|d)\s*$/i.test(prev) &&
+              /^(nto|os;|ender|trofiados|bilidade|ação|is\b|a\s+nova|ndicações|iminuição|atologia|os\s+tratamentos)/i.test(
+                line,
+              )
+            ) {
+              fixedLines[prevIdx] = prev + line;
+            } else if (/\b(d[oa]|n[oa])\s*$/i.test(prev) && /^s\s+/i.test(line)) {
+              fixedLines[prevIdx] = prev + line;
+            } else {
+              fixedLines[prevIdx] = prev + ' ' + line;
+            }
             continue;
           }
         }
       }
+
       fixedLines.push(line);
     }
 
@@ -90,6 +136,7 @@ export function normalizeTermHtml(inputHtml) {
         currentList = [];
       }
     };
+
     for (const line of fixedLines) {
       if (!line) {
         flushList();
@@ -106,11 +153,12 @@ export function normalizeTermHtml(inputHtml) {
         }
       }
     }
+
     flushList();
     return blocks.join('');
   }
 
-  // CASO 2: Se já é HTML (ex: do Quill), OPERA PRESERVANDO 100% DAS TAGS RICAS
+  // CASO 2: Se já é HTML puro (sem \n interno), OPERA PRESERVANDO 100% DAS TAGS RICAS
   // 1. Repara palavras partidas com hífen entre tags de bloco:
   str = str.replace(
     /<p([^>]*)>((?:(?!<\/p>)[\s\S])*?[a-zA-Zá-úÁ-Ú])-+\s*<\/p>\s*<p[^>]*>\s*([a-zA-Zá-úÁ-Ú](?:(?!<\/p>)[\s\S])*?)<\/p>/g,
