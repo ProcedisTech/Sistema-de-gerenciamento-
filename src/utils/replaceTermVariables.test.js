@@ -126,5 +126,55 @@ describe('replaceTermVariables utility', () => {
       expect(result).toContain('previsibilidade dos tratamentos:');
       expect(result).toContain('<li>Queda das pálpebras e/ou sobrancelhas (ptose), e/ou sensação de pálpebras inchadas;</li>');
     });
+
+    it('preserva 100% da formatação rica do Quill (strong, em, u, ol, span, classes ql-align-*)', () => {
+      const richHtml =
+        '<p class="ql-align-center"><strong>TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO</strong></p>' +
+        '<p class="ql-align-center"><em>Procedimento de Harmonização Facial</em></p>' +
+        '<p>Eu, <strong>[NOME DO PACIENTE]</strong>, portador do CPF <u>[CPF DO PACIENTE]</u>, declaro que fui devidamente esclarecido(a) sobre:</p>' +
+        '<ol>' +
+        '<li>O procedimento a ser realizado e seus <strong>benefícios</strong>;</li>' +
+        '<li>Os <span style="color: red;">riscos</span> e cuidados pós-operatórios;</li>' +
+        '<li>A possibilidade de <em>efeitos transitórios</em> como edema e hematoma.</li>' +
+        '</ol>' +
+        '<p class="ql-align-right">Assinado em [DATA DE NASCIMENTO DO PACIENTE].</p>';
+
+      const ctx = {
+        pac: {
+          nome: 'Maria Silva',
+          cpf: '123.456.789-00',
+          dataNascimento: '1990-05-15',
+        },
+      };
+
+      const result = replaceTermVariables(richHtml, ctx);
+      expect(result).toContain('<p class="ql-align-center"><strong>TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO</strong></p>');
+      expect(result).toContain('<p class="ql-align-center"><em>Procedimento de Harmonização Facial</em></p>');
+      expect(result).toContain('Eu, <strong>Maria Silva</strong>, portador do CPF <u>123.456.789-00</u>');
+      expect(result).toContain('<ol>');
+      expect(result).toContain('<li>O procedimento a ser realizado e seus <strong>benefícios</strong>;</li>');
+      expect(result).toContain('<li>Os <span style="color: red;">riscos</span> e cuidados pós-operatórios;</li>');
+      expect(result).toContain('<li>A possibilidade de <em>efeitos transitórios</em> como edema e hematoma.</li>');
+      expect(result).toContain('</ol>');
+      expect(result).toContain('<p class="ql-align-right">Assinado em 15/05/1990.</p>');
+    });
+
+    it('repara quebras de linha em HTML preservando tags internas como strong e classes de alinhamento', () => {
+      const brokenWithTags =
+        '<p class="ql-align-justify">Eu, <strong>[NOME DO PACIENTE]</strong>, portador do CPF [CPF DO PACIENTE], declaro ter sido informado pelo Dr</p>' +
+        '<p>.(a) <strong>[NOME DO PROFISSIONAL]</strong></p>' +
+        '<p>sobre a ação da Toxina Botulínica, suas i</p>' +
+        '<p>ndicações e contraindicações, e que o efeito inicia-</p>' +
+        '<p>se cerca de 48 horas após aplicação.</p>';
+
+      const ctx = {
+        pac: { nome: 'gui', cpf: '53872906003' },
+        prof: { nome: 'guilherme barcelos' },
+      };
+
+      const result = replaceTermVariables(brokenWithTags, ctx);
+      expect(result).toContain('Eu, <strong>gui</strong>, portador do CPF 53872906003, declaro ter sido informado pelo Dr.(a) <strong>guilherme barcelos</strong>');
+      expect(result).toContain('sobre a ação da Toxina Botulínica, suas indicações e contraindicações, e que o efeito inicia-se cerca de 48 horas após aplicação.');
+    });
   });
 });
