@@ -90,14 +90,41 @@ describe('replaceTermVariables utility', () => {
 
     it('repara HTML quebrado com quebras de linha duras de PDF/Word e restaura listas', () => {
       const brokenHtml =
-        '<p>declaro ter sido informado(a) pelo(a) Dr</p><p>.(a) guilherme</p>' +
-        '<p>suas i</p><p>ndicações e que o efeito da mesma inicia-</p><p>se cerca de 48 horas</p>' +
-        '<p>-</p><p>Equimoses ou hematomas;</p><p>-</p><p>Reação alérgica.</p>';
+        '<p>TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO — TOXINA BOTULÍNICA</p>' +
+        '<p>Eu, gui, portador(a) do CPF 53872906003, declaro ter sido informado(a) e bem orientado(a) pelo(a) Dr</p>' +
+        '<p>.(a) guilherme</p>' +
+        '<p>barcelos sobre a ação da Toxina Botulínica do tipo A (que remove o relaxamento dos músculos), suas i</p>' +
+        '<p>ndicações e contraindicações, e que o efeito da mesma inicia-</p>' +
+        '<p>se cerca de 48 a 72 horas após a aplicação, e tem efeito máximo em torno de 15 dias após a aplicação</p>' +
+        '<p>. A indicação do tratamento com a Toxina Botulínica é preconizada para o relaxamento do músculo e d</p>' +
+        '<p>iminuição da contração excessiva, e a mesma é transitória, geralmente por um período de 1 a 3 meses.</p>' +
+        '<p>Esse período depende de diferentes fatores associados ao paciente, à sua musculatura, ao tipo da pa</p>' +
+        '<p>tologia, bem como outros elementos.</p>' +
+        '<p>Os efeitos indesejáveis são raros e temporários e dependem, dentre outros fatores, da musculatura de</p>' +
+        '<p>cada paciente e da região aplicada, podendo ocasionar:</p>' +
+        '<p>• Equimoses ou hematomas (manchamento no local da aplicação, transitório de 5 a 7 dias) e sangrame</p>' +
+        '<p>nto e/ou dor durante a injeção;</p>' +
+        '<p>• Reação alérgica na pele, hipersensibilidade e/ou dor no local aplicado por horas ou dias, a dep</p>' +
+        '<p>ender da região aplicada;</p>' +
+        '<p>• Sensação de franqueza ao mastigar e/ou diminuição na amplitude do sorriso;</p>' +
+        '<p>• Diminuição na largura da face em pacientes com os músculos masseteres e/ou temporais hiper</p>' +
+        '<p>trofiados;</p>' +
+        '<p>• Assimetria;</p>' +
+        '<p>Queda das pálpebras e/ou sobrancelhas (ptose), e/ou sensação de pálpebras inchadas;</p>' +
+        '<p>• Alargamento da área entre as sobrancelhas.</p>' +
+        '<p>Fui também claramente informado(a) a respeito das seguintes contraindicações e da previsibilidade do</p>' +
+        '<p>s tratamentos:</p>' +
+        '<p>• O tratamento não está indicado em caso de gravidez e/ou amamentação.</p>';
 
       const result = replaceTermVariables(brokenHtml, {});
-      expect(result).toContain('pelo(a) Dr.(a) guilherme');
-      expect(result).toContain('suas indicações e que o efeito da mesma inicia-se cerca de 48 horas');
-      expect(result).toContain('<ul><li>Equimoses ou hematomas;</li><li>Reação alérgica.</li></ul>');
+      expect(result).toContain('pelo(a) Dr.(a) guilherme barcelos');
+      expect(result).toContain('suas indicações e contraindicações');
+      expect(result).toContain('inicia-se');
+      expect(result).toContain('sangramento e/ou dor durante a injeção;');
+      expect(result).toContain('a depender da região aplicada;');
+      expect(result).toContain('hipertrofiados;');
+      expect(result).toContain('previsibilidade dos tratamentos:');
+      expect(result).toContain('<li>Queda das pálpebras e/ou sobrancelhas (ptose), e/ou sensação de pálpebras inchadas;</li>');
     });
   });
 });

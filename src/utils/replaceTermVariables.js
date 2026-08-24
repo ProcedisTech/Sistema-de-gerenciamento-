@@ -20,65 +20,112 @@ export function formatDateBR(isoDate) {
  */
 export function normalizeTermHtml(inputHtml) {
   if (!inputHtml) return '';
-  let str = String(inputHtml).trim();
+  const str = String(inputHtml).trim();
+  const hadHtmlTags = /<[a-z][\s\S]*>/i.test(str);
 
-  // Se não contém tags HTML, retorna string original
-  if (!/<[a-z][\s\S]*>/i.test(str)) {
+  if (!hadHtmlTags) {
     return str;
   }
 
-  // 1. Remove traços de hifenização de quebra de linha entre tags: "inicia-</p><p>se" -> "inicia-se"
-  str = str.replace(/([a-zA-Zá-úÁ-Ú])-+\s*<\/(?:p|div|span)>\s*<(?:p|div|span)[^>]*>\s*([a-zA-Zá-úÁ-Ú])/gi, '$1-$2');
+  // 1. Extrai todos os blocos de texto
+  const rawParagraphs = [];
+  const pRegex = /<(?:p|div|li)[^>]*>([\s\S]*?)<\/(?:p|div|li)>/gi;
+  let match;
+  while ((match = pRegex.exec(str)) !== null) {
+    const text = match[1].replace(/<br\s*\/?>/gi, '').trim();
+    if (text) rawParagraphs.push(text);
+  }
 
-  // 2. Corrige quebra de palavras puras sem hífen entre tags: "suas i</p><p>ndicações" ou "sangrame</p><p>nto" ou "hipertrofiad</p><p>os"
-  str = str.replace(/([a-zA-Zá-úÁ-Ú]{1,15})\s*<\/(?:p|div|span)>\s*<(?:p|div|span)[^>]*>\s*([a-zA-Zá-úÁ-Ú]{1,15}(?:[;,.]|\s|$))/gi, (match, p1, p2) => {
-    if (/^(ndicações|iminuição|tologia|nto|os;|da|se|mente)/i.test(p2) || p1.length <= 2) {
-      return `${p1}${p2}`;
+  if (rawParagraphs.length === 0) {
+    const lines = str.split('\n');
+    for (const l of lines) {
+      if (l.trim()) rawParagraphs.push(l.trim());
     }
-    return `${p1} ${p2}`;
-  });
+  }
 
-  // 3. Corrige pontuação órfã no início de parágrafo: "</p><p>.(a)" ou "</p><p>. A" ou "</p><p>, e"
-  str = str.replace(/<\/(?:p|div)>\s*<(?:p|div)[^>]*>\s*([.,;:(/])/gi, '$1');
+  // 2. Primeiro passe: une palavras quebradas e pontuação órfã
+  const fixedLines = [];
+  for (let i = 0; i < rawParagraphs.length; i++) {
+    let line = rawParagraphs[i].trim();
 
-  // 4. Corrige marcadores isolados: "<p>-</p><p>Texto" ou "<p>- </p><p>Texto" -> "<li>Texto</li>"
-  str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s*<\/(?:p|div)>\s*<(?:p|div)[^>]*>(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
+    if (fixedLines.length > 0) {
+      const prev = fixedLines[fixedLines.length - 1];
 
-  // 5. Converte parágrafos iniciados com traço ou bullet OU terminados em ';' em <li>
-  str = str.replace(/<(?:p|div)[^>]*>\s*[-•]\s*(.*?)<\/(?:p|div)>/gi, '<li>$1</li>');
-  str = str.replace(/<(?:p|div)[^>]*>\s*([a-zA-Zá-úÁ-Ú][^<]*;)\s*<\/(?:p|div)>/gi, '<li>$1</li>');
-
-  // 6. Envolve sequências de <li> em <ul>...</ul>
-  str = str.replace(/(?:<li>[\s\S]*?<\/li>\s*)+/gi, (match) => `<ul>${match}</ul>`);
-
-  // 7. Junta parágrafos quebrados no meio de frases normais (mas NUNCA junta títulos em caixa alta nem linhas que terminam em : ou .)
-  str = str.replace(/<p>(.*?)<\/p>\s*<p>(.*?)<\/p>/gi, (match, p1, p2) => {
-    const t1 = p1.trim();
-    const t2 = p2.trim();
-    if (!t1 || !t2) return match;
-
-    // Se t1 é um título em caixa alta (ex: TERMO DE CONSENTIMENTO...), não junta
-    const isT1Upper = t1.length > 5 && t1 === t1.toUpperCase();
-    if (isT1Upper) return match;
-
-    // Se t1 termina com pontuação terminal (. : ! ?), não junta
-    if (/[.:!?]$/.test(t1) || t1.endsWith('</li>') || t1.endsWith('</ul>')) return match;
-
-    // Se t2 começa com marcador de lista
-    if (/^[-•]/.test(t2) || t2.startsWith('<li>') || t2.startsWith('<ul>')) return match;
-
-    // Se t2 começa com pontuação órfã (ex: ".(a)", ". A", ", e") ou palavra continuação
-    if (/^[.,;:(/]/.test(t2) || /^[a-zá-ú]/.test(t2)) {
-      return `<p>${t1} ${t2}</p>`;
+      // Caso 1: Dr + .(a)
+      if (/(\b(Dr|Dra|Prof|Profa|Sr|Sra))\s*$/i.test(prev) && /^\.\(a\)/i.test(line)) {
+        fixedLines[fixedLines.length - 1] = prev + line;
+        continue;
+      }
+      // Caso 2: Ponto / vírgula órfão no início da linha (. A indicação, etc)
+      if (/^[.,;:]\s*[A-ZÁ-Ú0-9]/.test(line) && !prev.endsWith('.')) {
+        fixedLines[fixedLines.length - 1] = prev + line;
+        continue;
+      }
+      // Caso 3: Palavras cortadas ao meio com hífen
+      if (prev.endsWith('-')) {
+        fixedLines[fixedLines.length - 1] = prev.slice(0, -1) + '-' + line;
+        continue;
+      }
+      // Caso 4: Palavras cortadas ao meio sem hífen (san + gramento, sangrame + nto, dep + ender, hiper + trofiados, hipertrofiad + os;)
+      if (/(\b(san|sangrame|dep|hiper|hipertrofiad))\s*$/i.test(prev) && /^(gramento|nto\b|ender|trofiados|os;)/i.test(line)) {
+        fixedLines[fixedLines.length - 1] = prev + line;
+        continue;
+      }
+      if (/(\b(suas\s+i|e\s+d|da\s+pa))\s*$/i.test(prev) && /^(ndicações|iminuição|tologia)/i.test(line)) {
+        fixedLines[fixedLines.length - 1] = prev + line;
+        continue;
+      }
+      if (/\bdo\s*$/i.test(prev) && /^s\s+tratamentos/i.test(line)) {
+        fixedLines[fixedLines.length - 1] = prev + line;
+        continue;
+      }
+      // Caso 5: Se o prev era um item de lista finalizado com ';' e line não tem bullet, line é um NOVO item de lista!
+      if (/^[-•*]/.test(prev) && prev.endsWith(';') && !/^[-•*]/.test(line) && !line.endsWith(':') && line !== line.toUpperCase()) {
+        fixedLines.push('• ' + line);
+        continue;
+      }
+      // Caso 6: Se o prev é um item de lista e line é a continuação dele (antes de ponto e vírgula)
+      if (/^[-•*]/.test(prev) && !prev.endsWith(';') && !prev.endsWith('.') && !/^[-•*]/.test(line) && !line.endsWith(':') && line !== line.toUpperCase()) {
+        fixedLines[fixedLines.length - 1] = prev + ' ' + line;
+        continue;
+      }
+      // Caso 7: Se prev não termina com pontuação forte (. : ! ?) e line é continuação de frase
+      if (!/[.:!?]$/.test(prev) && !/^[-•*]/.test(prev) && !/^[-•*]/.test(line) && prev !== prev.toUpperCase() && line !== line.toUpperCase()) {
+        fixedLines[fixedLines.length - 1] = prev + ' ' + line;
+        continue;
+      }
     }
 
-    return match;
-  });
+    fixedLines.push(line);
+  }
 
-  // 8. Limpa duplicações de <ul> aninhadas
-  str = str.replace(/<ul>\s*<ul>/gi, '<ul>').replace(/<\/ul>\s*<\/ul>/gi, '</ul>');
+  // 3. Segundo passe: organiza em parágrafos e listas HTML
+  const blocks = [];
+  let currentList = [];
 
-  return str;
+  const flushList = () => {
+    if (currentList.length > 0) {
+      blocks.push(`<ul>${currentList.map((item) => `<li>${item}</li>`).join('')}</ul>`);
+      currentList = [];
+    }
+  };
+
+  for (const line of fixedLines) {
+    if (/^[-•*]/.test(line)) {
+      const item = line.replace(/^[-•*]\s*/, '').trim();
+      currentList.push(item);
+    } else {
+      flushList();
+      if (line.length > 6 && line === line.toUpperCase()) {
+        blocks.push(`<p><strong>${line}</strong></p>`);
+      } else {
+        blocks.push(`<p>${line}</p>`);
+      }
+    }
+  }
+
+  flushList();
+  return blocks.join('');
 }
 
 export function replaceTermVariables(html, ctx) {
