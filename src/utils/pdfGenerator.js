@@ -14,11 +14,11 @@ export const generateTermoPdf = async ({
   profissionalCtx
 }) => {
   const doc = new jsPDF('p', 'mm', 'a4');
-  const margin = 20;
+  const margin = 15;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const maxWidth = pageWidth - margin * 2;
-  const maxPageY = pageHeight - 16; // Margem inferior de segurança (reserva rodapé e numeração)
+  const maxPageY = pageHeight - 11; // Margem inferior de segurança (reserva rodapé e numeração)
   const TEAL = [0, 168, 142];
   
   const clinica = clinicaCtx || {};
@@ -37,39 +37,39 @@ export const generateTermoPdf = async ({
   const contatoPaciente = pac.telefone || pac.phone || pac.telefoneNumero || '[Telefone do Paciente]';
 
   // Cabeçalho Página 1 (Banner Teal)
-  const headerHeight = 24;
+  const headerHeight = 20;
   doc.setFillColor(TEAL[0], TEAL[1], TEAL[2]);
   doc.rect(0, 0, pageWidth, headerHeight, 'F');
 
   // Logo Quadrado Branco
   doc.setDrawColor(255, 255, 255);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, 7, 10, 10, 1.5, 1.5, 'D');
+  doc.setLineWidth(0.4);
+  doc.roundedRect(margin, 5.5, 9, 9, 1.2, 1.2, 'D');
 
-  const startX = margin + 14;
-  let yQualif = 9;
+  const startX = margin + 12;
+  let yQualif = 7.5;
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   
   doc.setFont('helvetica', 'bold');
   doc.text('CLÍNICA:', startX, yQualif);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${nomeClinica} — ${enderecoClinica} — Contato: ${contatoClinica}`, startX + 14, yQualif);
+  doc.text(`${nomeClinica} — ${enderecoClinica} — Contato: ${contatoClinica}`, startX + 13, yQualif);
   
-  yQualif += 4.5;
+  yQualif += 4.0;
   doc.setFont('helvetica', 'bold');
   doc.text('PROFISSIONAL:', startX, yQualif);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${nomeProfissional} — Registro/CPF: ${cpfCrmProfissional}`, startX + 24, yQualif);
+  doc.text(`${nomeProfissional} — Registro/CPF: ${cpfCrmProfissional}`, startX + 22, yQualif);
   
-  yQualif += 4.5;
+  yQualif += 4.0;
   doc.setFont('helvetica', 'bold');
   doc.text('PACIENTE:', startX, yQualif);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${nomePaciente} — CPF: ${cpfPaciente} — Contato: ${contatoPaciente}`, startX + 16, yQualif);
+  doc.text(`${nomePaciente} — CPF: ${cpfPaciente} — Contato: ${contatoPaciente}`, startX + 15, yQualif);
 
   // Faixa do Título
-  const bannerHeight = 11;
+  const bannerHeight = 8.5;
   doc.setFillColor(240, 253, 250); 
   doc.rect(0, headerHeight, pageWidth, bannerHeight, 'F');
   doc.setDrawColor(226, 232, 240); 
@@ -77,23 +77,23 @@ export const generateTermoPdf = async ({
   doc.line(0, headerHeight + bannerHeight, pageWidth, headerHeight + bannerHeight);
 
   doc.setTextColor(15, 23, 42); 
-  doc.setFontSize(10.5);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   const titleText = (titulo || 'Termo de Consentimento LGPD').toUpperCase();
   const titleWidth = doc.getTextWidth(titleText);
-  doc.text(titleText, (pageWidth - titleWidth) / 2, headerHeight + 7);
+  doc.text(titleText, (pageWidth - titleWidth) / 2, headerHeight + 5.8);
 
-  let y = headerHeight + bannerHeight + 8; 
+  let y = headerHeight + bannerHeight + 5; 
 
   const addContinuationPage = () => {
     doc.addPage();
     doc.setFillColor(TEAL[0], TEAL[1], TEAL[2]);
-    doc.rect(0, 0, pageWidth, 7, 'F');
-    doc.setFontSize(7.5);
+    doc.rect(0, 0, pageWidth, 6, 'F');
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(255, 255, 255);
-    doc.text(`Procedi · ${(titulo || 'Termo de Consentimento').substring(0, 50)} (continuação)`, margin, 5);
-    y = 15;
+    doc.text(`Procedi · ${(titulo || 'Termo de Consentimento').substring(0, 50)} (continuação)`, margin, 4.2);
+    y = 12;
     doc.setTextColor(30, 41, 59);
   };
 
@@ -203,14 +203,14 @@ export const generateTermoPdf = async ({
 
   // Medição precisa de parágrafos para controle de paginação editorial
   const measuredParagraphs = finalParagraphs.map(p => {
-    const indentOffset = (p.indent || 0) * 6;
+    const indentOffset = (p.indent || 0) * 5;
     const availableWidth = Math.max(50, maxWidth - indentOffset);
     const fullText = p.segments.map(s => s.text).join('');
     const fontFamily = p.isCode ? 'courier' : 'helvetica';
     const fontStyle = p.isHeading ? 'bold' : (p.isBlockquote ? 'italic' : 'normal');
-    const fontSize = p.isHeading ? 11.5 : (p.isCode ? 9 : 9.8);
-    const lineHeight = p.isHeading ? 6.0 : (p.isCode ? 4.5 : 4.8);
-    const marginBottom = p.isHeading ? 2.5 : 3.0;
+    const fontSize = p.isHeading ? 10.5 : (p.isCode ? 8.5 : 8.8);
+    const lineHeight = p.isHeading ? 5.2 : (p.isCode ? 4.0 : 4.1);
+    const marginBottom = p.isHeading ? 2.0 : 1.8;
 
     doc.setFont(fontFamily, fontStyle);
     doc.setFontSize(fontSize);
@@ -235,11 +235,11 @@ export const generateTermoPdf = async ({
   });
 
   // Dimensões do Bloco de Assinatura
-  const sigWidth = 76;
-  const sigHeight = 26;
+  const sigWidth = 74;
+  const sigHeight = 18;
   const sigGap = maxWidth - sigWidth * 2; // Espaço exato entre as duas colunas
   const hasAuditMetadata = Boolean(metadados?.dataHora || metadados?.ipAddress);
-  const sigBlockHeight = sigHeight + 12 + (hasAuditMetadata ? 14 : 0) + 8; // Assinaturas + labels + stamp + respiro
+  const sigBlockHeight = sigHeight + 10 + (hasAuditMetadata ? 11 : 0) + 4; // Assinaturas + labels + stamp + respiro
 
   // Renderização com REGRA DE NEGÓCIO ANTI-ORFANATO:
   // As assinaturas NUNCA podem ficar isoladas na página seguinte sem texto contratual acima.
@@ -362,7 +362,7 @@ export const generateTermoPdf = async ({
   });
 
   // Espaço antes do bloco de assinaturas
-  y += 4;
+  y += 3;
   if (y + sigBlockHeight > maxPageY) {
     addContinuationPage();
   }
@@ -379,7 +379,7 @@ export const generateTermoPdf = async ({
   } else if (metadados?.statusCodigo === 'RECUSADO' || metadados?.recusado || metadados?.recusadoEm) {
     doc.setTextColor(220, 38, 38);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
+    doc.setFontSize(9.5);
     const carimbo = metadados?.recusadoEm
       ? `RECUSADO PELO PACIENTE — ${metadados.recusadoEm}`
       : 'RECUSADO PELO PACIENTE';
@@ -402,38 +402,38 @@ export const generateTermoPdf = async ({
     doc.line(rightColX, y + sigHeight - 2, rightColX + sigWidth, y + sigHeight - 2);
   }
 
-  y += sigHeight + 3;
+  y += sigHeight + 2.5;
 
   // Linhas de identificação (Nome e Documento)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
   doc.text(nomePaciente, leftColX, y);
   doc.text(nomeProfissional, rightColX, y);
 
-  y += 4;
+  y += 3.5;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
   doc.text(`Paciente · CPF: ${cpfPaciente}`, leftColX, y);
   doc.text(`Profissional · Registro/CPF: ${cpfCrmProfissional}`, rightColX, y);
 
   // 3. Selo / Card de Auditoria e Autenticidade Digital
   if (hasAuditMetadata) {
-    y += 7;
+    y += 5;
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
-    doc.roundedRect(margin, y, maxWidth, 9, 1.5, 1.5, 'FD');
+    doc.roundedRect(margin, y, maxWidth, 7.5, 1.2, 1.2, 'FD');
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(71, 85, 105);
 
     let auditLine = 'Documento assinado eletronicamente com validade jurídica (MP nº 2.200-2/2001).';
     if (metadados?.dataHora) auditLine += ` Data/Hora: ${metadados.dataHora}.`;
     if (metadados?.ipAddress) auditLine += ` IP de Origem: ${metadados.ipAddress}.`;
-    doc.text(auditLine, margin + 4, y + 5.5);
+    doc.text(auditLine, margin + 3, y + 4.8);
   }
 
   // 4. Numeração e Rodapé Global em Todas as Páginas (Página X de Y)
@@ -442,15 +442,15 @@ export const generateTermoPdf = async ({
     doc.setPage(p);
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
-    doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    doc.line(margin, pageHeight - 8, pageWidth - margin, pageHeight - 8);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text('Procedi · Termo de Consentimento Informado', margin, pageHeight - 6);
+    doc.text('Procedi · Termo de Consentimento Informado', margin, pageHeight - 4.5);
 
     const pageStr = `Página ${p} de ${totalPages}`;
-    doc.text(pageStr, pageWidth - margin - doc.getTextWidth(pageStr), pageHeight - 6);
+    doc.text(pageStr, pageWidth - margin - doc.getTextWidth(pageStr), pageHeight - 4.5);
   }
 
   doc.save(fileName);
