@@ -60,12 +60,38 @@ const INTRO_BASICA =
 const INTRO_LGPD =
   '<p>Eu, [NOME DO PACIENTE], portador(a) do CPF nº [CPF DO PACIENTE], declaro por meio deste termo que autorizo a clínica [NOME DA CLÍNICA], inscrita no CNPJ sob o nº [CNPJ DA CLÍNICA], a realizar o tratamento dos meus dados pessoais em conformidade com a LGPD (Lei nº 13.709/2018):</p>';
 
-/** Converte texto puro (linhas separadas por \n) num HTML com cada linha em seu próprio <p>. */
+/** Converte texto puro (linhas separadas por \n) num HTML semântico com <p> e <ul><li> para itens com marcador. */
 function paragraphizeTemplate(bruto) {
-  return bruto
-    .split('\n')
-    .map((p) => (p.trim() ? `<p>${p}</p>` : '<p><br></p>'))
-    .join('');
+  if (!bruto) return '';
+  const lines = String(bruto).split('\n');
+  const result = [];
+  let currentList = [];
+
+  const flushList = () => {
+    if (currentList.length > 0) {
+      result.push(`<ul>${currentList.map((item) => `<li>${item}</li>`).join('')}</ul>`);
+      currentList = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      result.push('<p><br></p>');
+      continue;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+      currentList.push(trimmed.replace(/^[-•]\s*/, ''));
+    } else {
+      flushList();
+      result.push(`<p>${trimmed}</p>`);
+    }
+  }
+
+  flushList();
+  return result.join('');
 }
 
 const TCLE_TOXINA_TEMPLATE_BRUTO = `TERMO DE CONSENTIMENTO LIVRE E ESCLARECIDO — TOXINA BOTULÍNICA

@@ -42,7 +42,7 @@ export function TermoVisualizacao({
   const temConteudoTexto = conteudoSanitizado.length > 0;
 
   return (
-    <div className="termo-folha mx-auto overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white shadow-xl ring-1 ring-slate-900/5">
+    <div className="termo-folha termo-folha--view mx-auto overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white shadow-xl ring-1 ring-slate-900/5">
       {/* Cabeçalho de Qualificação (Teal Banner) */}
       <div className="flex flex-col gap-3 bg-[#00a88e] px-6 py-4 sm:flex-row sm:items-center">
         <div className="flex shrink-0 items-center justify-center">
@@ -75,11 +75,17 @@ export function TermoVisualizacao({
       </div>
 
       {/* Corpo do Documento */}
-      <div className="px-6 py-8 sm:px-12 sm:py-10">
+      <div className="px-8 py-8 sm:px-14 sm:py-10 text-[14px] text-[#1e293b]">
         {temConteudoTexto ? (
           <div className="ql-snow">
             <div
-              className="ql-editor p-0 prose prose-slate max-w-none text-[14px] leading-relaxed text-[#1e293b] space-y-3"
+              className="ql-editor !p-0 !min-h-0 text-[14px] leading-relaxed text-[#1e293b]"
+              style={{
+                wordBreak: 'normal',
+                overflowWrap: 'break-word',
+                hyphens: 'manual',
+                whiteSpace: 'normal',
+              }}
               dangerouslySetInnerHTML={{ __html: conteudoSanitizado }}
             />
           </div>
