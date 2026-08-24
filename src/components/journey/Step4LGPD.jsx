@@ -49,6 +49,7 @@ import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.js
 import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
+import { replaceTermVariables } from '../../utils/replaceTermVariables';
 import { ViewportDialog } from '../shared/ViewportDialog.jsx';
 
 
@@ -485,7 +486,13 @@ export function Step3Termos({
     let assinaturaId = backendAssinaturaId;
     if (!assinaturaId) {
       try {
-        const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
+        const rawConteudo = String(conteudoExibicao || '').trim();
+        const conteudoSnapshot = replaceTermVariables(rawConteudo, {
+          pac: pacienteCtx,
+          clinica: clinicaCtx,
+          prof: profissionalCtx,
+          procedimento: procNomeExibicao,
+        }) || rawConteudo || null;
         let ipAddress = null;
         try {
           const res = await fetch('https://api.ipify.org?format=json');
@@ -607,7 +614,13 @@ export function Step3Termos({
     const salvar = async () => {
       try {
         setAssinaturaPersistida(true);
-        const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
+        const rawConteudo = String(conteudoExibicao || '').trim();
+        const conteudoSnapshot = replaceTermVariables(rawConteudo, {
+          pac: pacienteCtx,
+          clinica: clinicaCtx,
+          prof: profissionalCtx,
+          procedimento: procNomeExibicao,
+        }) || rawConteudo || null;
 
         let ipAddress = null;
         try {

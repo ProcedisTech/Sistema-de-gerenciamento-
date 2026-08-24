@@ -56,7 +56,8 @@ export function PublicSignatureFlow() {
         telefone: data.pacienteContato,
       },
       clinica: { nome: data.clinicaNome, cnpj: data.clinicaCnpj },
-      prof: { nome: data.profissionalNome }
+      prof: { nome: data.profissionalNome },
+      procedimento: data.procedimentoNome || ''
     });
 
     setDocumentoConteudo(conteudo);
