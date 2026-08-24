@@ -51,7 +51,7 @@ export const SECNUM =
   'grid h-6 w-6 shrink-0 place-items-center rounded-[7px] border border-teal-200 bg-teal-50 text-[11.5px] font-bold text-teal-700';
 
 export const SECNAME =
-  'secname min-w-0 max-w-full flex-1 border-0 bg-transparent px-1 py-0.5 text-base font-semibold tracking-[-0.015em] text-[#0f172a] outline-none focus:bg-teal-50 placeholder:font-medium placeholder:text-[#cbd5e1] sm:min-w-[120px] sm:flex-none';
+  'secname min-w-0 max-w-full flex-1 border-0 bg-transparent px-1 py-0.5 text-base font-semibold tracking-[-0.015em] text-[#0f172a] outline-none focus:bg-teal-50 placeholder:font-medium placeholder:text-[#cbd5e1] sm:min-w-[120px]';
 
 export const WHOBTN =
   'inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full border border-dashed border-[#cbd5e1] bg-transparent px-2.5 py-1.5 text-[11px] font-semibold text-[#64748b] transition-all hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-[0.42] sm:min-h-0 sm:py-1';

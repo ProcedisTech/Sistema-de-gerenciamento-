@@ -15,6 +15,7 @@ import {
   PrioridadeSegmented,
 } from './HabitoModalShell';
 import { tipoLabel } from './anamneseTipoLabels';
+import { ehTipoPaiCondicional } from './anamneseCondicional.js';
 import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -392,7 +393,7 @@ export function PerguntasCategoriasPanel() {
     () =>
       Object.values(perguntasPorCat)
         .flat()
-        .filter((p) => p.tipoResposta === 'sim_nao_naosei'),
+        .filter((p) => ehTipoPaiCondicional(p.tipoResposta)),
     [perguntasPorCat],
   );
 
