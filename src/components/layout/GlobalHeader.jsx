@@ -8,6 +8,7 @@ import { ProcediSymbol } from './ProcediSymbol.jsx';
 /**
  * @param {{
  *   activeView: string,
+ *   pageSlot?: React.ReactNode,
  *   onPatientSelect?: (patient: object) => void,
  *   onNovoPaciente?: () => void,
  *   onAgendamento?: () => void,
@@ -19,6 +20,7 @@ import { ProcediSymbol } from './ProcediSymbol.jsx';
  */
 export function GlobalHeader({
   activeView,
+  pageSlot,
   onPatientSelect,
   onNovoPaciente,
   onAgendamento,
@@ -82,7 +84,17 @@ export function GlobalHeader({
       {/* Desktop */}
       <header className="sticky top-0 z-30 hidden shrink-0 border-b border-app-border bg-white/95 backdrop-blur-sm lg:flex">
         <div className="flex w-full items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
-          {brandBlock}
+          <div className="flex shrink-0 items-center gap-3">
+            {brandBlock}
+            {pageSlot ? (
+              <>
+                <div className="h-4 w-px bg-[#e2e8f0] shrink-0" aria-hidden="true" />
+                <div className="hidden items-center min-w-0 lg:flex">
+                  {pageSlot}
+                </div>
+              </>
+            ) : null}
+          </div>
           {searchSlot}
 
           <div className="flex shrink-0 items-center gap-2">
