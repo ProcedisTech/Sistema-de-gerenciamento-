@@ -41,10 +41,30 @@ export const generateTermoPdf = async ({
   doc.setFillColor(TEAL[0], TEAL[1], TEAL[2]);
   doc.rect(0, 0, pageWidth, headerHeight, 'F');
 
-  // Logo Quadrado Branco
+  // Logo Quadrado Branco com Ícone de Escudo (Shield)
   doc.setDrawColor(255, 255, 255);
   doc.setLineWidth(0.4);
   doc.roundedRect(margin, 5.5, 9, 9, 1.2, 1.2, 'D');
+
+  // Ícone de Escudo Vetorial (Lucide Shield)
+  const shieldCenterX = margin + 4.5;
+  const shieldCenterY = 10.0;
+  const sw = 2.4;
+  const topSy = shieldCenterY - 2.3;
+  const midSy = shieldCenterY + 0.2;
+  const botSy = shieldCenterY + 2.4;
+
+  doc.setLineWidth(0.5);
+  doc.setLineCap('round');
+  doc.setLineJoin('round');
+  doc.line(shieldCenterX - sw, topSy + 0.7, shieldCenterX, topSy);
+  doc.line(shieldCenterX, topSy, shieldCenterX + sw, topSy + 0.7);
+  doc.line(shieldCenterX + sw, topSy + 0.7, shieldCenterX + sw, midSy);
+  doc.line(shieldCenterX + sw, midSy, shieldCenterX + sw * 0.7, shieldCenterY + 1.5);
+  doc.line(shieldCenterX + sw * 0.7, shieldCenterY + 1.5, shieldCenterX, botSy);
+  doc.line(shieldCenterX, botSy, shieldCenterX - sw * 0.7, shieldCenterY + 1.5);
+  doc.line(shieldCenterX - sw * 0.7, shieldCenterY + 1.5, shieldCenterX - sw, midSy);
+  doc.line(shieldCenterX - sw, midSy, shieldCenterX - sw, topSy + 0.7);
 
   const startX = margin + 12;
   let yQualif = 7.5;
