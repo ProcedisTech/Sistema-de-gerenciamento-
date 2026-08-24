@@ -162,7 +162,7 @@ export function normalizeTermHtml(inputHtml) {
 
 export function replaceTermVariables(html, ctx) {
   if (!html) return '';
-  let out = normalizeTermHtml(String(html));
+  let out = String(html);
 
   const { pac = {}, clinica = {}, prof = {} } = ctx || {};
 
@@ -174,26 +174,26 @@ export function replaceTermVariables(html, ctx) {
     { name: 'TELEFONE DO PACIENTE', value: pac.telefone },
     { name: 'NOME DA CLÍNICA', value: clinica.nome },
     { name: 'CNPJ DA CLÍNICA', value: clinica.cnpj },
-    { name: 'NOME DO PROFISSIONAL', value: prof.nome || prof.nomeCompleto }
+    { name: 'NOME DO PROFISSIONAL', value: prof.nome || prof.nomeCompleto },
   ];
 
+  // 1. Substitui variáveis primeiro (para que os placeholders com colchetes não interfiram no dewrap)
   for (const v of vars) {
     const val = v.value;
     if (!val) continue;
 
-    // 1. Regex Robusto
     const varPattern = v.name.replace(/\s+/g, '').split('').join('(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*');
-    const complexRegex = new RegExp(`(\\[|&#91;)(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*${varPattern}(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*(\\]|&#93;)`, 'gi');
+    const complexRegex = new RegExp(
+      `(\\[|&#91;)(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*${varPattern}(?:<[^>]*>|&nbsp;|[\\s\\u200B\\uFEFF])*(\\]|&#93;)`,
+      'gi',
+    );
     out = out.replace(complexRegex, val);
 
-    // 2. Fallbacks Literais Simples
     out = out.replace(new RegExp(`\\[${v.name}\\]`, 'gi'), val);
     out = out.replace(new RegExp(`&#91;${v.name}&#93;`, 'gi'), val);
   }
 
-  // Fallback e limpeza graciosa para termos legados:
-  // Se o termo legado continha [RG DO PACIENTE] e o paciente não tem RG cadastrado (ou fluxo remoto/OTP),
-  // removemos o token e prefixos gramaticais para evitar vazamento de placeholders crus em documentos jurídicos.
+  // 2. Limpeza graciosa de tokens de RG não preenchidos
   if (!pac.rg) {
     out = out.replace(/portador(\(a\))?\s+do\s+RG\s+(\[|&#91;)RG DO PACIENTE(\]|&#93;)\s+e\s+/gi, 'portador$1 do ');
     out = out.replace(/portador(\(a\))?\s+do\s+RG\s+(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, 'portador$1');
@@ -201,6 +201,9 @@ export function replaceTermVariables(html, ctx) {
     out = out.replace(/RG\s+(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, '');
     out = out.replace(/(\[|&#91;)RG DO PACIENTE(\]|&#93;)/gi, '');
   }
+
+  // 3. Executa de-wrapping e normalização semântica
+  out = normalizeTermHtml(out);
 
   return out;
 }

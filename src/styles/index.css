@@ -499,6 +499,8 @@
     margin-bottom: 0.65rem;
     line-height: 1.6;
     text-align: justify;
+    text-align-last: left;
+    text-justify: inter-word;
   }
 
   .termo-folha .ql-editor ul {
