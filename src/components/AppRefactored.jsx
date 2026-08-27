@@ -3293,23 +3293,24 @@ function AppRefactoredInner() {
         setLoteProcedimentosFeitosIds(novosIdsValidos);
         const dataRefSessao = toLocalISODate(new Date());
 
-        for (let i = 0; i < novosIdsValidos.length; i++) {
-          const pid = novosIdsValidos[i];
-          const proc = journeyState.procedimentosSessao[i] || {};
+        await Promise.all(
+          novosIdsValidos.map(async (pid, i) => {
+            const proc = journeyState.procedimentosSessao[i] || {};
 
-          // Para o índice ativo, usa os valores capturados sincronamente acima
-          // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
-          const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
-          if (snap) {
-            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-            await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
-          }
+            // Para o índice ativo, usa os valores capturados sincronamente acima
+            // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
+            const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
+            if (snap) {
+              const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+              await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
+            }
 
-          const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
-          if (photos.length > 0) {
-            await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
-          }
-        }
+            const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
+            if (photos.length > 0) {
+              await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
+            }
+          })
+        );
 
         let respostasDoLote = [];
         if (!isApenasSair) {
