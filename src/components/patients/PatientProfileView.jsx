@@ -536,26 +536,27 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
     if (!pacienteId) return;
     setLoading(true);
     anamneseApi.listPaciente(pacienteId)
-      .then(async (data) => {
+      .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setAnamneses(list);
-
-        const detMap = {};
-        const results = await Promise.all(
-          list.map((an) =>
-            anamneseApi.getPaciente(pacienteId, an.id)
-              .then((det) => ({ id: an.id, det }))
-              .catch(() => ({ id: an.id, det: null }))
-          )
-        );
-        results.forEach(({ id, det }) => { if (det) detMap[id] = det; });
-        setDetalhes(detMap);
-
         if (list.length > 0) setSelectedId(list[0].id);
       })
       .catch((err) => console.warn('Erro ao buscar anamneses:', err.message))
       .finally(() => setLoading(false));
   }, [pacienteId]);
+
+  useEffect(() => {
+    if (!pacienteId || !selectedId) return;
+    if (detalhes[selectedId]) return;
+
+    anamneseApi.getPaciente(pacienteId, selectedId)
+      .then((det) => {
+        if (det) {
+          setDetalhes((prev) => ({ ...prev, [selectedId]: det }));
+        }
+      })
+      .catch((err) => console.warn('Erro ao carregar detalhe da anamnese:', err?.message));
+  }, [pacienteId, selectedId, detalhes]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -1819,9 +1820,11 @@ export function PatientProfileView({
       setApiGaleriaItems([]);
       return undefined;
     }
+    if (patientDetailTab !== 'galeria' && patientDetailTab !== 'geral') {
+      return undefined;
+    }
     let cancelled = false;
     setGaleriaBackend('loading');
-    setApiGaleriaItems([]);
     (async () => {
       try {
         const data = await pacientesGaleriaApi.list(id);
@@ -1842,7 +1845,7 @@ export function PatientProfileView({
     return () => {
       cancelled = true;
     };
-  }, [selectedPatient?.id, patientListBump]);
+  }, [selectedPatient?.id, patientListBump, patientDetailTab]);
 
   // Refresh silencioso da galeria a cada 45 minutos (2700000ms)
   // Evita que URLs pré-assinadas com TTL de 1 hora expirem durante uso prolongado
