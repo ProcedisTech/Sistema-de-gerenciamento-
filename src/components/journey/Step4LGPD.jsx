@@ -49,8 +49,6 @@ import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.js
 import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
-import { replaceTermVariables } from '../../utils/replaceTermVariables';
-import { ViewportDialog } from '../shared/ViewportDialog.jsx';
 
 
 
@@ -263,125 +261,6 @@ export function SignatureFullscreenModal({
   );
 }
 
-/** Modal para vincular procedimento ao termo caso nao haja procedimento definido */
-export function VincularProcedimentoModal({
-  open,
-  onClose,
-  termoTitulo,
-  onSelectProcedimento,
-}) {
-  const { options: catalogoOptions } = useProcedimentosOptions();
-  const [busca, setBusca] = useState('');
-  const [customNome, setCustomNome] = useState('');
-
-  const opcoesFiltradas = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    if (!q) return catalogoOptions;
-    return catalogoOptions.filter((o) =>
-      String(o.nomeProcedimento || '').toLowerCase().includes(q)
-    );
-  }, [catalogoOptions, busca]);
-
-  const handleSelect = (nome, id) => {
-    if (!nome || !nome.trim()) return;
-    onSelectProcedimento(nome.trim(), id);
-  };
-
-  const handleCustomConfirm = () => {
-    if (!customNome.trim()) return;
-    onSelectProcedimento(customNome.trim(), null);
-  };
-
-  return (
-    <ViewportDialog open={open} onDismiss={onClose} titleId="vincular-procedimento-title">
-      <div className="flex items-center gap-2 border-b border-[#e2e8f0] px-5 py-4">
-        <Stethoscope className="h-5 w-5 text-[#00a88e]" />
-        <h2 id="vincular-procedimento-title" className="text-[16px] font-bold text-[#0f172a]">
-          Vincular Procedimento ao Termo
-        </h2>
-      </div>
-
-      <div className="px-5 py-4 space-y-4">
-        <p className="text-[13px] text-[#64748b]">
-          O termo <strong>{termoTitulo || 'selecionado'}</strong> necessita da indicação do procedimento a ser realizado. Selecione do catálogo da clínica ou digite abaixo:
-        </p>
-
-        <div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar procedimento do catálogo..."
-              className="w-full rounded-xl border border-[#e2e8f0] py-2 pl-9 pr-3 text-[13px] outline-none focus:border-[#00a88e]"
-            />
-          </div>
-
-          <div className="mt-2 max-h-[32vh] space-y-1 overflow-y-auto pr-1">
-            {opcoesFiltradas.length === 0 ? (
-              <p className="py-2 text-center text-[12px] text-[#94a3b8]">
-                Nenhum procedimento encontrado na busca.
-              </p>
-            ) : (
-              opcoesFiltradas.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => handleSelect(opt.nomeProcedimento, opt.id)}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] text-[#334155] hover:bg-[#f0fdfa] hover:text-[#00a88e] transition-colors"
-                >
-                  <span className="font-medium">{opt.nomeProcedimento}</span>
-                  <span className="text-[11px] text-[#94a3b8]">Selecionar →</span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="border-t border-[#e2e8f0] pt-3">
-          <label className="block text-[12px] font-semibold text-[#475569] mb-1">
-            Ou digite um procedimento personalizado:
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={customNome}
-              onChange={(e) => setCustomNome(e.target.value)}
-              placeholder="Ex: Rinomodelação, Peeling de Fenol..."
-              className="flex-1 rounded-xl border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#00a88e]"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleCustomConfirm();
-                }
-              }}
-            />
-            <button
-              type="button"
-              disabled={!customNome.trim()}
-              onClick={handleCustomConfirm}
-              className="rounded-xl bg-[#00a88e] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-40"
-            >
-              Usar
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3 bg-[#f8fafc]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-xl border border-[#e2e8f0] bg-white px-4 py-2 text-[13px] font-semibold text-[#64748b] hover:bg-slate-50"
-        >
-          Pular / Não especificar agora
-        </button>
-      </div>
-    </ViewportDialog>
-  );
-}
-
 export function Step3Termos({
   _termoLido,
   setTermoLido,
@@ -406,11 +285,6 @@ export function Step3Termos({
   pacienteCtx,
   clinicaCtx,
   profissionalCtx,
-  procedimentoCtx,
-  nomeProcedimento = '',
-  setNomeProcedimento,
-  setNomeProcedimentoCatalogoId,
-  procedimentos = [],
   onConcluir,
   catalogoIds = [],
   exigirFilaVinculo = true,
@@ -418,10 +292,6 @@ export function Step3Termos({
   onAbrirMetodosAssinatura,
 }) {
   const toast = useToast();
-  const [localNomeProcedimento, setLocalNomeProcedimento] = useState('');
-  const [showVincularProcedimentoModal, setShowVincularProcedimentoModal] = useState(false);
-  const procNomeExibicao = (localNomeProcedimento || nomeProcedimento || procedimentoCtx?.nome || '').trim();
-
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
   const [termosLoading, setTermosLoading] = useState(true);
   const [termoSelecionadoId, setTermoSelecionadoId] = useState(null);
@@ -486,13 +356,7 @@ export function Step3Termos({
     let assinaturaId = backendAssinaturaId;
     if (!assinaturaId) {
       try {
-        const rawConteudo = String(conteudoExibicao || '').trim();
-        const conteudoSnapshot = replaceTermVariables(rawConteudo, {
-          pac: pacienteCtx,
-          clinica: clinicaCtx,
-          prof: profissionalCtx,
-          procedimento: procNomeExibicao,
-        }) || rawConteudo || null;
+        const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
         let ipAddress = null;
         try {
           const res = await fetch('https://api.ipify.org?format=json');
@@ -614,13 +478,7 @@ export function Step3Termos({
     const salvar = async () => {
       try {
         setAssinaturaPersistida(true);
-        const rawConteudo = String(conteudoExibicao || '').trim();
-        const conteudoSnapshot = replaceTermVariables(rawConteudo, {
-          pac: pacienteCtx,
-          clinica: clinicaCtx,
-          prof: profissionalCtx,
-          procedimento: procNomeExibicao,
-        }) || rawConteudo || null;
+        const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
 
         let ipAddress = null;
         try {
@@ -852,26 +710,8 @@ export function Step3Termos({
       if (typeof setStep4Errors === 'function') {
         setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
       }
-
-      // Se ainda não houver procedimento definido, solicita ao usuário selecionar qual é o procedimento referente
-      const currentProc = (localNomeProcedimento || nomeProcedimento || procedimentoCtx?.nome || '').trim();
-      if (!currentProc) {
-        setShowVincularProcedimentoModal(true);
-      }
     },
-    [
-      onTermoChange,
-      setTermoLido,
-      setProfissionalAssinaturaDataUrl,
-      setTermoAssinaturaDataUrl,
-      setTermoAssinado,
-      setStep4Errors,
-      termosDisponiveis,
-      idsAssinadosJornada,
-      localNomeProcedimento,
-      nomeProcedimento,
-      procedimentoCtx,
-    ]
+    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis, idsAssinadosJornada]
   );
 
   useEffect(() => {
@@ -1115,9 +955,6 @@ export function Step3Termos({
                         pacienteCtx: pacienteCtx,
                         clinicaCtx: clinicaCtx,
                         profissionalCtx: profissionalCtx,
-                        procedimentoCtx: procedimentoCtx || nomeProcedimento,
-                        nomeProcedimento,
-                        procedimentos,
                         assinaturaProfissional: t.resultadoCompleto?.assinaturaProfissional,
                         assinaturaPaciente: t.resultadoCompleto?.assinaturaPaciente,
                         metadados: {
@@ -1332,58 +1169,26 @@ export function Step3Termos({
 
       {!termosLoading && termosDisponiveis.length > 0 && termoSelecionadoId ? (
         <>
-          {/* Banner de Procedimento Vinculado */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-200/80 bg-teal-50/50 p-3.5 shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#00a88e] text-white shadow-xs">
-                <Stethoscope className="h-4 w-4" />
-              </div>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-teal-800">
-                  Procedimento do Termo
-                </div>
-                <div className="text-[13px] font-bold text-slate-800">
-                  {procNomeExibicao || (
-                    <span className="font-normal italic text-slate-500">
-                      Nenhum procedimento selecionado
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowVincularProcedimentoModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-teal-700 shadow-xs hover:bg-teal-50 transition-colors"
-              >
-                <Stethoscope className="h-3.5 w-3.5" />
-                {procNomeExibicao ? 'Alterar Procedimento' : 'Vincular Procedimento'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
-                    generateTermoPdf({
-                      titulo: tituloExibicao,
-                      conteudo: conteudoExibicao,
-                      fileName: `termo_em_branco_${new Date().getTime()}.pdf`,
-                      pacienteCtx,
-                      clinicaCtx,
-                      profissionalCtx,
-                      procedimentoCtx: { nome: procNomeExibicao },
-                      nomeProcedimento: procNomeExibicao,
-                      procedimentos,
-                    });
+          <div className="mb-3 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                  generateTermoPdf({
+                    titulo: tituloExibicao,
+                    conteudo: conteudoExibicao,
+                    fileName: `termo_em_branco_${new Date().getTime()}.pdf`,
+                    pacienteCtx,
+                    clinicaCtx,
+                    profissionalCtx
                   });
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#0f172a] shadow-xs hover:bg-[#f8fafc] transition-colors"
-              >
-                Exportar PDF em branco
-              </button>
-            </div>
+                });
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-[#e2e8f0] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#0f172a] shadow-sm hover:bg-[#f8fafc] transition-colors"
+            >
+              Exportar PDF em branco
+            </button>
           </div>
-
           <div className="mb-8">
             <TermoVisualizacao
               titulo={tituloExibicao}
@@ -1391,9 +1196,6 @@ export function Step3Termos({
               pacienteCtx={pacienteCtx}
               clinicaCtx={clinicaCtx}
               profissionalCtx={profissionalCtx}
-              procedimentoCtx={{ nome: procNomeExibicao }}
-              nomeProcedimento={procNomeExibicao}
-              procedimentos={procedimentos}
             >
               {podeExibirAssinaturas ? (
                 <div className="space-y-6">
@@ -1479,12 +1281,6 @@ export function Step3Termos({
                                   conteudo: conteudoExibicao,
                                   assinaturaPaciente: termoAssinaturaDataUrl,
                                   assinaturaProfissional: profissionalAssinaturaDataUrl,
-                                  pacienteCtx,
-                                  clinicaCtx,
-                                  profissionalCtx,
-                                  procedimentoCtx: procedimentoCtx || nomeProcedimento,
-                                  nomeProcedimento,
-                                  procedimentos,
                                   metadados: {
                                     pacienteNome: pacienteCtx?.nome,
                                     profissionalNome: profissionalCtx?.nome,
@@ -1844,24 +1640,6 @@ export function Step3Termos({
           </div>
         </div>
       )}
-
-      {/* Modal para vincular procedimento ao termo */}
-      <VincularProcedimentoModal
-        open={showVincularProcedimentoModal}
-        onClose={() => setShowVincularProcedimentoModal(false)}
-        termoTitulo={tituloExibicao}
-        onSelectProcedimento={(nome, catId) => {
-          setLocalNomeProcedimento(nome);
-          if (typeof setNomeProcedimento === 'function') {
-            setNomeProcedimento(nome);
-          }
-          if (catId && typeof setNomeProcedimentoCatalogoId === 'function') {
-            setNomeProcedimentoCatalogoId(catId);
-          }
-          setShowVincularProcedimentoModal(false);
-          toast.success(`Procedimento "${nome}" vinculado ao termo.`);
-        }}
-      />
     </div>
   );
 }

@@ -152,8 +152,6 @@ Contato: [TELEFONE DO PACIENTE]
 
 Autorizo a divulgação de fotos, imagens e vídeos dos procedimentos realizados em mim por [NOME DA CLÍNICA] (CNPJ [CNPJ DA CLÍNICA]). Estou ciente de que o resultado leva, em média, de 7 a 14 dias para se estabilizar, podendo haver edema, hematomas ou infecção, com necessidade de cuidados e uso dos medicamentos prescritos no pós-operatório. A revisão será feita em data agendada, podendo ou não haver necessidade de retoque.
 
-Descrição do tratamento: [NOME DO PROCEDIMENTO]
-
 Profissional: [NOME DO PROFISSIONAL]`;
 
 /**
