@@ -209,13 +209,14 @@ export function replaceTermVariables(html, ctx) {
   let out = String(html);
 
   const { pac = {}, clinica = {}, prof = {}, procedimento = {} } = ctx || {};
+  const procObj = procedimento || {};
 
   const nomeProc =
     (typeof procedimento === 'string'
       ? procedimento
-      : procedimento.nome ||
-        procedimento.nomeProcedimento ||
-        procedimento.procedimentoNome ||
+      : procObj?.nome ||
+        procObj?.nomeProcedimento ||
+        procObj?.procedimentoNome ||
         ctx?.nomeProcedimento ||
         ctx?.procedimentoNome ||
         (Array.isArray(ctx?.procedimentos)
