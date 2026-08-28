@@ -17,7 +17,11 @@ export function AnamneseDocSaveBar({
 }) {
   return (
     <div className={SAVEBAR}>
-      <span className="flex flex-1 items-center gap-1.5 text-[12px] text-[#64748b]">
+      <span
+        className={`flex flex-1 items-center gap-1.5 text-[12px] ${
+          dirty && !saving ? 'font-semibold text-teal-800' : 'text-[#64748b]'
+        }`}
+      >
         {saving ? (
           <>
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -40,7 +44,14 @@ export function AnamneseDocSaveBar({
         onClick={onSave}
         disabled={!editavel || saving || !dirty}
       >
-        Salvar
+        {saving ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            Salvando…
+          </>
+        ) : (
+          'Salvar'
+        )}
       </button>
     </div>
   );

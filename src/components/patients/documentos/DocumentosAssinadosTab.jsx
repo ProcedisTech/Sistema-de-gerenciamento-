@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { Download, FileText, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
@@ -6,6 +6,8 @@ import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
 import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
+import { replaceTermVariables } from '../../../utils/replaceTermVariables';
+import { buildPacienteCtx } from '../../../utils/pacienteCtx';
 import { TermoIntegridadeSelo } from '../../termos/TermoIntegridadeSelo.jsx';
 import 'react-quill-new/dist/quill.snow.css';
 
@@ -63,13 +65,29 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
     return () => { mounted = false; };
   }, [pacienteId, orgId]);
 
+  const pacienteCtx = useMemo(() => buildPacienteCtx(paciente), [paciente]);
+  const clinicaCtx = useMemo(() => ({
+    nome: clinicaInfo?.nome,
+    cnpj: clinicaInfo?.cnpj,
+    endereco: clinicaInfo?.endereco,
+    telefone: clinicaInfo?.telefone,
+  }), [clinicaInfo]);
+  const profissionalCtx = useMemo(() => ({
+    nome: perfilInfo?.nomeCompleto,
+    cpf: perfilInfo?.cpf || perfilInfo?.crm,
+    crm: perfilInfo?.crm,
+    telefone: perfilInfo?.telefone,
+    assinaturaBase64: perfilInfo?.assinaturaPadrao || perfilInfo?.assinaturaBase64,
+  }), [perfilInfo]);
+
   const handleDownloadPdf = (doc) => {
     if (!doc.conteudoSnapshot) {
       toast.error('O conteúdo deste documento não está disponível para download.');
       return;
     }
-    
+
     try {
+      const procNome = doc.procedimentoNome || doc.nomeProcedimento || doc.procedimento || (doc.procedimentosVinculados && doc.procedimentosVinculados.length > 0 ? doc.procedimentosVinculados[0].nomeProcedimento : '');
       generateTermoPdf({
         titulo: doc.titulo || 'Documento',
         conteudo: doc.conteudoSnapshot,
@@ -85,22 +103,11 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
             : undefined,
         },
         fileName: `documento_${doc.titulo ? doc.titulo.replace(/\s+/g, '_').toLowerCase() : 'assinado'}_${new Date().getTime()}.pdf`,
-        pacienteCtx: {
-          nome: paciente?.nomeCompleto || paciente?.nome,
-          cpf: paciente?.cpf,
-          telefone: paciente?.telefone || paciente?.phone || paciente?.telefoneNumero || paciente?.telefonePrincipal
-        },
-        clinicaCtx: {
-          nome: clinicaInfo?.nome,
-          cnpj: clinicaInfo?.cnpj,
-          endereco: clinicaInfo?.endereco,
-          telefone: clinicaInfo?.telefone,
-        },
-        profissionalCtx: {
-          nome: perfilInfo?.nomeCompleto,
-          cpf: perfilInfo?.cpf || perfilInfo?.crm,
-          telefone: perfilInfo?.telefone,
-        }
+        pacienteCtx,
+        clinicaCtx,
+        profissionalCtx,
+        procedimentoCtx: { nome: procNome },
+        nomeProcedimento: procNome,
       });
     } catch {
       toast.error('Erro ao gerar o arquivo PDF.');
@@ -134,7 +141,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
   }
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       {documentos.map((doc) => {
         const isExpanded = expandedDocId === doc.id;
         return (
@@ -261,7 +268,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
                   <div className="md:col-span-2">
                     <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Conteúdo do Documento</h5>
                     <div className="bg-white border border-slate-200 rounded-lg max-h-[400px] overflow-y-auto text-sm text-slate-700 custom-scrollbar shadow-inner ql-snow">
-                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(doc.conteudoSnapshot || '<p>Conteúdo indisponível</p>') }} />
+                      <div className="ql-editor p-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(replaceTermVariables(doc.conteudoSnapshot, { pac: pacienteCtx, clinica: clinicaCtx, prof: profissionalCtx, procedimento: doc.procedimentoNome || doc.nomeProcedimento || doc.procedimento || (doc.procedimentosVinculados && doc.procedimentosVinculados.length > 0 ? doc.procedimentosVinculados[0].nomeProcedimento : '') }) || '<p>Conteúdo indisponível</p>') }} />
                     </div>
                   </div>
                   

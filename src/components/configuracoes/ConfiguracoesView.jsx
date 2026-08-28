@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Settings, ChevronDown } from 'lucide-react';
 import { ConfigHub } from './ConfigHub';
 import { getVisibleCategories, CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
@@ -22,6 +22,7 @@ import { ConfigDetailView } from './ConfigDetailView';
  * @param {() => void} [props.onPacientesCatalogRefresh]
  * @param {(opts?: { roleUserId?: string, scope?: 'all' | 'role' }) => void | Promise<void>} [props.onDisponibilidadeInvalidate]
  * @param {(isDirty: boolean) => void} [props.onDirtyHorariosChange]
+ * @param {(isDirty: boolean) => void} [props.onDirtyFichaChange]
  */
 export function ConfiguracoesView({
   canSeeAnamnese = false,
@@ -36,9 +37,12 @@ export function ConfiguracoesView({
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
+  onDirtyFichaChange,
   configSection,
   setConfigSection,
 }) {
+  const sectionGuardRef = useRef(null);
+
   const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
 
   // Categoria ativa: null = hub. Inicializa em detalhe se vier um deep-link (configSection não-null do pai).
@@ -96,15 +100,15 @@ export function ConfiguracoesView({
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
       {/* Header */}
-      <div className="mb-5 flex items-start gap-3 border-b border-[#e2e8f0] pb-5 md:mb-6 md:pb-6">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b]">
+      <div className="mb-5 flex items-start gap-3 border-b border-[#e2e8f0] pb-4 md:mb-6 md:pb-5">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] lg:hidden">
           <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[18px] font-bold leading-tight text-[#0f172a] sm:text-[21px] md:text-[22px]">
+          <h2 className="text-[18px] font-bold leading-tight text-[#0f172a] sm:text-[21px] md:text-[22px] lg:sr-only">
             Configurações
           </h2>
-          <p className="mt-0.5 text-[12px] font-medium leading-snug text-[#64748b] sm:text-[13px] md:text-[14px]">
+          <p className="text-[12px] font-medium leading-snug text-[#64748b] sm:text-[13px] md:text-[14px]">
             {headerSubtitle}
           </p>
         </div>
@@ -115,7 +119,10 @@ export function ConfiguracoesView({
         <MobileSectionDropdown
           groups={mobileGroups}
           activeSection={configSection}
-          onSelectSection={setConfigSection}
+          onSelectSection={(id) => {
+            if (sectionGuardRef.current) sectionGuardRef.current(id);
+            else setConfigSection(id);
+          }}
         />
       )}
 
@@ -153,6 +160,8 @@ export function ConfiguracoesView({
             onPacientesCatalogRefresh={onPacientesCatalogRefresh}
             onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
             onDirtyHorariosChange={onDirtyHorariosChange}
+            onDirtyFichaChange={onDirtyFichaChange}
+            sectionGuardRef={sectionGuardRef}
           />
         )}
       </div>

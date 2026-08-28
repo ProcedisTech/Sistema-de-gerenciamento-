@@ -207,9 +207,34 @@ function listIsosInMonth(monthDate) {
   return isos;
 }
 
+export function getBrasiliaNow() {
+  const d = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(d);
+  const getPart = (type) => parts.find((p) => p.type === type)?.value || '';
+  const y = getPart('year');
+  const m = getPart('month');
+  const day = getPart('day');
+  const hr = Number(getPart('hour') || 0);
+  const min = Number(getPart('minute') || 0);
+
+  const todayIso = `${y}-${m}-${day}`;
+  const currentMinutes = hr * 60 + min;
+  const currentHhmm = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  return { todayIso, currentMinutes, currentHhmm };
+}
+
 function nowMinutesLocal() {
-  const n = new Date();
-  return n.getHours() * 60 + n.getMinutes();
+  return getBrasiliaNow().currentMinutes;
 }
 
 /**

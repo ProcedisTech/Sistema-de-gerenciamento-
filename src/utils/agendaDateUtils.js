@@ -16,8 +16,13 @@ export function monthRangeIso(monthDate) {
 }
 
 export function toLocalDateIso(date = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(date);
 }
 
 /** Grade 7×6 (domingo = primeira coluna). */

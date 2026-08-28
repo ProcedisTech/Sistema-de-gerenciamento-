@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ConfigSidebarFlat } from './ConfigSidebarFlat';
 import { ConfigBreadcrumb } from './ConfigBreadcrumb';
 import { CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
@@ -40,6 +40,7 @@ import { authHeadersForFetch } from '../../services/api';
  * @param {(opts?) => void} [props.onDisponibilidadeInvalidate]
  * @param {(isDirty: boolean) => void} [props.onDirtyHorariosChange]
  * @param {(isDirty: boolean) => void} [props.onDirtyFichaChange]
+ * @param {React.MutableRefObject<((id: string) => void) | null>} [props.sectionGuardRef]
  */
 export function ConfigDetailView({
   categoryKey,
@@ -59,6 +60,7 @@ export function ConfigDetailView({
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
   onDirtyFichaChange,
+  sectionGuardRef,
 }) {
   const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
 
@@ -78,6 +80,7 @@ export function ConfigDetailView({
   const [modalOpen, setModalOpen] = useState(false);
   const [fichaDetailLabel, setFichaDetailLabel] = useState(null);
   const pendingAction = useRef(null);
+  const fichasHomeRef = useRef(null);
 
   const handleDirtyHorariosChange = (dirty) => {
     setIsDirtyHorarios(dirty);
@@ -108,14 +111,32 @@ export function ConfigDetailView({
 
   const handleModalDiscard = () => {
     setModalOpen(false);
+    setIsDirtyFicha(false);
+    setIsDirtyHorarios(false);
+    onDirtyFichaChange?.(false);
+    onDirtyHorariosChange?.(false);
     const action = pendingAction.current;
     pendingAction.current = null;
     action?.();
   };
 
-  // Wrappers com guard para sidebar e breadcrumb
-  const handleSetConfigSection = (id) => guardedNavigate(() => setConfigSection(id));
+  const applySection = (id) => {
+    if (id === 'fichas') {
+      fichasHomeRef.current?.exitToList?.();
+    }
+    setConfigSection(id);
+  };
+
+  const handleSetConfigSection = (id) => guardedNavigate(() => applySection(id));
   const handleBackToHub = () => guardedNavigate(() => onBackToHub());
+
+  useEffect(() => {
+    if (!sectionGuardRef) return undefined;
+    sectionGuardRef.current = handleSetConfigSection;
+    return () => {
+      sectionGuardRef.current = null;
+    };
+  });
 
   return (
     <>
@@ -172,6 +193,7 @@ export function ConfigDetailView({
               onDirtyHorariosChange={handleDirtyHorariosChange}
               onDirtyFichaChange={handleDirtyFichaChange}
               onFichaDetailLabelChange={setFichaDetailLabel}
+              fichasHomeRef={fichasHomeRef}
             />
           </div>
         </div>
@@ -200,6 +222,7 @@ function PainelAtivo({
   onDirtyHorariosChange,
   onDirtyFichaChange,
   onFichaDetailLabelChange,
+  fichasHomeRef,
 }) {
   if (configSection === 'procedimentos' && canSeeProcedimentos) {
     return <BancoProcedimentosPanel />;
@@ -211,7 +234,13 @@ function PainelAtivo({
     return <MetodosAssinaturaPanel />;
   }
   if (configSection === 'fichas' && canSeeAnamnese) {
-    return <AnamneseFichasHome onFichaNomeChange={onFichaDetailLabelChange} onDirtyFichaChange={onDirtyFichaChange} />;
+    return (
+      <AnamneseFichasHome
+        ref={fichasHomeRef}
+        onFichaNomeChange={onFichaDetailLabelChange}
+        onDirtyFichaChange={onDirtyFichaChange}
+      />
+    );
   }
   if (configSection === 'anamnese-publica' && canSeeAnamnese) {
     return <AnamneseConfigPublicaPanel />;

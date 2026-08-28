@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { buildPacienteCtx } from '../utils/pacienteCtx';
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, Settings, UserCog, Users, X } from 'lucide-react';
 
 // Hooks de estado
 import {
@@ -20,8 +21,7 @@ import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
 import { RoleGuard } from './auth/RoleGuard.jsx';
-import { Sidebar, Stepper, MobileNavigation } from './layout';
-import { GlobalHeader } from './layout/GlobalHeader.jsx';
+import { Sidebar, Stepper, MobileNavigation, GlobalHeader, PageSlot } from './layout';
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
@@ -713,19 +713,24 @@ function AppRefactoredInner() {
           if (result.allOk) {
             toast.success(`${group.length} agendamentos cancelados`);
             setScheduleCancelRow(null);
+            void kpiState.refresh();
           } else if (result.succeeded.length > 0) {
             toast.error(partialMsg || 'Cancelamento parcial');
             setScheduleCancelRow(null);
+            void kpiState.refresh();
           }
           return;
         }
         const ok = await agendaSchedule.handleCancelar(row.agendaId, payload);
-        if (ok) setScheduleCancelRow(null);
+        if (ok) {
+          setScheduleCancelRow(null);
+          void kpiState.refresh();
+        }
       } finally {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow, toast],
+    [agendaSchedule, scheduleCancelRow, toast, kpiState.refresh],
   );
 
   const handleSlotReagendar = React.useCallback(
@@ -3288,23 +3293,24 @@ function AppRefactoredInner() {
         setLoteProcedimentosFeitosIds(novosIdsValidos);
         const dataRefSessao = toLocalISODate(new Date());
 
-        for (let i = 0; i < novosIdsValidos.length; i++) {
-          const pid = novosIdsValidos[i];
-          const proc = journeyState.procedimentosSessao[i] || {};
+        await Promise.all(
+          novosIdsValidos.map(async (pid, i) => {
+            const proc = journeyState.procedimentosSessao[i] || {};
 
-          // Para o índice ativo, usa os valores capturados sincronamente acima
-          // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
-          const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
-          if (snap) {
-            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-            await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
-          }
+            // Para o índice ativo, usa os valores capturados sincronamente acima
+            // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
+            const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
+            if (snap) {
+              const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+              await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
+            }
 
-          const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
-          if (photos.length > 0) {
-            await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
-          }
-        }
+            const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
+            if (photos.length > 0) {
+              await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
+            }
+          })
+        );
 
         let respostasDoLote = [];
         if (!isApenasSair) {
@@ -3621,6 +3627,23 @@ function AppRefactoredInner() {
     );
   }
 
+  const renderGlobalPageSlot = () => {
+    switch (activeView) {
+      case 'pacientes':
+        return <PageSlot icon={Users} title="Pacientes" />;
+      case 'agenda':
+        return <PageSlot icon={CalendarDays} title="Agenda" />;
+      case 'gestao-equipe':
+        return <PageSlot icon={UserCog} title="Gestão de Equipe" />;
+      case 'configuracoes':
+        return <PageSlot icon={Settings} title="Configurações" />;
+      case 'notificacoes':
+        return <PageSlot icon={Bell} title="Notificações" />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex min-h-dvh md:h-screen flex-col md:flex-row font-sans overflow-x-hidden bg-app-canvas text-app-ink md:overflow-hidden">
 
@@ -3633,6 +3656,8 @@ function AppRefactoredInner() {
         }}
         onDiscard={() => {
           setIsUnsavedNavModalOpen(false);
+          setIsDirtyFicha(false);
+          setIsDirtyHorarios(false);
           const action = pendingNavAction.current;
           pendingNavAction.current = null;
           action?.();
@@ -3820,15 +3845,7 @@ function AppRefactoredInner() {
                           exigirFilaVinculo
                           termoFocoId={termoFocoId}
                           onAbrirMetodosAssinatura={handleNavigateToMetodosAssinatura}
-                          pacienteCtx={{
-                            nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
-                            cpf: pacienteAtual?.cpf,
-                            telefone:
-                              pacienteAtual?.telefone ||
-                              pacienteAtual?.phone ||
-                              pacienteAtual?.telefoneNumero ||
-                              pacienteAtual?.telefonePrincipal,
-                          }}
+                          pacienteCtx={buildPacienteCtx(pacienteAtual)}
                           clinicaCtx={{
                             nome: clinicaInfo?.nome,
                             cnpj: clinicaInfo?.cnpj,
@@ -3841,6 +3858,10 @@ function AppRefactoredInner() {
                             cpf: perfilInfo?.cpf || perfilInfo?.crm,
                             telefone: perfilInfo?.telefone
                           }}
+                          nomeProcedimento={journeyState.nomeProcedimento}
+                          setNomeProcedimento={journeyState.setNomeProcedimento}
+                          setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
+                          procedimentos={journeyState.procedimentosSessao}
                         />
                       )}
 
@@ -4312,15 +4333,7 @@ function AppRefactoredInner() {
                     exigirFilaVinculo={exigirFilaTermos}
                     termoFocoId={termoFocoId}
                     onAbrirMetodosAssinatura={handleNavigateToMetodosAssinatura}
-                    pacienteCtx={{
-                      nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
-                      cpf: pacienteAtual?.cpf,
-                      telefone:
-                        pacienteAtual?.telefone ||
-                        pacienteAtual?.phone ||
-                        pacienteAtual?.telefoneNumero ||
-                        pacienteAtual?.telefonePrincipal,
-                    }}
+                    pacienteCtx={buildPacienteCtx(pacienteAtual)}
                     clinicaCtx={{
                       nome: clinicaInfo?.nome,
                       cnpj: clinicaInfo?.cnpj,
@@ -4332,6 +4345,10 @@ function AppRefactoredInner() {
                       cpf: perfilInfo?.cpf || perfilInfo?.crm,
                       telefone: perfilInfo?.telefone,
                     }}
+                    nomeProcedimento={journeyState.nomeProcedimento}
+                    setNomeProcedimento={journeyState.setNomeProcedimento}
+                    setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
+                    procedimentos={journeyState.procedimentosSessao}
                     onConcluir={() => setConsultaModule('hub')}
                   />
                 ) : null}
@@ -4614,6 +4631,7 @@ function AppRefactoredInner() {
           <>
             <GlobalHeader
               activeView={activeView}
+              pageSlot={renderGlobalPageSlot()}
               onPatientSelect={handleGlobalPatientSelect}
               onNovoPaciente={handleGlobalNovoPaciente}
               onAgendamento={handleGlobalAgendamento}
@@ -4701,6 +4719,10 @@ function AppRefactoredInner() {
                       profileNav={profileNav}
                       clearProfileNavSnapshot={clearProfileNavSnapshot}
                       agendaSchedule={agendaSchedule}
+                      onSlotCancelar={(target) => {
+                        const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
+                        if (row) setScheduleCancelRow(row);
+                      }}
                     />
                   </RoleGuard>
                 )}

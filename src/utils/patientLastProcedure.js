@@ -19,10 +19,16 @@ export function lastProcedureLabel(p) {
   return n ? String(n) : '—';
 }
 
-/** Data no rodapé: mesma prioridade do cartão Última visita do perfil; fallback ao procedimento mais recente. */
+/** Data no rodapé: reflete a data mais recente entre ultimaVinda do DTO e lista de procedimentos. */
 export function lastProcedureDateForCard(p) {
+  const isoFromProcs = latestProcedureOccurredInstantIso(p?.procedures || []);
+  const dtProcs = isoFromProcs ? new Date(isoFromProcs).getTime() : 0;
+  const dtUltima = p?.ultimaVinda ? new Date(p.ultimaVinda).getTime() : 0;
+
+  if (dtProcs > 0 && dtProcs >= dtUltima) {
+    return formatCartaoDiaPtBr(isoFromProcs);
+  }
   const primary = patientUltimaVisitaDayFromDto(p);
   if (primary !== '-') return primary;
-  const iso = latestProcedureOccurredInstantIso(p?.procedures || []);
-  return iso ? formatCartaoDiaPtBr(iso) : '—';
+  return isoFromProcs ? formatCartaoDiaPtBr(isoFromProcs) : '—';
 }

@@ -22,6 +22,7 @@ import {
   newOrientacaoId,
   normalizeOrientacoesTemplateResponse,
   normalizeWaPhoneDigits,
+  getPresetOrientacoesByProcedimento,
 } from '../../utils/orientacoesJourney.js';
 import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
@@ -31,17 +32,9 @@ import {
   validateCalendarDateDigits8,
 } from '../utils/formatters';
 
-const ORIENTACOES_ITENS = [
-  'Evite exposição solar direta por 48 horas',
-  'Não toque na área tratada nas primeiras 6 horas',
-  'Mantenha a pele hidratada',
-  'Use protetor solar SPF 50+ nos próximos 7 dias',
-  'Evite atividades físicas intensas por 24 horas',
-  'Entre em contato conosco em caso de dúvidas ou reações',
-];
-
-function fallbackOrientacoesFromDefaults() {
-  return ORIENTACOES_ITENS.map((texto, ordem) => ({
+function fallbackOrientacoesFromDefaults(nomesArray = []) {
+  const itens = getPresetOrientacoesByProcedimento(nomesArray);
+  return itens.map((texto, ordem) => ({
     id: newOrientacaoId(),
     descricao: texto,
     ordem,
@@ -189,7 +182,7 @@ export function Step5Finalization({
       }
 
       if (!cancelled) {
-        setOrientacoesItens(fallbackOrientacoesFromDefaults());
+        setOrientacoesItens(fallbackOrientacoesFromDefaults(nomesUnicos));
         setOrientacoesCarregadas(true);
       }
     })();

@@ -13,20 +13,27 @@ export function PatientAvatar({
   const { src, loading } = usePatientProfilePhotoSrc(patient);
 
   return (
-    <div className={className}>
+    <div className={`relative shrink-0 overflow-hidden ${className}`}>
       {loading && !src ? (
-        <Loader2
-          className={`${spinnerClassName} animate-spin text-[#00a88e]`}
-          strokeWidth={2.5}
-          aria-label="Carregando foto"
-        />
+        <div className="flex h-full w-full items-center justify-center bg-slate-50">
+          <Loader2
+            className={`${spinnerClassName} animate-spin text-[#00a88e]`}
+            strokeWidth={2.5}
+            aria-label="Carregando foto"
+          />
+        </div>
       ) : src ? (
-        <ProtectedPatientMedia src={src} alt="" imgClassName="w-full h-full object-cover" />
+        <ProtectedPatientMedia
+          src={src}
+          alt={patient?.nome ? `Foto de ${patient.nome}` : 'Foto do paciente'}
+          className="!h-full !w-full !max-h-full !max-w-full"
+          imgClassName="!h-full !w-full !max-h-full !max-w-full !object-cover !object-center"
+        />
       ) : (
         <span
-          className={`flex h-full w-full items-center justify-center bg-[#00a88e] text-white ${initialsClassName}`}
+          className={`flex h-full w-full items-center justify-center bg-[#00a88e] text-white select-none ${initialsClassName}`}
         >
-          {getPatientInitials(patient?.nome)}
+          {getPatientInitials ? getPatientInitials(patient?.nome) : (patient?.nome || '').slice(0, 2).toUpperCase()}
         </span>
       )}
     </div>

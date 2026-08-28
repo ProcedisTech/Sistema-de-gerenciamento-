@@ -1,7 +1,7 @@
 /**
  * Matriz de ações do Day Rail (Rich card + Next-up).
  * @param {string} status
- * @returns {{ primary: 'confirmar' | 'iniciar' | null, secondary: Array<'whatsapp' | 'reagendar' | 'cancelar'> }}
+ * @returns {{ primary: 'confirmar' | 'iniciar' | null, secondary: Array<'anamnese' | 'whatsapp' | 'reagendar' | 'cancelar'> }}
  */
 export function getRailCardActions(status, canStartAnamnese = true) {
   const s = String(status || '');

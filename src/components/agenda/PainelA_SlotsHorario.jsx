@@ -31,6 +31,7 @@ function faixaAlternada(startMin) {
 }
 
 function slotEhClicavel(slot, isFallback, slotsDisponiveis) {
+  if (slot.state === 'passado') return false;
   if (slot.state === 'selecionado') return true;
   if (slot.state !== 'livre' || !slot.clickable) return false;
   if (isFallback) return true;
@@ -287,17 +288,19 @@ export function PainelA_SlotsHorario({
 
       if (!clicavel) {
         const labelOcupado =
-          slot.state === 'bloqueio'
-            ? slot.observacao || 'bloqueio'
-            : slot.state === 'ocupado'
-              ? slot.label || 'ocupado'
-              : 'indisponível';
+          slot.state === 'passado'
+            ? 'horário já passou'
+            : slot.state === 'bloqueio'
+              ? slot.observacao || 'bloqueio'
+              : slot.state === 'ocupado'
+                ? slot.label || 'ocupado'
+                : slot.observacao || 'indisponível';
         return (
           <LinhaDesabilitada
             key={hora}
             hora={hora}
             motivo={labelOcupado}
-            title="Horário indisponível"
+            title={slot.state === 'passado' ? 'Este horário já passou' : 'Horário indisponível'}
             startMin={slotMin}
             colunas={colunas}
           />

@@ -9,6 +9,8 @@ import {
 import { getRailCardActions } from '../../utils/agendaCardActions.js';
 import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
+import { CollapsibleSection } from '../shared/CollapsibleSection.jsx';
+import { isAgendamentoHojePassado } from '../../utils/sortAgendamentosHojePulse.js';
 
 function getSaudacao() {
   const h = new Date().getHours();
@@ -109,48 +111,26 @@ function SidebarSkeleton() {
   );
 }
 
-function SectionHeader({
-  icon,
-  title,
-  count,
-  onVerTodos,
-  verTodosLabel,
-  iconBg = 'bg-[#e6f7f5]',
-  iconColor = 'text-[#00a88e]',
+function AgendaRow({
+  slot,
+  agendaSchedule,
+  onStartAttendance,
+  getPatientInitials,
+  onSolicitarAnamnese,
+  onSlotCancelar,
 }) {
-  const Icon = icon;
-  return (
-    <div className="flex items-center gap-2 px-1 pb-2">
-      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
-        <Icon className={`h-3.5 w-3.5 ${iconColor}`} strokeWidth={2.2} aria-hidden />
-      </span>
-      <span className="flex-1 text-[13px] font-semibold leading-snug text-[#0f172a]">{title}</span>
-      {count != null && count > 0 ? (
-        <span className="rounded-full bg-[#e6f7f5] px-2 py-0.5 text-[11px] font-semibold text-[#00a88e]">
-          {count}
-        </span>
-      ) : null}
-      {onVerTodos ? (
-        <button
-          type="button"
-          onClick={onVerTodos}
-          className="text-[11px] font-medium text-[#00a88e] hover:underline"
-        >
-          {verTodosLabel || 'Ver todos'}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function AgendaRow({ slot, agendaSchedule, onStartAttendance, getPatientInitials }) {
   const { isNivel1, canStartAnamnese } = usePapel();
   const nome = slot?.pacienteNome || 'Paciente';
   const hora = slot?.horaInicio ? String(slot.horaInicio).slice(0, 5) : '';
   const procedimento = slot?.procedimentoNome || '';
+  const isPast = isAgendamentoHojePassado(slot);
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2.5">
+    <div
+      className={`flex min-w-0 flex-col gap-2 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2.5 ${
+        isPast ? 'opacity-60' : ''
+      }`}
+    >
       <div className="flex items-center gap-3">
         <PatientAvatar
           patient={{ id: slot?.pacienteId, nome: slot?.pacienteNome, fotoPerfilUrl: slot?.pacienteFotoUrl }}
@@ -169,7 +149,7 @@ function AgendaRow({ slot, agendaSchedule, onStartAttendance, getPatientInitials
           <span className="shrink-0 text-[11px] font-semibold text-[#64748b]">{hora}</span>
         ) : null}
       </div>
-      
+
       {agendaSchedule && !isNivel1 && (
         <div className="border-t border-[#f1f5f9] pt-2">
           <AgendaRailCardActions
@@ -177,12 +157,11 @@ function AgendaRow({ slot, agendaSchedule, onStartAttendance, getPatientInitials
             actions={getRailCardActions(slot.status, canStartAnamnese)}
             compact={true}
             onConfirmar={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'confirmado')}
-            onCheckIn={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'paciente_chegou')}
             onIniciarAtendimento={() => onStartAttendance?.(slot)}
             onWhatsApp={() => agendaSchedule.handleEnviarWhatsApp(slot.agendaId)}
-            onEnviarAnamnese={() => agendaSchedule.openDaySheet(slot.data, slot)}
+            onEnviarAnamnese={() => onSolicitarAnamnese?.(slot)}
             onReagendar={() => agendaSchedule.openReagendarModal(slot, [slot])}
-            onCancelar={() => agendaSchedule.handleCancelar(slot.agendaId)}
+            onCancelar={() => onSlotCancelar?.(slot)}
           />
         </div>
       )}
@@ -272,6 +251,8 @@ export function PulseSidebar({
   getPatientInitials,
   agendaSchedule,
   onStartAttendance,
+  onSolicitarAnamnese,
+  onSlotCancelar,
 }) {
   const nome = primeiroNome(nomeUsuario);
 
@@ -285,6 +266,17 @@ export function PulseSidebar({
   const nAniversarios = countAniversariantesEstaSemana(aniversariantes);
   const welcomeResumo = buildWelcomeResumo({ nAtendimentos, nSemPlano, nAniversarios });
   const resumoVazio = !loading && nAtendimentos === 0 && nSemPlano === 0 && nAniversarios === 0;
+
+  const verAgendaBtn =
+    agendamentos.length > 0 && onNavigateToAgenda ? (
+      <button
+        type="button"
+        onClick={onNavigateToAgenda}
+        className="shrink-0 text-[11px] font-medium text-[#00a88e] hover:underline"
+      >
+        Ver agenda
+      </button>
+    ) : null;
 
   return (
     <aside className="hidden w-[min(100%,340px)] shrink-0 flex-col gap-4 lg:flex xl:w-[380px]">
@@ -315,15 +307,13 @@ export function PulseSidebar({
           </div>
         </div>
 
-        {/* Agendamentos de hoje */}
-        <div className="shrink-0">
-          <SectionHeader
-            icon={CalendarDays}
-            title="Agendamentos de hoje"
-            count={agendamentos.length > 0 ? agendamentos.length : undefined}
-            onVerTodos={agendamentos.length > 0 ? onNavigateToAgenda : undefined}
-            verTodosLabel="Ver agenda"
-          />
+        <CollapsibleSection
+          id="agendamentos"
+          icon={CalendarDays}
+          title="Agendamentos de hoje"
+          count={agendamentos.length > 0 ? agendamentos.length : undefined}
+          headerExtra={verAgendaBtn}
+        >
           {loading ? (
             <SidebarSkeleton />
           ) : agendamentos.length === 0 ? (
@@ -333,7 +323,15 @@ export function PulseSidebar({
           ) : (
             <div className="flex flex-col gap-2">
               {agendamentos.slice(0, 5).map((slot) => (
-                <AgendaRow key={slot.id} slot={slot} agendaSchedule={agendaSchedule} onStartAttendance={onStartAttendance} getPatientInitials={getPatientInitials} />
+                <AgendaRow
+                  key={slot.id}
+                  slot={slot}
+                  agendaSchedule={agendaSchedule}
+                  onStartAttendance={onStartAttendance}
+                  getPatientInitials={getPatientInitials}
+                  onSolicitarAnamnese={onSolicitarAnamnese}
+                  onSlotCancelar={onSlotCancelar}
+                />
               ))}
               {agendamentos.length > 5 ? (
                 <button
@@ -347,17 +345,16 @@ export function PulseSidebar({
               ) : null}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
 
-        {/* Sem plano — pacientes ativos com statusPaciente.codigo = 'sem_plano' */}
-        <div className="shrink-0">
-          <SectionHeader
-            icon={FileX}
-            title="Sem plano"
-            count={totalSemPlano > 0 ? totalSemPlano : undefined}
-            iconBg="bg-ink-100"
-            iconColor="text-ink-500"
-          />
+        <CollapsibleSection
+          id="semPlano"
+          icon={FileX}
+          title="Sem plano"
+          count={totalSemPlano > 0 ? totalSemPlano : undefined}
+          iconBg="bg-ink-100"
+          iconColor="text-ink-500"
+        >
           {loading ? (
             <SidebarSkeleton />
           ) : semPlano.length === 0 ? (
@@ -384,17 +381,16 @@ export function PulseSidebar({
               })}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
 
-        {/* Próximos aniversários (por proximidade, não só do mês) */}
-        <div className="shrink-0">
-          <SectionHeader
-            icon={Cake}
-            title="Próximos aniversários"
-            count={aniversariantes.length > 0 ? aniversariantes.length : undefined}
-            iconBg="bg-pink-50"
-            iconColor="text-pink-500"
-          />
+        <CollapsibleSection
+          id="aniversarios"
+          icon={Cake}
+          title="Próximos aniversários"
+          count={aniversariantes.length > 0 ? aniversariantes.length : undefined}
+          iconBg="bg-pink-50"
+          iconColor="text-pink-500"
+        >
           {loading ? (
             <SidebarSkeleton />
           ) : aniversariantes.length === 0 ? (
@@ -413,7 +409,7 @@ export function PulseSidebar({
               ))}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
 
         <p className="shrink-0 text-center text-[10px] text-[#cbd5e1]">
           <Clock className="mr-1 inline h-3 w-3" strokeWidth={2} aria-hidden />

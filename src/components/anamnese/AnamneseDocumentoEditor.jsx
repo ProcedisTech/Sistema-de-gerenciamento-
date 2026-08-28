@@ -15,10 +15,14 @@ import {
 import { anamneseApi, clinicaApi, dimensoesApi, getApiErrorToastMessage } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
 import {
+  COMPOSE_PENDENTE_TOAST,
+  ESCOLHA_INCOMPLETA_TOAST,
   NOME_VAZIO_TOAST,
-  allowEmptyDocumento,
+  SEM_PERGUNTAS_TOAST,
   cloneSecoesFromDocumento,
+  composeHasPending,
   countPerguntas,
+  findEscolhaSemAlternativas,
   isNomeVazio,
   isSaveGenerationCurrent,
   needsCompartilhamentoModal,
@@ -33,42 +37,41 @@ import {
   editorDocumentoReducer,
 } from './editorDocumentoReducer.js';
 import { loadBiblioteca, moduloToAppendSecoes } from './editorDocumentoBiblioteca.js';
+import { ViewportDialog } from '../shared/ViewportDialog.jsx';
 import { DOC, BTN, BTN_PRIMARY } from './editorDocumentoTokens.js';
 import { AnamneseCompartilhamentoModal } from './AnamneseCompartilhamentoModal.jsx';
 import { AnamneseDocHead } from './AnamneseDocHead.jsx';
 import { AnamneseDocSaveBar } from './AnamneseDocSaveBar.jsx';
 import { AnamneseDocRail } from './AnamneseDocRail.jsx';
+import { AnamneseDocRailSheet } from './AnamneseDocRailSheet.jsx';
 import { AnamneseDocPreviewOverlay } from './AnamneseDocPreviewOverlay.jsx';
 import { AnamneseDocStartScreen } from './AnamneseDocStartScreen.jsx';
 import { AnamneseDocUnsavedModal } from './AnamneseDocUnsavedModal.jsx';
 import { SortableDocSecao } from './AnamneseDocSecao.jsx';
 import { AnamneseDocAddSec } from './AnamneseDocCompose.jsx';
 
+const RAIL_SIDE_MIN_PX = 800;
+
 function ReplaceConfirmModal({ open, onConfirm, onCancel }) {
-  if (!open) return null;
   return (
-    <div className="anamnese-sora fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div
-        className="w-full max-w-md overflow-hidden rounded-[13px] border border-[#e2e8f0] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="border-b border-[#f1f5f9] bg-[#fbfefe] px-[15px] py-3">
-          <b className="block text-[13px] font-semibold text-[#0f172a]">Substituir ficha?</b>
-          <span className="mt-0.5 block text-[11.5px] leading-snug text-[#64748b]">
-            Isso substitui a ficha que está aberta. Continuar?
-          </span>
-        </div>
-        <div className="flex justify-end gap-2 p-4">
-          <button type="button" className={BTN} onClick={onCancel}>
-            Cancelar
-          </button>
-          <button type="button" className={BTN_PRIMARY} onClick={onConfirm}>
-            Continuar
-          </button>
-        </div>
+    <ViewportDialog open={open} onDismiss={onCancel} titleId="replace-ficha-title">
+      <div className="border-b border-[#f1f5f9] bg-[#fbfefe] px-5 py-4">
+        <b id="replace-ficha-title" className="block text-[13px] font-semibold text-[#0f172a]">
+          Substituir ficha?
+        </b>
+        <span className="mt-1.5 block text-[13px] leading-relaxed text-[#64748b]">
+          Isso substitui a ficha que está aberta. Continuar?
+        </span>
       </div>
-    </div>
+      <div className="flex justify-end gap-2 px-5 py-4">
+        <button type="button" data-dialog-initial-focus className={BTN} onClick={onCancel}>
+          Cancelar
+        </button>
+        <button type="button" className={BTN_PRIMARY} onClick={onConfirm}>
+          Continuar
+        </button>
+      </div>
+    </ViewportDialog>
   );
 }
 
@@ -97,16 +100,24 @@ export function AnamneseDocumentoEditor({
   const [modal, setModal] = useState(null);
   const [unsavedOpen, setUnsavedOpen] = useState(false);
   const [replaceDoc, setReplaceDoc] = useState(null);
+  const [railSheetOpen, setRailSheetOpen] = useState(false);
+  const [railBeside, setRailBeside] = useState(false);
   const saveGen = useRef(0);
   const pendingBack = useRef(false);
+  const editorShellRef = useRef(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const isEmptyDoc = (state.secoes?.length || 0) === 0;
   const previewState = previewGhost || state;
 
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+
   useEffect(() => {
-    onDirtyChange?.(Boolean(state.dirty));
-  }, [state.dirty, onDirtyChange]);
+    onDirtyChangeRef.current?.(Boolean(state.dirty));
+  }, [state.dirty]);
+
+  useEffect(() => () => onDirtyChangeRef.current?.(false), []);
 
   useEffect(() => {
     if (!state.dirty) return;
@@ -167,6 +178,28 @@ export function AnamneseDocumentoEditor({
     onFichaNomeChange?.(state.nome || (state.fichaId ? 'Ficha' : 'Nova ficha'));
   }, [state.nome, state.fichaId, onFichaNomeChange]);
 
+  useEffect(() => {
+    if (loading) return undefined;
+    const el = editorShellRef.current;
+    if (!el) return undefined;
+    const apply = (width) => {
+      const beside = width >= RAIL_SIDE_MIN_PX;
+      setRailBeside(beside);
+      if (beside) setRailSheetOpen(false);
+    };
+    apply(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (typeof w === 'number') apply(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
+
+  useEffect(() => {
+    if (isEmptyDoc) setRailSheetOpen(false);
+  }, [isEmptyDoc]);
+
   const syncPadraoAfterSave = useCallback(
     async (savedFichaId, padrao) => {
       const patch = planPadraoSync({
@@ -189,8 +222,24 @@ export function AnamneseDocumentoEditor({
   const doSave = useCallback(
     async (opts = {}) => {
       if (!state.editavel) return null;
+      const notify = (msg) => {
+        if (!opts.silent) toast.error(msg);
+      };
       if (isNomeVazio(state.nome)) {
-        if (!opts.silent) toast.error(NOME_VAZIO_TOAST);
+        notify(NOME_VAZIO_TOAST);
+        return null;
+      }
+      if (composeHasPending(state.compose)) {
+        notify(COMPOSE_PENDENTE_TOAST);
+        return null;
+      }
+      if (countPerguntas(state.secoes) < 1) {
+        notify(SEM_PERGUNTAS_TOAST);
+        return null;
+      }
+      const escolhaIncompleta = findEscolhaSemAlternativas(state.secoes);
+      if (escolhaIncompleta) {
+        notify(ESCOLHA_INCOMPLETA_TOAST);
         return null;
       }
       const gen = ++saveGen.current;
@@ -212,7 +261,7 @@ export function AnamneseDocumentoEditor({
           especialidadeId: state.especialidadeId || null,
           textoDeclaracao: state.textoDeclaracao,
           secoes: state.secoes,
-          allowEmpty: opts.allowEmpty ?? allowEmptyDocumento(state.secoes),
+          allowEmpty: false,
         });
         const updated = await anamneseApi.salvarDocumento(id, payload);
         if (!isSaveGenerationCurrent(gen, saveGen.current)) return null;
@@ -362,6 +411,35 @@ export function AnamneseDocumentoEditor({
     dispatch({ type: EDITOR_ACTIONS.REORDER_SECOES, secoes: arrayMove(state.secoes, oldIndex, newIndex) });
   };
 
+  const handleMoveSecao = (index, dir) => {
+    const j = index + dir;
+    if (j < 0 || j >= state.secoes.length) return;
+    dispatch({ type: EDITOR_ACTIONS.REORDER_SECOES, secoes: arrayMove(state.secoes, index, j) });
+  };
+
+  const closeRailSheet = useCallback(() => setRailSheetOpen(false), []);
+
+  const railProps = {
+    railTab,
+    onRailTabChange: setRailTab,
+    fichas: biblioteca.FICHAS,
+    modulos: biblioteca.MODULOS,
+    banco: biblioteca.BANCO,
+    onUseFicha: (f) => {
+      handleUseFicha(f);
+      closeRailSheet();
+    },
+    onAddModulo: (m) => {
+      handleAppendModulo(m);
+      closeRailSheet();
+    },
+    onAddBank: (p) => {
+      handleAddBank(p);
+      closeRailSheet();
+    },
+    onEspiar: handleEspiar,
+  };
+
   const requestBack = useCallback(() => {
     if (state.dirty) {
       pendingBack.current = true;
@@ -372,7 +450,7 @@ export function AnamneseDocumentoEditor({
   }, [state.dirty, onBack]);
 
   const handleSaveAndLeave = async () => {
-    const saved = await doSave({ allowEmpty: true });
+    const saved = await doSave();
     if (!saved) return;
     setUnsavedOpen(false);
     if (pendingBack.current) {
@@ -440,8 +518,13 @@ export function AnamneseDocumentoEditor({
         state={previewState}
       />
 
-      <div className="flex min-h-0 flex-col gap-4 lg:flex-row">
-        <div className={`min-w-0 flex-1 ${DOC}`}>
+      <div
+        ref={editorShellRef}
+        className={`mx-auto grid min-h-0 min-w-0 w-full max-w-[1440px] items-stretch gap-5 ${
+          railBeside && !isEmptyDoc ? 'grid-cols-[minmax(0,1fr)_300px]' : 'grid-cols-1'
+        }`}
+      >
+        <div className={`relative min-w-0 w-full ${DOC}`}>
           <AnamneseDocHead
             state={state}
             dispatch={dispatch}
@@ -449,9 +532,10 @@ export function AnamneseDocumentoEditor({
             onTogglePadrao={handleTogglePadrao}
             onBack={requestBack}
             especialidades={especialidades}
+            onOpenBiblioteca={!railBeside && !isEmptyDoc ? () => setRailSheetOpen(true) : undefined}
           />
 
-          <div className="body min-h-[200px] pb-2">
+          <div className="body min-h-[200px] min-w-0 pb-24">
             {isEmptyDoc ? (
               <AnamneseDocStartScreen
                 fichas={biblioteca.FICHAS}
@@ -460,7 +544,6 @@ export function AnamneseDocumentoEditor({
                 onUseFicha={handleUseFicha}
                 onAppendModulo={handleAppendModulo}
                 onEspiar={handleEspiar}
-                onForkChange={setRailTab}
               />
             ) : (
               <>
@@ -471,12 +554,14 @@ export function AnamneseDocumentoEditor({
                         key={secao.clientKey}
                         secao={secao}
                         secaoIndex={i}
+                        secoesCount={state.secoes.length}
                         editavel={state.editavel}
                         dispatch={dispatch}
                         onPerguntaBlur={handlePerguntaBlur}
                         onKeyDown={handleKeyDown}
                         compose={state.compose}
                         stickyTipo={state.stickyTipo}
+                        onMoveSecao={handleMoveSecao}
                       />
                     ))}
                   </SortableContext>
@@ -495,7 +580,7 @@ export function AnamneseDocumentoEditor({
               saving={saving}
               lastSavedAt={lastSavedAt}
               editavel={state.editavel}
-              onSave={() => doSave({ allowEmpty: true })}
+              onSave={() => doSave()}
               onPreview={() => {
                 setPreviewGhost(null);
                 setPreviewOpen(true);
@@ -504,18 +589,20 @@ export function AnamneseDocumentoEditor({
           ) : null}
         </div>
 
-        <AnamneseDocRail
-          railTab={railTab}
-          onRailTabChange={setRailTab}
-          fichas={biblioteca.FICHAS}
-          modulos={biblioteca.MODULOS}
-          banco={biblioteca.BANCO}
-          onUseFicha={handleUseFicha}
-          onAddModulo={handleAppendModulo}
-          onAddBank={handleAddBank}
-          onEspiar={handleEspiar}
-        />
+        {railBeside && !isEmptyDoc ? (
+          <div className="min-w-0 w-[300px] shrink-0">
+            <div className="sticky top-0 max-h-[calc(100dvh-8rem)] overflow-y-auto">
+              <AnamneseDocRail {...railProps} />
+            </div>
+          </div>
+        ) : null}
       </div>
+
+      <AnamneseDocRailSheet
+        open={!railBeside && !isEmptyDoc && railSheetOpen}
+        onClose={closeRailSheet}
+        railProps={railProps}
+      />
     </div>
   );
 }

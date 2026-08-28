@@ -31,6 +31,9 @@ export function TermoFolha({
   pacienteCtx,
   clinicaCtx,
   profissionalCtx,
+  procedimentoCtx,
+  nomeProcedimento,
+  procedimentos,
   quillRef,
 }) {
   const tituloExibicao = titulo || 'Termo de Consentimento LGPD';
@@ -58,9 +61,12 @@ export function TermoFolha({
       pac: pacienteCtx || {},
       clinica: clinicaCtx || {},
       prof: profissionalCtx || {},
+      procedimento: procedimentoCtx || nomeProcedimento,
+      nomeProcedimento,
+      procedimentos,
     });
     return DOMPurify.sanitize(substituido, { ADD_ATTR: ['class'] });
-  }, [editavel, conteudo, pacienteCtx, clinicaCtx, profissionalCtx]);
+  }, [editavel, conteudo, pacienteCtx, clinicaCtx, profissionalCtx, procedimentoCtx, nomeProcedimento, procedimentos]);
 
   const valorExibido = editavel ? conteudo : conteudoView;
 

@@ -244,33 +244,12 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
 
   return (
     <div className="space-y-6">
-      {/* Header Responsivo */}
-      <div className={agendaEnterClass(showEntrance, 'agenda-delay-100')}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 bg-teal-50 rounded-xl">
-              <Users className="h-6 w-6 text-[#00a88e]" />
-            </div>
-            <h3 className="text-2xl font-bold text-slate-900 truncate tracking-tight">Gestão de Equipe</h3>
-          </div>
-          <p className="text-sm text-slate-500 truncate pl-12 sm:pl-0 sm:mt-1">Gerencie os membros da equipe e níveis de acesso da sua clínica.</p>
-        </div>
-        {activeTab === 'membros' && (
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="group flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-teal-500/30 transition-all duration-300 hover:shadow-teal-500/40 hover:-translate-y-0.5 active:scale-95 touch-manipulation sm:w-auto"
-          >
-            <UserPlus className="h-4 w-4 transition-transform group-hover:scale-110" />
-            <span className="whitespace-nowrap">Convidar / Criar Acesso</span>
-          </button>
-        )}
-      </div>
-      </div>
-      
-      {/* Abas Internas (Segmented Control) */}
-      <div className={agendaEnterClass(showEntrance, 'agenda-delay-150')}>
-      <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:inline-flex sm:w-auto relative z-10">
+      {/* Barra de Ações & Abas Internas */}
+      <div className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${agendaEnterClass(showEntrance, 'agenda-delay-100')}`}>
+        <h2 className="sr-only">Gestão de Equipe</h2>
+
+        {/* Abas Internas (Segmented Control) */}
+        <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:inline-flex sm:w-auto relative z-10">
         <button
           onClick={() => setActiveTab('membros')}
           className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${

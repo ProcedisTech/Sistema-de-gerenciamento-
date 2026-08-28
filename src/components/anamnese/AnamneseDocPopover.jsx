@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { VIEWPORT_DIALOG_OPEN_EVENT } from '../shared/ViewportDialog.jsx';
 
 function placePopover(el, anchor) {
   if (!el || !anchor) return;
@@ -48,18 +49,23 @@ export function AnamneseDocPopover({
       onClose?.();
     };
     document.addEventListener('mousedown', onDoc, true);
-    return () => document.removeEventListener('mousedown', onDoc, true);
+    const onViewportDialog = () => onClose?.();
+    document.addEventListener(VIEWPORT_DIALOG_OPEN_EVENT, onViewportDialog);
+    return () => {
+      document.removeEventListener('mousedown', onDoc, true);
+      document.removeEventListener(VIEWPORT_DIALOG_OPEN_EVENT, onViewportDialog);
+    };
   }, [open, anchorRef, onClose]);
 
   if (!open) return null;
 
-  const widthCls = variant === 'menu' ? 'w-[335px]' : 'w-[295px]';
+  const widthCls = variant === 'menu' ? 'w-[min(335px,calc(100vw-24px))]' : 'w-[min(295px,calc(100vw-24px))]';
 
   return createPortal(
     <div
       ref={popRef}
       role="dialog"
-      className={`anamnese-sora fixed z-[200] overflow-hidden rounded-[13px] border border-[#e2e8f0] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12),0_2px_8px_rgba(15,23,42,0.06)] animate-in fade-in duration-150 ${widthCls} ${className}`}
+      className={`anamnese-sora fixed z-[200] overflow-hidden rounded-[13px] border border-[#e2e8f0] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12),0_2px_8px_rgba(15,23,42,0.06)] animate-in fade-in duration-150 motion-reduce:animate-none ${widthCls} ${className}`}
     >
       {children}
     </div>,

@@ -1,28 +1,55 @@
-import React, { useRef, useState } from 'react';
-import { COMPOSE, CT, CT_ON, KBD } from './editorDocumentoTokens.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
+import {
+  COMPOSE,
+  COMPOSE_PENDING,
+  CT,
+  CT_ON,
+  KBD,
+  ADDBTN,
+  ADDSEC,
+  BTN_PRIMARY,
+  isTipoEscolha,
+} from './editorDocumentoTokens.js';
+import { canCommitCompose, composeCommitHint, composeHasPending } from './editorDocumentoState.js';
 import { RAPIDOS, getTipoMeta } from './editorTipoMeta.js';
 import { EDITOR_ACTIONS } from './editorDocumentoReducer.js';
 import { AnamneseDocPopover } from './AnamneseDocPopover.jsx';
 import { AnamneseDocTipoMenu } from './AnamneseDocTipoMenu.jsx';
+import { AnamneseDocAlternativas } from './AnamneseDocAlternativas.jsx';
 
 export function AnamneseDocCompose({ compose, stickyTipo, editavel, dispatch }) {
   const moreRef = useRef(null);
+  const inputRef = useRef(null);
   const [openTipo, setOpenTipo] = useState(false);
   const isChild = Boolean(compose?.child);
   const extra = !RAPIDOS.includes(stickyTipo);
   const extraMeta = getTipoMeta(stickyTipo);
+  const showAlts = isTipoEscolha(stickyTipo);
+  const pending = composeHasPending(compose);
+  const canCommit = canCommitCompose(compose, stickyTipo);
+  const commitHint = composeCommitHint(compose, stickyTipo);
   const placeholder = isChild
     ? 'Detalhe — ex.: Qual? Descreva...'
-    : 'Escreva a pergunta e aperte Enter';
+    : 'Escreva a pergunta';
+
+  useEffect(() => {
+    inputRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, []);
+
+  const commit = () => {
+    if (!canCommit) return;
+    dispatch({ type: EDITOR_ACTIONS.COMMIT_COMPOSE });
+  };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (!String(compose?.texto || '').trim()) {
-        dispatch({ type: EDITOR_ACTIONS.CLOSE_COMPOSE });
+      if (!canCommit) {
+        if (!pending) dispatch({ type: EDITOR_ACTIONS.CLOSE_COMPOSE });
         return;
       }
-      dispatch({ type: EDITOR_ACTIONS.COMMIT_COMPOSE });
+      commit();
     } else if (e.key === 'Tab') {
       e.preventDefault();
       dispatch({ type: EDITOR_ACTIONS.TOGGLE_COMPOSE_CHILD });
@@ -33,24 +60,25 @@ export function AnamneseDocCompose({ compose, stickyTipo, editavel, dispatch }) 
   };
 
   return (
-    <div className={`${COMPOSE}${isChild ? ' ml-9' : ''}`}>
+    <div className={`${pending ? COMPOSE_PENDING : COMPOSE}${isChild ? ' ml-4 sm:ml-9' : ''}`}>
       <span className="mt-0.5 w-5 shrink-0 text-right text-[11.5px] font-bold tabular-nums text-teal-700">
         ↵
       </span>
       <div className="min-w-0 flex-1">
         <input
+          ref={inputRef}
           type="text"
           autoFocus
           value={compose?.texto || ''}
           disabled={!editavel}
           placeholder={placeholder}
-          className="cinput w-full border-0 bg-transparent p-0 text-[14.5px] font-medium leading-[1.45] text-[#0f172a] outline-none placeholder:font-normal placeholder:text-[#64748b]"
+          className="cinput w-full border-0 bg-transparent p-0 text-base font-medium leading-[1.5] text-[#0f172a] outline-none placeholder:font-normal placeholder:text-[#64748b] sm:text-[14.5px] sm:leading-[1.45]"
           onChange={(e) =>
             dispatch({ type: EDITOR_ACTIONS.SET_COMPOSE_TEXT, texto: e.target.value })
           }
           onKeyDown={handleKeyDown}
         />
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-row flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-teal-700/80">
             Ela responde com
           </span>
@@ -64,7 +92,7 @@ export function AnamneseDocCompose({ compose, stickyTipo, editavel, dispatch }) 
                 disabled={!editavel}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => dispatch({ type: EDITOR_ACTIONS.SET_STICKY_TIPO, tipo })}
-                className={`${CT} ${on ? CT_ON : ''}`}
+                className={on ? CT_ON : CT}
               >
                 {meta.n}
               </button>
@@ -76,14 +104,46 @@ export function AnamneseDocCompose({ compose, stickyTipo, editavel, dispatch }) 
             disabled={!editavel}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setOpenTipo((v) => !v)}
-            className={`${CT} ${extra ? CT_ON : ''}`}
+            className={extra ? CT_ON : CT}
           >
             {extra ? extraMeta.n : 'Outro tipo'}
           </button>
         </div>
+
+        {showAlts ? (
+          <>
+            <p className="mt-2 text-[11px] font-medium text-teal-800/80">
+              Defina as opções abaixo antes de criar a pergunta.
+            </p>
+            <AnamneseDocAlternativas
+              alternativas={compose?.alternativasDraft || []}
+              editavel={editavel}
+              onChange={(alternativas) =>
+                dispatch({ type: EDITOR_ACTIONS.SET_COMPOSE_ALTERNATIVAS, alternativas })
+              }
+            />
+          </>
+        ) : null}
+
+        <div className="sticky bottom-16 z-10 mt-3 scroll-mb-24 sm:bottom-4">
+          <button
+            type="button"
+            className={`${BTN_PRIMARY} w-full justify-center sm:w-auto`}
+            disabled={!editavel || !canCommit}
+            title={canCommit ? 'Adicionar pergunta' : commitHint}
+            onClick={commit}
+          >
+            <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+            Adicionar pergunta
+          </button>
+          {!canCommit && pending ? (
+            <p className="mt-1.5 text-[11.5px] font-semibold text-amber-800">{commitHint}</p>
+          ) : null}
+        </div>
+
         <div className="chint mt-2 flex flex-wrap gap-3 text-[10.5px] text-[#64748b]">
           <span>
-            <span className={KBD}>Enter</span> criar
+            <span className={KBD}>Enter</span> atalho no título
           </span>
           <span>
             <span className={KBD}>Tab</span> {isChild ? 'soltar' : 'depende da anterior'}
@@ -114,12 +174,7 @@ export function AnamneseDocCompose({ compose, stickyTipo, editavel, dispatch }) 
 
 export function AnamneseDocAddBtn({ onClick, disabled }) {
   return (
-    <button
-      type="button"
-      className="addbtn my-2 ml-[71px] inline-flex cursor-pointer items-center gap-1.5 rounded-[9px] border border-dashed border-teal-200 bg-transparent px-3 py-2 text-[13px] font-semibold text-teal-700 transition-all hover:border-solid hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
-      onClick={onClick}
-      disabled={disabled}
-    >
+    <button type="button" className={ADDBTN} onClick={onClick} disabled={disabled}>
       Escrever pergunta
     </button>
   );
@@ -127,12 +182,7 @@ export function AnamneseDocAddBtn({ onClick, disabled }) {
 
 export function AnamneseDocAddSec({ onClick, disabled }) {
   return (
-    <button
-      type="button"
-      className="addsec mx-[30px] mt-2.5 flex w-[calc(100%-60px)] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[#cbd5e1] bg-transparent px-3.5 py-3.5 text-[13px] font-semibold text-[#64748b] transition-all hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
-      onClick={onClick}
-      disabled={disabled}
-    >
+    <button type="button" className={ADDSEC} onClick={onClick} disabled={disabled}>
       Nova seção
     </button>
   );

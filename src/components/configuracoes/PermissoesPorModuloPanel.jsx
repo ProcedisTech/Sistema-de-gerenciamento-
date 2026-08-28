@@ -1,11 +1,21 @@
-import React from 'react';
-import { CheckSquare, Square, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckSquare, Square, Loader2, ChevronDown } from 'lucide-react';
+
+const ehPermissaoDeVer = (p) => (p.codigo || '').toUpperCase().endsWith('_VER');
 
 /**
  * Checklist de permissões agrupadas por módulo. Reaproveitado no modal "Novo Perfil"
  * (GestaoPerfisTab) e nos modais de criar/editar membro (InviteModal, EditRoleModal).
+ *
+ * Em modo editável (disabled=false), cada módulo vem fechado e só mostra as permissões
+ * de ação (criar/editar/excluir/configurar). Abrir o módulo pelo botão "Ver" já marca
+ * sozinho as permissões "_VER" daquele módulo — não faz sentido dar acesso pra mexer
+ * em algo sem poder ver aquele algo, então a permissão de visualizar nunca fica exposta
+ * como um checkbox separado pra esquecer de marcar.
  */
 export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, disabled = false, loading = false, columns = 2, showModuloActions = false, onToggleModulo }) {
+  const [gruposAbertos, setGruposAbertos] = useState(() => new Set());
+
   const permissoesPorModulo = (permissoes || []).reduce((acc, perm) => {
     const mod = perm.modulo || 'Geral';
     if (!acc[mod]) acc[mod] = [];
@@ -21,54 +31,98 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
     );
   }
 
+  const alternarGrupo = (modulo, perms) => {
+    setGruposAbertos(prev => {
+      const next = new Set(prev);
+      if (next.has(modulo)) {
+        next.delete(modulo);
+        return next;
+      }
+      next.add(modulo);
+      const idsVer = perms.filter(ehPermissaoDeVer).map(p => p.permissaoId);
+      if (idsVer.length) {
+        if (onToggleModulo) {
+          onToggleModulo(idsVer, true);
+        } else {
+          idsVer.forEach(id => {
+            if (!(selecionadas || []).includes(id)) onChange(id, true);
+          });
+        }
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-4">
       {Object.entries(permissoesPorModulo).map(([modulo, perms]) => {
-        const ativasNoModulo = perms.filter(p => (selecionadas || []).includes(p.permissaoId)).length;
-        const todosSelecionados = ativasNoModulo === perms.length;
+        const aberto = disabled || gruposAbertos.has(modulo);
+        // Em modo editável, a permissão "_VER" some da lista de checkboxes — ela é
+        // marcada automaticamente ao abrir o grupo (ver alternarGrupo). Em modo somente
+        // leitura (preview de nível/perfil) mostra tudo, já que não há nada pra "abrir".
+        const permsExibidas = disabled ? perms : perms.filter(p => !ehPermissaoDeVer(p));
+        // Contador e "Marcar/Desmarcar todos" refletem só o que o usuário vê e controla —
+        // a "_VER" auto-marcada não entra na conta pra não confundir (ex: "1/4" com só 3
+        // checkboxes visíveis).
+        const ativasNoModulo = permsExibidas.filter(p => (selecionadas || []).includes(p.permissaoId)).length;
+        const todosSelecionados = permsExibidas.length > 0 && ativasNoModulo === permsExibidas.length;
         return (
         <div key={modulo}>
           <h5 className="sticky top-0 z-10 flex items-center justify-between text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2 bg-slate-50 py-2 px-3 rounded-xl border border-slate-100 shadow-sm">
             <span className="flex items-center gap-2">
               {modulo}
-              {showModuloActions && (
+              {showModuloActions && aberto && (
                 <button
                   type="button"
-                  onClick={() => onToggleModulo?.(perms.map(p => p.permissaoId), !todosSelecionados)}
+                  onClick={() => onToggleModulo?.(permsExibidas.map(p => p.permissaoId), !todosSelecionados)}
                   className="normal-case tracking-normal font-semibold text-teal-600 hover:text-teal-700"
                 >
                   {todosSelecionados ? 'Desmarcar todos' : 'Marcar todos'}
                 </button>
               )}
             </span>
-            <span className={`font-semibold normal-case tracking-normal ${todosSelecionados && perms.length > 0 ? 'text-teal-600' : 'text-slate-400'}`}>{ativasNoModulo}/{perms.length}</span>
-          </h5>
-          <div className={`grid grid-cols-1 sm:grid-cols-2 ${columns === 3 ? 'lg:grid-cols-3' : ''} gap-2 pl-1`}>
-            {perms.map(p => {
-              const checked = (selecionadas || []).includes(p.permissaoId);
-              return (
-                <label
-                  key={p.permissaoId}
-                  className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${checked ? 'border-teal-200 bg-teal-50/40 shadow-sm' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
+            <span className="flex items-center gap-3">
+              <span className={`font-semibold normal-case tracking-normal ${todosSelecionados ? 'text-teal-600' : 'text-slate-400'}`}>{ativasNoModulo}/{permsExibidas.length}</span>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => alternarGrupo(modulo, perms)}
+                  className="flex shrink-0 items-center gap-1 normal-case tracking-normal font-semibold text-teal-700 hover:text-teal-800"
                 >
-                  <div className="mt-0.5 text-teal-600 shrink-0">
-                    {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-500" />}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className={`text-[13px] font-bold ${checked ? 'text-teal-900' : 'text-slate-900'}`}>{p.nome}</span>
-                    {p.descricao && <span className="text-[11px] text-slate-600 leading-snug mt-1">{p.descricao}</span>}
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="hidden"
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={(e) => onChange(p.permissaoId, e.target.checked)}
-                  />
-                </label>
-              );
-            })}
-          </div>
+                  {aberto ? 'Ocultar' : 'Ver'}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+            </span>
+          </h5>
+          {aberto && (
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${columns === 3 ? 'lg:grid-cols-3' : ''} gap-2 pl-1`}>
+              {permsExibidas.map(p => {
+                const checked = (selecionadas || []).includes(p.permissaoId);
+                return (
+                  <label
+                    key={p.permissaoId}
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${checked ? 'border-teal-200 bg-teal-50/40 shadow-sm' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
+                  >
+                    <div className="mt-0.5 text-teal-600 shrink-0">
+                      {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-500" />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className={`text-[13px] font-bold ${checked ? 'text-teal-900' : 'text-slate-900'}`}>{p.nome}</span>
+                      {p.descricao && <span className="text-[11px] text-slate-600 leading-snug mt-1">{p.descricao}</span>}
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={(e) => onChange(p.permissaoId, e.target.checked)}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
         );
       })}

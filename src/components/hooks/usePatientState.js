@@ -3,7 +3,6 @@ import { applyPatientQuickFilter } from '../patients/patientListFilters.js';
 import {
   pacientesApi,
   patientListSortToApiParam,
-  procedimentosApi,
 } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import {
@@ -237,36 +236,6 @@ export const usePatientState = (opts = {}) => {
     const qApi = queryForPacientesSearch(patientSearchQuery);
     const isBirthday = patientListSortBy === 'birthday-asc';
 
-    const fetchProceduresForTargets = (mapped) => {
-      const targets = mapped.filter(
-        (p) => p?.id && patientUltimaVisitaDayFromDto(p) === '-',
-      );
-      if (!targets.length) return;
-
-      const chunk = 5;
-      (async () => {
-        for (let i = 0; i < targets.length; i += chunk) {
-          if (cancelled) break;
-          const batch = targets.slice(i, i + chunk);
-          await Promise.all(
-            batch.map(async (p) => {
-              if (cancelled) return;
-              try {
-                const data = await procedimentosApi.byPaciente(p.id);
-                if (cancelled) return;
-                mergePatientById(p.id, {
-                  procedures: Array.isArray(data) ? data : [],
-                });
-              } catch {
-                if (cancelled) return;
-                mergePatientById(p.id, { procedures: [] });
-              }
-            }),
-          );
-        }
-      })();
-    };
-
     const failList = (err) => {
       if (cancelled) return;
       setPatientListItems([]);
@@ -313,7 +282,6 @@ export const usePatientState = (opts = {}) => {
             totalElements:
               typeof pageData.totalElements === 'number' ? pageData.totalElements : mapped.length,
           });
-          fetchProceduresForTargets(mapped);
         })
         .catch(failList)
         .finally(() => {
@@ -350,7 +318,6 @@ export const usePatientState = (opts = {}) => {
           number: pageIdx,
           totalElements: total,
         });
-        fetchProceduresForTargets(slice);
       })
       .catch(failList)
       .finally(() => {
