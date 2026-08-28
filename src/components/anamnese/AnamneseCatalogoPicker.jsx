@@ -217,7 +217,14 @@ export function AnamneseCatalogoPicker({
                               onClick={() => handleSelect(item)}
                               className="w-full px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#e6f7f5]"
                             >
-                              {item.nome}
+                              <span className="flex flex-col gap-0.5">
+                                <span>{item.nome}</span>
+                                {(item.detalhe || item.encontradoPor) ? (
+                                  <span className="text-[11px] text-slate-400">
+                                    {[item.detalhe, item.encontradoPor].filter(Boolean).join(' · ')}
+                                  </span>
+                                ) : null}
+                              </span>
                             </button>
                           </li>
                         );

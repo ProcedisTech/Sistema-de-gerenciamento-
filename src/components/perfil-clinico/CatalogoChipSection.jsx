@@ -197,10 +197,19 @@ export function CatalogoChipSection({
                           : 'text-slate-700 hover:bg-[#e6f7f5] cursor-pointer'
                       }`}
                     >
-                      {item.nome}
-                      {already && (
-                        <span className="ml-2 text-[11px] text-slate-400">já adicionado</span>
-                      )}
+                      <span className="flex flex-col gap-0.5">
+                        <span>
+                          {item.nome}
+                          {already ? (
+                            <span className="ml-2 text-[11px] text-slate-400">já adicionado</span>
+                          ) : null}
+                        </span>
+                        {(item.detalhe || item.encontradoPor) ? (
+                          <span className="text-[11px] text-slate-400">
+                            {[item.detalhe, item.encontradoPor].filter(Boolean).join(' · ')}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                   </li>
                 );

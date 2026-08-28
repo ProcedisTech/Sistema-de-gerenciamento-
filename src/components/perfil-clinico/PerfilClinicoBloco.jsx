@@ -219,6 +219,7 @@ export function PerfilClinicoBloco({
             onUpdateObservacao={(id, texto) => updateObservacao('alergiasPrincipioAtivo', id, texto)}
             searchFn={buscarPrincipiosAtivos}
             placeholder="Buscar princípio ativo (ex.: dipirona, penicilina…)"
+            minQueryLength={2}
             readOnly={readOnly}
           />
         </section>
@@ -236,6 +237,7 @@ export function PerfilClinicoBloco({
             onUpdateObservacao={(id, texto) => updateObservacao('medicamentosEmUso', id, texto)}
             searchFn={buscarMedicamentos}
             placeholder="Buscar medicamento…"
+            minQueryLength={2}
             readOnly={readOnly}
             renderChipExtra={readOnly ? undefined : (item, _onChange) => (
               <MedicamentoExtra
