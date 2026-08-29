@@ -1,7 +1,30 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Search, X } from 'lucide-react';
 
 const DEBOUNCE_MS = 300;
+
+/** Agrupa resultados por produto comercial (caminho 3) quando há batch possível. */
+function groupResultsByProduto(results) {
+  const visible = (results || []).filter((r) => r != null);
+  const groups = [];
+  const byKey = new Map();
+
+  for (const item of visible) {
+    const id = item.encontradoPorId;
+    const key = id != null ? String(id) : `solo:${item.id ?? item.codigo}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        encontradoPor: item.encontradoPor ?? null,
+        encontradoPorId: id ?? null,
+        items: [],
+      });
+      groups.push(byKey.get(key));
+    }
+    byKey.get(key).items.push(item);
+  }
+  return groups;
+}
 
 /**
  * Autocomplete de catálogo clínico para anamnese.
@@ -88,18 +111,49 @@ export function AnamneseCatalogoPicker({
     if (descrevendo && textoRef.current) textoRef.current.focus();
   }, [descrevendo]);
 
-  const handleSelect = (item) => {
+  const handleSelect = (item, { viaProduto = false, medicamentoDeclaradoId = null } = {}) => {
     const id = item.id ?? item.codigo;
     if (id == null || selectedIds.has(String(id))) return;
-    emit(
-      [...catalogoItens, { id, nome: item.nome || String(id), fonte: 'catalogo' }],
-      textosLivres,
-      false,
-    );
+    const chip = {
+      id,
+      nome: item.nome || String(id),
+      fonte: 'catalogo',
+    };
+    if (viaProduto && medicamentoDeclaradoId) {
+      chip.medicamentoDeclaradoId = medicamentoDeclaradoId;
+      chip.viaProduto = true;
+    }
+    emit([...catalogoItens, chip], textosLivres, false);
     setQuery('');
     setResults([]);
     setShowResults(false);
   };
+
+  const handleSelectBatch = (items, medicamentoDeclaradoId) => {
+    const novos = [];
+    for (const item of items) {
+      const id = item.id ?? item.codigo;
+      if (id == null || selectedIds.has(String(id))) continue;
+      novos.push({
+        id,
+        nome: item.nome || String(id),
+        fonte: 'catalogo',
+        medicamentoDeclaradoId,
+        viaProduto: true,
+      });
+    }
+    if (novos.length === 0) return;
+    emit([...catalogoItens, ...novos], textosLivres, false);
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+  };
+
+  const visibleResults = useMemo(
+    () => results.filter((r) => !selectedIds.has(String(r.id ?? r.codigo))),
+    [results, catalogoItens],
+  );
+  const groups = useMemo(() => groupResultsByProduto(visibleResults), [visibleResults]);
 
   const handleRemoveCatalogo = (id) => {
     emit(catalogoItens.filter((i) => String(i.id) !== String(id)), textosLivres, false);
@@ -193,7 +247,7 @@ export function AnamneseCatalogoPicker({
               >
                 {loadingSearch ? (
                   <p className="px-3 py-2 text-[13px] text-slate-400">Buscando…</p>
-                ) : results.filter((r) => !selectedIds.has(String(r.id ?? r.codigo))).length === 0 ? (
+                ) : visibleResults.length === 0 ? (
                   <div className="flex flex-col gap-2 px-3 py-3">
                     <p className="text-[13px] text-slate-500">Nenhum item. Descreva em texto.</p>
                     <button
@@ -206,29 +260,50 @@ export function AnamneseCatalogoPicker({
                   </div>
                 ) : (
                   <ul>
-                    {results
-                      .filter((r) => !selectedIds.has(String(r.id ?? r.codigo)))
-                      .map((item) => {
-                        const id = item.id ?? item.codigo;
-                        return (
-                          <li key={id}>
+                    {groups.map((g) => (
+                      <React.Fragment key={g.key}>
+                        {g.encontradoPor ? (
+                          <li
+                            className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide bg-slate-50 text-slate-500"
+                            aria-hidden
+                          >
+                            {g.encontradoPor}
+                          </li>
+                        ) : null}
+                        {g.items.map((item) => {
+                          const id = item.id ?? item.codigo;
+                          return (
+                            <li key={id}>
+                              <button
+                                type="button"
+                                onClick={() => handleSelect(item)}
+                                className="w-full px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#e6f7f5]"
+                              >
+                                <span className="flex flex-col gap-0.5">
+                                  <span>{item.nome}</span>
+                                  {(item.detalhe || (item.encontradoPor && !g.encontradoPor)) ? (
+                                    <span className="text-[11px] text-slate-400">
+                                      {[item.detalhe, !g.encontradoPor ? item.encontradoPor : null].filter(Boolean).join(' · ')}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                        {g.items.length >= 2 && g.encontradoPorId ? (
+                          <li className="border-b border-slate-100">
                             <button
                               type="button"
-                              onClick={() => handleSelect(item)}
-                              className="w-full px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#e6f7f5]"
+                              onClick={() => handleSelectBatch(g.items, g.encontradoPorId)}
+                              className="w-full px-3 py-2 text-left text-[12px] font-semibold text-[#0f766e] hover:bg-[#e6f7f5]"
                             >
-                              <span className="flex flex-col gap-0.5">
-                                <span>{item.nome}</span>
-                                {(item.detalhe || item.encontradoPor) ? (
-                                  <span className="text-[11px] text-slate-400">
-                                    {[item.detalhe, item.encontradoPor].filter(Boolean).join(' · ')}
-                                  </span>
-                                ) : null}
-                              </span>
+                              {`Não sei qual componente · marcar as ${g.items.length}`}
                             </button>
                           </li>
-                        );
-                      })}
+                        ) : null}
+                      </React.Fragment>
+                    ))}
                     <li className="border-t border-slate-100">
                       <button
                         type="button"

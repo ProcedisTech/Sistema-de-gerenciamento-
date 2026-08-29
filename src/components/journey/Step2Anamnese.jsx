@@ -713,11 +713,13 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               removeItem={perfilClinico.removeItem}
               updateObservacao={perfilClinico.updateObservacao}
               updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
+              updateReacaoAdversa={perfilClinico.updateReacaoAdversa}
               buscarAlimentos={perfilClinico.buscarAlimentos}
               buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
               buscarMedicamentos={perfilClinico.buscarMedicamentos}
               buscarAntecedentes={perfilClinico.buscarAntecedentes}
               tiposByCodigo={perfilClinico.tiposByCodigo}
+              reacoesAdversas={perfilClinico.reacoesAdversas}
             />
           </div>
         </div>

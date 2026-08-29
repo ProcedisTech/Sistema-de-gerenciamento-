@@ -232,7 +232,11 @@ export function buildRespostaApiRows(pergunta, resposta) {
       : tipo === 'catalogo_medicamento' ? 'medicamentoCatalogoId'
       : 'antecedenteCatalogoId';
     for (const it of resposta.catalogoItens || []) {
-      rows.push({ perguntaId, [fkField]: it.id });
+      const row = { perguntaId, [fkField]: it.id };
+      if (tipo === 'catalogo_principio_ativo' && it.medicamentoDeclaradoId) {
+        row.medicamentoDeclaradoId = it.medicamentoDeclaradoId;
+      }
+      rows.push(row);
     }
     for (const t of resposta.textosLivres || []) {
       const texto = String(t.texto || '').trim();
@@ -268,7 +272,11 @@ export function serializeRespostaPublica(pergunta, resposta) {
     const canal = canalCatalogoPublico(tipo);
     const list = [];
     for (const it of resposta.catalogoItens || []) {
-      list.push({ tipo: canal, valor: it.id });
+      const entry = { tipo: canal, valor: it.id };
+      if (tipo === 'catalogo_principio_ativo' && it.medicamentoDeclaradoId) {
+        entry.medicamento_declarado_id = it.medicamentoDeclaradoId;
+      }
+      list.push(entry);
     }
     for (const t of resposta.textosLivres || []) {
       const texto = String(t.texto || '').trim();

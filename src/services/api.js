@@ -1662,5 +1662,9 @@ export const catalogoClinicoApi = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request(`/api/v1/catalogo-clinico/outras-alergias${qs}`, { needsOrg: false });
   },
+
+  /** Reações adversas estruturadas (picker de alergia PA no perfil). */
+  reacoesAdversas: () =>
+    request('/api/v1/catalogo-clinico/reacoes-adversas', { needsOrg: false }),
 };
 

@@ -32,7 +32,8 @@ export function mapGetToState(data) {
           usoContinuo: item.usoContinuo ?? true,
           origemDeclaracao: item.origemDeclaracao ?? null,
           confirmadoEm: item.confirmadoEm ?? null,
-          registradoPorNome: item.registradoPorNome ?? null,
+          reacaoAdversaId: item.reacaoAdversaId ?? null,
+          reacaoNome: item.reacaoNome ?? null,
         }))
       : [];
 
@@ -73,6 +74,7 @@ function mapStateToPutBody(state, roleUserId) {
           codigo: item.codigo,
           nome: item.nome,
           observacao: item.observacao || null,
+          reacaoAdversaId: item.reacaoAdversaId || null,
           dose: item.dose || null,
           frequencia: item.frequencia || null,
           usoContinuo: item.usoContinuo ?? null,
@@ -105,6 +107,7 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
   const [error, setError] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [tiposByCodigo, setTiposByCodigo] = useState({});
+  const [reacoesAdversas, setReacoesAdversas] = useState([]);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -159,6 +162,19 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
       })
       .catch(() => {
         if (!cancelled) setTiposByCodigo({});
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    catalogoClinicoApi.reacoesAdversas()
+      .then((d) => {
+        if (cancelled || !Array.isArray(d)) return;
+        setReacoesAdversas(d);
+      })
+      .catch(() => {
+        if (!cancelled) setReacoesAdversas([]);
       });
     return () => { cancelled = true; };
   }, []);
@@ -228,6 +244,15 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
     }));
   }, [updateState]);
 
+  const updateReacaoAdversa = useCallback((itemId, reacaoAdversaId, reacaoNome) => {
+    updateState((prev) => ({
+      ...prev,
+      alergiasPrincipioAtivo: (prev.alergiasPrincipioAtivo ?? []).map((i) =>
+        i.id === itemId ? { ...i, reacaoAdversaId, reacaoNome } : i
+      ),
+    }));
+  }, [updateState]);
+
   const buscarAlimentos = useCallback((q) =>
     catalogoClinicoApi.alimentos(q).then((d) => Array.isArray(d) ? d : []).catch(() => []),
   []);
@@ -256,10 +281,12 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
     removeItem,
     updateObservacao,
     updateMedicamentoExtra,
+    updateReacaoAdversa,
     buscarAlimentos,
     buscarPrincipiosAtivos,
     buscarMedicamentos,
     buscarAntecedentes,
     tiposByCodigo,
+    reacoesAdversas,
   };
 }
