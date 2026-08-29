@@ -3374,8 +3374,6 @@ function AppRefactoredInner() {
             const newM = total % 60;
             actualEndHh = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
           }
-          // Preserva horaInicio e horaFim previstos no banco para nao alterar a reserva do agendamento
-          const updatePayload = {};
 
           const agendaIdsToUpdate = new Set();
           if (targetAgendaId) agendaIdsToUpdate.add(String(targetAgendaId));
@@ -3384,18 +3382,13 @@ function AppRefactoredInner() {
           });
 
           for (const aId of agendaIdsToUpdate) {
-            await agendasApi.atualizarStatus(aId, 'realizado', updatePayload).catch((err) => {
-              console.warn('[encerrarAtendimento] Erro ao atualizar status da agenda:', err);
+            await enriquecerAgendaAgendada({
+              agendaId: aId,
+              procedimentosSessao: journeyState.procedimentosSessao,
+              novosIdsValidos,
+            }).catch((err) => {
+              console.warn('[encerrarAtendimento] Erro ao sincronizar agenda agendada:', err);
             });
-            if (novosIdsValidos.length > 0) {
-              await enriquecerAgendaAgendada({
-                agendaId: aId,
-                procedimentosSessao: journeyState.procedimentosSessao,
-                novosIdsValidos,
-              }).catch((err) => {
-                console.warn('[encerrarAtendimento] Erro ao enriquecer observação da agenda:', err);
-              });
-            }
           }
           journeyState.setAttendanceStartTime(null, sCpf);
         }

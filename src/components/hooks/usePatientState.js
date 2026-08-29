@@ -162,19 +162,9 @@ export const usePatientState = (opts = {}) => {
   );
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
-  const refreshPatients = useCallback(async () => {
+  const refreshPatients = useCallback(() => {
     if (!authEnabled) return;
-    try {
-      const pageData = await pacientesApi.search('');
-      const lista = pageData.content || [];
-      setPatients(lista.map(mapBackendPatient).filter(Boolean));
-    } catch (err) {
-      if (err.status === 401) {
-        console.warn('[usePatientState] Sessão ausente ou expirada; lista de pacientes não carregada.');
-      } else {
-        console.warn('[usePatientState] Falha ao buscar pacientes (search):', err.message);
-      }
-    }
+    setPatientListBump((x) => x + 1);
   }, [authEnabled]);
 
   const bumpPatientList = useCallback(() => {
@@ -273,6 +263,7 @@ export const usePatientState = (opts = {}) => {
             .map(mapBackendPatient)
             .filter(Boolean);
           setPatientListItems(mapped);
+          setPatients(mapped);
           setPatientListMeta({
             first: Boolean(pageData.first),
             last: Boolean(pageData.last),
@@ -345,10 +336,9 @@ export const usePatientState = (opts = {}) => {
   useEffect(() => {
     if (!authEnabled) {
       setPatients([]);
-      return;
+      setPatientListItems([]);
     }
-    refreshPatients();
-  }, [authEnabled, refreshPatients]);
+  }, [authEnabled]);
 
   const setSelectedPatientCpf = useCallback((nextCpf) => {
     _setSelectedPatientCpf((prev) => {

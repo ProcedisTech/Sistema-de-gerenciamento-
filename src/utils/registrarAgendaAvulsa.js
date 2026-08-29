@@ -173,31 +173,32 @@ export async function enriquecerAgendaAgendada({
   if (!agendaId) return;
 
   try {
-    // 1. Atualiza status para realizado
-    await agendasApi.atualizarStatus(agendaId, 'realizado');
+    const nomes = (procedimentosSessao || [])
+      .map((p) => p.nomeProcedimento || p.nome || p.nomeCatalogo)
+      .filter(Boolean);
 
-    // 2. Se foram salvos procedimentos no prontuário, anexa a lista de nomes na observação da agenda
-    if (Array.isArray(novosIdsValidos) && novosIdsValidos.length > 0) {
-      const nomes = (procedimentosSessao || [])
-        .map((p) => p.nomeProcedimento || p.nome || p.nomeCatalogo)
-        .filter(Boolean);
+    if (Array.isArray(novosIdsValidos) && novosIdsValidos.length > 0 && nomes.length > 0) {
+      const slotAtual = await agendasApi.get(agendaId).catch(() => null);
+      if (slotAtual) {
+        const obsAntiga = slotAtual.observacao ? String(slotAtual.observacao).trim() : '';
+        const textoExecutado = `Executado: ${nomes.join(', ')}`;
+        const novaObs = obsAntiga ? `${obsAntiga} | ${textoExecutado}` : textoExecutado;
 
-      if (nomes.length > 0) {
-        const slotAtual = await agendasApi.get(agendaId).catch(() => null);
-        if (slotAtual) {
-          const obsAntiga = slotAtual.observacao ? String(slotAtual.observacao).trim() : '';
-          const textoExecutado = `Executado: ${nomes.join(', ')}`;
-          const novaObs = obsAntiga ? `${obsAntiga} | ${textoExecutado}` : textoExecutado;
-
-          await agendasApi.update(agendaId, {
-            ...slotAtual,
-            observacao: novaObs,
-          }, { forcar: true }).catch((e) => {
-            console.warn('[enriquecerAgendaAgendada] Erro ao atualizar observação da agenda:', e);
-          });
-        }
+        await agendasApi.update(agendaId, {
+          ...slotAtual,
+          status: 'realizado',
+          observacao: novaObs,
+        }, { forcar: true }).catch((e) => {
+          console.warn('[enriquecerAgendaAgendada] Erro ao atualizar agenda enriquecida:', e);
+        });
+        return;
       }
     }
+
+    // Sem procedimentos ou falha de leitura: atualiza status diretamente
+    await agendasApi.atualizarStatus(agendaId, 'realizado').catch((e) => {
+      console.warn('[enriquecerAgendaAgendada] Erro ao atualizar status da agenda:', e);
+    });
   } catch (err) {
     console.warn('[enriquecerAgendaAgendada] Erro ao enriquecer agenda agendada (não-bloqueante):', err);
   }
