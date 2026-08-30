@@ -25,6 +25,14 @@ import {
 } from '../anamnese/anamneseFichaUtils.js';
 import { aplicarMudancaResposta, categoriaVisivelParaSexo, perguntaFilhaVisivel } from '../anamnese/anamneseCondicional.js';
 import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
+import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
+import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
+
+function resolveStatusCodigo(entry) {
+  if (!entry) return '';
+  if (typeof entry.status === 'string') return entry.status;
+  return entry.status?.codigo ?? entry.statusCodigo ?? '';
+}
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -97,6 +105,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   expectativas, setExpectativas,
   pacienteId = null,
   pacienteSexo = null,
+  pacienteNome = '',
+  pacienteCpf = '',
+  pacienteTelefone = '',
+  getPreenchimentoAnamneseId = null,
+  onPersistirAnamneseHub = null,
   roleUserId = null,
   step2Errors = {},
   setStep2Errors = () => {},
@@ -136,6 +149,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   );
   const [errosObrigatorias, setErrosObrigatorias] = useState(() => new Set());
   const [forcarNovoPreenchimento, setForcarNovoPreenchimento] = useState(false);
+  const [anamneseEscolhaOpen, setAnamneseEscolhaOpen] = useState(false);
+  const [anamneseSolicitacao, setAnamneseSolicitacao] = useState(null);
+  const [envioAtivo, setEnvioAtivo] = useState(false);
+  const [solicitandoAssinatura, setSolicitandoAssinatura] = useState(false);
+
+  const formularioReadOnly = modoVisualizacao || envioAtivo;
 
   // ── Perfil Clínico (Bloco 1) ─────────────────────────────
   const perfilClinico = usePerfilClinico(pacienteId, roleUserId, pacienteSexo, {
@@ -446,7 +465,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               assinaturaPaciente: preenchimento.assinaturaPaciente ?? detalhes?.assinaturaPaciente,
               status: preenchimento.status ?? detalhes?.status,
             };
-            syncedModo = true;
+            const statusCodigo =
+              resolveStatusCodigo(preenchimento)
+              || resolveStatusCodigo(detalhes);
+            const isAguardandoAssinatura = statusCodigo === 'aguardando_assinatura';
+            syncedModo = !isAguardandoAssinatura;
             setRespostas(respostasCarregadas);
             respostasRef.current = respostasCarregadas;
             setPreenchimentoAnterior(syncedPreenchimento);
@@ -495,7 +518,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   }, [pacienteId]);
 
   const handleRespostaChange = useCallback((resposta) => {
-    if (modoVisualizacao) return;
+    if (formularioReadOnly) return;
     const key = String(resposta.perguntaId);
     const normalized = { ...resposta, perguntaId: resposta.perguntaId };
     const perguntas = itensOrdenados.map((item) => item.pergunta).filter(Boolean);
@@ -520,6 +543,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     salvarRespostaAnamnese(key, normalized);
   }, [
     modoVisualizacao,
+    formularioReadOnly,
     salvarRespostaAnamnese,
     onSavedAnamneseStateChange,
     fichaSelecionadaId,
@@ -547,6 +571,81 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     fichaDropdownNovo,
     preenchimentoAnterior,
   ]);
+
+  const recarregarHistoricoPaciente = useCallback(async () => {
+    if (!pacienteId) return;
+    try {
+      const data = await anamneseApi.listPaciente(pacienteId);
+      setHistoricoPaciente(Array.isArray(data) ? data : []);
+    } catch {
+      setHistoricoPaciente([]);
+    }
+  }, [pacienteId]);
+
+  const handleSolicitarAssinatura = useCallback(async () => {
+    if (!pacienteId || formularioReadOnly || solicitandoAssinatura) return;
+    if (typeof onPersistirAnamneseHub !== 'function') return;
+
+    setSolicitandoAssinatura(true);
+    try {
+      const ok = await onPersistirAnamneseHub();
+      if (!ok) return;
+
+      const preenchimentoId =
+        (typeof getPreenchimentoAnamneseId === 'function' && getPreenchimentoAnamneseId())
+        || preenchimentoAnterior?.id
+        || null;
+      if (!preenchimentoId) return;
+
+      setAnamneseSolicitacao({
+        pacienteId: String(pacienteId),
+        telefonePaciente: pacienteTelefone || '',
+        pacienteNome: pacienteNome || 'Paciente',
+        pacienteCpf: pacienteCpf || '',
+        preenchimentoAnamneseId: String(preenchimentoId),
+        anamneseId: fichaSelecionadaId ? String(fichaSelecionadaId) : null,
+      });
+      setAnamneseEscolhaOpen(true);
+    } finally {
+      setSolicitandoAssinatura(false);
+    }
+  }, [
+    pacienteId,
+    formularioReadOnly,
+    solicitandoAssinatura,
+    onPersistirAnamneseHub,
+    getPreenchimentoAnamneseId,
+    preenchimentoAnterior?.id,
+    pacienteTelefone,
+    pacienteNome,
+    pacienteCpf,
+    fichaSelecionadaId,
+  ]);
+
+  const handleEscolherAnamneseQr = () => {
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) =>
+      curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null } } : curr,
+    );
+  };
+
+  const handleEscolherAnamneseWhatsApp = () => {
+    if (!anamneseSolicitacao?.telefonePaciente) {
+      return;
+    }
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) =>
+      curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' } } : curr,
+    );
+  };
+
+  const podeSolicitarAssinatura = Boolean(
+    pacienteId
+    && fichaSelecionadaId
+    && !formularioReadOnly
+    && !consultaMode
+    && Object.keys(respostas).length > 0,
+  );
 
   useEffect(() => {
     if (!fichaSelecionadaId || fichaSelecionada) return;
@@ -672,6 +771,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         <AnamneseDocumentoView
           pacienteId={pacienteId}
           preenchimentoId={vigente.id}
+          pacienteTelefone={pacienteTelefone}
+          anamneseId={ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente) || fichaSelecionadaId || null}
           onModificar={async () => {
             const fichaId = ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente);
             if (fichaId) await consultarUltimoPreenchimento(fichaId);
@@ -981,6 +1082,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
         <div className={fillWidthCls}>
+          {envioAtivo ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-900">
+              Aguardando assinatura do paciente. A ficha está bloqueada para edição enquanto o link estiver ativo.
+            </div>
+          ) : null}
           {/* Título da ficha — discreto */}
           <p className="mb-5 text-[15px] font-semibold text-slate-700">{fichaSelecionada.nome}</p>
 
@@ -1017,7 +1123,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                         onChange={handleRespostaChange}
                         alerta={isAlerta}
                         obrigatorio={showObrigatorio}
-                        readOnly={modoVisualizacao}
+                        readOnly={formularioReadOnly}
                         searchFn={searchCatalogoHub(item.pergunta?.tipoResposta, {
                           sexo: pacienteSexo,
                           tipoAntecedenteCodigo: item.pergunta?.tipoAntecedenteCodigo,
@@ -1078,7 +1184,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 setStep2Errors((prev) => ({ ...prev, queixa: false }));
               }}
               rows={3}
-              readOnly={modoVisualizacao}
+              readOnly={formularioReadOnly}
               className={`w-full rounded-lg border border-slate-200 px-3 py-2.5 text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors ${
                 modoVisualizacao ? 'cursor-default bg-slate-50 opacity-90' : 'bg-white'
               }`}
@@ -1133,7 +1239,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                   setTimeout(() => setSaveStatus(''), 2500);
                 }}
                 rows={4}
-                readOnly={modoVisualizacao}
+                readOnly={formularioReadOnly}
                 className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
                   modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
                 } ${
@@ -1164,7 +1270,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 setTimeout(() => setSaveStatus(''), 2500);
               }}
               rows={4}
-              readOnly={modoVisualizacao}
+              readOnly={formularioReadOnly}
               className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
                 modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
               } ${
@@ -1179,6 +1285,26 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       ) : null}
       </div>
 
+      {podeSolicitarAssinatura ? (
+        <div className={`mt-6 ${consultaMode ? '' : 'max-w-5xl xl:max-w-6xl'}`}>
+          <button
+            type="button"
+            onClick={handleSolicitarAssinatura}
+            disabled={solicitandoAssinatura}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[#00a88e]/30 bg-[#e6f7f5] px-5 py-2.5 text-[13px] font-bold text-[#0f766e] transition-colors hover:bg-[#d1f0eb] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {solicitandoAssinatura ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Salvando…
+              </>
+            ) : (
+              'Solicitar assinatura do paciente'
+            )}
+          </button>
+        </div>
+      ) : null}
+
       {consultaMode ? (
         <div className="mt-8 flex justify-end border-t border-app-border pt-6">
           <button
@@ -1191,6 +1317,42 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </button>
         </div>
       ) : null}
+
+      <ModalEscolhaAssinatura
+        open={anamneseEscolhaOpen}
+        onClose={() => {
+          setAnamneseEscolhaOpen(false);
+          setAnamneseSolicitacao(null);
+        }}
+        opcoes={{ tablet: false, qrCode: true, link: true }}
+        onSelectQrCode={handleEscolherAnamneseQr}
+        onSelectLink={handleEscolherAnamneseWhatsApp}
+      />
+
+      <SolicitarAnamneseModal
+        open={Boolean(anamneseSolicitacao?.escolha)}
+        escolha={anamneseSolicitacao?.escolha}
+        payload={anamneseSolicitacao}
+        onClose={() => {
+          setAnamneseSolicitacao(null);
+          setEnvioAtivo(false);
+        }}
+        onCancelar={() => {
+          setAnamneseSolicitacao((curr) => (curr ? { ...curr, escolha: undefined } : null));
+          setAnamneseEscolhaOpen(true);
+        }}
+        onEnvioGerado={() => setEnvioAtivo(true)}
+        onEnvioExpirado={() => setEnvioAtivo(false)}
+        onConcluido={async () => {
+          setAnamneseSolicitacao(null);
+          setEnvioAtivo(false);
+          setModoVisualizacao(true);
+          await recarregarHistoricoPaciente();
+          if (fichaSelecionadaId) {
+            await selecionarFichaParaNovo(fichaSelecionadaId);
+          }
+        }}
+      />
     </div>
   );
 });

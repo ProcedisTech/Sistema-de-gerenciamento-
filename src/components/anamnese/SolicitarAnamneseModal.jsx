@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
 import { anamneseEnvioApi } from '../../services/api';
@@ -12,7 +12,14 @@ import {
 
 /**
  * @param {{ metodoCodigo: string, canalCodigo?: string|null }} escolha
- * @param {{ pacienteId: string, telefonePaciente?: string, pacienteNome?: string, pacienteCpf?: string }} payload
+ * @param {{
+ *   pacienteId: string,
+ *   telefonePaciente?: string,
+ *   pacienteNome?: string,
+ *   pacienteCpf?: string,
+ *   preenchimentoAnamneseId?: string|null,
+ *   anamneseId?: string|null,
+ * }} payload
  */
 export function SolicitarAnamneseModal({
   open,
@@ -21,18 +28,24 @@ export function SolicitarAnamneseModal({
   payload,
   onConcluido,
   onCancelar,
+  onEnvioGerado,
+  onEnvioExpirado,
 }) {
   const [sessaoData, setSessaoData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expirado, setExpirado] = useState(false);
   const [concluido, setConcluido] = useState(false);
   const pollingRef = useRef(null);
+  const gerarSeqRef = useRef(0);
 
   const canalCodigo = escolha?.canalCodigo ?? null;
   const isQr = !canalCodigo;
   const isWhatsApp = canalCodigo === 'WHATSAPP';
   const pacienteId = payload?.pacienteId;
   const telefonePaciente = payload?.telefonePaciente;
+  const preenchimentoAnamneseId = payload?.preenchimentoAnamneseId ?? null;
+  const anamneseId = payload?.anamneseId ?? null;
 
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
@@ -41,72 +54,110 @@ export function SolicitarAnamneseModal({
       setSessaoData(null);
       setLoading(true);
       setError(null);
+      setExpirado(false);
       setConcluido(false);
     }
   }
 
+  const montarPayloadGerar = useCallback(() => ({
+    pacienteId,
+    canalCodigo: canalCodigo || null,
+    telefonePaciente: canalCodigo ? (telefonePaciente || null) : null,
+    ...(preenchimentoAnamneseId ? { preenchimentoAnamneseId } : {}),
+    ...(anamneseId ? { anamneseId } : {}),
+  }), [pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId, anamneseId]);
+
+  const iniciarGeracao = useCallback((forcarNovo = false) => {
+    const key = chaveGerarAnamneseEnvio(
+      pacienteId,
+      canalCodigo,
+      telefonePaciente,
+      preenchimentoAnamneseId,
+    );
+    if (forcarNovo) {
+      liberarGerarInFlight(key);
+    }
+
+    setLoading(true);
+    setError(null);
+    setExpirado(false);
+    setConcluido(false);
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    const seq = gerarSeqRef.current + 1;
+    gerarSeqRef.current = seq;
+
+    let pending = forcarNovo ? null : obterGerarInFlight(key);
+    if (!pending) {
+      pending = anamneseEnvioApi.gerar(montarPayloadGerar());
+      registrarGerarInFlight(key, pending);
+    }
+
+    pending
+      .then((data) => {
+        if (gerarSeqRef.current !== seq) return;
+        setSessaoData(data);
+        setLoading(false);
+        onEnvioGerado?.();
+        if (data?.envioId) {
+          pollingRef.current = setInterval(async () => {
+            try {
+              const statusData = await anamneseEnvioApi.status(data.envioId);
+              if (statusData.status === 'CONCLUIDO') {
+                clearInterval(pollingRef.current);
+                setConcluido(true);
+                setTimeout(() => {
+                  if (onConcluido) onConcluido();
+                }, 1500);
+              } else if (statusData.status === 'EXPIRADO' || statusData.status === 'CANCELADO') {
+                clearInterval(pollingRef.current);
+                setExpirado(true);
+                setLoading(false);
+                onEnvioExpirado?.();
+              }
+            } catch (err) {
+              console.error('Erro no polling da anamnese', err);
+            }
+          }, 3000);
+        }
+      })
+      .catch((err) => {
+        if (gerarSeqRef.current !== seq) return;
+        setError(err.message || 'Falha ao gerar solicitação');
+        setLoading(false);
+        liberarGerarInFlight(key);
+      });
+  }, [
+    pacienteId,
+    canalCodigo,
+    telefonePaciente,
+    preenchimentoAnamneseId,
+    montarPayloadGerar,
+    onConcluido,
+    onEnvioGerado,
+    onEnvioExpirado,
+  ]);
+
   useEffect(() => {
-    const key = chaveGerarAnamneseEnvio(pacienteId, canalCodigo, telefonePaciente);
+    const key = chaveGerarAnamneseEnvio(
+      pacienteId,
+      canalCodigo,
+      telefonePaciente,
+      preenchimentoAnamneseId,
+    );
     if (!open) {
       if (pollingRef.current) clearInterval(pollingRef.current);
       liberarGerarInFlight(key);
       return undefined;
     }
 
-    let isSubscribed = true;
-
-    const iniciarPolling = (envioId) => {
-      pollingRef.current = setInterval(async () => {
-        try {
-          const data = await anamneseEnvioApi.status(envioId);
-          if (data.status === 'CONCLUIDO') {
-            clearInterval(pollingRef.current);
-            setConcluido(true);
-            setTimeout(() => {
-              if (onConcluido) onConcluido();
-            }, 1500);
-          } else if (data.status === 'EXPIRADO' || data.status === 'CANCELADO') {
-            clearInterval(pollingRef.current);
-            setError(`Solicitação ${String(data.status).toLowerCase()}`);
-          }
-        } catch (err) {
-          console.error('Erro no polling da anamnese', err);
-        }
-      }, 3000);
-    };
-
-    const aplicar = (data) => {
-      if (!isSubscribed) return;
-      setSessaoData(data);
-      setLoading(false);
-      if (data?.envioId) iniciarPolling(data.envioId);
-    };
-
-    let pending = obterGerarInFlight(key);
-    if (!pending) {
-      pending = anamneseEnvioApi.gerar({
-        pacienteId,
-        canalCodigo: canalCodigo || null,
-        telefonePaciente: canalCodigo ? (telefonePaciente || null) : null,
-      });
-      registrarGerarInFlight(key, pending);
-    }
-
-    pending
-      .then(aplicar)
-      .catch((err) => {
-        if (isSubscribed) {
-          setError(err.message || 'Falha ao gerar solicitação');
-          setLoading(false);
-        }
-        liberarGerarInFlight(key);
-      });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- modal abre com fetch imediato (padrão SolicitarAnamneseModal)
+    iniciarGeracao(false);
 
     return () => {
-      isSubscribed = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [open, canalCodigo, pacienteId, telefonePaciente, onConcluido]);
+  }, [open, iniciarGeracao, pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId]);
 
   if (!open) return null;
 
@@ -143,6 +194,30 @@ export function SolicitarAnamneseModal({
             <div className="flex flex-col items-center gap-4 py-8">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
               <p className="text-slate-600 font-medium">Gerando solicitação...</p>
+            </div>
+          ) : expirado ? (
+            <div className="flex flex-col items-center gap-4 py-4 w-full">
+              <div className="rounded-full bg-amber-100 p-4 text-amber-600">
+                <X className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Link expirado</h3>
+              <p className="text-sm text-slate-500">
+                O prazo acabou. Gere um novo link com as mesmas respostas da entrevista.
+              </p>
+              <button
+                type="button"
+                onClick={() => iniciarGeracao(true)}
+                className="mt-2 w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+              >
+                Gerar novo link
+              </button>
+              <button
+                type="button"
+                onClick={onCancelar}
+                className="text-sm font-semibold text-slate-400 hover:text-slate-600 underline"
+              >
+                Tentar outro método
+              </button>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-4 py-8">

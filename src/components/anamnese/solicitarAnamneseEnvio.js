@@ -4,8 +4,8 @@ export function resetSolicitarAnamneseGerarLock() {
   gerarInFlight.clear();
 }
 
-export function chaveGerarAnamneseEnvio(pacienteId, canalCodigo, telefonePaciente) {
-  return `${pacienteId || ''}|${canalCodigo || ''}|${telefonePaciente || ''}`;
+export function chaveGerarAnamneseEnvio(pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId) {
+  return `${pacienteId || ''}|${canalCodigo || ''}|${telefonePaciente || ''}|${preenchimentoAnamneseId || ''}`;
 }
 
 export function obterGerarInFlight(key) {

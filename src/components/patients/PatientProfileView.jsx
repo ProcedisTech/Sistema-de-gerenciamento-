@@ -518,7 +518,12 @@ function resolveFichaTemplateId(detalhe, an) {
   return v != null && v !== '' ? String(v) : null;
 }
 
-function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
+function AnamneseTab({
+  pacienteId,
+  pacienteSexo = null,
+  pacienteTelefone = '',
+  roleUserId,
+}) {
   const toast = useToast();
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
@@ -784,6 +789,8 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
       <AnamneseDocumentoView
         pacienteId={pacienteId}
         preenchimentoId={selected.id}
+        pacienteTelefone={pacienteTelefone}
+        anamneseId={resolveFichaTemplateId(detalhe, selected)}
         onModificar={
           !selected.preenchidoPorPaciente && fichaByAnId[selected.id]
             ? () => handleStartEditAnamnese(selected.id, detalhe)
@@ -3110,6 +3117,7 @@ export function PatientProfileView({
                 <AnamneseTab
                   pacienteId={selectedPatient.id}
                   pacienteSexo={selectedPatient.sexo}
+                  pacienteTelefone={selectedPatient.telefone || selectedPatient.celular || ''}
                   roleUserId={roleUserId}
                 />
               )}

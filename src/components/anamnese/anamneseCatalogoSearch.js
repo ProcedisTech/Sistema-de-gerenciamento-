@@ -29,6 +29,9 @@ export function searchCatalogoHub(tipoResposta, { sexo, tipoAntecedenteCodigo } 
         .then(asList)
         .catch(() => []);
     }
+    if (tipoResposta === 'catalogo_reacao') {
+      return catalogoClinicoApi.reacoesAdversas().then(asList).catch(() => []);
+    }
     return [];
   };
 }
@@ -66,6 +69,9 @@ export function searchCatalogoPublico(tipoResposta, { sexo, tipoAntecedenteCodig
       if (sexo && sexo !== 'N') params.set('sexo', sexo);
       if (tipoAntecedenteCodigo) params.set('tipo', tipoAntecedenteCodigo);
       return fetchJson(`/api/public/anamnese/catalogo/antecedentes-pessoais?${params.toString()}`);
+    }
+    if (tipoResposta === 'catalogo_reacao') {
+      return fetchJson('/api/public/anamnese/catalogo/reacoes-adversas');
     }
     return [];
   };

@@ -3740,6 +3740,11 @@ function AppRefactoredInner() {
                           setExpectativas={journeyState.setExpectativas}
                           pacienteId={pacienteAtual?.id || null}
                           pacienteSexo={pacienteAtual?.sexo || null}
+                          pacienteNome={pacienteAtual?.nomeCompleto || pacienteAtual?.nome || ''}
+                          pacienteCpf={pacienteAtual?.cpf || ''}
+                          pacienteTelefone={pacienteAtual?.telefone || pacienteAtual?.celular || ''}
+                          getPreenchimentoAnamneseId={() => anamnesePreenchimentoIdRef.current}
+                          onPersistirAnamneseHub={salvarAnamneseAntesDeAvancar}
                           roleUserId={roleUserId}
                           step2Errors={journeyState.step2Errors}
                           setStep2Errors={journeyState.setStep2Errors}
@@ -4256,6 +4261,11 @@ function AppRefactoredInner() {
                     setExpectativas={journeyState.setExpectativas}
                     pacienteId={pacienteAtual?.id || null}
                     pacienteSexo={pacienteAtual?.sexo || null}
+                    pacienteNome={pacienteAtual?.nomeCompleto || pacienteAtual?.nome || ''}
+                    pacienteCpf={pacienteAtual?.cpf || ''}
+                    pacienteTelefone={pacienteAtual?.telefone || pacienteAtual?.celular || ''}
+                    getPreenchimentoAnamneseId={() => anamnesePreenchimentoIdRef.current}
+                    onPersistirAnamneseHub={salvarAnamneseAntesDeAvancar}
                     roleUserId={roleUserId}
                     step2Errors={journeyState.step2Errors}
                     setStep2Errors={journeyState.setStep2Errors}

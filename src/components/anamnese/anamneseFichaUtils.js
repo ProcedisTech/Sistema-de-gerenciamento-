@@ -1,4 +1,4 @@
-import { canalCatalogoPublico, isTipoCatalogo } from './anamneseTipoLabels';
+import { canalCatalogoPublico, isTipoCatalogo, isTipoCatalogoMulti } from './anamneseTipoLabels';
 
 export function buildPerguntaTipoById(ficha) {
   const map = {};
@@ -29,13 +29,22 @@ export function mapApiRespostaToEstado(r) {
   if (Array.isArray(multi) && multi.length > 0) {
     row.opcoesSelecionadas = multi.map((x) => (typeof x === 'object' && x != null && x.id != null ? x.id : x));
   }
+  if (r.reacaoAdversaId) {
+    row.reacaoAdversaId = r.reacaoAdversaId;
+    row.catalogoItens = [{
+      id: r.reacaoAdversaId,
+      nome: r.opcaoSelecionada || r.reacaoAdversaNome || String(r.reacaoAdversaId),
+      fonte: 'catalogo',
+    }];
+    return row;
+  }
   const catalogId =
     r.alergiaCatalogoId
     || r.principioAtivoId
     || r.medicamentoCatalogoId
     || r.antecedenteCatalogoId;
   if (catalogId) {
-    row.catalogoItens = [{ id: catalogId, nome: r.opcaoSelecionada || String(catalogId), fonte: 'catalogo' }];
+    row.catalogoItens = [{ id: catalogId, nome: r.catalogoNome || r.opcaoSelecionada || String(catalogId), fonte: 'catalogo' }];
   }
   return row;
 }
@@ -62,7 +71,7 @@ export function mergeApiRespostasToMap(respostasApi, perguntaTipoById = {}) {
     }
 
     const tipoPergunta = perguntaTipoById[key] || '';
-    const isCat = tipoPergunta.startsWith('catalogo_');
+    const isCatMulti = isTipoCatalogoMulti(tipoPergunta);
 
     if (mapped.declarouAusencia) {
       map[key] = { perguntaId: mapped.perguntaId, declarouAusencia: true };
@@ -74,7 +83,16 @@ export function mergeApiRespostasToMap(respostasApi, perguntaTipoById = {}) {
       continue;
     }
 
-    if (isCat) {
+    if (tipoPergunta === 'catalogo_reacao' && mapped.reacaoAdversaId) {
+      map[key] = {
+        perguntaId: mapped.perguntaId,
+        reacaoAdversaId: mapped.reacaoAdversaId,
+        catalogoItens: mapped.catalogoItens || [],
+      };
+      continue;
+    }
+
+    if (isCatMulti) {
       const prev = map[key] || { perguntaId: mapped.perguntaId, catalogoItens: [], textosLivres: [] };
       const catalogoItens = [...(prev.catalogoItens || [])];
       const textosLivres = [...(prev.textosLivres || [])];
@@ -188,7 +206,12 @@ export function isRespostaPreenchida(pergunta, resposta) {
   if (tipo === 'sim_nao_naosei') {
     return Boolean(resposta.respostaTrivalente);
   }
-  if (isTipoCatalogo(tipo)) {
+  if (tipo === 'catalogo_reacao') {
+    if (resposta.declarouAusencia) return true;
+    return Boolean(resposta.reacaoAdversaId)
+      || (Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0);
+  }
+  if (isTipoCatalogoMulti(tipo)) {
     if (resposta.declarouAusencia) return true;
     const hasCat = Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0;
     const hasTxt = Array.isArray(resposta.textosLivres) && resposta.textosLivres.some((t) => String(t.texto || '').trim());
@@ -221,7 +244,15 @@ export function buildRespostaApiRows(pergunta, resposta) {
   if (tipo === 'sim_nao_naosei') {
     return [{ perguntaId, respostaTrivalente: resposta.respostaTrivalente }];
   }
-  if (isTipoCatalogo(tipo)) {
+  if (tipo === 'catalogo_reacao') {
+    if (resposta.declarouAusencia) {
+      return [{ perguntaId, declarouAusencia: true }];
+    }
+    const reacaoId = resposta.reacaoAdversaId ?? resposta.catalogoItens?.[0]?.id;
+    if (reacaoId) return [{ perguntaId, reacaoAdversaId: reacaoId }];
+    return [];
+  }
+  if (isTipoCatalogoMulti(tipo)) {
     if (resposta.declarouAusencia) {
       return [{ perguntaId, declarouAusencia: true }];
     }
@@ -265,7 +296,15 @@ export function serializeRespostaPublica(pergunta, resposta) {
   if (tipo === 'sim_nao_naosei') {
     return [{ tipo: 'trivalente', valor: resposta.respostaTrivalente }];
   }
-  if (isTipoCatalogo(tipo)) {
+  if (tipo === 'catalogo_reacao') {
+    if (resposta.declarouAusencia) {
+      return [{ tipo: 'declarou_ausencia', valor: true }];
+    }
+    const reacaoId = resposta.reacaoAdversaId ?? resposta.catalogoItens?.[0]?.id;
+    if (reacaoId) return [{ tipo: 'reacao', valor: reacaoId }];
+    return undefined;
+  }
+  if (isTipoCatalogoMulti(tipo)) {
     if (resposta.declarouAusencia) {
       return [{ tipo: 'declarou_ausencia', valor: true }];
     }
