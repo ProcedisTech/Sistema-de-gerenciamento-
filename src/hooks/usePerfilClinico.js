@@ -32,6 +32,7 @@ export function mapGetToState(data) {
           usoContinuo: item.usoContinuo ?? true,
           origemDeclaracao: item.origemDeclaracao ?? null,
           confirmadoEm: item.confirmadoEm ?? null,
+          registradoPorNome: item.registradoPorNome ?? null,
           reacaoAdversaId: item.reacaoAdversaId ?? null,
           reacaoNome: item.reacaoNome ?? null,
         }))
