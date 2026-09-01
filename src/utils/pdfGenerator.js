@@ -750,7 +750,6 @@ export const generateFichaPacientePdf = ({
     ['Nome completo', pac.nome],
     ['Nome social', pac.nomeSocialDisplay],
     ['Sexo', pac.sexoDisplay],
-    ['Gênero', pac.generoDisplay],
     ['Nascimento', pac.nascimentoDisplay ? `${pac.nascimentoDisplay} · ${safe(pac.idadeDisplay)}` : ''],
     ['CPF', pac.cpfDisplay],
     ['Telefone', pac.telefoneDisplay],
