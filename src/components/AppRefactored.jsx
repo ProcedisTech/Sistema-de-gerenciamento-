@@ -2360,7 +2360,7 @@ function AppRefactoredInner() {
           });
         }
         refreshPatientsAndPagedList();
-        setConsultaModule('hub');
+        await anamneseRef.current?.transicionarParaDocumento?.();
       }
     } finally {
       setStep1Busy(false);

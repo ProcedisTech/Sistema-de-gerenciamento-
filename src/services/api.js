@@ -1298,6 +1298,8 @@ export const anamneseEnvioApi = {
       body: JSON.stringify(payload),
     }),
   status: (envioId) => request(`/api/v1/anamnese/envios/${envioId}/status`),
+  cancelar: (envioId) =>
+    request(`/api/v1/anamnese/envios/${envioId}/cancelar`, { method: 'POST' }),
 };
 
   // 🟨🟨 Configurações de Acesso Público 🟨🟨

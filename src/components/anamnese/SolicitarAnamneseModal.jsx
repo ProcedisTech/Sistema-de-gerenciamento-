@@ -38,6 +38,14 @@ export function SolicitarAnamneseModal({
   const [concluido, setConcluido] = useState(false);
   const pollingRef = useRef(null);
   const gerarSeqRef = useRef(0);
+  const wasOpenRef = useRef(false);
+
+  const onConcluidoRef = useRef(onConcluido);
+  const onEnvioGeradoRef = useRef(onEnvioGerado);
+  const onEnvioExpiradoRef = useRef(onEnvioExpirado);
+  useEffect(() => { onConcluidoRef.current = onConcluido; }, [onConcluido]);
+  useEffect(() => { onEnvioGeradoRef.current = onEnvioGerado; }, [onEnvioGerado]);
+  useEffect(() => { onEnvioExpiradoRef.current = onEnvioExpirado; }, [onEnvioExpirado]);
 
   const canalCodigo = escolha?.canalCodigo ?? null;
   const isQr = !canalCodigo;
@@ -98,22 +106,24 @@ export function SolicitarAnamneseModal({
         if (gerarSeqRef.current !== seq) return;
         setSessaoData(data);
         setLoading(false);
-        onEnvioGerado?.();
+        onEnvioGeradoRef.current?.(data);
         if (data?.envioId) {
           pollingRef.current = setInterval(async () => {
             try {
               const statusData = await anamneseEnvioApi.status(data.envioId);
               if (statusData.status === 'CONCLUIDO') {
                 clearInterval(pollingRef.current);
+                pollingRef.current = null;
                 setConcluido(true);
                 setTimeout(() => {
-                  if (onConcluido) onConcluido();
+                  onConcluidoRef.current?.();
                 }, 1500);
               } else if (statusData.status === 'EXPIRADO' || statusData.status === 'CANCELADO') {
                 clearInterval(pollingRef.current);
+                pollingRef.current = null;
                 setExpirado(true);
                 setLoading(false);
-                onEnvioExpirado?.();
+                onEnvioExpiradoRef.current?.();
               }
             } catch (err) {
               console.error('Erro no polling da anamnese', err);
@@ -133,10 +143,12 @@ export function SolicitarAnamneseModal({
     telefonePaciente,
     preenchimentoAnamneseId,
     montarPayloadGerar,
-    onConcluido,
-    onEnvioGerado,
-    onEnvioExpirado,
   ]);
+
+  const iniciarGeracaoRef = useRef(iniciarGeracao);
+  useEffect(() => {
+    iniciarGeracaoRef.current = iniciarGeracao;
+  }, [iniciarGeracao]);
 
   useEffect(() => {
     const key = chaveGerarAnamneseEnvio(
@@ -146,18 +158,23 @@ export function SolicitarAnamneseModal({
       preenchimentoAnamneseId,
     );
     if (!open) {
+      wasOpenRef.current = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = null;
       liberarGerarInFlight(key);
       return undefined;
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- modal abre com fetch imediato (padrão SolicitarAnamneseModal)
-    iniciarGeracao(false);
+    if (!wasOpenRef.current) {
+      wasOpenRef.current = true;
+      iniciarGeracaoRef.current(false);
+    }
 
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      pollingRef.current = null;
     };
-  }, [open, iniciarGeracao, pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId]);
+  }, [open, pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId]);
 
   if (!open) return null;
 
