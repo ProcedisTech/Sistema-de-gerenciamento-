@@ -6,10 +6,11 @@ import { PenLine, Calendar } from 'lucide-react';
 import { DynamicQuestion } from '../../components/anamnese/DynamicQuestion.jsx';
 import {
   isRespostaPreenchida,
+  mergeApiRespostasToMap,
   serializeRespostaPublica,
   toPerguntaFromPublica,
 } from '../../components/anamnese/anamneseFichaUtils.js';
-import { aplicarMudancaResposta, perguntaFilhaVisivel } from '../../components/anamnese/anamneseCondicional.js';
+import { aplicarMudancaResposta, collectPerguntaIdsVisiveis, perguntaFilhaVisivel } from '../../components/anamnese/anamneseCondicional.js';
 import { searchCatalogoPublico } from '../../components/anamnese/anamneseCatalogoSearch.js';
 
 // Simple CPF formatter: 000.000.000-00
@@ -26,6 +27,32 @@ const formatCPF = (val) => {
   return v;
 };
 
+function buildPerguntaTipoByIdFromModelo(modelo) {
+  const map = {};
+  for (const cat of modelo?.categorias || []) {
+    for (const p of cat.perguntas || []) {
+      if (p?.perguntaId != null && p?.tipo) map[String(p.perguntaId)] = p.tipo;
+    }
+  }
+  return map;
+}
+
+function hydrateRespostasFromLookup(data) {
+  const count = data?.respostaExistenteCount ?? 0;
+  const apiRespostas = data?.respostas;
+  if (count <= 0 || !Array.isArray(apiRespostas) || apiRespostas.length === 0) {
+    return { respostas: {}, hydrationStatus: 'none' };
+  }
+  const merged = mergeApiRespostasToMap(
+    apiRespostas,
+    buildPerguntaTipoByIdFromModelo(data?.modelo),
+  );
+  if (Object.keys(merged).length === 0) {
+    return { respostas: {}, hydrationStatus: 'failed' };
+  }
+  return { respostas: merged, hydrationStatus: 'ok' };
+}
+
 export const AnamnesePage = () => {
   const [clinicSlug, setClinicSlug] = useState('');
   const [cpf, setCpf] = useState('');
@@ -33,6 +60,8 @@ export const AnamnesePage = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [estado, setEstado] = useState('ENTRADA_CPF'); // ENTRADA_CPF | VALIDA | SEM_SOLICITACAO | FORMULARIO | ASSINATURA | SUCESSO
   const [lookupData, setLookupData] = useState(null);
+  const [hydrationToken, setHydrationToken] = useState(null);
+  const [hydrationStatus, setHydrationStatus] = useState('none'); // none | ok | failed
   
   const [respostas, setRespostas] = useState({});
   const [assinatura, setAssinatura] = useState(null);
@@ -104,12 +133,16 @@ export const AnamnesePage = () => {
       
       const data = await res.json();
       setLookupData(data);
-      
+      setHydrationToken(data.hydrationToken ?? null);
+
       if (data.status === 'VALIDA') {
         setEstado('VALIDA');
       } else if (data.status === 'INEXISTENTE') {
         setEstado('SEM_SOLICITACAO');
       } else {
+        const hydrated = hydrateRespostasFromLookup(data);
+        setRespostas(hydrated.respostas);
+        setHydrationStatus(hydrated.hydrationStatus);
         setEstado('FORMULARIO');
       }
     } catch (err) {
@@ -157,6 +190,13 @@ export const AnamnesePage = () => {
 
   const handleGoToSignature = (e) => {
     e.preventDefault();
+
+    if (hydrationStatus === 'failed') {
+      setErrorMsg(
+        'Não foi possível carregar as respostas da entrevista. Recarregue a página ou peça ajuda à recepção.',
+      );
+      return;
+    }
     
     const modelo = lookupData?.modelo;
     if (!modelo) return;
@@ -222,6 +262,12 @@ export const AnamnesePage = () => {
         clinic: clinicSlug,
         anamneseId: modelo.anamneseId,
         respostas: formattedRespostas,
+        perguntaIdsVisiveis: collectPerguntaIdsVisiveis(
+          modelo.categorias,
+          respostas,
+          toPerguntaFromPublica,
+        ),
+        hydrationToken,
         assinatura: assinatura
       };
 
@@ -235,8 +281,21 @@ export const AnamnesePage = () => {
       });
       
       if (!res.ok) {
-        if (res.status === 409) throw new Error('Não há solicitação ativa de anamnese. Peça à recepção para liberar o acesso.');
-        throw new Error('Erro ao enviar respostas. Tente novamente.');
+        let msg = 'Erro ao enviar respostas. Tente novamente.';
+        try {
+          const errData = await res.json();
+          if (errData?.message === 'HYDRATION_INCOMPLETA') {
+            msg = 'Não foi possível confirmar o carregamento das respostas da entrevista. Recarregue a página e tente novamente.';
+          } else if (errData?.message) {
+            msg = errData.message;
+          }
+        } catch {
+          // mantém msg padrão
+        }
+        if (res.status === 409 && msg === 'Erro ao enviar respostas. Tente novamente.') {
+          msg = 'Não há solicitação ativa de anamnese. Peça à recepção para liberar o acesso.';
+        }
+        throw new Error(msg);
       }
       
       setEstado('SUCESSO');
@@ -263,6 +322,12 @@ export const AnamnesePage = () => {
             {errorMsg}
           </div>
         )}
+
+        {hydrationStatus === 'failed' ? (
+          <div className="bg-amber-50 text-amber-800 p-4 rounded-xl text-sm border border-amber-200">
+            Não foi possível carregar as respostas preenchidas na clínica. Recarregue a página antes de continuar.
+          </div>
+        ) : null}
 
         {modelo.categorias.map(cat => (
           <div key={cat.categoriaId} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
@@ -292,7 +357,7 @@ export const AnamnesePage = () => {
 
         <button 
           type="submit"
-          disabled={loading}
+          disabled={loading || hydrationStatus === 'failed'}
           className="w-full h-12 mt-4 rounded-xl bg-teal-600 text-white font-bold text-[15px] hover:bg-teal-700 active:bg-teal-800 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-md flex items-center justify-center gap-2"
         >
           {loading ? (

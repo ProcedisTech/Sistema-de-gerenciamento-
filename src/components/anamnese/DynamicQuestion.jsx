@@ -1,7 +1,7 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { AnamneseCatalogoPicker } from './AnamneseCatalogoPicker.jsx';
-import { isTipoCatalogo } from './anamneseTipoLabels';
+import { isTipoCatalogoMulti } from './anamneseTipoLabels';
 
 /** Label da pergunta com numeração inline, obrigatório* e ícone de alerta. */
 export function QuestionLabel({ numero, descricao, obrigatorio = false, alerta = false }) {
@@ -18,6 +18,84 @@ export function QuestionLabel({ numero, descricao, obrigatorio = false, alerta =
         <span className="text-[11px] font-semibold text-red-600" aria-label="obrigatório">obrigatório*</span>
       )}
     </span>
+  );
+}
+
+function CatalogoReacaoQuestion({
+  pergunta,
+  resposta,
+  onChange,
+  readOnly,
+  searchFn,
+  numero,
+  obrigatorio,
+  alerta,
+}) {
+  const searchEnabled = typeof searchFn === 'function';
+  const fetchScope = searchEnabled ? searchFn : null;
+  const [loadedScope, setLoadedScope] = useState(null);
+  const [opcoes, setOpcoes] = useState([]);
+
+  useEffect(() => {
+    if (!searchEnabled) return undefined;
+    let cancelled = false;
+    const scope = searchFn;
+    searchFn('')
+      .then((list) => {
+        if (!cancelled) setOpcoes(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setOpcoes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedScope(scope);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchFn, searchEnabled]);
+
+  const displayOpcoes = searchEnabled && loadedScope === fetchScope ? opcoes : [];
+  const displayLoading = searchEnabled && loadedScope !== fetchScope;
+
+  const selectedId = resposta?.reacaoAdversaId ?? resposta?.catalogoItens?.[0]?.id;
+
+  return (
+    <div className="flex w-full min-w-0 flex-col">
+      <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
+      {displayLoading ? (
+        <p className="text-[13px] text-slate-400">Carregando opções…</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {displayOpcoes.map((op) => {
+            const id = op.id ?? op.reacaoAdversaId;
+            const nome = op.nome ?? op.descricao ?? String(id);
+            const ativo = selectedId != null && String(selectedId) === String(id);
+            return (
+              <button
+                key={String(id)}
+                type="button"
+                disabled={readOnly}
+                aria-pressed={ativo}
+                onClick={() => {
+                  if (readOnly) return;
+                  onChange({
+                    perguntaId: pergunta.id,
+                    reacaoAdversaId: ativo ? null : id,
+                    catalogoItens: ativo ? [] : [{ id, nome, fonte: 'catalogo' }],
+                  });
+                }}
+                className={`rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-all ${
+                  readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
+                }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-600 hover:border-[#00a88e]/40'}`}
+              >
+                {nome}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -177,7 +255,22 @@ export function DynamicQuestion({
     );
   }
 
-  if (isTipoCatalogo(tipo)) {
+  if (tipo === 'catalogo_reacao') {
+    return (
+      <CatalogoReacaoQuestion
+        pergunta={pergunta}
+        resposta={resposta}
+        onChange={onChange}
+        readOnly={readOnly}
+        searchFn={searchFn}
+        numero={numero}
+        obrigatorio={obrigatorio}
+        alerta={alerta}
+      />
+    );
+  }
+
+  if (isTipoCatalogoMulti(tipo)) {
     return (
       <div className="flex w-full min-w-0 flex-col">
         <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />

@@ -1298,6 +1298,8 @@ export const anamneseEnvioApi = {
       body: JSON.stringify(payload),
     }),
   status: (envioId) => request(`/api/v1/anamnese/envios/${envioId}/status`),
+  cancelar: (envioId) =>
+    request(`/api/v1/anamnese/envios/${envioId}/cancelar`, { method: 'POST' }),
 };
 
   // 🟨🟨 Configurações de Acesso Público 🟨🟨
@@ -1662,5 +1664,9 @@ export const catalogoClinicoApi = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request(`/api/v1/catalogo-clinico/outras-alergias${qs}`, { needsOrg: false });
   },
+
+  /** Reações adversas estruturadas (picker de alergia PA no perfil). */
+  reacoesAdversas: () =>
+    request('/api/v1/catalogo-clinico/reacoes-adversas', { needsOrg: false }),
 };
 

@@ -488,7 +488,7 @@ export function Step1CheckIn({
                 )}
               </div>
               <div className="space-y-1.5">
-                <label className="text-[13px] font-bold text-[#a855f7]">E-mail <span className="text-red-500">*</span></label>
+                <label className="text-[13px] font-bold text-[#a855f7]">E-mail</label>
                 <input
                   type="email"
                   value={email}

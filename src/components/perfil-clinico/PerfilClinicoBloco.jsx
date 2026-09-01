@@ -31,11 +31,13 @@ export function PerfilClinicoBloco({
   removeItem,
   updateObservacao,
   updateMedicamentoExtra,
+  updateReacaoAdversa,
   buscarAlimentos,
   buscarPrincipiosAtivos,
   buscarMedicamentos,
   buscarAntecedentes,
   tiposByCodigo = {},
+  reacoesAdversas = [],
   readOnly = false,
 }) {
   const errorMessage = useMemo(
@@ -219,7 +221,16 @@ export function PerfilClinicoBloco({
             onUpdateObservacao={(id, texto) => updateObservacao('alergiasPrincipioAtivo', id, texto)}
             searchFn={buscarPrincipiosAtivos}
             placeholder="Buscar princípio ativo (ex.: dipirona, penicilina…)"
+            minQueryLength={2}
             readOnly={readOnly}
+            renderChipExtra={readOnly ? undefined : (item) => (
+              <ReacaoAdversaSelect
+                item={item}
+                opcoes={reacoesAdversas}
+                onChange={(reacaoAdversaId, reacaoNome) =>
+                  updateReacaoAdversa(item.id, reacaoAdversaId, reacaoNome)}
+              />
+            )}
           />
         </section>
 
@@ -236,6 +247,7 @@ export function PerfilClinicoBloco({
             onUpdateObservacao={(id, texto) => updateObservacao('medicamentosEmUso', id, texto)}
             searchFn={buscarMedicamentos}
             placeholder="Buscar medicamento…"
+            minQueryLength={2}
             readOnly={readOnly}
             renderChipExtra={readOnly ? undefined : (item, _onChange) => (
               <MedicamentoExtra
@@ -305,5 +317,27 @@ function MedicamentoExtra({ item, onChange }) {
         <span className="text-[12px] text-slate-600">Uso contínuo</span>
       </label>
     </div>
+  );
+}
+
+function ReacaoAdversaSelect({ item, opcoes, onChange }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] text-slate-500">Reação adversa</span>
+      <select
+        value={item.reacaoAdversaId ?? ''}
+        onChange={(e) => {
+          const id = e.target.value || null;
+          const nome = id ? opcoes.find((o) => String(o.id) === String(id))?.nome ?? null : null;
+          onChange(id, nome);
+        }}
+        className="rounded border border-slate-200 px-2 py-1 text-[12px] text-slate-700 outline-none focus:border-[#6c63ff]"
+      >
+        <option value="">Selecionar…</option>
+        {opcoes.map((o) => (
+          <option key={o.id} value={o.id}>{o.nome}</option>
+        ))}
+      </select>
+    </label>
   );
 }

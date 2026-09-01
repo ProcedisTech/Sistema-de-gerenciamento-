@@ -30,7 +30,6 @@ export function PatientForm({
   sexo,
   estadoCivilId,
   profissaoId,
-  genero,
   cpf,
   rg,
   telefoneCountryCode,
@@ -59,7 +58,6 @@ export function PatientForm({
   onSexoChange,
   onEstadoCivilChange,
   onProfissaoIdChange,
-  onGeneroChange,
   onCpfChange,
   onCpfBlur,
   onRgChange,
@@ -225,7 +223,7 @@ export function PatientForm({
       : '';
 
   const isWideModal = variant === 'modal';
-  const requiredFieldValues = [nome, dataNascimentoDisplay, sexo, estadoCivilId, profissaoId, cpf, telefoneNumero, email];
+  const requiredFieldValues = [nome, dataNascimentoDisplay, sexo, estadoCivilId, profissaoId, cpf, telefoneNumero];
   const requiredFilledCount = requiredFieldValues.filter(
     (v) => v !== null && v !== undefined && String(v).trim() !== '',
   ).length;
@@ -505,18 +503,6 @@ export function PatientForm({
                     variant={isModalVariant ? 'modal' : 'default'}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className={labelCls('text-[#00a88e]')}>Gênero</label>
-                  <input
-                    type="text"
-                    value={genero}
-                    disabled={readOnly}
-                    maxLength={PACIENTE_FIELD_MAX.genero}
-                    onChange={(e) => onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))}
-                    placeholder="Como se identifica"
-                    className={inputClass()}
-                  />
-                </div>
               </div>
             </div>
 
@@ -655,9 +641,7 @@ export function PatientForm({
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <label className={labelCls('text-[#a855f7]')}>
-                      E-mail <FieldReq />
-                    </label>
+                    <label className={labelCls('text-[#a855f7]')}>E-mail</label>
                     <input
                       type="email"
                       value={email}
@@ -933,20 +917,6 @@ export function PatientForm({
               variant={isModalVariant ? 'modal' : 'default'}
             />
           </div>
-          <div className="md:col-span-2 space-y-1.5">
-            <label className={labelCls('text-[#00a88e]')}>Gênero</label>
-            <input
-              type="text"
-              value={genero}
-              disabled={readOnly}
-              maxLength={PACIENTE_FIELD_MAX.genero}
-              onChange={(e) =>
-                onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))
-              }
-              placeholder="Como se identifica"
-              className={inputClass()}
-            />
-          </div>
         </div>
       </div>
 
@@ -1087,9 +1057,7 @@ export function PatientForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className={labelCls('text-[#a855f7]')}>
-              E-mail <FieldReq />
-            </label>
+            <label className={labelCls('text-[#a855f7]')}>E-mail</label>
             <input
               type="email"
               value={email}

@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
+import { AnamneseAssinaturaActions } from './AnamneseAssinaturaActions.jsx';
+import { resolverEstadoAssinatura } from './anamneseAssinaturaUiState.js';
 
 const TRIVALENTE = { SIM: 'Sim', NAO: 'Não' , NAO_SEI: 'Não sei' };
 const METODO = {
@@ -138,6 +140,8 @@ function groupByCategoria(itens) {
 export function AnamneseDocumentoView({
   pacienteId,
   preenchimentoId,
+  anamneseId = null,
+  pacienteTelefone = '',
   onVoltar,
   voltarLabel = 'Voltar',
   onModificar,
@@ -151,19 +155,23 @@ export function AnamneseDocumentoView({
   const [filter, setFilter] = useState('completa');
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!pacienteId || !preenchimentoId) return;
-    setLoading(true);
-    setError(null);
-    anamneseApi
+  const recarregarDocumento = useCallback(() => {
+    if (!pacienteId || !preenchimentoId) return Promise.resolve();
+    return anamneseApi
       .getDocumento(pacienteId, preenchimentoId)
       .then(setGravada)
       .catch((err) => {
         setError(err);
         setGravada(null);
-      })
-      .finally(() => setLoading(false));
+      });
   }, [pacienteId, preenchimentoId]);
+
+  useEffect(() => {
+    if (!pacienteId || !preenchimentoId) return;
+    setLoading(true);
+    setError(null);
+    recarregarDocumento().finally(() => setLoading(false));
+  }, [pacienteId, preenchimentoId, recarregarDocumento]);
 
   const allItens = useMemo(
     () => envelopeItens(gravada?.conteudoJsonb).slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
@@ -252,6 +260,14 @@ export function AnamneseDocumentoView({
   const hashOk = integridade?.valido === true;
   const assinada = Boolean(gravada.assinaturaPaciente);
   const imutavel = Boolean(gravada.conteudoHash);
+  const envioAtivo = gravada.envioAtivo ?? null;
+  const uiAssinatura = resolverEstadoAssinatura({
+    assinada,
+    envioStatus: envioAtivo?.status ?? null,
+    preenchimentoId,
+    pacienteId,
+    imutavel,
+  });
 
   return (
     <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafa] ${className}`}>
@@ -291,17 +307,21 @@ export function AnamneseDocumentoView({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
-            {assinada && formatStamp(assinadoEm) ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99f6e4] bg-[#f0fdfa] px-3 py-1.5 text-[11px] font-bold tracking-wide text-[#0f766e]">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {formatStamp(assinadoEm)}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-bold tracking-wide text-amber-800">
-                Aguardando assinatura do paciente
-              </span>
-            )}
-            {!imutavel && typeof onModificar === 'function' ? (
+            <AnamneseAssinaturaActions
+              pacienteId={pacienteId}
+              preenchimentoId={preenchimentoId}
+              anamneseId={anamneseId}
+              pacienteTelefone={pacienteTelefone}
+              pacienteNome={gravada.pacienteNome}
+              pacienteCpf={gravada.pacienteCpf}
+              assinada={assinada}
+              imutavel={imutavel}
+              envioAtivo={envioAtivo}
+              assinadoEm={assinadoEm}
+              formatStamp={formatStamp}
+              onDocumentoRefresh={recarregarDocumento}
+            />
+            {!imutavel && !uiAssinatura.envioAtivo && typeof onModificar === 'function' ? (
               <button
                 type="button"
                 onClick={onModificar}
@@ -552,7 +572,9 @@ export function AnamneseDocumentoView({
         <p className="text-center text-[11px] text-[#94a3b8]">
           {imutavel
             ? 'Documento imutável. Correções entram como nova anamnese, preservando esta.'
-            : 'Ainda não assinado — é possível modificar as respostas.'}
+            : uiAssinatura.envioAtivo
+              ? 'Link enviado — edição bloqueada até o paciente responder ou o envio expirar.'
+              : 'Ainda não assinado — é possível modificar as respostas.'}
         </p>
       </div>
     </div>

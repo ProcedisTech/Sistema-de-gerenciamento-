@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ConfigSidebarFlat } from './ConfigSidebarFlat';
 import { ConfigBreadcrumb } from './ConfigBreadcrumb';
 import { CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
@@ -130,6 +130,11 @@ export function ConfigDetailView({
   const handleSetConfigSection = (id) => guardedNavigate(() => applySection(id));
   const handleBackToHub = () => guardedNavigate(() => onBackToHub());
 
+  const getPerfilAuthHeaders = useCallback(
+    () => authHeadersForFetch({ needsOrg: false }),
+    [],
+  );
+
   useEffect(() => {
     if (!sectionGuardRef) return undefined;
     sectionGuardRef.current = handleSetConfigSection;
@@ -186,6 +191,7 @@ export function ConfigDetailView({
               canSeeClinica={canSeeClinica}
               canSeeAgendaConfig={canSeeAgendaConfig}
               canSeeEquipe={canSeeEquipe}
+              getPerfilAuthHeaders={getPerfilAuthHeaders}
               onClinicaAtualizada={onClinicaAtualizada}
               onPerfilAtualizado={onPerfilAtualizado}
               onPacientesCatalogRefresh={onPacientesCatalogRefresh}
@@ -215,6 +221,7 @@ function PainelAtivo({
   canSeeClinica,
   canSeeAgendaConfig,
   canSeeEquipe,
+  getPerfilAuthHeaders,
   onClinicaAtualizada,
   onPerfilAtualizado,
   onPacientesCatalogRefresh,
@@ -248,7 +255,7 @@ function PainelAtivo({
   if (configSection === 'perfil' && canSeePerfil) {
     return (
       <PerfilProfissionalPanel
-        getAuthHeaders={() => authHeadersForFetch({ needsOrg: false })}
+        getAuthHeaders={getPerfilAuthHeaders}
         onPerfilAtualizado={onPerfilAtualizado}
       />
     );

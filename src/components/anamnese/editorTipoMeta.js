@@ -52,6 +52,12 @@ export const TIPO_META = {
     feed: 'condição de saúde',
     vira: 'Vira <b>condição de saúde</b> no prontuário dela',
   },
+  catalogo_reacao: {
+    n: 'Tipo de reação adversa',
+    d: 'Escolha única — ex.: urticária, anafilaxia',
+    feed: 'reação adversa',
+    vira: 'Vincula <b>reação adversa</b> às alergias declaradas',
+  },
 };
 
 export const PRIO_META = {
@@ -91,6 +97,7 @@ export const TIPO_MENU_GROUPS = [
       'catalogo_principio_ativo',
       'catalogo_alergia',
       'catalogo_antecedente',
+      'catalogo_reacao',
     ],
   },
 ];
