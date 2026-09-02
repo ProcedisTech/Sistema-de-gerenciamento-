@@ -133,7 +133,8 @@ function AgendaRow({
     >
       <div className="flex items-center gap-3">
         <PatientAvatar
-          patient={{ id: slot?.pacienteId, nome: slot?.pacienteNome, fotoPerfilUrl: slot?.pacienteFotoUrl }}
+          patient={{ id: slot?.pacienteId, nome: slot?.pacienteNome }}
+          fetchPhotoById
           getPatientInitials={getPatientInitials}
           className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e6f7f5]"
           initialsClassName="text-[11px] font-bold"

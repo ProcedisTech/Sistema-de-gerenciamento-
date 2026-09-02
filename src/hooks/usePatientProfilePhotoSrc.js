@@ -6,8 +6,9 @@ import { pacientesApi } from '../services/api.js';
  * Resolve a URL exibível da foto de perfil.
  * - Path ou URL na própria API: fetch + blob (jwt/org no GET).
  * - URL presigned em outro host (R2): <img src> direto — sem headers que invalidem a assinatura.
+ * - fetchPhotoById: busca GET /foto-perfil só com id (ex.: listagem de agenda sem URL no DTO).
  */
-export function usePatientProfilePhotoSrc(patient) {
+export function usePatientProfilePhotoSrc(patient, { fetchPhotoById = false } = {}) {
   const rawFoto = typeof patient?.fotoPerfilUrl === 'string' ? patient.fotoPerfilUrl.trim() : '';
   const id = patient?.id;
   const isVolatilePreviewUrl = rawFoto.startsWith('data:') || rawFoto.startsWith('blob:');
@@ -15,7 +16,12 @@ export function usePatientProfilePhotoSrc(patient) {
   const isHttp = rawFoto.startsWith('http://') || rawFoto.startsWith('https://');
   const useDirectPresignedUrl = Boolean(isHttp && !shouldAttachApiAuthToFetchUrl(rawFoto));
 
-  const needsApiFetch = Boolean(id && rawFoto && !isVolatilePreviewUrl && !useDirectPresignedUrl);
+  const needsApiFetch = Boolean(
+    id &&
+      !isVolatilePreviewUrl &&
+      !useDirectPresignedUrl &&
+      (rawFoto || fetchPhotoById),
+  );
 
   const [blobSrc, setBlobSrc] = useState(null);
   const [loading, setLoading] = useState(false);

@@ -122,8 +122,8 @@ export function isAgendaVisibleOnDashboard(row) {
 /**
  * Agendas no intervalo (1 linha por AgendaDTO — sem GET aninhado de agendamentos).
  */
-export async function fetchDashboardAppointmentsForRange(startIso, endIso) {
-  const raw = await agendasApi.byRange(startIso, endIso);
+export async function fetchDashboardAppointmentsForRange(startIso, endIso, opts = {}) {
+  const raw = await agendasApi.byRange(startIso, endIso, opts);
   const dtos = normalizeApiList(raw);
   const rows = dtos
     .map(mapAgendaDtoToDashboardRow)

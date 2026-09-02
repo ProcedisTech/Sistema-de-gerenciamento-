@@ -10,6 +10,8 @@ import {
   confirmacaoApi,
   disponibilidadeApi,
   equipeApi,
+  getApiErrorToastMessage,
+  isAbortError,
   pacientesApi,
   procedimentosApi,
 } from '../../services/api';
@@ -208,6 +210,17 @@ async function fetchBloqueioConflitosCount(prof, dataAgendamento, horaInicio, ho
   }
 }
 
+function monthContainsIso(monthDate, isoDate) {
+  const { start, end } = monthRangeIso(monthDate);
+  return isoDate >= start && isoDate <= end;
+}
+
+function countHojeFromAppointments(rows, todayIso) {
+  return filterKpiCountableAppointments(rows).filter(
+    (row) => toDateKey(row.data) === todayIso,
+  ).length;
+}
+
 function bloqueioTimeToMinutes(t) {
   if (t == null || t === '') return 0;
   const parts = String(t).trim().split(':');
@@ -341,7 +354,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   /** Duração total para grade de slots (sync unidirecional do AgendaFormModal). */
   const [slotDuracaoMin, setSlotDuracaoMinState] = useState(30);
   const [daySheetOpen, setDaySheetOpen] = useState(false);
-  const [hojeCount, setHojeCount] = useState(0);
+  const [hojeSessionCount, setHojeSessionCount] = useState(0);
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
   const [disponibilidades, setDisponibilidades] = useState({});
@@ -375,6 +388,9 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [equipeError, setEquipeError] = useState('');
   const equipeFetchedRef = useRef(false);
   const dispMonthCacheRef = useRef({});
+  const monthLoadAbortRef = useRef(null);
+  const monthLoadGenRef = useRef(0);
+  const hojeLoadAbortRef = useRef(null);
   /** Evita double-fetch quando saveAppointment já chamou loadMonth com mês explícito. */
   const skipNextAutoLoadRef = useRef(false);
   /** Callback one-shot após save bem-sucedido (fluxo planejamento Step3). */
@@ -514,50 +530,101 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     };
   }, [appointments, disponibilidades]);
 
-  const loadMonth = useCallback(
-    async (overrideMonthDate) => {
+  const runMonthLoad = useCallback(
+    async (targetMonth) => {
       dispMonthCacheRef.current = {};
       if (!authEnabled) {
         setAppointments([]);
-        setHojeCount(0);
         setLoading(false);
         setError('');
         return;
       }
-      const targetMonth = overrideMonthDate ?? monthDate;
+
+      monthLoadAbortRef.current?.abort();
+      const controller = new AbortController();
+      monthLoadAbortRef.current = controller;
+      const gen = ++monthLoadGenRef.current;
+
       setLoading(true);
       setError('');
       try {
         const { start, end } = monthRangeIso(targetMonth);
-        const rows = await fetchDashboardAppointmentsForRange(start, end);
+        const rows = await fetchDashboardAppointmentsForRange(start, end, {
+          signal: controller.signal,
+        });
+        if (gen !== monthLoadGenRef.current) return;
         setAppointments(rows);
-
-        const hoje = toLocalDateIso();
-        try {
-          const rawSlots = await agendasApi.byRange(hoje, hoje);
-          const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
-          setHojeCount(dtos.length);
-        } catch {
-          setHojeCount(0);
-        }
       } catch (e) {
-        setError(e?.message || 'Não foi possível carregar a agenda.');
+        if (isAbortError(e)) return;
+        if (gen !== monthLoadGenRef.current) return;
+        setError(getApiErrorToastMessage(e, 'Não foi possível carregar a agenda.'));
         setAppointments([]);
-        setHojeCount(0);
       } finally {
-        setLoading(false);
+        if (gen === monthLoadGenRef.current) setLoading(false);
       }
     },
-    [authEnabled, monthDate]
+    [authEnabled],
   );
+
+  const loadMonth = useCallback(
+    async (overrideMonthDate) => {
+      const targetMonth = overrideMonthDate ?? monthDate;
+      await runMonthLoad(targetMonth);
+    },
+    [monthDate, runMonthLoad],
+  );
+
+  const refreshHojeSessionCount = useCallback(async () => {
+    if (!authEnabled) {
+      setHojeSessionCount(0);
+      return;
+    }
+    hojeLoadAbortRef.current?.abort();
+    const controller = new AbortController();
+    hojeLoadAbortRef.current = controller;
+    try {
+      const hoje = toLocalDateIso();
+      const rawSlots = await agendasApi.byRange(hoje, hoje, { signal: controller.signal });
+      const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
+      setHojeSessionCount(dtos.length);
+    } catch (e) {
+      if (isAbortError(e)) return;
+      setHojeSessionCount(0);
+    }
+  }, [authEnabled]);
+
+  const refreshHojeIfOffCurrentMonth = useCallback(async () => {
+    if (monthContainsIso(monthDate, todayIso)) return;
+    await refreshHojeSessionCount();
+  }, [monthDate, todayIso, refreshHojeSessionCount]);
+
+  useEffect(() => {
+    if (!authEnabled) {
+      setHojeSessionCount(0);
+      return undefined;
+    }
+    refreshHojeSessionCount();
+    return () => {
+      hojeLoadAbortRef.current?.abort();
+    };
+  }, [authEnabled, refreshHojeSessionCount]);
 
   useEffect(() => {
     if (skipNextAutoLoadRef.current) {
       skipNextAutoLoadRef.current = false;
-      return;
+      return undefined;
     }
-    loadMonth();
-  }, [loadMonth]);
+    if (!authEnabled) {
+      setAppointments([]);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+    runMonthLoad(monthDate);
+    return () => {
+      monthLoadAbortRef.current?.abort();
+    };
+  }, [authEnabled, monthDate, runMonthLoad]);
 
   const dispCacheKey = useCallback((roleId, md) => {
     return `${String(roleId || '').trim()}:${monthKey(md)}`;
@@ -1289,7 +1356,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     dispMonthCacheRef.current = {};
     await loadMonth();
     await refreshWeekGrid();
-  }, [loadMonth, refreshWeekGrid]);
+    await refreshHojeIfOffCurrentMonth();
+  }, [loadMonth, refreshWeekGrid, refreshHojeIfOffCurrentMonth]);
 
   const handleCancelar = useCallback(
     async (agendaId, payload, opts = {}) => {
@@ -1303,6 +1371,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         if (!opts.skipDashboardRefresh) {
           await loadMonth();
           await refreshWeekGrid();
+          await refreshHojeIfOffCurrentMonth();
           notifyAgendaPatientSync();
         }
         setError('');
@@ -1314,7 +1383,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         return false;
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, notifyAgendaPatientSync]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
   );
 
   const handleMarcarNaoCompareceu = useCallback(
@@ -1641,6 +1710,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setMonthDate(nextMonthDate);
       await loadMonth(nextMonthDate);
       await refreshWeekGrid();
+      await refreshHojeIfOffCurrentMonth();
       closeBloqueioModal();
       setError('');
       setBloqueioConflitosResyncMessage('');
@@ -1666,6 +1736,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     isNivel1,
     loadMonth,
     refreshWeekGrid,
+    refreshHojeIfOffCurrentMonth,
     roleUserIdAgenda,
     toastError,
     toastSuccess,
@@ -1739,6 +1810,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         if (!opts.skipDashboardRefresh) {
           await loadMonth();
           await refreshWeekGrid();
+          await refreshHojeIfOffCurrentMonth();
         }
         setError('');
         return true;
@@ -1753,7 +1825,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         return false;
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError],
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, refreshHojeIfOffCurrentMonth],
   );
 
   const handleReagendar = useCallback(
@@ -1774,6 +1846,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         if (!opts.skipDashboardRefresh) {
           await loadMonth();
           await refreshWeekGrid();
+          await refreshHojeIfOffCurrentMonth();
           notifyAgendaPatientSync();
         }
         setError('');
@@ -1786,7 +1859,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         setSubmittingReagendar(false);
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp, notifyAgendaPatientSync]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
   );
 
   const handleEnviarWhatsApp = useCallback(
@@ -1876,15 +1949,22 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     }).length;
   }, [filteredAppointments, monthDate]);
 
+  const statsHojeCount = useMemo(() => {
+    if (monthContainsIso(monthDate, todayIso)) {
+      return countHojeFromAppointments(appointments, todayIso);
+    }
+    return hojeSessionCount;
+  }, [monthDate, todayIso, appointments, hojeSessionCount]);
+
   const stats = useMemo(() => {
     const kpiRows = filterKpiCountableAppointments(appointments);
     return {
       totalMes: kpiRows.length,
       confirmados: kpiRows.filter((item) => item.status === 'confirmado').length,
       pendentes: kpiRows.filter((item) => item.status === 'pendente').length,
-      hoje: hojeCount,
+      hoje: statsHojeCount,
     };
-  }, [appointments, hojeCount]);
+  }, [appointments, statsHojeCount]);
 
   const groupedAppointments = useMemo(() => {
     const grouped = groupByDate(filteredAppointments);
@@ -2385,6 +2465,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setMonthDate(nextMonthDate);
       await loadMonth(nextMonthDate);
       await refreshWeekGrid();
+      await refreshHojeIfOffCurrentMonth();
       notifyAgendaPatientSync();
       if (agendaSavedPayload && onAgendaSavedRef.current) {
         const cb = onAgendaSavedRef.current;
@@ -2411,6 +2492,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     planejamentoItemIdPorCatalogo,
     patientOptions,
     refreshWeekGrid,
+    refreshHojeIfOffCurrentMonth,
     roleUserIdAgenda,
     dispCacheKey,
     notifyAgendaPatientSync,
