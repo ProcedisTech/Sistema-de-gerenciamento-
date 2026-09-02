@@ -214,6 +214,11 @@ export function getApiErrorDetail(err) {
  * @param {string} [fallback]
  * @returns {string}
  */
+/** Requisição cancelada via AbortController (navegação obsoleta, etc.). */
+export function isAbortError(err) {
+  return err?.name === 'AbortError';
+}
+
 export function getApiErrorToastMessage(err, fallback) {
   const status = err != null && typeof err === 'object' ? err.status : undefined;
 
@@ -295,8 +300,14 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   });
 
   if (res.status === 401) {
+    if (fetchOpts.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
     const refreshed = await attemptTokenRefresh();
     if (refreshed) {
+      if (fetchOpts.signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       headers.Authorization = `Bearer ${refreshed}`;
       res = await fetch(url, {
         ...fetchOpts,
@@ -936,7 +947,7 @@ export const agendasApi = {
     if (opts?.excluirCancelado) {
       url += `&excluirCancelado=true`;
     }
-    return request(url);
+    return request(url, { signal: opts.signal });
   },
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
