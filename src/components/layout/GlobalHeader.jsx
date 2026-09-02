@@ -42,16 +42,8 @@ export function GlobalHeader({
     </div>
   );
 
-  const bell = (
-    <NotificationBell
-      variant="header"
-      onVerTodas={onOpenNotificacoes}
-      notificacoesRefreshKey={notificacoesRefreshKey}
-    />
-  );
-
   const searchSlot = isPacientesView ? (
-    <div className="relative min-w-[12rem] max-w-md flex-1">
+    <div className="relative hidden min-w-[12rem] max-w-md flex-1 lg:block">
       <Search
         className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
         strokeWidth={2.25}
@@ -68,7 +60,7 @@ export function GlobalHeader({
       />
     </div>
   ) : (
-    <div className="min-w-[12rem] max-w-md flex-1">
+    <div className="hidden min-w-[12rem] max-w-md flex-1 lg:block">
       <PacienteSearchInput
         value=""
         onChange={(_id, patient) => {
@@ -80,56 +72,52 @@ export function GlobalHeader({
   );
 
   return (
-    <>
-      {/* Desktop */}
-      <header className="sticky top-0 z-30 hidden shrink-0 border-b border-app-border bg-white/95 backdrop-blur-sm lg:flex">
-        <div className="flex w-full items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
-          <div className="flex shrink-0 items-center gap-3">
-            {brandBlock}
-            {pageSlot ? (
-              <>
-                <div className="h-4 w-px bg-[#e2e8f0] shrink-0" aria-hidden="true" />
-                <div className="hidden items-center min-w-0 lg:flex">
-                  {pageSlot}
-                </div>
-              </>
-            ) : null}
-          </div>
-          {searchSlot}
-
-          <div className="flex shrink-0 items-center gap-2">
-            {showAgendamento ? (
-              <button
-                type="button"
-                onClick={onAgendamento}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 text-[13px] font-medium text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40"
-              >
-                <CalendarPlus className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
-                Agendamento
-              </button>
-            ) : null}
-
-            {showNovoPaciente ? (
-              <button
-                type="button"
-                onClick={onNovoPaciente}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#00a88e] px-3 text-[13px] font-medium text-white transition-colors hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40"
-              >
-                <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
-                Novo Paciente
-              </button>
-            ) : null}
-
-            {bell}
-          </div>
+    <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center border-b border-app-border bg-white/95 px-4 backdrop-blur-sm lg:h-auto lg:py-2.5 sm:px-6 lg:px-8">
+      <div className="flex w-full items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
+          {brandBlock}
+          {pageSlot ? (
+            <>
+              <div className="hidden h-4 w-px shrink-0 bg-[#e2e8f0] lg:block" aria-hidden="true" />
+              <div className="hidden min-w-0 items-center lg:flex">
+                {pageSlot}
+              </div>
+            </>
+          ) : null}
         </div>
-      </header>
 
-      {/* Mobile compacto: símbolo + sino */}
-      <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-app-border bg-white/95 px-4 backdrop-blur-sm lg:hidden">
-        {brandBlock}
-        {bell}
-      </header>
-    </>
+        {searchSlot}
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {showAgendamento ? (
+            <button
+              type="button"
+              onClick={onAgendamento}
+              className="hidden h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 text-[13px] font-medium text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 lg:inline-flex"
+            >
+              <CalendarPlus className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+              Agendamento
+            </button>
+          ) : null}
+
+          {showNovoPaciente ? (
+            <button
+              type="button"
+              onClick={onNovoPaciente}
+              className="hidden h-10 items-center gap-2 rounded-xl bg-[#00a88e] px-3 text-[13px] font-medium text-white transition-colors hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 lg:inline-flex"
+            >
+              <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+              Novo Paciente
+            </button>
+          ) : null}
+
+          <NotificationBell
+            variant="header"
+            onVerTodas={onOpenNotificacoes}
+            notificacoesRefreshKey={notificacoesRefreshKey}
+          />
+        </div>
+      </div>
+    </header>
   );
 }

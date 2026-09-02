@@ -315,7 +315,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
   return `${left} – ${right} de ${y2}`;
 }
 
-export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
+export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPatientSync } = {}) {
   const { roleUserId, roleNome } = useOrg();
   const { bumpRevision } = useDisponibilidadeRevision();
   const { isNivel1 } = usePapel();
@@ -379,6 +379,11 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
   const skipNextAutoLoadRef = useRef(false);
   /** Callback one-shot após save bem-sucedido (fluxo planejamento Step3). */
   const onAgendaSavedRef = useRef(null);
+  const onAgendaPatientSyncRef = useRef(onAgendaPatientSync);
+  onAgendaPatientSyncRef.current = onAgendaPatientSync;
+  const notifyAgendaPatientSync = useCallback(() => {
+    onAgendaPatientSyncRef.current?.();
+  }, []);
   /** planejamentoItemId explícito ao abrir modal a partir de item do plano (fallback do vínculo). */
   const planejamentoItemIdVinculoRef = useRef(null);
   const disponibilidadesRef = useRef(disponibilidades);
@@ -1298,6 +1303,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (!opts.skipDashboardRefresh) {
           await loadMonth();
           await refreshWeekGrid();
+          notifyAgendaPatientSync();
         }
         setError('');
         return true;
@@ -1308,7 +1314,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         return false;
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, notifyAgendaPatientSync]
   );
 
   const handleMarcarNaoCompareceu = useCallback(
@@ -1768,6 +1774,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         if (!opts.skipDashboardRefresh) {
           await loadMonth();
           await refreshWeekGrid();
+          notifyAgendaPatientSync();
         }
         setError('');
         return true;
@@ -1779,7 +1786,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
         setSubmittingReagendar(false);
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp, notifyAgendaPatientSync]
   );
 
   const handleEnviarWhatsApp = useCallback(
@@ -2378,6 +2385,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
       setMonthDate(nextMonthDate);
       await loadMonth(nextMonthDate);
       await refreshWeekGrid();
+      notifyAgendaPatientSync();
       if (agendaSavedPayload && onAgendaSavedRef.current) {
         const cb = onAgendaSavedRef.current;
         onAgendaSavedRef.current = null;
@@ -2405,6 +2413,7 @@ export function useAgendaPage({ patients = [], authEnabled = false } = {}) {
     refreshWeekGrid,
     roleUserIdAgenda,
     dispCacheKey,
+    notifyAgendaPatientSync,
     toastSuccess,
     toastError,
     validateForm,
