@@ -9,8 +9,9 @@ export function PatientAvatar({
   className = '',
   initialsClassName = 'text-[12px] font-bold',
   spinnerClassName = 'w-5 h-5',
+  fetchPhotoById = false,
 }) {
-  const { src, loading } = usePatientProfilePhotoSrc(patient);
+  const { src, loading } = usePatientProfilePhotoSrc(patient, { fetchPhotoById });
 
   return (
     <div className={`relative shrink-0 overflow-hidden ${className}`}>
