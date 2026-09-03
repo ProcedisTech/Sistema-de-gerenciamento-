@@ -20,7 +20,14 @@ import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError, isAgendaSlotOverlapError } from '../../utils/agendaErrors';
-import { monthRangeIso, toDateKey } from '../../utils/agendaDateUtils';
+import {
+  monthContainsIso,
+  monthKey,
+  monthRangeIso,
+  resolveMonthRefreshAction,
+  toDateKey,
+  weekContainsIso,
+} from '../../utils/agendaDateUtils';
 import {
   fetchKpiDrilldownRows,
   filterKpiCountableAppointments,
@@ -30,6 +37,9 @@ import {
   buildAgendaBloquearPeriodoBody,
   buildAgendaCreateBody,
   fetchDashboardAppointmentsForRange,
+  isAgendaVisibleOnDashboard,
+  mapAgendaDtoToDashboardRow,
+  mergeDashboardRows,
   normalizeApiList,
 } from '../../utils/agendaDashboardMapping';
 import { countBloqueioPeriodoConflicts } from '../../utils/agendaBloqueioConflicts.js';
@@ -123,10 +133,6 @@ export function toLocalDateIso(date = new Date()) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
-function monthKey(date) {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
-}
-
 function capitalize(value) {
   if (!value) return '';
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -208,11 +214,6 @@ async function fetchBloqueioConflitosCount(prof, dataAgendamento, horaInicio, ho
   } catch {
     return { ok: false, count: null };
   }
-}
-
-function monthContainsIso(monthDate, isoDate) {
-  const { start, end } = monthRangeIso(monthDate);
-  return isoDate >= start && isoDate <= end;
 }
 
 function countHojeFromAppointments(rows, todayIso) {
@@ -391,8 +392,6 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const monthLoadAbortRef = useRef(null);
   const monthLoadGenRef = useRef(0);
   const hojeLoadAbortRef = useRef(null);
-  /** Evita double-fetch quando saveAppointment já chamou loadMonth com mês explícito. */
-  const skipNextAutoLoadRef = useRef(false);
   /** Callback one-shot após save bem-sucedido (fluxo planejamento Step3). */
   const onAgendaSavedRef = useRef(null);
   const onAgendaPatientSyncRef = useRef(onAgendaPatientSync);
@@ -610,10 +609,6 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, [authEnabled, refreshHojeSessionCount]);
 
   useEffect(() => {
-    if (skipNextAutoLoadRef.current) {
-      skipNextAutoLoadRef.current = false;
-      return undefined;
-    }
     if (!authEnabled) {
       setAppointments([]);
       setLoading(false);
@@ -1705,10 +1700,12 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         Number(data.slice(5, 7)) - 1,
         1,
       );
-      skipNextAutoLoadRef.current = true;
       setSelectedDay(data);
-      setMonthDate(nextMonthDate);
-      await loadMonth(nextMonthDate);
+      if (resolveMonthRefreshAction(monthDate, nextMonthDate) === 'loadMonth') {
+        await loadMonth(nextMonthDate);
+      } else {
+        setMonthDate(nextMonthDate);
+      }
       await refreshWeekGrid();
       await refreshHojeIfOffCurrentMonth();
       closeBloqueioModal();
@@ -1735,6 +1732,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     closeBloqueioModal,
     isNivel1,
     loadMonth,
+    monthDate,
     refreshWeekGrid,
     refreshHojeIfOffCurrentMonth,
     roleUserIdAgenda,
@@ -2275,6 +2273,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     const isConsulta = tipo === TIPO_ATENDIMENTO_CONSULTA;
 
     let agendaSavedPayload = null;
+    const createdDtos = [];
 
     try {
       if (isRetorno) {
@@ -2305,6 +2304,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         );
         if (created === null) return false;
         if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+        createdDtos.push(created);
         if (onAgendaSavedRef.current) {
           agendaSavedPayload = {
             agendaId: created.id,
@@ -2342,6 +2342,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         );
         if (created === null) return false;
         if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+        createdDtos.push(created);
         if (onAgendaSavedRef.current) {
           agendaSavedPayload = {
             agendaId: created.id,
@@ -2415,6 +2416,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
             continue;
           }
           if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+          createdDtos.push(created);
           const horaInicioSlot = startHh;
           resultados.push({
             id: catalogoProcedimentoSaudeId,
@@ -2460,10 +2462,31 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       if (savedRole) {
         delete dispMonthCacheRef.current[dispCacheKey(savedRole, nextMonthDate)];
       }
-      skipNextAutoLoadRef.current = true;
+
+      const mappedRows = createdDtos
+        .map(mapAgendaDtoToDashboardRow)
+        .filter(Boolean)
+        .filter(isAgendaVisibleOnDashboard);
+      const monthBounds = monthRangeIso(nextMonthDate);
+      setAppointments((prev) =>
+        mergeDashboardRows(prev, mappedRows, { startIso: monthBounds.start, endIso: monthBounds.end }),
+      );
+      if (viewMode === 'semana') {
+        const weekRows = mappedRows.filter((r) => weekContainsIso(weekStartIso, weekEndIso, r.data));
+        setWeekGridAppointments((prev) =>
+          mergeDashboardRows(prev, weekRows, {
+            startIso: weekStartIso,
+            endIso: weekEndIso,
+          }),
+        );
+      }
+
       setSelectedDay(form.data);
-      setMonthDate(nextMonthDate);
-      await loadMonth(nextMonthDate);
+      if (resolveMonthRefreshAction(monthDate, nextMonthDate) === 'loadMonth') {
+        await loadMonth(nextMonthDate);
+      } else {
+        setMonthDate(nextMonthDate);
+      }
       await refreshWeekGrid();
       await refreshHojeIfOffCurrentMonth();
       notifyAgendaPatientSync();
@@ -2489,6 +2512,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     isNivel1,
     loadMonth,
     modalMode,
+    monthDate,
     planejamentoItemIdPorCatalogo,
     patientOptions,
     refreshWeekGrid,
@@ -2499,6 +2523,9 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     toastSuccess,
     toastError,
     validateForm,
+    viewMode,
+    weekEndIso,
+    weekStartIso,
   ]);
 
   const updateStatus = useCallback(
