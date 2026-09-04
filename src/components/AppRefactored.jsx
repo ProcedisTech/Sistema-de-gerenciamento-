@@ -134,6 +134,8 @@ import {
   formatAntecedenciaText,
   formatAtrasoText,
 } from '../utils/agendaStartTolerance.js';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
+import SessionTimeoutWarningModal from './session/SessionTimeoutWarningModal';
 
 function normalizeTermosList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -408,6 +410,14 @@ function AppRefactoredInner() {
       return next;
     });
   }, []);
+
+  // --- Session idle timeout ---
+  const sessionTimeout = useSessionTimeout({
+    isLoggedIn: authState.isLoggedIn,
+    activeView,
+    consultaModule,
+  });
+
   const goToView = (view) => {
     // Verificacao de segurança na troca de view
     if (view === 'configuracoes' && !canSeeConfig) {
@@ -4830,6 +4840,14 @@ function AppRefactoredInner() {
         onClose={() => setTermoBloqueio((prev) => ({ ...prev, open: false }))}
         onIrParaTermos={irParaTermosFaltantes}
       />
+
+      {sessionTimeout.showWarning && (
+        <SessionTimeoutWarningModal
+          deadlineTs={sessionTimeout.deadlineTs}
+          onStay={sessionTimeout.handleStay}
+          onLogout={sessionTimeout.handleLogoutNow}
+        />
+      )}
 
       <PlanoConcluidoClinicaModal
         open={planoConcluidoModal.open}
