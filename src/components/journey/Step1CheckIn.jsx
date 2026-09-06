@@ -16,8 +16,8 @@ import {
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
 import { useToast } from '../../contexts/useToast.js';
-import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import ProfissaoSelect from '../patients/ProfissaoSelect';
+import { EstadoCivilSelect } from '../patients/EstadoCivilSelect';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 
 export function Step1CheckIn({
@@ -365,21 +365,15 @@ export function Step1CheckIn({
               </div>
               <div className="space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Estado Civil <span className="text-red-500">*</span></label>
-                <select
+                <EstadoCivilSelect
                   value={estadoCivilId}
-                  onChange={(e) => {
-                    setEstadoCivilId(e.target.value);
-                    setStep1Errors({...step1Errors, estadoCivil: false});
+                  error={Boolean(step1Errors.estadoCivil)}
+                  onChange={(value) => {
+                    setEstadoCivilId(value);
+                    setStep1Errors({ ...step1Errors, estadoCivil: false });
                   }}
-                  className={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.estadoCivil ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
-                >
-                  <option value="">Selecione...</option>
-                  {ESTADOS_CIVIS.map((ec) => (
-                    <option key={ec.id} value={ec.id}>
-                      {ec.nome}
-                    </option>
-                  ))}
-                </select>
+                  selectClassName={`w-full px-4 py-3 bg-[#f8fbfb] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#00a88e]/20 appearance-none transition-all ${step1Errors.estadoCivil ? 'border-red-400 bg-red-50' : 'border-[#00a88e]/25 focus:border-[#00a88e]'}`}
+                />
               </div>
               <div className="md:col-span-2 space-y-1.5">
                 <label className="text-[13px] font-bold text-[#00a88e]">Profissão <span className="text-red-500">*</span></label>
