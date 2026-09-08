@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Save, Loader2, UserRound, Plus, Camera, AlertTriangle, Calendar, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   maskCPF,
@@ -9,6 +9,7 @@ import {
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUtils';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
+import { normalizePatientName } from '../../utils/normalizePatientName';
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
 import ProfissaoSelect from './ProfissaoSelect';
 import { EstadoCivilSelect } from './EstadoCivilSelect';
@@ -229,6 +230,44 @@ export function PatientForm({
   const requiredTotal = requiredFieldValues.length;
   const hasComplementaryData = Boolean(instagram || tiktok || nomeMae || nomePai || indicacao);
   const [complementaryOpen, setComplementaryOpen] = useState(hasComplementaryData);
+  const [nomeCapitalizacaoAviso, setNomeCapitalizacaoAviso] = useState(null);
+  const skipNormalizeOnBlur = useRef(false);
+
+  const handleNomeChange = (raw) => {
+    const value = raw.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
+    skipNormalizeOnBlur.current = false;
+    setNomeCapitalizacaoAviso(null);
+    onNomeChange(value);
+    clearError?.('nome');
+  };
+
+  const handleNomeBlur = () => {
+    if (readOnly || skipNormalizeOnBlur.current) return;
+    const next = normalizePatientName(nome);
+    if (next == null || next === nome) return;
+    setNomeCapitalizacaoAviso({ original: nome });
+    onNomeChange(next);
+  };
+
+  const handleNomeDesfazer = () => {
+    if (!nomeCapitalizacaoAviso) return;
+    onNomeChange(nomeCapitalizacaoAviso.original);
+    setNomeCapitalizacaoAviso(null);
+    skipNormalizeOnBlur.current = true;
+  };
+
+  const nomeCapitalizacaoAvisoEl = nomeCapitalizacaoAviso ? (
+    <p className="text-[12px] font-medium text-slate-500">
+      Nome ajustado. Digitado: «{nomeCapitalizacaoAviso.original}»{' '}
+      <button
+        type="button"
+        onClick={handleNomeDesfazer}
+        className="font-semibold text-[#00a88e] underline-offset-2 hover:underline"
+      >
+        Desfazer
+      </button>
+    </p>
+  ) : null;
 
   return (
     <form
@@ -380,14 +419,12 @@ export function PatientForm({
                     value={nome}
                     disabled={readOnly}
                     maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
-                      onNomeChange(value);
-                      clearError?.('nome');
-                    }}
+                    onChange={(e) => handleNomeChange(e.target.value)}
+                    onBlur={handleNomeBlur}
                     placeholder="Nome completo do paciente"
                     className={inputClass('nome')}
                   />
+                  {nomeCapitalizacaoAvisoEl}
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
@@ -795,14 +832,12 @@ export function PatientForm({
               value={nome}
               disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
-              onChange={(e) => {
-                const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
-                onNomeChange(value);
-                clearError?.('nome');
-              }}
+              onChange={(e) => handleNomeChange(e.target.value)}
+              onBlur={handleNomeBlur}
               placeholder="Nome completo do paciente"
               className={inputClass('nome')}
             />
+            {nomeCapitalizacaoAvisoEl}
           </div>
           <div className="space-y-1.5">
             <label className={labelCls('text-[#00a88e]')}>
