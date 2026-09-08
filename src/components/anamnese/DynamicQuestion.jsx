@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { AnamneseCatalogoPicker } from './AnamneseCatalogoPicker.jsx';
 import { isTipoCatalogoMulti } from './anamneseTipoLabels';
@@ -32,15 +32,24 @@ function CatalogoReacaoQuestion({
   alerta,
 }) {
   const searchEnabled = typeof searchFn === 'function';
-  const fetchScope = searchEnabled ? searchFn : null;
-  const [loadedScope, setLoadedScope] = useState(null);
+  const searchFnRef = useRef(searchFn);
+  useEffect(() => {
+    searchFnRef.current = searchFn;
+  });
+
+  const [loading, setLoading] = useState(searchEnabled);
   const [opcoes, setOpcoes] = useState([]);
+  const [prevSearchEnabled, setPrevSearchEnabled] = useState(searchEnabled);
+  if (prevSearchEnabled !== searchEnabled) {
+    setPrevSearchEnabled(searchEnabled);
+    setLoading(searchEnabled);
+  }
 
   useEffect(() => {
     if (!searchEnabled) return undefined;
     let cancelled = false;
-    const scope = searchFn;
-    searchFn('')
+    const fn = searchFnRef.current;
+    fn('')
       .then((list) => {
         if (!cancelled) setOpcoes(Array.isArray(list) ? list : []);
       })
@@ -48,26 +57,23 @@ function CatalogoReacaoQuestion({
         if (!cancelled) setOpcoes([]);
       })
       .finally(() => {
-        if (!cancelled) setLoadedScope(scope);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [searchFn, searchEnabled]);
-
-  const displayOpcoes = searchEnabled && loadedScope === fetchScope ? opcoes : [];
-  const displayLoading = searchEnabled && loadedScope !== fetchScope;
+  }, [searchEnabled]);
 
   const selectedId = resposta?.reacaoAdversaId ?? resposta?.catalogoItens?.[0]?.id;
 
   return (
     <div className="flex w-full min-w-0 flex-col">
       <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
-      {displayLoading ? (
+      {loading ? (
         <p className="text-[13px] text-slate-400">Carregando opções…</p>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {displayOpcoes.map((op) => {
+          {opcoes.map((op) => {
             const id = op.id ?? op.reacaoAdversaId;
             const nome = op.nome ?? op.descricao ?? String(id);
             const ativo = selectedId != null && String(selectedId) === String(id);
