@@ -8,7 +8,6 @@ import {
 } from '../utils/formatters';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUtils';
-import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
 import ProfissaoSelect from './ProfissaoSelect';
