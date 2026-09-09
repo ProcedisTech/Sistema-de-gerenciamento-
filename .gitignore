@@ -38,3 +38,7 @@ diff_availability.txt
 
 # Agentes / Skills locais
 .agents/
+
+# Documentos exportados para leitura / WhatsApp
+docs_export/
+*.html

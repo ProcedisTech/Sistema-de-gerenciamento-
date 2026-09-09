@@ -2,7 +2,9 @@ import { STATUS_PROCEDIMENTO_FINALIZADO_ID } from '../constants/statusProcedimen
 import {
   coerceSessoesArray,
   pickSessaoAtiva,
+  pickSessaoRealizada,
   pickSessaoRetornoAtiva,
+  pickSessaoRetornoRealizada,
 } from './planejamentoSessoes.js';
 
 
@@ -193,7 +195,11 @@ export function normalizePlanoItem(raw) {
 
     sessaoAtiva: pickSessaoAtiva(sessoes),
 
+    sessaoRealizada: pickSessaoRealizada(sessoes),
+
     sessaoRetornoAtiva: pickSessaoRetornoAtiva(sessoes),
+
+    sessaoRetornoRealizada: pickSessaoRetornoRealizada(sessoes),
 
   };
 

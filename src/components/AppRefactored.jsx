@@ -62,7 +62,7 @@ import {
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
-import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
+import { pickSessaoAtiva, pickSessaoRetornoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
@@ -578,19 +578,21 @@ function AppRefactoredInner() {
 
   const handleAgendarPlanoItem = React.useCallback(
     (paciente, item, onSaved) => {
-      if (!paciente?.id || !roleUserId || !item?.catalogoProcedimentoSaudeId) return;
-      const catId = String(item.catalogoProcedimentoSaudeId).trim();
+      const catId = String(item?.catalogoProcedimentoSaudeId || item?.catalogoId || '').trim();
+      if (!paciente?.id || !roleUserId || !catId) return;
       const planejamentoItemId = String(item.planejamentoItemId ?? item.id ?? '').trim();
       if (!isRealUuid(planejamentoItemId)) {
         toast.error('Salve o plano antes de agendar este procedimento.');
         return;
       }
+      const targetData = item?.dataPlanejada || item?.data || null;
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
         catalogoProcedimentoSaudeIds: [catId],
         planejamentoItemId,
         planejamentoItemIdPorCatalogo: {
           [catId]: planejamentoItemId,
         },
+        data: targetData,
         profissionalRoleUserId: roleUserId,
         onAgendaSaved: onSaved,
       });
@@ -606,11 +608,31 @@ function AppRefactoredInner() {
         toast.error('Salve o plano antes de agendar retorno deste procedimento.');
         return;
       }
+      const targetData = item.dataRetornoSugerida || item.data || null;
+      const dataPai =
+        item.dataPaiReal ||
+        item.sessaoAtiva?.dataAgendamento ||
+        item.sessaoRealizada?.dataAgendamento ||
+        item.dataRealizacao ||
+        item.dataPlanejada ||
+        null;
+      const horaPai =
+        item.horaPaiReal ||
+        item.sessaoAtiva?.horaInicio ||
+        item.sessaoRealizada?.horaInicio ||
+        null;
+
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
         modoRetorno: true,
         planejamentoItemId,
         retornoOrigemNome: String(item.catalogoNome ?? '').trim() || 'Procedimento',
-        retornoDataPlanejada: item.dataPlanejada ?? null,
+        retornoDataPlanejada: dataPai,
+        retornoHoraPai: horaPai,
+        retornoPlanoTitulo: item.planoTitulo || null,
+        retornoVisitaLabel: item.visitaLabel || null,
+        retornoStatusPai: item.statusPai || null,
+        data: targetData,
+        dataAgendamento: targetData,
         profissionalRoleUserId: roleUserId,
         onAgendaSaved: onSaved,
       });
@@ -636,26 +658,46 @@ function AppRefactoredInner() {
   const handleReagendarPlanoItem = React.useCallback(
     async (paciente, item, plano, onPlanoRefresh) => {
       if (!paciente?.id || !plano?.id || !item?.id) return;
+      const isItemRetorno = Boolean(
+        item.isRetorno ||
+        item.tipo === 'retorno' ||
+        item.tipoProcedimentoCodigo === 'retorno' ||
+        item.sessaoAtiva?.tipoProcedimentoCodigo === 'retorno',
+      );
+      const realPlanejamentoItemId = String(
+        item.planejamentoItemId || item.id || '',
+      )
+        .replace(/_retorno$/, '')
+        .trim();
+
       let sessao = item.sessaoAtiva;
       if (!sessao?.agendaId) {
         try {
           const detalhe = await planejamentosApi.detalhe(plano.id);
           const rawItem = (detalhe?.itens ?? []).find(
-            (i) => String(i.planejamentoItemId ?? i.id) === String(item.id),
+            (i) => String(i.planejamentoItemId ?? i.id) === realPlanejamentoItemId,
           );
-          sessao = pickSessaoAtiva(rawItem?.sessoes ?? []);
+          sessao = isItemRetorno
+            ? pickSessaoRetornoAtiva(rawItem?.sessoes ?? [])
+            : pickSessaoAtiva(rawItem?.sessoes ?? []);
         } catch (e) {
           console.warn('[handleReagendarPlanoItem] Falha ao carregar detalhe do plano:', e);
           return;
         }
       }
       if (!sessao?.agendaId) return;
+
       const catId = String(
         item.catalogoId ??
         item.catalogoProcedimentoSaudeId ??
         sessao.catalogoProcedimentoSaudeId ??
         '',
       ).trim();
+
+      const procNomePai = String(item.catalogoNome ?? '')
+        .replace(/^Retorno Clínico · /, '')
+        .trim() || 'Procedimento';
+
       const appointment = {
         agendaId: sessao.agendaId,
         id: sessao.agendaId,
@@ -669,10 +711,28 @@ function AppRefactoredInner() {
           paciente.telefoneNumero ||
           paciente.telefonePrincipal ||
           '',
-        catalogoProcedimentoSaudeId: catId,
+        catalogoProcedimentoSaudeId: isItemRetorno ? null : catId,
         profissionalRoleUserId: sessao.profissionalRoleUserId ?? roleUserId,
-        planejamentoItemId: item.id,
+        planejamentoItemId: realPlanejamentoItemId,
+        tipoProcedimentoCodigo: isItemRetorno ? 'retorno' : (sessao.tipoProcedimentoCodigo || null),
+        agendamentoTipoRetorno: isItemRetorno,
+        isRetorno: isItemRetorno,
+        procedimentoNome: isItemRetorno ? procNomePai : undefined,
+        retornoOrigemNome: isItemRetorno ? procNomePai : undefined,
+        retornoPlanoTitulo: item.planoTitulo || plano?.titulo || plano?.nome || 'Plano de Tratamento',
+        retornoVisitaLabel: item.visitaLabel || 'No Plano',
+        retornoDataPlanejada:
+          item.dataPaiReal ||
+          item.sessaoAtiva?.dataAgendamento ||
+          item.dataPlanejada ||
+          null,
+        retornoHoraPai:
+          item.horaPaiReal ||
+          item.sessaoAtiva?.horaInicio ||
+          null,
+        retornoStatusPai: item.statusPai || 'agendado',
       };
+
       agendaSchedule.openReagendarModal(appointment, [appointment], {
         onAgendaSaved: async () => {
           await onPlanoRefresh?.();
@@ -723,6 +783,18 @@ function AppRefactoredInner() {
         }
         const ok = await agendaSchedule.handleCancelar(row.agendaId, payload);
         if (ok) {
+          if (Array.isArray(payload.cancelarRetornos) && payload.cancelarRetornos.length > 0) {
+            for (const ret of payload.cancelarRetornos) {
+              const retId = ret.agendaId || ret.id;
+              if (retId) {
+                await agendaSchedule.handleCancelar(retId, payload, {
+                  successToast: false,
+                  skipDashboardRefresh: true,
+                });
+              }
+            }
+            toast.success('Procedimento e retorno vinculado cancelados com sucesso');
+          }
           setScheduleCancelRow(null);
           void kpiState.refresh();
         }
@@ -732,6 +804,20 @@ function AppRefactoredInner() {
     },
     [agendaSchedule, scheduleCancelRow, toast, kpiState.refresh],
   );
+
+  const scheduleCancelRetornosVinculados = React.useMemo(() => {
+    const row = scheduleCancelRow?.agenda;
+    if (!row?.planejamentoItemId || row?.isRetorno) return [];
+    const pItemId = String(row.planejamentoItemId);
+    const rowId = String(row.agendaId || row.id);
+    const all = agendaSchedule?.monthAppointments || [];
+    return all.filter((a) => {
+      const aPItemId = String(a.planejamentoItemId || '');
+      const aId = String(a.agendaId || a.id);
+      const st = String(a.status || a.statusCodigo || '').toLowerCase();
+      return aPItemId === pItemId && aId !== rowId && a.isRetorno && st !== 'cancelado';
+    });
+  }, [scheduleCancelRow, agendaSchedule?.monthAppointments]);
 
   const handleSlotReagendar = React.useCallback(
     async (target) => {
@@ -1459,13 +1545,18 @@ function AppRefactoredInner() {
     cameraState.closePhotoModal();
 
     if (!isSameDayResume) {
-      if (!options.fromAgendaSlot) {
+      const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
+      if (hasLote) {
+        setProcedimentosLote(options.lote);
+        journeyState.setProcedimentosSessao(options.lote);
+        journeyState.setActiveProcedureIndex(0);
+      } else if (!options.fromAgendaSlot) {
         setProcedimentosLote([]);
+        journeyState.setProcedimentosSessao([]);
+        journeyState.setActiveProcedureIndex(0);
       }
       // Limpa IDs de procedimentos da sessão anterior para evitar duplicações no prontuário
       setLoteProcedimentosFeitosIds([]);
-      journeyState.setProcedimentosSessao([]);
-      journeyState.setActiveProcedureIndex(0);
       journeyState.setNomeProcedimento('');
       journeyState.setNomeProcedimentoCatalogoId(null);
       journeyState.setObservacoesExecucao('');
@@ -1529,11 +1620,14 @@ function AppRefactoredInner() {
     setSelectedPatientCpf(cpf);
     if (!isSameDayResume) {
       setJourneyProcedureDateIso(todayIso);
-      const nomeAgenda = options.procedimentoNome != null ? String(options.procedimentoNome).trim() : '';
+      const nomeAgenda =
+        (options.procedimentoNome != null && String(options.procedimentoNome).trim() !== '')
+          ? String(options.procedimentoNome).trim()
+          : (options.lote?.[0]?.procedimentoNome ? String(options.lote[0].procedimentoNome).trim() : '');
       const catAgenda =
-        options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== ''
+        (options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== '')
           ? String(options.catalogoProcedimentoSaudeId).trim()
-          : null;
+          : (options.lote?.[0]?.catalogoProcedimentoSaudeId ? String(options.lote[0].catalogoProcedimentoSaudeId).trim() : null);
       journeyState.setNomeProcedimentoCatalogoId(catAgenda);
       journeyState.setNomeProcedimento(nomeAgenda);
       journeyState.setAgendaId(options.agendaId ?? null);
@@ -2346,6 +2440,46 @@ function AppRefactoredInner() {
     // O salvamento real de evaluationCapturedPhotos ocorre apenas em encerrarAtendimento.
     setConsultaModule('hub');
   }, []);
+
+  const handleSelectProcedimentoDoPlano = React.useCallback(
+    (item) => {
+      if (!item) return;
+      const isRetorno = Boolean(
+        item.isRetorno ||
+        item.tipoProcedimentoCodigo === 'retorno' ||
+        item.tipo === 'retorno'
+      );
+      const catId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || '').trim() || null;
+      const nome = item.catalogoNome || 'Procedimento';
+      const planoItemId = item.id || item.planejamentoItemId || null;
+      const agendaId = item.sessaoAtiva?.agendaId || null;
+
+      if (catId) journeyState.setNomeProcedimentoCatalogoId(catId);
+      if (nome) journeyState.setNomeProcedimento(nome);
+      if (agendaId) journeyState.setAgendaId(agendaId);
+      if (planoItemId && catId) {
+        journeyState.setJourneyPlanejamentoCtx((prev) => ({
+          planejamentoId: prev?.planejamentoId ?? null,
+          itemIdByCatalogo: { ...(prev?.itemIdByCatalogo || {}), [String(catId)]: String(planoItemId) },
+          procedimentosComPontos: prev?.procedimentosComPontos || [],
+        }));
+      }
+
+      if (isRetorno) {
+        journeyState.setIsAgendaRetorno(true);
+        journeyState.setTipoAtendimento('retorno');
+        if (item.procedimentoFeitoOrigemId || item.origemId) {
+          journeyState.setProcedimentoFeitoOrigemId(String(item.procedimentoFeitoOrigemId || item.origemId));
+        }
+        toast.success(`Retorno Clínico de "${nome}" selecionado para o atendimento.`);
+        setConsultaModule('retorno');
+      } else {
+        toast.success(`Procedimento "${nome}" selecionado para o atendimento.`);
+        setConsultaModule('hub');
+      }
+    },
+    [journeyState, toast],
+  );
 
   const handleConcluirAnamnese = React.useCallback(async () => {
     setStep1Busy(true);
@@ -4294,7 +4428,9 @@ function AppRefactoredInner() {
                     pacienteId={pacienteAtual?.id ?? null}
                     roleUserId={roleUserId ?? null}
                     pacienteNome={pacienteAtual?.nome ?? ''}
+                    paciente={pacienteAtual}
                     onVoltar={() => setConsultaModule('hub')}
+                    onSelectProcedimentoParaConsulta={handleSelectProcedimentoDoPlano}
                     onAgendarItem={(item, onSaved) =>
                       handleAgendarPlanoItem(pacienteAtual, item, onSaved)
                     }
@@ -4679,6 +4815,8 @@ function AppRefactoredInner() {
                       onCreatePatient={handleCreatePatientFromPatients}
                       onStartAttendance={handleAgendaStartAttendance}
                       onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
+                      onAgendarPlanoItem={handleAgendarPlanoItem}
+                      onAgendarRetornoPlanoItem={handleAgendarRetornoPlanoItem}
                       onReagendarPlanoItem={handleReagendarPlanoItem}
                       onPlanoConcluido={handlePlanoConcluidoAposBaixa}
                       onUpdatePatient={handleUpdatePatientProfile}
@@ -4906,6 +5044,7 @@ function AppRefactoredInner() {
           {scheduleCancelRow?.agenda ? (
             <CancelarAgendaModal
               agenda={scheduleCancelRow.agenda}
+              retornosVinculados={scheduleCancelRetornosVinculados}
               onClose={() => setScheduleCancelRow(null)}
               onConfirm={handleScheduleConfirmCancelar}
               isSubmitting={scheduleCancelSubmitting}

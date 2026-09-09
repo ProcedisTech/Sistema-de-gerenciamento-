@@ -19,7 +19,6 @@
  * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
  */
 
-import { STATUS_PROCEDIMENTO_FINALIZADO_ID } from '../constants/statusProcedimento.js';
 import { sanitizeOrgId, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 import { supabase } from '../lib/supabaseClient';
 import { updateServerTimeOffset } from '../utils/serverTime';
@@ -795,7 +794,7 @@ export const planejamentosApi = {
     ),
   darBaixaItem: (planejamentoId, itemId) =>
     planejamentosApi.atualizarItem(planejamentoId, itemId, {
-      statusProcedimentoId: STATUS_PROCEDIMENTO_FINALIZADO_ID,
+      statusCodigo: 'finalizado',
     }),
 };
 

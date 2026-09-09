@@ -345,6 +345,7 @@ function DayColumn({
         const noShow = appt.status === 'cancelado' && isAgendaNoShow(appt);
         const cardClass = statusCardClass(appt.status);
         const lineThrough = appt.status === 'cancelado';
+        const isReagendado = appt.status === 'reagendado';
         const corProc = appt.corHex || '#00a88e';
         const showWhatsAppBadge =
           appt.status === 'pendente' ||
@@ -373,21 +374,28 @@ function DayColumn({
                 <AlertTriangle className="h-3 w-3 text-amber-500" />
               </span>
             ) : null}
+            {isReagendado ? (
+              <div className="mb-0.5">
+                <span className="inline-block rounded bg-purple-100 px-1 py-0 text-[8px] font-bold uppercase leading-tight text-purple-800 border border-purple-200">
+                  Reagendado
+                </span>
+              </div>
+            ) : null}
             <div
-              className={`flex items-center gap-1 text-[11px] font-bold leading-tight text-[#0FA37F] ${lineThrough ? 'line-through' : ''}`}
+              className={`flex items-center gap-1 text-[11px] font-bold leading-tight ${isReagendado ? 'text-purple-700' : 'text-[#0FA37F]'} ${lineThrough ? 'line-through' : ''}`}
             >
               <span
                 className="inline-block h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: corProc }}
+                style={{ backgroundColor: isReagendado ? '#A855F7' : corProc }}
                 aria-hidden
               />
               {appt.horaInicio}
             </div>
-            <div className={`truncate text-[11px] font-bold text-[#1A1A2E] ${lineThrough ? 'line-through' : ''}`}>
+            <div className={`truncate text-[11px] font-bold ${isReagendado ? 'text-purple-900 opacity-90' : 'text-[#1A1A2E]'} ${lineThrough ? 'line-through' : ''}`}>
               {appt.pacienteNome}
             </div>
             {showProc ? (
-              <div className={`truncate text-[10px] font-medium ${appt.procedimentoNome ? 'text-[#888888]' : 'text-amber-700'} ${lineThrough ? 'line-through' : ''}`}>
+              <div className={`truncate text-[10px] font-medium ${isReagendado ? 'text-purple-700 opacity-80' : appt.procedimentoNome ? 'text-[#888888]' : 'text-amber-700'} ${lineThrough ? 'line-through' : ''}`}>
                 {appt.procedimentoNome || 'Sem procedimento informado'}
               </div>
             ) : null}

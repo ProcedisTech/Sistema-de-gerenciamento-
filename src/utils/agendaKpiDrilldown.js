@@ -5,10 +5,11 @@ import {
   mapAgendaDtoToDashboardRow,
   normalizeApiList,
 } from './agendaDashboardMapping';
+import { deriveAgendaSlotStatus } from './agendaMapping';
 
-/** Linha do dashboard que entra em KPI / drill-down (exclui bloqueio de horário). */
+/** Linha do dashboard que entra em KPI / drill-down (exclui bloqueio de horário e reagendado). */
 export function isKpiCountableAppointment(row) {
-  return row?.tipo !== 'bloqueio';
+  return row?.tipo !== 'bloqueio' && row?.status !== 'reagendado';
 }
 
 export function filterKpiCountableAppointments(rows) {
@@ -17,7 +18,9 @@ export function filterKpiCountableAppointments(rows) {
 
 /** DTO bruto da API — antes do map para contagem "Hoje". */
 export function isKpiCountableAgendaDto(dto) {
-  return String(dto?.tipoProcedimentoCodigo || '').toLowerCase() !== 'bloqueio';
+  if (String(dto?.tipoProcedimentoCodigo || '').toLowerCase() === 'bloqueio') return false;
+  const status = deriveAgendaSlotStatus(dto);
+  return status !== 'reagendado';
 }
 
 function parseIsoLocal(iso) {

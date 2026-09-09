@@ -76,10 +76,34 @@ export function pickSessaoAtiva(sessoes) {
 }
 
 /**
+ * Escolhe a sessão de agenda realizada vinculada ao item (exclui retorno).
+ * Prefere a mais recente por data+hora quando há múltiplas candidatas.
+ */
+export function pickSessaoRealizada(sessoes) {
+  const realizadas = (Array.isArray(sessoes) ? sessoes : [])
+    .map(normalizeSessao)
+    .filter(Boolean)
+    .filter((s) => normalizeSessaoStatus(s) === 'realizado' && !isSessaoRetorno(s));
+  return pickSessaoFromList(realizadas);
+}
+
+/**
  * Escolhe a sessão de retorno “ativa” vinculada ao item (só tipo retorno).
  */
 export function pickSessaoRetornoAtiva(sessoes) {
   return pickSessaoFromList(filterSessoesAtivas(sessoes, { retornoOnly: true }));
+}
+
+/**
+ * Escolhe a sessão de retorno “realizada” vinculada ao item (só tipo retorno).
+ * Prefere a mais recente por data+hora quando há múltiplas candidatas.
+ */
+export function pickSessaoRetornoRealizada(sessoes) {
+  const realizadas = (Array.isArray(sessoes) ? sessoes : [])
+    .map(normalizeSessao)
+    .filter(Boolean)
+    .filter((s) => normalizeSessaoStatus(s) === 'realizado' && isSessaoRetorno(s));
+  return pickSessaoFromList(realizadas);
 }
 
 /**
