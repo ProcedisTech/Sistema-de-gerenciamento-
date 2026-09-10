@@ -134,6 +134,8 @@ import {
   formatAntecedenciaText,
   formatAtrasoText,
 } from '../utils/agendaStartTolerance.js';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
+import SessionTimeoutWarningModal from './session/SessionTimeoutWarningModal';
 
 function normalizeTermosList(raw) {
   if (Array.isArray(raw)) return raw;
@@ -408,6 +410,14 @@ function AppRefactoredInner() {
       return next;
     });
   }, []);
+
+  // --- Session idle timeout ---
+  const sessionTimeout = useSessionTimeout({
+    isLoggedIn: authState.isLoggedIn,
+    activeView,
+    consultaModule,
+  });
+
   const goToView = (view) => {
     // Verificacao de segurança na troca de view
     if (view === 'configuracoes' && !canSeeConfig) {
@@ -516,7 +526,13 @@ function AppRefactoredInner() {
 
   const kpiState = usePatientsKpi({ authEnabled: authSessionReady, bump: patientListBump });
 
-  const agendaSchedule = useAgendaPage({ patients, authEnabled: authSessionReady });
+  const onAgendaPatientSyncRef = React.useRef(() => {});
+
+  const agendaSchedule = useAgendaPage({
+    patients,
+    authEnabled: authSessionReady,
+    onAgendaPatientSync: () => onAgendaPatientSyncRef.current(),
+  });
 
   const buildAgendaPacienteFromRecord = React.useCallback((p) => {
     if (!p?.id) return null;
@@ -773,11 +789,11 @@ function AppRefactoredInner() {
           if (result.allOk) {
             toast.success(`${group.length} agendamentos cancelados`);
             setScheduleCancelRow(null);
-            void kpiState.refresh();
+            onAgendaPatientSyncRef.current();
           } else if (result.succeeded.length > 0) {
             toast.error(partialMsg || 'Cancelamento parcial');
             setScheduleCancelRow(null);
-            void kpiState.refresh();
+            onAgendaPatientSyncRef.current();
           }
           return;
         }
@@ -796,13 +812,12 @@ function AppRefactoredInner() {
             toast.success('Procedimento e retorno vinculado cancelados com sucesso');
           }
           setScheduleCancelRow(null);
-          void kpiState.refresh();
         }
       } finally {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow, toast, kpiState.refresh],
+    [agendaSchedule, scheduleCancelRow, toast],
   );
 
   const scheduleCancelRetornosVinculados = React.useMemo(() => {
@@ -855,11 +870,7 @@ function AppRefactoredInner() {
     bumpPatientList();
   }, [fetchPatientsCatalog, bumpPatientList]);
 
-  // Sincroniza Pacientes quando agenda muda (criar/cancelar/reagendar)
-  React.useEffect(() => {
-    if (!authSessionReady) return;
-    refreshPatientsAndPagedList();
-  }, [agendaSchedule.appointments, authSessionReady, refreshPatientsAndPagedList]);
+  onAgendaPatientSyncRef.current = refreshPatientsAndPagedList;
 
   const pacienteAtual = React.useMemo(() => {
     const sCpf = String(selectedPatientCpf || '').trim();
@@ -2494,7 +2505,7 @@ function AppRefactoredInner() {
           });
         }
         refreshPatientsAndPagedList();
-        setConsultaModule('hub');
+        await anamneseRef.current?.transicionarParaDocumento?.();
       }
     } finally {
       setStep1Busy(false);
@@ -2601,7 +2612,6 @@ function AppRefactoredInner() {
 
   const finalizarAtendimentoNavegacao = React.useCallback(
     async (sCpf, { successMessage = 'Jornada finalizada com sucesso.', refreshFalhaNaoBloqueia = false } = {}) => {
-      refreshPatientsAndPagedList();
       try {
         await agendaSchedule.refreshDashboard();
       } catch (e) {
@@ -2610,6 +2620,7 @@ function AppRefactoredInner() {
         if (!refreshFalhaNaoBloqueia) throw e;
         console.warn('refreshDashboard falhou após concluir retorno (seguindo com a saída):', e);
       }
+      refreshPatientsAndPagedList();
       toast.success(successMessage);
       setActiveView('pacientes');
       resetJourney();
@@ -3875,6 +3886,11 @@ function AppRefactoredInner() {
                           setExpectativas={journeyState.setExpectativas}
                           pacienteId={pacienteAtual?.id || null}
                           pacienteSexo={pacienteAtual?.sexo || null}
+                          pacienteNome={pacienteAtual?.nomeCompleto || pacienteAtual?.nome || ''}
+                          pacienteCpf={pacienteAtual?.cpf || ''}
+                          pacienteTelefone={pacienteAtual?.telefone || pacienteAtual?.celular || ''}
+                          getPreenchimentoAnamneseId={() => anamnesePreenchimentoIdRef.current}
+                          onPersistirAnamneseHub={salvarAnamneseAntesDeAvancar}
                           roleUserId={roleUserId}
                           step2Errors={journeyState.step2Errors}
                           setStep2Errors={journeyState.setStep2Errors}
@@ -4391,6 +4407,11 @@ function AppRefactoredInner() {
                     setExpectativas={journeyState.setExpectativas}
                     pacienteId={pacienteAtual?.id || null}
                     pacienteSexo={pacienteAtual?.sexo || null}
+                    pacienteNome={pacienteAtual?.nomeCompleto || pacienteAtual?.nome || ''}
+                    pacienteCpf={pacienteAtual?.cpf || ''}
+                    pacienteTelefone={pacienteAtual?.telefone || pacienteAtual?.celular || ''}
+                    getPreenchimentoAnamneseId={() => anamnesePreenchimentoIdRef.current}
+                    onPersistirAnamneseHub={salvarAnamneseAntesDeAvancar}
                     roleUserId={roleUserId}
                     step2Errors={journeyState.step2Errors}
                     setStep2Errors={journeyState.setStep2Errors}
@@ -4957,6 +4978,14 @@ function AppRefactoredInner() {
         onClose={() => setTermoBloqueio((prev) => ({ ...prev, open: false }))}
         onIrParaTermos={irParaTermosFaltantes}
       />
+
+      {sessionTimeout.showWarning && (
+        <SessionTimeoutWarningModal
+          deadlineTs={sessionTimeout.deadlineTs}
+          onStay={sessionTimeout.handleStay}
+          onLogout={sessionTimeout.handleLogoutNow}
+        />
+      )}
 
       <PlanoConcluidoClinicaModal
         open={planoConcluidoModal.open}

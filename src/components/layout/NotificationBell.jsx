@@ -34,11 +34,7 @@ export default function NotificationBell({
     refreshCount();
     const id = setInterval(refreshCount, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [refreshCount]);
-
-  useEffect(() => {
-    refreshCount();
-  }, [notificacoesRefreshKey, refreshCount]);
+  }, [refreshCount, notificacoesRefreshKey]);
 
   useEffect(() => {
     if (!open) return undefined;

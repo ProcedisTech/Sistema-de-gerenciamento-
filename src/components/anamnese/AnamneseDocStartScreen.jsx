@@ -100,11 +100,15 @@ export function AnamneseDocStartScreen({
   onUseFicha,
   onAppendModulo,
   onEspiar,
+  onForkChange,
 }) {
   const [fork, setFork] = useState(null);
 
   const toggleFork = (f) => {
-    setFork((prev) => (prev === f ? null : f));
+    const next = fork === f ? null : f;
+    setFork(next);
+    if (next === 'ficha') onForkChange?.('fichas');
+    if (next === 'secao') onForkChange?.('secoes');
   };
 
   return (

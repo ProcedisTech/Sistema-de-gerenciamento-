@@ -161,7 +161,6 @@ export function mapBackendPatient(dto) {
     nomeMae: dto.nomeMae || '',
     nomePai: dto.nomePai || '',
     indicacao: dto.indicacao || '',
-    genero: dto.genero || '',
     status: dto.ativo !== false ? 'ativo' : 'inativo',
     /** Canônico no Spring: só fotoPerfilUrl; aliases no front são opcionais. */
     fotoPerfilUrl: rawFoto ? normalizeFotoPerfilUrl(rawFoto) : '',
@@ -255,7 +254,6 @@ export function patientToPacienteUpdateDTO(patient, editing) {
     enderecoCidade: trimOrNull(editing?.enderecoCidade ?? patient.enderecoCidade),
     enderecoEstado: normalizeUf(editing?.enderecoEstado ?? patient.enderecoEstado),
     endereco: null,
-    genero: patient.genero || null,
     estadoCivilId: patient.estadoCivilId || undefined,
   };
 }
@@ -302,7 +300,6 @@ export function mergePacienteDtoWithEditing(dto, editing) {
     ),
     endereco: null,
     sexo: (sexoMerged ?? dto.sexo) || null,
-    genero: (editing?.genero ?? dto.genero ?? '').trim() || null,
     estadoCivilId:
       editing?.estadoCivilId !== undefined && editing?.estadoCivilId !== ''
         ? editing.estadoCivilId

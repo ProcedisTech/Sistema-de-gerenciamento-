@@ -43,7 +43,6 @@ import { AnamneseCompartilhamentoModal } from './AnamneseCompartilhamentoModal.j
 import { AnamneseDocHead } from './AnamneseDocHead.jsx';
 import { AnamneseDocSaveBar } from './AnamneseDocSaveBar.jsx';
 import { AnamneseDocRail } from './AnamneseDocRail.jsx';
-import { AnamneseDocRailSheet } from './AnamneseDocRailSheet.jsx';
 import { AnamneseDocPreviewOverlay } from './AnamneseDocPreviewOverlay.jsx';
 import { AnamneseDocStartScreen } from './AnamneseDocStartScreen.jsx';
 import { AnamneseDocUnsavedModal } from './AnamneseDocUnsavedModal.jsx';
@@ -195,10 +194,6 @@ export function AnamneseDocumentoEditor({
     ro.observe(el);
     return () => ro.disconnect();
   }, [loading]);
-
-  useEffect(() => {
-    if (isEmptyDoc) setRailSheetOpen(false);
-  }, [isEmptyDoc]);
 
   const syncPadraoAfterSave = useCallback(
     async (savedFichaId, padrao) => {
@@ -417,7 +412,7 @@ export function AnamneseDocumentoEditor({
     dispatch({ type: EDITOR_ACTIONS.REORDER_SECOES, secoes: arrayMove(state.secoes, index, j) });
   };
 
-  const closeRailSheet = useCallback(() => setRailSheetOpen(false), []);
+  const closeRailSheet = () => setRailSheetOpen(false);
 
   const railProps = {
     railTab,
@@ -521,7 +516,7 @@ export function AnamneseDocumentoEditor({
       <div
         ref={editorShellRef}
         className={`mx-auto grid min-h-0 min-w-0 w-full max-w-[1440px] items-stretch gap-5 ${
-          railBeside && !isEmptyDoc ? 'grid-cols-[minmax(0,1fr)_300px]' : 'grid-cols-1'
+          railBeside ? 'grid-cols-[minmax(0,1fr)_300px]' : 'grid-cols-1'
         }`}
       >
         <div className={`relative min-w-0 w-full ${DOC}`}>
@@ -532,7 +527,7 @@ export function AnamneseDocumentoEditor({
             onTogglePadrao={handleTogglePadrao}
             onBack={requestBack}
             especialidades={especialidades}
-            onOpenBiblioteca={!railBeside && !isEmptyDoc ? () => setRailSheetOpen(true) : undefined}
+            onOpenBiblioteca={!railBeside ? () => setRailSheetOpen(true) : undefined}
           />
 
           <div className="body min-h-[200px] min-w-0 pb-24">
@@ -544,6 +539,10 @@ export function AnamneseDocumentoEditor({
                 onUseFicha={handleUseFicha}
                 onAppendModulo={handleAppendModulo}
                 onEspiar={handleEspiar}
+                onForkChange={(tab) => {
+                  setRailTab(tab);
+                  setRailSheetOpen(true);
+                }}
               />
             ) : (
               <>
@@ -589,7 +588,7 @@ export function AnamneseDocumentoEditor({
           ) : null}
         </div>
 
-        {railBeside && !isEmptyDoc ? (
+        {railBeside ? (
           <div className="min-w-0 w-[300px] shrink-0">
             <div className="sticky top-0 max-h-[calc(100dvh-8rem)] overflow-y-auto">
               <AnamneseDocRail {...railProps} />
@@ -598,11 +597,33 @@ export function AnamneseDocumentoEditor({
         ) : null}
       </div>
 
-      <AnamneseDocRailSheet
-        open={!railBeside && !isEmptyDoc && railSheetOpen}
-        onClose={closeRailSheet}
-        railProps={railProps}
-      />
+      {!railBeside && railSheetOpen ? (
+        <div
+          className="anamnese-sora fixed inset-0 z-[90] flex flex-col justify-end bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Biblioteca"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeRailSheet();
+          }}
+        >
+          <div className="flex max-h-[min(85dvh,720px)] min-h-0 flex-col rounded-t-2xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#f1f5f9] px-4 py-3">
+              <b className="text-[14px] font-semibold text-[#0f172a]">Biblioteca</b>
+              <button
+                type="button"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[#e2e8f0] text-[13px] font-semibold text-[#475569]"
+                onClick={closeRailSheet}
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <AnamneseDocRail {...railProps} embedded />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

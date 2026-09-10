@@ -4,6 +4,13 @@ export function toDateKey(value) {
   return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
+/** Chave YYYY-MM do calendário local (para comparar meses sem identidade de Date). */
+export function monthKey(date) {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
 /** Primeiro e último dia do mês de `monthDate` em YYYY-MM-DD (calendário local). */
 export function monthRangeIso(monthDate) {
   const y = monthDate.getFullYear();
@@ -13,6 +20,30 @@ export function monthRangeIso(monthDate) {
   const last = new Date(y, m + 1, 0).getDate();
   const end = `${y}-${pad(m + 1)}-${pad(last)}`;
   return { start, end };
+}
+
+/** True se `isoDate` cai no mês de `monthDate`. */
+export function monthContainsIso(monthDate, isoDate) {
+  const { start, end } = monthRangeIso(monthDate);
+  const key = toDateKey(isoDate);
+  return Boolean(key) && key >= start && key <= end;
+}
+
+/** True se `isoDate` cai no intervalo inclusivo da semana carregada. */
+export function weekContainsIso(weekStartIso, weekEndIso, isoDate) {
+  const key = toDateKey(isoDate);
+  return Boolean(key) && key >= weekStartIso && key <= weekEndIso;
+}
+
+/**
+ * Evita race skipNextAutoLoad + AbortController no effect de monthDate.
+ * @returns {'loadMonth' | 'setMonthDateOnly'}
+ */
+export function resolveMonthRefreshAction(currentMonthDate, nextMonthDate) {
+  if (monthKey(currentMonthDate) === monthKey(nextMonthDate)) {
+    return 'loadMonth';
+  }
+  return 'setMonthDateOnly';
 }
 
 export function toLocalDateIso(date = new Date()) {

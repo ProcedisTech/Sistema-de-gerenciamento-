@@ -1,4 +1,5 @@
 import { agendasApi } from '../services/api';
+import { toDateKey } from './agendaDateUtils';
 import { addMinutesToTime, deriveAgendaSlotStatus } from './agendaMapping';
 
 export function normalizeApiList(raw) {
@@ -120,10 +121,35 @@ export function isAgendaVisibleOnDashboard(row) {
 }
 
 /**
+ * Mescla linhas criadas no estado do dashboard: gate por range ISO + dedupe por agendaId
+ * (incoming vence). Puro / testável — sem sort (a célula reordena).
+ */
+export function mergeDashboardRows(prev, createdRows, { startIso, endIso } = {}) {
+  const start = String(startIso || '');
+  const end = String(endIso || '');
+  const incoming = (createdRows || []).filter((row) => {
+    const d = toDateKey(row?.data);
+    return Boolean(d) && d >= start && d <= end;
+  });
+  if (incoming.length === 0) return Array.isArray(prev) ? prev : [];
+
+  const byId = new Map();
+  for (const row of prev || []) {
+    const id = String(row?.agendaId || row?.id || '').trim();
+    if (id) byId.set(id, row);
+  }
+  for (const row of incoming) {
+    const id = String(row?.agendaId || row?.id || '').trim();
+    if (id) byId.set(id, row);
+  }
+  return Array.from(byId.values());
+}
+
+/**
  * Agendas no intervalo (1 linha por AgendaDTO — sem GET aninhado de agendamentos).
  */
-export async function fetchDashboardAppointmentsForRange(startIso, endIso) {
-  const raw = await agendasApi.byRange(startIso, endIso);
+export async function fetchDashboardAppointmentsForRange(startIso, endIso, opts = {}) {
+  const raw = await agendasApi.byRange(startIso, endIso, opts);
   const dtos = normalizeApiList(raw);
   const rows = dtos
     .map(mapAgendaDtoToDashboardRow)

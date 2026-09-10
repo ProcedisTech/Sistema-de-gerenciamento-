@@ -213,6 +213,11 @@ export function getApiErrorDetail(err) {
  * @param {string} [fallback]
  * @returns {string}
  */
+/** Requisição cancelada via AbortController (navegação obsoleta, etc.). */
+export function isAbortError(err) {
+  return err?.name === 'AbortError';
+}
+
 export function getApiErrorToastMessage(err, fallback) {
   const status = err != null && typeof err === 'object' ? err.status : undefined;
 
@@ -294,8 +299,14 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   });
 
   if (res.status === 401) {
+    if (fetchOpts.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
     const refreshed = await attemptTokenRefresh();
     if (refreshed) {
+      if (fetchOpts.signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       headers.Authorization = `Bearer ${refreshed}`;
       res = await fetch(url, {
         ...fetchOpts,
@@ -935,7 +946,7 @@ export const agendasApi = {
     if (opts?.excluirCancelado) {
       url += `&excluirCancelado=true`;
     }
-    return request(url);
+    return request(url, { signal: opts.signal });
   },
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
@@ -1297,6 +1308,8 @@ export const anamneseEnvioApi = {
       body: JSON.stringify(payload),
     }),
   status: (envioId) => request(`/api/v1/anamnese/envios/${envioId}/status`),
+  cancelar: (envioId) =>
+    request(`/api/v1/anamnese/envios/${envioId}/cancelar`, { method: 'POST' }),
 };
 
   // 🟨🟨 Configurações de Acesso Público 🟨🟨
@@ -1661,5 +1674,9 @@ export const catalogoClinicoApi = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request(`/api/v1/catalogo-clinico/outras-alergias${qs}`, { needsOrg: false });
   },
+
+  /** Reações adversas estruturadas (picker de alergia PA no perfil). */
+  reacoesAdversas: () =>
+    request('/api/v1/catalogo-clinico/reacoes-adversas', { needsOrg: false }),
 };
 

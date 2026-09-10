@@ -1,9 +1,20 @@
 import {
   aplicarMudancaResposta,
+  categoriaVisivelParaSexo,
   ehTipoPaiCondicional,
   isPaiSim,
   perguntaFilhaVisivel,
 } from './anamneseCondicional.js';
+
+describe('categoriaVisivelParaSexo', () => {
+  it('categoria F não aparece para paciente M', () => {
+    expect(categoriaVisivelParaSexo('F', 'M')).toBe(false);
+  });
+
+  it('categoria F aparece para paciente F', () => {
+    expect(categoriaVisivelParaSexo('F', 'F')).toBe(true);
+  });
+});
 
 describe('ehTipoPaiCondicional', () => {
   it('aceita sim_nao_naosei e booleano', () => {

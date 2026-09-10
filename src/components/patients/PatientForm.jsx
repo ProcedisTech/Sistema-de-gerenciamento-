@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Save, Loader2, UserRound, Plus, Camera, AlertTriangle, Calendar, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   maskCPF,
@@ -8,8 +8,8 @@ import {
 } from '../utils/formatters';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid } from '../../utils/phoneUtils';
-import { ESTADOS_CIVIS } from '../../data/estadosCivis';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
+import { normalizePatientName } from '../../utils/normalizePatientName';
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
 import ProfissaoSelect from './ProfissaoSelect';
 import { EstadoCivilSelect } from './EstadoCivilSelect';
@@ -30,7 +30,6 @@ export function PatientForm({
   sexo,
   estadoCivilId,
   profissaoId,
-  genero,
   cpf,
   rg,
   telefoneCountryCode,
@@ -59,7 +58,6 @@ export function PatientForm({
   onSexoChange,
   onEstadoCivilChange,
   onProfissaoIdChange,
-  onGeneroChange,
   onCpfChange,
   onCpfBlur,
   onRgChange,
@@ -225,13 +223,51 @@ export function PatientForm({
       : '';
 
   const isWideModal = variant === 'modal';
-  const requiredFieldValues = [nome, dataNascimentoDisplay, sexo, estadoCivilId, profissaoId, cpf, telefoneNumero, email];
+  const requiredFieldValues = [nome, dataNascimentoDisplay, sexo, estadoCivilId, profissaoId, cpf, telefoneNumero];
   const requiredFilledCount = requiredFieldValues.filter(
     (v) => v !== null && v !== undefined && String(v).trim() !== '',
   ).length;
   const requiredTotal = requiredFieldValues.length;
   const hasComplementaryData = Boolean(instagram || tiktok || nomeMae || nomePai || indicacao);
   const [complementaryOpen, setComplementaryOpen] = useState(hasComplementaryData);
+  const [nomeCapitalizacaoAviso, setNomeCapitalizacaoAviso] = useState(null);
+  const skipNormalizeOnBlur = useRef(false);
+
+  const handleNomeChange = (raw) => {
+    const value = raw.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
+    skipNormalizeOnBlur.current = false;
+    setNomeCapitalizacaoAviso(null);
+    onNomeChange(value);
+    clearError?.('nome');
+  };
+
+  const handleNomeBlur = () => {
+    if (readOnly || skipNormalizeOnBlur.current) return;
+    const next = normalizePatientName(nome);
+    if (next == null || next === nome) return;
+    setNomeCapitalizacaoAviso({ original: nome });
+    onNomeChange(next);
+  };
+
+  const handleNomeDesfazer = () => {
+    if (!nomeCapitalizacaoAviso) return;
+    onNomeChange(nomeCapitalizacaoAviso.original);
+    setNomeCapitalizacaoAviso(null);
+    skipNormalizeOnBlur.current = true;
+  };
+
+  const nomeCapitalizacaoAvisoEl = nomeCapitalizacaoAviso ? (
+    <p className="text-[12px] font-medium text-slate-500">
+      Nome ajustado. Digitado: «{nomeCapitalizacaoAviso.original}»{' '}
+      <button
+        type="button"
+        onClick={handleNomeDesfazer}
+        className="font-semibold text-[#00a88e] underline-offset-2 hover:underline"
+      >
+        Desfazer
+      </button>
+    </p>
+  ) : null;
 
   return (
     <form
@@ -383,14 +419,12 @@ export function PatientForm({
                     value={nome}
                     disabled={readOnly}
                     maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
-                      onNomeChange(value);
-                      clearError?.('nome');
-                    }}
+                    onChange={(e) => handleNomeChange(e.target.value)}
+                    onBlur={handleNomeBlur}
                     placeholder="Nome completo do paciente"
                     className={inputClass('nome')}
                   />
+                  {nomeCapitalizacaoAvisoEl}
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
@@ -503,18 +537,6 @@ export function PatientForm({
                     }}
                     error={Boolean(errors?.profissao)}
                     variant={isModalVariant ? 'modal' : 'default'}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className={labelCls('text-[#00a88e]')}>Gênero</label>
-                  <input
-                    type="text"
-                    value={genero}
-                    disabled={readOnly}
-                    maxLength={PACIENTE_FIELD_MAX.genero}
-                    onChange={(e) => onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))}
-                    placeholder="Como se identifica"
-                    className={inputClass()}
                   />
                 </div>
               </div>
@@ -655,9 +677,7 @@ export function PatientForm({
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <label className={labelCls('text-[#a855f7]')}>
-                      E-mail <FieldReq />
-                    </label>
+                    <label className={labelCls('text-[#a855f7]')}>E-mail</label>
                     <input
                       type="email"
                       value={email}
@@ -812,14 +832,12 @@ export function PatientForm({
               value={nome}
               disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.nomeCompleto}
-              onChange={(e) => {
-                const value = e.target.value.replace(/[0-9]/g, '').slice(0, PACIENTE_FIELD_MAX.nomeCompleto);
-                onNomeChange(value);
-                clearError?.('nome');
-              }}
+              onChange={(e) => handleNomeChange(e.target.value)}
+              onBlur={handleNomeBlur}
               placeholder="Nome completo do paciente"
               className={inputClass('nome')}
             />
+            {nomeCapitalizacaoAvisoEl}
           </div>
           <div className="space-y-1.5">
             <label className={labelCls('text-[#00a88e]')}>
@@ -931,20 +949,6 @@ export function PatientForm({
               }}
               error={Boolean(errors?.profissao)}
               variant={isModalVariant ? 'modal' : 'default'}
-            />
-          </div>
-          <div className="md:col-span-2 space-y-1.5">
-            <label className={labelCls('text-[#00a88e]')}>Gênero</label>
-            <input
-              type="text"
-              value={genero}
-              disabled={readOnly}
-              maxLength={PACIENTE_FIELD_MAX.genero}
-              onChange={(e) =>
-                onGeneroChange(e.target.value.slice(0, PACIENTE_FIELD_MAX.genero))
-              }
-              placeholder="Como se identifica"
-              className={inputClass()}
             />
           </div>
         </div>
@@ -1087,9 +1091,7 @@ export function PatientForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className={labelCls('text-[#a855f7]')}>
-              E-mail <FieldReq />
-            </label>
+            <label className={labelCls('text-[#a855f7]')}>E-mail</label>
             <input
               type="email"
               value={email}
