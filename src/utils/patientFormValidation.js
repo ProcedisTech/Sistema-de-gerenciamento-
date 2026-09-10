@@ -5,6 +5,12 @@
 import { normalizeCpf, isCpfValidCheckDigits } from '../components/utils/formatters';
 import { isPhoneValid } from './phoneUtils';
 
+const PACIENTE_EMAIL_FORMAT = /^\S+@\S+\.\S+$/;
+
+export function isPacienteEmailFormatValid(email) {
+  return PACIENTE_EMAIL_FORMAT.test(String(email ?? '').trim());
+}
+
 /**
  * Campos esperados em `v` (valor cru do formulário, antes do payload da API).
  * Inclui `profissaoId` (UUID) para profissão obrigatória.
@@ -28,7 +34,8 @@ export function validatePacienteFormBasics(v, opts = {}) {
   if (!String(v.telefoneNumero ?? '').trim() || !isPhoneValid(v.telefoneCountryCode ?? 'BR', v.telefoneNumero ?? '')) {
     e.telefone = true;
   }
-  if (!String(v.email ?? '').trim()) e.email = true;
+  const emailTrimmed = String(v.email ?? '').trim();
+  if (emailTrimmed && !isPacienteEmailFormatValid(emailTrimmed)) e.email = true;
   return e;
 }
 

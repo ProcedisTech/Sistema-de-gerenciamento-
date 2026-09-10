@@ -8,9 +8,12 @@ function asList(data) {
 export function searchCatalogoHub(tipoResposta, { sexo, tipoAntecedenteCodigo } = {}) {
   return async (q) => {
     if (tipoResposta === 'catalogo_alergia') {
+      const qTrim = String(q ?? '').trim();
       const [alimentos, outras] = await Promise.all([
         catalogoClinicoApi.alimentos(q).then(asList).catch(() => []),
-        catalogoClinicoApi.outrasAlergias(q).then(asList).catch(() => []),
+        qTrim.length >= 2
+          ? catalogoClinicoApi.outrasAlergias(q).then(asList).catch(() => [])
+          : Promise.resolve([]),
       ]);
       return [...alimentos, ...outras];
     }
@@ -25,6 +28,9 @@ export function searchCatalogoHub(tipoResposta, { sexo, tipoAntecedenteCodigo } 
         .antecedentesPessoais(q, sexo, tipoAntecedenteCodigo)
         .then(asList)
         .catch(() => []);
+    }
+    if (tipoResposta === 'catalogo_reacao') {
+      return catalogoClinicoApi.reacoesAdversas().then(asList).catch(() => []);
     }
     return [];
   };
@@ -43,9 +49,12 @@ export function searchCatalogoPublico(tipoResposta, { sexo, tipoAntecedenteCodig
   return async (q) => {
     const enc = encodeURIComponent(q);
     if (tipoResposta === 'catalogo_alergia') {
+      const qTrim = String(q ?? '').trim();
       const [alimentos, outras] = await Promise.all([
         fetchJson(`/api/public/anamnese/catalogo/alimentos?q=${enc}`),
-        fetchJson(`/api/public/anamnese/catalogo/outras-alergias?q=${enc}`),
+        qTrim.length >= 2
+          ? fetchJson(`/api/public/anamnese/catalogo/outras-alergias?q=${enc}`)
+          : Promise.resolve([]),
       ]);
       return [...alimentos, ...outras];
     }
@@ -60,6 +69,9 @@ export function searchCatalogoPublico(tipoResposta, { sexo, tipoAntecedenteCodig
       if (sexo && sexo !== 'N') params.set('sexo', sexo);
       if (tipoAntecedenteCodigo) params.set('tipo', tipoAntecedenteCodigo);
       return fetchJson(`/api/public/anamnese/catalogo/antecedentes-pessoais?${params.toString()}`);
+    }
+    if (tipoResposta === 'catalogo_reacao') {
+      return fetchJson('/api/public/anamnese/catalogo/reacoes-adversas');
     }
     return [];
   };

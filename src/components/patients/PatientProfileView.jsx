@@ -228,7 +228,6 @@ function buildPacienteCtxForFicha(p) {
     sexoDisplay: sexoCodigo ? SEXO_DISPLAY_LABELS[sexoCodigo] : '',
     estadoCivilDisplay: p.estadoCivil,
     profissaoDisplay: p.profissaoNome,
-    generoDisplay: p.genero,
     telefoneDisplay: p.telefone,
     emailDisplay: p.email,
     instagramDisplay: p.instagram,
@@ -518,7 +517,12 @@ function resolveFichaTemplateId(detalhe, an) {
   return v != null && v !== '' ? String(v) : null;
 }
 
-function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
+function AnamneseTab({
+  pacienteId,
+  pacienteSexo = null,
+  pacienteTelefone = '',
+  roleUserId,
+}) {
   const toast = useToast();
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
@@ -785,6 +789,8 @@ function AnamneseTab({ pacienteId, pacienteSexo = null, roleUserId }) {
       <AnamneseDocumentoView
         pacienteId={pacienteId}
         preenchimentoId={selected.id}
+        pacienteTelefone={pacienteTelefone}
+        anamneseId={resolveFichaTemplateId(detalhe, selected)}
         onModificar={
           !selected.preenchidoPorPaciente && fichaByAnId[selected.id]
             ? () => handleStartEditAnamnese(selected.id, detalhe)
@@ -1469,7 +1475,6 @@ export function PatientProfileView({
       cpfDisplay: cpfRaw ? maskCPF(cpfRaw) : '',
       sexo: sexoForPatientFormSelect(patient.sexo),
       estadoCivilId: patient.estadoCivilId || '',
-      genero: patient.genero || '',
       dataNascimentoIso: patient.dataNascimento || '',
       dataNascimentoDisplay: isoDateToBrazilianDisplay(patient.dataNascimento || ''),
       idade: patient.idade ?? '',
@@ -2106,7 +2111,6 @@ export function PatientProfileView({
         indicacao: editing.indicacao || '',
         sexo: editing.sexo,
         estadoCivilId: editing.estadoCivilId || '',
-        genero: editing.genero || '',
         dataNascimento: editing.dataNascimentoIso || '',
         rg: rgDigits || undefined,
       });
@@ -2383,7 +2387,6 @@ export function PatientProfileView({
                     sexo={editing.sexo}
                     estadoCivilId={editing.estadoCivilId}
                     profissaoId={editing.profissaoId}
-                    genero={editing.genero}
                     cpf={editing.cpfDisplay}
                     rg={editing.rg}
                     telefoneCountryCode={editing.telefoneCountryCode ?? 'BR'}
@@ -2427,7 +2430,6 @@ export function PatientProfileView({
                     onSexoChange={(value) => setEditing((p) => p ? { ...p, sexo: value } : p)}
                     onEstadoCivilChange={(value) => setEditing((p) => p ? { ...p, estadoCivilId: value } : p)}
                     onProfissaoIdChange={(value) => setEditing((p) => p ? { ...p, profissaoId: value } : p)}
-                    onGeneroChange={(value) => setEditing((p) => p ? { ...p, genero: value } : p)}
                     onCpfChange={(value) => setEditing((p) => {
                       if (!p) return p;
                       const next = { ...p, cpfDisplay: value };
@@ -3113,6 +3115,7 @@ export function PatientProfileView({
                 <AnamneseTab
                   pacienteId={selectedPatient.id}
                   pacienteSexo={selectedPatient.sexo}
+                  pacienteTelefone={selectedPatient.telefone || selectedPatient.celular || ''}
                   roleUserId={roleUserId}
                 />
               )}

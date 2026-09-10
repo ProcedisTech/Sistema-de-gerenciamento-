@@ -53,13 +53,13 @@ describe('GlobalHeader com pageSlot', () => {
     );
 
     expect(screen.getByText('Agenda')).toBeInTheDocument();
-    expect(screen.getAllByText('Procedi').length).toBeGreaterThan(0);
+    expect(screen.getByText('Procedi')).toBeInTheDocument();
   });
 
   it('não renderiza o container do slot quando pageSlot for omitido', () => {
     render(<GlobalHeader activeView="agenda" />);
 
     expect(screen.queryByTestId('global-header-page-slot')).not.toBeInTheDocument();
-    expect(screen.getAllByText('Procedi').length).toBeGreaterThan(0);
+    expect(screen.getByText('Procedi')).toBeInTheDocument();
   });
 });

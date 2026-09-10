@@ -10,7 +10,7 @@ import {
   Stethoscope,
   X,
 } from 'lucide-react';
-import { anamneseApi } from '../../services/api';
+import { anamneseApi, anamneseEnvioApi } from '../../services/api';
 import { usePerfilClinico } from '../../hooks/usePerfilClinico';
 import { PerfilClinicoBloco } from '../perfil-clinico/PerfilClinicoBloco';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
@@ -25,6 +25,14 @@ import {
 } from '../anamnese/anamneseFichaUtils.js';
 import { aplicarMudancaResposta, categoriaVisivelParaSexo, perguntaFilhaVisivel } from '../anamnese/anamneseCondicional.js';
 import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
+import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
+import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
+
+function resolveStatusCodigo(entry) {
+  if (!entry) return '';
+  if (typeof entry.status === 'string') return entry.status;
+  return entry.status?.codigo ?? entry.statusCodigo ?? '';
+}
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -84,6 +92,16 @@ function respostasMapHasEntries(m) {
   return m && typeof m === 'object' && Object.keys(m).length > 0;
 }
 
+async function carregarEnvioAtivoDocumento(pacienteId, preenchimentoId) {
+  if (!pacienteId || !preenchimentoId) return null;
+  try {
+    const doc = await anamneseApi.getDocumento(pacienteId, preenchimentoId);
+    return doc?.envioAtivo ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Hidratação inicial: evita `{}` truthy em `draft || mapa` esconder `respostasAnamnese`. */
 function mergeInitialRespostas(draftRespostas, respostasAnamneseMap) {
   if (respostasMapHasEntries(draftRespostas)) return draftRespostas;
@@ -97,6 +115,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   expectativas, setExpectativas,
   pacienteId = null,
   pacienteSexo = null,
+  pacienteNome = '',
+  pacienteCpf = '',
+  pacienteTelefone = '',
+  getPreenchimentoAnamneseId = null,
+  onPersistirAnamneseHub = null,
   roleUserId = null,
   step2Errors = {},
   setStep2Errors = () => {},
@@ -136,6 +159,14 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   );
   const [errosObrigatorias, setErrosObrigatorias] = useState(() => new Set());
   const [forcarNovoPreenchimento, setForcarNovoPreenchimento] = useState(false);
+  const [anamneseEscolhaOpen, setAnamneseEscolhaOpen] = useState(false);
+  const [anamneseSolicitacao, setAnamneseSolicitacao] = useState(null);
+  const [envioAtivo, setEnvioAtivo] = useState(null);
+  const [solicitandoAssinatura, setSolicitandoAssinatura] = useState(false);
+  const [cancelandoEnvio, setCancelandoEnvio] = useState(false);
+
+  const envioPendente = envioAtivo?.status === 'PENDENTE';
+  const formularioReadOnly = modoVisualizacao || envioPendente;
 
   // ── Perfil Clínico (Bloco 1) ─────────────────────────────
   const perfilClinico = usePerfilClinico(pacienteId, roleUserId, pacienteSexo, {
@@ -169,71 +200,6 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   /** Ficha personalizada com perguntas: complemento opcional no final (motivo da visita). */
   const mostrarComplementoVisita = Boolean(fichaSelecionada && itensOrdenados.length > 0);
 
-  useImperativeHandle(ref, () => ({
-    getAnamneseData: () => {
-      if (!fichaSelecionadaId || !fichaSelecionada) return null;
-      const perguntaById = new Map(
-        itensOrdenados.map((item) => [String(item.pergunta?.id), item.pergunta]),
-      );
-      const rows = [];
-      for (const r of Object.values(respostas)) {
-        const pergunta = perguntaById.get(String(r.perguntaId));
-        if (!pergunta) continue;
-        const row = buildRespostaApiRows(pergunta, r);
-        if (row.length) rows.push(...row);
-      }
-      return {
-        anamneseId: fichaSelecionadaId,
-        respostas: rows,
-      };
-    },
-    /** Modo leitura ou reaproveitando preenchimento anterior — queixa opcional no UI. */
-    skipQueixaExpectativas: () => Boolean(modoVisualizacao || preenchimentoAnterior),
-    /** Valida perguntas obrigatórias da ficha (front-only; back não valida hoje). */
-    validateObrigatorias: () => {
-      if (modoVisualizacao || preenchimentoAnterior) return { ok: true, faltando: [] };
-      if (!fichaSelecionada || itensOrdenados.length === 0) return { ok: true, faltando: [] };
-
-      const faltando = [];
-      for (const item of itensOrdenados) {
-        if (!item.obrigatorio) continue;
-        const pid = item.pergunta?.id;
-        if (pid == null) continue;
-        if (!categoriaVisivelParaSexo(item.pergunta?.categoriaSexoAplicavel, pacienteSexo)) continue;
-        if (!perguntaFilhaVisivel(item.pergunta, respostas)) continue;
-        const resposta = respostas[pid] ?? respostas[String(pid)];
-        if (!isRespostaPreenchida(item.pergunta, resposta)) faltando.push(pid);
-      }
-      setErrosObrigatorias(new Set(faltando.map(String)));
-      if (faltando.length > 0) {
-        const firstId = String(faltando[0]);
-        requestAnimationFrame(() => {
-          document.querySelector(`[data-pergunta-id="${firstId}"]`)?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-          });
-        });
-      }
-      return { ok: faltando.length === 0, faltando };
-    },
-    /** Salva perfil clínico. Retorna { ok, error? }. */
-    savePerfilClinico: () => perfilClinico.save(),
-    /** Perfil tem edições não salvas. */
-    isPerfilDirty: () => perfilClinico.isDirty,
-    /** PUT perfil em andamento. */
-    isPerfilSaving: () => perfilClinico.isSaving,
-    /**
-     * Retorna true se a anamnese tem dados preenchidos que ainda não foram salvos/concluídos.
-     * Checamos apenas o estado interno: respostas da ficha e seleção de dropdown.
-     * Queixa e expectativas são verificadas pelo AppRefactored via journeyState diretamente.
-     */
-    isDirty: () => {
-      if (modoVisualizacao) return false;
-      const hasRespostas = Object.keys(respostas).length > 0;
-      const hasFichaDropdown = Boolean(fichaDropdownNovo);
-      return hasRespostas || hasFichaDropdown;
-    },
-  }), [fichaSelecionadaId, fichaSelecionada, respostas, modoVisualizacao, preenchimentoAnterior, perfilClinico, itensOrdenados, fichaDropdownNovo, pacienteSexo]);
   const [loadingFichas, setLoadingFichas] = useState(true);
   const [loadingFicha, setLoadingFicha] = useState(false);
   const [historicoPaciente, setHistoricoPaciente] = useState([]);
@@ -446,11 +412,17 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               assinaturaPaciente: preenchimento.assinaturaPaciente ?? detalhes?.assinaturaPaciente,
               status: preenchimento.status ?? detalhes?.status,
             };
-            syncedModo = true;
+            const statusCodigo =
+              resolveStatusCodigo(preenchimento)
+              || resolveStatusCodigo(detalhes);
+            const isAguardandoAssinatura = statusCodigo === 'aguardando_assinatura';
+            syncedModo = !isAguardandoAssinatura;
             setRespostas(respostasCarregadas);
             respostasRef.current = respostasCarregadas;
             setPreenchimentoAnterior(syncedPreenchimento);
-            setModoVisualizacao(true);
+            setModoVisualizacao(syncedModo);
+            const envioDoc = await carregarEnvioAtivoDocumento(pacienteId, preenchimento.id);
+            setEnvioAtivo(envioDoc);
             const parsed = parseQueixaExpectativasObs(detalhes?.observacoes);
             if (parsed && (parsed.queixa || parsed.expectativas)) {
               setQueixa(parsed.queixa);
@@ -492,10 +464,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     setFichaDropdownNovo('');
     respostasRef.current = {};
     setErrosObrigatorias(new Set());
+    setEnvioAtivo(null);
   }, [pacienteId]);
 
   const handleRespostaChange = useCallback((resposta) => {
-    if (modoVisualizacao) return;
+    if (formularioReadOnly) return;
     const key = String(resposta.perguntaId);
     const normalized = { ...resposta, perguntaId: resposta.perguntaId };
     const perguntas = itensOrdenados.map((item) => item.pergunta).filter(Boolean);
@@ -520,6 +493,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     salvarRespostaAnamnese(key, normalized);
   }, [
     modoVisualizacao,
+    formularioReadOnly,
     salvarRespostaAnamnese,
     onSavedAnamneseStateChange,
     fichaSelecionadaId,
@@ -547,6 +521,199 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     fichaDropdownNovo,
     preenchimentoAnterior,
   ]);
+
+  const recarregarHistoricoPaciente = useCallback(async () => {
+    if (!pacienteId) return;
+    try {
+      const data = await anamneseApi.listPaciente(pacienteId);
+      setHistoricoPaciente(Array.isArray(data) ? data : []);
+    } catch {
+      setHistoricoPaciente([]);
+    }
+  }, [pacienteId]);
+
+  useImperativeHandle(ref, () => ({
+    getAnamneseData: () => {
+      if (!fichaSelecionadaId || !fichaSelecionada) return null;
+      const perguntaById = new Map(
+        itensOrdenados.map((item) => [String(item.pergunta?.id), item.pergunta]),
+      );
+      const rows = [];
+      for (const r of Object.values(respostas)) {
+        const pergunta = perguntaById.get(String(r.perguntaId));
+        if (!pergunta) continue;
+        const row = buildRespostaApiRows(pergunta, r);
+        if (row.length) rows.push(...row);
+      }
+      return {
+        anamneseId: fichaSelecionadaId,
+        respostas: rows,
+      };
+    },
+    skipQueixaExpectativas: () => Boolean(modoVisualizacao || preenchimentoAnterior),
+    validateObrigatorias: () => {
+      if (modoVisualizacao || preenchimentoAnterior) return { ok: true, faltando: [] };
+      if (!fichaSelecionada || itensOrdenados.length === 0) return { ok: true, faltando: [] };
+
+      const faltando = [];
+      for (const item of itensOrdenados) {
+        if (!item.obrigatorio) continue;
+        const pid = item.pergunta?.id;
+        if (pid == null) continue;
+        if (!categoriaVisivelParaSexo(item.pergunta?.categoriaSexoAplicavel, pacienteSexo)) continue;
+        if (!perguntaFilhaVisivel(item.pergunta, respostas)) continue;
+        const resposta = respostas[pid] ?? respostas[String(pid)];
+        if (!isRespostaPreenchida(item.pergunta, resposta)) faltando.push(pid);
+      }
+      setErrosObrigatorias(new Set(faltando.map(String)));
+      if (faltando.length > 0) {
+        const firstId = String(faltando[0]);
+        requestAnimationFrame(() => {
+          document.querySelector(`[data-pergunta-id="${firstId}"]`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        });
+      }
+      return { ok: faltando.length === 0, faltando };
+    },
+    savePerfilClinico: () => perfilClinico.save(),
+    isPerfilDirty: () => perfilClinico.isDirty,
+    isPerfilSaving: () => perfilClinico.isSaving,
+    isDirty: () => {
+      if (modoVisualizacao) return false;
+      const hasRespostas = Object.keys(respostas).length > 0;
+      const hasFichaDropdown = Boolean(fichaDropdownNovo);
+      return hasRespostas || hasFichaDropdown;
+    },
+    transicionarParaDocumento: async () => {
+      await recarregarHistoricoPaciente();
+      const preenchimentoId =
+        (typeof getPreenchimentoAnamneseId === 'function' && getPreenchimentoAnamneseId())
+        || preenchimentoAnterior?.id
+        || null;
+      if (preenchimentoId) {
+        setPreenchimentoAnterior((prev) => prev?.id === preenchimentoId ? prev : { id: preenchimentoId });
+      }
+      setForcarNovoPreenchimento(false);
+      setModoVisualizacao(true);
+    },
+  }), [
+    fichaSelecionadaId,
+    fichaSelecionada,
+    respostas,
+    modoVisualizacao,
+    preenchimentoAnterior,
+    perfilClinico,
+    itensOrdenados,
+    fichaDropdownNovo,
+    pacienteSexo,
+    recarregarHistoricoPaciente,
+    getPreenchimentoAnamneseId,
+  ]);
+
+  const handleCancelarEnvio = useCallback(async () => {
+    if (!envioAtivo?.id || cancelandoEnvio) return;
+    if (!window.confirm('Cancelar o link enviado? O paciente não poderá mais usar este link.')) return;
+    setCancelandoEnvio(true);
+    try {
+      await anamneseEnvioApi.cancelar(envioAtivo.id);
+      setEnvioAtivo(null);
+      const statusCodigo = resolveStatusCodigo(preenchimentoAnterior);
+      if (statusCodigo === 'aguardando_assinatura') {
+        setModoVisualizacao(false);
+      }
+    } catch (err) {
+      console.warn('[Step2Anamnese] Falha ao cancelar envio:', err?.message || err);
+    } finally {
+      setCancelandoEnvio(false);
+    }
+  }, [envioAtivo?.id, cancelandoEnvio, preenchimentoAnterior]);
+
+  const handleModalEnvioGerado = useCallback((data) => {
+    if (data?.envioId) {
+      setEnvioAtivo({ id: data.envioId, status: 'PENDENTE', expiraEm: data.expiraEm ?? null });
+    }
+  }, []);
+
+  const handleModalEnvioExpirado = useCallback(() => {
+    setEnvioAtivo(null);
+  }, []);
+
+  const handleModalConcluido = useCallback(async () => {
+    setAnamneseSolicitacao(null);
+    setEnvioAtivo(null);
+    setModoVisualizacao(true);
+    await recarregarHistoricoPaciente();
+    if (fichaSelecionadaId) {
+      await selecionarFichaParaNovo(fichaSelecionadaId);
+    }
+  }, [recarregarHistoricoPaciente, fichaSelecionadaId, selecionarFichaParaNovo]);
+
+  const handleSolicitarAssinatura = useCallback(async () => {
+    if (!pacienteId || formularioReadOnly || solicitandoAssinatura) return;
+    if (typeof onPersistirAnamneseHub !== 'function') return;
+
+    setSolicitandoAssinatura(true);
+    try {
+      const ok = await onPersistirAnamneseHub();
+      if (!ok) return;
+
+      const preenchimentoId =
+        (typeof getPreenchimentoAnamneseId === 'function' && getPreenchimentoAnamneseId())
+        || preenchimentoAnterior?.id
+        || null;
+      if (!preenchimentoId) return;
+
+      setAnamneseSolicitacao({
+        pacienteId: String(pacienteId),
+        telefonePaciente: pacienteTelefone || '',
+        pacienteNome: pacienteNome || 'Paciente',
+        pacienteCpf: pacienteCpf || '',
+        preenchimentoAnamneseId: String(preenchimentoId),
+        anamneseId: fichaSelecionadaId ? String(fichaSelecionadaId) : null,
+      });
+      setAnamneseEscolhaOpen(true);
+    } finally {
+      setSolicitandoAssinatura(false);
+    }
+  }, [
+    pacienteId,
+    formularioReadOnly,
+    solicitandoAssinatura,
+    onPersistirAnamneseHub,
+    getPreenchimentoAnamneseId,
+    preenchimentoAnterior?.id,
+    pacienteTelefone,
+    pacienteNome,
+    pacienteCpf,
+    fichaSelecionadaId,
+  ]);
+
+  const handleEscolherAnamneseQr = () => {
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) =>
+      curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null } } : curr,
+    );
+  };
+
+  const handleEscolherAnamneseWhatsApp = () => {
+    if (!anamneseSolicitacao?.telefonePaciente) {
+      return;
+    }
+    setAnamneseEscolhaOpen(false);
+    setAnamneseSolicitacao((curr) =>
+      curr ? { ...curr, escolha: { metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' } } : curr,
+    );
+  };
+
+  const podeSolicitarAssinatura = Boolean(
+    pacienteId
+    && fichaSelecionadaId
+    && !formularioReadOnly
+    && !consultaMode
+    && Object.keys(respostas).length > 0,
+  );
 
   useEffect(() => {
     if (!fichaSelecionadaId || fichaSelecionada) return;
@@ -672,6 +839,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         <AnamneseDocumentoView
           pacienteId={pacienteId}
           preenchimentoId={vigente.id}
+          pacienteTelefone={pacienteTelefone}
+          anamneseId={ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente) || fichaSelecionadaId || null}
           onModificar={async () => {
             const fichaId = ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente);
             if (fichaId) await consultarUltimoPreenchimento(fichaId);
@@ -713,11 +882,14 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               removeItem={perfilClinico.removeItem}
               updateObservacao={perfilClinico.updateObservacao}
               updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
+              updateReacaoAdversa={perfilClinico.updateReacaoAdversa}
               buscarAlimentos={perfilClinico.buscarAlimentos}
               buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
               buscarMedicamentos={perfilClinico.buscarMedicamentos}
               buscarAntecedentes={perfilClinico.buscarAntecedentes}
               tiposByCodigo={perfilClinico.tiposByCodigo}
+              reacoesAdversas={perfilClinico.reacoesAdversas}
+              readOnly={formularioReadOnly}
             />
           </div>
         </div>
@@ -979,6 +1151,19 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
       {fichaSelecionada && itensOrdenados.length > 0 && (
         <div className={fillWidthCls}>
+          {envioPendente ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-900">
+              <p>Aguardando assinatura do paciente. A ficha está bloqueada para edição enquanto o link estiver ativo.</p>
+              <button
+                type="button"
+                onClick={handleCancelarEnvio}
+                disabled={cancelandoEnvio}
+                className="mt-2 text-[12px] font-bold text-amber-800 underline hover:text-amber-950 disabled:opacity-60"
+              >
+                {cancelandoEnvio ? 'Cancelando…' : 'Cancelar envio e voltar a editar'}
+              </button>
+            </div>
+          ) : null}
           {/* Título da ficha — discreto */}
           <p className="mb-5 text-[15px] font-semibold text-slate-700">{fichaSelecionada.nome}</p>
 
@@ -1015,7 +1200,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                         onChange={handleRespostaChange}
                         alerta={isAlerta}
                         obrigatorio={showObrigatorio}
-                        readOnly={modoVisualizacao}
+                        readOnly={formularioReadOnly}
                         searchFn={searchCatalogoHub(item.pergunta?.tipoResposta, {
                           sexo: pacienteSexo,
                           tipoAntecedenteCodigo: item.pergunta?.tipoAntecedenteCodigo,
@@ -1076,7 +1261,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 setStep2Errors((prev) => ({ ...prev, queixa: false }));
               }}
               rows={3}
-              readOnly={modoVisualizacao}
+              readOnly={formularioReadOnly}
               className={`w-full rounded-lg border border-slate-200 px-3 py-2.5 text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors ${
                 modoVisualizacao ? 'cursor-default bg-slate-50 opacity-90' : 'bg-white'
               }`}
@@ -1131,7 +1316,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                   setTimeout(() => setSaveStatus(''), 2500);
                 }}
                 rows={4}
-                readOnly={modoVisualizacao}
+                readOnly={formularioReadOnly}
                 className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
                   modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
                 } ${
@@ -1162,7 +1347,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 setTimeout(() => setSaveStatus(''), 2500);
               }}
               rows={4}
-              readOnly={modoVisualizacao}
+              readOnly={formularioReadOnly}
               className={`w-full rounded-xl border-[2px] p-3 text-[16px] font-medium outline-none focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px] ${
                 modoVisualizacao ? 'cursor-default bg-slate-50 opacity-95' : 'bg-[#f8fbfb]'
               } ${
@@ -1177,6 +1362,26 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       ) : null}
       </div>
 
+      {podeSolicitarAssinatura ? (
+        <div className={`mt-6 ${consultaMode ? '' : 'max-w-5xl xl:max-w-6xl'}`}>
+          <button
+            type="button"
+            onClick={handleSolicitarAssinatura}
+            disabled={solicitandoAssinatura}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[#00a88e]/30 bg-[#e6f7f5] px-5 py-2.5 text-[13px] font-bold text-[#0f766e] transition-colors hover:bg-[#d1f0eb] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {solicitandoAssinatura ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Salvando…
+              </>
+            ) : (
+              'Solicitar assinatura do paciente'
+            )}
+          </button>
+        </div>
+      ) : null}
+
       {consultaMode ? (
         <div className="mt-8 flex justify-end border-t border-app-border pt-6">
           <button
@@ -1189,6 +1394,33 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           </button>
         </div>
       ) : null}
+
+      <ModalEscolhaAssinatura
+        open={anamneseEscolhaOpen}
+        onClose={() => {
+          setAnamneseEscolhaOpen(false);
+          setAnamneseSolicitacao(null);
+        }}
+        opcoes={{ tablet: false, qrCode: true, link: true }}
+        onSelectQrCode={handleEscolherAnamneseQr}
+        onSelectLink={handleEscolherAnamneseWhatsApp}
+      />
+
+      <SolicitarAnamneseModal
+        open={Boolean(anamneseSolicitacao?.escolha)}
+        escolha={anamneseSolicitacao?.escolha}
+        payload={anamneseSolicitacao}
+        onClose={() => {
+          setAnamneseSolicitacao(null);
+        }}
+        onCancelar={() => {
+          setAnamneseSolicitacao((curr) => (curr ? { ...curr, escolha: undefined } : null));
+          setAnamneseEscolhaOpen(true);
+        }}
+        onEnvioGerado={handleModalEnvioGerado}
+        onEnvioExpirado={handleModalEnvioExpirado}
+        onConcluido={handleModalConcluido}
+      />
     </div>
   );
 });

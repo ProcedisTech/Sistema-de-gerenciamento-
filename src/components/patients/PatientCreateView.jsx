@@ -99,7 +99,6 @@ export function PatientCreateView({
   const [nomeMae, setNomeMae] = useState('');
   const [nomePai, setNomePai] = useState('');
   const [indicacao, setIndicacao] = useState('');
-  const [genero, setGenero] = useState('');
   const [errors, setErrors] = useState({});
   const [cpfErrorText, setCpfErrorText] = useState('');
 
@@ -234,7 +233,7 @@ export function PatientCreateView({
         cpf: cpfDigits || null,
         rg: rg.replace(/\D/g, '') || null,
         telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
-        email: email || null,
+        email: (email ?? '').trim() || null,
         instagram: instagram || null,
         tiktok: tiktok || null,
         nomeMae: nomeMae || null,
@@ -250,7 +249,6 @@ export function PatientCreateView({
         enderecoEstado: enderecoEstado.trim().toUpperCase().slice(0, 2) || null,
         endereco: null,
         sexo: sexo || null,
-        genero: genero || null,
         estadoCivilId: estadoCivilId || undefined,
       };
 
@@ -428,7 +426,6 @@ export function PatientCreateView({
       sexo={sexo}
       estadoCivilId={estadoCivilId}
       profissaoId={profissaoId}
-      genero={genero}
       cpf={cpf}
       rg={rg}
       telefoneCountryCode={telefoneCountryCode}
@@ -457,7 +454,6 @@ export function PatientCreateView({
       onSexoChange={setSexo}
       onEstadoCivilChange={setEstadoCivilId}
       onProfissaoIdChange={setProfissaoId}
-      onGeneroChange={setGenero}
       onCpfChange={setCpf}
       onCpfBlur={handleCpfBlur}
       onRgChange={setRg}

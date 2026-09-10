@@ -20,7 +20,6 @@ export const PACIENTE_FIELD_MAX = Object.freeze({
   alergias: 2000,
   condicoesSaude: 2000,
   medicamentos: 2000,
-  genero: 100,
   instagram: 100,
   tiktok: 100,
   indicacao: 200,
