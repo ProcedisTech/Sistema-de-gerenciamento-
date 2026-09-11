@@ -1,25 +1,3 @@
-const gerarInFlight = new Map();
-
-export function resetSolicitarAnamneseGerarLock() {
-  gerarInFlight.clear();
-}
-
-export function chaveGerarAnamneseEnvio(pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId) {
-  return `${pacienteId || ''}|${canalCodigo || ''}|${telefonePaciente || ''}|${preenchimentoAnamneseId || ''}`;
-}
-
-export function obterGerarInFlight(key) {
-  return gerarInFlight.get(key);
-}
-
-export function registrarGerarInFlight(key, pending) {
-  gerarInFlight.set(key, pending);
-}
-
-export function liberarGerarInFlight(key) {
-  gerarInFlight.delete(key);
-}
-
 export function montarUrlWhatsAppAnamnese({ telefonePaciente, pacienteCpf, pacienteNome, urlPublica }) {
   const phone = (telefonePaciente || '').replace(/\D/g, '');
   const finalPhone = phone.startsWith('55') ? phone : `55${phone}`;
