@@ -9,7 +9,8 @@ import {
   RotateCcw, 
   Camera, 
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  Eye
 } from 'lucide-react';
 import { GaleriaArquivoImage } from '../patients/GaleriaArquivoImage.jsx';
 import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
@@ -30,6 +31,42 @@ function AtendimentoAvulsoItemCard({
   const hasFotos = fotos.length > 0;
   const hasRetornos = retornos.length > 0;
   const hasObservacao = Boolean(atendimento.observacao && String(atendimento.observacao).trim());
+
+  // Agrupamento estrito por categoria clínica em prateleiras separadas um embaixo do outro
+  const categoriasOrganizadas = useMemo(() => {
+    const grupos = {
+      antes: [],
+      mapa: [],
+      depois: [],
+      avaliacao: [],
+      outro: [],
+    };
+
+    fotos.forEach((f) => {
+      const cat = String(f.categoria || '').toLowerCase().trim();
+      if (cat === 'antes') grupos.antes.push(f);
+      else if (cat === 'mapa') grupos.mapa.push(f);
+      else if (cat === 'depois') grupos.depois.push(f);
+      else if (cat === 'avaliacao') grupos.avaliacao.push(f);
+      else grupos.outro.push(f);
+    });
+
+    const ordem = [
+      { key: 'antes', label: 'Antes' },
+      { key: 'mapa', label: 'Mapa de Aplicação' },
+      { key: 'depois', label: 'Depois' },
+      { key: 'avaliacao', label: 'Avaliação' },
+      { key: 'outro', label: 'Outros Registros' },
+    ];
+
+    return ordem
+      .map(({ key, label }) => ({
+        key,
+        label,
+        fotos: grupos[key] || [],
+      }))
+      .filter((c) => c.fotos.length > 0);
+  }, [fotos]);
 
   return (
     <div className="rounded-md border border-slate-200 bg-white shadow-2xs overflow-hidden transition-all">
@@ -102,47 +139,69 @@ function AtendimentoAvulsoItemCard({
             </div>
           )}
 
-          {/* FOTOS DO ATENDIMENTO */}
+          {/* FOTOS DO ATENDIMENTO (AGRUPADAS POR CATEGORIA UM EMBAIXO DO OUTRO) */}
           {hasFotos ? (
-            <div>
-              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                Fotos Registradas neste Procedimento ({fotos.length}):
+            <div className="space-y-2.5 pt-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5 text-purple-600" />
+                <span>Fotos Registradas neste Procedimento ({fotos.length}):</span>
               </span>
-              <div className="flex flex-wrap gap-1.5 items-center">
-                {fotos.map((foto) => {
-                  const isMapa = Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === 'mapa';
-                  return (
-                    <div
-                      key={foto.id || foto.fotoId}
-                      onClick={() => onOpenLightbox(foto)}
-                      className="group relative w-14 h-14 rounded overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer hover:border-purple-500 transition-all shadow-2xs"
-                      title={foto.descricaoLegenda || foto.categoria}
-                    >
-                      {isMapa ? (
-                        <GaleriaMapaThumb
-                          url={foto.url}
-                          mapaOverlay={foto.mapaOverlay}
-                          pacienteId={pacienteId}
-                          fotoId={foto.fotoId || foto.id}
-                          alt={foto.descricaoLegenda || 'Mapa'}
-                          density="thumb"
-                          className="w-full h-full"
-                        />
-                      ) : (
-                        <GaleriaArquivoImage
-                          url={foto.url}
-                          pacienteId={pacienteId}
-                          fotoId={foto.fotoId || foto.id}
-                          alt="Foto avulsa"
-                          imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      )}
-                      <span className="absolute bottom-0.5 inset-x-0.5 text-[7px] font-bold text-white bg-slate-950/75 rounded text-center truncate">
-                        {GALERIA_CATEGORIA_LABELS[foto.categoria] || 'Foto'}
+
+              <div className="space-y-3 pt-0.5">
+                {categoriasOrganizadas.map(({ key, label, fotos: catFotos }) => (
+                  <div key={key} className="space-y-1.5">
+                    {/* Cabeçalho da Categoria com Badge Neutro */}
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200/90 shadow-2xs">
+                        {label} · {catFotos.length} {catFotos.length === 1 ? 'foto' : 'fotos'}
                       </span>
                     </div>
-                  );
-                })}
+
+                    {/* Linha Horizontal de Miniaturas */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                      {catFotos.map((foto) => {
+                        const isMapa = Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === 'mapa';
+                        return (
+                          <div
+                            key={foto.id || foto.fotoId || foto.url}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenLightbox(foto, fotos);
+                            }}
+                            className="group relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shadow-2xs hover:border-purple-500 hover:shadow-md hover:scale-[1.03] transition-all cursor-pointer select-none"
+                            title={foto.descricaoLegenda || foto.categoria || 'Clique para ampliar com zoom'}
+                          >
+                            {isMapa ? (
+                              <GaleriaMapaThumb
+                                url={foto.url}
+                                mapaOverlay={foto.mapaOverlay}
+                                pacienteId={pacienteId}
+                                fotoId={foto.fotoId || foto.id}
+                                alt={foto.descricaoLegenda || 'Mapa de aplicação'}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <GaleriaArquivoImage
+                                url={foto.url}
+                                pacienteId={pacienteId}
+                                fotoId={foto.fotoId || foto.id}
+                                alt={foto.descricaoLegenda || 'Foto do procedimento'}
+                                imgClassName="w-full h-full object-cover"
+                              />
+                            )}
+
+                            {/* Hover overlay com ícone de zoom */}
+                            <div className="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                              <span className="p-1 rounded-full bg-white/90 text-slate-800 shadow-xs">
+                                <Eye className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
@@ -184,9 +243,11 @@ export function PastaAtendimentosAvulsos({
   atendimentosAvulsos = [],
   fotosAvulsas = [],
   onUploadFotoManual,
+  initialOpen = false,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(initialOpen);
   const [selectedFoto, setSelectedFoto] = useState(null);
+  const [selectedFotosLista, setSelectedFotosLista] = useState([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const totalAtendimentos = atendimentosAvulsos.length;
@@ -251,7 +312,10 @@ export function PastaAtendimentosAvulsos({
                   key={atendimento.chave}
                   atendimento={atendimento}
                   pacienteId={pacienteId}
-                  onOpenLightbox={(foto) => setSelectedFoto(foto)}
+                  onOpenLightbox={(foto, lista) => {
+                    setSelectedFoto(foto);
+                    setSelectedFotosLista(lista || fotosAvulsas);
+                  }}
                 />
               ))}
 
@@ -289,8 +353,12 @@ export function PastaAtendimentosAvulsos({
       {selectedFoto && (
         <PlanoFotoLightbox
           foto={selectedFoto}
+          fotos={selectedFotosLista}
           pacienteId={pacienteId}
-          onClose={() => setSelectedFoto(null)}
+          onClose={() => {
+            setSelectedFoto(null);
+            setSelectedFotosLista([]);
+          }}
         />
       )}
     </div>

@@ -150,12 +150,12 @@ function normalizeEquipeList(raw) {
       const nome = p?.nomeCompleto || p?.nome || p?.name || p?.username || 'Profissional';
       return roleUserId
         ? {
-            roleUserId,
-            nome: String(nome).trim() || 'Profissional',
-            roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
-            fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
-            especialidade: p?.especialidade || p?.specialty || '',
-          }
+          roleUserId,
+          nome: String(nome).trim() || 'Profissional',
+          roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
+          fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
+          especialidade: p?.especialidade || p?.specialty || '',
+        }
         : null;
     })
     .filter(Boolean);
@@ -872,14 +872,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const listHistorico =
         resHistorico.status === 'fulfilled'
           ? normalizeApiList(resHistorico.value).map((r) => ({
-              id: String(r.id),
-              procedimentoFeitoOrigemId: String(r.id),
-              nome: nomeProcedimentoRaiz(r),
-              catalogoNome: r.catalogoProcedimentoNome || r.nomeCatalogo || r.nome,
-              data: r.data,
-              tipoOrigem: 'historico',
-              planejamentoItemId: r.planejamentoItemId || null,
-            }))
+            id: String(r.id),
+            procedimentoFeitoOrigemId: String(r.id),
+            nome: nomeProcedimentoRaiz(r),
+            catalogoNome: r.catalogoProcedimentoNome || r.nomeCatalogo || r.nome,
+            data: r.data,
+            tipoOrigem: 'historico',
+            planejamentoItemId: r.planejamentoItemId || null,
+          }))
           : [];
 
       let listPlano = [];
@@ -1626,7 +1626,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     bloqueioForm.horaFim,
     bloqueioForm.duracaoMin,
     resetBloqueioConflitosState,
-     
+
   ]);
 
   const selectBloqueioDia = useCallback(
@@ -1927,7 +1927,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         if (opts.successToast !== false) {
           toastSuccess(
             opts.successToast ||
-              (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
+            (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
           );
         }
         if (!opts.skipDashboardRefresh) {
@@ -2540,109 +2540,109 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           };
         }
       } else {
-    const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
-      .map((id) => String(id).trim())
-      .filter(Boolean);
-
-    try {
-      for (let i = 0; i < procIds.length; i++) {
-        const id = procIds[i];
-        if (id.startsWith('new:')) {
-          const nome = id.substring(4);
-          const novoProcedimento = await catalogosApi.criar({ nomeProcedimento: nome });
-          const novoId = String(novoProcedimento.catalogoProcedimentoId || novoProcedimento.id || '').trim();
-          procIds[i] = novoId;
-        }
-      }
-    } catch (err) {
-      console.error('Erro ao cadastrar procedimento no catálogo:', err);
-      setError('Erro ao cadastrar novo procedimento no catálogo.');
-      return false;
-    }
-
-      let startHh = String(form.horaInicio || '09:00').slice(0, 5);
-      const resultados = [];
-      const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
-      const divisao = divideDuracaoEntreProcedimentos(duracaoTotal, procIds.length);
-
-      for (let i = 0; i < procIds.length; i += 1) {
-        const catalogoProcedimentoSaudeId = procIds[i];
-        const dMin = divisao[i] ?? 30;
-
-        const planejamentoItemId = resolvePlanejamentoItemIdForCatalogo(
-          catalogoProcedimentoSaudeId,
-          planejamentoItemIdPorCatalogo,
-          planejamentoItemIdVinculoRef.current,
-        );
-        const agendaOrigemResolvida =
-          modalMode === 'reagendar'
-            ? (grupoReagendarMap[catalogoProcedimentoSaudeId] ||
-               (procIds.length === 1 ? (editingAppointment?.agendaId || editingAppointment?.id) : undefined))
-            : undefined;
-
-        const createBody = buildAgendaCreateBody({
-          dataAgendamento: form.data,
-          horaInicio: startHh,
-          duracaoMin: dMin,
-          profissionalRoleUserId: agendaRole,
-          observacao: String(form.observacao || '').trim(),
-          pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-          catalogoProcedimentoSaudeId,
-          // Resolve pelo ID do procedimento — com fallback seguro para reagendamento individual
-          ...(agendaOrigemResolvida ? { agendaIdOrigem: agendaOrigemResolvida } : {}),
-          ...(planejamentoItemId ? { planejamentoItemId } : {}),
-        });
+        const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
+          .map((id) => String(id).trim())
+          .filter(Boolean);
 
         try {
-          const created = await executarComBypassDisp(
-            () => agendasApi.create(createBody),
-            () => agendasApi.create(createBody, { forcar: true }),
-            abrirConfirmacaoForaDisp
-          );
-          if (created === null) {
-            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
-            continue;
+          for (let i = 0; i < procIds.length; i++) {
+            const id = procIds[i];
+            if (id.startsWith('new:')) {
+              const nome = id.substring(4);
+              const novoProcedimento = await catalogosApi.criar({ nomeProcedimento: nome });
+              const novoId = String(novoProcedimento.catalogoProcedimentoId || novoProcedimento.id || '').trim();
+              procIds[i] = novoId;
+            }
           }
-          if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-          createdDtos.push(created);
-          const horaInicioSlot = startHh;
-          resultados.push({
-            id: catalogoProcedimentoSaudeId,
-            status: 'ok',
-            agendaId: created?.id,
-            planejamentoItemId,
-            horaInicio: horaInicioSlot,
-            horaFim: addMinutesToTime(horaInicioSlot, dMin),
-          });
-          startHh = addMinutesToTime(startHh, dMin);
         } catch (err) {
-          if (isAgendaSlotOverlapError(err)) {
-            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'conflito', mensagem: formatAgendamentoApiError(err) });
-            continue;
-          }
-          throw err;
+          console.error('Erro ao cadastrar procedimento no catálogo:', err);
+          setError('Erro ao cadastrar novo procedimento no catálogo.');
+          return false;
         }
-      }
 
-      const algumFalhou = resultados.some((r) => r.status !== 'ok');
-      if (algumFalhou) {
-        onConflictResult?.(resultados);
-        return false;
-      }
+        let startHh = String(form.horaInicio || '09:00').slice(0, 5);
+        const resultados = [];
+        const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
+        const divisao = divideDuracaoEntreProcedimentos(duracaoTotal, procIds.length);
 
-      const firstOk = resultados.find((r) => r.status === 'ok');
-      if (firstOk && onAgendaSavedRef.current) {
-        agendaSavedPayload = {
-          agendaId: firstOk.agendaId,
-          planejamentoItemId: firstOk.planejamentoItemId ?? null,
-          catalogoProcedimentoSaudeId: firstOk.id,
-          dataAgendamento: form.data,
-          horaInicio: firstOk.horaInicio,
-          horaFim: firstOk.horaFim,
-          profissionalRoleUserId: agendaRole,
-          statusCodigo: 'AGENDADO',
-        };
-      }
+        for (let i = 0; i < procIds.length; i += 1) {
+          const catalogoProcedimentoSaudeId = procIds[i];
+          const dMin = divisao[i] ?? 30;
+
+          const planejamentoItemId = resolvePlanejamentoItemIdForCatalogo(
+            catalogoProcedimentoSaudeId,
+            planejamentoItemIdPorCatalogo,
+            planejamentoItemIdVinculoRef.current,
+          );
+          const agendaOrigemResolvida =
+            modalMode === 'reagendar'
+              ? (grupoReagendarMap[catalogoProcedimentoSaudeId] ||
+                (procIds.length === 1 ? (editingAppointment?.agendaId || editingAppointment?.id) : undefined))
+              : undefined;
+
+          const createBody = buildAgendaCreateBody({
+            dataAgendamento: form.data,
+            horaInicio: startHh,
+            duracaoMin: dMin,
+            profissionalRoleUserId: agendaRole,
+            observacao: String(form.observacao || '').trim(),
+            pacienteId: String(form.pacienteId || patient?.id || '').trim(),
+            catalogoProcedimentoSaudeId,
+            // Resolve pelo ID do procedimento — com fallback seguro para reagendamento individual
+            ...(agendaOrigemResolvida ? { agendaIdOrigem: agendaOrigemResolvida } : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
+          });
+
+          try {
+            const created = await executarComBypassDisp(
+              () => agendasApi.create(createBody),
+              () => agendasApi.create(createBody, { forcar: true }),
+              abrirConfirmacaoForaDisp
+            );
+            if (created === null) {
+              resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
+              continue;
+            }
+            if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+            createdDtos.push(created);
+            const horaInicioSlot = startHh;
+            resultados.push({
+              id: catalogoProcedimentoSaudeId,
+              status: 'ok',
+              agendaId: created?.id,
+              planejamentoItemId,
+              horaInicio: horaInicioSlot,
+              horaFim: addMinutesToTime(horaInicioSlot, dMin),
+            });
+            startHh = addMinutesToTime(startHh, dMin);
+          } catch (err) {
+            if (isAgendaSlotOverlapError(err)) {
+              resultados.push({ id: catalogoProcedimentoSaudeId, status: 'conflito', mensagem: formatAgendamentoApiError(err) });
+              continue;
+            }
+            throw err;
+          }
+        }
+
+        const algumFalhou = resultados.some((r) => r.status !== 'ok');
+        if (algumFalhou) {
+          onConflictResult?.(resultados);
+          return false;
+        }
+
+        const firstOk = resultados.find((r) => r.status === 'ok');
+        if (firstOk && onAgendaSavedRef.current) {
+          agendaSavedPayload = {
+            agendaId: firstOk.agendaId,
+            planejamentoItemId: firstOk.planejamentoItemId ?? null,
+            catalogoProcedimentoSaudeId: firstOk.id,
+            dataAgendamento: form.data,
+            horaInicio: firstOk.horaInicio,
+            horaFim: firstOk.horaFim,
+            profissionalRoleUserId: agendaRole,
+            statusCodigo: 'AGENDADO',
+          };
+        }
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);

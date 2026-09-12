@@ -26,6 +26,10 @@ function normalizeSessao(raw) {
     )
       .trim()
       .toLowerCase(),
+    procedimentoFeitoOrigemId:
+      raw.procedimentoFeitoOrigemId ?? raw.procedimento_feito_origem_id ?? null,
+    procedimentoFeitoId:
+      raw.procedimentoFeitoId ?? raw.procedimento_feito_id ?? null,
   };
 }
 

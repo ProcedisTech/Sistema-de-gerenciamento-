@@ -50,7 +50,6 @@ import { PlanoConcluirRetornoConfirmModal } from './PlanoConcluirRetornoConfirmM
 import { PlanoEncerrarConfirmModal } from './PlanoEncerrarConfirmModal.jsx';
 import { ValorOrcadoInput } from './ValorOrcadoInput.jsx';
 import { PlanoVisitasTimeline } from './PlanoVisitasTimeline.jsx';
-import { PastaAtendimentosAvulsos } from './PastaAtendimentosAvulsos.jsx';
 import { resolverFotosEPlanos } from '../../utils/planoGaleriaResolver.js';
 import { normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
 import { mapBackendPatient } from '../../utils/patientMapping.js';
@@ -458,8 +457,8 @@ function renderItensComIntervalo({
                       <div className="flex items-center gap-2">
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${todosFinalizados
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-teal-50 text-teal-800 border border-teal-200'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-teal-50 text-teal-800 border border-teal-200'
                             }`}
                         >
                           {todosFinalizados
@@ -625,8 +624,8 @@ function PlanoCard({
         <div className="flex items-center gap-2.5 self-end sm:self-auto">
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isAtivo
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-slate-100 text-slate-700 border border-slate-300'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-slate-100 text-slate-700 border border-slate-300'
               }`}
           >
             {statusUi.label || (isAtivo ? 'EM ANDAMENTO' : 'FINALIZADO')}
@@ -1294,7 +1293,7 @@ export function PlanosTab({
     [planosEnriquecidos],
   );
 
-  const { fotosPorPlanoId, fotosPorPlanejamentoItemId, fotosAvulsas, atendimentosAvulsos } = useMemo(() => {
+  const { fotosPorPlanoId, fotosPorPlanejamentoItemId } = useMemo(() => {
     return resolverFotosEPlanos(sortedPlanos, galeriaFotos, listaProcedimentosFeitos);
   }, [sortedPlanos, galeriaFotos, listaProcedimentosFeitos]);
 
@@ -1325,7 +1324,6 @@ export function PlanosTab({
   const planosFiltradosPorPill = useMemo(() => {
     if (filtroStatus === 'ativo') return planosAtivos;
     if (filtroStatus === 'concluido') return planosHistorico;
-    if (filtroStatus === 'avulsos') return [];
     return sortedPlanos;
   }, [filtroStatus, planosAtivos, planosHistorico, sortedPlanos]);
 
@@ -1538,26 +1536,116 @@ export function PlanosTab({
     [darBaixaItem, displayPlanos, handleSalvarPlano, onPlanoConcluido, pacienteId, refresh, carregarGaleria, carregarProcedimentosFeitos, toast],
   );
 
+  const resolveOrigemIdParaRetorno = useCallback((targetItem, explicitOrigemId) => {
+    if (explicitOrigemId) return String(explicitOrigemId);
+    const cleanId = String(targetItem?.planejamentoItemId || targetItem?.id || '').replace(/_retorno$/, '').trim();
+    if (cleanId && Array.isArray(procedimentosFeitos)) {
+      const pai =
+        procedimentosFeitos.find(
+          (p) =>
+            String(p.planejamentoItemId || '').replace(/_retorno$/, '').trim() === cleanId &&
+            !p.isRetoque &&
+            !p.procedimentoFeitoOrigemId
+        ) ||
+        procedimentosFeitos.find(
+          (p) =>
+            String(p.planejamentoItemId || '').replace(/_retorno$/, '').trim() === cleanId &&
+            !p.isRetoque
+        );
+      if (pai?.id) return String(pai.id);
+    }
+    return null;
+  }, [procedimentosFeitos]);
+
+  const resolveNomeProcedimento = useCallback(
+    (target, fallback) => {
+      const nomeDireto = target?.catalogoNome || fallback?.catalogoNome;
+      if (nomeDireto && String(nomeDireto).trim().toLowerCase() !== 'procedimento') {
+        return String(nomeDireto).trim();
+      }
+      const catId = String(
+        target?.catalogoProcedimentoSaudeId ||
+        target?.catalogoId ||
+        fallback?.catalogoProcedimentoSaudeId ||
+        fallback?.catalogoId ||
+        ''
+      ).trim();
+      if (catId && Array.isArray(catalogoOptions)) {
+        const opt = catalogoOptions.find(
+          (o) => String(o.id || o.catalogoProcedimentoSaudeId) === catId
+        );
+        if (opt?.nomeProcedimento || opt?.nome) {
+          return String(opt.nomeProcedimento || opt.nome).trim();
+        }
+      }
+      return (nomeDireto && String(nomeDireto).trim()) || 'Procedimento';
+    },
+    [catalogoOptions]
+  );
+
   const handleIniciarAtendimentoItem = useCallback(
-    (item, _plano) => {
+    async (item, _plano) => {
+      let targetItem = item;
+      let targetPlano = _plano || displayPlanos.find((p) => String(p.id) === String(item?.planejamentoId)) || displayPlanos[0];
+      const pid = targetPlano?.id;
+      const itemId = targetItem?.id || targetItem?.planejamentoItemId;
+
+      if (pid && (targetPlano?.statusCodigo === 'rascunho' || !isRealUuid(itemId))) {
+        try {
+          await handleSalvarPlano(pid);
+          const detalhe = await planejamentosApi.detalhe(pid);
+          const targetCatId = String(targetItem?.catalogoProcedimentoSaudeId || targetItem?.catalogoId || '');
+          const match = detalhe?.itens?.find(
+            (i) =>
+              String(i.catalogoProcedimentoSaudeId || i.catalogoId || '') === targetCatId &&
+              i.statusCodigo !== 'concluido',
+          );
+          if (match) {
+            const nomeAntes = targetItem?.catalogoNome || item?.catalogoNome;
+            targetItem = {
+              ...match,
+              id: match.planejamentoItemId || match.id,
+              planejamentoId: pid,
+              catalogoNome: match.catalogoNome || nomeAntes,
+            };
+          }
+          if (detalhe) {
+            targetPlano = detalhe;
+          }
+        } catch (err) {
+          console.warn('Aviso ao salvar plano antes de iniciar:', err);
+        }
+      }
+
       if (isConsulta) {
-        onSelectProcedimentoParaConsulta?.(item);
+        onSelectProcedimentoParaConsulta?.(targetItem, targetPlano);
         return;
       }
       if (typeof onStartAttendance !== 'function') return;
-      const catId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || '').trim();
-      const nome = item.catalogoNome || 'Procedimento';
-      const agendaId = item.sessaoAtiva?.agendaId || null;
-      const data = item.sessaoAtiva?.dataAgendamento || null;
-      const horaInicio = item.sessaoAtiva?.horaInicio || null;
-      const planoItemId = item.id || item.planejamentoItemId || null;
+      const catId = String(targetItem.catalogoProcedimentoSaudeId || targetItem.catalogoId || '').trim();
+      const nome = resolveNomeProcedimento(targetItem, item);
+      const agendaId = targetItem.sessaoAtiva?.agendaId || null;
+      const data = targetItem.sessaoAtiva?.dataAgendamento || null;
+      const horaInicio = targetItem.sessaoAtiva?.horaInicio || null;
+      const rawItemId = targetItem.planejamentoItemId || targetItem.id || null;
+      const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
       const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
 
       const isItemRetorno = Boolean(
-        item.isRetorno ||
-        item.tipoProcedimentoCodigo === 'retorno' ||
-        item.tipo === 'retorno'
+        targetItem.isRetorno ||
+        targetItem.tipoProcedimentoCodigo === 'retorno' ||
+        targetItem.tipo === 'retorno'
       );
+
+      const rawOrigemId =
+        targetItem.procedimentoFeitoOrigemId ||
+        targetItem.sessaoAtiva?.procedimentoFeitoOrigemId ||
+        targetItem.sessaoRetornoAtiva?.procedimentoFeitoOrigemId ||
+        targetItem.sessaoRetornoRealizada?.procedimentoFeitoOrigemId ||
+        targetItem.procedimentoFeitoId ||
+        targetItem.sessaoRealizada?.procedimentoFeitoId ||
+        null;
+      const origemId = isItemRetorno ? resolveOrigemIdParaRetorno(targetItem, rawOrigemId) : rawOrigemId;
 
       onStartAttendance(pacienteAlvo, {
         agendaId,
@@ -1567,8 +1655,9 @@ export function PlanosTab({
         procedimentoNome: nome,
         catalogoProcedimentoSaudeId: catId,
         planejamentoItemId: planoItemId,
-        tipoProcedimentoCodigo: isItemRetorno ? 'retorno' : (item.tipoProcedimentoCodigo || ''),
+        tipoProcedimentoCodigo: isItemRetorno ? 'retorno' : (targetItem.tipoProcedimentoCodigo || ''),
         isAgendaRetorno: isItemRetorno,
+        ...(origemId ? { procedimentoFeitoOrigemId: String(origemId) } : {}),
         lote: [
           {
             agendaId,
@@ -1579,14 +1668,25 @@ export function PlanosTab({
         ],
       });
     },
-    [isConsulta, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome],
+    [displayPlanos, handleSalvarPlano, isConsulta, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno],
   );
 
   const handleIniciarAtendimentoVisita = useCallback(
-    (visita, _plano) => {
+    async (visita, _plano) => {
+      let targetPlano = _plano || displayPlanos[0];
+      const pid = targetPlano?.id;
+      if (pid && targetPlano?.statusCodigo === 'rascunho') {
+        try {
+          await handleSalvarPlano(pid);
+          const detalhe = await planejamentosApi.detalhe(pid);
+          if (detalhe) targetPlano = detalhe;
+        } catch (err) {
+          console.warn('Aviso ao salvar plano antes de iniciar visita:', err);
+        }
+      }
       if (isConsulta) {
-        const primeiro = visita?.itens?.[0];
-        if (primeiro) onSelectProcedimentoParaConsulta?.(primeiro);
+        const primeiro = targetPlano?.itens?.find((i) => String(i.visitaNumero) === String(visita?.numero)) || visita?.itens?.[0];
+        if (primeiro) onSelectProcedimentoParaConsulta?.(primeiro, targetPlano);
         return;
       }
       if (typeof onStartAttendance !== 'function') return;
@@ -1595,19 +1695,23 @@ export function PlanosTab({
 
       const primeiro = itens[0];
       const catId = String(primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || '').trim();
-      const nome = primeiro.catalogoNome || 'Procedimento';
+      const nome = resolveNomeProcedimento(primeiro);
       const agendaId = primeiro.sessaoAtiva?.agendaId || null;
       const data = primeiro.sessaoAtiva?.dataAgendamento || null;
       const horaInicio = primeiro.sessaoAtiva?.horaInicio || null;
-      const planoItemId = primeiro.id || primeiro.planejamentoItemId || null;
+      const rawItemId = primeiro.planejamentoItemId || primeiro.id || null;
+      const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
       const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
 
-      const lote = itens.map((it) => ({
-        agendaId: it.sessaoAtiva?.agendaId || null,
-        procedimentoNome: it.catalogoNome || 'Procedimento',
-        catalogoProcedimentoSaudeId: String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim(),
-        planejamentoItemId: it.id || it.planejamentoItemId || null,
-      }));
+      const lote = itens.map((it) => {
+        const rId = it.planejamentoItemId || it.id || null;
+        return {
+          agendaId: it.sessaoAtiva?.agendaId || null,
+          procedimentoNome: resolveNomeProcedimento(it),
+          catalogoProcedimentoSaudeId: String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim(),
+          planejamentoItemId: rId ? String(rId).replace(/_retorno$/, '').trim() : null,
+        };
+      });
 
       const isVisitaRetorno = Boolean(
         visita.isRetornoVisita ||
@@ -1615,6 +1719,16 @@ export function PlanosTab({
         primeiro.tipoProcedimentoCodigo === 'retorno' ||
         primeiro.tipo === 'retorno'
       );
+
+      const rawOrigemId =
+        primeiro.procedimentoFeitoOrigemId ||
+        primeiro.sessaoAtiva?.procedimentoFeitoOrigemId ||
+        primeiro.sessaoRetornoAtiva?.procedimentoFeitoOrigemId ||
+        primeiro.sessaoRetornoRealizada?.procedimentoFeitoOrigemId ||
+        primeiro.procedimentoFeitoId ||
+        primeiro.sessaoRealizada?.procedimentoFeitoId ||
+        null;
+      const origemId = isVisitaRetorno ? resolveOrigemIdParaRetorno(primeiro, rawOrigemId) : rawOrigemId;
 
       onStartAttendance(pacienteAlvo, {
         agendaId,
@@ -1626,16 +1740,27 @@ export function PlanosTab({
         planejamentoItemId: planoItemId,
         tipoProcedimentoCodigo: isVisitaRetorno ? 'retorno' : (primeiro.tipoProcedimentoCodigo || ''),
         isAgendaRetorno: isVisitaRetorno,
+        ...(origemId ? { procedimentoFeitoOrigemId: String(origemId) } : {}),
         lote,
       });
     },
-    [isConsulta, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome],
+    [displayPlanos, handleSalvarPlano, isConsulta, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno],
   );
 
-  const handleBatchIniciarAtendimento = useCallback(() => {
+  const handleBatchIniciarAtendimento = useCallback(async () => {
     if (selecionados.size === 0) return;
-    const planoAtivo = displayPlanos[0];
+    let planoAtivo = displayPlanos[0];
     if (!planoAtivo) return;
+
+    if (planoAtivo.id && planoAtivo.statusCodigo === 'rascunho') {
+      try {
+        await handleSalvarPlano(planoAtivo.id);
+        const detalhe = await planejamentosApi.detalhe(planoAtivo.id);
+        if (detalhe) planoAtivo = detalhe;
+      } catch (err) {
+        console.warn('Aviso ao salvar plano antes do batch:', err);
+      }
+    }
 
     const itensParaIniciar = (planoAtivo.itens || []).filter((it) =>
       selecionados.has(String(it.id || it.tempId)),
@@ -1643,7 +1768,7 @@ export function PlanosTab({
     if (itensParaIniciar.length === 0) return;
 
     if (isConsulta) {
-      onSelectProcedimentoParaConsulta?.(itensParaIniciar[0]);
+      onSelectProcedimentoParaConsulta?.(itensParaIniciar[0], planoAtivo);
       limparSelecao();
       return;
     }
@@ -1651,19 +1776,39 @@ export function PlanosTab({
 
     const primeiro = itensParaIniciar[0];
     const catId = String(primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || '').trim();
-    const nome = primeiro.catalogoNome || 'Procedimento';
+    const nome = resolveNomeProcedimento(primeiro);
     const agendaId = primeiro.sessaoAtiva?.agendaId || null;
     const data = primeiro.sessaoAtiva?.dataAgendamento || null;
     const horaInicio = primeiro.sessaoAtiva?.horaInicio || null;
-    const planoItemId = primeiro.id || primeiro.planejamentoItemId || null;
+    const rawItemId = primeiro.planejamentoItemId || primeiro.id || null;
+    const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
     const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
 
-    const lote = itensParaIniciar.map((it) => ({
-      agendaId: it.sessaoAtiva?.agendaId || null,
-      procedimentoNome: it.catalogoNome || 'Procedimento',
-      catalogoProcedimentoSaudeId: String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim(),
-      planejamentoItemId: it.id || it.planejamentoItemId || null,
-    }));
+    const lote = itensParaIniciar.map((it) => {
+      const rId = it.planejamentoItemId || it.id || null;
+      return {
+        agendaId: it.sessaoAtiva?.agendaId || null,
+        procedimentoNome: resolveNomeProcedimento(it),
+        catalogoProcedimentoSaudeId: String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim(),
+        planejamentoItemId: rId ? String(rId).replace(/_retorno$/, '').trim() : null,
+      };
+    });
+
+    const isLoteRetorno = Boolean(
+      primeiro.isRetorno ||
+      primeiro.tipoProcedimentoCodigo === 'retorno' ||
+      primeiro.tipo === 'retorno'
+    );
+
+    const rawOrigemId =
+      primeiro.procedimentoFeitoOrigemId ||
+      primeiro.sessaoAtiva?.procedimentoFeitoOrigemId ||
+      primeiro.sessaoRetornoAtiva?.procedimentoFeitoOrigemId ||
+      primeiro.sessaoRetornoRealizada?.procedimentoFeitoOrigemId ||
+      primeiro.procedimentoFeitoId ||
+      primeiro.sessaoRealizada?.procedimentoFeitoId ||
+      null;
+    const origemId = isLoteRetorno ? resolveOrigemIdParaRetorno(primeiro, rawOrigemId) : rawOrigemId;
 
     onStartAttendance(pacienteAlvo, {
       agendaId,
@@ -1673,12 +1818,13 @@ export function PlanosTab({
       procedimentoNome: nome,
       catalogoProcedimentoSaudeId: catId,
       planejamentoItemId: planoItemId,
-      tipoProcedimentoCodigo: primeiro.tipoProcedimentoCodigo || '',
-      isAgendaRetorno: false,
+      tipoProcedimentoCodigo: isLoteRetorno ? 'retorno' : (primeiro.tipoProcedimentoCodigo || ''),
+      isAgendaRetorno: isLoteRetorno,
+      ...(origemId ? { procedimentoFeitoOrigemId: String(origemId) } : {}),
       lote,
     });
     limparSelecao();
-  }, [displayPlanos, isConsulta, limparSelecao, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, selecionados]);
+  }, [displayPlanos, handleSalvarPlano, isConsulta, limparSelecao, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno, selecionados]);
 
   // Handler de Agendamento em Lote (+0, +1, +7, +15, +30 dias)
   const handleBatchAgendar = useCallback(
@@ -2196,8 +2342,6 @@ export function PlanosTab({
   };
 
   const renderProfilePlanosList = () => {
-    const showAvulsosOnly = filtroStatus === 'avulsos';
-
     return (
       <div className="space-y-4">
         {/* BARRA DE FILTRO POR PÍLULAS NO ESTILO DO PRONTUÁRIO */}
@@ -2233,180 +2377,159 @@ export function PlanosTab({
             >
               Concluídos {planosHistorico.length}
             </button>
-            <button
-              type="button"
-              onClick={() => setFiltroStatus('avulsos')}
-              className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${filtroStatus === 'avulsos'
-                ? 'font-bold bg-purple-600 text-white shadow-2xs'
-                : 'font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-            >
-              Pasta Avulsos {atendimentosAvulsos.length}
-            </button>
           </div>
         </div>
 
         {/* LISTA DE PLANOS */}
-        {!showAvulsosOnly && (
-          <div className="space-y-3.5">
-            {planosFiltradosPorPill.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-teal-50/20 px-4 py-8 text-center">
-                <BookOpen className="mx-auto h-6 w-6 text-slate-400" />
-                <p className="mt-1.5 text-xs font-semibold text-slate-700">
-                  Nenhum plano encontrado neste filtro.
-                </p>
-              </div>
-            ) : (
-              planosFiltradosPorPill.map((plano) => {
-                const isAtivo = plano.statusCodigo === 'ativo';
-                const isExpandido = expandidos[plano.id] !== undefined ? expandidos[plano.id] : isAtivo;
-                const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
-                const itens = Array.isArray(plano.itens) ? plano.itens : [];
-                const fotosPlano = fotosPorPlanoId[String(plano.id)] || [];
+        <div className="space-y-3.5">
+          {planosFiltradosPorPill.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-teal-50/20 px-4 py-8 text-center">
+              <BookOpen className="mx-auto h-6 w-6 text-slate-400" />
+              <p className="mt-1.5 text-xs font-semibold text-slate-700">
+                Nenhum plano encontrado neste filtro.
+              </p>
+            </div>
+          ) : (
+            planosFiltradosPorPill.map((plano) => {
+              const isAtivo = plano.statusCodigo === 'ativo';
+              const isExpandido = expandidos[plano.id] !== undefined ? expandidos[plano.id] : isAtivo;
+              const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
+              const itens = Array.isArray(plano.itens) ? plano.itens : [];
+              const fotosPlano = fotosPorPlanoId[String(plano.id)] || [];
 
-                return (
+              return (
+                <div
+                  key={plano.id}
+                  className={`bg-white rounded-lg border border-slate-200 shadow-2xs transition-all ${isAtivo ? 'border-l-4 border-l-[#00a88e]' : 'border-l-4 border-l-slate-400'
+                    }`}
+                >
+                  {/* CABEÇALHO DO PLANO */}
                   <div
-                    key={plano.id}
-                    className={`bg-white rounded-lg border border-slate-200 shadow-2xs transition-all ${isAtivo ? 'border-l-4 border-l-[#00a88e]' : 'border-l-4 border-l-slate-400'
-                      }`}
+                    onClick={() => toggleExpandido(plano.id, plano)}
+                    className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white cursor-pointer hover:bg-slate-50/50 transition-colors select-none rounded-t-lg"
                   >
-                    {/* CABEÇALHO DO PLANO */}
-                    <div
-                      onClick={() => toggleExpandido(plano.id, plano)}
-                      className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white cursor-pointer hover:bg-slate-50/50 transition-colors select-none rounded-t-lg"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
-                          <Calendar className={`w-3 h-3 ${isAtivo ? 'text-[#00a88e]' : 'text-slate-400'}`} />
-                          <span>
-                            {plano.criadoEm ? `Iniciado em ${formatDataPt(plano.criadoEm)}` : 'Plano de Tratamento'}
-                          </span>
-                          <span className={`px-1 py-0.2 rounded font-bold text-[9px] ${isAtivo ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-600'}`}>
-                            #{String(plano.id).slice(0, 6).toUpperCase()}
-                          </span>
-                        </div>
-
-                        <h3 className="text-sm font-bold text-slate-900">
-                          {plano.observacao || 'Protocolo de Tratamento Facial / Corporal'}
-                        </h3>
-
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                          <span>{itens.length} {itens.length === 1 ? 'Procedimento' : 'Procedimentos'}</span>
-                          <span className="text-slate-300">·</span>
-                          <span className="font-bold text-slate-700">{formatValorBrl(plano.valorTotal)}</span>
-                          {fotosPlano.length > 0 && (
-                            <>
-                              <span className="text-slate-300">·</span>
-                              <span className="text-teal-700 font-medium">{fotosPlano.length} foto(s)</span>
-                            </>
-                          )}
-                        </div>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
+                        <Calendar className={`w-3 h-3 ${isAtivo ? 'text-[#00a88e]' : 'text-slate-400'}`} />
+                        <span>
+                          {plano.criadoEm ? `Iniciado em ${formatDataPt(plano.criadoEm)}` : 'Plano de Tratamento'}
+                        </span>
+                        <span className={`px-1 py-0.2 rounded font-bold text-[9px] ${isAtivo ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-600'}`}>
+                          #{String(plano.id).slice(0, 6).toUpperCase()}
+                        </span>
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isAtivo ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700 border border-slate-300'
-                          }`}>
-                          {statusUi.label || (isAtivo ? 'EM ANDAMENTO' : 'FINALIZADO')}
-                        </span>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        {plano.observacao || 'Protocolo de Tratamento Facial / Corporal'}
+                      </h3>
 
-                        {isAtivo && (
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPlanoMenuAbertoId((prev) => (prev === plano.id ? null : plano.id));
-                              }}
-                              className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                              title="Mais opções do plano"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-
-                            {planoMenuAbertoId === plano.id && (
-                              <div
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 top-7 z-50 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-100"
-                              >
-                                <button
-                                  type="button"
-                                  disabled={mutating}
-                                  onClick={() => {
-                                    setPlanoMenuAbertoId(null);
-                                    openEncerrarModal(plano.id);
-                                  }}
-                                  className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                  <span>Encerrar Plano (Desistência)</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                        <span>{itens.length} {itens.length === 1 ? 'Procedimento' : 'Procedimentos'}</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="font-bold text-slate-700">{formatValorBrl(plano.valorTotal)}</span>
+                        {fotosPlano.length > 0 && (
+                          <>
+                            <span className="text-slate-300">·</span>
+                            <span className="text-teal-700 font-medium">{fotosPlano.length} foto(s)</span>
+                          </>
                         )}
-
-                        <div className="p-1 rounded-md text-slate-400">
-                          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpandido ? 'rotate-180 text-slate-700' : ''}`} />
-                        </div>
                       </div>
                     </div>
 
-                    {/* CORPO EXPANSÍVEL: VISITAS & FOTOS */}
-                    {isExpandido && (
-                      <div className="p-3.5 bg-slate-50/40 border-t border-slate-100 space-y-3">
-                        <PlanoVisitasTimeline
-                          plano={plano}
-                          pacienteId={pacienteId}
-                          fotosDoPlano={fotosPlano}
-                          fotosPorPlanejamentoItemId={fotosPorPlanejamentoItemId}
-                          canCrud={canCrud}
-                          canBaixa={canBaixa}
-                          canReagendar={canReagendar}
-                          canAgendar={canAgendar}
-                          mutating={mutating}
-                          onAgendarItem={handleAgendarItem}
-                          onAgendarRetornoItem={handleAgendarRetornoItem}
-                          onReagendarItem={handleReagendarItem}
-                          onIniciarAtendimentoItem={handleIniciarAtendimentoItem}
-                          onIniciarAtendimentoVisita={handleIniciarAtendimentoVisita}
-                          onDarBaixa={handleDarBaixa}
-                          catalogoOptions={catalogoOptions}
-                          selecionados={selecionados}
-                          onToggleSelecao={toggleSelecao}
-                          procedimentosFeitos={procedimentosFeitos}
-                          onEdit={(item) =>
-                            setEditItemState({
-                              planoId: plano.id,
-                              itemKey: itemReactKey(item),
-                              item,
-                            })
-                          }
-                          onRemover={async (pid, iid) => {
-                            setActionError('');
-                            try {
-                              await removerItem(pid, iid);
-                            } catch (e) {
-                              setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.');
-                            }
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isAtivo ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700 border border-slate-300'
+                        }`}>
+                        {statusUi.label || (isAtivo ? 'EM ANDAMENTO' : 'FINALIZADO')}
+                      </span>
 
-        {/* PASTA DE ATENDIMENTOS AVULSOS */}
-        {(filtroStatus === 'todos' || filtroStatus === 'avulsos') && (
-          <PastaAtendimentosAvulsos
-            pacienteId={pacienteId}
-            atendimentosAvulsos={atendimentosAvulsos}
-            fotosAvulsas={fotosAvulsas}
-          />
-        )}
+                      {isAtivo && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPlanoMenuAbertoId((prev) => (prev === plano.id ? null : plano.id));
+                            }}
+                            className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                            title="Mais opções do plano"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+
+                          {planoMenuAbertoId === plano.id && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute right-0 top-7 z-50 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-100"
+                            >
+                              <button
+                                type="button"
+                                disabled={mutating}
+                                onClick={() => {
+                                  setPlanoMenuAbertoId(null);
+                                  openEncerrarModal(plano.id);
+                                }}
+                                className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                <span>Encerrar Plano (Desistência)</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="p-1 rounded-md text-slate-400">
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpandido ? 'rotate-180 text-slate-700' : ''}`} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CORPO EXPANSÍVEL: VISITAS & FOTOS */}
+                  {isExpandido && (
+                    <div className="p-3.5 bg-slate-50/40 border-t border-slate-100 space-y-3">
+                      <PlanoVisitasTimeline
+                        plano={plano}
+                        pacienteId={pacienteId}
+                        fotosDoPlano={fotosPlano}
+                        fotosPorPlanejamentoItemId={fotosPorPlanejamentoItemId}
+                        canCrud={canCrud}
+                        canBaixa={canBaixa}
+                        canReagendar={canReagendar}
+                        canAgendar={canAgendar}
+                        mutating={mutating}
+                        onAgendarItem={handleAgendarItem}
+                        onAgendarRetornoItem={handleAgendarRetornoItem}
+                        onReagendarItem={handleReagendarItem}
+                        onIniciarAtendimentoItem={handleIniciarAtendimentoItem}
+                        onIniciarAtendimentoVisita={handleIniciarAtendimentoVisita}
+                        onDarBaixa={handleDarBaixa}
+                        catalogoOptions={catalogoOptions}
+                        selecionados={selecionados}
+                        onToggleSelecao={toggleSelecao}
+                        procedimentosFeitos={procedimentosFeitos}
+                        onEdit={(item) =>
+                          setEditItemState({
+                            planoId: plano.id,
+                            itemKey: itemReactKey(item),
+                            item,
+                          })
+                        }
+                        onRemover={async (pid, iid) => {
+                          setActionError('');
+                          try {
+                            await removerItem(pid, iid);
+                          } catch (e) {
+                            setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.');
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     );
   };

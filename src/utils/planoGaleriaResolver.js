@@ -42,28 +42,50 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
 
   // Mapear itens de planos e agendamentos por ID para busca O(1)
   const itemToPlanoMap = new Map(); // itemId -> { planoId, item }
-  const agendaIdToPlanoItemMap = new Map(); // agendaId -> { planoId, itemId }
-  const procedimentoFeitoToPlanoItemMap = new Map(); // procedimentoFeitoId -> { planoId, itemId }
+  const agendaIdToPlanoItemMap = new Map(); // agendaId -> { planoId, itemId, isRetorno }
+  const procedimentoFeitoToPlanoItemMap = new Map(); // procedimentoFeitoId -> { planoId, itemId, isRetorno }
 
   (planos || []).forEach((plano) => {
     const pId = String(plano.id || '').trim();
     (plano.itens || []).forEach((item) => {
-      const itemId = String(item.id || item.planejamentoItemId || item.tempId || '').trim();
-      if (itemId) {
-        itemToPlanoMap.set(itemId, { planoId: pId, item });
+      const rawItemId = item.planejamentoItemId || item.id || item.tempId || '';
+      const baseItemId = String(rawItemId).replace(/_retorno$/, '').trim();
+      if (baseItemId) {
+        itemToPlanoMap.set(baseItemId, { planoId: pId, item });
+        if (rawItemId !== baseItemId) {
+          itemToPlanoMap.set(String(rawItemId).trim(), { planoId: pId, item });
+        }
 
-        // Mapear sessões da agenda do item para contingência
+        // Mapear sessões da agenda do item para contingência com distinção estrita de retorno
         const sessAtivaAgId = item.sessaoAtiva?.agendaId ? String(item.sessaoAtiva.agendaId).trim() : null;
         const sessRealAgId = item.sessaoRealizada?.agendaId ? String(item.sessaoRealizada.agendaId).trim() : null;
         const sessRetAgId = item.sessaoRetornoAtiva?.agendaId ? String(item.sessaoRetornoAtiva.agendaId).trim() : null;
-        if (sessAtivaAgId) agendaIdToPlanoItemMap.set(sessAtivaAgId, { planoId: pId, itemId });
-        if (sessRealAgId) agendaIdToPlanoItemMap.set(sessRealAgId, { planoId: pId, itemId });
-        if (sessRetAgId) agendaIdToPlanoItemMap.set(sessRetAgId, { planoId: pId, itemId });
+        const sessRetRealAgId = item.sessaoRetornoRealizada?.agendaId ? String(item.sessaoRetornoRealizada.agendaId).trim() : null;
+
+        if (sessAtivaAgId) {
+          agendaIdToPlanoItemMap.set(sessAtivaAgId, { planoId: pId, itemId: baseItemId, isRetorno: false });
+        }
+        if (sessRealAgId) {
+          agendaIdToPlanoItemMap.set(sessRealAgId, { planoId: pId, itemId: baseItemId, isRetorno: false });
+        }
+        if (sessRetAgId) {
+          agendaIdToPlanoItemMap.set(sessRetAgId, { planoId: pId, itemId: `${baseItemId}_retorno`, isRetorno: true });
+        }
+        if (sessRetRealAgId) {
+          agendaIdToPlanoItemMap.set(sessRetRealAgId, { planoId: pId, itemId: `${baseItemId}_retorno`, isRetorno: true });
+        }
 
         if (Array.isArray(item.sessoes)) {
           item.sessoes.forEach((s) => {
             const agId = s.agendaId ? String(s.agendaId).trim() : null;
-            if (agId) agendaIdToPlanoItemMap.set(agId, { planoId: pId, itemId });
+            if (agId) {
+              const isRet = String(s.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
+              agendaIdToPlanoItemMap.set(agId, {
+                planoId: pId,
+                itemId: isRet ? `${baseItemId}_retorno` : baseItemId,
+                isRetorno: isRet,
+              });
+            }
           });
         }
 
@@ -71,13 +93,31 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         if (item.sessaoAtiva?.procedimentoFeitoId) {
           procedimentoFeitoToPlanoItemMap.set(
             String(item.sessaoAtiva.procedimentoFeitoId).trim(),
-            { planoId: pId, itemId }
+            { planoId: pId, itemId: baseItemId, isRetorno: false }
+          );
+        }
+        if (item.sessaoRealizada?.procedimentoFeitoId) {
+          procedimentoFeitoToPlanoItemMap.set(
+            String(item.sessaoRealizada.procedimentoFeitoId).trim(),
+            { planoId: pId, itemId: baseItemId, isRetorno: false }
+          );
+        }
+        if (item.sessaoRetornoAtiva?.procedimentoFeitoId) {
+          procedimentoFeitoToPlanoItemMap.set(
+            String(item.sessaoRetornoAtiva.procedimentoFeitoId).trim(),
+            { planoId: pId, itemId: `${baseItemId}_retorno`, isRetorno: true }
+          );
+        }
+        if (item.sessaoRetornoRealizada?.procedimentoFeitoId) {
+          procedimentoFeitoToPlanoItemMap.set(
+            String(item.sessaoRetornoRealizada.procedimentoFeitoId).trim(),
+            { planoId: pId, itemId: `${baseItemId}_retorno`, isRetorno: true }
           );
         }
         if (item.procedimentoFeitoId) {
           procedimentoFeitoToPlanoItemMap.set(
             String(item.procedimentoFeitoId).trim(),
-            { planoId: pId, itemId }
+            { planoId: pId, itemId: baseItemId, isRetorno: false }
           );
         }
       }
@@ -92,12 +132,21 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
 
     if (!pfId) return;
 
-    // A. Match direto por planejamentoItemId
-    if (pItemId && itemToPlanoMap.has(pItemId)) {
-      const match = itemToPlanoMap.get(pItemId);
+    const isRetorno = Boolean(
+      proc.isRetoque ||
+      proc.procedimentoFeitoOrigemId ||
+      String(proc.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno'
+    );
+
+    // A. Match direto por planejamentoItemId (com suporte a sufixo _retorno ou ID limpo)
+    const cleanPItemId = pItemId ? String(pItemId).replace(/_retorno$/, '').trim() : null;
+    if (cleanPItemId && itemToPlanoMap.has(cleanPItemId)) {
+      const match = itemToPlanoMap.get(cleanPItemId);
+      const targetItemId = isRetorno ? `${cleanPItemId}_retorno` : cleanPItemId;
       procedimentoFeitoToPlanoItemMap.set(pfId, {
         planoId: match.planoId,
-        itemId: pItemId,
+        itemId: targetItemId,
+        isRetorno,
       });
       return;
     }
@@ -105,18 +154,27 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     // B. Match de contingência por agendaId
     if (agId && agendaIdToPlanoItemMap.has(agId)) {
       const match = agendaIdToPlanoItemMap.get(agId);
-      procedimentoFeitoToPlanoItemMap.set(pfId, match);
+      procedimentoFeitoToPlanoItemMap.set(pfId, {
+        planoId: match.planoId,
+        itemId: match.itemId,
+        isRetorno: match.isRetorno ?? isRetorno,
+      });
       return;
     }
   });
 
-  // C. Herança para retornos vinculados ao procedimento pai
+  // C. Herança para retornos vinculados ao procedimento pai via procedimentoFeitoOrigemId
   (procedimentosFeitos || []).forEach((proc) => {
     const pfId = String(proc.id || proc.procedimentoFeitoId || '').trim();
     const paiId = proc.procedimentoFeitoOrigemId ? String(proc.procedimentoFeitoOrigemId).trim() : null;
     if (pfId && paiId && !procedimentoFeitoToPlanoItemMap.has(pfId) && procedimentoFeitoToPlanoItemMap.has(paiId)) {
       const paiMatch = procedimentoFeitoToPlanoItemMap.get(paiId);
-      procedimentoFeitoToPlanoItemMap.set(pfId, paiMatch);
+      const baseItemId = String(paiMatch.itemId).replace(/_retorno$/, '').trim();
+      procedimentoFeitoToPlanoItemMap.set(pfId, {
+        planoId: paiMatch.planoId,
+        itemId: `${baseItemId}_retorno`,
+        isRetorno: true,
+      });
     }
   });
 
@@ -127,41 +185,57 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   fotos.forEach((foto) => {
     let matchedPlanoId = null;
     let matchedItemId = null;
+    let isRetornoFoto = false;
 
-    // 1. Tentar match direto por planejamentoItemId
-    if (foto.planejamentoItemId) {
-      const pItemId = String(foto.planejamentoItemId).trim();
-      if (itemToPlanoMap.has(pItemId)) {
-        matchedPlanoId = itemToPlanoMap.get(pItemId).planoId;
-        matchedItemId = pItemId;
-      }
-    }
-
-    // 2. Tentar match por procedimentoFeitoId cruzado
-    if (!matchedPlanoId && foto.procedimentoFeitoId) {
+    // 1. Tentar match por procedimentoFeitoId cruzado (mais específico: distingue pai vs retorno)
+    if (foto.procedimentoFeitoId) {
       const pfId = String(foto.procedimentoFeitoId).trim();
       if (procedimentoFeitoToPlanoItemMap.has(pfId)) {
         const match = procedimentoFeitoToPlanoItemMap.get(pfId);
         matchedPlanoId = match.planoId;
         matchedItemId = match.itemId;
+        isRetornoFoto = Boolean(match.isRetorno);
       }
     }
+
+    // 2. Tentar match direto por planejamentoItemId (fallback se foto não tem procedimentoFeitoId)
+    if (!matchedPlanoId && foto.planejamentoItemId) {
+      const rawPItemId = String(foto.planejamentoItemId).trim();
+      const cleanPItemId = rawPItemId.replace(/_retorno$/, '').trim();
+      if (itemToPlanoMap.has(cleanPItemId)) {
+        matchedPlanoId = itemToPlanoMap.get(cleanPItemId).planoId;
+        const fotoIsRetorno = Boolean(
+          foto.isRetorno ||
+          rawPItemId.endsWith('_retorno') ||
+          String(foto.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno'
+        );
+        matchedItemId = fotoIsRetorno ? `${cleanPItemId}_retorno` : cleanPItemId;
+        isRetornoFoto = fotoIsRetorno;
+      }
+    }
+
+    const enrichedFoto = {
+      ...foto,
+      matchedItemId: matchedItemId || null,
+      matchedPlanoId: matchedPlanoId || null,
+      isRetorno: isRetornoFoto,
+    };
 
     // 3. Distribuir a foto
     if (matchedPlanoId) {
       if (!fotosPorPlanoId[matchedPlanoId]) {
         fotosPorPlanoId[matchedPlanoId] = [];
       }
-      fotosPorPlanoId[matchedPlanoId].push(foto);
+      fotosPorPlanoId[matchedPlanoId].push(enrichedFoto);
 
       if (matchedItemId) {
         if (!fotosPorPlanejamentoItemId[matchedItemId]) {
           fotosPorPlanejamentoItemId[matchedItemId] = [];
         }
-        fotosPorPlanejamentoItemId[matchedItemId].push(foto);
+        fotosPorPlanejamentoItemId[matchedItemId].push(enrichedFoto);
       }
     } else {
-      fotosAvulsas.push(foto);
+      fotosAvulsas.push(enrichedFoto);
     }
   });
 

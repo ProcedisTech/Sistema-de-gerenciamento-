@@ -187,6 +187,26 @@ export function PlanoItemCard({
     );
   };
 
+  const handleAbrirAgendaItem = () => {
+    setShowDataMenu(false);
+    const resolvedId = item.planejamentoItemId || item.id;
+    onAgendarItem?.(
+      {
+        ...item,
+        id: resolvedId,
+        planejamentoItemId: resolvedId,
+        catalogoProcedimentoSaudeId: item.catalogoProcedimentoSaudeId || item.catalogoId,
+        catalogoNome: item.catalogoNome,
+        dataPlanejada: item.dataPlanejada || null,
+        data: item.dataPlanejada || null,
+        planoTitulo: planoTitulo || plano?.titulo || plano?.nome || 'Plano de Tratamento',
+        visitaLabel: visitaLabel || (item.sessaoAtiva ? 'Visita agendada' : 'No plano'),
+      },
+      () => {},
+      plano?.id,
+    );
+  };
+
   const cardClass = isRealizado
     ? 'rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-2xs'
     : selecionado
@@ -202,9 +222,9 @@ export function PlanoItemCard({
       }`}
       style={entranceDelayMs != null ? { animationDelay: `${entranceDelayMs}ms` } : undefined}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 lg:gap-4">
         {/* LADO ESQUERDO: CHECKBOX + INFOS */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
           {selecionavel && !isRealizado && (
             <button
               type="button"
@@ -251,7 +271,7 @@ export function PlanoItemCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span
-                className={`text-sm font-semibold truncate ${
+                className={`text-sm font-semibold ${
                   isRealizado
                     ? 'line-through text-slate-400'
                     : 'text-slate-800'
@@ -321,8 +341,8 @@ export function PlanoItemCard({
         </div>
 
         {/* LADO DIREITO: VALOR + AÇÕES V6 */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="text-right">
+        <div className="flex items-center justify-between lg:justify-end gap-2.5 sm:gap-3 shrink-0 flex-wrap sm:flex-nowrap border-t lg:border-t-0 border-slate-100 pt-2.5 lg:pt-0 mt-0.5 lg:mt-0">
+          <div className="text-left lg:text-right shrink-0">
             <div className="text-sm font-bold text-slate-800 tabular-nums">
               {item.isRetorno ? 'Incluso' : valorLabel}
             </div>
@@ -341,36 +361,21 @@ export function PlanoItemCard({
 
           {/* TRIO DE AÇÕES V6 */}
           {!isRealizado ? (
-            <div className="flex items-center gap-1.5 relative">
-              {/* INICIAR ATENDIMENTO */}
-              {canBaixa && (
-                <button
-                  type="button"
-                  disabled={mutating}
-                  title="Iniciar atendimento"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onIniciarAtendimento?.(item, plano);
-                  }}
-                  className="w-10 h-10 rounded-xl bg-[#00a88e] text-white flex items-center justify-center hover:bg-[#008f79] active:scale-95 shadow-2xs transition-all"
-                >
-                  <Zap className="w-4 h-4" strokeWidth={2.2} />
-                </button>
-              )}
-
+            <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap relative">
               {/* REAGENDAR PROCEDIMENTO (JÁ AGENDADO) */}
               {showReagendar && (
                 <button
                   type="button"
                   disabled={mutating}
-                  title="Reagendar procedimento"
+                  title="Mudar data do procedimento"
                   onClick={(e) => {
                     e.stopPropagation();
                     onReagendarItem?.(item, plano);
                   }}
-                  className="w-10 h-10 rounded-xl border border-teal-200 bg-teal-50/60 text-teal-700 flex items-center justify-center hover:bg-teal-100 hover:border-teal-400 active:scale-95 shadow-2xs transition-all"
+                  className="inline-flex h-9 sm:h-10 items-center gap-1.5 px-2.5 sm:px-3 rounded-xl border border-teal-200 bg-teal-50/70 text-teal-700 text-xs font-semibold hover:bg-teal-100 hover:border-teal-400 active:scale-95 shadow-2xs transition-all shrink-0 whitespace-nowrap select-none"
                 >
-                  <CalendarClock className="w-4 h-4" strokeWidth={2.2} />
+                  <CalendarClock className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                  <span>Mudar data</span>
                 </button>
               )}
 
@@ -382,17 +387,24 @@ export function PlanoItemCard({
                     disabled={mutating}
                     title={item.dataPlanejada ? 'Mudar data planejada' : 'Agendar procedimento'}
                     onClick={() => setShowDataMenu((prev) => !prev)}
-                    className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 active:scale-95 shadow-2xs transition-all"
+                    className="inline-flex h-9 sm:h-10 items-center gap-1.5 px-2.5 sm:px-3 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 active:scale-95 shadow-2xs transition-all shrink-0 whitespace-nowrap select-none"
                   >
-                    <Calendar className="w-4 h-4" strokeWidth={2.2} />
+                    <Calendar className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                    <span>{item.dataPlanejada ? 'Mudar data' : 'Agendar'}</span>
                   </button>
 
                   {showDataMenu && (
-                    <div className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-100">
-                      <div className="px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                        Agendar para quando?
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-12 z-50 w-64 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl animate-in fade-in zoom-in-95 duration-100 text-left"
+                    >
+                      <div className="flex items-center justify-between px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                        <span>Agendar para quando?</span>
+                        <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                          Vinculado ao Plano
+                        </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-1 my-1">
+                      <div className="grid grid-cols-2 gap-1 my-1.5">
                         <button
                           type="button"
                           onClick={() => handleEscolherOffset(0)}
@@ -429,33 +441,15 @@ export function PlanoItemCard({
                           Em 30 dias <span className="text-[10px] text-slate-400 font-normal ml-1">retorno</span>
                         </button>
                       </div>
-                      <div className="border-t border-slate-100 pt-1.5 mt-1">
-                        <label className="block px-2 text-[10px] font-bold text-slate-400 mb-1">
-                          Data específica:
-                        </label>
-                        <input
-                          type="date"
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              setShowDataMenu(false);
-                              const resolvedId = item.planejamentoItemId || item.id;
-                              onAgendarItem?.(
-                                {
-                                  ...item,
-                                  id: resolvedId,
-                                  planejamentoItemId: resolvedId,
-                                  catalogoProcedimentoSaudeId: item.catalogoProcedimentoSaudeId || item.catalogoId,
-                                  catalogoNome: item.catalogoNome,
-                                  dataPlanejada: e.target.value,
-                                  data: e.target.value,
-                                },
-                                () => {},
-                                plano?.id,
-                              );
-                            }
-                          }}
-                          className="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#00a88e] outline-none"
-                        />
+                      <div className="border-t border-slate-100 pt-2 mt-1">
+                        <button
+                          type="button"
+                          onClick={handleAbrirAgendaItem}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-[#00a88e] text-white text-xs font-semibold hover:bg-[#008f79] active:scale-98 transition-colors shadow-2xs"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>Escolher na Agenda...</span>
+                        </button>
                       </div>
                     </div>
                   )}
@@ -473,7 +467,7 @@ export function PlanoItemCard({
                       e.stopPropagation();
                       setShowRetornoMenu((prev) => !prev);
                     }}
-                    className="inline-flex h-10 items-center gap-1 rounded-xl border border-teal-200/90 bg-teal-50/70 px-2.5 text-xs font-bold text-teal-700 hover:border-teal-400 hover:bg-teal-100/80 active:scale-95 shadow-2xs transition-all"
+                    className="inline-flex h-9 sm:h-10 items-center gap-1.5 rounded-xl border border-teal-200/90 bg-teal-50/70 px-2.5 text-xs font-bold text-teal-700 hover:border-teal-400 hover:bg-teal-100/80 active:scale-95 shadow-2xs transition-all shrink-0 whitespace-nowrap select-none"
                   >
                     <RotateCcw className="w-3.5 h-3.5 shrink-0" strokeWidth={2.4} />
                     <span>+ Retorno</span>
@@ -535,6 +529,23 @@ export function PlanoItemCard({
                 </div>
               )}
 
+              {/* INICIAR ATENDIMENTO */}
+              {canBaixa && (
+                <button
+                  type="button"
+                  disabled={mutating}
+                  title={item.isRetorno ? 'Iniciar Retorno' : 'Iniciar atendimento'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onIniciarAtendimento?.(item, plano);
+                  }}
+                  className="inline-flex h-9 sm:h-10 items-center gap-1.5 px-2.5 sm:px-3 rounded-xl bg-[#00a88e] text-white text-xs font-bold hover:bg-[#008f79] active:scale-95 shadow-2xs transition-all shrink-0 whitespace-nowrap select-none"
+                >
+                  <Zap className="w-3.5 h-3.5 shrink-0" strokeWidth={2.4} />
+                  <span>{item.isRetorno ? 'Iniciar Retorno' : 'Iniciar'}</span>
+                </button>
+              )}
+
               {/* REMOVER DO PLANO */}
               {canCrud && (
                 <button
@@ -542,14 +553,14 @@ export function PlanoItemCard({
                   disabled={mutating}
                   title="Remover do plano"
                   onClick={() => onRemover?.(item)}
-                  className="w-10 h-10 rounded-xl border border-slate-200 bg-white text-slate-400 flex items-center justify-center hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 active:scale-95 shadow-2xs transition-all"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-slate-200 bg-white text-slate-400 flex items-center justify-center hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 active:scale-95 shadow-2xs transition-all shrink-0 select-none"
                 >
                   <Trash2 className="w-4 h-4" strokeWidth={2} />
                 </button>
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
               {onAgendarRetornoItem && !item.sessaoRetornoAtiva?.agendaId && (
                 <button
                   type="button"
@@ -573,9 +584,10 @@ export function PlanoItemCard({
                       plano.id,
                     )
                   }
-                  className="w-10 h-10 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 flex items-center justify-center hover:bg-teal-100 active:scale-95 shadow-2xs transition-all"
+                  className="inline-flex h-9 sm:h-10 items-center gap-1.5 px-2.5 sm:px-3 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 text-xs font-bold hover:bg-teal-100 active:scale-95 shadow-2xs transition-all shrink-0 whitespace-nowrap select-none"
                 >
-                  <CalendarPlus className="w-4 h-4" strokeWidth={2.2} />
+                  <CalendarPlus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.2} />
+                  <span>Agendar retorno</span>
                 </button>
               )}
               {canCrud && (
@@ -584,7 +596,7 @@ export function PlanoItemCard({
                   disabled={mutating}
                   title="Remover histórico"
                   onClick={() => onRemover?.(item)}
-                  className="w-8 h-8 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all"
+                  className="w-8 h-8 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all select-none"
                 >
                   <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
                 </button>

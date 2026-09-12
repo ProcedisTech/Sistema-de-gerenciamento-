@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Calendar, 
   Clock, 
   RotateCcw,
   Plus,
@@ -20,7 +19,7 @@ import { formatValorBrl } from '../../utils/planejamentoDraftUtils.js';
 import { toLocalDateIso } from '../../utils/agendaDateUtils.js';
 import { PlanoFotoLightbox } from './PlanoFotoLightbox.jsx';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
-import { canReagendarItem, isItemFinalizado } from '../../utils/planejamentoStatusUi.js';
+import { isItemFinalizado } from '../../utils/planejamentoStatusUi.js';
 
 function formatarTempoCadeira(minutos) {
   const m = Number(minutos) || 0;
@@ -59,9 +58,15 @@ function PlanoVisitaGaleria({
 
   const fotos = useMemo(() => {
     const map = new Map();
+    const isVisitaRetorno = Boolean(visita.isRetornoVisita);
+
     (visita.itens || []).forEach((it) => {
-      const itemId = String(it.id || it.planejamentoItemId || it.tempId || '');
-      const fotosDoItem = fotosPorPlanejamentoItemId[itemId] || [];
+      const rawId = String(it.id || it.planejamentoItemId || it.tempId || '');
+      const baseItemId = String(it.planejamentoItemId || it.id || '').replace(/_retorno$/, '');
+      const isRetornoItem = Boolean(it.isRetorno || it.tipo === 'retorno' || rawId.endsWith('_retorno'));
+      const lookupKey = isRetornoItem ? `${baseItemId}_retorno` : baseItemId;
+
+      const fotosDoItem = fotosPorPlanejamentoItemId[lookupKey] || [];
       fotosDoItem.forEach((f) => {
         const key = String(f.id || f.fotoId || f.url);
         if (!map.has(key)) map.set(key, f);
@@ -71,13 +76,25 @@ function PlanoVisitaGaleria({
     (fotosDoPlano || []).forEach((f) => {
       const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
       if (fData && fData === visita.data) {
-        const key = String(f.id || f.fotoId || f.url);
-        if (!map.has(key)) map.set(key, f);
+        const fotoIsRetorno = Boolean(f.isRetorno);
+        if (fotoIsRetorno === isVisitaRetorno) {
+          // Se a foto já tiver um matchedItemId específico, só inclui se pertencer aos itens desta visita
+          if (f.matchedItemId) {
+            const pertenceAEstaVisita = (visita.itens || []).some((it) => {
+              const baseItemId = String(it.planejamentoItemId || it.id || '').replace(/_retorno$/, '');
+              const expectedKey = isVisitaRetorno ? `${baseItemId}_retorno` : baseItemId;
+              return f.matchedItemId === expectedKey;
+            });
+            if (!pertenceAEstaVisita) return;
+          }
+          const key = String(f.id || f.fotoId || f.url);
+          if (!map.has(key)) map.set(key, f);
+        }
       }
     });
 
     return Array.from(map.values());
-  }, [visita.itens, visita.data, fotosPorPlanejamentoItemId, fotosDoPlano]);
+  }, [visita.itens, visita.data, visita.isRetornoVisita, fotosPorPlanejamentoItemId, fotosDoPlano]);
 
   // Agrupamento estrito por categoria clínica em prateleiras horizontais separadas
   const categoriasOrganizadas = useMemo(() => {
@@ -307,10 +324,11 @@ export function PlanoVisitasTimeline({
           String(sessaoRetorno?.statusCodigo).toLowerCase() === 'realizado';
         const isPaiRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
 
+        const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
         const retornoItem = {
           ...item,
-          id: `${item.id || item.planejamentoItemId}_retorno`,
-          planejamentoItemId: item.id || item.planejamentoItemId,
+          id: `${basePlanejamentoItemId}_retorno`,
+          planejamentoItemId: basePlanejamentoItemId,
           catalogoNome: `Retorno Clínico · ${item.catalogoNome || 'Procedimento'}`,
           isRetorno: true,
           tipo: 'retorno',
@@ -323,6 +341,18 @@ export function PlanoVisitasTimeline({
           sessaoRealizada: isRetornoRealizado ? sessaoRetorno : null,
           sessaoRetornoAtiva: null,
           sessaoRetornoRealizada: null,
+          procedimentoFeitoId:
+            sessaoRetorno?.procedimentoFeitoId ||
+            item.sessaoRetornoRealizada?.procedimentoFeitoId ||
+            null,
+          procedimentoFeitoOrigemId:
+            sessaoRetorno?.procedimentoFeitoOrigemId ||
+            item.sessaoRetornoAtiva?.procedimentoFeitoOrigemId ||
+            item.sessaoRetornoRealizada?.procedimentoFeitoOrigemId ||
+            item.procedimentoFeitoId ||
+            item.sessaoRealizada?.procedimentoFeitoId ||
+            item.procedimentoFeitoOrigemId ||
+            null,
           valorOrcado: 0,
           dataPaiReal:
             item.sessaoAtiva?.dataAgendamento ||
@@ -505,41 +535,17 @@ export function PlanoVisitasTimeline({
                               : `${visita.itens.length} procedimento${visita.itens.length !== 1 ? 's' : ''}`}
                         </span>
 
-                        {!todosFinalizados && canAgendar && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const primeiroItem = visita.itens[0];
-                              if (!primeiroItem) return;
-                              const itemComVisita = {
-                                ...primeiroItem,
-                                visitaLabel: `Visita ${idx + 1}${visita.isRetornoVisita ? ' (Retorno Clínico)' : ''}`,
-                              };
-                              const jaAgendado = Boolean(primeiroItem.sessaoAtiva?.agendaId) || canReagendarItem(plano, primeiroItem);
-                              if (jaAgendado && canReagendar && typeof onReagendarItem === 'function') {
-                                onReagendarItem(itemComVisita, plano);
-                              } else {
-                                onAgendarItem?.(itemComVisita, undefined, plano?.id);
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px] font-semibold transition-colors"
-                          >
-                            <Calendar className="w-3 h-3" />
-                            <span>Mudar data</span>
-                          </button>
-                        )}
-
-                        {!todosFinalizados && canBaixa && (
+                        {!todosFinalizados && canBaixa && !visita.isRetornoVisita && visita.itens.length > 1 && (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onIniciarAtendimentoVisita?.(visita, plano);
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold shadow-2xs transition-all"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00a88e] hover:bg-[#008f79] text-white text-xs font-bold shadow-2xs transition-all select-none active:scale-95"
                           >
-                            <Zap className="w-3 h-3" />
-                            <span>{visita.isRetornoVisita ? 'Iniciar Retorno' : 'Iniciar visita'}</span>
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Iniciar visita ({visita.itens.length})</span>
                           </button>
                         )}
                       </div>

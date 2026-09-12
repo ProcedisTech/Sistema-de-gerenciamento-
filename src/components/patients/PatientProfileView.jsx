@@ -101,6 +101,7 @@ import { GaleriaMapaThumb } from './galeria/GaleriaMapaThumb.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
+import { AtendimentosAvulsosTab } from './AtendimentosAvulsosTab.jsx';
 import { AnamneseDocumentoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
 import {
@@ -1653,7 +1654,7 @@ export function PatientProfileView({
       setApiGaleriaItems([]);
       return undefined;
     }
-    if (patientDetailTab !== 'planos' && patientDetailTab !== 'geral') {
+    if (patientDetailTab !== 'planos' && patientDetailTab !== 'geral' && patientDetailTab !== 'avulsos') {
       return undefined;
     }
     let cancelled = false;
@@ -2259,9 +2260,10 @@ export function PatientProfileView({
           ) : null}
 
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
-            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
+            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch gap-0.5 overflow-x-auto no-scrollbar border-b border-[#e2e8f0] bg-white px-2 sm:gap-1 sm:px-3">
               {[
                 { key: 'planos', label: 'Planos & Evolução', title: 'Planos de Tratamento & Evolução Fotográfica', icon: BookOpen },
+                { key: 'avulsos', label: 'Atendimentos Avulsos', title: 'Atendimentos e Procedimentos Avulsos', icon: Sparkles },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 canStartAnamnese && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 canSeeDocumentos && { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
@@ -2275,13 +2277,13 @@ export function PatientProfileView({
                     title={title}
                     aria-label={title}
                     onClick={() => setPatientDetailTab(key)}
-                    className={`flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-0.5 whitespace-nowrap px-2 py-2.5 text-[11px] font-semibold transition-colors sm:gap-1 sm:px-3 sm:text-[12px] ${active
+                    className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-2.5 py-2.5 text-[12px] font-semibold transition-colors sm:px-3 sm:text-[12.5px] ${active
                       ? '-mb-px border-b-2 border-[#00a88e] text-[#00a88e]'
                       : 'border-b-2 border-transparent text-[#64748b] hover:text-[#0f172a]'
                       }`}
                   >
-                    <TabIcon className="h-3.5 w-3.5 shrink-0 sm:mr-1" strokeWidth={2.25} aria-hidden />
-                    <span className="hidden truncate sm:inline">{label}</span>
+                    <TabIcon className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                    <span className="whitespace-nowrap">{label}</span>
                   </button>
                 );
               })}
@@ -2890,6 +2892,16 @@ export function PatientProfileView({
                     onStartAttendance?.(p || selectedPatient, opts)
                   }
                   onPlanoConcluido={() => onPlanoConcluido?.(selectedPatient)}
+                />
+              )}
+
+              {patientDetailTab === 'avulsos' && (
+                <AtendimentosAvulsosTab
+                  pacienteId={selectedPatient?.id ?? null}
+                  paciente={selectedPatient}
+                  roleUserId={roleUserId ?? null}
+                  procedimentosFeitos={sortedApiProcedures}
+                  galeriaFotosInicial={apiGaleriaItems}
                 />
               )}
 

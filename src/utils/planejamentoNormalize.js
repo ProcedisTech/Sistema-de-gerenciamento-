@@ -201,6 +201,10 @@ export function normalizePlanoItem(raw) {
 
     sessaoRetornoRealizada: pickSessaoRetornoRealizada(sessoes),
 
+    sessoes,
+
+    procedimentoFeitoId: raw.procedimentoFeitoId ?? raw.procedimento_feito_id ?? null,
+
   };
 
 }
