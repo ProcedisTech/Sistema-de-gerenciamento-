@@ -55,7 +55,7 @@ export function mapAgendaDtoToDashboardRow(dto) {
   const MODALIDADE_LABEL = {
     retorno: 'Retorno',
     avaliacao: 'Avaliação',
-    consulta: 'Consulta Inicial',
+    consulta: 'Consulta',
   };
 
   let procedimentoNome;

@@ -43,11 +43,9 @@ import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
 import { formatDateBR } from '../../utils/replaceTermVariables';
-import { convertToWebP } from '../../utils/imageUtils.js';
 import {
   fetchNextAppointmentIsoForPaciente,
   latestProcedureOccurredInstantIso,
-  procedureOccurredInstantIso,
 } from '../../utils/patientProfileDerivedDates.js';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
@@ -89,26 +87,21 @@ import {
   flattenNestedTimelineRoots,
 } from './procedureTimelineUtils.js';
 import {
-  formatPacienteGaleriaError,
   normalizePacienteGaleriaResponse,
-  filterGaleriaItemsForUi,
   groupGaleriaItemsBySession,
-  formatGaleriaLegendaForUpload,
-  itemMesReferenciaISO,
   formatDataSessaoPtBr,
   GALERIA_CATEGORIA,
   GALERIA_CATEGORIA_LABELS,
 } from '../../utils/pacienteGaleria.js';
 import {
   GaleriaArquivoImage,
-  GaleriaLocalImage,
 } from './GaleriaArquivoImage.jsx';
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { GaleriaMapaThumb } from './galeria/GaleriaMapaThumb.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
-import { GaleriaTab } from './galeria/GaleriaTab.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
+import { AtendimentosAvulsosTab } from './AtendimentosAvulsosTab.jsx';
 import { AnamneseDocumentoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
 import {
@@ -125,23 +118,6 @@ import { mapGetToState as mapPerfilClinicoResponseToState } from '../../hooks/us
 import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
 import { AlertasClinicosPanel, AlertasGroupCards } from './AlertasClinicosPanel.jsx';
 import { buildGroupedChips } from './alertaGrouping.js';
-
-function resolveProcedimentoFeitoIdForUpload(sess, categoria) {
-  const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
-  const inCat = fotos.filter((f) => (f.categoria || 'outro') === categoria);
-  const fromCat = inCat.find((f) => f?.procedimentoFeitoId)?.procedimentoFeitoId;
-  if (fromCat) return String(fromCat).trim();
-  const any = fotos.find((f) => f?.procedimentoFeitoId)?.procedimentoFeitoId;
-  return any != null ? String(any).trim() : null;
-}
-
-function resolveNomeProcedimentoForUpload(sess, categoria) {
-  const fotos = Array.isArray(sess?.fotos) ? sess.fotos : [];
-  const inCat = fotos.filter((f) => (f.categoria || 'outro') === categoria);
-  const nomeCat = inCat.map((f) => (f.nomeProcedimento || '').trim()).find(Boolean);
-  if (nomeCat) return nomeCat;
-  return (fotos.map((f) => (f.nomeProcedimento || '').trim()).find(Boolean)) || '';
-}
 
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
@@ -358,17 +334,15 @@ function ProntuarioSessionPhotos({ fotosProc, onPreviewPhoto, selectedPatientId 
                       e.stopPropagation();
                       setSelectedStage(tab.id);
                     }}
-                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                      active
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${active
                         ? 'bg-[#00a88e] text-white shadow-2xs'
                         : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
-                    }`}
+                      }`}
                   >
                     <span>{tab.label}</span>
                     <span
-                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${
-                        active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                      }`}
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
                     >
                       {tab.count}
                     </span>
@@ -696,13 +670,13 @@ function AnamneseTab({
   const rotuloPreenchimento = (an) => {
     const data = an.dataHora
       ? new Date(an.dataHora).toLocaleString('pt-BR', {
-          timeZone: 'America/Sao_Paulo',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
       : 'sem data';
     const estado = an.assinaturaPaciente ? 'Assinada' : 'Aguardando assinatura';
     return `${data} · ${an.anamneseNome || 'Anamnese'} · ${estado}`;
@@ -876,11 +850,13 @@ export function PatientProfileView({
   getPatientInitials,
   onStartAttendance,
   onAgendarPaciente,
+  onAgendarPlanoItem,
+  onAgendarRetornoPlanoItem,
   onReagendarPlanoItem,
   onPlanoConcluido,
   onUpdatePatient,
   onAddGalleryFiles: _onAddGalleryFiles,
-  onDeleteGalleryPhoto,
+  onDeleteGalleryPhoto: _onDeleteGalleryPhoto,
   mergePatientById,
   refreshPatients,
   roleUserId,
@@ -893,7 +869,7 @@ export function PatientProfileView({
   patientListBump,
 }) {
   const toast = useToast();
-  const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
+  const { isNivel1: _isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
   const { orgId } = useOrg();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
@@ -922,23 +898,9 @@ export function PatientProfileView({
   const [cadastroReadOnly, setCadastroReadOnly] = useState(true);
   /** Preview da galeria: `authFetch` quando a imagem vem da API (precisa X-Org-Id). */
   const [galleryPreview, setGalleryPreview] = useState(null);
-  const [sessoesExpandidas, setSessoesExpandidas] = useState({});
-  const [categoriasEmEdicao, setCategoriasEmEdicao] = useState({});
-  const [modoComparar, setModoComparar] = useState(false);
-  const [compararSelecionadas, setCompararSelecionadas] = useState({
-    avaliacao: null,
-    posImediato: null,
-    retorno: null,
-  });
-  const [compararModalOpen, setCompararModalOpen] = useState(false);
+  const [_galeriaBackend, setGaleriaBackend] = useState('loading');
   const [quickNoteText, setQuickNoteText] = useState('');
-  /** 'loading' | 'api' = lista no servidor; 'local' = fallback (fotos da jornada / legado). */
-  const [galeriaBackend, setGaleriaBackend] = useState('loading');
   const [apiGaleriaItems, setApiGaleriaItems] = useState([]);
-  const [galeriaFilterCategoria, setGaleriaFilterCategoria] = useState('all');
-  const [galeriaFilterMes, setGaleriaFilterMes] = useState('all');
-  const [galeriaFilterProcedimento, setGaleriaFilterProcedimento] = useState('all');
-  const [galeriaUploadBusy, setGaleriaUploadBusy] = useState(false);
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [gerarPdfBusy, setGerarPdfBusy] = useState(false);
   const gerarPdfInFlightRef = useRef(false);
@@ -1009,19 +971,6 @@ export function PatientProfileView({
     return null;
   }, [proximoRetornoKpiDisplay]);
 
-  const handleCompararFotoClick = (foto) => {
-    if (foto._isRetornoSession) {
-      setCompararSelecionadas((prev) => ({ ...prev, retorno: foto }));
-      return;
-    }
-    const cat = foto.categoria || 'outro';
-    if (cat === 'antes' || cat === 'avaliacao') {
-      setCompararSelecionadas((prev) => ({ ...prev, avaliacao: foto }));
-    } else if (cat === 'depois') {
-      setCompararSelecionadas((prev) => ({ ...prev, posImediato: foto }));
-    }
-  };
-
   const refreshGaleriaFromApi = useCallback(async () => {
     const id = selectedPatient?.id;
     if (!id) return;
@@ -1040,23 +989,7 @@ export function PatientProfileView({
   }, [selectedPatient?.id]);
 
   useEffect(() => {
-    const preenchidos = [
-      compararSelecionadas.avaliacao,
-      compararSelecionadas.posImediato,
-      compararSelecionadas.retorno,
-    ].filter(Boolean).length;
-    if (preenchidos >= 2) {
-      setCompararModalOpen(true);
-    }
-  }, [compararSelecionadas]);
-
-  useEffect(() => {
-    setGaleriaFilterCategoria('all');
-    setGaleriaFilterMes('all');
-    setGaleriaFilterProcedimento('all');
     setProntuarioExpanded({});
-    setSessoesExpandidas({});
-    setCategoriasEmEdicao({});
     setRelatoModal({ open: false, procedimentoFeitoId: null, pacienteId: null });
     setProntuarioVisibleCount(PRONTUARIO_PAGE_SIZE);
     setApiProcedures([]);
@@ -1608,113 +1541,9 @@ export function PatientProfileView({
     }
   };
 
-  const capturedPhotos = useMemo(() => {
-    const list = Array.isArray(patient.evaluationCapturedPhotos)
-      ? patient.evaluationCapturedPhotos
-      : [];
-    return list
-      .filter((p) => p?.url)
-      .map((p, idx) => ({
-        id: `cap_${idx}`,
-        url: p.url,
-        source: p?.meta?.source || 'camera',
-        capturedAt: p?.meta?.capturedAt,
-        fileName: p?.meta?.fileName || `Foto ${idx + 1}`,
-        index: idx,
-      }));
-  }, [patient]);
 
-  const fallbackGalleryPhotos = useMemo(() => {
-    const sessions = Array.isArray(patient.galeria) ? patient.galeria : [];
-    const flattened = [];
-    sessions.forEach((session, sIdx) => {
-      (session.fotos || []).forEach((foto, fIdx) => {
-        if (!foto?.url) return;
-        flattened.push({
-          id: `legacy_${sIdx}_${fIdx}`,
-          url: foto.url,
-          source: 'legacy',
-          fileName: `${session.sessao || 'Sessao'} - ${foto.label || 'Foto'}`,
-          index: -1,
-        });
-      });
-    });
-    return flattened;
-  }, [patient]);
 
-  const galleryItemsForGrid = useMemo(() => {
-    if (galeriaBackend === 'api') {
-      return apiGaleriaItems.map((it) => ({
-        id: `api_${it.serverId}`,
-        url: it.url,
-        fileName: it.fileName,
-        legenda: it.legenda,
-        dataReferencia: it.dataReferencia,
-        serverId: it.serverId,
-        source: 'api',
-        index: -1,
-        categoria: it.categoria,
-        descricaoLegenda: it.descricaoLegenda,
-        nomeProcedimento: it.nomeProcedimento,
-      }));
-    }
-    return capturedPhotos.length > 0 ? capturedPhotos : fallbackGalleryPhotos;
-  }, [galeriaBackend, apiGaleriaItems, capturedPhotos, fallbackGalleryPhotos]);
 
-  const galeriaMesesOpcoes = useMemo(() => {
-    const set = new Set();
-    (apiGaleriaItems || []).forEach((it) => {
-      const m = itemMesReferenciaISO(it);
-      if (m) set.add(m);
-    });
-    return Array.from(set).sort().reverse();
-  }, [apiGaleriaItems]);
-
-  const galeriaProcedimentosOpcoes = useMemo(() => {
-    const set = new Set();
-    (apiGaleriaItems || []).forEach((it) => {
-      const n = (it.nomeProcedimento || '').trim();
-      if (n) set.add(n);
-      const d = (it.descricaoLegenda || '').trim();
-      if (d && !n) set.add(d);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [apiGaleriaItems]);
-
-  const proceduresById = useMemo(() => {
-    const map = new Map();
-    (apiProcedures || []).forEach((p) => {
-      if (p?.id != null) map.set(String(p.id), p);
-    });
-    return map;
-  }, [apiProcedures]);
-
-  const galeriaSessionsForView = useMemo(() => {
-    if (galeriaBackend !== 'api') return [];
-    const filtered = filterGaleriaItemsForUi(apiGaleriaItems, {
-      categoria: galeriaFilterCategoria,
-      mesAno: galeriaFilterMes,
-      procedimentoToken: galeriaFilterProcedimento,
-    });
-    const sessions = groupGaleriaItemsBySession(filtered);
-    return sessions.map((sess) => {
-      const proc = proceduresById.get(String(sess.fotos[0]?.procedimentoFeitoId));
-      const origemId = proc?.procedimentoFeitoOrigemId ?? proc?.procedimento_feito_origem_id;
-      const origem = origemId != null ? proceduresById.get(String(origemId)) : null;
-      const isRetorno = Boolean(origem);
-      const origemDataIso = origem ? procedureOccurredInstantIso(origem) : null;
-      const fotos = isRetorno
-        ? sess.fotos.map((f) => ({ ...f, _isRetornoSession: true }))
-        : sess.fotos;
-      return {
-        ...sess,
-        fotos,
-        isRetorno,
-        origemProcedimentoNome: origem?.procedimentoNome || null,
-        origemDataLabel: origemDataIso ? formatDataSessaoPtBr(origemDataIso.slice(0, 10)) : null,
-      };
-    });
-  }, [galeriaBackend, apiGaleriaItems, galeriaFilterCategoria, galeriaFilterMes, galeriaFilterProcedimento, proceduresById]);
 
   const dismissBirthdayModal = useCallback(() => {
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
@@ -1825,7 +1654,7 @@ export function PatientProfileView({
       setApiGaleriaItems([]);
       return undefined;
     }
-    if (patientDetailTab !== 'galeria' && patientDetailTab !== 'geral') {
+    if (patientDetailTab !== 'planos' && patientDetailTab !== 'geral' && patientDetailTab !== 'avulsos') {
       return undefined;
     }
     let cancelled = false;
@@ -1990,63 +1819,7 @@ export function PatientProfileView({
     [apiGaleriaItems],
   );
 
-  const handleGaleriaUpload = useCallback(
-    async (sess, categoria, file) => {
-      const pacienteId = selectedPatient?.id;
-      if (!pacienteId || !file) return;
-      if (!roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
-        toast.warning(
-          'Selecione o profissional na barra de contexto para enviar fotos à galeria.',
-        );
-        return;
-      }
-      const procedimentoFeitoId = resolveProcedimentoFeitoIdForUpload(sess, categoria);
-      setGaleriaUploadBusy(true);
-      try {
-        const webp = await convertToWebP(file, 0.85, 1920);
-        const tipoFotoCodigo =
-          categoria === GALERIA_CATEGORIA.ANTES
-            ? 'ANTES'
-            : categoria === GALERIA_CATEGORIA.PLANEJAMENTO
-              ? 'PLANEJAMENTO'
-              : categoria === GALERIA_CATEGORIA.AVALIACAO
-                ? 'AVALIACAO'
-                : categoria === GALERIA_CATEGORIA.MAPA
-                  ? 'MAPA'
-                  : categoria === GALERIA_CATEGORIA.DEPOIS
-                    ? 'DEPOIS'
-                    : null;
-        const uploadOpts = {
-          roleUserId,
-          procedimentoFeitoId: procedimentoFeitoId ?? undefined,
-          dataReferencia: sess.dataISO !== 'sem-data' ? sess.dataISO : undefined,
-          legenda: formatGaleriaLegendaForUpload(
-            categoria,
-            resolveNomeProcedimentoForUpload(sess, categoria),
-          ),
-        };
-        if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
-        await pacientesGaleriaApi.upload(pacienteId, webp, uploadOpts);
-        await refreshGaleriaFromApi();
-        toast.success('Foto adicionada à galeria.');
-      } catch (e) {
-        toast.error(formatPacienteGaleriaError(e));
-      } finally {
-        setGaleriaUploadBusy(false);
-      }
-    },
-    [selectedPatient?.id, roleUserId, refreshGaleriaFromApi, toast],
-  );
 
-  const galeriaUploadDisabled =
-    isNivel1 || galeriaUploadBusy || !roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId || ''));
-  const galeriaUploadDisabledTitle = isNivel1
-    ? 'Sem permissão'
-    : !roleUserId || !/^[0-9a-f-]{36}$/i.test(String(roleUserId || ''))
-      ? 'Selecione o profissional na barra de contexto'
-      : galeriaUploadBusy
-        ? 'Enviando…'
-        : undefined;
 
   const toggleProntuarioRow = useCallback((rowKey) => {
     setProntuarioExpanded((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }));
@@ -2149,21 +1922,7 @@ export function PatientProfileView({
     }
   };
 
-  const handleRemoveGalleryItem = async (item) => {
-    if (item.source === 'api' && item.serverId && selectedPatient?.id) {
-      try {
-        await pacientesGaleriaApi.remove(selectedPatient.id, item.serverId);
-        setApiGaleriaItems((prev) => prev.filter((x) => x.serverId !== item.serverId));
-        toast.success('Foto removida da galeria.');
-      } catch (e) {
-        toast.error(formatPacienteGaleriaError(e));
-      }
-      return;
-    }
-    if (typeof item.index === 'number' && item.index >= 0) {
-      onDeleteGalleryPhoto?.(selectedPatient.cpf, item.index);
-    }
-  };
+
 
   const handleAddQuickNote = async () => {
     const text = quickNoteText.trim();
@@ -2501,12 +2260,12 @@ export function PatientProfileView({
           ) : null}
 
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
-            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
+            <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch gap-0.5 overflow-x-auto no-scrollbar border-b border-[#e2e8f0] bg-white px-2 sm:gap-1 sm:px-3">
               {[
-                { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
+                { key: 'planos', label: 'Planos & Evolução', title: 'Planos de Tratamento & Evolução Fotográfica', icon: BookOpen },
+                { key: 'avulsos', label: 'Atendimentos Avulsos', title: 'Atendimentos e Procedimentos Avulsos', icon: Sparkles },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 canStartAnamnese && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
-                canSeeGaleria && { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
                 canSeeDocumentos && { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
               ].filter(Boolean).map(({ key, label, title, icon }) => {
                 const TabIcon = icon;
@@ -2518,13 +2277,13 @@ export function PatientProfileView({
                     title={title}
                     aria-label={title}
                     onClick={() => setPatientDetailTab(key)}
-                    className={`flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-0.5 whitespace-nowrap px-2 py-2.5 text-[11px] font-semibold transition-colors sm:gap-1 sm:px-3 sm:text-[12px] ${active
-                        ? '-mb-px border-b-2 border-[#00a88e] text-[#00a88e]'
-                        : 'border-b-2 border-transparent text-[#64748b] hover:text-[#0f172a]'
+                    className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-2.5 py-2.5 text-[12px] font-semibold transition-colors sm:px-3 sm:text-[12.5px] ${active
+                      ? '-mb-px border-b-2 border-[#00a88e] text-[#00a88e]'
+                      : 'border-b-2 border-transparent text-[#64748b] hover:text-[#0f172a]'
                       }`}
                   >
-                    <TabIcon className="h-3.5 w-3.5 shrink-0 sm:mr-1" strokeWidth={2.25} aria-hidden />
-                    <span className="hidden truncate sm:inline">{label}</span>
+                    <TabIcon className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                    <span className="whitespace-nowrap">{label}</span>
                   </button>
                 );
               })}
@@ -2659,10 +2418,10 @@ export function PatientProfileView({
                                       : '—';
                                     const childTimeLabel = childCriado
                                       ? childCriado.toLocaleTimeString('pt-BR', {
-                                          timeZone: 'America/Sao_Paulo',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })
+                                        timeZone: 'America/Sao_Paulo',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })
                                       : '';
                                     const childNomeProc = child.procedimentoNome || child.nome || 'Procedimento';
                                     const childFotos = galeriaItemsForProcedure(child);
@@ -2767,17 +2526,15 @@ export function PatientProfileView({
                                 setProntuarioFilter(f.id);
                                 setProntuarioVisibleCount(PRONTUARIO_PAGE_SIZE);
                               }}
-                              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                                active
+                              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${active
                                   ? 'bg-[#00a88e] text-white shadow-2xs'
                                   : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
-                              }`}
+                                }`}
                             >
                               <span>{f.label}</span>
                               <span
-                                className={`rounded-full px-1.5 py-0.2 text-[10px] ${
-                                  active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                                }`}
+                                className={`rounded-full px-1.5 py-0.2 text-[10px] ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                                  }`}
                               >
                                 {f.count}
                               </span>
@@ -2800,8 +2557,8 @@ export function PatientProfileView({
                     !sortedApiProcedures.length ? (
                       <p className="text-center py-10 text-[#94a3b8] text-[14px] font-medium">Nenhum procedimento registrado ainda.</p>
                     ) : (
-                        <>
-                          <ProcedureTimelineRail>
+                      <>
+                        <ProcedureTimelineRail>
                           {flatProntuarioVisible.map(({ proc, depth }, idx) => {
                             const rowKey =
                               proc.id != null && proc.id !== ''
@@ -2810,8 +2567,8 @@ export function PatientProfileView({
                             const open = Boolean(prontuarioExpanded[rowKey]);
                             const dataLabel = proc.criadoEm
                               ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) +
-                                ' · ' +
-                                new Date(proc.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                              ' · ' +
+                              new Date(proc.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
                               : '—';
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                             const fotosProc = galeriaItemsForProcedure(proc);
@@ -2843,18 +2600,16 @@ export function PatientProfileView({
                             return (
                               <ProcedureTimelineEntry key={rowKey} depth={depth}>
                                 <div
-                                  className={`overflow-hidden rounded-xl border transition-all ${
-                                    depth > 0
+                                  className={`overflow-hidden rounded-xl border transition-all ${depth > 0
                                       ? 'border-sky-200/80 border-l-4 border-l-sky-500 bg-[#f0f9ff]/40 shadow-2xs hover:shadow-xs'
                                       : 'border-[#e2e8f0] border-l-4 border-l-[#00a88e] bg-white shadow-xs hover:shadow-sm'
-                                  }`}
+                                    }`}
                                 >
                                   <button
                                     type="button"
                                     onClick={() => toggleProntuarioRow(rowKey)}
-                                    className={`flex w-full min-h-[44px] items-start gap-2.5 px-3.5 py-3 text-left transition-colors sm:gap-3.5 sm:px-4 sm:py-3.5 ${
-                                      depth > 0 ? 'hover:bg-sky-50/50' : 'hover:bg-[#f8fafc]'
-                                    }`}
+                                    className={`flex w-full min-h-[44px] items-start gap-2.5 px-3.5 py-3 text-left transition-colors sm:gap-3.5 sm:px-4 sm:py-3.5 ${depth > 0 ? 'hover:bg-sky-50/50' : 'hover:bg-[#f8fafc]'
+                                      }`}
                                     aria-expanded={open}
                                   >
                                     <div className="min-w-0 flex-1">
@@ -2929,30 +2684,26 @@ export function PatientProfileView({
                                           e.stopPropagation();
                                           toggleProntuarioRetornos(proc.id);
                                         }}
-                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${
-                                          expandedProntuarioRetornosMap[proc.id]
+                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${expandedProntuarioRetornosMap[proc.id]
                                             ? 'border-2 border-sky-400 bg-sky-100 text-sky-950 shadow-xs'
                                             : 'border-2 border-sky-300/90 bg-sky-50/90 text-sky-950 shadow-2xs hover:border-sky-400 hover:bg-sky-100'
-                                        }`}
+                                          }`}
                                       >
                                         <span className="flex items-center gap-1.5">
                                           <span>🔄</span>
                                           <span>
                                             {expandedProntuarioRetornosMap[proc.id]
-                                              ? `Ocultar ${proc.retornos.length} ${
-                                                  proc.retornos.length === 1 ? 'retorno vinculado' : 'retornos vinculados'
-                                                }`
-                                              : `Ver ${proc.retornos.length} ${
-                                                  proc.retornos.length === 1 ? 'retorno vinculado' : 'retornos vinculados'
-                                                }`}
+                                              ? `Ocultar ${proc.retornos.length} ${proc.retornos.length === 1 ? 'retorno vinculado' : 'retornos vinculados'
+                                              }`
+                                              : `Ver ${proc.retornos.length} ${proc.retornos.length === 1 ? 'retorno vinculado' : 'retornos vinculados'
+                                              }`}
                                           </span>
                                         </span>
                                         <span className="flex items-center gap-1 text-[10px] font-bold text-sky-800">
                                           <span>{expandedProntuarioRetornosMap[proc.id] ? 'Recolher' : 'Expandir'}</span>
                                           <ChevronDown
-                                            className={`h-3.5 w-3.5 transition-transform duration-200 ${
-                                              expandedProntuarioRetornosMap[proc.id] ? 'rotate-180' : ''
-                                            }`}
+                                            className={`h-3.5 w-3.5 transition-transform duration-200 ${expandedProntuarioRetornosMap[proc.id] ? 'rotate-180' : ''
+                                              }`}
                                             strokeWidth={2.5}
                                           />
                                         </span>
@@ -3100,16 +2851,15 @@ export function PatientProfileView({
                               label={`Carregar mais procedimentos (+${Math.min(
                                 PRONTUARIO_PAGE_SIZE,
                                 filteredProntuarioRoots.length - prontuarioRootsVisible.length,
-                              )}) · Exibindo ${prontuarioRootsVisible.length} de ${
-                                filteredProntuarioRoots.length
-                              }`}
+                              )}) · Exibindo ${prontuarioRootsVisible.length} de ${filteredProntuarioRoots.length
+                                }`}
                             />
                           </div>
                         )}
                       </>
                     ))}
-                  </div>
-                )}
+                </div>
+              )}
 
               {patientDetailTab === 'anamnese' && (
                 <AnamneseTab
@@ -3124,46 +2874,34 @@ export function PatientProfileView({
                 <PlanosTab
                   variant="profile"
                   pacienteId={selectedPatient?.id ?? null}
+                  paciente={selectedPatient}
+                  pacienteNome={selectedPatient?.nome || selectedPatient?.nomeCompleto || ''}
                   roleUserId={roleUserId ?? null}
+                  procedimentosFeitos={sortedApiProcedures}
+                  galeriaFotosInicial={apiGaleriaItems}
+                  onAgendarItem={(item, onSaved) =>
+                    onAgendarPlanoItem?.(selectedPatient, item, onSaved)
+                  }
+                  onAgendarRetornoItem={(item, onSaved) =>
+                    onAgendarRetornoPlanoItem?.(selectedPatient, item, onSaved)
+                  }
                   onReagendarItem={(item, plano, onSaved) =>
                     onReagendarPlanoItem?.(selectedPatient, item, plano, onSaved)
+                  }
+                  onStartAttendance={(p, opts) =>
+                    onStartAttendance?.(p || selectedPatient, opts)
                   }
                   onPlanoConcluido={() => onPlanoConcluido?.(selectedPatient)}
                 />
               )}
 
-              {patientDetailTab === 'galeria' && (
-                <GaleriaTab
-                  isNivel1={isNivel1}
-                  galeriaBackend={galeriaBackend}
-                  selectedPatientId={selectedPatient?.id}
-                  galeriaSessionsForView={galeriaSessionsForView}
-                  galeriaMesesOpcoes={galeriaMesesOpcoes}
-                  galeriaProcedimentosOpcoes={galeriaProcedimentosOpcoes}
-                  galeriaFilterCategoria={galeriaFilterCategoria}
-                  setGaleriaFilterCategoria={setGaleriaFilterCategoria}
-                  galeriaFilterMes={galeriaFilterMes}
-                  setGaleriaFilterMes={setGaleriaFilterMes}
-                  galeriaFilterProcedimento={galeriaFilterProcedimento}
-                  setGaleriaFilterProcedimento={setGaleriaFilterProcedimento}
-                  apiGaleriaItemsLength={apiGaleriaItems.length}
-                  galleryItemsForGrid={galleryItemsForGrid}
-                  sessoesExpandidas={sessoesExpandidas}
-                  setSessoesExpandidas={setSessoesExpandidas}
-                  categoriasEmEdicao={categoriasEmEdicao}
-                  setCategoriasEmEdicao={setCategoriasEmEdicao}
-                  modoComparar={modoComparar}
-                  setModoComparar={setModoComparar}
-                  compararSelecionadas={compararSelecionadas}
-                  setCompararSelecionadas={setCompararSelecionadas}
-                  compararModalOpen={compararModalOpen}
-                  setCompararModalOpen={setCompararModalOpen}
-                  onCompararFotoClick={handleCompararFotoClick}
-                  onRemoveGalleryItem={handleRemoveGalleryItem}
-                  onUploadCategoria={handleGaleriaUpload}
-                  onLocalPreview={setGalleryPreview}
-                  uploadDisabled={galeriaUploadDisabled}
-                  uploadDisabledTitle={galeriaUploadDisabledTitle}
+              {patientDetailTab === 'avulsos' && (
+                <AtendimentosAvulsosTab
+                  pacienteId={selectedPatient?.id ?? null}
+                  paciente={selectedPatient}
+                  roleUserId={roleUserId ?? null}
+                  procedimentosFeitos={sortedApiProcedures}
+                  galeriaFotosInicial={apiGaleriaItems}
                 />
               )}
 
@@ -3325,8 +3063,8 @@ export function PatientProfileView({
                     <div
                       key={nota.id || i}
                       className={`rounded-lg border p-2 ${i % 2 === 0
-                          ? 'border-amber-100/90 bg-amber-50/70'
-                          : 'border-emerald-100/90 bg-emerald-50/70'
+                        ? 'border-amber-100/90 bg-amber-50/70'
+                        : 'border-emerald-100/90 bg-emerald-50/70'
                         }`}
                     >
                       <p className="text-[13px] text-[#0f172a]">{nota.texto}</p>

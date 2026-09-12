@@ -83,8 +83,14 @@ export function canDarBaixaItem(plano, item) {
 export function canReagendarItem(plano, item) {
   if (!plano || !item) return false;
   if (plano.statusCodigo !== 'ativo') return false;
-  if (!isItemAgendado(item.statusItem ?? item.statusItemNome)) return false;
+  if (isItemFinalizado(item.statusItem ?? item.statusItemNome)) return false;
+  if (isItemCancelado(item.statusItem ?? item.statusItemNome)) return false;
+
   const sessao = item.sessaoAtiva;
+  const temSessaoAtiva = Boolean(sessao?.agendaId);
+  const statusItemAgendado = isItemAgendado(item.statusItem ?? item.statusItemNome);
+  if (!temSessaoAtiva && !statusItemAgendado) return false;
+
   if (sessao?.agendaId) {
     const statusSessao = normalizeCodigo(sessao.statusCodigo ?? sessao.status ?? '');
     if (['reagendado', 'cancelado', 'realizado'].includes(statusSessao)) return false;

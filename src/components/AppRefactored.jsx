@@ -62,7 +62,7 @@ import {
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
-import { pickSessaoAtiva } from '../utils/planejamentoSessoes.js';
+import { pickSessaoAtiva, pickSessaoRetornoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
@@ -526,7 +526,7 @@ function AppRefactoredInner() {
 
   const kpiState = usePatientsKpi({ authEnabled: authSessionReady, bump: patientListBump });
 
-  const onAgendaPatientSyncRef = React.useRef(() => {});
+  const onAgendaPatientSyncRef = React.useRef(() => { });
 
   const agendaSchedule = useAgendaPage({
     patients,
@@ -594,19 +594,21 @@ function AppRefactoredInner() {
 
   const handleAgendarPlanoItem = React.useCallback(
     (paciente, item, onSaved) => {
-      if (!paciente?.id || !roleUserId || !item?.catalogoProcedimentoSaudeId) return;
-      const catId = String(item.catalogoProcedimentoSaudeId).trim();
+      const catId = String(item?.catalogoProcedimentoSaudeId || item?.catalogoId || '').trim();
+      if (!paciente?.id || !roleUserId || !catId) return;
       const planejamentoItemId = String(item.planejamentoItemId ?? item.id ?? '').trim();
       if (!isRealUuid(planejamentoItemId)) {
         toast.error('Salve o plano antes de agendar este procedimento.');
         return;
       }
+      const targetData = item?.dataPlanejada || item?.data || null;
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
         catalogoProcedimentoSaudeIds: [catId],
         planejamentoItemId,
         planejamentoItemIdPorCatalogo: {
           [catId]: planejamentoItemId,
         },
+        data: targetData,
         profissionalRoleUserId: roleUserId,
         onAgendaSaved: onSaved,
       });
@@ -622,11 +624,31 @@ function AppRefactoredInner() {
         toast.error('Salve o plano antes de agendar retorno deste procedimento.');
         return;
       }
+      const targetData = item.dataRetornoSugerida || item.data || null;
+      const dataPai =
+        item.dataPaiReal ||
+        item.sessaoAtiva?.dataAgendamento ||
+        item.sessaoRealizada?.dataAgendamento ||
+        item.dataRealizacao ||
+        item.dataPlanejada ||
+        null;
+      const horaPai =
+        item.horaPaiReal ||
+        item.sessaoAtiva?.horaInicio ||
+        item.sessaoRealizada?.horaInicio ||
+        null;
+
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
         modoRetorno: true,
         planejamentoItemId,
         retornoOrigemNome: String(item.catalogoNome ?? '').trim() || 'Procedimento',
-        retornoDataPlanejada: item.dataPlanejada ?? null,
+        retornoDataPlanejada: dataPai,
+        retornoHoraPai: horaPai,
+        retornoPlanoTitulo: item.planoTitulo || null,
+        retornoVisitaLabel: item.visitaLabel || null,
+        retornoStatusPai: item.statusPai || null,
+        data: targetData,
+        dataAgendamento: targetData,
         profissionalRoleUserId: roleUserId,
         onAgendaSaved: onSaved,
       });
@@ -652,26 +674,46 @@ function AppRefactoredInner() {
   const handleReagendarPlanoItem = React.useCallback(
     async (paciente, item, plano, onPlanoRefresh) => {
       if (!paciente?.id || !plano?.id || !item?.id) return;
+      const isItemRetorno = Boolean(
+        item.isRetorno ||
+        item.tipo === 'retorno' ||
+        item.tipoProcedimentoCodigo === 'retorno' ||
+        item.sessaoAtiva?.tipoProcedimentoCodigo === 'retorno',
+      );
+      const realPlanejamentoItemId = String(
+        item.planejamentoItemId || item.id || '',
+      )
+        .replace(/_retorno$/, '')
+        .trim();
+
       let sessao = item.sessaoAtiva;
       if (!sessao?.agendaId) {
         try {
           const detalhe = await planejamentosApi.detalhe(plano.id);
           const rawItem = (detalhe?.itens ?? []).find(
-            (i) => String(i.planejamentoItemId ?? i.id) === String(item.id),
+            (i) => String(i.planejamentoItemId ?? i.id) === realPlanejamentoItemId,
           );
-          sessao = pickSessaoAtiva(rawItem?.sessoes ?? []);
+          sessao = isItemRetorno
+            ? pickSessaoRetornoAtiva(rawItem?.sessoes ?? [])
+            : pickSessaoAtiva(rawItem?.sessoes ?? []);
         } catch (e) {
           console.warn('[handleReagendarPlanoItem] Falha ao carregar detalhe do plano:', e);
           return;
         }
       }
       if (!sessao?.agendaId) return;
+
       const catId = String(
         item.catalogoId ??
         item.catalogoProcedimentoSaudeId ??
         sessao.catalogoProcedimentoSaudeId ??
         '',
       ).trim();
+
+      const procNomePai = String(item.catalogoNome ?? '')
+        .replace(/^Retorno Clínico · /, '')
+        .trim() || 'Procedimento';
+
       const appointment = {
         agendaId: sessao.agendaId,
         id: sessao.agendaId,
@@ -685,10 +727,28 @@ function AppRefactoredInner() {
           paciente.telefoneNumero ||
           paciente.telefonePrincipal ||
           '',
-        catalogoProcedimentoSaudeId: catId,
+        catalogoProcedimentoSaudeId: isItemRetorno ? null : catId,
         profissionalRoleUserId: sessao.profissionalRoleUserId ?? roleUserId,
-        planejamentoItemId: item.id,
+        planejamentoItemId: realPlanejamentoItemId,
+        tipoProcedimentoCodigo: isItemRetorno ? 'retorno' : (sessao.tipoProcedimentoCodigo || null),
+        agendamentoTipoRetorno: isItemRetorno,
+        isRetorno: isItemRetorno,
+        procedimentoNome: isItemRetorno ? procNomePai : undefined,
+        retornoOrigemNome: isItemRetorno ? procNomePai : undefined,
+        retornoPlanoTitulo: item.planoTitulo || plano?.titulo || plano?.nome || 'Plano de Tratamento',
+        retornoVisitaLabel: item.visitaLabel || 'No Plano',
+        retornoDataPlanejada:
+          item.dataPaiReal ||
+          item.sessaoAtiva?.dataAgendamento ||
+          item.dataPlanejada ||
+          null,
+        retornoHoraPai:
+          item.horaPaiReal ||
+          item.sessaoAtiva?.horaInicio ||
+          null,
+        retornoStatusPai: item.statusPai || 'agendado',
       };
+
       agendaSchedule.openReagendarModal(appointment, [appointment], {
         onAgendaSaved: async () => {
           await onPlanoRefresh?.();
@@ -739,6 +799,18 @@ function AppRefactoredInner() {
         }
         const ok = await agendaSchedule.handleCancelar(row.agendaId, payload);
         if (ok) {
+          if (Array.isArray(payload.cancelarRetornos) && payload.cancelarRetornos.length > 0) {
+            for (const ret of payload.cancelarRetornos) {
+              const retId = ret.agendaId || ret.id;
+              if (retId) {
+                await agendaSchedule.handleCancelar(retId, payload, {
+                  successToast: false,
+                  skipDashboardRefresh: true,
+                });
+              }
+            }
+            toast.success('Procedimento e retorno vinculado cancelados com sucesso');
+          }
           setScheduleCancelRow(null);
         }
       } finally {
@@ -747,6 +819,20 @@ function AppRefactoredInner() {
     },
     [agendaSchedule, scheduleCancelRow, toast],
   );
+
+  const scheduleCancelRetornosVinculados = React.useMemo(() => {
+    const row = scheduleCancelRow?.agenda;
+    if (!row?.planejamentoItemId || row?.isRetorno) return [];
+    const pItemId = String(row.planejamentoItemId);
+    const rowId = String(row.agendaId || row.id);
+    const all = agendaSchedule?.monthAppointments || [];
+    return all.filter((a) => {
+      const aPItemId = String(a.planejamentoItemId || '');
+      const aId = String(a.agendaId || a.id);
+      const st = String(a.status || a.statusCodigo || '').toLowerCase();
+      return aPItemId === pItemId && aId !== rowId && a.isRetorno && st !== 'cancelado';
+    });
+  }, [scheduleCancelRow, agendaSchedule?.monthAppointments]);
 
   const handleSlotReagendar = React.useCallback(
     async (target) => {
@@ -821,7 +907,7 @@ function AppRefactoredInner() {
     ]
   );
 
-  const exigirFilaTermos = !journeyState.isAgendaRetorno || Boolean(journeyState.houveRetoque);
+  const exigirFilaTermos = !journeyState.isAgendaRetorno;
 
   const pfIdCatalogoAtivo = pfIdNestaSessaoParaCatalogo(
     journeyState.nomeProcedimentoCatalogoId,
@@ -1470,13 +1556,18 @@ function AppRefactoredInner() {
     cameraState.closePhotoModal();
 
     if (!isSameDayResume) {
-      if (!options.fromAgendaSlot) {
+      const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
+      if (hasLote) {
+        setProcedimentosLote(options.lote);
+        journeyState.setProcedimentosSessao(options.lote);
+        journeyState.setActiveProcedureIndex(0);
+      } else if (!options.fromAgendaSlot) {
         setProcedimentosLote([]);
+        journeyState.setProcedimentosSessao([]);
+        journeyState.setActiveProcedureIndex(0);
       }
       // Limpa IDs de procedimentos da sessão anterior para evitar duplicações no prontuário
       setLoteProcedimentosFeitosIds([]);
-      journeyState.setProcedimentosSessao([]);
-      journeyState.setActiveProcedureIndex(0);
       journeyState.setNomeProcedimento('');
       journeyState.setNomeProcedimentoCatalogoId(null);
       journeyState.setObservacoesExecucao('');
@@ -1540,11 +1631,14 @@ function AppRefactoredInner() {
     setSelectedPatientCpf(cpf);
     if (!isSameDayResume) {
       setJourneyProcedureDateIso(todayIso);
-      const nomeAgenda = options.procedimentoNome != null ? String(options.procedimentoNome).trim() : '';
+      const nomeAgenda =
+        (options.procedimentoNome != null && String(options.procedimentoNome).trim() !== '')
+          ? String(options.procedimentoNome).trim()
+          : (options.lote?.[0]?.procedimentoNome ? String(options.lote[0].procedimentoNome).trim() : '');
       const catAgenda =
-        options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== ''
+        (options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== '')
           ? String(options.catalogoProcedimentoSaudeId).trim()
-          : null;
+          : (options.lote?.[0]?.catalogoProcedimentoSaudeId ? String(options.lote[0].catalogoProcedimentoSaudeId).trim() : null);
       journeyState.setNomeProcedimentoCatalogoId(catAgenda);
       journeyState.setNomeProcedimento(nomeAgenda);
       journeyState.setAgendaId(options.agendaId ?? null);
@@ -2358,6 +2452,68 @@ function AppRefactoredInner() {
     setConsultaModule('hub');
   }, []);
 
+  const handleSelectProcedimentoDoPlano = React.useCallback(
+    (item, plano) => {
+      if (!item) return;
+      const isRetorno = Boolean(
+        item.isRetorno ||
+        item.tipoProcedimentoCodigo === 'retorno' ||
+        item.tipo === 'retorno'
+      );
+      const catId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || '').trim() || null;
+      const nome = item.catalogoNome || 'Procedimento';
+      const rawPlanoItemId = item.id || item.planejamentoItemId || null;
+      const planoItemId = rawPlanoItemId ? String(rawPlanoItemId).replace(/_retorno$/, '').trim() : null;
+      const agendaId = item.sessaoAtiva?.agendaId || null;
+      const planoId = plano?.id || item.planejamentoId || null;
+
+      if (catId) journeyState.setNomeProcedimentoCatalogoId(catId);
+      if (nome) journeyState.setNomeProcedimento(nome);
+      if (agendaId) journeyState.setAgendaId(agendaId);
+      if (planoItemId) {
+        journeyState.setJourneyPlanejamentoCtx((prev) => ({
+          planejamentoId: planoId || prev?.planejamentoId || null,
+          itemIdByCatalogo: { ...(prev?.itemIdByCatalogo || {}), ...(catId ? { [String(catId)]: String(planoItemId) } : {}) },
+          procedimentosComPontos: prev?.procedimentosComPontos || [],
+        }));
+      }
+
+      // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado
+      journeyState.setProcedimentosSessao([
+        {
+          agendaId,
+          procedimentoNome: nome,
+          nomeProcedimento: nome,
+          catalogoProcedimentoSaudeId: catId,
+          planejamentoItemId: planoItemId,
+          isAgendaRetorno: isRetorno,
+        },
+      ]);
+      setProcedimentosLote([
+        {
+          agendaId,
+          procedimentoNome: nome,
+          catalogoProcedimentoSaudeId: catId,
+          planejamentoItemId: planoItemId,
+        },
+      ]);
+
+      if (isRetorno) {
+        journeyState.setIsAgendaRetorno(true);
+        journeyState.setTipoAtendimento('retorno');
+        if (item.procedimentoFeitoOrigemId || item.origemId) {
+          journeyState.setProcedimentoFeitoOrigemId(String(item.procedimentoFeitoOrigemId || item.origemId));
+        }
+        toast.success(`Retorno Clínico de "${nome}" selecionado para o atendimento.`);
+        setConsultaModule('retorno');
+      } else {
+        toast.success(`Procedimento "${nome}" selecionado para o atendimento.`);
+        setConsultaModule('hub');
+      }
+    },
+    [journeyState, toast],
+  );
+
   const handleConcluirAnamnese = React.useCallback(async () => {
     setStep1Busy(true);
     try {
@@ -2519,37 +2675,57 @@ function AppRefactoredInner() {
       if (!paciente?.id || !roleUserId) return null;
 
       try {
-      const agendaIdRaw = opts.agendaId != null ? String(opts.agendaId).trim() : '';
-      const agendaIdValido =
-        agendaIdRaw && UUID_REGEX_PROC.test(agendaIdRaw) ? agendaIdRaw : null;
+        const agendaIdRaw = opts.agendaId != null ? String(opts.agendaId).trim() : '';
+        const agendaIdValido =
+          agendaIdRaw && UUID_REGEX_PROC.test(agendaIdRaw) ? agendaIdRaw : null;
 
-      const catalogoId =
-        opts.catalogoProcedimentoSaudeId != null &&
-        String(opts.catalogoProcedimentoSaudeId).trim() !== ''
-          ? String(opts.catalogoProcedimentoSaudeId).trim()
-          : null;
+        const catalogoId =
+          opts.catalogoProcedimentoSaudeId != null &&
+            String(opts.catalogoProcedimentoSaudeId).trim() !== ''
+            ? String(opts.catalogoProcedimentoSaudeId).trim()
+            : null;
 
-      const nome = opts.nome != null ? String(opts.nome).trim() : '';
-      const observacao =
-        opts.observacao != null && String(opts.observacao).trim() !== ''
-          ? String(opts.observacao).trim()
-          : null;
-      const planejamentoItemId =
-        opts.planejamentoItemId != null && String(opts.planejamentoItemId).trim() !== ''
-          ? String(opts.planejamentoItemId).trim()
-          : null;
+        const nome = opts.nome != null ? String(opts.nome).trim() : '';
+        const observacao =
+          opts.observacao != null && String(opts.observacao).trim() !== ''
+            ? String(opts.observacao).trim()
+            : null;
+        const planejamentoItemId =
+          opts.planejamentoItemId != null && String(opts.planejamentoItemId).trim() !== ''
+            ? String(opts.planejamentoItemId).trim()
+            : null;
 
-      if (agendaIdValido) {
-        const body = {
-          pacienteId: paciente.id,
-          agendaId: agendaIdValido,
+        if (agendaIdValido) {
+          const body = {
+            pacienteId: paciente.id,
+            agendaId: agendaIdValido,
+            roleUserId,
+            ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
+            ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
+          };
+          const tIniciar = performance.now();
+          const res = await procedimentosApi.iniciar(body);
+          console.info('[termo-perf] POST iniciar', Math.round(performance.now() - tIniciar), 'ms');
+          const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
+          const idStr = pid != null && pid !== '' ? String(pid) : null;
+          if (idStr) {
+            await vincularAssinaturasAoProcedimento(idStr);
+            persistirPfSessao(catalogoId, idStr);
+            appendLotePfId(idStr);
+          }
+          return idStr;
+        }
+
+        if (!nome) return null;
+        const tManual = performance.now();
+        const res = await procedimentosApi.registrarManual(paciente.id, {
+          nome,
           roleUserId,
-          ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
-          ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
-        };
-        const tIniciar = performance.now();
-        const res = await procedimentosApi.iniciar(body);
-        console.info('[termo-perf] POST iniciar', Math.round(performance.now() - tIniciar), 'ms');
+          observacao,
+          catalogoProcedimentoSaudeId: catalogoId,
+          ...(planejamentoItemId ? { planejamentoItemId } : {}),
+        });
+        console.info('[termo-perf] POST registrarManual', Math.round(performance.now() - tManual), 'ms');
         const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
         const idStr = pid != null && pid !== '' ? String(pid) : null;
         if (idStr) {
@@ -2558,26 +2734,6 @@ function AppRefactoredInner() {
           appendLotePfId(idStr);
         }
         return idStr;
-      }
-
-      if (!nome) return null;
-      const tManual = performance.now();
-      const res = await procedimentosApi.registrarManual(paciente.id, {
-        nome,
-        roleUserId,
-        observacao,
-        catalogoProcedimentoSaudeId: catalogoId,
-        ...(planejamentoItemId ? { planejamentoItemId } : {}),
-      });
-      console.info('[termo-perf] POST registrarManual', Math.round(performance.now() - tManual), 'ms');
-      const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
-      const idStr = pid != null && pid !== '' ? String(pid) : null;
-      if (idStr) {
-        await vincularAssinaturasAoProcedimento(idStr);
-        persistirPfSessao(catalogoId, idStr);
-        appendLotePfId(idStr);
-      }
-      return idStr;
       } catch (e) {
         const parsed = parseTermosBloqueioError(e);
         if (parsed) {
@@ -2624,7 +2780,13 @@ function AppRefactoredInner() {
           : null;
       if (!agendaIdValido) return null;
 
-      const planejamentoItemId = resolvePlanejamentoItemId(catalogoId);
+      const rawItemId =
+        opts.planejamentoItemId ||
+        (catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
+        journeyState.procedimentosSessao?.[0]?.planejamentoItemId;
+      const planejamentoItemId = rawItemId
+        ? String(rawItemId).replace(/_retorno$/, '').trim()
+        : null;
 
       const body = {
         pacienteId: paciente.id,
@@ -2694,11 +2856,25 @@ function AppRefactoredInner() {
         }
       }
 
+      const currentProc = journeyState.procedimentosSessao?.[journeyState.activeProcedureIndex || 0];
+      const catalogoId =
+        journeyState.nomeProcedimentoCatalogoId ||
+        currentProc?.catalogoProcedimentoSaudeId ||
+        null;
+      const rawPlanejamentoItemId =
+        currentProc?.planejamentoItemId ||
+        (catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
+        null;
+      const cleanPlanejamentoItemId = rawPlanejamentoItemId
+        ? String(rawPlanejamentoItemId).replace(/_retorno$/, '').trim()
+        : null;
+
       return getOrCreateProcedimentoFeitoId(paciente, {
         allowCreate: true,
         isRetoque,
-        catalogoId: null,
+        catalogoId,
         agendaId: currentAgendaId,
+        planejamentoItemId: cleanPlanejamentoItemId,
       });
     },
     [
@@ -2706,6 +2882,7 @@ function AppRefactoredInner() {
       journeyState,
       loteProcedimentosFeitosIds,
       pacienteAtual?.cpf,
+      resolvePlanejamentoItemId,
       roleUserId,
       selectedPatientCpf,
     ],
@@ -3147,8 +3324,16 @@ function AppRefactoredInner() {
       }
 
       for (const snapshotNome of nomesUnicos) {
-        // No batch, we don't have easy access to each procedure's catalogoId from here easily if it was empty.
-        // We'll just check if the name exists in the catalog.
+        if (!snapshotNome || ['procedimento', 'retorno'].includes(snapshotNome.toLowerCase())) {
+          continue;
+        }
+        const jaVinculadoAoCatalogo = (journeyState.procedimentosSessao || []).some(
+          p => (p.procedimentoNome === snapshotNome || p.nomeProcedimento === snapshotNome) &&
+               (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
+        ) || (journeyState.nomeProcedimento === snapshotNome && journeyState.nomeProcedimentoCatalogoId);
+        if (jaVinculadoAoCatalogo) {
+          continue;
+        }
         const hit = catalogNames.includes(snapshotNome.toLowerCase());
         if (!hit) {
           const add = await askFinishJourneyConfirm({
@@ -3209,6 +3394,18 @@ function AppRefactoredInner() {
         ? journeyState.procedimentosSessao
         : procedimentosLote;
 
+      const catPrincipal =
+        journeyState.nomeProcedimentoCatalogoId ||
+        (listaParaSalvar && listaParaSalvar[0]?.catalogoProcedimentoSaudeId);
+      const rawPItemIdPrincipal =
+        (listaParaSalvar && listaParaSalvar[0]?.planejamentoItemId) ||
+        (catPrincipal ? resolvePlanejamentoItemId(catPrincipal) : null) ||
+        null;
+      const planoItemIdPrincipal = rawPItemIdPrincipal
+        ? String(rawPItemIdPrincipal).replace(/_retorno$/, '').trim()
+        : null;
+      let agendouRetornoFuturo = false;
+
       const todosIds = [];
       const payloadLote = { procedimentos: [] };
       const indexParaCriar = [];
@@ -3232,13 +3429,15 @@ function AppRefactoredInner() {
             const isRetorno = proc.isAgendaRetorno || proc.tipoAtendimento === 'retorno';
             // Apenas envia ao lote se possuir um catálogo selecionado OU for atendimento de retorno
             if ((catId || isRetorno) && criarProcedimento) {
+              const rawPItemId = proc.planejamentoItemId || (catId ? resolvePlanejamentoItemId(catId) : null);
+              const pItemId = rawPItemId ? String(rawPItemId).replace(/_retorno$/, '').trim() : null;
               const body = {
                 nome: (proc.nomeProcedimento || proc.procedimentoNome || '').trim(),
                 roleUserId,
                 observacao: proc.observacoesExecucao || null,
                 agendaId: proc.agendaId || journeyState.agendaId,
                 catalogoProcedimentoSaudeId: catId,
-                ...(resolvePlanejamentoItemId(catId) ? { planejamentoItemId: resolvePlanejamentoItemId(catId) } : {}),
+                ...(pItemId ? { planejamentoItemId: pItemId } : {}),
               };
               payloadLote.procedimentos.push(body);
               indexParaCriar.push(i);
@@ -3323,6 +3522,24 @@ function AppRefactoredInner() {
           })
         );
 
+        const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
+          journeyProcedureDateIso,
+          journeyState.proximoRetornoDisplay
+        );
+
+        if (!isApenasSair && returnIsoPre && paciente && roleUserId) {
+          await registrarRetornoFuturo({
+            paciente,
+            roleUserId,
+            dataRetornoIso: returnIsoPre,
+            procedimentoOrigemId: novosIdsValidos[0] || null,
+            planejamentoItemId: planoItemIdPrincipal,
+          }).catch((err) => {
+            console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
+          });
+          agendouRetornoFuturo = true;
+        }
+
         let respostasDoLote = [];
         if (!isApenasSair) {
           const finalizarPromises = novosIdsValidos.map(id => procedimentosApi.finalizar(id).catch(e => {
@@ -3352,18 +3569,17 @@ function AppRefactoredInner() {
         let targetAgendaId = journeyState.agendaId;
 
         if (!targetAgendaId) {
-          if (novosIdsValidos.length > 0) {
-            const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-            await registrarAgendaAvulsa({
-              journeyState,
-              paciente,
-              roleUserId,
-              novosIdsValidos,
-              attendanceStartTimeIso: startTimeIso,
-            }).catch((err) => {
-              console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
-            });
-          }
+          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+          await registrarAgendaAvulsa({
+            journeyState,
+            paciente,
+            roleUserId,
+            novosIdsValidos,
+            attendanceStartTimeIso: startTimeIso,
+            planejamentoItemId: planoItemIdPrincipal,
+          }).catch((err) => {
+            console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
+          });
           journeyState.setAttendanceStartTime(null, sCpf);
         } else {
           const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
@@ -3411,22 +3627,23 @@ function AppRefactoredInner() {
           journeyState.setAttendanceStartTime(null, sCpf);
         }
 
-        const { validIso: returnIso } = evaluateProximoRetornoStep5(
+        const { validIso: returnIsoPost } = evaluateProximoRetornoStep5(
           journeyProcedureDateIso,
           journeyState.proximoRetornoDisplay
         );
 
         await Promise.all([
           persistirEncerramentoConsulta(novosIdsValidos),
-          returnIso && paciente && roleUserId
+          !agendouRetornoFuturo && returnIsoPost && paciente && roleUserId
             ? registrarRetornoFuturo({
-                paciente,
-                roleUserId,
-                dataRetornoIso: returnIso,
-                procedimentoOrigemId: novosIdsValidos[0] || null,
-              }).catch((err) => {
-                console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
-              })
+              paciente,
+              roleUserId,
+              dataRetornoIso: returnIsoPost,
+              procedimentoOrigemId: novosIdsValidos[0] || null,
+              planejamentoItemId: planoItemIdPrincipal,
+            }).catch((err) => {
+              console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
+            })
             : Promise.resolve(),
         ]);
 
@@ -3701,20 +3918,20 @@ function AppRefactoredInner() {
       {/* Main Content */}
       <main
         className={`flex flex-1 flex-col h-full min-h-0 ${isJornadaView || isConsultaView
-            ? 'overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
-            : isAgendaView
-              ? 'overflow-hidden max-lg:overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
-              : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
+          ? 'overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
+          : isAgendaView
+            ? 'overflow-hidden max-lg:overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
+            : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
           }`}
       >
         {isJornadaView && (
           <header
             className={`border-b border-app-border shadow-app-card ${isJornadaView
-                ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
-                : `z-0 bg-white ${activeView === 'configuracoes'
-                  ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
-                  : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
-                }`
+              ? 'sticky top-0 z-10 shrink-0 bg-[#f8fbfb] px-4 py-6 sm:px-6 md:px-10 sm:py-8'
+              : `z-0 bg-white ${activeView === 'configuracoes'
+                ? 'px-4 sm:px-5 md:px-8 lg:px-10 py-3 sm:py-3.5 md:py-4'
+                : 'px-4 sm:px-6 md:px-10 py-6 sm:py-8'
+              }`
               }`}
           >
             {/* @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'. */}
@@ -3738,8 +3955,8 @@ function AppRefactoredInner() {
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 <div className="mx-auto w-full max-w-[1600px] p-3 pb-28 [-webkit-overflow-scrolling:touch] sm:p-6 md:px-8 md:pt-8 md:pb-28">
                   <div className={`rounded-[20px] border border-app-border bg-white shadow-app-card ${currentStep === 1
-                      ? 'p-3 pb-4 sm:p-5 sm:pb-5 md:p-6 md:pb-6'
-                      : 'p-4 pb-5 sm:p-8 sm:pb-6 md:pb-8'
+                    ? 'p-3 pb-4 sm:p-5 sm:pb-5 md:p-6 md:pb-6'
+                    : 'p-4 pb-5 sm:p-8 sm:pb-6 md:pb-8'
                     }`}>
                     <div key={currentStep} className="animate-in fade-in slide-in-from-right-4 duration-200">
                       {currentStep === 1 && (
@@ -4074,8 +4291,8 @@ function AppRefactoredInner() {
                         onClick={prevStep}
                         disabled={currentStep === 1 || isFinishing}
                         className={`flex items-center justify-center gap-2 rounded-xl border-[2px] px-5 py-2.5 text-[13px] font-semibold outline-none transition-all ${currentStep === 1 || isFinishing
-                            ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
-                            : 'border-[#e2e8f0] bg-white text-[#00a88e] hover:border-[#00a88e]/40 hover:bg-[#f0fdf9]'
+                          ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                          : 'border-[#e2e8f0] bg-white text-[#00a88e] hover:border-[#00a88e]/40 hover:bg-[#f0fdf9]'
                           }`}
                       >
                         <ChevronLeft className="h-4 w-4" strokeWidth={3} /> Anterior
@@ -4107,10 +4324,10 @@ function AppRefactoredInner() {
                             step5RetornoBloqueiaFinal
                           }
                           className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${journeyState.orientacoes &&
-                              !step5RetornoBloqueiaFinal &&
-                              !isFinishing
-                              ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
-                              : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
+                            !step5RetornoBloqueiaFinal &&
+                            !isFinishing
+                            ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
+                            : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                             }`}
                         >
                           {isFinishing
@@ -4134,8 +4351,8 @@ function AppRefactoredInner() {
                 onClick={prevStep}
                 disabled={currentStep === 1 || isFinishing}
                 className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-xl border-[2px] px-4 text-[14px] font-semibold ${currentStep === 1 || isFinishing
-                    ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
-                    : 'border-[#e2e8f0] bg-white text-[#00a88e] active:border-[#00a88e]/40'
+                  ? 'cursor-not-allowed border-[#e2e8f0] bg-[#f8fbfb] text-[#94a3b8]'
+                  : 'border-[#e2e8f0] bg-white text-[#00a88e] active:border-[#00a88e]/40'
                   }`}
               >
                 <ChevronLeft className="h-4 w-4" strokeWidth={3} aria-hidden />
@@ -4154,14 +4371,14 @@ function AppRefactoredInner() {
                     (!journeyState.orientacoes || step5RetornoBloqueiaFinal))
                 }
                 className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${currentStep < 5
-                    ? isFinishing || (currentStep === 1 && step1Busy)
-                      ? 'cursor-not-allowed bg-[#00a88e]/50'
-                      : 'bg-[#00a88e] active:bg-[#00967f]'
-                    : journeyState.orientacoes &&
-                      !step5RetornoBloqueiaFinal &&
-                      !isFinishing
-                      ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
-                      : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
+                  ? isFinishing || (currentStep === 1 && step1Busy)
+                    ? 'cursor-not-allowed bg-[#00a88e]/50'
+                    : 'bg-[#00a88e] active:bg-[#00967f]'
+                  : journeyState.orientacoes &&
+                    !step5RetornoBloqueiaFinal &&
+                    !isFinishing
+                    ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
+                    : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                   }`}
               >
                 {currentStep < 5 ? (
@@ -4234,6 +4451,17 @@ function AppRefactoredInner() {
                   <ConsultaRetornoFlow
                     pacienteId={pacienteAtual?.id}
                     procedimentoFeitoOrigemId={journeyState.procedimentoFeitoOrigemId}
+                    planejamentoItemId={
+                      (
+                        journeyState.procedimentosSessao?.[journeyState.activeProcedureIndex || 0]?.planejamentoItemId ||
+                        (journeyState.nomeProcedimentoCatalogoId ? resolvePlanejamentoItemId(journeyState.nomeProcedimentoCatalogoId) : null) ||
+                        journeyState.planejamentoItemId ||
+                        null
+                      )?.replace?.(/_retorno$/, '') || null
+                    }
+                    catalogoId={journeyState.nomeProcedimentoCatalogoId}
+                    nomeProcedimento={journeyState.nomeProcedimento}
+                    onOrigemResolved={(origemId) => journeyState.setProcedimentoFeitoOrigemId(origemId)}
                     mapaRetornoState={mapaRetornoState}
                     retornoAvaliacao={journeyState.retornoAvaliacao}
                     setRetornoAvaliacao={journeyState.setRetornoAvaliacao}
@@ -4264,35 +4492,35 @@ function AppRefactoredInner() {
                         Nenhuma ficha padrão de anamnese configurada. Defina em Configurações → Anamnese → Fichas.
                       </div>
                     ) : null}
-                  <Step2Anamnese
-                    onAutoSaveAnamnese={autoSaveAnamneseSilently}
-                    ref={anamneseRef}
-                    queixa={journeyState.queixa}
-                    setQueixa={journeyState.setQueixa}
-                    expectativas={journeyState.expectativas}
-                    setExpectativas={journeyState.setExpectativas}
-                    pacienteId={pacienteAtual?.id || null}
-                    pacienteSexo={pacienteAtual?.sexo || null}
-                    pacienteNome={pacienteAtual?.nomeCompleto || pacienteAtual?.nome || ''}
-                    pacienteCpf={pacienteAtual?.cpf || ''}
-                    pacienteTelefone={pacienteAtual?.telefone || pacienteAtual?.celular || ''}
-                    getPreenchimentoAnamneseId={() => anamnesePreenchimentoIdRef.current}
-                    onPersistirAnamneseHub={salvarAnamneseAntesDeAvancar}
-                    roleUserId={roleUserId}
-                    step2Errors={journeyState.step2Errors}
-                    setStep2Errors={journeyState.setStep2Errors}
-                    savedAnamneseState={journeyState.step2AnamneseDraft}
-                    onSavedAnamneseStateChange={journeyState.setStep2AnamneseDraft}
-                    respostasAnamnese={journeyState.respostasAnamnese}
-                    salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
-                    setRespostasAnamnese={journeyState.setRespostasAnamnese}
-                    onQueixaVisibilityChange={setQueixaVisivel}
-                    perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
-                    onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => { })}
-                    consultaMode
-                    onConcluirAnamnese={handleConcluirAnamnese}
-                    isConcluirAnamneseBusy={step1Busy}
-                  />
+                    <Step2Anamnese
+                      onAutoSaveAnamnese={autoSaveAnamneseSilently}
+                      ref={anamneseRef}
+                      queixa={journeyState.queixa}
+                      setQueixa={journeyState.setQueixa}
+                      expectativas={journeyState.expectativas}
+                      setExpectativas={journeyState.setExpectativas}
+                      pacienteId={pacienteAtual?.id || null}
+                      pacienteSexo={pacienteAtual?.sexo || null}
+                      pacienteNome={pacienteAtual?.nomeCompleto || pacienteAtual?.nome || ''}
+                      pacienteCpf={pacienteAtual?.cpf || ''}
+                      pacienteTelefone={pacienteAtual?.telefone || pacienteAtual?.celular || ''}
+                      getPreenchimentoAnamneseId={() => anamnesePreenchimentoIdRef.current}
+                      onPersistirAnamneseHub={salvarAnamneseAntesDeAvancar}
+                      roleUserId={roleUserId}
+                      step2Errors={journeyState.step2Errors}
+                      setStep2Errors={journeyState.setStep2Errors}
+                      savedAnamneseState={journeyState.step2AnamneseDraft}
+                      onSavedAnamneseStateChange={journeyState.setStep2AnamneseDraft}
+                      respostasAnamnese={journeyState.respostasAnamnese}
+                      salvarRespostaAnamnese={journeyState.salvarRespostaAnamnese}
+                      setRespostasAnamnese={journeyState.setRespostasAnamnese}
+                      onQueixaVisibilityChange={setQueixaVisivel}
+                      perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
+                      onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => { })}
+                      consultaMode
+                      onConcluirAnamnese={handleConcluirAnamnese}
+                      isConcluirAnamneseBusy={step1Busy}
+                    />
                   </>
                 ) : null}
                 {consultaModule === 'avaliacao' && !journeyState.isAgendaRetorno ? (
@@ -4315,7 +4543,9 @@ function AppRefactoredInner() {
                     pacienteId={pacienteAtual?.id ?? null}
                     roleUserId={roleUserId ?? null}
                     pacienteNome={pacienteAtual?.nome ?? ''}
+                    paciente={pacienteAtual}
                     onVoltar={() => setConsultaModule('hub')}
+                    onSelectProcedimentoParaConsulta={handleSelectProcedimentoDoPlano}
                     onAgendarItem={(item, onSaved) =>
                       handleAgendarPlanoItem(pacienteAtual, item, onSaved)
                     }
@@ -4663,12 +4893,12 @@ function AppRefactoredInner() {
             />
             <div
               className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
-                  ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] 3xl:max-w-[min(100%,1960px)] 4xl:max-w-[min(100%,2200px)]'
-                  : isAgendaView
-                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-2 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)] 3xl:max-w-[min(100%,1880px)] 4xl:max-w-[min(100%,2080px)]'
-                    : activeView === 'pacientes'
-                      ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] 3xl:max-w-[min(100%,2080px)] 4xl:max-w-[min(100%,2320px)] flex flex-col'
-                      : 'p-3 sm:p-6 md:p-8 max-w-[1600px] 3xl:max-w-[2000px]'
+                ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] 3xl:max-w-[min(100%,1960px)] 4xl:max-w-[min(100%,2200px)]'
+                : isAgendaView
+                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-2 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)] 3xl:max-w-[min(100%,1880px)] 4xl:max-w-[min(100%,2080px)]'
+                  : activeView === 'pacientes'
+                    ? 'px-3 pt-1 pb-6 sm:px-5 sm:pt-2 sm:pb-8 md:px-6 md:pt-2 md:pb-8 lg:px-8 lg:pt-3 lg:pb-10 xl:px-10 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1920px)] 3xl:max-w-[min(100%,2080px)] 4xl:max-w-[min(100%,2320px)] flex flex-col'
+                    : 'p-3 sm:p-6 md:p-8 max-w-[1600px] 3xl:max-w-[2000px]'
                 }`}
             >
               <div
@@ -4700,6 +4930,8 @@ function AppRefactoredInner() {
                       onCreatePatient={handleCreatePatientFromPatients}
                       onStartAttendance={handleAgendaStartAttendance}
                       onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
+                      onAgendarPlanoItem={handleAgendarPlanoItem}
+                      onAgendarRetornoPlanoItem={handleAgendarRetornoPlanoItem}
                       onReagendarPlanoItem={handleReagendarPlanoItem}
                       onPlanoConcluido={handlePlanoConcluidoAposBaixa}
                       onUpdatePatient={handleUpdatePatientProfile}
@@ -4935,6 +5167,7 @@ function AppRefactoredInner() {
           {scheduleCancelRow?.agenda ? (
             <CancelarAgendaModal
               agenda={scheduleCancelRow.agenda}
+              retornosVinculados={scheduleCancelRetornosVinculados}
               onClose={() => setScheduleCancelRow(null)}
               onConfirm={handleScheduleConfirmCancelar}
               isSubmitting={scheduleCancelSubmitting}

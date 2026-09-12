@@ -1,4 +1,4 @@
-import { Clock3, Lock, Stethoscope, UserRound } from 'lucide-react';
+import { Clock3, Lock, Plus, Stethoscope, UserRound } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel.js';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
@@ -116,6 +116,7 @@ export function AgendaAppointmentSummaryCard({
   compact = false,
   variant = 'default',
   showProfissional = false,
+  onAgendarNesteHorario,
 }) {
   const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
@@ -369,6 +370,15 @@ export function AgendaAppointmentSummaryCard({
               </div>
             ) : (
               <>
+                {isReagendado && typeof onAgendarNesteHorario === 'function' ? (
+                  <button
+                    type="button"
+                    onClick={() => onAgendarNesteHorario(appointment.data, String(appointment.horaInicio || '').slice(0, 5))}
+                    className="inline-flex items-center gap-1 rounded-md bg-teal-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-teal-700 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" /> Agendar novo paciente
+                  </button>
+                ) : null}
                 {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
                   <button
                     type="button"
@@ -477,6 +487,15 @@ export function AgendaAppointmentSummaryCard({
             </div>
           ) : (
             <>
+              {isReagendado && typeof onAgendarNesteHorario === 'function' ? (
+                <button
+                  type="button"
+                  onClick={() => onAgendarNesteHorario(appointment.data, String(appointment.horaInicio || '').slice(0, 5))}
+                  className="inline-flex items-center justify-center gap-1.5 w-full rounded-xl bg-teal-600 px-3 py-2.5 text-xs font-bold text-white hover:bg-teal-700 transition-colors shadow-sm cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" /> Agendar novo paciente neste horário
+                </button>
+              ) : null}
               {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
                 <button
                   type="button"

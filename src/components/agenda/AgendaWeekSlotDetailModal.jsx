@@ -20,6 +20,7 @@ export function AgendaWeekSlotDetailModal({
   isNivel1 = false,
   advanceOfferByAgendaId,
   onAdvanceClick,
+  onAgendarNesteHorario,
 }) {
   const entry = normalizeTarget(target);
   const primary = getEntryPrimaryAppointment(entry);
@@ -65,6 +66,10 @@ export function AgendaWeekSlotDetailModal({
             isNivel1={isNivel1}
             advanceOffer={advanceOffer}
             onAdvanceClick={onAdvanceClick}
+            onAgendarNesteHorario={(iso, horaHm) => {
+              onClose();
+              onAgendarNesteHorario?.(iso, horaHm);
+            }}
           />
         </div>
       </div>

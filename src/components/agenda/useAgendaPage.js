@@ -13,8 +13,11 @@ import {
   getApiErrorToastMessage,
   isAbortError,
   pacientesApi,
+  planejamentosApi,
   procedimentosApi,
 } from '../../services/api';
+import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
+import { nomeProcedimentoRaiz } from './retornoOrigemUtils.js';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
@@ -28,6 +31,7 @@ import {
   toDateKey,
   weekContainsIso,
 } from '../../utils/agendaDateUtils';
+import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
 import {
   fetchKpiDrilldownRows,
   filterKpiCountableAppointments,
@@ -146,12 +150,12 @@ function normalizeEquipeList(raw) {
       const nome = p?.nomeCompleto || p?.nome || p?.name || p?.username || 'Profissional';
       return roleUserId
         ? {
-            roleUserId,
-            nome: String(nome).trim() || 'Profissional',
-            roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
-            fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
-            especialidade: p?.especialidade || p?.specialty || '',
-          }
+          roleUserId,
+          nome: String(nome).trim() || 'Profissional',
+          roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
+          fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
+          especialidade: p?.especialidade || p?.specialty || '',
+        }
         : null;
     })
     .filter(Boolean);
@@ -247,13 +251,18 @@ function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
     tipoAtendimento: proc.id ? TIPO_ATENDIMENTO_PROCEDIMENTO : TIPO_ATENDIMENTO_CONSULTA,
     tipoAtendimentoLocked: false,
     agendamentoTipoRetorno: false,
-    retornoPaiLocked: false,
     procedimentoFeitoOrigemId: '',
     procedimentosFeitosRaiz: [],
+    planejamentoItensRaiz: [],
     procedimentosRaizLoading: false,
     procedimentosRaizError: '',
     retornoOrigemNome: '',
     retornoDataPlanejada: null,
+    retornoOrigemTipo: '',
+    retornoPlanoTitulo: null,
+    retornoVisitaLabel: null,
+    retornoHoraPai: null,
+    retornoStatusPai: null,
   };
 }
 
@@ -384,6 +393,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [grupoReagendarDuracoes, setGrupoReagendarDuracoes] = useState({});
   /** Mapa {catalogoProcedimentoSaudeId → planejamentoItemId} para vincular POST de agenda ao item do plano. */
   const [planejamentoItemIdPorCatalogo, setPlanejamentoItemIdPorCatalogo] = useState({});
+  /** Retornos vinculados ao procedimento pai sendo reagendado (para validação de consistência cronológica). */
+  const [retornosVinculadosReagendar, setRetornosVinculadosReagendar] = useState([]);
   const [equipeList, setEquipeList] = useState([]);
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
@@ -849,26 +860,79 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setForm((prev) => ({
       ...prev,
       procedimentosFeitosRaiz: [],
+      planejamentoItensRaiz: [],
       procedimentosRaizLoading: true,
       procedimentosRaizError: '',
     }));
-    pacientesApi
-      .listarProcedimentosFeitosRaiz(id)
-      .then((raw) => {
-        const list = normalizeApiList(raw);
-        setForm((f) => ({
-          ...f,
-          procedimentosFeitosRaiz: list,
-          procedimentosRaizLoading: false,
-        }));
-      })
-      .catch((err) => {
-        setForm((f) => ({
-          ...f,
-          procedimentosRaizLoading: false,
-          procedimentosRaizError: err?.message || 'Erro ao carregar procedimentos.',
-        }));
-      });
+
+    Promise.allSettled([
+      pacientesApi.listarProcedimentosFeitosRaiz(id),
+      planejamentosApi.listarPorPaciente(id),
+    ]).then(([resHistorico, resPlanos]) => {
+      const listHistorico =
+        resHistorico.status === 'fulfilled'
+          ? normalizeApiList(resHistorico.value).map((r) => ({
+            id: String(r.id),
+            procedimentoFeitoOrigemId: String(r.id),
+            nome: nomeProcedimentoRaiz(r),
+            catalogoNome: r.catalogoProcedimentoNome || r.nomeCatalogo || r.nome,
+            data: r.data,
+            tipoOrigem: 'historico',
+            planejamentoItemId: r.planejamentoItemId || null,
+          }))
+          : [];
+
+      let listPlano = [];
+      if (resPlanos.status === 'fulfilled') {
+        const planos = normalizeListaPlanos(resPlanos.value);
+        const planosAtivos = planos.filter((p) => p.statusCodigo === 'ativo');
+        planosAtivos.forEach((plano) => {
+          const itens = Array.isArray(plano.itens) ? plano.itens : [];
+          itens.forEach((it) => {
+            if (it.isRetorno) return;
+            const status = String(it.statusItem || it.statusItemNome || '').toLowerCase();
+            if (status === 'cancelado' || status === 'desistência') return;
+
+            const jaAgendado = Boolean(it.sessaoAtiva?.dataAgendamento);
+            const jaRealizado =
+              Boolean(it.sessaoRealizada?.dataAgendamento) ||
+              status === 'finalizado' ||
+              status === 'realizado';
+
+            // Regra Clínica: Retorno só pode ser vinculado a procedimentos que já foram agendados ou realizados
+            if (!jaAgendado && !jaRealizado) return;
+
+            listPlano.push({
+              id: String(it.id || it.planejamentoItemId),
+              planejamentoItemId: String(it.id || it.planejamentoItemId),
+              planoId: String(plano.id),
+              planoTitulo: plano.titulo || plano.nome || 'Plano de Tratamento',
+              nome: it.catalogoNome || 'Procedimento',
+              catalogoNome: it.catalogoNome,
+              data: it.sessaoAtiva?.dataAgendamento || it.sessaoRealizada?.dataAgendamento || it.dataRealizacao || it.dataPlanejada || null,
+              horaInicio: it.sessaoAtiva?.horaInicio || it.sessaoRealizada?.horaInicio || null,
+              tipoOrigem: 'plano',
+              statusItem: status,
+              jaAgendado,
+              jaRealizado,
+            });
+          });
+        });
+      }
+
+      const hasError = resHistorico.status === 'rejected' && resPlanos.status === 'rejected';
+      const errorMsg = hasError
+        ? (resHistorico.reason?.message || resPlanos.reason?.message || 'Erro ao carregar procedimentos.')
+        : '';
+
+      setForm((f) => ({
+        ...f,
+        procedimentosFeitosRaiz: listHistorico,
+        planejamentoItensRaiz: listPlano,
+        procedimentosRaizLoading: false,
+        procedimentosRaizError: errorMsg,
+      }));
+    });
   }, []);
 
   const selectPaciente = useCallback(
@@ -892,6 +956,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         telefone,
         procedimentoFeitoOrigemId: isRetorno && !temOrigemConcreta ? '' : prev.procedimentoFeitoOrigemId,
         procedimentosFeitosRaiz: precisaCarregarRaizes ? [] : isRetorno ? prev.procedimentosFeitosRaiz : [],
+        planejamentoItensRaiz: precisaCarregarRaizes ? [] : isRetorno ? prev.planejamentoItensRaiz : [],
         procedimentosRaizLoading: precisaCarregarRaizes,
         procedimentosRaizError: '',
       }));
@@ -949,10 +1014,12 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           // Limpa STATE do tipo anterior (não só a UI).
           procedimentoFeitoOrigemId: '',
           procedimentosFeitosRaiz: [],
+          planejamentoItensRaiz: [],
           procedimentosRaizLoading: precisaCarregarRaizes,
           procedimentosRaizError: '',
           retornoOrigemNome: '',
           retornoDataPlanejada: null,
+          retornoOrigemTipo: '',
           catalogoProcedimentoSaudeIds: [],
         };
 
@@ -980,6 +1047,64 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       form.tipoAtendimentoLocked,
     ],
   );
+
+  const selecionarRetornoOrigemPlano = useCallback((item) => {
+    const itemId = String(item?.id || item?.planejamentoItemId || '').trim();
+    planejamentoItemIdVinculoRef.current = itemId || null;
+    setForm((prev) => ({
+      ...prev,
+      procedimentoFeitoOrigemId: '',
+      planejamentoItemId: itemId,
+      retornoOrigemNome: item?.catalogoNome || item?.nome || 'Procedimento no plano',
+      retornoDataPlanejada: item?.data || item?.dataPlanejada || null,
+      retornoOrigemTipo: 'plano',
+      retornoPlanoTitulo: item?.planoTitulo || item?.planoNome || null,
+      retornoVisitaLabel: item?.visitaLabel || null,
+      retornoHoraPai: item?.horaInicio || item?.hora || null,
+      retornoStatusPai: item?.jaRealizado ? 'realizado' : (item?.jaAgendado ? 'agendado' : 'planejado'),
+    }));
+    setFormErrors((prev) => ({
+      ...prev,
+      procedimentoFeitoOrigemId: undefined,
+    }));
+  }, []);
+
+  const selecionarRetornoOrigemHistorico = useCallback((item) => {
+    const procId = String(item?.id || item?.procedimentoFeitoOrigemId || '').trim();
+    planejamentoItemIdVinculoRef.current = null;
+    setForm((prev) => ({
+      ...prev,
+      procedimentoFeitoOrigemId: procId,
+      planejamentoItemId: '',
+      retornoOrigemNome: item?.nome || 'Procedimento realizado',
+      retornoDataPlanejada: item?.data || null,
+      retornoOrigemTipo: 'historico',
+      retornoPlanoTitulo: null,
+      retornoVisitaLabel: null,
+      retornoHoraPai: item?.hora || null,
+      retornoStatusPai: 'realizado',
+    }));
+    setFormErrors((prev) => ({
+      ...prev,
+      procedimentoFeitoOrigemId: undefined,
+    }));
+  }, []);
+
+  const limparVinculoRetornoPlano = useCallback(() => {
+    planejamentoItemIdVinculoRef.current = null;
+    setForm((prev) => ({
+      ...prev,
+      procedimentoFeitoOrigemId: '',
+      planejamentoItemId: '',
+      retornoOrigemNome: '',
+      retornoDataPlanejada: null,
+      retornoOrigemTipo: '',
+      retornoPlanoTitulo: null,
+      retornoVisitaLabel: null,
+      retornoHoraPai: null,
+      retornoStatusPai: null,
+    }));
+  }, []);
 
   useEffect(() => {
     const id = String(form.pacienteId || '').trim();
@@ -1501,7 +1626,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     bloqueioForm.horaFim,
     bloqueioForm.duracaoMin,
     resetBloqueioConflitosState,
-     
+
   ]);
 
   const selectBloqueioDia = useCallback(
@@ -1802,7 +1927,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         if (opts.successToast !== false) {
           toastSuccess(
             opts.successToast ||
-              (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
+            (codigo === 'confirmado' ? 'Agendamento confirmado' : `Status atualizado: ${codigo}`),
           );
         }
         if (!opts.skipDashboardRefresh) {
@@ -2055,8 +2180,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         : Array.isArray(opts.catalogoProcedimentoSaudeIds)
           ? opts.catalogoProcedimentoSaudeIds.map((id) => String(id).trim()).filter(Boolean)
           : [];
-      const date = todayIso;
-      const base = defaultForm(date, patientOptions, null);
+      const targetDate = opts.data || opts.dataAgendamento || todayIso;
+      const base = defaultForm(targetDate, patientOptions, null);
       const vinculoExplicito = String(opts.planejamentoItemId ?? '').trim();
       planejamentoItemIdVinculoRef.current = vinculoExplicito || null;
       const paiPreselecionado = String(opts.procedimentoFeitoOrigemId ?? '').trim();
@@ -2077,36 +2202,13 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         procedimentosRaizError: '',
         retornoOrigemNome: String(opts.retornoOrigemNome ?? '').trim(),
         retornoDataPlanejada: opts.retornoDataPlanejada ?? null,
+        retornoPlanoTitulo: opts.retornoPlanoTitulo ?? null,
+        retornoVisitaLabel: opts.retornoVisitaLabel ?? null,
+        retornoHoraPai: opts.retornoHoraPai ?? null,
+        retornoStatusPai: opts.retornoStatusPai ?? null,
       });
       if (precisaCarregarRaizes) {
-        pacientesApi
-          .listarProcedimentosFeitosRaiz(patient.id)
-          .then((raw) => {
-            const list = normalizeApiList(raw);
-            // Se o retorno veio de um item de plano, tenta pré-resolver a origem
-            // automaticamente (só quando há exatamente 1 candidato inequívoco —
-            // caso contrário o usuário escolhe manualmente no seletor).
-            let autoOrigemId = '';
-            if (vinculoExplicito) {
-              const matches = list.filter(
-                (r) => String(r.planejamentoItemId || '').trim() === vinculoExplicito
-              );
-              if (matches.length === 1) autoOrigemId = String(matches[0].id);
-            }
-            setForm((f) => ({
-              ...f,
-              procedimentosFeitosRaiz: list,
-              procedimentosRaizLoading: false,
-              procedimentoFeitoOrigemId: autoOrigemId || f.procedimentoFeitoOrigemId,
-            }));
-          })
-          .catch((err) => {
-            setForm((f) => ({
-              ...f,
-              procedimentosRaizLoading: false,
-              procedimentosRaizError: err?.message || 'Erro ao carregar procedimentos.',
-            }));
-          });
+        carregarProcedimentosRaiz(patient.id);
       }
       const mapaNormalizado = opts.modoRetorno
         ? {}
@@ -2119,6 +2221,18 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       if (forcedProf) setRoleUserIdAgenda(forcedProf);
       onAgendaSavedRef.current =
         typeof opts.onAgendaSaved === 'function' ? opts.onAgendaSaved : null;
+
+      // Sincroniza dia selecionado e mês do calendário para coincidir com targetDate
+      if (targetDate) {
+        setSelectedDay(targetDate);
+        if (typeof targetDate === 'string' && targetDate.includes('-')) {
+          const [y, m] = targetDate.split('-').map(Number);
+          if (y && m) {
+            setDispMonthDate(new Date(y, m - 1, 1));
+          }
+        }
+      }
+
       setModalMode('create');
     },
     [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
@@ -2133,6 +2247,16 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const base = defaultForm(appointment?.data || selectedDay, patientOptions, null);
       const catIds = grupo.map((a) => String(a.catalogoProcedimentoSaudeId || '').trim()).filter(Boolean);
       setEditingAppointment(appointment);
+
+      const isOrigemRetorno =
+        String(appointment?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno' ||
+        Boolean(appointment?.procedimentoFeitoOrigemId) ||
+        Boolean(appointment?.agendamentoTipoRetorno);
+
+      const tipoResolvido = isOrigemRetorno
+        ? TIPO_ATENDIMENTO_RETORNO
+        : (catIds.length > 0 ? TIPO_ATENDIMENTO_PROCEDIMENTO : TIPO_ATENDIMENTO_CONSULTA);
+
       const planoMap = {};
       for (const a of grupo) {
         const cat = String(a.catalogoProcedimentoSaudeId || '').trim();
@@ -2142,16 +2266,32 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         }
       }
       setPlanejamentoItemIdPorCatalogo(planoMap);
+
+      const vinculoPlano =
+        appointment?.planejamentoItemId ||
+        grupo.find((a) => a.planejamentoItemId)?.planejamentoItemId;
+      planejamentoItemIdVinculoRef.current = vinculoPlano ? String(vinculoPlano).trim() : null;
+
       setForm({
         ...base,
         pacienteId: appointment?.pacienteId || base.pacienteId,
         pacienteNome: appointment?.pacienteNome || base.pacienteNome,
         telefone: appointment?.telefone || base.telefone,
         catalogoProcedimentoSaudeIds: catIds,
+        tipoAtendimento: tipoResolvido,
+        tipoAtendimentoLocked: true,
+        agendamentoTipoRetorno: isOrigemRetorno,
+        procedimentoFeitoOrigemId: appointment?.procedimentoFeitoOrigemId || '',
+        retornoOrigemNome: appointment?.procedimentoNome || appointment?.retornoOrigemNome || '',
+        retornoPlanoTitulo: appointment?.retornoPlanoTitulo || null,
+        retornoVisitaLabel: appointment?.retornoVisitaLabel || null,
+        retornoDataPlanejada: appointment?.retornoDataPlanejada || null,
+        retornoHoraPai: appointment?.retornoHoraPai || null,
+        retornoStatusPai: appointment?.retornoStatusPai || null,
         data: '',        // usuário escolhe nova data no calendário
         horaInicio: '',  // usuário escolhe novo slot
         horaFimSlot: '',
-        duracaoMin: 30,
+        duracaoMin: appointment?.duracaoMin || 30,
         observacao: appointment?.observacao || appointment?.rawAgendamento?.observacao || base.observacao,
       });
       setFormErrors({});
@@ -2160,20 +2300,40 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         String(appointment?.profissionalRoleUserId ?? appointment?.roleUserId ?? roleUserId ?? '').trim()
       );
       setGrupoReagendarMap(
-        Object.fromEntries(grupo.map((a) => [String(a.catalogoProcedimentoSaudeId), a.agendaId]))
+        Object.fromEntries(
+          grupo
+            .filter((a) => a.catalogoProcedimentoSaudeId)
+            .map((a) => [String(a.catalogoProcedimentoSaudeId), a.agendaId || a.id])
+        )
       );
       setGrupoReagendarDuracoes(
         Object.fromEntries(
           grupo
-            .filter((a) => a.duracaoMin != null)
+            .filter((a) => a.duracaoMin != null && a.catalogoProcedimentoSaudeId)
             .map((a) => [String(a.catalogoProcedimentoSaudeId), a.duracaoMin])
         )
       );
       onAgendaSavedRef.current =
         typeof opts.onAgendaSaved === 'function' ? opts.onAgendaSaved : null;
+
+      if (vinculoPlano && !isOrigemRetorno) {
+        const pId = String(vinculoPlano).trim();
+        const curId = String(appointment?.agendaId || appointment?.id || '');
+        const linked = (Array.isArray(appointments) ? appointments : []).filter((a) => {
+          const apId = String(a.planejamentoItemId || '');
+          const aId = String(a.agendaId || a.id || '');
+          const st = String(a.statusCodigo || a.status || '').toLowerCase();
+          const isRet = a.isRetorno || String(a.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
+          return apId === pId && aId !== curId && isRet && st !== 'cancelado';
+        });
+        setRetornosVinculadosReagendar(linked);
+      } else {
+        setRetornosVinculadosReagendar([]);
+      }
+
       setModalMode('reagendar');
     },
-    [isNivel1, patientOptions, selectedDay, roleUserId]
+    [isNivel1, patientOptions, selectedDay, roleUserId, appointments]
   );
 
   const closeModal = useCallback(() => {
@@ -2188,6 +2348,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setGrupoReagendarDuracoes({});
     setPlanejamentoItemIdPorCatalogo({});
     planejamentoItemIdVinculoRef.current = null;
+    setRetornosVinculadosReagendar([]);
     equipeFetchedRef.current = false;
     dispMonthCacheRef.current = {};
     setDispMonthDtos([]);
@@ -2210,7 +2371,11 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       }
     } else if (tipo === TIPO_ATENDIMENTO_RETORNO) {
       const temPaiPreselecionado = Boolean(String(form.procedimentoFeitoOrigemId || '').trim());
-      if (!temPaiPreselecionado) {
+      const temVinculoPlano = Boolean(
+        String(planejamentoItemIdVinculoRef.current || form.planejamentoItemId || '').trim() ||
+        String(form.retornoOrigemNome || '').trim()
+      );
+      if (!temPaiPreselecionado && !temVinculoPlano) {
         if (!String(form.pacienteId || '').trim()) {
           nextErrors.procedimentoFeitoOrigemId =
             'Escolha o paciente primeiro. A origem do retorno vem do histórico dele.';
@@ -2219,10 +2384,11 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         } else if (
           !form.procedimentosRaizError &&
           Array.isArray(form.procedimentosFeitosRaiz) &&
-          form.procedimentosFeitosRaiz.length === 0
+          form.procedimentosFeitosRaiz.length === 0 &&
+          (!form.planejamentoItensRaiz || form.planejamentoItensRaiz.length === 0)
         ) {
           nextErrors.procedimentoFeitoOrigemId =
-            'Sem procedimento realizado. Este paciente ainda não tem histórico para vincular o retorno.';
+            'Sem procedimentos no histórico ou no plano para vincular o retorno.';
         } else {
           nextErrors.procedimentoFeitoOrigemId = 'Selecione o procedimento de origem do retorno.';
         }
@@ -2233,6 +2399,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     if (!form.data) nextErrors.data = 'Selecione um dia no calendário.';
     else if (form.data < todayIso) {
       nextErrors.data = 'Data inválida — não é possível agendar para o passado.';
+    } else if (modalMode === 'reagendar' && retornosVinculadosReagendar.length > 0) {
+      for (const ret of retornosVinculadosReagendar) {
+        const dataRet = ret.dataAgendamento || ret.data;
+        if (dataRet && form.data >= dataRet) {
+          nextErrors.data = `A nova data (${formatDataPt(form.data)}) não pode ser igual ou posterior ao retorno vinculado (${formatDataPt(dataRet)}).`;
+          break;
+        }
+      }
     } else if (
       form.data === todayIso &&
       form.horaInicio &&
@@ -2252,7 +2426,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [form, todayIso, modalMode, roleUserIdAgenda]);
+  }, [form, todayIso, modalMode, roleUserIdAgenda, retornosVinculadosReagendar, currentBrasiliaMinutes]);
 
   const saveAppointment = useCallback(async ({ onConflictResult } = {}) => {
     if (isNivel1) return false;
@@ -2286,6 +2460,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
         const planejamentoItemId = String(planejamentoItemIdVinculoRef.current ?? '').trim();
         const origemId = String(form.procedimentoFeitoOrigemId || '').trim();
+        const agendaIdOrigem =
+          modalMode === 'reagendar'
+            ? (editingAppointment?.agendaId || editingAppointment?.id)
+            : undefined;
         const createBody = buildAgendaCreateBody({
           dataAgendamento: form.data,
           horaInicio: startHh,
@@ -2296,6 +2474,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           tipoProcedimentoId: tipoId,
           ...(origemId ? { procedimentoFeitoOrigemId: origemId } : {}),
           ...(planejamentoItemId ? { planejamentoItemId } : {}),
+          ...(agendaIdOrigem ? { agendaIdOrigem } : {}),
         });
         const created = await executarComBypassDisp(
           () => agendasApi.create(createBody),
@@ -2325,6 +2504,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         }
         const startHh = String(form.horaInicio || '09:00').slice(0, 5);
         const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
+        const agendaIdOrigem =
+          modalMode === 'reagendar'
+            ? (editingAppointment?.agendaId || editingAppointment?.id)
+            : undefined;
         const createBody = buildAgendaCreateBody({
           dataAgendamento: form.data,
           horaInicio: startHh,
@@ -2334,6 +2517,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           pacienteId: String(form.pacienteId || patient?.id || '').trim(),
           tipoProcedimentoId: tipoId,
           // Sem catálogo e sem procedimentoFeitoOrigemId (state limpo ao trocar tipo).
+          ...(agendaIdOrigem ? { agendaIdOrigem } : {}),
         });
         const created = await executarComBypassDisp(
           () => agendasApi.create(createBody),
@@ -2356,105 +2540,109 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           };
         }
       } else {
-    const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
-      .map((id) => String(id).trim())
-      .filter(Boolean);
-
-    try {
-      for (let i = 0; i < procIds.length; i++) {
-        const id = procIds[i];
-        if (id.startsWith('new:')) {
-          const nome = id.substring(4);
-          const novoProcedimento = await catalogosApi.criar({ nomeProcedimento: nome });
-          const novoId = String(novoProcedimento.catalogoProcedimentoId || novoProcedimento.id || '').trim();
-          procIds[i] = novoId;
-        }
-      }
-    } catch (err) {
-      console.error('Erro ao cadastrar procedimento no catálogo:', err);
-      setError('Erro ao cadastrar novo procedimento no catálogo.');
-      return false;
-    }
-
-      let startHh = String(form.horaInicio || '09:00').slice(0, 5);
-      const resultados = [];
-      const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
-      const divisao = divideDuracaoEntreProcedimentos(duracaoTotal, procIds.length);
-
-      for (let i = 0; i < procIds.length; i += 1) {
-        const catalogoProcedimentoSaudeId = procIds[i];
-        const dMin = divisao[i] ?? 30;
-
-        const planejamentoItemId = resolvePlanejamentoItemIdForCatalogo(
-          catalogoProcedimentoSaudeId,
-          planejamentoItemIdPorCatalogo,
-          planejamentoItemIdVinculoRef.current,
-        );
-        const createBody = buildAgendaCreateBody({
-          dataAgendamento: form.data,
-          horaInicio: startHh,
-          duracaoMin: dMin,
-          profissionalRoleUserId: agendaRole,
-          observacao: String(form.observacao || '').trim(),
-          pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-          catalogoProcedimentoSaudeId,
-          // Resolve pelo ID do procedimento — robusto a reordenação/remoção de procs no modal.
-          ...(modalMode === 'reagendar' && grupoReagendarMap[catalogoProcedimentoSaudeId]
-            ? { agendaIdOrigem: grupoReagendarMap[catalogoProcedimentoSaudeId] }
-            : {}),
-          ...(planejamentoItemId ? { planejamentoItemId } : {}),
-        });
+        const procIds = (Array.isArray(form.catalogoProcedimentoSaudeIds) ? form.catalogoProcedimentoSaudeIds : [])
+          .map((id) => String(id).trim())
+          .filter(Boolean);
 
         try {
-          const created = await executarComBypassDisp(
-            () => agendasApi.create(createBody),
-            () => agendasApi.create(createBody, { forcar: true }),
-            abrirConfirmacaoForaDisp
-          );
-          if (created === null) {
-            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
-            continue;
+          for (let i = 0; i < procIds.length; i++) {
+            const id = procIds[i];
+            if (id.startsWith('new:')) {
+              const nome = id.substring(4);
+              const novoProcedimento = await catalogosApi.criar({ nomeProcedimento: nome });
+              const novoId = String(novoProcedimento.catalogoProcedimentoId || novoProcedimento.id || '').trim();
+              procIds[i] = novoId;
+            }
           }
-          if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
-          createdDtos.push(created);
-          const horaInicioSlot = startHh;
-          resultados.push({
-            id: catalogoProcedimentoSaudeId,
-            status: 'ok',
-            agendaId: created?.id,
-            planejamentoItemId,
-            horaInicio: horaInicioSlot,
-            horaFim: addMinutesToTime(horaInicioSlot, dMin),
-          });
-          startHh = addMinutesToTime(startHh, dMin);
         } catch (err) {
-          if (isAgendaSlotOverlapError(err)) {
-            resultados.push({ id: catalogoProcedimentoSaudeId, status: 'conflito', mensagem: formatAgendamentoApiError(err) });
-            continue;
-          }
-          throw err;
+          console.error('Erro ao cadastrar procedimento no catálogo:', err);
+          setError('Erro ao cadastrar novo procedimento no catálogo.');
+          return false;
         }
-      }
 
-      const algumFalhou = resultados.some((r) => r.status !== 'ok');
-      if (algumFalhou) {
-        onConflictResult?.(resultados);
-        return false;
-      }
+        let startHh = String(form.horaInicio || '09:00').slice(0, 5);
+        const resultados = [];
+        const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
+        const divisao = divideDuracaoEntreProcedimentos(duracaoTotal, procIds.length);
 
-      const firstOk = resultados.find((r) => r.status === 'ok');
-      if (firstOk && onAgendaSavedRef.current) {
-        agendaSavedPayload = {
-          agendaId: firstOk.agendaId,
-          planejamentoItemId: firstOk.planejamentoItemId ?? null,
-          catalogoProcedimentoSaudeId: firstOk.id,
-          dataAgendamento: form.data,
-          horaInicio: firstOk.horaInicio,
-          horaFim: firstOk.horaFim,
-          profissionalRoleUserId: agendaRole,
-          statusCodigo: 'AGENDADO',
-        };
-      }
+        for (let i = 0; i < procIds.length; i += 1) {
+          const catalogoProcedimentoSaudeId = procIds[i];
+          const dMin = divisao[i] ?? 30;
+
+          const planejamentoItemId = resolvePlanejamentoItemIdForCatalogo(
+            catalogoProcedimentoSaudeId,
+            planejamentoItemIdPorCatalogo,
+            planejamentoItemIdVinculoRef.current,
+          );
+          const agendaOrigemResolvida =
+            modalMode === 'reagendar'
+              ? (grupoReagendarMap[catalogoProcedimentoSaudeId] ||
+                (procIds.length === 1 ? (editingAppointment?.agendaId || editingAppointment?.id) : undefined))
+              : undefined;
+
+          const createBody = buildAgendaCreateBody({
+            dataAgendamento: form.data,
+            horaInicio: startHh,
+            duracaoMin: dMin,
+            profissionalRoleUserId: agendaRole,
+            observacao: String(form.observacao || '').trim(),
+            pacienteId: String(form.pacienteId || patient?.id || '').trim(),
+            catalogoProcedimentoSaudeId,
+            // Resolve pelo ID do procedimento — com fallback seguro para reagendamento individual
+            ...(agendaOrigemResolvida ? { agendaIdOrigem: agendaOrigemResolvida } : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
+          });
+
+          try {
+            const created = await executarComBypassDisp(
+              () => agendasApi.create(createBody),
+              () => agendasApi.create(createBody, { forcar: true }),
+              abrirConfirmacaoForaDisp
+            );
+            if (created === null) {
+              resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
+              continue;
+            }
+            if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
+            createdDtos.push(created);
+            const horaInicioSlot = startHh;
+            resultados.push({
+              id: catalogoProcedimentoSaudeId,
+              status: 'ok',
+              agendaId: created?.id,
+              planejamentoItemId,
+              horaInicio: horaInicioSlot,
+              horaFim: addMinutesToTime(horaInicioSlot, dMin),
+            });
+            startHh = addMinutesToTime(startHh, dMin);
+          } catch (err) {
+            if (isAgendaSlotOverlapError(err)) {
+              resultados.push({ id: catalogoProcedimentoSaudeId, status: 'conflito', mensagem: formatAgendamentoApiError(err) });
+              continue;
+            }
+            throw err;
+          }
+        }
+
+        const algumFalhou = resultados.some((r) => r.status !== 'ok');
+        if (algumFalhou) {
+          onConflictResult?.(resultados);
+          return false;
+        }
+
+        const firstOk = resultados.find((r) => r.status === 'ok');
+        if (firstOk && onAgendaSavedRef.current) {
+          agendaSavedPayload = {
+            agendaId: firstOk.agendaId,
+            planejamentoItemId: firstOk.planejamentoItemId ?? null,
+            catalogoProcedimentoSaudeId: firstOk.id,
+            dataAgendamento: form.data,
+            horaInicio: firstOk.horaInicio,
+            horaFim: firstOk.horaFim,
+            profissionalRoleUserId: agendaRole,
+            statusCodigo: 'AGENDADO',
+          };
+        }
       }
 
       const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
@@ -2638,9 +2826,13 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setPlanejamentoItemIdPorCatalogo,
     closeModal,
     patientSelectLocked,
+    retornosVinculadosReagendar,
     isModoPlanejamento: Object.keys(planejamentoItemIdPorCatalogo).length > 0,
     retornoTemVinculoPlano: Boolean(String(planejamentoItemIdVinculoRef.current ?? '').trim()),
     retornoPaiPreselecionado: Boolean(form.retornoPaiLocked),
+    selecionarRetornoOrigemPlano,
+    selecionarRetornoOrigemHistorico,
+    limparVinculoRetornoPlano,
     patientOptions,
     procedimentoOptions,
     dispCalendarioDia,
