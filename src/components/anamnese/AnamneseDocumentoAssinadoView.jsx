@@ -13,6 +13,7 @@ import { anamneseApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
 import { AnamneseAssinaturaActions } from './AnamneseAssinaturaActions.jsx';
 import { resolverEstadoAssinatura } from './anamneseAssinaturaUiState.js';
+import { tipoAlimentaProntuario } from './editorTipoMeta.js';
 
 const TRIVALENTE = { SIM: 'Sim', NAO: 'Não' , NAO_SEI: 'Não sei' };
 const METODO = {
@@ -185,10 +186,21 @@ export function AnamneseDocumentoView({
 
   const isProntuario = useCallback(
     (item) => {
+      const tipo = String(item?.tipo_resposta || item?.tipoResposta || '');
       const id = perguntaId(item);
-      if (id && prontuarioIds.has(String(id))) return true;
-      const tipo = String(item?.tipo_resposta || '');
-      return tipo.startsWith('catalogo_') && hasChip(item);
+      if (tipo.startsWith('catalogo_') && hasChip(item)) {
+        return true;
+      }
+      if (id && prontuarioIds.has(String(id))) {
+        if (tipoAlimentaProntuario(tipo)) {
+          return true;
+        }
+        // SIM com antecedente mapeado (backend inclui no prontuarioIds).
+        if ((tipo === 'sim_nao_naosei' || tipo === 'booleano') && isSim(item)) {
+          return true;
+        }
+      }
+      return false;
     },
     [prontuarioIds]
   );
