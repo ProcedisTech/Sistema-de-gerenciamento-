@@ -30,7 +30,7 @@ export function searchCatalogoHub(tipoResposta, { sexo, tipoAntecedenteCodigo } 
         .catch(() => []);
     }
     if (tipoResposta === 'catalogo_reacao') {
-      return catalogoClinicoApi.reacoesAdversas().then(asList).catch(() => []);
+      return catalogoClinicoApi.reacoesAdversas().then(asList);
     }
     return [];
   };
@@ -41,6 +41,18 @@ async function fetchJson(path) {
     headers: { 'X-Requested-With': 'XMLHttpRequest' },
   });
   if (!res.ok) return [];
+  const data = await res.json();
+  return asList(data);
+}
+
+/** Como fetchJson, mas propaga rejeição em HTTP não-OK (lista fixa de reação). */
+async function fetchJsonOrThrow(path) {
+  const res = await fetch(resolveApiUrl(path), {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  });
+  if (!res.ok) {
+    throw new Error(`Catálogo indisponível (${res.status})`);
+  }
   const data = await res.json();
   return asList(data);
 }
@@ -71,7 +83,7 @@ export function searchCatalogoPublico(tipoResposta, { sexo, tipoAntecedenteCodig
       return fetchJson(`/api/public/anamnese/catalogo/antecedentes-pessoais?${params.toString()}`);
     }
     if (tipoResposta === 'catalogo_reacao') {
-      return fetchJson('/api/public/anamnese/catalogo/reacoes-adversas');
+      return fetchJsonOrThrow('/api/public/anamnese/catalogo/reacoes-adversas');
     }
     return [];
   };

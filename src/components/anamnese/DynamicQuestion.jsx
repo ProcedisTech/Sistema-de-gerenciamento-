@@ -39,10 +39,12 @@ function CatalogoReacaoQuestion({
 
   const [loading, setLoading] = useState(searchEnabled);
   const [opcoes, setOpcoes] = useState([]);
+  const [loadError, setLoadError] = useState(false);
   const [prevSearchEnabled, setPrevSearchEnabled] = useState(searchEnabled);
   if (prevSearchEnabled !== searchEnabled) {
     setPrevSearchEnabled(searchEnabled);
     setLoading(searchEnabled);
+    setLoadError(false);
   }
 
   useEffect(() => {
@@ -51,10 +53,16 @@ function CatalogoReacaoQuestion({
     const fn = searchFnRef.current;
     fn('')
       .then((list) => {
-        if (!cancelled) setOpcoes(Array.isArray(list) ? list : []);
+        if (!cancelled) {
+          setOpcoes(Array.isArray(list) ? list : []);
+          setLoadError(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setOpcoes([]);
+        if (!cancelled) {
+          setOpcoes([]);
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -71,6 +79,10 @@ function CatalogoReacaoQuestion({
       <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
       {loading ? (
         <p className="text-[13px] text-slate-400">Carregando opções…</p>
+      ) : searchEnabled && loadError ? (
+        <p className="text-[12px] font-medium text-slate-500">Não foi possível carregar as opções.</p>
+      ) : searchEnabled && opcoes.length === 0 ? (
+        <p className="text-[12px] font-medium text-slate-500">Nenhuma opção disponível.</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {opcoes.map((op) => {
