@@ -1453,7 +1453,7 @@ export function Step3Termos({
         }}
         escolha={metodoEscolhido}
         sessaoExternaPayload={{
-          termoAssinaturaId: backendAssinaturaId || termoSelecionadoId,
+          termoAssinaturaId: backendAssinaturaId,
           telefonePaciente: pacienteCtx?.telefone || '',
         }}
         onAssinaturaConcluida={() => {
