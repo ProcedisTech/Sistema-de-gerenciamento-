@@ -30,6 +30,9 @@ function CatalogoReacaoQuestion({
   numero,
   obrigatorio,
   alerta,
+  gruposReacao = null,
+  vinculosReacao = null,
+  onVinculosChange = null,
 }) {
   const searchEnabled = typeof searchFn === 'function';
   const searchFnRef = useRef(searchFn);
@@ -72,7 +75,72 @@ function CatalogoReacaoQuestion({
     };
   }, [searchEnabled]);
 
+  const useGrupos = Array.isArray(gruposReacao)
+    && gruposReacao.length > 0
+    && typeof onVinculosChange === 'function'
+    && Array.isArray(vinculosReacao);
+
   const selectedId = resposta?.reacaoAdversaId ?? resposta?.catalogoItens?.[0]?.id;
+
+  const applyVinculoPick = (grupoKey, reacaoId, reacaoNome) => {
+    const next = vinculosReacao.map((v) => {
+      if (v.key !== grupoKey) return v;
+      const same = v.reacaoAdversaId != null && String(v.reacaoAdversaId) === String(reacaoId);
+      return {
+        ...v,
+        reacaoAdversaId: same ? null : reacaoId,
+        reacaoNome: same ? null : reacaoNome,
+      };
+    });
+    onVinculosChange(next);
+    onChange({
+      perguntaId: pergunta.id,
+      ...(() => {
+        const byId = new Map();
+        for (const v of next) {
+          if (!v.reacaoAdversaId) continue;
+          byId.set(String(v.reacaoAdversaId), {
+            id: v.reacaoAdversaId,
+            nome: v.reacaoNome || String(v.reacaoAdversaId),
+            fonte: 'catalogo',
+          });
+        }
+        const catalogoItens = Array.from(byId.values());
+        return {
+          reacaoAdversaId: catalogoItens[0]?.id ?? null,
+          catalogoItens,
+          declarouAusencia: false,
+        };
+      })(),
+    });
+  };
+
+  const renderOpcoes = (ativoId, onPick) => (
+    <div className="flex flex-wrap gap-2">
+      {opcoes.map((op) => {
+        const id = op.id ?? op.reacaoAdversaId;
+        const nome = op.nome ?? op.descricao ?? String(id);
+        const ativo = ativoId != null && String(ativoId) === String(id);
+        return (
+          <button
+            key={String(id)}
+            type="button"
+            disabled={readOnly}
+            aria-pressed={ativo}
+            onClick={() => {
+              if (readOnly) return;
+              onPick(id, nome, ativo);
+            }}
+            className={`rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-all ${
+              readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
+            }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-600 hover:border-[#00a88e]/40'}`}
+          >
+            {nome}
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="flex w-full min-w-0 flex-col">
@@ -83,35 +151,29 @@ function CatalogoReacaoQuestion({
         <p className="text-[12px] font-medium text-slate-500">Não foi possível carregar as opções.</p>
       ) : searchEnabled && opcoes.length === 0 ? (
         <p className="text-[12px] font-medium text-slate-500">Nenhuma opção disponível.</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {opcoes.map((op) => {
-            const id = op.id ?? op.reacaoAdversaId;
-            const nome = op.nome ?? op.descricao ?? String(id);
-            const ativo = selectedId != null && String(selectedId) === String(id);
+      ) : useGrupos ? (
+        <div className="flex flex-col gap-4">
+          {gruposReacao.map((g) => {
+            const vinculo = vinculosReacao.find((v) => v.key === g.key);
+            const ativoId = vinculo?.reacaoAdversaId ?? null;
             return (
-              <button
-                key={String(id)}
-                type="button"
-                disabled={readOnly}
-                aria-pressed={ativo}
-                onClick={() => {
-                  if (readOnly) return;
-                  onChange({
-                    perguntaId: pergunta.id,
-                    reacaoAdversaId: ativo ? null : id,
-                    catalogoItens: ativo ? [] : [{ id, nome, fonte: 'catalogo' }],
-                  });
-                }}
-                className={`rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-all ${
-                  readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
-                }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-600 hover:border-[#00a88e]/40'}`}
-              >
-                {nome}
-              </button>
+              <div key={g.key} className="rounded-lg border border-slate-100 bg-slate-50/40 p-3">
+                <p className="mb-2 text-[12px] font-semibold text-slate-700">
+                  {g.escopo === 'PRODUTO' ? 'Produto' : 'Substância'}: {g.label}
+                </p>
+                {renderOpcoes(ativoId, (id, nome) => applyVinculoPick(g.key, id, nome))}
+              </div>
             );
           })}
         </div>
+      ) : (
+        renderOpcoes(selectedId, (id, nome, ativo) => {
+          onChange({
+            perguntaId: pergunta.id,
+            reacaoAdversaId: ativo ? null : id,
+            catalogoItens: ativo ? [] : [{ id, nome, fonte: 'catalogo' }],
+          });
+        })
       )}
     </div>
   );
@@ -126,6 +188,9 @@ export function DynamicQuestion({
   obrigatorio = false,
   numero = null,
   searchFn = null,
+  gruposReacao = null,
+  vinculosReacao = null,
+  onVinculosChange = null,
 }) {
   const tipo = pergunta.tipoResposta;
   const fieldBase = `w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors${readOnly ? ' cursor-default bg-slate-50 opacity-90' : ''}`;
@@ -284,6 +349,9 @@ export function DynamicQuestion({
         numero={numero}
         obrigatorio={obrigatorio}
         alerta={alerta}
+        gruposReacao={gruposReacao}
+        vinculosReacao={vinculosReacao}
+        onVinculosChange={onVinculosChange}
       />
     );
   }

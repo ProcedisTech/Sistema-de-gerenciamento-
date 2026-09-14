@@ -248,9 +248,15 @@ export function buildRespostaApiRows(pergunta, resposta) {
     if (resposta.declarouAusencia) {
       return [{ perguntaId, declarouAusencia: true }];
     }
-    const reacaoId = resposta.reacaoAdversaId ?? resposta.catalogoItens?.[0]?.id;
-    if (reacaoId) return [{ perguntaId, reacaoAdversaId: reacaoId }];
-    return [];
+    const ids = [];
+    if (Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0) {
+      for (const it of resposta.catalogoItens) {
+        if (it?.id != null && !ids.includes(it.id)) ids.push(it.id);
+      }
+    } else if (resposta.reacaoAdversaId) {
+      ids.push(resposta.reacaoAdversaId);
+    }
+    return ids.map((reacaoAdversaId) => ({ perguntaId, reacaoAdversaId }));
   }
   if (isTipoCatalogoMulti(tipo)) {
     if (resposta.declarouAusencia) {
@@ -300,9 +306,16 @@ export function serializeRespostaPublica(pergunta, resposta) {
     if (resposta.declarouAusencia) {
       return [{ tipo: 'declarou_ausencia', valor: true }];
     }
-    const reacaoId = resposta.reacaoAdversaId ?? resposta.catalogoItens?.[0]?.id;
-    if (reacaoId) return [{ tipo: 'reacao', valor: reacaoId }];
-    return undefined;
+    const ids = [];
+    if (Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0) {
+      for (const it of resposta.catalogoItens) {
+        if (it?.id != null) ids.push(it.id);
+      }
+    } else if (resposta.reacaoAdversaId) {
+      ids.push(resposta.reacaoAdversaId);
+    }
+    if (ids.length === 0) return undefined;
+    return ids.map((id) => ({ tipo: 'reacao', valor: id }));
   }
   if (isTipoCatalogoMulti(tipo)) {
     if (resposta.declarouAusencia) {
@@ -348,4 +361,125 @@ export function toPerguntaFromPublica(p) {
 /** Itens da ficha ordenados por `ordem`. */
 export function sortFichaItens(ficha) {
   return [...(ficha?.itens || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+}
+
+function newClientId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `decl-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/**
+ * Agrupa chips de princípio ativo para perguntar reação por produto/substância (D5).
+ * @returns {{ key: string, escopo: 'PRODUTO'|'SUBSTANCIA', medicamentoCatalogoId: string|null, label: string, principioAtivoIds: string[], declaracaoClientId?: string }[]}
+ */
+export function buildGruposReacao(perguntas, respostas) {
+  const byKey = new Map();
+  for (const pergunta of perguntas || []) {
+    const tipo = pergunta?.tipoResposta || pergunta?.tipo;
+    if (tipo !== 'catalogo_principio_ativo') continue;
+    const pid = pergunta.id ?? pergunta.perguntaId;
+    const r = respostas?.[pid] ?? respostas?.[String(pid)];
+    if (!r || r.declarouAusencia) continue;
+    for (const it of r.catalogoItens || []) {
+      if (it?.id == null) continue;
+      const viaProduto = Boolean(it.viaProduto && it.medicamentoDeclaradoId);
+      const key = viaProduto
+        ? `PRODUTO:${it.medicamentoDeclaradoId}`
+        : `SUBSTANCIA:${it.id}`;
+      let g = byKey.get(key);
+      if (!g) {
+        g = {
+          key,
+          escopo: viaProduto ? 'PRODUTO' : 'SUBSTANCIA',
+          medicamentoCatalogoId: viaProduto ? it.medicamentoDeclaradoId : null,
+          label: viaProduto
+            ? (it.nomeProduto || it.medicamentoNome || `Produto (${String(it.medicamentoDeclaradoId).slice(0, 8)}…)`)
+            : (it.nome || String(it.id)),
+          principioAtivoIds: [],
+          nomesPa: [],
+        };
+        byKey.set(key, g);
+      }
+      const paId = String(it.id);
+      if (!g.principioAtivoIds.includes(paId)) {
+        g.principioAtivoIds.push(paId);
+        if (it.nome) g.nomesPa.push(it.nome);
+      }
+      if (viaProduto && it.nome && !g.label.includes(it.nome) && g.nomesPa.length <= 3) {
+        // keep product label; nomesPa used as subtitle
+      }
+    }
+  }
+  return Array.from(byKey.values()).map((g) => ({
+    ...g,
+    label: g.escopo === 'PRODUTO' && g.nomesPa.length
+      ? `${g.label} (${g.nomesPa.join(', ')})`
+      : g.label,
+  }));
+}
+
+/**
+ * Alinha vinculosReacao aos grupos atuais (preserva reação e declaracaoClientId).
+ */
+export function syncVinculosComGrupos(grupos, vinculosAnteriores = []) {
+  const prevByKey = new Map(
+    (vinculosAnteriores || []).map((v) => [v.key || vinculoKey(v), v]),
+  );
+  return (grupos || []).map((g) => {
+    const prev = prevByKey.get(g.key);
+    return {
+      key: g.key,
+      declaracaoClientId: prev?.declaracaoClientId || newClientId(),
+      escopo: g.escopo,
+      medicamentoCatalogoId: g.medicamentoCatalogoId || null,
+      reacaoAdversaId: prev?.reacaoAdversaId ?? null,
+      reacaoNome: prev?.reacaoNome ?? null,
+      principioAtivoIds: g.principioAtivoIds,
+      label: g.label,
+    };
+  });
+}
+
+function vinculoKey(v) {
+  if (v.key) return v.key;
+  if (v.escopo === 'PRODUTO' && v.medicamentoCatalogoId) {
+    return `PRODUTO:${v.medicamentoCatalogoId}`;
+  }
+  const pa = v.principioAtivoIds?.[0];
+  return pa ? `SUBSTANCIA:${pa}` : `DECL:${v.declaracaoClientId}`;
+}
+
+/** Payload canônico para API (só vínculos com reação escolhida). */
+export function toVinculosReacaoPayload(vinculos) {
+  return (vinculos || [])
+    .filter((v) => v.reacaoAdversaId && Array.isArray(v.principioAtivoIds) && v.principioAtivoIds.length > 0)
+    .map((v) => ({
+      declaracaoClientId: v.declaracaoClientId,
+      escopo: v.escopo,
+      medicamentoCatalogoId: v.medicamentoCatalogoId || null,
+      reacaoAdversaId: v.reacaoAdversaId,
+      principioAtivoIds: v.principioAtivoIds,
+    }));
+}
+
+/** Atualiza a resposta agregada de catalogo_reacao a partir dos vínculos. */
+export function respostaReacaoFromVinculos(perguntaId, vinculos) {
+  const byId = new Map();
+  for (const v of vinculos || []) {
+    if (!v.reacaoAdversaId) continue;
+    byId.set(String(v.reacaoAdversaId), {
+      id: v.reacaoAdversaId,
+      nome: v.reacaoNome || String(v.reacaoAdversaId),
+      fonte: 'catalogo',
+    });
+  }
+  const catalogoItens = Array.from(byId.values());
+  return {
+    perguntaId,
+    reacaoAdversaId: catalogoItens[0]?.id ?? null,
+    catalogoItens,
+    declarouAusencia: false,
+  };
 }

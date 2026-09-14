@@ -18,10 +18,13 @@ import { AnamneseDocumentoView } from '../anamnese/AnamneseDocumentoAssinadoView
 import {
   buildPerguntaTipoById,
   buildRespostaApiRows,
+  buildGruposReacao,
   groupItensByCategoria,
   isFullWidthItem,
   isRespostaPreenchida,
   mergeApiRespostasToMap,
+  syncVinculosComGrupos,
+  toVinculosReacaoPayload,
 } from '../anamnese/anamneseFichaUtils.js';
 import { aplicarMudancaResposta, categoriaVisivelParaSexo, perguntaFilhaVisivel } from '../anamnese/anamneseCondicional.js';
 import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
@@ -148,6 +151,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       ? mergeInitialRespostas(savedAnamneseState?.respostas, respostasAnamnese)
       : {}
   );
+  const [vinculosReacao, setVinculosReacao] = useState(
+    () => (draftValido && Array.isArray(savedAnamneseState?.vinculosReacao)
+      ? savedAnamneseState.vinculosReacao
+      : [])
+  );
   const [preenchimentoAnterior, setPreenchimentoAnterior] = useState(
     () => (draftValido ? savedAnamneseState?.preenchimentoAnterior || null : null)
   );
@@ -181,6 +189,15 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         : [],
     [fichaSelecionada],
   );
+
+  const gruposReacao = useMemo(() => {
+    const perguntas = itensOrdenados.map((item) => item.pergunta).filter(Boolean);
+    return buildGruposReacao(perguntas, respostas);
+  }, [itensOrdenados, respostas]);
+
+  useEffect(() => {
+    setVinculosReacao((prev) => syncVinculosComGrupos(gruposReacao, prev));
+  }, [gruposReacao]);
 
   const itensFiltrados = useMemo(
     () =>
@@ -243,6 +260,27 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   respostasRef.current = respostas;
   const savedDraftRef = useRef(savedAnamneseState);
   savedDraftRef.current = savedAnamneseState;
+
+  const handleVinculosReacaoChange = useCallback((next) => {
+    setVinculosReacao(next);
+    onSavedAnamneseStateChange({
+      ...(savedDraftRef.current || {}),
+      pacienteId,
+      fichaSelecionadaId,
+      fichaDropdownNovo,
+      respostas: respostasRef.current,
+      vinculosReacao: next,
+      preenchimentoAnterior,
+      modoVisualizacao,
+    });
+  }, [
+    onSavedAnamneseStateChange,
+    pacienteId,
+    fichaSelecionadaId,
+    fichaDropdownNovo,
+    preenchimentoAnterior,
+    modoVisualizacao,
+  ]);
 
   useEffect(() => {
     anamneseApi.listFichas()
@@ -459,6 +497,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     setFichaSelecionadaId('');
     setFichaSelecionada(null);
     setRespostas({});
+    setVinculosReacao([]);
     setPreenchimentoAnterior(null);
     setModoVisualizacao(false);
     setFichaDropdownNovo('');
@@ -487,6 +526,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       fichaSelecionadaId,
       fichaDropdownNovo,
       respostas: next,
+      vinculosReacao,
       preenchimentoAnterior,
       modoVisualizacao,
     });
@@ -500,6 +540,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     fichaDropdownNovo,
     preenchimentoAnterior,
     itensOrdenados,
+    pacienteId,
+    vinculosReacao,
   ]);
 
   const toggleModoVisualizacao = useCallback(() => {
@@ -548,6 +590,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       return {
         anamneseId: fichaSelecionadaId,
         respostas: rows,
+        vinculosReacao: toVinculosReacaoPayload(vinculosReacao),
       };
     },
     skipQueixaExpectativas: () => Boolean(modoVisualizacao || preenchimentoAnterior),
@@ -883,6 +926,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
               updateObservacao={perfilClinico.updateObservacao}
               updateMedicamentoExtra={perfilClinico.updateMedicamentoExtra}
               updateReacaoAdversa={perfilClinico.updateReacaoAdversa}
+              updateReacoesAdversas={perfilClinico.updateReacoesAdversas}
               buscarAlimentos={perfilClinico.buscarAlimentos}
               buscarPrincipiosAtivos={perfilClinico.buscarPrincipiosAtivos}
               buscarMedicamentos={perfilClinico.buscarMedicamentos}
@@ -1205,6 +1249,17 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                           sexo: pacienteSexo,
                           tipoAntecedenteCodigo: item.pergunta?.tipoAntecedenteCodigo,
                         })}
+                        gruposReacao={
+                          item.pergunta?.tipoResposta === 'catalogo_reacao' ? gruposReacao : null
+                        }
+                        vinculosReacao={
+                          item.pergunta?.tipoResposta === 'catalogo_reacao' ? vinculosReacao : null
+                        }
+                        onVinculosChange={
+                          item.pergunta?.tipoResposta === 'catalogo_reacao'
+                            ? handleVinculosReacaoChange
+                            : null
+                        }
                       />
                     </div>
                   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { SignatureFullscreenModal } from '../../components/journey/Step4LGPD';
 import { TermoVisualizacao } from '../../components/termos/TermoVisualizacao';
@@ -9,6 +9,9 @@ import {
   mergeApiRespostasToMap,
   serializeRespostaPublica,
   toPerguntaFromPublica,
+  buildGruposReacao,
+  syncVinculosComGrupos,
+  toVinculosReacaoPayload,
 } from '../../components/anamnese/anamneseFichaUtils.js';
 import { aplicarMudancaResposta, collectPerguntaIdsVisiveis, perguntaFilhaVisivel } from '../../components/anamnese/anamneseCondicional.js';
 import { searchCatalogoPublico } from '../../components/anamnese/anamneseCatalogoSearch.js';
@@ -64,6 +67,7 @@ export const AnamnesePage = () => {
   const [hydrationStatus, setHydrationStatus] = useState('none'); // none | ok | failed
   
   const [respostas, setRespostas] = useState({});
+  const [vinculosReacao, setVinculosReacao] = useState([]);
   const [assinatura, setAssinatura] = useState(null);
   const [termoAceito, setTermoAceito] = useState(false);
 
@@ -182,10 +186,27 @@ export const AnamnesePage = () => {
     }
   };
 
+  const perguntasModelo = useMemo(
+    () => (lookupData?.modelo?.categorias || [])
+      .flatMap((c) => (c.perguntas || []).map(toPerguntaFromPublica)),
+    [lookupData],
+  );
+
+  const gruposReacao = useMemo(
+    () => buildGruposReacao(perguntasModelo, respostas),
+    [perguntasModelo, respostas],
+  );
+
+  useEffect(() => {
+    setVinculosReacao((prev) => syncVinculosComGrupos(gruposReacao, prev));
+  }, [gruposReacao]);
+
+  const handleVinculosReacaoChange = useCallback((next) => {
+    setVinculosReacao(next);
+  }, []);
+
   const handleRespostaChange = (resposta) => {
-    const perguntas = (lookupData?.modelo?.categorias || [])
-      .flatMap((c) => (c.perguntas || []).map(toPerguntaFromPublica));
-    setRespostas((prev) => aplicarMudancaResposta(prev, perguntas, resposta));
+    setRespostas((prev) => aplicarMudancaResposta(prev, perguntasModelo, resposta));
   };
 
   const handleGoToSignature = (e) => {
@@ -268,7 +289,8 @@ export const AnamnesePage = () => {
           toPerguntaFromPublica,
         ),
         hydrationToken,
-        assinatura: assinatura
+        assinatura: assinatura,
+        vinculosReacao: toVinculosReacaoPayload(vinculosReacao),
       };
 
       const res = await fetch(resolveApiUrl('/api/public/anamnese/responder'), {
@@ -347,6 +369,11 @@ export const AnamnesePage = () => {
                       searchFn={searchCatalogoPublico(p.tipoResposta, {
                         tipoAntecedenteCodigo: p.tipoAntecedenteCodigo,
                       })}
+                      gruposReacao={p.tipoResposta === 'catalogo_reacao' ? gruposReacao : null}
+                      vinculosReacao={p.tipoResposta === 'catalogo_reacao' ? vinculosReacao : null}
+                      onVinculosChange={
+                        p.tipoResposta === 'catalogo_reacao' ? handleVinculosReacaoChange : null
+                      }
                     />
                   </div>
                 );
