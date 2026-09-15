@@ -111,7 +111,7 @@ export function AnamneseCatalogoPicker({
     if (descrevendo && textoRef.current) textoRef.current.focus();
   }, [descrevendo]);
 
-  const handleSelect = (item, { viaProduto = false, medicamentoDeclaradoId = null } = {}) => {
+  const handleSelect = (item, { viaProduto = false, medicamentoDeclaradoId = null, nomeProduto = null } = {}) => {
     const id = item.id ?? item.codigo;
     if (id == null || selectedIds.has(String(id))) return;
     const chip = {
@@ -122,6 +122,8 @@ export function AnamneseCatalogoPicker({
     if (viaProduto && medicamentoDeclaradoId) {
       chip.medicamentoDeclaradoId = medicamentoDeclaradoId;
       chip.viaProduto = true;
+      const nome = nomeProduto || item.encontradoPor;
+      if (nome) chip.nomeProduto = nome;
     }
     emit([...catalogoItens, chip], textosLivres, false);
     setQuery('');
@@ -129,18 +131,24 @@ export function AnamneseCatalogoPicker({
     setShowResults(false);
   };
 
-  const handleSelectBatch = (items, medicamentoDeclaradoId) => {
+  const handleSelectBatch = (items, medicamentoDeclaradoId, nomeProduto = null) => {
     const novos = [];
     for (const item of items) {
       const id = item.id ?? item.codigo;
       if (id == null || selectedIds.has(String(id))) continue;
-      novos.push({
+      const chip = {
         id,
         nome: item.nome || String(id),
         fonte: 'catalogo',
         medicamentoDeclaradoId,
         viaProduto: true,
-      });
+      };
+      if (nomeProduto) {
+        chip.nomeProduto = nomeProduto;
+      } else if (item.encontradoPor) {
+        chip.nomeProduto = item.encontradoPor;
+      }
+      novos.push(chip);
     }
     if (novos.length === 0) return;
     emit([...catalogoItens, ...novos], textosLivres, false);
@@ -276,7 +284,16 @@ export function AnamneseCatalogoPicker({
                             <li key={id}>
                               <button
                                 type="button"
-                                onClick={() => handleSelect(item)}
+                                onClick={() => handleSelect(
+                                  item,
+                                  g.encontradoPorId
+                                    ? {
+                                      viaProduto: true,
+                                      medicamentoDeclaradoId: g.encontradoPorId,
+                                      nomeProduto: g.encontradoPor,
+                                    }
+                                    : {},
+                                )}
                                 className="w-full px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#e6f7f5]"
                               >
                                 <span className="flex flex-col gap-0.5">
@@ -295,7 +312,7 @@ export function AnamneseCatalogoPicker({
                           <li className="border-b border-slate-100">
                             <button
                               type="button"
-                              onClick={() => handleSelectBatch(g.items, g.encontradoPorId)}
+                              onClick={() => handleSelectBatch(g.items, g.encontradoPorId, g.encontradoPor)}
                               className="w-full px-3 py-2 text-left text-[12px] font-semibold text-[#0f766e] hover:bg-[#e6f7f5]"
                             >
                               {`Não sei qual componente · marcar as ${g.items.length}`}

@@ -15,9 +15,9 @@ const resumoCritico = {
     { id: '4', nome: 'Mel, de abelha' },
   ],
   alergiasPrincipioAtivo: [
-    { id: '5', nome: 'bupropiona' },
-    { id: '6', nome: 'dipirona' },
-    { id: '7', nome: 'prednisolona' },
+    { id: '5', nome: 'bupropiona', criticidade: 'ALTA', reacoes: [{ id: 'r1', nome: 'Falta de ar', criticidade: 'ALTA' }] },
+    { id: '6', nome: 'dipirona', criticidade: 'BAIXA', reacoes: [{ id: 'r2', nome: 'Coceira', criticidade: 'BAIXA' }] },
+    { id: '7', nome: 'prednisolona', criticidade: 'ALTA', reacoes: [{ id: 'r3', nome: 'Urticária', criticidade: 'ALTA' }] },
   ],
   medicamentosEmUso: [
     { id: '8', nome: 'Losartana' },
@@ -73,7 +73,7 @@ describe('AlertasClinicosPanel (hub)', () => {
     expect(screen.getByRole('button', { name: /3 Medicamento em uso/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /2 Condição de saúde/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /5 Declarado na anamnese/i })).toBeInTheDocument();
-    expect(screen.getByText('9 críticos')).toBeInTheDocument();
+    expect(screen.getByText('2 de alta gravidade')).toBeInTheDocument();
     expect(screen.getByText(/18\/08/)).toBeInTheDocument();
     expect(screen.getByText(/assinada/)).toBeInTheDocument();
     expect(container.firstChild.className).toContain('border-[#fecdd3]');
@@ -97,11 +97,11 @@ describe('AlertasClinicosPanel (hub)', () => {
     expect(pa).toHaveAttribute('aria-expanded', 'true');
     expect(alimentar).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('Camarão')).not.toBeInTheDocument();
-    expect(screen.getByText('dipirona')).toBeInTheDocument();
+    expect(screen.getByText(/dipirona/)).toBeInTheDocument();
 
     await user.click(pa);
     expect(pa).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('dipirona')).not.toBeInTheDocument();
+    expect(screen.queryByText(/dipirona/)).not.toBeInTheDocument();
   });
 
   it('Ver tudo agrega as naturezas e desliga ao clicar um contador', async () => {
@@ -155,7 +155,7 @@ describe('AlertasClinicosPanel (hub)', () => {
     const zero = screen.getByRole('button', { name: /0 Alergia alimentar/i });
     expect(zero).toBeInTheDocument();
     expect(zero.className).toContain('opacity-50');
-    expect(screen.getByText('sem críticos')).toBeInTheDocument();
+    expect(screen.getByText('sem alta gravidade')).toBeInTheDocument();
     expect(container.firstChild.className).toContain('border-[#99f6e4]');
     expect(screen.getByText(/finalizada/)).toBeInTheDocument();
   });
@@ -176,7 +176,7 @@ describe('AlertasClinicosPanel (hub)', () => {
     ).toBeInTheDocument();
     expect(container.firstChild.className).toContain('border-[#e2e8f0]');
     expect(container.firstChild.className).not.toContain('border-[#99f6e4]');
-    expect(screen.queryByText(/sem críticos/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sem alta gravidade/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Solicitar anamnese' }));
     expect(onSolicitar).toHaveBeenCalledTimes(1);

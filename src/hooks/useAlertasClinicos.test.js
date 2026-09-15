@@ -37,9 +37,15 @@ describe('mapResumoToLegacy', () => {
     expect(mapped.alertasAnamnese[2].titulo).toBe('Histórico familiar: Infarto');
   });
 
-  it('criticosCount soma alergias alimentares, PA e declarações críticas', () => {
-    const mapped = mapResumoToLegacy(resumo);
-    expect(mapped.criticosCount).toBe(3);
+  it('criticosCount conta só PA com criticidade ALTA', () => {
+    const mapped = mapResumoToLegacy({
+      ...resumo,
+      alergiasPrincipioAtivo: [
+        { id: 'p1', nome: 'dipirona', criticidade: 'ALTA' },
+        { id: 'p2', nome: 'lidocaina', criticidade: 'BAIXA' },
+      ],
+    });
+    expect(mapped.criticosCount).toBe(1);
   });
 
   it('tolera payload vazio', () => {

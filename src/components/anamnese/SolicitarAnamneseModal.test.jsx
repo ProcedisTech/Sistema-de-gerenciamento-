@@ -11,9 +11,12 @@ vi.mock('../../services/api', () => ({
     status: vi.fn(),
     cancelar: vi.fn(),
   },
+  anamneseApi: {
+    getPaciente: vi.fn(),
+  },
 }));
 
-import { anamneseEnvioApi } from '../../services/api';
+import { anamneseApi, anamneseEnvioApi } from '../../services/api';
 
 describe('SolicitarAnamneseModal', () => {
   beforeEach(() => {
@@ -22,9 +25,11 @@ describe('SolicitarAnamneseModal', () => {
       envioId: 'e1',
       urlPublica: 'https://app.procedi.com/anamnese?clinic=demo',
       otpCode: '123456',
+      preenchimentoAnamneseId: 'pre-1',
     });
     anamneseEnvioApi.status.mockResolvedValue({ status: 'PENDENTE' });
     anamneseEnvioApi.cancelar.mockResolvedValue(undefined);
+    anamneseApi.getPaciente.mockResolvedValue({ status: 'Finalizada' });
   });
 
   it('dispara gerar uma única vez sob StrictMode', async () => {
@@ -181,6 +186,70 @@ describe('SolicitarAnamneseModal', () => {
     expect(href).not.toContain('123456');
     expect(href).not.toContain('código de verificação');
     expect(screen.queryByText(/Código de verificação/)).not.toBeInTheDocument();
+  });
+
+  it('CONCLUIDO com preenchimento cancelada mostra recusa e chama onRecusado (não onConcluido)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onConcluido = vi.fn();
+    const onRecusado = vi.fn();
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    anamneseApi.getPaciente.mockResolvedValue({ status: 'cancelada' });
+
+    render(
+      <SolicitarAnamneseModal
+        open
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' }}
+        payload={{
+          pacienteId: 'pac-1',
+          telefonePaciente: '11999999999',
+          pacienteNome: 'Marina',
+          preenchimentoAnamneseId: 'pre-1',
+        }}
+        onClose={() => {}}
+        onConcluido={onConcluido}
+        onRecusado={onRecusado}
+      />,
+    );
+    await screen.findByText('Aguardando paciente');
+    await vi.advanceTimersByTimeAsync(3000);
+    await screen.findByText('Paciente recusou');
+    expect(screen.queryByText('Anamnese recebida!')).not.toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(onRecusado).toHaveBeenCalledTimes(1);
+    expect(onConcluido).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('CONCLUIDO assinado mostra sucesso e chama onConcluido', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onConcluido = vi.fn();
+    const onRecusado = vi.fn();
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    anamneseApi.getPaciente.mockResolvedValue({ status: 'Finalizada' });
+
+    render(
+      <SolicitarAnamneseModal
+        open
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' }}
+        payload={{
+          pacienteId: 'pac-1',
+          telefonePaciente: '11999999999',
+          pacienteNome: 'Marina',
+          preenchimentoAnamneseId: 'pre-1',
+        }}
+        onClose={() => {}}
+        onConcluido={onConcluido}
+        onRecusado={onRecusado}
+      />,
+    );
+    await screen.findByText('Aguardando paciente');
+    await vi.advanceTimersByTimeAsync(3000);
+    await screen.findByText('Anamnese recebida!');
+    expect(screen.queryByText('Paciente recusou')).not.toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(onConcluido).toHaveBeenCalledTimes(1);
+    expect(onRecusado).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
 

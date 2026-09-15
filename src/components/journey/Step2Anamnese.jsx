@@ -693,6 +693,16 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     }
   }, [recarregarHistoricoPaciente, fichaSelecionadaId, selecionarFichaParaNovo]);
 
+  const handleModalRecusado = useCallback(async () => {
+    setAnamneseSolicitacao(null);
+    setEnvioAtivo(null);
+    setModoVisualizacao(true);
+    await recarregarHistoricoPaciente();
+    if (fichaSelecionadaId) {
+      await selecionarFichaParaNovo(fichaSelecionadaId);
+    }
+  }, [recarregarHistoricoPaciente, fichaSelecionadaId, selecionarFichaParaNovo]);
+
   const handleSolicitarAssinatura = useCallback(async () => {
     if (!pacienteId || formularioReadOnly || solicitandoAssinatura) return;
     if (typeof onPersistirAnamneseHub !== 'function') return;
@@ -1163,21 +1173,35 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       </div>
 
       {preenchimentoAnterior && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-[#e6f7f5] border border-[#00a88e] rounded-xl px-4 py-3 mb-4">
-          <div className="flex items-center gap-2 text-[#0f766e] text-sm font-medium min-w-0">
+        <div className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-xl px-4 py-3 mb-4 ${
+          resolveStatusCodigo(preenchimentoAnterior) === 'cancelada'
+            ? 'bg-amber-50 border border-amber-200'
+            : 'bg-[#e6f7f5] border border-[#00a88e]'
+        }`}>
+          <div className={`flex items-center gap-2 text-sm font-medium min-w-0 ${
+            resolveStatusCodigo(preenchimentoAnterior) === 'cancelada' ? 'text-amber-900' : 'text-[#0f766e]'
+          }`}>
             <CheckCircle className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} aria-hidden />
             <span>
-              Preenchida em{' '}
-              {preenchimentoAnterior.dataHora
-                ? new Date(preenchimentoAnterior.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-                : 'data não registrada'}
+              {resolveStatusCodigo(preenchimentoAnterior) === 'cancelada'
+                ? 'Paciente recusou esta ficha — revise e solicite novamente se necessário'
+                : (
+                  <>
+                    Preenchida em{' '}
+                    {preenchimentoAnterior.dataHora
+                      ? new Date(preenchimentoAnterior.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                      : 'data não registrada'}
+                  </>
+                )}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={toggleModoVisualizacao}
-              className="text-sm font-bold text-[#00a88e] hover:underline text-left sm:text-right flex-shrink-0"
+              className={`text-sm font-bold hover:underline text-left sm:text-right flex-shrink-0 ${
+                resolveStatusCodigo(preenchimentoAnterior) === 'cancelada' ? 'text-amber-800' : 'text-[#00a88e]'
+              }`}
             >
               {modoVisualizacao ? 'Modificar' : 'Cancelar'}
             </button>
@@ -1475,6 +1499,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         onEnvioGerado={handleModalEnvioGerado}
         onEnvioExpirado={handleModalEnvioExpirado}
         onConcluido={handleModalConcluido}
+        onRecusado={handleModalRecusado}
       />
     </div>
   );

@@ -30,7 +30,6 @@ export function mapApiRespostaToEstado(r) {
     row.opcoesSelecionadas = multi.map((x) => (typeof x === 'object' && x != null && x.id != null ? x.id : x));
   }
   if (r.reacaoAdversaId) {
-    row.reacaoAdversaId = r.reacaoAdversaId;
     row.catalogoItens = [{
       id: r.reacaoAdversaId,
       nome: r.opcaoSelecionada || r.reacaoAdversaNome || String(r.reacaoAdversaId),
@@ -83,11 +82,15 @@ export function mergeApiRespostasToMap(respostasApi, perguntaTipoById = {}) {
       continue;
     }
 
-    if (tipoPergunta === 'catalogo_reacao' && mapped.reacaoAdversaId) {
+    if (tipoPergunta === 'catalogo_reacao' && Array.isArray(mapped.catalogoItens) && mapped.catalogoItens.length > 0) {
+      const prev = map[key];
+      const catalogoItens = [...(prev?.catalogoItens || [])];
+      for (const it of mapped.catalogoItens) {
+        if (!catalogoItens.some((c) => String(c.id) === String(it.id))) catalogoItens.push(it);
+      }
       map[key] = {
         perguntaId: mapped.perguntaId,
-        reacaoAdversaId: mapped.reacaoAdversaId,
-        catalogoItens: mapped.catalogoItens || [],
+        catalogoItens,
       };
       continue;
     }
@@ -208,8 +211,7 @@ export function isRespostaPreenchida(pergunta, resposta) {
   }
   if (tipo === 'catalogo_reacao') {
     if (resposta.declarouAusencia) return true;
-    return Boolean(resposta.reacaoAdversaId)
-      || (Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0);
+    return Array.isArray(resposta.catalogoItens) && resposta.catalogoItens.length > 0;
   }
   if (isTipoCatalogoMulti(tipo)) {
     if (resposta.declarouAusencia) return true;
@@ -253,8 +255,6 @@ export function buildRespostaApiRows(pergunta, resposta) {
       for (const it of resposta.catalogoItens) {
         if (it?.id != null && !ids.includes(it.id)) ids.push(it.id);
       }
-    } else if (resposta.reacaoAdversaId) {
-      ids.push(resposta.reacaoAdversaId);
     }
     return ids.map((reacaoAdversaId) => ({ perguntaId, reacaoAdversaId }));
   }
@@ -311,8 +311,6 @@ export function serializeRespostaPublica(pergunta, resposta) {
       for (const it of resposta.catalogoItens) {
         if (it?.id != null) ids.push(it.id);
       }
-    } else if (resposta.reacaoAdversaId) {
-      ids.push(resposta.reacaoAdversaId);
     }
     if (ids.length === 0) return undefined;
     return ids.map((id) => ({ tipo: 'reacao', valor: id }));
@@ -412,16 +410,20 @@ export function buildGruposReacao(perguntas, respostas) {
       }
     }
   }
-  return Array.from(byKey.values()).map((g) => ({
-    ...g,
-    label: g.escopo === 'PRODUTO' && g.nomesPa.length
-      ? `${g.label} (${g.nomesPa.join(', ')})`
-      : g.label,
-  }));
+  return Array.from(byKey.values()).map((g) => {
+    if (g.escopo === 'PRODUTO' && g.nomesPa.length > 0) {
+      const n = g.nomesPa.length;
+      return {
+        ...g,
+        label: `${g.label} (${n} ${n === 1 ? 'substância marcada' : 'substâncias marcadas'})`,
+      };
+    }
+    return g;
+  });
 }
 
 /**
- * Alinha vinculosReacao aos grupos atuais (preserva reação e declaracaoClientId).
+ * Alinha vinculosReacao aos grupos atuais (preserva reações e declaracaoClientId).
  */
 export function syncVinculosComGrupos(grupos, vinculosAnteriores = []) {
   const prevByKey = new Map(
@@ -429,15 +431,22 @@ export function syncVinculosComGrupos(grupos, vinculosAnteriores = []) {
   );
   return (grupos || []).map((g) => {
     const prev = prevByKey.get(g.key);
+    let reacoes = Array.isArray(prev?.reacoes) ? prev.reacoes : [];
+    if (reacoes.length === 0 && prev?.reacaoAdversaId) {
+      reacoes = [{
+        reacaoAdversaId: prev.reacaoAdversaId,
+        reacaoNome: prev.reacaoNome || null,
+        codigo: prev.reacaoCodigo || null,
+      }];
+    }
     return {
       key: g.key,
       declaracaoClientId: prev?.declaracaoClientId || newClientId(),
       escopo: g.escopo,
       medicamentoCatalogoId: g.medicamentoCatalogoId || null,
-      reacaoAdversaId: prev?.reacaoAdversaId ?? null,
-      reacaoNome: prev?.reacaoNome ?? null,
       principioAtivoIds: g.principioAtivoIds,
       label: g.label,
+      reacoes,
     };
   });
 }
@@ -451,35 +460,25 @@ function vinculoKey(v) {
   return pa ? `SUBSTANCIA:${pa}` : `DECL:${v.declaracaoClientId}`;
 }
 
-/** Payload canônico para API (só vínculos com reação escolhida). */
+/** Payload canônico para API: 1 vínculo cliente com N reações → N DTOs. */
 export function toVinculosReacaoPayload(vinculos) {
-  return (vinculos || [])
-    .filter((v) => v.reacaoAdversaId && Array.isArray(v.principioAtivoIds) && v.principioAtivoIds.length > 0)
-    .map((v) => ({
-      declaracaoClientId: v.declaracaoClientId,
-      escopo: v.escopo,
-      medicamentoCatalogoId: v.medicamentoCatalogoId || null,
-      reacaoAdversaId: v.reacaoAdversaId,
-      principioAtivoIds: v.principioAtivoIds,
-    }));
-}
-
-/** Atualiza a resposta agregada de catalogo_reacao a partir dos vínculos. */
-export function respostaReacaoFromVinculos(perguntaId, vinculos) {
-  const byId = new Map();
+  const out = [];
   for (const v of vinculos || []) {
-    if (!v.reacaoAdversaId) continue;
-    byId.set(String(v.reacaoAdversaId), {
-      id: v.reacaoAdversaId,
-      nome: v.reacaoNome || String(v.reacaoAdversaId),
-      fonte: 'catalogo',
-    });
+    if (!Array.isArray(v.principioAtivoIds) || v.principioAtivoIds.length === 0) continue;
+    let reacoes = Array.isArray(v.reacoes) ? v.reacoes : [];
+    if (reacoes.length === 0 && v.reacaoAdversaId) {
+      reacoes = [{ reacaoAdversaId: v.reacaoAdversaId }];
+    }
+    for (const r of reacoes) {
+      if (!r?.reacaoAdversaId) continue;
+      out.push({
+        declaracaoClientId: v.declaracaoClientId,
+        escopo: v.escopo,
+        medicamentoCatalogoId: v.medicamentoCatalogoId || null,
+        reacaoAdversaId: r.reacaoAdversaId,
+        principioAtivoIds: v.principioAtivoIds,
+      });
+    }
   }
-  const catalogoItens = Array.from(byId.values());
-  return {
-    perguntaId,
-    reacaoAdversaId: catalogoItens[0]?.id ?? null,
-    catalogoItens,
-    declarouAusencia: false,
-  };
+  return out;
 }

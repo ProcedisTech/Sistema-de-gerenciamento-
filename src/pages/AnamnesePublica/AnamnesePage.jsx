@@ -13,6 +13,7 @@ import {
   syncVinculosComGrupos,
   toVinculosReacaoPayload,
 } from '../../components/anamnese/anamneseFichaUtils.js';
+import { AnamneseDocumentoView } from '../../components/anamnese/AnamneseDocumentoAssinadoView.jsx';
 import { aplicarMudancaResposta, collectPerguntaIdsVisiveis, perguntaFilhaVisivel } from '../../components/anamnese/anamneseCondicional.js';
 import { searchCatalogoPublico } from '../../components/anamnese/anamneseCatalogoSearch.js';
 
@@ -218,6 +219,13 @@ export const AnamnesePage = () => {
       );
       return;
     }
+
+    const modoConfirmacao = Boolean(lookupData?.modoConfirmacao);
+    if (modoConfirmacao) {
+      setErrorMsg('');
+      setEstado('ASSINATURA');
+      return;
+    }
     
     const modelo = lookupData?.modelo;
     if (!modelo) return;
@@ -267,14 +275,17 @@ export const AnamnesePage = () => {
     
     try {
       const modelo = lookupData?.modelo;
+      const modoConfirmacao = Boolean(lookupData?.modoConfirmacao);
       const formattedRespostas = {};
-      for (const cat of modelo.categorias || []) {
-        for (const raw of cat.perguntas || []) {
-          const p = toPerguntaFromPublica(raw);
-          if (!perguntaFilhaVisivel(p, respostas)) continue;
-          const val = respostas[p.id] ?? respostas[String(p.id)];
-          const serialized = serializeRespostaPublica(p, val);
-          if (serialized !== undefined) formattedRespostas[p.id] = serialized;
+      if (!modoConfirmacao) {
+        for (const cat of modelo.categorias || []) {
+          for (const raw of cat.perguntas || []) {
+            const p = toPerguntaFromPublica(raw);
+            if (!perguntaFilhaVisivel(p, respostas)) continue;
+            const val = respostas[p.id] ?? respostas[String(p.id)];
+            const serialized = serializeRespostaPublica(p, val);
+            if (serialized !== undefined) formattedRespostas[p.id] = serialized;
+          }
         }
       }
 
@@ -290,7 +301,7 @@ export const AnamnesePage = () => {
         ),
         hydrationToken,
         assinatura: assinatura,
-        vinculosReacao: toVinculosReacaoPayload(vinculosReacao),
+        vinculosReacao: modoConfirmacao ? [] : toVinculosReacaoPayload(vinculosReacao),
       };
 
       const res = await fetch(resolveApiUrl('/api/public/anamnese/responder'), {
@@ -331,6 +342,58 @@ export const AnamnesePage = () => {
   const renderFormulario = () => {
     const modelo = lookupData?.modelo;
     if (!modelo) return null;
+
+    const modoConfirmacao = Boolean(lookupData?.modoConfirmacao);
+    if (modoConfirmacao) {
+      return (
+        <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
+          <div className="text-center mb-2">
+            <h2 className="text-2xl font-bold text-slate-800">{modelo.nome}</h2>
+            <p className="text-sm text-slate-500 mt-2">
+              Olá, {lookupData.pacienteNome}. Confira as informações preenchidas na clínica e confirme com sua assinatura.
+            </p>
+          </div>
+
+          {errorMsg && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100">
+              {errorMsg}
+            </div>
+          )}
+
+          {hydrationStatus === 'failed' || !lookupData?.documento ? (
+            <div className="bg-amber-50 text-amber-800 p-4 rounded-xl text-sm border border-amber-200">
+              Não foi possível carregar o documento da entrevista. Recarregue a página antes de continuar.
+            </div>
+          ) : (
+            <AnamneseDocumentoView
+              documento={lookupData.documento}
+              variante="pacienteConfirmacao"
+            />
+          )}
+
+          <button
+            type="button"
+            disabled={loading || hydrationStatus === 'failed' || !lookupData?.documento}
+            onClick={handleGoToSignature}
+            className="w-full h-12 mt-2 rounded-xl bg-teal-600 text-white font-bold text-[15px] hover:bg-teal-700 active:bg-teal-800 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-md flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>Confirmar e assinar</>
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={handleRecusar}
+            className="w-full h-10 rounded-xl border border-slate-200 text-slate-500 font-semibold text-sm hover:bg-slate-50 transition-colors disabled:opacity-70"
+          >
+            Não concordo com estas informações
+          </button>
+        </div>
+      );
+    }
 
     return (
       <form onSubmit={handleGoToSignature} className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
@@ -522,7 +585,7 @@ Data do preenchimento: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'Ame
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                 </svg>
-                Confirmar e Enviar Anamnese
+                {lookupData?.modoConfirmacao ? 'Confirmar e assinar' : 'Confirmar e Enviar Anamnese'}
               </>
             )}
           </button>
@@ -535,7 +598,7 @@ Data do preenchimento: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'Ame
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
             </svg>
-            Voltar e revisar respostas
+            {lookupData?.modoConfirmacao ? 'Voltar à ficha' : 'Voltar e revisar respostas'}
           </button>
         </div>
       </div>

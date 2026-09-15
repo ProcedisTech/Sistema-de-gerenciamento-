@@ -210,4 +210,120 @@ describe('AnamneseDocumentoView', () => {
     expect(screen.getByText('Dipirona')).toBeInTheDocument();
     expect(screen.getByText('Coceira')).toBeInTheDocument();
   });
+
+  it('pacienteConfirmacao usa documento prop sem fetch e mostra reação sem ações profissionais', async () => {
+    const documento = {
+      ...baseDoc,
+      assinaturaPaciente: null,
+      conteudoHash: null,
+      conteudoJsonb: {
+        ...baseDoc.conteudoJsonb,
+        itens: [
+          {
+            pergunta_id: 'q-reacao',
+            tipo_resposta: 'catalogo_reacao',
+            categoria: 'Alergias',
+            pergunta: 'Qual foi a reacao?',
+            prioridade: 'CRITICA',
+            ordem: 1,
+            resposta: { catalogo: { nome: 'Coceira', tipo: 'reacao', id: 'ra1' } },
+          },
+        ],
+      },
+    };
+
+    render(
+      <AnamneseDocumentoView
+        documento={documento}
+        variante="pacienteConfirmacao"
+      />,
+    );
+
+    expect(await screen.findByText('Coceira')).toBeInTheDocument();
+    expect(screen.getByText('Marina Alves')).toBeInTheDocument();
+    expect(screen.getByText(/ponto crítico/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ficha completa/ })).toBeInTheDocument();
+    expect(anamneseApi.getDocumento).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Solicitar assinatura/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Modificar' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Aguardando assinatura do paciente')).not.toBeInTheDocument();
+  });
+
+  it('documento antigo flat (sem vínculos) ainda lista reação separada', async () => {
+    anamneseApi.getDocumento.mockResolvedValue({
+      ...baseDoc,
+      prontuarioPerguntaIds: ['q-pa'],
+      conteudoJsonb: {
+        ...baseDoc.conteudoJsonb,
+        itens: [
+          {
+            pergunta_id: 'q-pa',
+            tipo_resposta: 'catalogo_principio_ativo',
+            categoria: 'Alergias',
+            pergunta: 'A quais princípios ativos?',
+            prioridade: 'CRITICA',
+            ordem: 1,
+            resposta: { catalogo: { nome: 'Dipirona', tipo: 'principio_ativo', id: 'pa1' } },
+          },
+          {
+            pergunta_id: 'q-reacao',
+            tipo_resposta: 'catalogo_reacao',
+            categoria: 'Alergias',
+            pergunta: 'Qual foi a reacao?',
+            prioridade: 'CRITICA',
+            ordem: 2,
+            resposta: { catalogo: { nome: 'Coceira', tipo: 'reacao', id: 'ra1' } },
+          },
+        ],
+      },
+    });
+
+    render(<AnamneseDocumentoView pacienteId="pac1" preenchimentoId="p1" />);
+
+    expect(await screen.findByText('Dipirona')).toBeInTheDocument();
+    expect(screen.getByText('Coceira')).toBeInTheDocument();
+  });
+
+  it('payload projetado (opção A) mostra substância com reação e agrupa produto', async () => {
+    anamneseApi.getDocumento.mockResolvedValue({
+      ...baseDoc,
+      fatosCriticos: [{ texto: 'dipirona — Falta de ar', icone: 'item' }],
+      conteudoJsonb: {
+        ...baseDoc.conteudoJsonb,
+        itens: [
+          {
+            pergunta_id: 'q-pa',
+            tipo_resposta: 'catalogo_principio_ativo',
+            categoria: 'Alergias',
+            pergunta: 'A quais princípios ativos?',
+            prioridade: 'CRITICA',
+            ordem: 1,
+            grupo_produto: 'Dorflex',
+            resposta: {
+              catalogo: { nome: 'dipirona — Falta de ar', tipo: 'principio_ativo', id: 'pa1' },
+            },
+          },
+          {
+            pergunta_id: 'q-pa-2',
+            tipo_resposta: 'catalogo_principio_ativo',
+            categoria: 'Alergias',
+            pergunta: 'A quais princípios ativos?',
+            prioridade: 'CRITICA',
+            ordem: 2,
+            grupo_produto: 'Dorflex',
+            resposta: {
+              catalogo: { nome: 'dexametasona — Coceira', tipo: 'principio_ativo', id: 'pa2' },
+            },
+          },
+        ],
+      },
+    });
+
+    render(<AnamneseDocumentoView pacienteId="pac1" preenchimentoId="p1" />);
+
+    expect((await screen.findAllByText('dipirona — Falta de ar')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('dexametasona — Coceira')).toBeInTheDocument();
+    expect(screen.getAllByText('Dorflex').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Qual foi a reacao?')).not.toBeInTheDocument();
+  });
 });
