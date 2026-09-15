@@ -2239,6 +2239,7 @@ function AppRefactoredInner() {
               anamneseId,
               ...(observacoes ? { observacoes } : {}),
               respostas: anamneseData?.respostas || [],
+              vinculosReacao: anamneseData?.vinculosReacao || [],
             });
             // ID permanece o mesmo; não precisa atualizar o ref
           } else {
@@ -2247,6 +2248,7 @@ function AppRefactoredInner() {
               anamneseId,
               ...(observacoes ? { observacoes } : {}),
               respostas: anamneseData?.respostas || [],
+              vinculosReacao: anamneseData?.vinculosReacao || [],
             });
             const pid = created?.id ?? created?.preenchimentoId;
             if (pid != null && pid !== '') {

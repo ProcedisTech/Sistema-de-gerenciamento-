@@ -16,7 +16,7 @@ export function tipoLabel(tipo) {
   return TIPO_LABEL_MAP[tipo] || tipo;
 }
 
-/** Catálogos multi-select (picker com busca). `catalogo_reacao` é escolha única — fora desta lista. */
+/** Catálogos multi-select (picker com busca). `catalogo_reacao` tem UI própria de multi por grupo. */
 export const TIPOS_CATALOGO_MULTI = [
   'catalogo_alergia',
   'catalogo_principio_ativo',

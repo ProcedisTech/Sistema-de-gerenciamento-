@@ -147,16 +147,25 @@ export function AnamneseDocumentoView({
   voltarLabel = 'Voltar',
   onModificar,
   className = '',
+  /** Pré-carregado (lookup público) — pula fetch autenticado. */
+  documento = null,
+  /** pacienteConfirmacao: esconde ações profissionais e rodapé “aguardando”. */
+  variante = 'hub',
 }) {
   const toast = useToast();
-  const [gravada, setGravada] = useState(null);
+  const modoPaciente = variante === 'pacienteConfirmacao';
+  const [gravada, setGravada] = useState(documento ?? null);
   const [integridade, setIntegridade] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!documento);
   const [verificando, setVerificando] = useState(false);
   const [filter, setFilter] = useState('completa');
   const [error, setError] = useState(null);
 
   const recarregarDocumento = useCallback(() => {
+    if (documento) {
+      setGravada(documento);
+      return Promise.resolve(documento);
+    }
     if (!pacienteId || !preenchimentoId) return Promise.resolve();
     return anamneseApi
       .getDocumento(pacienteId, preenchimentoId)
@@ -165,14 +174,20 @@ export function AnamneseDocumentoView({
         setError(err);
         setGravada(null);
       });
-  }, [pacienteId, preenchimentoId]);
+  }, [pacienteId, preenchimentoId, documento]);
 
   useEffect(() => {
+    if (documento) {
+      setGravada(documento);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     if (!pacienteId || !preenchimentoId) return;
     setLoading(true);
     setError(null);
     recarregarDocumento().finally(() => setLoading(false));
-  }, [pacienteId, preenchimentoId, recarregarDocumento]);
+  }, [pacienteId, preenchimentoId, documento, recarregarDocumento]);
 
   const allItens = useMemo(
     () => envelopeItens(gravada?.conteudoJsonb).slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
@@ -319,21 +334,23 @@ export function AnamneseDocumentoView({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
-            <AnamneseAssinaturaActions
-              pacienteId={pacienteId}
-              preenchimentoId={preenchimentoId}
-              anamneseId={anamneseId}
-              pacienteTelefone={pacienteTelefone}
-              pacienteNome={gravada.pacienteNome}
-              pacienteCpf={gravada.pacienteCpf}
-              assinada={assinada}
-              imutavel={imutavel}
-              envioAtivo={envioAtivo}
-              assinadoEm={assinadoEm}
-              formatStamp={formatStamp}
-              onDocumentoRefresh={recarregarDocumento}
-            />
-            {!imutavel && !uiAssinatura.envioAtivo && typeof onModificar === 'function' ? (
+            {!modoPaciente ? (
+              <AnamneseAssinaturaActions
+                pacienteId={pacienteId}
+                preenchimentoId={preenchimentoId}
+                anamneseId={anamneseId}
+                pacienteTelefone={pacienteTelefone}
+                pacienteNome={gravada.pacienteNome}
+                pacienteCpf={gravada.pacienteCpf}
+                assinada={assinada}
+                imutavel={imutavel}
+                envioAtivo={envioAtivo}
+                assinadoEm={assinadoEm}
+                formatStamp={formatStamp}
+                onDocumentoRefresh={recarregarDocumento}
+              />
+            ) : null}
+            {!modoPaciente && !imutavel && !uiAssinatura.envioAtivo && typeof onModificar === 'function' ? (
               <button
                 type="button"
                 onClick={onModificar}
@@ -354,7 +371,7 @@ export function AnamneseDocumentoView({
                   ) : null}
                 </>
               ) : null}
-              {gravada.preenchidoPorNome ? (
+              {!modoPaciente && gravada.preenchidoPorNome ? (
                 <>
                   {gravada.validadeAte ? <br /> : null}
                   Preenchida por {gravada.preenchidoPorNome}
@@ -444,6 +461,7 @@ export function AnamneseDocumentoView({
                   const kind = highlightKind(item);
                   const chip = chipNome(item);
                   const noProntuario = isProntuario(item);
+                  const grupoProduto = item.grupo_produto || item.grupoProduto || null;
                   return (
                     <div
                       key={item.pergunta_id || `${item.ordem}-${item.pergunta}`}
@@ -456,6 +474,11 @@ export function AnamneseDocumentoView({
                       }`}
                     >
                       <p className="text-[13px] font-semibold text-[#0f172a]">{item.pergunta}</p>
+                      {grupoProduto ? (
+                        <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                          {grupoProduto}
+                        </p>
+                      ) : null}
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         {chip ? (
                           <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[12px] font-semibold text-[#334155]">
@@ -511,19 +534,19 @@ export function AnamneseDocumentoView({
                   </dd>
                 </>
               ) : null}
-              {gravada.ip ? (
+              {!modoPaciente && gravada.ip ? (
                 <>
                   <dt className="text-[#94a3b8]">Endereço IP</dt>
                   <dd className="font-semibold text-[#334155]">{gravada.ip}</dd>
                 </>
               ) : null}
-              {gravada.userAgent ? (
+              {!modoPaciente && gravada.userAgent ? (
                 <>
                   <dt className="text-[#94a3b8]">Aparelho</dt>
                   <dd className="break-all font-semibold text-[#334155]">{gravada.userAgent}</dd>
                 </>
               ) : null}
-              {gravada.geolocalizacao ? (
+              {!modoPaciente && gravada.geolocalizacao ? (
                 <>
                   <dt className="text-[#94a3b8]">Local</dt>
                   <dd className="font-semibold text-[#334155]">{gravada.geolocalizacao}</dd>
@@ -531,6 +554,8 @@ export function AnamneseDocumentoView({
               ) : null}
             </dl>
           </div>
+          {!modoPaciente ? (
+            <>
           <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center">
             <ShieldCheck className={`h-5 w-5 shrink-0 ${hashOk ? 'text-emerald-600' : 'text-[#00a88e]'}`} />
             <div className="min-w-0 flex-1">
@@ -564,6 +589,16 @@ export function AnamneseDocumentoView({
             </div>
           ) : null}
             </>
+          ) : null}
+            </>
+          ) : modoPaciente ? (
+            (conteudo.texto_declaracao || gravada.textoDeclaracao) ? (
+              <div className="px-4 py-6">
+                <blockquote className="text-left text-[13px] italic leading-relaxed text-[#475569]">
+                  “{conteudo.texto_declaracao || gravada.textoDeclaracao}”
+                </blockquote>
+              </div>
+            ) : null
           ) : (
             <div className="px-4 py-6 text-center">
               {(conteudo.texto_declaracao || gravada.textoDeclaracao) ? (
@@ -581,13 +616,15 @@ export function AnamneseDocumentoView({
           )}
         </div>
 
-        <p className="text-center text-[11px] text-[#94a3b8]">
-          {imutavel
-            ? 'Documento imutável. Correções entram como nova anamnese, preservando esta.'
-            : uiAssinatura.envioAtivo
-              ? 'Link enviado — edição bloqueada até o paciente responder ou o envio expirar.'
-              : 'Ainda não assinado — é possível modificar as respostas.'}
-        </p>
+        {!modoPaciente ? (
+          <p className="text-center text-[11px] text-[#94a3b8]">
+            {imutavel
+              ? 'Documento imutável. Correções entram como nova anamnese, preservando esta.'
+              : uiAssinatura.envioAtivo
+                ? 'Link enviado — edição bloqueada até o paciente responder ou o envio expirar.'
+                : 'Ainda não assinado — é possível modificar as respostas.'}
+          </p>
+        ) : null}
       </div>
     </div>
   );

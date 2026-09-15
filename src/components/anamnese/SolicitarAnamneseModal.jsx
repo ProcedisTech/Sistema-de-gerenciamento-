@@ -1,8 +1,18 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
-import { anamneseEnvioApi } from '../../services/api';
+import { anamneseApi, anamneseEnvioApi } from '../../services/api';
 import { montarUrlWhatsAppAnamnese } from './solicitarAnamneseEnvio.js';
+
+function resolveStatusCodigo(entry) {
+  if (!entry) return null;
+  const raw = entry.status ?? entry.statusAnamnese ?? entry.statusCodigo;
+  if (typeof raw === 'string') return raw.toLowerCase();
+  if (raw && typeof raw === 'object' && typeof raw.codigo === 'string') {
+    return raw.codigo.toLowerCase();
+  }
+  return null;
+}
 
 /**
  * @param {{ metodoCodigo: string, canalCodigo?: string|null }} escolha
@@ -21,6 +31,7 @@ export function SolicitarAnamneseModal({
   escolha,
   payload,
   onConcluido,
+  onRecusado,
   onCancelar,
   onEnvioGerado,
   onEnvioExpirado,
@@ -30,6 +41,7 @@ export function SolicitarAnamneseModal({
   const [error, setError] = useState(null);
   const [expirado, setExpirado] = useState(false);
   const [concluido, setConcluido] = useState(false);
+  const [recusado, setRecusado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const pollingRef = useRef(null);
   const gerarSeqRef = useRef(0);
@@ -37,10 +49,12 @@ export function SolicitarAnamneseModal({
   const gerandoRef = useRef(false);
 
   const onConcluidoRef = useRef(onConcluido);
+  const onRecusadoRef = useRef(onRecusado);
   const onCancelarRef = useRef(onCancelar);
   const onEnvioGeradoRef = useRef(onEnvioGerado);
   const onEnvioExpiradoRef = useRef(onEnvioExpirado);
   useEffect(() => { onConcluidoRef.current = onConcluido; }, [onConcluido]);
+  useEffect(() => { onRecusadoRef.current = onRecusado; }, [onRecusado]);
   useEffect(() => { onCancelarRef.current = onCancelar; }, [onCancelar]);
   useEffect(() => { onEnvioGeradoRef.current = onEnvioGerado; }, [onEnvioGerado]);
   useEffect(() => { onEnvioExpiradoRef.current = onEnvioExpirado; }, [onEnvioExpirado]);
@@ -62,6 +76,7 @@ export function SolicitarAnamneseModal({
       setError(null);
       setExpirado(false);
       setConcluido(false);
+      setRecusado(false);
       setCancelando(false);
     }
   }
@@ -97,6 +112,31 @@ export function SolicitarAnamneseModal({
     ...(forcarNovo ? { forcarNovo: true } : {}),
   }), [pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId, anamneseId]);
 
+  const resolverOutcomeConcluido = useCallback(async (data) => {
+    const preenchimentoId =
+      data?.preenchimentoAnamneseId
+      || preenchimentoAnamneseId
+      || null;
+    if (pacienteId && preenchimentoId) {
+      try {
+        const detalhes = await anamneseApi.getPaciente(pacienteId, preenchimentoId);
+        if (resolveStatusCodigo(detalhes) === 'cancelada') {
+          setRecusado(true);
+          setTimeout(() => {
+            onRecusadoRef.current?.();
+          }, 1500);
+          return;
+        }
+      } catch (err) {
+        console.warn('[SolicitarAnamneseModal] Falha ao ler status do preenchimento', err);
+      }
+    }
+    setConcluido(true);
+    setTimeout(() => {
+      onConcluidoRef.current?.();
+    }, 1500);
+  }, [pacienteId, preenchimentoAnamneseId]);
+
   const iniciarGeracao = useCallback((forcarNovo = false) => {
     if (gerandoRef.current) return;
     gerandoRef.current = true;
@@ -105,6 +145,7 @@ export function SolicitarAnamneseModal({
     setError(null);
     setExpirado(false);
     setConcluido(false);
+    setRecusado(false);
     if (pollingRef.current) clearInterval(pollingRef.current);
 
     const seq = gerarSeqRef.current + 1;
@@ -124,10 +165,7 @@ export function SolicitarAnamneseModal({
               if (statusData.status === 'CONCLUIDO') {
                 clearInterval(pollingRef.current);
                 pollingRef.current = null;
-                setConcluido(true);
-                setTimeout(() => {
-                  onConcluidoRef.current?.();
-                }, 1500);
+                await resolverOutcomeConcluido(data);
               } else if (statusData.status === 'EXPIRADO' || statusData.status === 'CANCELADO') {
                 clearInterval(pollingRef.current);
                 pollingRef.current = null;
@@ -147,7 +185,7 @@ export function SolicitarAnamneseModal({
         setLoading(false);
         gerandoRef.current = false;
       });
-  }, [montarPayloadGerar]);
+  }, [montarPayloadGerar, resolverOutcomeConcluido]);
 
   const iniciarGeracaoRef = useRef(iniciarGeracao);
   useEffect(() => {
@@ -197,7 +235,17 @@ export function SolicitarAnamneseModal({
         </header>
 
         <div className="px-6 pb-8 text-center flex flex-col items-center">
-          {concluido ? (
+          {recusado ? (
+            <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <X className="h-10 w-10" strokeWidth={2.5} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Paciente recusou</h3>
+              <p className="text-sm text-slate-500">
+                A paciente não concordou com as informações. Revise a ficha e solicite novamente se necessário.
+              </p>
+            </div>
+          ) : concluido ? (
             <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-500">
                 <CheckCircle2 className="h-10 w-10" strokeWidth={2.5} />
