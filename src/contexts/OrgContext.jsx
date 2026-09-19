@@ -47,6 +47,8 @@ export function OrgProvider({ children }) {
   const [roleNome, setRoleNomeState] = useState('');
   /** Permissões customizadas ou do perfil, vindas do /me. */
   const [permissoes, setPermissoesState] = useState([]);
+  /** Flag de elegibilidade para aparecer na agenda como profissional vinda do perfil de acesso (/me). */
+  const [apareceNaAgenda, setApareceNaAgendaState] = useState(null);
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -108,6 +110,10 @@ export function OrgProvider({ children }) {
     setPermissoesState(Array.isArray(perms) ? perms : []);
   }, []);
 
+  const setApareceNaAgenda = useCallback((val) => {
+    setApareceNaAgendaState(typeof val === 'boolean' ? val : null);
+  }, []);
+
   /** Limpa org/papel/role do localStorage e do estado no logout. */
   const clearOrgSession = useCallback(() => {
     try {
@@ -124,6 +130,7 @@ export function OrgProvider({ children }) {
     setPapelState(null);
     setRoleNomeState('');
     setPermissoesState([]);
+    setApareceNaAgendaState(null);
     apiSetOrgId('');
   }, []);
 
@@ -142,9 +149,11 @@ export function OrgProvider({ children }) {
       setRoleNome,
       permissoes,
       setPermissoes,
+      apareceNaAgenda,
+      setApareceNaAgenda,
       clearOrgSession,
     }),
-    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, clearOrgSession]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, clearOrgSession]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -167,6 +176,8 @@ export function useOrg() {
       setRoleNome: () => {},
       permissoes: [],
       setPermissoes: () => {},
+      apareceNaAgenda: null,
+      setApareceNaAgenda: () => {},
       clearOrgSession: () => {},
     };
   }
