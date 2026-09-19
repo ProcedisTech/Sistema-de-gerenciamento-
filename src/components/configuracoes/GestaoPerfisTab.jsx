@@ -4,7 +4,7 @@ import { Settings2, Plus, Edit2, Trash2, Shield, Crown, Loader2, X } from 'lucid
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorDetail } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
-import { getPermissoesPadraoPorPerfilId, getPresetProfileId, formatCargoLabel } from './gestaoUsuariosUtils';
+import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesCustomizadasModal } from './PermissoesCustomizadasModal';
 
@@ -13,9 +13,13 @@ const isPerfilGlobal = (perfil) => !perfil.organizacaoSaudeDona && !perfil.organ
 // Rótulos curtos pros módulos nas barrinhas de cobertura dos cards.
 const MODULO_LABEL_CURTO = {
   AGENDA: 'Agenda',
-  ATENDIMENTO: 'Atend.',
-  CONFIGURACOES: 'Config.',
   PACIENTES: 'Pac.',
+  GALERIA: 'Galeria',
+  ANAMNESE: 'Anamn.',
+  PRONTUARIO: 'Pront.',
+  DOCUMENTOS: 'Docs',
+  CATALOGO: 'Catál.',
+  EQUIPE_SISTEMA: 'Equipe',
 };
 
 export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onReload, fetchHeaders, perfilParaAbrir, onPerfilParaAbrirConsumido }) {
@@ -25,7 +29,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   const [editingPerfil, setEditingPerfil] = useState(null);
   const [perfilBaseCriacao, setPerfilBaseCriacao] = useState(null);
 
-  const [formData, setFormData] = useState({ nome: '', descricao: '' });
+  const [formData, setFormData] = useState({ nome: '', descricao: '', apareceNaAgenda: false });
   const [saving, setSaving] = useState(false);
 
   const [selectedPermissoes, setSelectedPermissoes] = useState([]);
@@ -37,7 +41,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   // Guarda a última sugestão de nome/descrição que o próprio handleCargoChange aplicou,
   // pra distinguir "usuário editou por conta própria" (não sobrescreve mais) de "ainda é
   // a sugestão do cargo anterior" (pode trocar pela sugestão do novo cargo escolhido).
-  const cargoSugestaoRef = useRef({ nome: '', descricao: '' });
+  const cargoSugestaoRef = useRef({ nome: '', descricao: '', apareceNaAgenda: false });
   // Evita que a resposta de uma troca de cargo antiga (mais lenta) sobrescreva, ao
   // chegar depois, o resultado de uma troca mais recente.
   const cargoRequestIdRef = useRef(0);
@@ -61,8 +65,8 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     setEditingPerfil(null);
     setPerfilBaseCriacao(null);
     setCargoPreenchimento('');
-    cargoSugestaoRef.current = { nome: '', descricao: '' };
-    setFormData({ nome: '', descricao: '' });
+    cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: false };
+    setFormData({ nome: '', descricao: '', apareceNaAgenda: false });
     setSelectedPermissoes([]);
     setWizardStep(1);
     setShowModal(true);
@@ -72,8 +76,12 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     setEditingPerfil(perfil);
     setPerfilBaseCriacao(null);
     setCargoPreenchimento('');
-    cargoSugestaoRef.current = { nome: '', descricao: '' };
-    setFormData({ nome: perfil.nome || '', descricao: perfil.descricao || '' });
+    cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: false };
+    setFormData({
+      nome: perfil.nome || '',
+      descricao: perfil.descricao || '',
+      apareceNaAgenda: perfil.apareceNaAgenda ?? false,
+    });
     setSelectedPermissoes([]);
     setWizardStep(1);
     setShowModal(true);
@@ -95,20 +103,17 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   };
 
   const buscarPermissoesAtuais = async (perfilId) => {
-    // Norma padrão como ponto de partida — usada tanto quando a clínica ainda não
-    // customizou este perfil (API retorna []) quanto se a chamada falhar.
-    const permissoesPadrao = () => getPermissoesPadraoPorPerfilId(perfilId, perfisAcesso, permissoes);
     try {
       const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
         headers: await fetchHeaders(),
         credentials: 'include'
       });
-      if (!res.ok) return permissoesPadrao();
+      if (!res.ok) return [];
       const data = await res.json();
-      return data.length === 0 ? permissoesPadrao() : data;
+      return Array.isArray(data) ? data : [];
     } catch {
       toast.error('Erro ao buscar permissões atuais.');
-      return permissoesPadrao();
+      return [];
     }
   };
 
@@ -159,8 +164,12 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
         const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
         setEditingPerfil(null);
         setCargoPreenchimento('');
-        cargoSugestaoRef.current = { nome: '', descricao: '' };
-        setFormData({ nome: perfil.nome || '', descricao: perfil.descricao || '' });
+        cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: perfil.apareceNaAgenda ?? false };
+        setFormData({
+          nome: perfil.nome || '',
+          descricao: perfil.descricao || '',
+          apareceNaAgenda: perfil.apareceNaAgenda ?? false,
+        });
         setSelectedPermissoes(permissoesAtuais);
         setPerfilBaseCriacao(perfil.nome);
         setWizardStep(1);
@@ -181,8 +190,12 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       setPerfilEscolha(null);
       setEditingPerfil(null);
       setCargoPreenchimento('');
-      cargoSugestaoRef.current = { nome: '', descricao: '' };
-      setFormData({ nome: nomeNovo, descricao: perfilOrigem.descricao || '' });
+      cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: perfilOrigem.apareceNaAgenda ?? false };
+      setFormData({
+        nome: nomeNovo,
+        descricao: perfilOrigem.descricao || '',
+        apareceNaAgenda: perfilOrigem.apareceNaAgenda ?? false,
+      });
       setSelectedPermissoes(permissoesAtuais);
       setPerfilBaseCriacao(perfilOrigem.nome);
       setWizardStep(1);
@@ -205,20 +218,20 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     const perfilPreset = perfilPresetId ? (perfisAcesso || []).find(p => String(p.id) === String(perfilPresetId)) : null;
     const cargoLabel = formatCargoLabel(cargo.nome);
     const descricaoSugerida = perfilPreset?.descricao || `Acesso equivalente ao cargo de ${cargoLabel}.`;
+    const apareceNaAgendaSugerida = perfilPreset ? Boolean(perfilPreset.apareceNaAgenda) : false;
     const requestId = ++cargoRequestIdRef.current;
 
-    // A mutação do ref fica FORA do updater do setState: em StrictMode o React chama o
-    // updater duas vezes pra checar pureza, e mutar o ref lá dentro faz a 2ª chamada ver
-    // um ref já alterado pela 1ª, descartando a atualização (foi exatamente o bug visto).
     const sugestaoAnterior = cargoSugestaoRef.current;
-    cargoSugestaoRef.current = { nome: cargoLabel, descricao: descricaoSugerida };
+    cargoSugestaoRef.current = {
+      nome: cargoLabel,
+      descricao: descricaoSugerida,
+      apareceNaAgenda: apareceNaAgendaSugerida,
+    };
 
     setFormData(prev => ({
-      // Só herda a sugestão anterior (não sobrescreve) se o campo ainda estiver vazio ou
-      // for exatamente a sugestão do cargo anterior — se o usuário editou por conta
-      // própria, o valor dele diverge da última sugestão e paramos de mexer nele.
       nome: (!prev.nome.trim() || prev.nome === sugestaoAnterior.nome) ? cargoLabel : prev.nome,
       descricao: (!prev.descricao.trim() || prev.descricao === sugestaoAnterior.descricao) ? descricaoSugerida : prev.descricao,
+      apareceNaAgenda: perfilPreset ? Boolean(perfilPreset.apareceNaAgenda) : prev.apareceNaAgenda,
     }));
 
     if (!perfilPresetId) return;
@@ -382,10 +395,19 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                   </div>
                   <p className="text-xs text-slate-500 mb-3 min-h-[2.4em] line-clamp-2">{p.descricao || 'Sem descrição.'}</p>
 
-                  <div className="mb-4">
+                  <div className="mb-4 flex flex-wrap gap-1.5 items-center">
                     <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-xs font-semibold px-2.5 py-1 rounded-md">
                       {resumo.carregado ? `${resumo.total} funções habilitadas` : 'Carregando...'}
                     </span>
+                    {p.apareceNaAgenda ? (
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded border border-emerald-200">
+                        📅 Atende na Agenda
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[11px] font-bold px-2 py-0.5 rounded border border-slate-200">
+                        🚫 Sem Agenda
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between border-t border-slate-50 pt-3 mt-auto mb-3">
@@ -413,7 +435,11 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
         <div className="pt-4">
           <h5 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 ml-1">Templates Globais do Sistema</h5>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {globais.sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(p => {
+            {[...globais].sort((a,b) => {
+              const orderA = CODIGO_ORDER[(a.codigo||'').toUpperCase()] || 99;
+              const orderB = CODIGO_ORDER[(b.codigo||'').toUpperCase()] || 99;
+              return orderA - orderB;
+            }).map(p => {
               const isDono = (p.codigo || '').toUpperCase() === 'DONO';
               const resumo = getResumoPerfil(p);
               return (
@@ -429,10 +455,19 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                   </div>
                   <p className="text-xs text-slate-500 line-clamp-2 mb-3 min-h-[2.4em]">{p.descricao || 'Nível de acesso nativo do sistema.'}</p>
 
-                  <div className="mb-4">
+                  <div className="mb-4 flex flex-wrap gap-1.5 items-center">
                     <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-1 rounded-md">
                       {resumo.carregado ? `${resumo.total} funções habilitadas` : 'Carregando...'}
                     </span>
+                    {p.apareceNaAgenda ? (
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded border border-emerald-200">
+                        📅 Atende na Agenda
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[11px] font-bold px-2 py-0.5 rounded border border-slate-200">
+                        🚫 Sem Agenda
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between border-t border-slate-200/70 pt-3 mt-auto mb-3">
@@ -495,18 +530,26 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                 <div className="w-full max-w-md mx-auto space-y-4 py-2 flex-1 min-h-0 overflow-y-auto">
                   {!editingPerfil && (
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Preencher a partir do Cargo</label>
+                      <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Basear no Perfil do Cargo</label>
                       <select
                         value={cargoPreenchimento}
                         onChange={e => handleCargoChange(e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
                       >
-                        <option value="">Selecione (opcional)...</option>
-                        {(roles || []).filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
-                          <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
-                        ))}
+                        <option value="">Selecione um cargo para preenchimento rápido (opcional)...</option>
+                        {[...(roles || [])]
+                          .sort((a, b) => {
+                            const ordA = ROLE_DISPLAY_ORDER[(a.nome || '').toUpperCase()] || 99;
+                            const ordB = ROLE_DISPLAY_ORDER[(b.nome || '').toUpperCase()] || 99;
+                            if (ordA !== ordB) return ordA - ordB;
+                            return (a.nome || '').localeCompare(b.nome || '');
+                          })
+                          .map(r => (
+                            <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
+                          ))
+                        }
                       </select>
-                      <p className="text-[11px] text-slate-400 mt-1 ml-1">Marca automaticamente as permissões equivalentes a esse cargo — só um ponto de partida, ajuste no próximo passo.</p>
+                      <p className="text-[11px] text-slate-400 mt-1 ml-1">Carrega o conjunto de permissões oficiais deste cargo como ponto de partida para o novo perfil customizado.</p>
                     </div>
                   )}
                   <div>
@@ -531,6 +574,33 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                       placeholder="Ex: Acesso às rotinas de recepção e faturamento básico."
                       className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 resize-none"
                     />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 transition-colors hover:border-teal-200">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          📅 Aparece na agenda como profissional?
+                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Define se colaboradores com este perfil aparecem na agenda para marcações e atendimento.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex cursor-pointer items-center shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.apareceNaAgenda)}
+                          onChange={e => setFormData({ ...formData, apareceNaAgenda: e.target.checked })}
+                          className="peer sr-only"
+                        />
+                        <div className="peer h-6 w-11 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-teal-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none"></div>
+                      </label>
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.apareceNaAgenda ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {formData.apareceNaAgenda ? '✓ Sim (Atende na Agenda)' : '✕ Não (Apenas administrativo/apoio)'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ) : (

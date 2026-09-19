@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus, X, Loader2, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { UserPlus, X, Loader2, Eye, EyeOff, ExternalLink, Shield } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorToastMessage, equipeApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi } from '../../utils/phoneUtils';
-import { getPresetProfileId, getPermissoesPadraoPorPerfilId, formatCargoLabel } from './gestaoUsuariosUtils';
+import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
@@ -23,6 +23,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [telefoneTouched, setTelefoneTouched] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
+  const [customizarPerfil, setCustomizarPerfil] = useState(false);
 
   // Só leitura: mostra o que o Nível selecionado inclui. Editar de verdade acontece na aba Perfis de Acesso.
   const [permissoesDoNivel, setPermissoesDoNivel] = useState([]);
@@ -36,9 +37,6 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
       return;
     }
     setLoadingTemplate(true);
-    // Norma padrão como ponto de partida — usada tanto quando a clínica ainda não
-    // customizou este Nível (API retorna []) quanto se a chamada falhar.
-    const permissoesPadrao = () => getPermissoesPadraoPorPerfilId(perfilId, perfisAcesso, permissoes);
     try {
       const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
         headers: await fetchHeaders(),
@@ -46,13 +44,13 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
       });
       if (res.ok) {
         const data = await res.json();
-        setPermissoesDoNivel(data.length === 0 ? permissoesPadrao() : data);
+        setPermissoesDoNivel(Array.isArray(data) ? data : []);
       } else {
-        setPermissoesDoNivel(permissoesPadrao());
+        setPermissoesDoNivel([]);
       }
     } catch (e) {
       console.error('Erro ao carregar permissões do nível:', e);
-      setPermissoesDoNivel(permissoesPadrao());
+      setPermissoesDoNivel([]);
     } finally {
       setLoadingTemplate(false);
     }
@@ -109,7 +107,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
     let nextPerfilAcessoId = form.perfilAcessoId;
     const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
     if (selectedRole) {
-      const presetId = getPresetProfileId(selectedRole.nome, perfisAcesso);
+      const presetId = getPresetProfileId(selectedRole, perfisAcesso);
       if (presetId) {
         nextPerfilAcessoId = presetId;
       }
@@ -242,24 +240,30 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
     }
   };
 
-  const sectionCardCls = (err, cls) => `transition-all duration-300 shadow-sm ${cls} ${err ? 'border-red-300 ring-2 ring-red-100' : 'hover:shadow-md hover:border-slate-300'}`;
+  const sectionCardCls = (err, cls) => `shadow-sm ${cls} ${err ? 'border-red-300 ring-2 ring-red-100' : ''}`;
   const sectionHeadingCls = (cls) => `font-bold tracking-tight ${cls}`;
   const sectionMb = "mb-5";
   const gridGapClass = "gap-x-6 gap-y-5";
 
-  const phoneWrapClass = () => `flex items-center gap-2 rounded-xl border bg-white px-3 py-2.5 transition-all shadow-sm ${
+  const phoneWrapClass = () => `flex items-center gap-2 rounded-xl border bg-white px-3 py-2.5 shadow-sm ${
     telefoneTouched && telefoneNumero && !isPhoneValid(telefoneCountryCode, telefoneNumero)
       ? 'border-red-300 ring-4 ring-red-100'
       : 'border-slate-200 focus-within:border-teal-500 focus-within:ring-4 focus-within:ring-teal-500/10'
   }`;
 
+  const perfilSelecionado = (perfisAcesso || []).find(p => String(p.id) === String(form.perfilAcessoId));
+
   return createPortal(
     <>
-    <div
-      className="fixed inset-0 z-[200] flex items-start md:items-center justify-center bg-slate-900/60 p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto [webkit-overflow-scrolling:touch]"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="w-full max-w-[95vw] md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto rounded-3xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl ring-1 ring-white/10 my-4 md:my-auto transition-all duration-300 min-h-[70vh] max-h-none md:max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
+      {/* Backdrop limpo e leve para máxima taxa de quadros (60/120 FPS) */}
+      <div
+        className="fixed inset-0 bg-slate-900/60 pointer-events-auto transition-opacity"
+        onMouseDown={onClose}
+      />
+
+      {/* Modal Card */}
+      <div className="relative z-10 w-full max-w-[95vw] md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto rounded-3xl bg-white p-4 sm:p-6 md:p-8 shadow-2xl ring-1 ring-black/5 max-h-[92vh] flex flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 pb-5 mb-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-teal-50 rounded-xl">
@@ -276,7 +280,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto [webkit-overflow-scrolling:touch] pr-1 pb-4 space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto pr-2 pb-4 space-y-6 custom-scrollbar">
             {/* Seção 1: Dados Básicos */}
             <div className={sectionCardCls(false, 'rounded-2xl border border-teal-200 bg-white p-6')}>
               <div className={`flex items-center gap-3 ${sectionMb}`}>
@@ -428,7 +432,10 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
             </div>
 
             {/* Nova Seção: Endereço */}
-            <div className={sectionCardCls(false, 'rounded-2xl border border-purple-200 bg-white p-6')}>
+            <div
+              className={sectionCardCls(false, 'rounded-2xl border border-purple-200 bg-white p-6')}
+              style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto none auto 250px' }}
+            >
               <div className={`flex items-center gap-3 ${sectionMb}`}>
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#a855f7] text-[14px] font-bold text-white shadow-sm">
                   2b
@@ -508,7 +515,10 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
             </div>
 
             {/* Seção 3: Acesso e Permissões */}
-            <div className={sectionCardCls(false, 'rounded-2xl border border-blue-200 bg-white p-6')}>
+            <div
+              className={sectionCardCls(false, 'rounded-2xl border border-blue-200 bg-white p-6')}
+              style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto none auto 250px' }}
+            >
               <div className={`flex items-center gap-3 ${sectionMb}`}>
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
                   3
@@ -537,40 +547,105 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm"
                   />
                 </div>
-                <div className="hidden md:block"></div>
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cargo</label>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Cargo na Clínica</label>
                   <select
                     required
                     value={form.roleId}
                     onChange={e => handleRoleChangeInvite(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
                   >
-                    <option value="">Selecione...</option>
-                    {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
-                      <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Nível de Permissão</label>
-                  <select
-                    required
-                    value={form.perfilAcessoId}
-                    onChange={e => handlePerfilChangeInvite(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                  >
-                    <option value="">Selecione...</option>
-                    {[...perfisAcesso]
-                      .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                      .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
-                      .map(p => (
-                        <option key={p.id} value={p.id}>{p.nome}</option>
+                    <option value="">Selecione o cargo...</option>
+                    {[...roles]
+                      .sort((a, b) => {
+                        const ordA = ROLE_DISPLAY_ORDER[(a.nome || '').toUpperCase()] || 99;
+                        const ordB = ROLE_DISPLAY_ORDER[(b.nome || '').toUpperCase()] || 99;
+                        if (ordA !== ordB) return ordA - ordB;
+                        return (a.nome || '').localeCompare(b.nome || '');
+                      })
+                      .map(r => (
+                        <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
                       ))
                     }
                   </select>
                 </div>
               </div>
+
+              {/* Card Resumo do Perfil Atrelado ao Cargo */}
+              {perfilSelecionado && (
+                <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/40 p-4 transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start sm:items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm">
+                        <Shield className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-slate-900">
+                            Perfil: {perfilSelecionado.nome}
+                          </span>
+                          {perfilSelecionado.apareceNaAgenda ? (
+                            <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              📅 Atende na Agenda
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
+                              🚫 Sem Agenda
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {perfilSelecionado.descricao || 'Perfil de acesso com permissões oficiais para esta função.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextState = !customizarPerfil;
+                        setCustomizarPerfil(nextState);
+                        if (!nextState && form.roleId) {
+                          const selectedRole = roles.find(r => String(r.id) === String(form.roleId));
+                          const presetId = selectedRole ? getPresetProfileId(selectedRole, perfisAcesso) : null;
+                          if (presetId) handlePerfilChangeInvite(presetId);
+                        }
+                      }}
+                      className="text-xs font-bold text-teal-700 hover:text-teal-900 underline self-start sm:self-center shrink-0"
+                    >
+                      {customizarPerfil ? 'Voltar ao perfil padrão do cargo' : 'Alterar perfil de acesso'}
+                    </button>
+                  </div>
+
+                  {customizarPerfil && (
+                    <div className="mt-4 pt-4 border-t border-teal-200/60">
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-800">
+                        Selecionar outro Perfil de Acesso
+                      </label>
+                      <select
+                        value={form.perfilAcessoId}
+                        onChange={e => handlePerfilChangeInvite(e.target.value)}
+                        className="w-full rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                      >
+                        {[...perfisAcesso]
+                          .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                          .sort((a, b) => {
+                            const ordA = CODIGO_ORDER[(a.codigo || '').toUpperCase()] || 99;
+                            const ordB = CODIGO_ORDER[(b.codigo || '').toUpperCase()] || 99;
+                            if (ordA !== ordB) return ordA - ordB;
+                            return (a.nome || '').localeCompare(b.nome || '');
+                          })
+                          .map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.nome} {p.apareceNaAgenda ? '(Atende na Agenda)' : '(Sem Agenda)'}
+                            </option>
+                          ))
+                        }
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {form.perfilAcessoId && (
                 <div className="mt-4">
@@ -589,8 +664,8 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                     <ExternalLink className="h-3.5 w-3.5" />
                     Editar este nível na aba Perfis de Acesso
                   </button>
-                  <div className={`grid transition-all duration-200 ease-out ${permissoesExpandidas ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0'}`}>
-                    <div className="overflow-hidden">
+                  {permissoesExpandidas && (
+                    <div className="mt-3 overflow-hidden animate-in fade-in duration-200">
                       <PermissoesPorModuloPanel
                         permissoes={permissoes}
                         selecionadas={permissoesDoNivel}
@@ -599,7 +674,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                         onChange={() => {}}
                       />
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -619,7 +694,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
               className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? 'Salvando...' : 'Salvar Alterações'}
+              {saving ? 'Criando...' : 'Criar Acesso'}
             </button>
           </div>
         </form>

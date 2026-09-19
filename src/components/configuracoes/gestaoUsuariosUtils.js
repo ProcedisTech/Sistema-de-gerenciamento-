@@ -1,13 +1,52 @@
 // Utilitários compartilhados entre InviteModal e EditRoleModal.
 import { resolveApiUrl } from '../../config/apiEnv';
 
+// Ordenação clínica canônica para os perfis de acesso do sistema
+export const CODIGO_ORDER = {
+  DONO: 1,
+  ADMINISTRADOR: 2,
+  NIVEL_5: 2,
+  SOCIO: 3,
+  MEDICO: 4,
+  NIVEL_4: 4,
+  ENFERMEIRO: 5,
+  BIOMEDICO: 6,
+  NIVEL_3: 6,
+  SECRETARIA: 7,
+  NIVEL_2: 7,
+  APOIO: 8,
+  NIVEL_1: 8,
+};
+
+// Ordenação clínica canônica para os cargos do sistema
+export const ROLE_DISPLAY_ORDER = {
+  ADMINISTRADOR: 1,
+  GERENTE: 2,
+  SOCIO: 3,
+  MEDICO: 4,
+  DENTISTA: 5,
+  BIOMEDICO: 6,
+  ESTETICISTA: 7,
+  ENFERMEIRO: 8,
+  RECEPCIONISTA: 9,
+  SECRETARIA: 10,
+  APOIO: 11,
+  OUTRO: 12,
+};
+
 const CARGO_DISPLAY_LABELS = {
   ADMINISTRADOR: 'Administrador',
+  GERENTE: 'Gerente',
+  SOCIO: 'Sócio / Investidor',
   MEDICO: 'Médico',
-  ESTETICISTA: 'Esteticista',
-  RECEPCIONISTA: 'Recepcionista',
   DENTISTA: 'Dentista',
   BIOMEDICO: 'Biomédico',
+  ESTETICISTA: 'Esteticista',
+  ENFERMEIRO: 'Enfermeiro(a)',
+  RECEPCIONISTA: 'Recepcionista',
+  SECRETARIA: 'Secretária',
+  APOIO: 'Auxiliar / Apoio',
+  OUTRO: 'Outro',
   PROFISSIONAL: 'Profissional / Médico',
 };
 
@@ -19,91 +58,124 @@ export const formatCargoLabel = (nome) => {
   return nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase();
 };
 
-/** Dado o nome do Cargo selecionado, sugere o Nível de Permissão correspondente. */
-export const getPresetProfileId = (roleName, perfis) => {
+/** Dado o nome ou objeto do Cargo selecionado, sugere o Perfil de Acesso correspondente. */
+export const getPresetProfileId = (roleOrRoleName, perfis = []) => {
+  if (!roleOrRoleName) return null;
+  if (typeof roleOrRoleName === 'object' && roleOrRoleName.perfilAcessoPadraoId) {
+    const directMatch = perfis.find(p => String(p.id) === String(roleOrRoleName.perfilAcessoPadraoId));
+    if (directMatch) return directMatch.id;
+  }
+  const roleName = typeof roleOrRoleName === 'object' ? roleOrRoleName.nome : roleOrRoleName;
   if (!roleName) return null;
   const nameLower = roleName.toLowerCase();
 
-  if (nameLower.includes('administrador') || nameLower === 'adm') {
-    // Nível 5 - Administrador
+  // Sócio / Investidor
+  if (nameLower.includes('socio') || nameLower.includes('sócio')) {
     const match = perfis.find(p =>
+      (p.codigo || '').toUpperCase() === 'SOCIO' ||
+      (p.nome || '').toLowerCase().includes('sócio') ||
+      (p.nome || '').toLowerCase().includes('socio') ||
+      (p.codigo || '').toUpperCase() === 'NIVEL_5'
+    );
+    if (match) return match.id;
+  }
+
+  // Administrador / Gerente
+  if (nameLower.includes('administrador') || nameLower.includes('gerente') || nameLower === 'adm' || nameLower === 'admin') {
+    const match = perfis.find(p =>
+      (p.codigo || '').toUpperCase() === 'ADMINISTRADOR' ||
       (p.nome || '').toLowerCase().includes('administrador') ||
-      (p.codigo || '').toLowerCase().includes('nivel_5')
+      (p.codigo || '').toUpperCase() === 'NIVEL_5'
     );
-    return match ? match.id : null;
+    if (match) return match.id;
   }
 
-  if (nameLower.includes('medico') || nameLower.includes('esteticista') || nameLower.includes('dentista') || nameLower.includes('biomedico') || nameLower.includes('biomédico')) {
-    // Nível 4 - Profissional Sênior
+  // Médico / Dentista / Responsável Técnico
+  if (nameLower.includes('medico') || nameLower.includes('médico') || nameLower.includes('dentista') || nameLower.includes('responsavel')) {
     const match = perfis.find(p =>
-      (p.nome || '').toLowerCase().includes('sênior') ||
-      (p.nome || '').toLowerCase().includes('senior') ||
-      (p.codigo || '').toLowerCase().includes('nivel_4')
+      (p.codigo || '').toUpperCase() === 'MEDICO' ||
+      (p.nome || '').toLowerCase().includes('médico') ||
+      (p.nome || '').toLowerCase().includes('medico') ||
+      (p.nome || '').toLowerCase().includes('dentista') ||
+      (p.codigo || '').toUpperCase() === 'NIVEL_4'
     );
-    return match ? match.id : null;
+    if (match) return match.id;
   }
 
-  if (nameLower.includes('profissional')) {
-    // Nível 3 - Profissional Padrão
+  // Enfermeiro(a)
+  if (nameLower.includes('enfermeir')) {
     const match = perfis.find(p =>
-      (p.nome || '').toLowerCase().includes('padrão') ||
-      (p.nome || '').toLowerCase().includes('padrao') ||
-      (p.codigo || '').toLowerCase().includes('nivel_3')
+      (p.codigo || '').toUpperCase() === 'ENFERMEIRO' ||
+      (p.nome || '').toLowerCase().includes('enfermeir') ||
+      (p.codigo || '').toUpperCase() === 'NIVEL_3'
     );
-    return match ? match.id : null;
+    if (match) return match.id;
   }
 
-  if (nameLower.includes('recepcionista') || nameLower.includes('recepcao')) {
-    // Nível 2 - Recepção
+  // Biomédico / Esteticista
+  if (
+    nameLower.includes('biomedic') || nameLower.includes('biomédic') ||
+    nameLower.includes('estetic') ||
+    nameLower.includes('saude') || nameLower.includes('saúde') ||
+    nameLower.includes('clinico') || nameLower.includes('clínico')
+  ) {
     const match = perfis.find(p =>
+      (p.codigo || '').toUpperCase() === 'BIOMEDICO' ||
+      (p.nome || '').toLowerCase().includes('biomédic') ||
+      (p.nome || '').toLowerCase().includes('biomedico') ||
+      (p.nome || '').toLowerCase().includes('esteticista') ||
+      (p.codigo || '').toUpperCase() === 'NIVEL_3'
+    );
+    if (match) return match.id;
+  }
+
+  // Recepção / Secretária
+  if (
+    nameLower.includes('recepcionista') || nameLower.includes('recepcao') || nameLower.includes('recepção') ||
+    nameLower.includes('secretari') || nameLower.includes('secretári') || nameLower.includes('atend')
+  ) {
+    const match = perfis.find(p =>
+      (p.codigo || '').toUpperCase() === 'SECRETARIA' ||
+      (p.nome || '').toLowerCase().includes('secretár') ||
+      (p.nome || '').toLowerCase().includes('secretar') ||
       (p.nome || '').toLowerCase().includes('recepção') ||
       (p.nome || '').toLowerCase().includes('recepcao') ||
-      (p.codigo || '').toLowerCase().includes('nivel_2')
+      (p.codigo || '').toUpperCase() === 'NIVEL_2'
     );
-    return match ? match.id : null;
+    if (match) return match.id;
   }
 
-  return null;
+  // Apoio / Básico
+  const apoioMatch = perfis.find(p =>
+    (p.codigo || '').toUpperCase() === 'APOIO' ||
+    (p.nome || '').toLowerCase().includes('apoio') ||
+    (p.codigo || '').toUpperCase() === 'NIVEL_1'
+  );
+  return apoioMatch ? apoioMatch.id : null;
 };
 
 /**
- * Permissões padrão por Nível, usadas como ponto de partida no checklist quando a
- * clínica ainda não customizou aquele Nível (API retorna [] em
- * GET /api/v1/perfis-acesso/{id}/permissoes). Só pré-marca os checkboxes — o admin
- * pode editar livremente antes de salvar. Códigos que não existirem no catálogo da
- * clínica (`permissoes`) simplesmente não casam com nada, sem quebrar nada.
+ * As permissões de cada Perfil são gerenciadas como fonte única da verdade no backend
+ * (tb_perfil_acesso_permissao) e carregadas dinamicamente via GET /api/v1/perfis-acesso/{id}/permissoes.
  */
-export const DEFAULT_PERMISSOES_POR_NIVEL = {
-  NIVEL_1: ['AGENDA_VER', 'PACIENTE_VER'],
-  NIVEL_2: ['AGENDA_VER', 'PACIENTE_VER', 'AGENDA_CRIAR', 'AGENDA_EDITAR', 'CATALOGO_VER', 'PACIENTE_CRIAR', 'PACIENTE_EDITAR'],
-  NIVEL_3: ['AGENDA_VER', 'PACIENTE_VER', 'AGENDA_CRIAR', 'AGENDA_EDITAR', 'CATALOGO_VER', 'PACIENTE_CRIAR', 'PACIENTE_EDITAR', 'PACIENTE_EXCLUIR', 'ANAMNESE_PREENCHIMENTO_CRIAR', 'PRONTUARIO_VER', 'PRONTUARIO_CRIAR', 'PACIENTE_NOTA_CRIAR', 'ANAMNESE_MODELO_VER', 'DOC_MODELO_VER', 'PACIENTE_GALERIA_VER', 'PACIENTE_DOCUMENTO_VER'],
-  NIVEL_4: ['AGENDA_VER', 'PACIENTE_VER', 'AGENDA_CRIAR', 'AGENDA_EDITAR', 'CATALOGO_VER', 'PACIENTE_CRIAR', 'PACIENTE_EDITAR', 'PACIENTE_EXCLUIR', 'ANAMNESE_PREENCHIMENTO_CRIAR', 'PRONTUARIO_VER', 'PRONTUARIO_CRIAR', 'PACIENTE_NOTA_CRIAR', 'ANAMNESE_MODELO_VER', 'DOC_MODELO_VER', 'PACIENTE_GALERIA_VER', 'PACIENTE_DOCUMENTO_VER', 'CLINICA_EDITAR', 'HORARIO_EDITAR'],
-  NIVEL_5: ['AGENDA_VER', 'PACIENTE_VER', 'AGENDA_CRIAR', 'AGENDA_EDITAR', 'CATALOGO_VER', 'PACIENTE_CRIAR', 'PACIENTE_EDITAR', 'PACIENTE_EXCLUIR', 'ANAMNESE_PREENCHIMENTO_CRIAR', 'PRONTUARIO_VER', 'PRONTUARIO_CRIAR', 'PACIENTE_NOTA_CRIAR', 'ANAMNESE_MODELO_VER', 'DOC_MODELO_VER', 'PACIENTE_GALERIA_VER', 'PACIENTE_DOCUMENTO_VER', 'CLINICA_EDITAR', 'HORARIO_EDITAR', 'USUARIO_VER', 'AUDITORIA_VER', 'PDF_EXPORTAR', 'PRECOS_EDITAR'],
-};
+export const getPermissoesPadraoPorPerfilId = () => [];
 
-/**
- * Resolve as permissões padrão de um Nível (por perfilAcessoId) para a lista de
- * permissaoId correspondente no catálogo atual da clínica.
- */
-export const getPermissoesPadraoPorPerfilId = (perfilAcessoId, perfisAcesso, permissoes) => {
-  const perfil = (perfisAcesso || []).find(p => String(p.id) === String(perfilAcessoId));
-  const codigos = DEFAULT_PERMISSOES_POR_NIVEL[(perfil?.codigo || '').toUpperCase()] || [];
-  return (permissoes || [])
-    .filter(p => codigos.includes(p.codigo))
-    .map(p => p.permissaoId);
-};
 
 /**
  * Cria um novo Perfil de Acesso (POST) e atribui a ele o conjunto de permissões
  * informado (PUT), usado pelo pop-up de "permissões customizadas" ao salvar um
  * membro com o checklist divergente do template do Nível selecionado.
  */
-export const criarPerfilComPermissoes = async ({ nome, descricao, permissoes, fetchHeaders }) => {
+export const criarPerfilComPermissoes = async ({ nome, descricao, apareceNaAgenda, permissoes, fetchHeaders }) => {
   const res = await fetch(resolveApiUrl('/api/v1/perfis-acesso'), {
     method: 'POST',
     headers: { ...(await fetchHeaders()), 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ nome, descricao: descricao || '' })
+    body: JSON.stringify({
+      nome,
+      descricao: descricao || '',
+      apareceNaAgenda: Boolean(apareceNaAgenda),
+    })
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
