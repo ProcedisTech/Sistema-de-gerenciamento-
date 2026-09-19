@@ -283,7 +283,9 @@ export function AgendaDashboard({
     [listDaySummary],
   );
 
-  const showProfissional = (agenda.equipeList?.length || 0) > 1;
+  const showProfissional =
+    (agenda.canSeeAgendaMulti !== false) &&
+    ((agenda.equipeList?.filter((p) => p.apareceNaAgenda !== false).length || 0) > 1);
 
   const todayAppointments = React.useMemo(() => {
     return agenda.appointments.filter((item) => String(item.data) === String(agenda.todayIso));

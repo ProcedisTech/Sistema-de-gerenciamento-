@@ -40,6 +40,7 @@ import { PlanoItemEditModal } from './PlanoItemEditModal.jsx';
 import { PlanoConcluirRetornoConfirmModal } from './PlanoConcluirRetornoConfirmModal.jsx';
 import { PlanoEncerrarConfirmModal } from './PlanoEncerrarConfirmModal.jsx';
 import { ValorOrcadoInput } from './ValorOrcadoInput.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 
 function formatValorBrl(val) {
   if (val == null || val === '') return '—';
@@ -842,6 +843,7 @@ export function PlanosTab({
   } = usePlanoDraft();
   const hydratedPlanIdsRef = useRef(new Set());
   const toast = useToast();
+  const { canEditPrecosOrcados } = usePapel();
   const { options: catalogoOptions, loading: catalogoLoading } = useProcedimentosOptions();
   const [expandidos, setExpandidos] = useState({});
   const [novoItemPorPlano, setNovoItemPorPlano] = useState({});
@@ -1155,7 +1157,7 @@ export function PlanosTab({
             />
             <ValorOrcadoInput
               value={draftForm.valorDisplay}
-              disabled={disabled}
+              disabled={disabled || !canEditPrecosOrcados}
               onChange={(valorDisplay) => setDraftForm({ valorDisplay })}
             />
             <button
@@ -1413,6 +1415,7 @@ export function PlanosTab({
         catalogoOptions={catalogoOptions}
         catalogoLoading={catalogoLoading}
         mutating={mutating || Boolean(savingPlanoId)}
+        canEditPreco={canEditPrecosOrcados}
         onClose={() => setEditItemState(null)}
         onSave={handleEditItemSave}
       />

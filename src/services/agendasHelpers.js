@@ -12,11 +12,17 @@ import { isAgendaForaDisponibilidadeError } from '../utils/agendaErrors';
  * @param {() => Promise<boolean>} abrirConfirmacao - resolve true=confirmou, false=cancelou
  * @returns {Promise<any|null>} resultado da chamada, ou null se usuário cancelou
  */
-export async function executarComBypassDisp(chamadaApi, chamadaApiComForcar, abrirConfirmacao) {
+export async function executarComBypassDisp(chamadaApi, chamadaApiComForcar, abrirConfirmacao, podeForcar = true) {
   try {
     return await chamadaApi();
   } catch (err) {
     if (!isAgendaForaDisponibilidadeError(err)) throw err;
+
+    if (!podeForcar) {
+      const semPermissaoErr = new Error('FORA_DA_DISPONIBILIDADE_SEM_PERMISSAO');
+      semPermissaoErr.detail = 'Você não possui permissão para realizar encaixe fora da disponibilidade do profissional.';
+      throw semPermissaoErr;
+    }
 
     const confirmou = await abrirConfirmacao();
     if (!confirmou) return null;

@@ -20,7 +20,7 @@ import { CadastrarClinica } from './auth/CadastrarClinica.jsx';
 import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
-import { RoleGuard } from './auth/RoleGuard.jsx';
+import { RoleGuard, PERMISSOES } from './auth/RoleGuard.jsx';
 import { Sidebar, Stepper, MobileNavigation, GlobalHeader, PageSlot } from './layout';
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
@@ -166,7 +166,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 function AppRefactoredInner() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, clearOrgSession } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, setApareceNaAgenda, clearOrgSession } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -250,6 +250,10 @@ function AppRefactoredInner() {
         }
         if (typeof setPermissoes === 'function') {
           setPermissoes(meJson?.permissoes || []);
+        }
+        if (typeof setApareceNaAgenda === 'function') {
+          const aparece = meJson?.apareceNaAgenda ?? meJson?.aparece_na_agenda ?? null;
+          setApareceNaAgenda(aparece);
         }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
@@ -4674,7 +4678,7 @@ function AppRefactoredInner() {
               >
 
                 {activeView === 'pacientes' && (
-                  <RoleGuard requiredPermission="PACIENTE_VER" minLevel="NIVEL_1" showError>
+                  <RoleGuard requiredPermission={PERMISSOES.PACIENTE_VER} minLevel="NIVEL_1" showError>
                     <PatientsView
                       isRecepcionista={isRecepcionista}
                       patients={patients}
@@ -4763,7 +4767,7 @@ function AppRefactoredInner() {
                 )}
 
                 {activeView === 'gestao-equipe' && (
-                  <RoleGuard requiredPermission="USUARIO_VER" minLevel="NIVEL_5" showError>
+                  <RoleGuard requiredPermission={PERMISSOES.USUARIO_VER} minLevel="NIVEL_5" showError>
                     <GestaoUsuariosView
                       onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                     />
@@ -4780,7 +4784,7 @@ function AppRefactoredInner() {
                 )}
 
                 {activeView === 'agenda' && (
-                  <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
+                  <RoleGuard requiredPermission={PERMISSOES.AGENDA_VER} minLevel="NIVEL_1" showError>
                     <div className="flex min-h-0 flex-1 flex-col">
                       <AgendaDashboard
                         agenda={agendaSchedule}

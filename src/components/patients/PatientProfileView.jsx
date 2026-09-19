@@ -893,7 +893,7 @@ export function PatientProfileView({
   patientListBump,
 }) {
   const toast = useToast();
-  const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
+  const { isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos, canSeeOrcamentos } = usePapel();
   const { orgId } = useOrg();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
@@ -1337,14 +1337,26 @@ export function PatientProfileView({
   ]);
 
   useEffect(() => {
+    const defaultTab = canSeeOrcamentos
+      ? 'planos'
+      : (canSeeProntuario
+          ? 'prontuario'
+          : (canStartAnamnese
+              ? 'anamnese'
+              : (canSeeGaleria
+                  ? 'galeria'
+                  : 'documentos')));
+
     if (
       patientDetailTab === 'timeline' ||
       patientDetailTab === 'cadastro' ||
       patientDetailTab === 'atendimento'
     ) {
-      setPatientDetailTab('planos');
+      setPatientDetailTab(defaultTab);
+    } else if (patientDetailTab === 'planos' && !canSeeOrcamentos) {
+      setPatientDetailTab(defaultTab);
     }
-  }, [patientDetailTab, setPatientDetailTab]);
+  }, [patientDetailTab, setPatientDetailTab, canSeeOrcamentos, canSeeProntuario, canStartAnamnese, canSeeGaleria]);
 
   const isEditing = Boolean(editing);
 
@@ -2503,7 +2515,7 @@ export function PatientProfileView({
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
             <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch justify-between gap-0 overflow-x-hidden border-b border-[#e2e8f0] bg-white sm:gap-1">
               {[
-                { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
+                canSeeOrcamentos && { key: 'planos', label: 'Planos', title: 'Planos de tratamento', icon: BookOpen },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 canStartAnamnese && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 canSeeGaleria && { key: 'galeria', label: 'Galeria', title: 'Galeria', icon: ImageIcon },
@@ -3120,7 +3132,7 @@ export function PatientProfileView({
                 />
               )}
 
-              {patientDetailTab === 'planos' && (
+              {patientDetailTab === 'planos' && canSeeOrcamentos && (
                 <PlanosTab
                   variant="profile"
                   pacienteId={selectedPatient?.id ?? null}

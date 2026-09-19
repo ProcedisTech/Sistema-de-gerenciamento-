@@ -138,6 +138,7 @@ function normalizeEquipeList(raw) {
     .map((p) => {
       const roleUserId = String(p?.roleUserId || p?.role_user_id || p?.id || '').trim();
       const nome = p?.nomeCompleto || p?.nome || p?.name || p?.username || 'Profissional';
+      const apareceNaAgenda = p?.apareceNaAgenda ?? p?.aparece_na_agenda ?? true;
       return roleUserId
         ? {
             roleUserId,
@@ -145,6 +146,7 @@ function normalizeEquipeList(raw) {
             roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
             fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
             especialidade: p?.especialidade || p?.specialty || '',
+            apareceNaAgenda: Boolean(apareceNaAgenda),
           }
         : null;
     })
@@ -331,7 +333,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
 export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPatientSync } = {}) {
   const { roleUserId, roleNome } = useOrg();
   const { bumpRevision } = useDisponibilidadeRevision();
-  const { isNivel1 } = usePapel();
+  const { isNivel1, canSeeAgendaMulti, canSeeAgendaPropria, canEncaixarForaDisp } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
   const { todayIso, currentMinutes: currentBrasiliaMinutes } = useBrasiliaTime();
   const [monthDate, setMonthDate] = useState(() => {
@@ -549,9 +551,11 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setError('');
       try {
         const { start, end } = monthRangeIso(targetMonth);
-        const rows = await fetchDashboardAppointmentsForRange(start, end, {
-          signal: controller.signal,
-        });
+        const rangeOpts = { signal: controller.signal };
+        if (!canSeeAgendaMulti && canSeeAgendaPropria && roleUserId) {
+          rangeOpts.profissionalRoleUserId = roleUserId;
+        }
+        const rows = await fetchDashboardAppointmentsForRange(start, end, rangeOpts);
         if (gen !== monthLoadGenRef.current) return;
         setAppointments(rows);
       } catch (e) {
@@ -563,7 +567,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         if (gen === monthLoadGenRef.current) setLoading(false);
       }
     },
-    [authEnabled],
+    [authEnabled, canSeeAgendaMulti, canSeeAgendaPropria, roleUserId],
   );
 
   const loadMonth = useCallback(
@@ -1330,7 +1334,11 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     let cancelled = false;
     (async () => {
       try {
-        const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso);
+        const weekOpts = {};
+        if (!canSeeAgendaMulti && canSeeAgendaPropria && roleUserId) {
+          weekOpts.profissionalRoleUserId = roleUserId;
+        }
+        const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso, weekOpts);
         if (!cancelled) setWeekGridAppointments(rows);
       } catch {
         if (!cancelled) setWeekGridAppointments([]);
@@ -1339,17 +1347,21 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     return () => {
       cancelled = true;
     };
-  }, [authEnabled, viewMode, weekStartIso, weekEndIso]);
+  }, [authEnabled, viewMode, weekStartIso, weekEndIso, canSeeAgendaMulti, canSeeAgendaPropria, roleUserId]);
 
   const refreshWeekGrid = useCallback(async () => {
     if (!authEnabled || viewMode !== 'semana') return;
     try {
-      const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso);
+      const weekOpts = {};
+      if (!canSeeAgendaMulti && canSeeAgendaPropria && roleUserId) {
+        weekOpts.profissionalRoleUserId = roleUserId;
+      }
+      const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso, weekOpts);
       setWeekGridAppointments(rows);
     } catch {
       setWeekGridAppointments([]);
     }
-  }, [authEnabled, viewMode, weekStartIso, weekEndIso]);
+  }, [authEnabled, viewMode, weekStartIso, weekEndIso, canSeeAgendaMulti, canSeeAgendaPropria, roleUserId]);
 
   /** Recarrega lista do mês e grade semanal (no-op na semana se viewMode !== 'semana'). */
   const refreshDashboard = useCallback(async () => {
@@ -1837,7 +1849,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         const resultado = await executarComBypassDisp(
           () => agendasApi.reagendar(agendaId, payload),
           () => agendasApi.reagendar(agendaId, payload, { forcar: true }),
-          abrirConfirmacaoForaDisp
+          abrirConfirmacaoForaDisp,
+          canEncaixarForaDisp,
         );
         if (resultado === null) return false;
         if (opts.successToast !== false) {
@@ -1851,15 +1864,15 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         }
         setError('');
         return true;
-      } catch (e) {
-        const msg = formatAgendamentoApiError(e);
-        toastError(msg || 'Erro ao reagendar');
+      } catch (err) {
+        const msg = formatAgendamentoApiError(err, 'Falha ao reagendar');
+        toastError(msg);
         return false;
       } finally {
         setSubmittingReagendar(false);
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
+    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp, canEncaixarForaDisp, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
   );
 
   const handleEnviarWhatsApp = useCallback(
@@ -2302,6 +2315,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           () => agendasApi.create(createBody),
           () => agendasApi.create(createBody, { forcar: true }),
           abrirConfirmacaoForaDisp,
+          canEncaixarForaDisp,
         );
         if (created === null) return false;
         if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
@@ -2339,6 +2353,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           () => agendasApi.create(createBody),
           () => agendasApi.create(createBody, { forcar: true }),
           abrirConfirmacaoForaDisp,
+          canEncaixarForaDisp,
         );
         if (created === null) return false;
         if (created?.id == null) throw new Error('Resposta da API sem id da agenda.');
@@ -2408,7 +2423,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           const created = await executarComBypassDisp(
             () => agendasApi.create(createBody),
             () => agendasApi.create(createBody, { forcar: true }),
-            abrirConfirmacaoForaDisp
+            abrirConfirmacaoForaDisp,
+            canEncaixarForaDisp,
           );
           if (created === null) {
             resultados.push({ id: catalogoProcedimentoSaudeId, status: 'cancelado' });
@@ -2482,6 +2498,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     }
   }, [
     abrirConfirmacaoForaDisp,
+    canEncaixarForaDisp,
     closeModal,
     editingAppointment,
     form,
@@ -2647,7 +2664,11 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setViewMode,
     slotsOcupados,
     slotsOcupadosLoading,
+    roleUserId,
     roleUserIdAgenda,
+    canSeeAgendaMulti,
+    canSeeAgendaPropria,
+    canEncaixarForaDisp,
     setRoleUserIdAgenda: setRoleUserIdAgendaPublic,
     ensureEquipeLoaded,
     equipeList,
