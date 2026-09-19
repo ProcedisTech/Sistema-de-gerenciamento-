@@ -268,6 +268,8 @@ export function normalizePacienteGaleriaItem(raw) {
   }
 
   return {
+    id: String(id),
+    fotoId: String(id),
     serverId: String(id),
     url: absolutizeUrl(String(url)),
     tipoFotoCodigo,

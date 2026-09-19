@@ -24,13 +24,21 @@ export function AguardandoPacienteModal({
   const [recusado, setRecusado] = useState(false);
   const pollingRef = useRef(null);
 
+  const onAssinaturaConcluidaRef = useRef(onAssinaturaConcluida);
+  useEffect(() => {
+    onAssinaturaConcluidaRef.current = onAssinaturaConcluida;
+  }, [onAssinaturaConcluida]);
+
   const metodoCodigo = escolha?.metodoCodigo ?? null;
   const canalCodigo = escolha?.canalCodigo ?? null;
   const isQr = metodoCodigo === 'DISPOSITIVO_PROPRIO_LOCAL' && !canalCodigo;
   const isWhatsApp = canalCodigo === 'WHATSAPP';
 
+  const termoAssinaturaId = sessaoExternaPayload?.termoAssinaturaId ?? null;
+  const telefonePaciente = sessaoExternaPayload?.telefonePaciente ?? null;
+
   useEffect(() => {
-    if (!open) {
+    if (!open || !termoAssinaturaId) {
       if (pollingRef.current) clearInterval(pollingRef.current);
       setSessaoData(null);
       setLoading(true);
@@ -51,10 +59,10 @@ export function AguardandoPacienteModal({
             ...(await authHeadersForFetch({ needsOrg: true })),
           },
           body: JSON.stringify({
-            termoAssinaturaId: sessaoExternaPayload.termoAssinaturaId,
+            termoAssinaturaId,
             metodoCodigo,
             canalCodigo: canalCodigo || null,
-            telefonePaciente: canalCodigo ? (sessaoExternaPayload.telefonePaciente || null) : null,
+            telefonePaciente: canalCodigo ? (telefonePaciente || null) : null,
           }),
         });
 
@@ -75,6 +83,9 @@ export function AguardandoPacienteModal({
     };
 
     const iniciarPolling = (sessaoId) => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
       pollingRef.current = setInterval(async () => {
         try {
           const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/status`), {
@@ -84,7 +95,7 @@ export function AguardandoPacienteModal({
           if (data.status === 'CONCLUIDO') {
             clearInterval(pollingRef.current);
             let recusou = false;
-            const termoId = sessaoExternaPayload?.termoAssinaturaId;
+            const termoId = termoAssinaturaId;
             if (termoId) {
               try {
                 const taRes = await fetch(resolveApiUrl(`/api/v1/termos/assinaturas/${termoId}`), {
@@ -102,7 +113,7 @@ export function AguardandoPacienteModal({
             setRecusado(recusou);
             setConcluido(true);
             setTimeout(() => {
-              if (onAssinaturaConcluida) onAssinaturaConcluida();
+              onAssinaturaConcluidaRef.current?.();
             }, 1500);
           } else if (data.status === 'EXPIRADO' || data.status === 'CANCELADO') {
             clearInterval(pollingRef.current);
@@ -120,7 +131,7 @@ export function AguardandoPacienteModal({
       isSubscribed = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [open, metodoCodigo, canalCodigo, sessaoExternaPayload]);
+  }, [open, metodoCodigo, canalCodigo, termoAssinaturaId, telefonePaciente]);
 
   if (!open) return null;
 

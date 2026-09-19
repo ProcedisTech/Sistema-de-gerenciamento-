@@ -21,21 +21,40 @@ function normalizeSexoForApi(sexo) {
 export function mapGetToState(data) {
   const toChips = (arr) =>
     Array.isArray(arr)
-      ? arr.map((item) => ({
-          id: item.id ?? item.codigo,
-          codigo: item.codigo,
-          nome: item.nome,
-          observacao: item.observacao ?? '',
-          tipoCodigo: item.tipoCodigo ?? undefined,
-          dose: item.dose ?? '',
-          frequencia: item.frequencia ?? '',
-          usoContinuo: item.usoContinuo ?? true,
-          origemDeclaracao: item.origemDeclaracao ?? null,
-          confirmadoEm: item.confirmadoEm ?? null,
-          registradoPorNome: item.registradoPorNome ?? null,
-          reacaoAdversaId: item.reacaoAdversaId ?? null,
-          reacaoNome: item.reacaoNome ?? null,
-        }))
+      ? arr.map((item) => {
+          const reacoes = Array.isArray(item.reacoes)
+            ? item.reacoes
+                .filter((r) => r?.reacaoAdversaId != null)
+                .map((r) => ({
+                  reacaoAdversaId: r.reacaoAdversaId,
+                  reacaoNome: r.reacaoNome ?? null,
+                  declaracaoReacaoId: r.declaracaoReacaoId ?? null,
+                  escopo: r.escopo ?? null,
+                }))
+            : [];
+          const topId = item.reacaoAdversaId ?? reacoes[0]?.reacaoAdversaId ?? null;
+          const topNome = item.reacaoNome ?? reacoes[0]?.reacaoNome ?? null;
+          return {
+            id: item.id ?? item.codigo,
+            codigo: item.codigo,
+            nome: item.nome,
+            observacao: item.observacao ?? '',
+            tipoCodigo: item.tipoCodigo ?? undefined,
+            dose: item.dose ?? '',
+            frequencia: item.frequencia ?? '',
+            usoContinuo: item.usoContinuo ?? true,
+            origemDeclaracao: item.origemDeclaracao ?? null,
+            confirmadoEm: item.confirmadoEm ?? null,
+            registradoPorNome: item.registradoPorNome ?? null,
+            reacaoAdversaId: topId,
+            reacaoNome: topNome,
+            reacoes: reacoes.length
+              ? reacoes
+              : topId
+                ? [{ reacaoAdversaId: topId, reacaoNome: topNome }]
+                : [],
+          };
+        })
       : [];
 
   return {
@@ -68,24 +87,39 @@ export function classifyPerfilError(err) {
  * Monta o body do PUT. Sempre envia as 4 listas (regra 1 do plano).
  */
 function mapStateToPutBody(state, roleUserId) {
-  const toPayload = (arr) =>
+  const toPayload = (arr, { withReacoes = false } = {}) =>
     Array.isArray(arr)
-      ? arr.map((item) => ({
-          id: item.id,
-          codigo: item.codigo,
-          nome: item.nome,
-          observacao: item.observacao || null,
-          reacaoAdversaId: item.reacaoAdversaId || null,
-          dose: item.dose || null,
-          frequencia: item.frequencia || null,
-          usoContinuo: item.usoContinuo ?? null,
-        }))
+      ? arr.map((item) => {
+          const base = {
+            id: item.id,
+            codigo: item.codigo,
+            nome: item.nome,
+            observacao: item.observacao || null,
+            dose: item.dose || null,
+            frequencia: item.frequencia || null,
+            usoContinuo: item.usoContinuo ?? null,
+          };
+          if (!withReacoes) {
+            return { ...base, reacaoAdversaId: item.reacaoAdversaId || null };
+          }
+          const ids = Array.isArray(item.reacoes)
+            ? item.reacoes.map((r) => r.reacaoAdversaId).filter(Boolean)
+            : [];
+          if (ids.length === 0 && item.reacaoAdversaId) {
+            ids.push(item.reacaoAdversaId);
+          }
+          return {
+            ...base,
+            reacaoAdversaId: ids[0] || null,
+            reacoesAdversasIds: ids,
+          };
+        })
       : [];
 
   return {
     roleUserId,
     alergias: toPayload(state.alergias),
-    alergiasPrincipioAtivo: toPayload(state.alergiasPrincipioAtivo),
+    alergiasPrincipioAtivo: toPayload(state.alergiasPrincipioAtivo, { withReacoes: true }),
     medicamentosEmUso: toPayload(state.medicamentosEmUso),
     antecedentes: toPayload(state.antecedentes),
   };
@@ -248,9 +282,30 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
   const updateReacaoAdversa = useCallback((itemId, reacaoAdversaId, reacaoNome) => {
     updateState((prev) => ({
       ...prev,
-      alergiasPrincipioAtivo: (prev.alergiasPrincipioAtivo ?? []).map((i) =>
-        i.id === itemId ? { ...i, reacaoAdversaId, reacaoNome } : i
-      ),
+      alergiasPrincipioAtivo: (prev.alergiasPrincipioAtivo ?? []).map((i) => {
+        if (i.id !== itemId) return i;
+        const reacoes = reacaoAdversaId
+          ? [{ reacaoAdversaId, reacaoNome: reacaoNome ?? null }]
+          : [];
+        return { ...i, reacaoAdversaId: reacaoAdversaId || null, reacaoNome: reacaoNome || null, reacoes };
+      }),
+    }));
+  }, [updateState]);
+
+  /** Substitui a lista N:N de reações de uma alergia PA (canônico). */
+  const updateReacoesAdversas = useCallback((itemId, reacoes) => {
+    const list = Array.isArray(reacoes) ? reacoes.filter((r) => r?.reacaoAdversaId != null) : [];
+    updateState((prev) => ({
+      ...prev,
+      alergiasPrincipioAtivo: (prev.alergiasPrincipioAtivo ?? []).map((i) => {
+        if (i.id !== itemId) return i;
+        return {
+          ...i,
+          reacoes: list,
+          reacaoAdversaId: list[0]?.reacaoAdversaId ?? null,
+          reacaoNome: list[0]?.reacaoNome ?? null,
+        };
+      }),
     }));
   }, [updateState]);
 
@@ -283,6 +338,7 @@ export function usePerfilClinico(pacienteId, roleUserId, sexoPaciente, { draft =
     updateObservacao,
     updateMedicamentoExtra,
     updateReacaoAdversa,
+    updateReacoesAdversas,
     buscarAlimentos,
     buscarPrincipiosAtivos,
     buscarMedicamentos,

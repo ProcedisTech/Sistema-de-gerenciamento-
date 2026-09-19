@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, ChevronDown, Calendar, Lock, Plus } from 'lucide-react';
+import { X, ChevronDown, Calendar, Lock, Plus, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
 import { useUsuarioLogado } from '../../hooks/useUsuarioLogado.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { PacienteSearchInput } from './PacienteSearchInput.jsx';
@@ -18,7 +18,6 @@ import {
 } from '../../utils/agendaRangeSelection.js';
 import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
 import {
-  formatProcedimentoRaizData,
   nomeProcedimentoRaiz,
 } from './retornoOrigemUtils.js';
 import {
@@ -238,11 +237,16 @@ export function AgendaFormModal({ agenda }) {
   const isModoRetorno = tipoAtendimento === TIPO_ATENDIMENTO_RETORNO;
   const isModoProcedimento = tipoAtendimento === TIPO_ATENDIMENTO_PROCEDIMENTO;
   const origemId = String(agenda.form.procedimentoFeitoOrigemId || '').trim();
+  const planejamentoItemId = String(agenda.form.planejamentoItemId || '').trim();
   const isRetornoSemSeletorPai =
-    isModoRetorno && Boolean(origemId) && (agenda.retornoTemVinculoPlano || agenda.retornoPaiPreselecionado);
+    isModoRetorno && (
+      Boolean(agenda.form.retornoOrigemNome && !retornoOrigemExpanded) ||
+      (Boolean(origemId || planejamentoItemId) && (agenda.retornoTemVinculoPlano || agenda.retornoPaiPreselecionado))
+    );
 
   const temPaciente = Boolean(String(agenda.form.pacienteId || '').trim());
-  const raizes = agenda.form.procedimentosFeitosRaiz || [];
+  const raizesHistorico = agenda.form.procedimentosFeitosRaiz || [];
+  const raizesPlano = agenda.form.planejamentoItensRaiz || [];
   const raizesLoading = Boolean(agenda.form.procedimentosRaizLoading);
   const raizesVazias =
     isModoRetorno &&
@@ -250,15 +254,17 @@ export function AgendaFormModal({ agenda }) {
     !isRetornoSemSeletorPai &&
     !raizesLoading &&
     !agenda.form.procedimentosRaizError &&
-    raizes.length === 0;
+    raizesHistorico.length === 0 &&
+    raizesPlano.length === 0;
   const retornoSemPaciente = isModoRetorno && !temPaciente && !isRetornoSemSeletorPai;
+  const temOrigemSelecionada = Boolean(origemId || planejamentoItemId || agenda.form.retornoOrigemNome);
 
   const confirmDisabled =
     !temPaciente ||
     (isModoProcedimento && !(agenda.form.catalogoProcedimentoSaudeIds?.length > 0)) ||
     (isModoRetorno &&
       !isRetornoSemSeletorPai &&
-      (!origemId || retornoSemPaciente || raizesVazias || raizesLoading)) ||
+      (!temOrigemSelecionada || retornoSemPaciente || raizesVazias || raizesLoading)) ||
     !agenda.form.data ||
     !agenda.form.horaInicio ||
     !agenda.form.horaFimSlot ||
@@ -567,7 +573,7 @@ export function AgendaFormModal({ agenda }) {
       !retornoSemPaciente &&
       !isRetornoSemSeletorPai &&
       !raizesVazias &&
-      (!origemId || retornoOrigemExpanded);
+      (!temOrigemSelecionada || retornoOrigemExpanded);
 
     return (
       <div className={`rounded-xl border border-teal-200/90 bg-teal-50/60 shadow-sm transition-all ${compact ? 'p-2.5' : 'p-3.5'}`}>
@@ -579,35 +585,58 @@ export function AgendaFormModal({ agenda }) {
 
         {retornoSemPaciente ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-900">
-            Escolha o paciente primeiro. A origem do retorno vem do histórico dele.
+            Escolha o paciente primeiro. A origem do retorno vem do histórico dele ou do plano.
           </div>
         ) : isRetornoSemSeletorPai ? (
           agenda.form.retornoOrigemNome ? (
             <div
               role="status"
               aria-label="Procedimento de origem do retorno"
-              className="flex items-start gap-2 rounded-xl border-2 border-[#14B8A6] bg-[#e6f7f5] px-2.5 py-2"
+              className="rounded-xl border-2 border-[#14B8A6] bg-[#e6f7f5] p-3 space-y-1.5"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0f766e]">
-                <Lock className="h-3.5 w-3.5" aria-hidden />
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#0f766e] shadow-2xs">
+                    <Lock className="h-3.5 w-3.5" aria-hidden />
+                  </div>
+                  <p className="truncate text-[13px] font-bold text-[#0f766e]">
+                    Retorno de: {agenda.form.retornoOrigemNome}
+                  </p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                  {agenda.form.retornoStatusPai === 'realizado'
+                    ? (agenda.form.retornoVisitaLabel ? `Concluído · ${agenda.form.retornoVisitaLabel}` : 'Concluído')
+                    : (agenda.form.retornoVisitaLabel ? `No Plano · ${agenda.form.retornoVisitaLabel}` : 'No Plano')}
+                </span>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[12px] font-semibold text-[#0f766e]">
-                  {agenda.form.retornoOrigemNome}
+
+              {agenda.form.retornoPlanoTitulo && (
+                <p className="flex items-center gap-1.5 text-[11px] font-medium text-teal-900/80 pl-9">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
+                  <span>Plano: <span className="font-semibold text-teal-950">{agenda.form.retornoPlanoTitulo}</span></span>
                 </p>
-                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-500">
-                  <Calendar className="h-3 w-3 shrink-0" aria-hidden />
-                  <span>
-                    {agenda.form.retornoDataPlanejada
-                      ? `Agendado para ${formatDataPt(agenda.form.retornoDataPlanejada)}`
-                      : 'Data planejada não definida'}
-                  </span>
-                </p>
-              </div>
+              )}
+
+              <p className="flex items-center gap-1.5 text-[11px] text-ink-600 pl-9">
+                {agenda.form.retornoStatusPai === 'realizado' ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+                ) : (
+                  <Calendar className="h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
+                )}
+                <span>
+                  {agenda.form.retornoStatusPai === 'realizado' && agenda.form.retornoDataPlanejada
+                    ? `Procedimento realizado em: ${formatDataPt(agenda.form.retornoDataPlanejada)}`
+                    : agenda.form.retornoDataPlanejada
+                      ? `Procedimento marcado para: ${formatDataPt(agenda.form.retornoDataPlanejada)}${
+                          agenda.form.retornoHoraPai ? ` às ${String(agenda.form.retornoHoraPai).slice(0, 5)}` : ''
+                        }`
+                      : 'Procedimento aguardando agendamento na agenda'}
+                </span>
+              </p>
             </div>
           ) : (
             (() => {
-              const pai = raizes.find((r) => String(r.id) === origemId);
+              const pai = raizesHistorico.find((r) => String(r.id) === origemId);
               const nome = pai ? nomeProcedimentoRaiz(pai) : 'Procedimento de origem';
               return (
                 <div
@@ -618,7 +647,9 @@ export function AgendaFormModal({ agenda }) {
                     <Lock className="h-3.5 w-3.5" aria-hidden />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-semibold text-[#0f766e]">{nome}</p>
+                    <p className="truncate text-[12px] font-semibold text-[#0f766e]">
+                      Retorno de: {nome}
+                    </p>
                   </div>
                 </div>
               );
@@ -627,7 +658,7 @@ export function AgendaFormModal({ agenda }) {
         ) : raizesVazias ? (
           <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] font-medium text-amber-900">
             <div>
-              Sem procedimento realizado. Este paciente ainda não possui histórico para vincular o retorno.
+              Este paciente ainda não possui procedimentos no histórico nem no plano para vincular o retorno.
             </div>
             <button
               type="button"
@@ -637,44 +668,107 @@ export function AgendaFormModal({ agenda }) {
               Alterar Tipo para Consulta com 1 clique
             </button>
           </div>
-        ) : origemId && !retornoOrigemExpanded ? (
+        ) : temOrigemSelecionada && !retornoOrigemExpanded ? (
           (() => {
-            const pai = raizes.find((r) => String(r.id) === origemId);
-            const nome = pai ? nomeProcedimentoRaiz(pai) : 'Procedimento de origem';
-            const dataFmt = pai ? formatProcedimentoRaizData(pai.data) : '';
+            const paiHistorico = raizesHistorico.find((r) => String(r.id) === origemId);
+            const paiPlano = raizesPlano.find(
+              (r) => String(r.id) === String(planejamentoItemId || origemId)
+            );
+            const pai = paiPlano || paiHistorico;
+            const isPlano = Boolean(
+              paiPlano || agenda.form.retornoOrigemTipo === 'plano' || agenda.retornoTemVinculoPlano
+            );
+            const nome = pai ? pai.nome : agenda.form.retornoOrigemNome || 'Procedimento de origem';
+            const planoTitulo = agenda.form.retornoPlanoTitulo || paiPlano?.planoTitulo || null;
+            const visitaLabel = agenda.form.retornoVisitaLabel || paiPlano?.visitaLabel || null;
+            const dataOrigem = agenda.form.retornoDataPlanejada || pai?.data || null;
+            const horaOrigem = agenda.form.retornoHoraPai || pai?.horaInicio || null;
+            const statusPai =
+              agenda.form.retornoStatusPai ||
+              (pai?.jaRealizado ? 'realizado' : (pai?.jaAgendado ? 'agendado' : (isPlano ? 'planejado' : 'realizado')));
+
             return (
-              <div className={compact ? 'max-h-[82px] overflow-y-auto' : undefined}>
-                <div className="flex items-center gap-2 rounded-xl border-2 border-[#14B8A6] bg-[#e6f7f5] px-2.5 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-semibold text-[#0f766e]">{nome}</p>
-                    {dataFmt ? (
-                      <p className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-500">
-                        <Calendar className="h-3 w-3 shrink-0" aria-hidden />
-                        <span>{dataFmt}</span>
-                      </p>
-                    ) : null}
+              <div className="rounded-xl border-2 border-[#14B8A6] bg-[#e6f7f5] p-3 space-y-1.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#0f766e] shadow-2xs">
+                      <Lock className="h-3.5 w-3.5" aria-hidden />
+                    </div>
+                    <p className="truncate text-[13px] font-bold text-[#0f766e]">
+                      Retorno de: {nome}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      agenda.updateForm('procedimentoFeitoOrigemId', '');
-                      setRetornoOrigemExpanded(true);
-                    }}
-                    className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-[#0f766e] hover:bg-white/60 ${FOCUS_RING}`}
-                    aria-label="Trocar procedimento de origem"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Trocar
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                      {isPlano
+                        ? (statusPai === 'realizado'
+                            ? (visitaLabel ? `Concluído · ${visitaLabel}` : 'Concluído')
+                            : (visitaLabel ? `No Plano · ${visitaLabel}` : 'No Plano'))
+                        : 'Histórico / Prontuário'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        agenda.limparVinculoRetornoPlano?.();
+                        agenda.updateForm('procedimentoFeitoOrigemId', '');
+                        setRetornoOrigemExpanded(true);
+                      }}
+                      className={`inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-[#0f766e] hover:bg-white/70 transition-all ${FOCUS_RING}`}
+                      aria-label="Trocar procedimento de origem"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Trocar
+                    </button>
+                  </div>
                 </div>
+
+                {planoTitulo && (
+                  <p className="flex items-center gap-1.5 text-[11px] font-medium text-teal-900/80 pl-9">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
+                    <span>Plano: <span className="font-semibold text-teal-950">{planoTitulo}</span></span>
+                  </p>
+                )}
+
+                <p className="flex items-center gap-1.5 text-[11px] text-ink-600 pl-9">
+                  {statusPai === 'realizado' ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+                  ) : (
+                    <Calendar className="h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
+                  )}
+                  <span>
+                    {statusPai === 'realizado' && dataOrigem
+                      ? `Procedimento realizado em: ${formatDataPt(dataOrigem)}`
+                      : dataOrigem
+                        ? `Procedimento marcado para: ${formatDataPt(dataOrigem)}${
+                            horaOrigem ? ` às ${String(horaOrigem).slice(0, 5)}` : ''
+                          }`
+                        : 'Procedimento aguardando agendamento na agenda'}
+                  </span>
+                </p>
               </div>
             );
           })()
         ) : retornoSelectExpanded ? (
           <RetornoOrigemSelect
-            value={origemId}
-            onChange={(val) => agenda.updateForm('procedimentoFeitoOrigemId', val)}
-            options={raizes}
+            value={origemId || planejamentoItemId}
+            onSelectOrigem={(item) => {
+              if (item.tipoOrigem === 'plano') {
+                agenda.selecionarRetornoOrigemPlano?.(item);
+              } else {
+                agenda.selecionarRetornoOrigemHistorico?.(item);
+              }
+              setRetornoOrigemExpanded(false);
+            }}
+            onChange={(val, tipoOrigem, item) => {
+              if (tipoOrigem === 'plano' || item?.tipoOrigem === 'plano') {
+                agenda.selecionarRetornoOrigemPlano?.(item || { id: val });
+              } else {
+                agenda.selecionarRetornoOrigemHistorico?.(item || { id: val });
+              }
+              setRetornoOrigemExpanded(false);
+            }}
+            optionsPlano={raizesPlano}
+            optionsHistorico={raizesHistorico}
             loading={raizesLoading}
             error={agenda.form.procedimentosRaizError}
             fieldError={agenda.formErrors?.procedimentoFeitoOrigemId}
@@ -801,6 +895,34 @@ export function AgendaFormModal({ agenda }) {
           {/* Destaque no topo: proc/retorno aparece em toda a largura diretamente abaixo dos seletores */}
           {(isModoProcedimento || isModoRetorno) ? (
             <div className="mt-3">{renderProcOuRetornoCard({ compact: false })}</div>
+          ) : null}
+
+          {/* Alerta de Retorno Vinculado no Reagendamento do Procedimento Pai */}
+          {isReagendar && agenda.retornosVinculadosReagendar?.length > 0 ? (
+            <div
+              className={`mt-3 rounded-xl border p-3 text-xs space-y-1.5 ${
+                agenda.form.data && agenda.retornosVinculadosReagendar.some((r) => agenda.form.data >= (r.dataAgendamento || r.data))
+                  ? 'border-red-300 bg-red-50 text-red-950'
+                  : 'border-amber-300 bg-amber-50 text-amber-950'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+                <span>Retorno vinculado detectado no plano</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Este procedimento possui retorno agendado para{' '}
+                <strong>
+                  {formatDataPt(agenda.retornosVinculadosReagendar[0].dataAgendamento || agenda.retornosVinculadosReagendar[0].data)}
+                </strong>
+                {agenda.retornosVinculadosReagendar[0].horaInicio ? ` às ${String(agenda.retornosVinculadosReagendar[0].horaInicio).slice(0, 5)}` : ''}.
+              </p>
+              {agenda.form.data && agenda.retornosVinculadosReagendar.some((r) => agenda.form.data >= (r.dataAgendamento || r.data)) ? (
+                <p className="text-[11px] font-bold text-red-700">
+                  ⚠️ A nova data ({formatDataPt(agenda.form.data)}) não pode ser igual ou posterior ao retorno ({formatDataPt(agenda.retornosVinculadosReagendar[0].dataAgendamento || agenda.retornosVinculadosReagendar[0].data)}).
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

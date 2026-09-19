@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, ImageIcon, Loader2, Lock, RotateCcw, Trash2, ZoomIn, X } from 'lucide-react';
+import { Camera, Copy, ImageIcon, Loader2, Lock, RotateCcw, Trash2, ZoomIn, X } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { mapasApi, pacientesGaleriaApi, procedimentosApi } from '../../services/api.js';
 import { normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
@@ -49,6 +49,10 @@ function resolveNomeProcedimento(meta) {
 export function ConsultaRetornoFlow({
   pacienteId,
   procedimentoFeitoOrigemId,
+  planejamentoItemId = null,
+  catalogoId = null,
+  nomeProcedimento = '',
+  onOrigemResolved,
   mapaRetornoState,
   _retornoAvaliacao = {},
   _setRetornoAvaliacao,
@@ -101,16 +105,23 @@ export function ConsultaRetornoFlow({
     e.target.value = '';
   };
 
-  const catalogoIdPai = parentMeta?.catalogoProcedimentoSaudeId
-    ? String(parentMeta.catalogoProcedimentoSaudeId)
-    : '';
-  const nomeProcedimentoPai = resolveNomeProcedimento(parentMeta);
-  const procedimentoArmadoPai = catalogoIdPai
-    ? { id: catalogoIdPai, nome: nomeProcedimentoPai }
-    : null;
+  const catalogoIdPai =
+    parentMeta?.catalogoProcedimentoSaudeId ||
+    parentMeta?.nomeProcedimentoCatalogoId ||
+    parentMeta?.catalogoId ||
+    catalogoId ||
+    'retorno-catalogo';
+  const nomeProcedimentoPai =
+    resolveNomeProcedimento(parentMeta) !== '—'
+      ? resolveNomeProcedimento(parentMeta)
+      : (nomeProcedimento || 'Procedimento Retocado');
+  const procedimentoArmadoPai = {
+    id: String(catalogoIdPai),
+    nome: nomeProcedimentoPai,
+  };
 
   useEffect(() => {
-    if (!pacienteId || !procedimentoFeitoOrigemId) {
+    if (!pacienteId) {
       setParentMeta(null);
       setFotosPorTipo({});
       setParentFotosPorVista({});
@@ -126,17 +137,61 @@ export function ConsultaRetornoFlow({
 
     (async () => {
       try {
-        const paiId = String(procedimentoFeitoOrigemId);
-        const [procListRaw, galeriaRaw, mapaResp] = await Promise.all([
-          procedimentosApi.byPaciente(pacienteId),
+        const procListRaw = await procedimentosApi.byPaciente(pacienteId);
+        if (cancelled) return;
+
+        const procList = Array.isArray(procListRaw) ? procListRaw : procListRaw?.content ?? [];
+
+        let pai = null;
+        if (procedimentoFeitoOrigemId) {
+          pai = procList.find((p) => String(p.id) === String(procedimentoFeitoOrigemId)) || null;
+        }
+        const cleanTargetId = String(planejamentoItemId || '').replace(/_retorno$/, '').trim();
+        if (!pai && cleanTargetId) {
+          // Busca o procedimento original realizado desse item de plano (não-retoque)
+          pai =
+            procList.find(
+              (p) =>
+                String(p.planejamentoItemId || '').replace(/_retorno$/, '').trim() === cleanTargetId &&
+                !p.isRetoque &&
+                !p.procedimentoFeitoOrigemId,
+            ) ||
+            procList.find(
+              (p) =>
+                String(p.planejamentoItemId || '').replace(/_retorno$/, '').trim() === cleanTargetId &&
+                !p.isRetoque,
+            ) ||
+            null;
+        }
+        if (!pai && catalogoId) {
+          // Fallback por catálogo
+          pai =
+            procList.find(
+              (p) =>
+                String(p.catalogoProcedimentoSaudeId || p.catalogoId || '') === String(catalogoId) &&
+                !p.isRetoque,
+            ) || null;
+        }
+
+        if (pai && (!procedimentoFeitoOrigemId || String(procedimentoFeitoOrigemId) !== String(pai.id))) {
+          onOrigemResolved?.(String(pai.id));
+        }
+
+        setParentMeta(pai);
+
+        if (!pai) {
+          setParentSemMapa(true);
+          setParentFotosPorVista({});
+          setParentPontosPorVista({});
+          return;
+        }
+
+        const paiId = String(pai.id);
+        const [galeriaRaw, mapaResp] = await Promise.all([
           pacientesGaleriaApi.list(pacienteId, { procedimentoFeitoId: paiId }),
           mapasApi.buscarPorProcedimento(paiId).catch(() => null),
         ]);
         if (cancelled) return;
-
-        const procList = Array.isArray(procListRaw) ? procListRaw : procListRaw?.content ?? [];
-        const pai = procList.find((p) => String(p.id) === paiId) || null;
-        setParentMeta(pai);
 
         const galeriaItems = normalizePacienteGaleriaResponse(galeriaRaw);
         const grouped = { ANTES: [], POS_IMEDIATO: [], DEPOIS: [] };
@@ -217,7 +272,7 @@ export function ConsultaRetornoFlow({
     return () => {
       cancelled = true;
     };
-  }, [pacienteId, procedimentoFeitoOrigemId]);
+  }, [pacienteId, procedimentoFeitoOrigemId, planejamentoItemId, catalogoId, onOrigemResolved]);
 
   useEffect(
     () => () => {
@@ -676,9 +731,30 @@ export function ConsultaRetornoFlow({
                       countPontosVista={mapaRetornoState.countPontosVista}
                     />
                     <div className="mt-3">
-                      <VistaAtivaHeader vistaAtual={retornoVistaAtual} />
+                      <div className="flex items-center justify-between gap-2">
+                        <VistaAtivaHeader vistaAtual={retornoVistaAtual} />
+                        {parentFotosPorVista?.[retornoVistaAtual]?.displayUrl && !retornoFotoAtual ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const parentFoto = parentFotosPorVista[retornoVistaAtual];
+                              mapaRetornoState.setFotoVista(retornoVistaAtual, {
+                                displayUrl: parentFoto.displayUrl,
+                                fotoGaleriaId: parentFoto.fotoGaleriaId,
+                                source: 'galeria',
+                              });
+                              toast.success('Foto do procedimento original vinculada ao retoque!');
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/40 bg-[#f0fdf9] px-2.5 py-1 text-[11px] font-semibold text-[#00a88e] hover:bg-[#e6fcf5] transition-colors"
+                            title="Usar a mesma foto do procedimento original nesta vista"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            Usar foto original
+                          </button>
+                        ) : null}
+                      </div>
                       <FotoVistaCanvas
-                        previewMode={true}
+                        previewMode={false}
                         showToolbar={true}
                         vistaAtual={retornoVistaAtual}
                         foto={retornoFotoAtual}

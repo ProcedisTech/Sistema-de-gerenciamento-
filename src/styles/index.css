@@ -308,6 +308,14 @@
   background: #0d9488;
 }
 
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @keyframes toast-pop-in {
   from {
     opacity: 0;

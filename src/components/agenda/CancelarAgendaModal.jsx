@@ -4,16 +4,29 @@
  * onConfirm → { motivoCancelamentoId, motivoCancelamentoTexto? }
  */
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, AlertTriangle } from 'lucide-react';
 import { motivosCancelamentoApi, getApiErrorToastMessage } from '../../services/api.js';
 import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
 
-export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfirm, isSubmitting = false }) {
+function formatDataPt(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).split('T')[0].split('-');
+  return d && m && y ? `${d}/${m}/${y}` : String(iso);
+}
+
+export default function CancelarAgendaModal({
+  agenda: _agenda,
+  retornosVinculados = [],
+  onClose,
+  onConfirm,
+  isSubmitting = false,
+}) {
   const [motivos, setMotivos] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [motivoId, setMotivoId] = useState('');
   const [texto, setTexto] = useState('');
+  const [cancelarRetornoJunto, setCancelarRetornoJunto] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +61,7 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
     await onConfirm({
       motivoCancelamentoId: motivoId,
       motivoCancelamentoTexto: texto.trim() ? texto.trim().slice(0, 500) : undefined,
+      cancelarRetornos: cancelarRetornoJunto ? retornosVinculados : [],
     });
   };
 
@@ -60,6 +74,39 @@ export default function CancelarAgendaModal({ agenda: _agenda, onClose, onConfir
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {retornosVinculados.length > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 space-y-2">
+            <div className="flex items-center gap-1.5 font-bold text-amber-950">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>Retorno vinculado detectado</span>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              Este procedimento possui {retornosVinculados.length === 1 ? '1 retorno agendado' : `${retornosVinculados.length} retornos agendados`} no plano do paciente:
+            </p>
+            <div className="space-y-1.5 bg-white/80 rounded-lg p-2 border border-amber-200/70 font-medium">
+              {retornosVinculados.map((r) => (
+                <div key={r.agendaId || r.id} className="flex justify-between items-center text-[11px]">
+                  <span>
+                    Retorno: <strong>{r.data ? formatDataPt(r.data) : ''}</strong> às {r.horaInicio || ''}
+                  </span>
+                  <span className="text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-bold">
+                    Vinculado ao Plano
+                  </span>
+                </div>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-amber-950">
+              <input
+                type="checkbox"
+                checked={cancelarRetornoJunto}
+                onChange={(e) => setCancelarRetornoJunto(e.target.checked)}
+                className="rounded text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
+              />
+              <span>Cancelar também o{retornosVinculados.length > 1 ? 's retornos' : ' retorno'} com o mesmo motivo</span>
+            </label>
+          </div>
+        )}
 
         <p className="mb-4 text-sm text-gray-600">Por favor, informe o motivo do cancelamento.</p>
 

@@ -214,15 +214,22 @@ export function ProcedureTimelinePreviewCard({
 
   if (typeof onPress === 'function') {
     return (
-      <button
-        type="button"
-        className={`group flex min-h-[44px] w-full items-stretch overflow-hidden rounded-xl text-left transition-all ${cardBorderClass}`}
+      <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onPress(e);
+          }
+        }}
+        className={`group flex min-h-[44px] w-full items-stretch overflow-hidden rounded-xl text-left cursor-pointer transition-all ${cardBorderClass}`}
         onClick={onPress}
       >
         <span className="sr-only">{`Ver prontuário: ${procedureName}, ${dateLabel}${timeLabel ? ` ${timeLabel}` : ''}`}</span>
         {body}
         {chevron}
-      </button>
+      </div>
     );
   }
 

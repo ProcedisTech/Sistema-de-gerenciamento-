@@ -121,6 +121,7 @@ function DaySummaryModal({
   isNivel1 = false,
   advanceOfferByAgendaId,
   onAdvanceClick,
+  onAgendarNesteHorario,
 }) {
   if (!group) return null;
 
@@ -157,6 +158,10 @@ function DaySummaryModal({
                 isNivel1={isNivel1}
                 advanceOffer={advanceId ? advanceOfferByAgendaId?.get(advanceId) : undefined}
                 onAdvanceClick={onAdvanceClick}
+                onAgendarNesteHorario={(iso, horaHm) => {
+                  onClose();
+                  onAgendarNesteHorario?.(iso, horaHm);
+                }}
               />
             );
           })}
@@ -823,6 +828,7 @@ export function AgendaDashboard({
         isNivel1={agenda.isNivel1}
         advanceOfferByAgendaId={listDayAdvanceOffers}
         onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
+        onAgendarNesteHorario={agenda.isNivel1 ? null : openWeekCreateAtSlot}
       />
 
       <AgendaWeekSlotDetailModal
@@ -833,6 +839,7 @@ export function AgendaDashboard({
         isNivel1={agenda.isNivel1}
         advanceOfferByAgendaId={advanceOfferByAgendaId}
         onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
+        onAgendarNesteHorario={agenda.isNivel1 ? null : openWeekCreateAtSlot}
       />
 
       <AgendaAdvanceConfirmModal

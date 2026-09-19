@@ -92,9 +92,10 @@ export const useAuthState = (options = {}) => {
     }
   };
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(async (options = {}) => {
+    const scope = options.scope || 'global';
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope });
     } catch {
       /* ignore */
     }
@@ -124,7 +125,10 @@ export const useAuthState = (options = {}) => {
   }, [setRoleUserId, clearOrgSession, toastInfo]);
 
   useEffect(() => {
-    const handler = () => handleLogout();
+    const handler = (e) => {
+      const scope = e.detail?.scope || 'global';
+      handleLogout({ scope });
+    };
     window.addEventListener('auth:expired', handler);
     return () => window.removeEventListener('auth:expired', handler);
   }, [handleLogout]);

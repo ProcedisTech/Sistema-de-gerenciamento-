@@ -12,7 +12,9 @@ function cloneItens(itens) {
   return (Array.isArray(itens) ? itens : []).map((i) => ({
     ...i,
     sessaoAtiva: i.sessaoAtiva ? { ...i.sessaoAtiva } : null,
+    sessaoRealizada: i.sessaoRealizada ? { ...i.sessaoRealizada } : null,
     sessaoRetornoAtiva: i.sessaoRetornoAtiva ? { ...i.sessaoRetornoAtiva } : null,
+    sessaoRetornoRealizada: i.sessaoRetornoRealizada ? { ...i.sessaoRetornoRealizada } : null,
   }));
 }
 
@@ -97,6 +99,7 @@ export function usePlanoDraft() {
       statusItemNome: null,
       sessaoAtiva: null,
       sessaoRetornoAtiva: null,
+      sessaoRetornoRealizada: null,
     };
     const item = enriquecerDraftItemTipo(base, catalogoOptions);
     setDraftByPlanoId((prev) => {

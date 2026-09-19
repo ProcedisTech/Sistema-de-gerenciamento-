@@ -51,6 +51,7 @@ export async function registrarRetornoFuturo({
   roleUserId,
   dataRetornoIso,
   procedimentoOrigemId = null,
+  planejamentoItemId = null,
 }) {
   try {
     const pacienteId = paciente?.id;
@@ -71,6 +72,7 @@ export async function registrarRetornoFuturo({
       tipoProcedimentoId,
       statusCodigo: 'confirmado',
       ...(procedimentoOrigemId ? { procedimentoFeitoOrigemId: procedimentoOrigemId } : {}),
+      ...(planejamentoItemId ? { planejamentoItemId } : {}),
       observacao: 'Retorno agendado automaticamente pós-procedimento',
     };
 
@@ -91,6 +93,7 @@ export async function registrarAgendaAvulsa({
   roleUserId,
   novosIdsValidos = [],
   attendanceStartTimeIso = null,
+  planejamentoItemId = null,
 }) {
   try {
     const pacienteId = paciente?.id;
@@ -141,6 +144,7 @@ export async function registrarAgendaAvulsa({
       statusCodigo: 'realizado',
       ...(deduzido.catalogoSaudeId ? { catalogoProcedimentoSaudeId: deduzido.catalogoSaudeId } : {}),
       ...(deduzido.procedimentoFeitoOrigemId ? { procedimentoFeitoOrigemId: deduzido.procedimentoFeitoOrigemId } : {}),
+      ...(planejamentoItemId ? { planejamentoItemId } : {}),
       observacao: 'Atendimento avulso registrado automaticamente pelo prontuário',
     };
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { AnamneseCatalogoPicker } from './AnamneseCatalogoPicker.jsx';
 import { isTipoCatalogoMulti } from './anamneseTipoLabels';
@@ -30,70 +30,214 @@ function CatalogoReacaoQuestion({
   numero,
   obrigatorio,
   alerta,
+  gruposReacao = null,
+  vinculosReacao = null,
+  onVinculosChange = null,
 }) {
+  const CODIGO_NAO_LEMBRA = 'NAO_LEMBRA';
   const searchEnabled = typeof searchFn === 'function';
-  const fetchScope = searchEnabled ? searchFn : null;
-  const [loadedScope, setLoadedScope] = useState(null);
+  const searchFnRef = useRef(searchFn);
+  useEffect(() => {
+    searchFnRef.current = searchFn;
+  });
+
+  const [loading, setLoading] = useState(searchEnabled);
   const [opcoes, setOpcoes] = useState([]);
+  const [loadError, setLoadError] = useState(false);
+  const [prevSearchEnabled, setPrevSearchEnabled] = useState(searchEnabled);
+  if (prevSearchEnabled !== searchEnabled) {
+    setPrevSearchEnabled(searchEnabled);
+    setLoading(searchEnabled);
+    setLoadError(false);
+  }
 
   useEffect(() => {
     if (!searchEnabled) return undefined;
     let cancelled = false;
-    const scope = searchFn;
-    searchFn('')
+    const fn = searchFnRef.current;
+    fn('')
       .then((list) => {
-        if (!cancelled) setOpcoes(Array.isArray(list) ? list : []);
+        if (!cancelled) {
+          setOpcoes(Array.isArray(list) ? list : []);
+          setLoadError(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setOpcoes([]);
+        if (!cancelled) {
+          setOpcoes([]);
+          setLoadError(true);
+        }
       })
       .finally(() => {
-        if (!cancelled) setLoadedScope(scope);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [searchFn, searchEnabled]);
+  }, [searchEnabled]);
 
-  const displayOpcoes = searchEnabled && loadedScope === fetchScope ? opcoes : [];
-  const displayLoading = searchEnabled && loadedScope !== fetchScope;
+  const useGrupos = Array.isArray(gruposReacao)
+    && gruposReacao.length > 0
+    && typeof onVinculosChange === 'function'
+    && Array.isArray(vinculosReacao);
 
-  const selectedId = resposta?.reacaoAdversaId ?? resposta?.catalogoItens?.[0]?.id;
+  const normalizeReacoes = (v) => {
+    if (Array.isArray(v?.reacoes) && v.reacoes.length > 0) return v.reacoes;
+    if (v?.reacaoAdversaId) {
+      return [{
+        reacaoAdversaId: v.reacaoAdversaId,
+        reacaoNome: v.reacaoNome || null,
+        codigo: v.reacaoCodigo || null,
+      }];
+    }
+    return [];
+  };
+
+  const catalogoFromVinculos = (vinculos) => {
+    const byId = new Map();
+    for (const v of vinculos || []) {
+      for (const r of normalizeReacoes(v)) {
+        if (r?.reacaoAdversaId == null) continue;
+        byId.set(String(r.reacaoAdversaId), {
+          id: r.reacaoAdversaId,
+          nome: r.reacaoNome || String(r.reacaoAdversaId),
+          fonte: 'catalogo',
+          codigo: r.codigo || null,
+        });
+      }
+    }
+    return Array.from(byId.values());
+  };
+
+  const toggleReacaoNoGrupo = (reacoes, reacaoId, reacaoNome, codigo) => {
+    const idStr = String(reacaoId);
+    const already = reacoes.some((r) => String(r.reacaoAdversaId) === idStr);
+    if (already) {
+      return reacoes.filter((r) => String(r.reacaoAdversaId) !== idStr);
+    }
+    if (codigo === CODIGO_NAO_LEMBRA) {
+      return [{ reacaoAdversaId: reacaoId, reacaoNome, codigo }];
+    }
+    const semNaoLembra = reacoes.filter((r) => r.codigo !== CODIGO_NAO_LEMBRA);
+    return [...semNaoLembra, { reacaoAdversaId: reacaoId, reacaoNome, codigo: codigo || null }];
+  };
+
+  const applyVinculoPick = (grupoKey, reacaoId, reacaoNome, codigo) => {
+    const next = vinculosReacao.map((v) => {
+      if (v.key !== grupoKey) return v;
+      const reacoes = toggleReacaoNoGrupo(normalizeReacoes(v), reacaoId, reacaoNome, codigo);
+      return {
+        key: v.key,
+        declaracaoClientId: v.declaracaoClientId,
+        escopo: v.escopo,
+        medicamentoCatalogoId: v.medicamentoCatalogoId,
+        principioAtivoIds: v.principioAtivoIds,
+        label: v.label,
+        reacoes,
+      };
+    });
+    onVinculosChange(next);
+    const catalogoItens = catalogoFromVinculos(next);
+    onChange({
+      perguntaId: pergunta.id,
+      catalogoItens,
+      declarouAusencia: false,
+    });
+  };
+
+  const applySemGrupoPick = (reacaoId, reacaoNome, codigo, ativo) => {
+    const atuais = Array.isArray(resposta?.catalogoItens) ? resposta.catalogoItens : [];
+    const asReacoes = atuais.map((it) => ({
+      reacaoAdversaId: it.id,
+      reacaoNome: it.nome,
+      codigo: it.codigo || null,
+    }));
+    let nextReacoes;
+    if (ativo) {
+      nextReacoes = asReacoes.filter((r) => String(r.reacaoAdversaId) !== String(reacaoId));
+    } else {
+      nextReacoes = toggleReacaoNoGrupo(asReacoes, reacaoId, reacaoNome, codigo);
+    }
+    onChange({
+      perguntaId: pergunta.id,
+      catalogoItens: nextReacoes.map((r) => ({
+        id: r.reacaoAdversaId,
+        nome: r.reacaoNome || String(r.reacaoAdversaId),
+        fonte: 'catalogo',
+        codigo: r.codigo || null,
+      })),
+      declarouAusencia: false,
+    });
+  };
+
+  const renderOpcoes = (ativoIds, onPick) => {
+    const ativoSet = new Set((ativoIds || []).map(String));
+    return (
+      <div className="flex flex-wrap gap-2">
+        {opcoes.map((op) => {
+          const id = op.id ?? op.reacaoAdversaId;
+          const nome = op.nome ?? op.descricao ?? String(id);
+          const codigo = op.codigo ?? null;
+          const ativo = ativoSet.has(String(id));
+          return (
+            <button
+              key={String(id)}
+              type="button"
+              disabled={readOnly}
+              aria-pressed={ativo}
+              onClick={() => {
+                if (readOnly) return;
+                onPick(id, nome, codigo, ativo);
+              }}
+              className={`rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-all ${
+                readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
+              }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-600 hover:border-[#00a88e]/40'}`}
+            >
+              {nome}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const selectedIds = (resposta?.catalogoItens || []).map((it) => it.id).filter((id) => id != null);
 
   return (
     <div className="flex w-full min-w-0 flex-col">
-      <QuestionLabel numero={numero} descricao={pergunta.descricao} obrigatorio={obrigatorio} alerta={alerta} />
-      {displayLoading ? (
+      <QuestionLabel
+        numero={numero}
+        descricao="Quais foram as reações?"
+        obrigatorio={obrigatorio}
+        alerta={alerta}
+      />
+      {loading ? (
         <p className="text-[13px] text-slate-400">Carregando opções…</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {displayOpcoes.map((op) => {
-            const id = op.id ?? op.reacaoAdversaId;
-            const nome = op.nome ?? op.descricao ?? String(id);
-            const ativo = selectedId != null && String(selectedId) === String(id);
+      ) : searchEnabled && loadError ? (
+        <p className="text-[12px] font-medium text-slate-500">Não foi possível carregar as opções.</p>
+      ) : searchEnabled && opcoes.length === 0 ? (
+        <p className="text-[12px] font-medium text-slate-500">Nenhuma opção disponível.</p>
+      ) : useGrupos ? (
+        <div className="flex flex-col gap-4">
+          {gruposReacao.map((g) => {
+            const vinculo = vinculosReacao.find((v) => v.key === g.key);
+            const ativoIds = normalizeReacoes(vinculo).map((r) => r.reacaoAdversaId);
             return (
-              <button
-                key={String(id)}
-                type="button"
-                disabled={readOnly}
-                aria-pressed={ativo}
-                onClick={() => {
-                  if (readOnly) return;
-                  onChange({
-                    perguntaId: pergunta.id,
-                    reacaoAdversaId: ativo ? null : id,
-                    catalogoItens: ativo ? [] : [{ id, nome, fonte: 'catalogo' }],
-                  });
-                }}
-                className={`rounded-xl border px-4 py-2.5 text-[13px] font-medium transition-all ${
-                  readOnly ? 'cursor-default opacity-90 ' : 'cursor-pointer '
-                }${ativo ? 'border-[#00a88e] bg-[#e6f7f5] text-[#0f766e]' : 'border-slate-200 text-slate-600 hover:border-[#00a88e]/40'}`}
-              >
-                {nome}
-              </button>
+              <div key={g.key} className="rounded-lg border border-slate-100 bg-slate-50/40 p-3">
+                <p className="mb-1 text-[12px] font-semibold text-slate-700">
+                  {g.label}
+                </p>
+                <p className="mb-2 text-[11px] text-slate-500">pode marcar mais de uma</p>
+                {renderOpcoes(ativoIds, (id, nome, codigo) => applyVinculoPick(g.key, id, nome, codigo))}
+              </div>
             );
           })}
         </div>
+      ) : (
+        <>
+          <p className="mb-2 text-[11px] text-slate-500">pode marcar mais de uma</p>
+          {renderOpcoes(selectedIds, (id, nome, codigo, ativo) => applySemGrupoPick(id, nome, codigo, ativo))}
+        </>
       )}
     </div>
   );
@@ -108,6 +252,9 @@ export function DynamicQuestion({
   obrigatorio = false,
   numero = null,
   searchFn = null,
+  gruposReacao = null,
+  vinculosReacao = null,
+  onVinculosChange = null,
 }) {
   const tipo = pergunta.tipoResposta;
   const fieldBase = `w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors${readOnly ? ' cursor-default bg-slate-50 opacity-90' : ''}`;
@@ -266,6 +413,9 @@ export function DynamicQuestion({
         numero={numero}
         obrigatorio={obrigatorio}
         alerta={alerta}
+        gruposReacao={gruposReacao}
+        vinculosReacao={vinculosReacao}
+        onVinculosChange={onVinculosChange}
       />
     );
   }

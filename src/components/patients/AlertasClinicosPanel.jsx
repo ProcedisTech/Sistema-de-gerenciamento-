@@ -33,7 +33,22 @@ function formatDiaMes(iso) {
 function itemNome(item) {
   if (item == null) return '';
   if (typeof item === 'string') return item;
-  return item.nome ?? '';
+  const base = item.nome ?? '';
+  const reacoes = Array.isArray(item.reacoes) ? item.reacoes : [];
+  if (reacoes.length === 0) return base;
+  const partes = reacoes
+    .map((r) => {
+      const nome = r?.nome;
+      if (!nome) return null;
+      return r.criticidade ? `${nome} (${r.criticidade})` : nome;
+    })
+    .filter(Boolean);
+  if (partes.length === 0) return base;
+  return `${base} — ${partes.join(', ')}`;
+}
+
+function countAltaGravidade(alergiasPa) {
+  return (alergiasPa || []).filter((item) => item?.criticidade === 'ALTA').length;
 }
 
 function Chev({ className = '', inverted = false }) {
@@ -301,8 +316,7 @@ function FaixaHub({ resumo, isLoading, onSolicitarAnamnese }) {
     [r]
   );
 
-  const criticosCount =
-    r.alergiasAlimentares.length + r.alergiasPrincipioAtivo.length + r.declaracoesCriticas.length;
+  const criticosCount = countAltaGravidade(r.alergiasPrincipioAtivo);
   const estado = criticosCount > 0 ? 'crit' : r.temVigente ? 'ok' : 'nada';
   const detalheAberto = allOpen || openIndex >= 0;
   const dataCurta = formatDiaMes(r.vigenteEm);
@@ -403,7 +417,7 @@ function FaixaHub({ resumo, isLoading, onSolicitarAnamnese }) {
             }`}
           >
             <AlertTriangle className="h-3 w-3" strokeWidth={2} aria-hidden />
-            {criticosCount > 0 ? `${criticosCount} críticos` : 'sem críticos'}
+            {criticosCount > 0 ? `${criticosCount} de alta gravidade` : 'sem alta gravidade'}
           </span>
           <button
             type="button"

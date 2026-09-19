@@ -32,6 +32,7 @@ export function PerfilClinicoBloco({
   updateObservacao,
   updateMedicamentoExtra,
   updateReacaoAdversa,
+  updateReacoesAdversas,
   buscarAlimentos,
   buscarPrincipiosAtivos,
   buscarMedicamentos,
@@ -224,11 +225,17 @@ export function PerfilClinicoBloco({
             minQueryLength={2}
             readOnly={readOnly}
             renderChipExtra={readOnly ? undefined : (item) => (
-              <ReacaoAdversaSelect
+              <ReacoesAdversasMulti
                 item={item}
                 opcoes={reacoesAdversas}
-                onChange={(reacaoAdversaId, reacaoNome) =>
-                  updateReacaoAdversa(item.id, reacaoAdversaId, reacaoNome)}
+                onChange={(reacoes) => {
+                  if (typeof updateReacoesAdversas === 'function') {
+                    updateReacoesAdversas(item.id, reacoes);
+                  } else {
+                    const top = reacoes[0];
+                    updateReacaoAdversa(item.id, top?.reacaoAdversaId ?? null, top?.reacaoNome ?? null);
+                  }
+                }}
               />
             )}
           />
@@ -320,24 +327,48 @@ function MedicamentoExtra({ item, onChange }) {
   );
 }
 
-function ReacaoAdversaSelect({ item, opcoes, onChange }) {
+function ReacoesAdversasMulti({ item, opcoes, onChange }) {
+  const selected = Array.isArray(item.reacoes) && item.reacoes.length > 0
+    ? item.reacoes
+    : item.reacaoAdversaId
+      ? [{ reacaoAdversaId: item.reacaoAdversaId, reacaoNome: item.reacaoNome }]
+      : [];
+  const selectedIds = new Set(selected.map((r) => String(r.reacaoAdversaId)));
+
+  const toggle = (op) => {
+    const id = String(op.id);
+    let next;
+    if (selectedIds.has(id)) {
+      next = selected.filter((r) => String(r.reacaoAdversaId) !== id);
+    } else {
+      next = [...selected, { reacaoAdversaId: op.id, reacaoNome: op.nome ?? null }];
+    }
+    onChange(next);
+  };
+
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] text-slate-500">Reação adversa</span>
-      <select
-        value={item.reacaoAdversaId ?? ''}
-        onChange={(e) => {
-          const id = e.target.value || null;
-          const nome = id ? opcoes.find((o) => String(o.id) === String(id))?.nome ?? null : null;
-          onChange(id, nome);
-        }}
-        className="rounded border border-slate-200 px-2 py-1 text-[12px] text-slate-700 outline-none focus:border-[#6c63ff]"
-      >
-        <option value="">Selecionar…</option>
-        {opcoes.map((o) => (
-          <option key={o.id} value={o.id}>{o.nome}</option>
-        ))}
-      </select>
-    </label>
+    <fieldset className="flex flex-col gap-1">
+      <legend className="text-[11px] text-slate-500">Reações adversas</legend>
+      <div className="flex flex-wrap gap-1.5">
+        {opcoes.map((o) => {
+          const ativo = selectedIds.has(String(o.id));
+          return (
+            <button
+              key={o.id}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => toggle(o)}
+              className={`rounded border px-2 py-1 text-[11px] font-medium transition-colors ${
+                ativo
+                  ? 'border-purple-400 bg-purple-50 text-purple-800'
+                  : 'border-slate-200 text-slate-600 hover:border-purple-300'
+              }`}
+            >
+              {o.nome}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }

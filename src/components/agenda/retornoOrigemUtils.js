@@ -10,7 +10,7 @@ export function formatProcedimentoRaizData(dataRaw) {
 }
 
 export function nomeProcedimentoRaiz(item) {
-  return item?.catalogoProcedimentoNome || item?.nome || 'Procedimento';
+  return item?.catalogoProcedimentoNome || item?.catalogoNome || item?.nome || 'Procedimento';
 }
 
 export function filtrarProcedimentosRaiz(options = [], query = '') {
@@ -19,6 +19,7 @@ export function filtrarProcedimentosRaiz(options = [], query = '') {
   return options.filter((r) => {
     const nome = nomeProcedimentoRaiz(r).toLowerCase();
     const dataFmt = formatProcedimentoRaizData(r.data).toLowerCase();
-    return nome.includes(q) || dataFmt.includes(q);
+    const plano = String(r.planoTitulo || '').toLowerCase();
+    return nome.includes(q) || dataFmt.includes(q) || plano.includes(q);
   });
 }

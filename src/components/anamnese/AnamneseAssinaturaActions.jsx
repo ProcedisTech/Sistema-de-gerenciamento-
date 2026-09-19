@@ -380,6 +380,16 @@ export function AnamneseAssinaturaActions({
 
         }}
 
+        onRecusado={() => {
+
+          setSolicitacao(null);
+
+          setProcessandoResposta(false);
+
+          onDocumentoRefresh?.();
+
+        }}
+
       />
 
     </>

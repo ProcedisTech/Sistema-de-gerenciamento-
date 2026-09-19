@@ -1,7 +1,9 @@
 import {
   coerceSessoesArray,
   pickSessaoAtiva,
+  pickSessaoRealizada,
   pickSessaoRetornoAtiva,
+  pickSessaoRetornoRealizada,
 } from './planejamentoSessoes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -210,10 +212,13 @@ export function draftToPutItens(itens) {
 }
 
 export function planoItemToDraftItem(raw, tipoCodigo = '') {
-  const id = raw?.id ? String(raw.id).trim() : null;
+  const rawId = raw?.planejamentoItemId || raw?.id;
+  const id = rawId ? String(rawId).trim() : null;
+  const validUuid = isRealUuid(id) ? id : null;
   const sessoes = coerceSessoesArray(raw);
   return {
-    id: isRealUuid(id) ? id : null,
+    id: validUuid,
+    planejamentoItemId: validUuid,
     tempId: id || createTempId(),
     catalogoProcedimentoSaudeId: String(
       raw?.catalogoProcedimentoSaudeId ?? raw?.catalogoId ?? '',
@@ -225,7 +230,9 @@ export function planoItemToDraftItem(raw, tipoCodigo = '') {
     statusItem: raw?.statusItem ?? null,
     statusItemNome: raw?.statusItemNome ?? null,
     sessaoAtiva: raw?.sessaoAtiva ?? pickSessaoAtiva(sessoes),
+    sessaoRealizada: raw?.sessaoRealizada ?? pickSessaoRealizada(sessoes),
     sessaoRetornoAtiva: raw?.sessaoRetornoAtiva ?? pickSessaoRetornoAtiva(sessoes),
+    sessaoRetornoRealizada: raw?.sessaoRetornoRealizada ?? pickSessaoRetornoRealizada(sessoes),
   };
 }
 

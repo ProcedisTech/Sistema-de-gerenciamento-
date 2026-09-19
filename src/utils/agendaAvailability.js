@@ -110,7 +110,7 @@ export function intervalsOverlap(aStart, aEnd, bStart, bEnd) {
 export function isSlotOccupied(dayAppointments, slotStartMin, slotDurationMin = 30) {
   const slotEnd = slotStartMin + slotDurationMin;
   for (const appt of dayAppointments || []) {
-    if (appt?.status === 'cancelado' || appt?.status === 'realizado') continue;
+    if (appt?.status === 'cancelado' || appt?.status === 'realizado' || appt?.status === 'reagendado') continue;
     const start = parseHhmmToMinutes(appt?.horaInicio);
     const dur = Number(appt?.duracaoMin) || 45;
     if (intervalsOverlap(slotStartMin, slotEnd, start, start + dur)) return true;

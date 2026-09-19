@@ -170,10 +170,11 @@ export function getAppointmentStatusBucket(row) {
 export function filterAppointmentsByStatusFilters(appointments, filters) {
   const active = filters instanceof Set ? filters : new Set(filters);
   if (active.size === 0) {
-    return (appointments || []).filter((item) => item?.tipo === 'bloqueio' && item.status !== 'cancelado');
+    return (appointments || []).filter((item) => (item?.tipo === 'bloqueio' && item.status !== 'cancelado') || item?.status === 'reagendado');
   }
   return (appointments || []).filter((item) => {
     if (item?.tipo === 'bloqueio' && item.status !== 'cancelado') return true;
+    if (item?.status === 'reagendado') return true;
     const bucket = getAppointmentStatusBucket(item);
     return bucket != null && active.has(bucket);
   });

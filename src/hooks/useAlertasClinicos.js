@@ -62,7 +62,7 @@ function chipsPerfil(lista, secao, titulo, keyPrefix) {
 
 /**
  * Deriva os arrays legados da sidebar/modal a partir do resumo (já filtrado pelo vigente).
- * `criticosCount` = alergias alimentares + PA + declarações críticas — mesmo critério do selo da faixa.
+ * `criticosCount` = alergias PA com criticidade ALTA — mesmo critério do selo da faixa.
  */
 export function mapResumoToLegacy(resumo) {
   const r = normalizeResumo(resumo);
@@ -98,8 +98,7 @@ export function mapResumoToLegacy(resumo) {
       familiar: true,
     })),
   ];
-  const criticosCount =
-    r.alergiasAlimentares.length + r.alergiasPrincipioAtivo.length + r.declaracoesCriticas.length;
+  const criticosCount = r.alergiasPrincipioAtivo.filter((item) => item?.criticidade === 'ALTA').length;
   return {
     resumo: r,
     alertasPerfil,
