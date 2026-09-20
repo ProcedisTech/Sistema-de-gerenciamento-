@@ -61,25 +61,32 @@ test.describe('Procedi - Full System E2E Flow', () => {
       await novoPerfilBtn.click();
       await page.waitForTimeout(1000);
 
-      // Preenche dados do perfil
+      // 1. Seleciona um cargo base para pré-carregar as permissões oficiais do cargo
+      const cargoBaseSelect = page.locator('select').filter({ hasText: /Selecione um cargo/i }).first();
+      if (await cargoBaseSelect.isVisible()) {
+        await cargoBaseSelect.selectOption({ index: 1 });
+        await page.waitForTimeout(1000);
+      }
+
+      // 2. Personaliza nome e descrição do perfil
       const nomeInput = page.locator('input[placeholder="Ex: Recepcionista Sênior"]').first();
       const descInput = page.locator('textarea[placeholder="Ex: Acesso às rotinas de recepção e faturamento básico."]').first();
       
       const perfilNome = 'Perfil E2E Automação ' + Math.floor(Math.random() * 1000);
       await nomeInput.fill(perfilNome);
-      await descInput.fill('Perfil criado via teste automatizado ponta a ponta para validação de permissões.');
+      await descInput.fill('Perfil criado via teste automatizado ponta a ponta com permissões carregadas.');
 
-      // Avançar para o passo 2 (Permissões) usando o botão "Continuar →"
+      // 3. Avançar para o passo 2 (Permissões) usando o botão "Continuar →"
       const continuarBtn = page.locator('button[type="submit"]:has-text("Continuar")').or(page.locator('button:has-text("Continuar")')).first();
       await continuarBtn.click();
       await page.waitForTimeout(1000);
 
-      // Salvar Perfil no passo 2 com o botão "Salvar Alterações"
+      // 4. Salvar Perfil no passo 2 com o botão "Salvar Alterações"
       const salvarPerfilBtn = page.locator('button[type="submit"]:has-text("Salvar Alterações")').or(page.locator('button:has-text("Salvar")')).first();
       await salvarPerfilBtn.click();
       await page.waitForTimeout(3000);
       await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/03_perfil_customizado_criado.png', fullPage: true });
-      console.log('>>> [OK] Perfil Customizado criado com sucesso!');
+      console.log('>>> [OK] Perfil Customizado criado com permissões com sucesso!');
     }
 
     // Voltar para aba Membros e testar edição de membro existente
