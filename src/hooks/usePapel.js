@@ -83,17 +83,21 @@ export function usePapel() {
   const canInativarPacientes    = hasPerm(PERMISSOES.PACIENTE_EXCLUIR, PERFIS_ACESSO.NIVEL_3);
   const canReativarPacientes    = hasPerm(PERMISSOES.PACIENTE_EXCLUIR, PERFIS_ACESSO.NIVEL_3);
 
-  // ── Módulo: Galeria Clínica ──────────────────────────────────────────────
-  const canSeeGaleria           = hasPerm(PERMISSOES.PACIENTE_GALERIA_VER, PERFIS_ACESSO.NIVEL_3);
-
-  // ── Módulo: Anamnese ─────────────────────────────────────────────────────
-  const canSeeRespostasAnamnese = hasPerm(PERMISSOES.ANAMNESE_PREENCHIMENTO_VER, PERFIS_ACESSO.NIVEL_3);
+  // ── Módulo: Atendimento ──────────────────────────────────────────────────
   const canStartAnamnese        = hasPerm(PERMISSOES.ANAMNESE_PREENCHIMENTO_CRIAR, PERFIS_ACESSO.NIVEL_3);
+  const canRealizarAtendimento  = canStartAnamnese;
+  const canStartAtendimento     = canStartAnamnese;
+  const canSeeHubAvaliacao      = hasPerm(PERMISSOES.HUB_AVALIACAO_VER, PERFIS_ACESSO.NIVEL_2);
+  const canSeeHubAnamnese       = hasPerm(PERMISSOES.HUB_ANAMNESE_VER, PERFIS_ACESSO.NIVEL_2);
+  const canSeeHubTermos         = hasPerm(PERMISSOES.HUB_TERMOS_VER, PERFIS_ACESSO.NIVEL_2);
+  const canExecuteHubProcedimento = hasPerm(PERMISSOES.HUB_PROCEDIMENTO_EXECUTAR, PERFIS_ACESSO.NIVEL_3);
+  const canSeeHubOrientacao     = hasPerm(PERMISSOES.HUB_ORIENTACAO_VER, PERFIS_ACESSO.NIVEL_2);
+
+  // ── Módulo: Anamnese (Modelos) ───────────────────────────────────────────
   const canSeeConfigAnamnese    = hasPerm(PERMISSOES.ANAMNESE_MODELO_VER, PERFIS_ACESSO.NIVEL_3);
   const canConfigModelosAnamnese= hasPerm(PERMISSOES.ANAMNESE_MODELO_EDITAR, PERFIS_ACESSO.NIVEL_4);
-  const canSeeHubAnamnese       = hasPerm(PERMISSOES.HUB_ANAMNESE_VER, PERFIS_ACESSO.NIVEL_2);
 
-  // ── Módulo: Prontuário & Atendimento ─────────────────────────────────────
+  // ── Módulo: Prontuário ───────────────────────────────────────────────────
   const canSeeProntuario        = hasPerm(PERMISSOES.PRONTUARIO_VER, PERFIS_ACESSO.NIVEL_3);
   const canCreateProntuario     = hasPerm(PERMISSOES.PRONTUARIO_CRIAR, PERFIS_ACESSO.NIVEL_3);
   const canSeeNotasPaciente     = hasPerm(PERMISSOES.PACIENTE_NOTA_VER, PERFIS_ACESSO.NIVEL_3);
@@ -101,16 +105,15 @@ export function usePapel() {
   const canEditNotaPaciente     = hasPerm(PERMISSOES.PACIENTE_NOTA_EDITAR, PERFIS_ACESSO.NIVEL_4);
   const canManageEvolucoes      = hasPerm(PERMISSOES.EVOLUCAO_GERENCIAR, PERFIS_ACESSO.NIVEL_3);
   const canManageOrientacoes    = hasPerm(PERMISSOES.ORIENTACAO_GERENCIAR, PERFIS_ACESSO.NIVEL_3);
-  const canSeeHubAvaliacao      = hasPerm(PERMISSOES.HUB_AVALIACAO_VER, PERFIS_ACESSO.NIVEL_2);
-  const canExecuteHubProcedimento = hasPerm(PERMISSOES.HUB_PROCEDIMENTO_EXECUTAR, PERFIS_ACESSO.NIVEL_3);
-  const canSeeHubOrientacao     = hasPerm(PERMISSOES.HUB_ORIENTACAO_VER, PERFIS_ACESSO.NIVEL_2);
+  const canSeeGaleria           = hasPerm(PERMISSOES.PACIENTE_GALERIA_VER, PERFIS_ACESSO.NIVEL_3);
+  const canSeeFotosAnexo        = canSeeGaleria;
+  const canSeeRespostasAnamnese = hasPerm(PERMISSOES.ANAMNESE_PREENCHIMENTO_VER, PERFIS_ACESSO.NIVEL_3);
 
   // ── Módulo: Documentos & Assinaturas ─────────────────────────────────────
   const canSeeDocumentos        = hasPerm(PERMISSOES.PACIENTE_DOCUMENTO_VER, PERFIS_ACESSO.NIVEL_3);
   const canCreateAssinaturaDigital = hasPerm(PERMISSOES.DOCUMENTO_ASSINATURA_CRIAR, PERFIS_ACESSO.NIVEL_2);
   const canSeeConfigTermos      = hasPerm(PERMISSOES.DOC_MODELO_VER, PERFIS_ACESSO.NIVEL_4);
   const canEditConfigTermos     = hasPerm(PERMISSOES.DOC_MODELO_EDITAR, PERFIS_ACESSO.NIVEL_5);
-  const canSeeHubTermos         = hasPerm(PERMISSOES.HUB_TERMOS_VER, PERFIS_ACESSO.NIVEL_2);
 
   // ── Módulo: Catálogo de Procedimentos & Orçamentos ────────────────────────
   const canSeeConfigProcedimentos = hasPerm(PERMISSOES.CATALOGO_VER, PERFIS_ACESSO.NIVEL_4);
@@ -197,17 +200,21 @@ export function usePapel() {
     canInativarPacientes,
     canReativarPacientes,
 
-    // Galeria Clínica
-    canSeeGaleria,
-
-    // Anamnese
-    canSeeRespostasAnamnese,
+    // Atendimento
     canStartAnamnese,
+    canRealizarAtendimento,
+    canStartAtendimento,
+    canSeeHubAvaliacao,
+    canSeeHubAnamnese,
+    canSeeHubTermos,
+    canExecuteHubProcedimento,
+    canSeeHubOrientacao,
+
+    // Anamnese (Modelos)
     canSeeConfigAnamnese,
     canConfigModelosAnamnese,
-    canSeeHubAnamnese,
 
-    // Prontuário & Atendimento
+    // Prontuário
     canSeeProntuario,
     canCreateProntuario,
     canSeeNotasPaciente,
@@ -215,16 +222,15 @@ export function usePapel() {
     canEditNotaPaciente,
     canManageEvolucoes,
     canManageOrientacoes,
-    canSeeHubAvaliacao,
-    canExecuteHubProcedimento,
-    canSeeHubOrientacao,
+    canSeeGaleria,
+    canSeeFotosAnexo,
+    canSeeRespostasAnamnese,
 
     // Documentos & Assinaturas
     canSeeDocumentos,
     canCreateAssinaturaDigital,
     canSeeConfigTermos,
     canEditConfigTermos,
-    canSeeHubTermos,
 
     // Catálogo & Orçamentos
     canSeeConfigProcedimentos,

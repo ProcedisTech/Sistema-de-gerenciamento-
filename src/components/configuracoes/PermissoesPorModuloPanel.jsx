@@ -1,17 +1,35 @@
 import React, { useState } from 'react';
 import { CheckSquare, Square, Loader2, ChevronDown } from 'lucide-react';
 
-const ehPermissaoDeVer = (p) => (p.codigo || '').toUpperCase().endsWith('_VER');
+// Apenas as permissões de visualização raiz dos módulos são ocultadas como checkbox individual
+// e marcadas automaticamente ao expandir o módulo pelo botão "Ver".
+// Permissões funcionais específicas (ex: PACIENTE_GALERIA_VER, ANAMNESE_PREENCHIMENTO_VER,
+// AGENDA_MULTI_VER, AGENDA_PROPRIA_VER, PACIENTE_NOTA_VER, PACIENTE_DOCUMENTO_VER,
+// PACIENTE_ORCAMENTO_VER, PERFIL_ACESSO_VER e todas as etapas de Atendimento)
+// permanecem visíveis como checkboxes de controle explícito pelo usuário.
+const PERMISSOES_RAIZ_MODULO = new Set([
+  'AGENDA_VER',
+  'PACIENTE_VER',
+  'PRONTUARIO_VER',
+  'CATALOGO_VER',
+  'DOC_MODELO_VER',
+  'ANAMNESE_MODELO_VER',
+  'USUARIO_VER',
+  'NOTIFICACAO_VER',
+  'AUDITORIA_VER',
+]);
+
+const ehPermissaoRaizModulo = (p) => PERMISSOES_RAIZ_MODULO.has((p.codigo || '').toUpperCase());
 
 /**
  * Checklist de permissões agrupadas por módulo. Reaproveitado no modal "Novo Perfil"
  * (GestaoPerfisTab) e nos modais de criar/editar membro (InviteModal, EditRoleModal).
  *
  * Em modo editável (disabled=false), cada módulo vem fechado e só mostra as permissões
- * de ação (criar/editar/excluir/configurar). Abrir o módulo pelo botão "Ver" já marca
- * sozinho as permissões "_VER" daquele módulo — não faz sentido dar acesso pra mexer
- * em algo sem poder ver aquele algo, então a permissão de visualizar nunca fica exposta
- * como um checkbox separado pra esquecer de marcar.
+ * de ação e funcionais. Abrir o módulo pelo botão "Ver" já marca sozinho a permissão
+ * raiz "_VER" daquele módulo (ex: PRONTUARIO_VER, AGENDA_VER) — não faz sentido dar acesso
+ * pra mexer em algo sem poder ver aquele algo. Permissões de escopo funcional específico
+ * (como fotos, respostas de anamnese e etapas do atendimento) ficam visíveis para seleção.
  */
 export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, disabled = false, loading = false, columns = 2, showModuloActions = false, onToggleModulo }) {
   const [gruposAbertos, setGruposAbertos] = useState(() => new Set());
@@ -39,12 +57,12 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
         return next;
       }
       next.add(modulo);
-      const idsVer = perms.filter(ehPermissaoDeVer).map(p => p.permissaoId);
-      if (idsVer.length) {
+      const idsRaiz = perms.filter(ehPermissaoRaizModulo).map(p => p.permissaoId);
+      if (idsRaiz.length) {
         if (onToggleModulo) {
-          onToggleModulo(idsVer, true);
+          onToggleModulo(idsRaiz, true);
         } else {
-          idsVer.forEach(id => {
+          idsRaiz.forEach(id => {
             if (!(selecionadas || []).includes(id)) onChange(id, true);
           });
         }
@@ -57,10 +75,10 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
     <div className="space-y-4">
       {Object.entries(permissoesPorModulo).map(([modulo, perms]) => {
         const aberto = disabled || gruposAbertos.has(modulo);
-        // Em modo editável, a permissão "_VER" some da lista de checkboxes — ela é
-        // marcada automaticamente ao abrir o grupo (ver alternarGrupo). Em modo somente
-        // leitura (preview de nível/perfil) mostra tudo, já que não há nada pra "abrir".
-        const permsExibidas = disabled ? perms : perms.filter(p => !ehPermissaoDeVer(p));
+        // Em modo editável, apenas a permissão raiz de visualização do módulo some
+        // da lista de checkboxes (marcada automaticamente ao abrir o grupo). Em modo
+        // somente leitura (preview de nível/perfil) mostra tudo, já que não há nada pra "abrir".
+        const permsExibidas = disabled ? perms : perms.filter(p => !ehPermissaoRaizModulo(p));
         // Contador e "Marcar/Desmarcar todos" refletem só o que o usuário vê e controla —
         // a "_VER" auto-marcada não entra na conta pra não confundir (ex: "1/4" com só 3
         // checkboxes visíveis).

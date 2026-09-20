@@ -4,11 +4,11 @@
  * e com as migrations Flyway (V155__refactor_canonico_tb_permissao.sql).
  */
 
-// ── 8 Módulos Canônicos do Sistema ───────────────────────────────────────────
+// ── Módulos Canônicos do Sistema ───────────────────────────────────────────────
 export const MODULOS_SISTEMA = Object.freeze({
   AGENDA: 'Agenda',
   PACIENTES: 'Pacientes',
-  GALERIA: 'Galeria',
+  ATENDIMENTO: 'Atendimento',
   ANAMNESE: 'Anamnese',
   PRONTUARIO: 'Prontuário',
   DOCUMENTOS: 'Documentos',
@@ -18,7 +18,7 @@ export const MODULOS_SISTEMA = Object.freeze({
   SISTEMA: 'Sistema',
 });
 
-// ── 43 Permissões Canônicas Ativas ───────────────────────────────────────────
+// ── 54 Permissões Canônicas Ativas ───────────────────────────────────────────
 export const PERMISSOES = Object.freeze({
   // 1. Módulo Agenda (10)
   AGENDA_VER: 'AGENDA_VER',
@@ -38,17 +38,19 @@ export const PERMISSOES = Object.freeze({
   PACIENTE_EDITAR: 'PACIENTE_EDITAR',
   PACIENTE_EXCLUIR: 'PACIENTE_EXCLUIR',
 
-  // 3. Módulo Galeria (1)
-  PACIENTE_GALERIA_VER: 'PACIENTE_GALERIA_VER',
-
-  // 4. Módulo Anamnese (5)
-  ANAMNESE_PREENCHIMENTO_VER: 'ANAMNESE_PREENCHIMENTO_VER',
+  // 3. Módulo Atendimento (6)
   ANAMNESE_PREENCHIMENTO_CRIAR: 'ANAMNESE_PREENCHIMENTO_CRIAR',
+  HUB_AVALIACAO_VER: 'HUB_AVALIACAO_VER',
+  HUB_ANAMNESE_VER: 'HUB_ANAMNESE_VER',
+  HUB_TERMOS_VER: 'HUB_TERMOS_VER',
+  HUB_PROCEDIMENTO_EXECUTAR: 'HUB_PROCEDIMENTO_EXECUTAR',
+  HUB_ORIENTACAO_VER: 'HUB_ORIENTACAO_VER',
+
+  // 4. Módulo Anamnese (2)
   ANAMNESE_MODELO_VER: 'ANAMNESE_MODELO_VER',
   ANAMNESE_MODELO_EDITAR: 'ANAMNESE_MODELO_EDITAR',
-  HUB_ANAMNESE_VER: 'HUB_ANAMNESE_VER',
 
-  // 5. Módulo Prontuário (10)
+  // 5. Módulo Prontuário (9)
   PRONTUARIO_VER: 'PRONTUARIO_VER',
   PRONTUARIO_CRIAR: 'PRONTUARIO_CRIAR',
   PACIENTE_NOTA_VER: 'PACIENTE_NOTA_VER',
@@ -56,16 +58,14 @@ export const PERMISSOES = Object.freeze({
   PACIENTE_NOTA_EDITAR: 'PACIENTE_NOTA_EDITAR',
   EVOLUCAO_GERENCIAR: 'EVOLUCAO_GERENCIAR',
   ORIENTACAO_GERENCIAR: 'ORIENTACAO_GERENCIAR',
-  HUB_AVALIACAO_VER: 'HUB_AVALIACAO_VER',
-  HUB_PROCEDIMENTO_EXECUTAR: 'HUB_PROCEDIMENTO_EXECUTAR',
-  HUB_ORIENTACAO_VER: 'HUB_ORIENTACAO_VER',
+  PACIENTE_GALERIA_VER: 'PACIENTE_GALERIA_VER',
+  ANAMNESE_PREENCHIMENTO_VER: 'ANAMNESE_PREENCHIMENTO_VER',
 
-  // 6. Módulo Documentos (5)
+  // 6. Módulo Documentos (4)
   PACIENTE_DOCUMENTO_VER: 'PACIENTE_DOCUMENTO_VER',
   DOCUMENTO_ASSINATURA_CRIAR: 'DOCUMENTO_ASSINATURA_CRIAR',
   DOC_MODELO_VER: 'DOC_MODELO_VER',
   DOC_MODELO_EDITAR: 'DOC_MODELO_EDITAR',
-  HUB_TERMOS_VER: 'HUB_TERMOS_VER',
 
   // 7. Módulo Catálogo (5)
   CATALOGO_VER: 'CATALOGO_VER',

@@ -4,23 +4,11 @@ import { Settings2, Plus, Edit2, Trash2, Shield, Crown, Loader2, X } from 'lucid
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorDetail } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
-import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
+import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER, MODULO_LABEL_CURTO } from './gestaoUsuariosUtils';
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesCustomizadasModal } from './PermissoesCustomizadasModal';
 
 const isPerfilGlobal = (perfil) => !perfil.organizacaoSaudeDona && !perfil.organizacaoSaudeDonaId;
-
-// Rótulos curtos pros módulos nas barrinhas de cobertura dos cards.
-const MODULO_LABEL_CURTO = {
-  AGENDA: 'Agenda',
-  PACIENTES: 'Pac.',
-  GALERIA: 'Galeria',
-  ANAMNESE: 'Anamn.',
-  PRONTUARIO: 'Pront.',
-  DOCUMENTOS: 'Docs',
-  CATALOGO: 'Catál.',
-  EQUIPE_SISTEMA: 'Equipe',
-};
 
 export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onReload, fetchHeaders, perfilParaAbrir, onPerfilParaAbrirConsumido }) {
   const toast = useToast();

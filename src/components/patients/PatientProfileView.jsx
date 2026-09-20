@@ -869,7 +869,7 @@ export function PatientProfileView({
   patientListBump,
 }) {
   const toast = useToast();
-  const { canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos, canSeeOrcamentos } = usePapel();
+  const { canEditPacientes, papel, canStartAnamnese, canSeeRespostasAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos, canSeeOrcamentos } = usePapel();
   const { orgId } = useOrg();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
@@ -1274,7 +1274,7 @@ export function PatientProfileView({
       ? 'planos'
       : (canSeeProntuario
           ? 'prontuario'
-          : (canStartAnamnese
+          : ((canStartAnamnese || canSeeRespostasAnamnese)
               ? 'anamnese'
               : (canSeeGaleria
                   ? 'galeria'
@@ -1289,7 +1289,7 @@ export function PatientProfileView({
     } else if (patientDetailTab === 'planos' && !canSeeOrcamentos) {
       setPatientDetailTab(defaultTab);
     }
-  }, [patientDetailTab, setPatientDetailTab, canSeeOrcamentos, canSeeProntuario, canStartAnamnese, canSeeGaleria]);
+  }, [patientDetailTab, setPatientDetailTab, canSeeOrcamentos, canSeeProntuario, canStartAnamnese, canSeeRespostasAnamnese, canSeeGaleria]);
 
   const isEditing = Boolean(editing);
 
@@ -2277,7 +2277,7 @@ export function PatientProfileView({
                 canSeeOrcamentos && { key: 'planos', label: 'Planos & Evolução', title: 'Planos de Tratamento & Evolução Fotográfica', icon: BookOpen },
                 { key: 'avulsos', label: 'Atendimentos Avulsos', title: 'Atendimentos e Procedimentos Avulsos', icon: Sparkles },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
-                canStartAnamnese && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
+                (canStartAnamnese || canSeeRespostasAnamnese) && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 canSeeDocumentos && { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
               ].filter(Boolean).map(({ key, label, title, icon }) => {
                 const TabIcon = icon;

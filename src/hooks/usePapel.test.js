@@ -89,8 +89,11 @@ describe('Catálogo de Permissões e usePapel', () => {
     const { result } = renderHook(() => usePapel());
 
     expect(result.current.canSeeGaleria).toBe(true);
+    expect(result.current.canSeeFotosAnexo).toBe(true);
     expect(result.current.canSeeRespostasAnamnese).toBe(true);
     expect(result.current.canStartAnamnese).toBe(true);
+    expect(result.current.canRealizarAtendimento).toBe(true);
+    expect(result.current.canStartAtendimento).toBe(true);
     expect(result.current.canSeeProntuario).toBe(true);
     expect(result.current.canManageEvolucoes).toBe(true);
     expect(result.current.canManageOrientacoes).toBe(true);

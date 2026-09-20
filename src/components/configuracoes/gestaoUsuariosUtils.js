@@ -19,6 +19,24 @@ export const CODIGO_ORDER = {
   NIVEL_1: 6,
 };
 
+// Rótulos curtos pros módulos nas barrinhas de cobertura dos cards.
+export const MODULO_LABEL_CURTO = {
+  AGENDA: 'Agenda',
+  PACIENTES: 'Pac.',
+  ATENDIMENTO: 'Atendimento',
+  ANAMNESE: 'Anamn.',
+  PRONTUARIO: 'Pront.',
+  'PRONTUÁRIO': 'Pront.',
+  DOCUMENTOS: 'Docs',
+  CATALOGO: 'Catál.',
+  'CATÁLOGO': 'Catál.',
+  CLINICA: 'Clínica',
+  'CLÍNICA': 'Clínica',
+  EQUIPE: 'Equipe',
+  EQUIPE_SISTEMA: 'Equipe',
+  SISTEMA: 'Sistema',
+};
+
 // Ordenação clínica canônica para os cargos do sistema
 export const ROLE_DISPLAY_ORDER = {
   ADMINISTRADOR: 1,
