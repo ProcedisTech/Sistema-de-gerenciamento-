@@ -252,6 +252,12 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
   }`;
 
   const perfilSelecionado = (perfisAcesso || []).find(p => String(p.id) === String(form.perfilAcessoId));
+  const agendaPermId = (permissoes || []).find(p => p.codigo === 'AGENDA_APARECER')?.permissaoId;
+  const perfilSelecionadoAtendeAgenda = Boolean(
+    (agendaPermId && permissoesDoNivel.includes(agendaPermId)) ||
+    ((perfilSelecionado?.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO') ||
+    ((perfilSelecionado?.codigo || '').toUpperCase() === 'DONO')
+  );
 
   return createPortal(
     <>
@@ -584,7 +590,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                           <span className="text-sm font-bold text-slate-900">
                             Perfil: {perfilSelecionado.nome}
                           </span>
-                          {perfilSelecionado.apareceNaAgenda ? (
+                          {perfilSelecionadoAtendeAgenda ? (
                             <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                               📅 Atende na Agenda
                             </span>
@@ -635,11 +641,14 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                             if (ordA !== ordB) return ordA - ordB;
                             return (a.nome || '').localeCompare(b.nome || '');
                           })
-                          .map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.nome} {p.apareceNaAgenda ? '(Atende na Agenda)' : '(Sem Agenda)'}
-                            </option>
-                          ))
+                          .map(p => {
+                            const isClinico = (p.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO';
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.nome} {isClinico ? '(Atende na Agenda)' : ''}
+                              </option>
+                            );
+                          })
                         }
                       </select>
                     </div>

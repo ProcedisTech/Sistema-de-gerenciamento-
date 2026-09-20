@@ -108,7 +108,14 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
                       {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-500" />}
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[13px] font-bold ${checked ? 'text-teal-900' : 'text-slate-900'}`}>{p.nome}</span>
+                      <span className={`text-[13px] font-bold ${checked ? 'text-teal-900' : 'text-slate-900'} flex items-center gap-1.5 flex-wrap`}>
+                        {p.nome}
+                        {p.codigo === 'AGENDA_APARECER' && (
+                          <span className="inline-flex items-center gap-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-emerald-300">
+                            📅 Atende na Agenda
+                          </span>
+                        )}
+                      </span>
                       {p.descricao && <span className="text-[11px] text-slate-600 leading-snug mt-1">{p.descricao}</span>}
                     </div>
                     <input

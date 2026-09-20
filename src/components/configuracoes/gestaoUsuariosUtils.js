@@ -7,15 +7,16 @@ export const CODIGO_ORDER = {
   ADMINISTRADOR: 2,
   NIVEL_5: 2,
   SOCIO: 3,
+  PROFISSIONAL_CLINICO: 4,
   MEDICO: 4,
   NIVEL_4: 4,
-  ENFERMEIRO: 5,
-  BIOMEDICO: 6,
-  NIVEL_3: 6,
-  SECRETARIA: 7,
-  NIVEL_2: 7,
-  APOIO: 8,
-  NIVEL_1: 8,
+  ENFERMEIRO: 4,
+  BIOMEDICO: 4,
+  NIVEL_3: 4,
+  SECRETARIA: 5,
+  NIVEL_2: 5,
+  APOIO: 6,
+  NIVEL_1: 6,
 };
 
 // Ordenação clínica canônica para os cargos do sistema
@@ -90,40 +91,24 @@ export const getPresetProfileId = (roleOrRoleName, perfis = []) => {
     if (match) return match.id;
   }
 
-  // Médico / Dentista / Responsável Técnico
-  if (nameLower.includes('medico') || nameLower.includes('médico') || nameLower.includes('dentista') || nameLower.includes('responsavel')) {
-    const match = perfis.find(p =>
-      (p.codigo || '').toUpperCase() === 'MEDICO' ||
-      (p.nome || '').toLowerCase().includes('médico') ||
-      (p.nome || '').toLowerCase().includes('medico') ||
-      (p.nome || '').toLowerCase().includes('dentista') ||
-      (p.codigo || '').toUpperCase() === 'NIVEL_4'
-    );
-    if (match) return match.id;
-  }
-
-  // Enfermeiro(a)
-  if (nameLower.includes('enfermeir')) {
-    const match = perfis.find(p =>
-      (p.codigo || '').toUpperCase() === 'ENFERMEIRO' ||
-      (p.nome || '').toLowerCase().includes('enfermeir') ||
-      (p.codigo || '').toUpperCase() === 'NIVEL_3'
-    );
-    if (match) return match.id;
-  }
-
-  // Biomédico / Esteticista
+  // Profissional Clínico (Médico, Dentista, Enfermeiro, Biomédico, Esteticista, etc.)
   if (
+    nameLower.includes('medico') || nameLower.includes('médico') ||
+    nameLower.includes('dentista') || nameLower.includes('responsavel') ||
+    nameLower.includes('enfermeir') ||
     nameLower.includes('biomedic') || nameLower.includes('biomédic') ||
     nameLower.includes('estetic') ||
     nameLower.includes('saude') || nameLower.includes('saúde') ||
     nameLower.includes('clinico') || nameLower.includes('clínico')
   ) {
     const match = perfis.find(p =>
+      (p.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO' ||
+      (p.nome || '').toLowerCase().includes('profissional clínico') ||
+      (p.nome || '').toLowerCase().includes('profissional clinico') ||
+      (p.codigo || '').toUpperCase() === 'MEDICO' ||
+      (p.codigo || '').toUpperCase() === 'NIVEL_4' ||
       (p.codigo || '').toUpperCase() === 'BIOMEDICO' ||
-      (p.nome || '').toLowerCase().includes('biomédic') ||
-      (p.nome || '').toLowerCase().includes('biomedico') ||
-      (p.nome || '').toLowerCase().includes('esteticista') ||
+      (p.codigo || '').toUpperCase() === 'ENFERMEIRO' ||
       (p.codigo || '').toUpperCase() === 'NIVEL_3'
     );
     if (match) return match.id;
@@ -166,7 +151,7 @@ export const getPermissoesPadraoPorPerfilId = () => [];
  * informado (PUT), usado pelo pop-up de "permissões customizadas" ao salvar um
  * membro com o checklist divergente do template do Nível selecionado.
  */
-export const criarPerfilComPermissoes = async ({ nome, descricao, apareceNaAgenda, permissoes, fetchHeaders }) => {
+export const criarPerfilComPermissoes = async ({ nome, descricao, permissoes, fetchHeaders }) => {
   const res = await fetch(resolveApiUrl('/api/v1/perfis-acesso'), {
     method: 'POST',
     headers: { ...(await fetchHeaders()), 'Content-Type': 'application/json' },
@@ -174,7 +159,6 @@ export const criarPerfilComPermissoes = async ({ nome, descricao, apareceNaAgend
     body: JSON.stringify({
       nome,
       descricao: descricao || '',
-      apareceNaAgenda: Boolean(apareceNaAgenda),
     })
   });
   if (!res.ok) {

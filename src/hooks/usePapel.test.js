@@ -8,13 +8,15 @@ vi.mock('../contexts/OrgContext', () => ({
 }));
 
 describe('Catálogo de Permissões e usePapel', () => {
-  it('deve conter exatamente 53 permissões canônicas ativas', () => {
+  it('deve conter exatamente 54 permissões canônicas ativas', () => {
     const codigos = Object.values(PERMISSOES);
-    expect(codigos).toHaveLength(53);
+    expect(codigos).toHaveLength(54);
+    expect(PERMISSOES.AGENDA_APARECER).toBe('AGENDA_APARECER');
   });
 
-  it('deve conter os 6 perfis padrão globais em PERFIS_ACESSO', () => {
+  it('deve conter os perfis padrão globais em PERFIS_ACESSO incluindo PROFISSIONAL_CLINICO', () => {
     expect(PERFIS_ACESSO.DONO).toBe('DONO');
+    expect(PERFIS_ACESSO.PROFISSIONAL_CLINICO).toBe('PROFISSIONAL_CLINICO');
     expect(PERFIS_ACESSO.NIVEL_5).toBe('NIVEL_5');
     expect(PERFIS_ACESSO.NIVEL_4).toBe('NIVEL_4');
     expect(PERFIS_ACESSO.NIVEL_3).toBe('NIVEL_3');
@@ -107,5 +109,17 @@ describe('Catálogo de Permissões e usePapel', () => {
 
     expect(result.current.hasAnyPerm([PERMISSOES.AGENDA_VER, PERMISSOES.PACIENTE_GALERIA_VER])).toBe(true);
     expect(result.current.hasAnyPerm([PERMISSOES.PACIENTE_GALERIA_VER, PERMISSOES.USUARIO_EXCLUIR])).toBe(false);
+  });
+
+  it('deve identificar corretamente profissional clinico e canAparecerNaAgenda', () => {
+    vi.mocked(OrgContextModule.useOrg).mockReturnValue({
+      papel: 'PROFISSIONAL_CLINICO',
+      permissoes: [PERMISSOES.AGENDA_APARECER, PERMISSOES.AGENDA_VER],
+    });
+
+    const { result } = renderHook(() => usePapel());
+
+    expect(result.current.isProfissionalClinico).toBe(true);
+    expect(result.current.canAparecerNaAgenda).toBe(true);
   });
 });

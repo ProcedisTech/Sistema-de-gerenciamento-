@@ -29,7 +29,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   const [editingPerfil, setEditingPerfil] = useState(null);
   const [perfilBaseCriacao, setPerfilBaseCriacao] = useState(null);
 
-  const [formData, setFormData] = useState({ nome: '', descricao: '', apareceNaAgenda: false });
+  const [formData, setFormData] = useState({ nome: '', descricao: '' });
   const [saving, setSaving] = useState(false);
 
   const [selectedPermissoes, setSelectedPermissoes] = useState([]);
@@ -41,7 +41,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   // Guarda a última sugestão de nome/descrição que o próprio handleCargoChange aplicou,
   // pra distinguir "usuário editou por conta própria" (não sobrescreve mais) de "ainda é
   // a sugestão do cargo anterior" (pode trocar pela sugestão do novo cargo escolhido).
-  const cargoSugestaoRef = useRef({ nome: '', descricao: '', apareceNaAgenda: false });
+  const cargoSugestaoRef = useRef({ nome: '', descricao: '' });
   // Evita que a resposta de uma troca de cargo antiga (mais lenta) sobrescreva, ao
   // chegar depois, o resultado de uma troca mais recente.
   const cargoRequestIdRef = useRef(0);
@@ -65,8 +65,8 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     setEditingPerfil(null);
     setPerfilBaseCriacao(null);
     setCargoPreenchimento('');
-    cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: false };
-    setFormData({ nome: '', descricao: '', apareceNaAgenda: false });
+    cargoSugestaoRef.current = { nome: '', descricao: '' };
+    setFormData({ nome: '', descricao: '' });
     setSelectedPermissoes([]);
     setWizardStep(1);
     setShowModal(true);
@@ -76,11 +76,10 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     setEditingPerfil(perfil);
     setPerfilBaseCriacao(null);
     setCargoPreenchimento('');
-    cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: false };
+    cargoSugestaoRef.current = { nome: '', descricao: '' };
     setFormData({
       nome: perfil.nome || '',
       descricao: perfil.descricao || '',
-      apareceNaAgenda: perfil.apareceNaAgenda ?? false,
     });
     setSelectedPermissoes([]);
     setWizardStep(1);
@@ -147,11 +146,16 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       ativos: carregado ? perms.filter(p => permsDoPerfil.includes(p.permissaoId)).length : 0,
       total: perms.length,
     }));
+    const agendaPerm = (permissoes || []).find(p => p.codigo === 'AGENDA_APARECER');
+    const atendeNaAgenda = carregado
+      ? Boolean(agendaPerm && permsDoPerfil.includes(agendaPerm.permissaoId))
+      : ((perfil.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO' || (perfil.codigo || '').toUpperCase() === 'DONO');
     return {
       carregado,
       total: carregado ? permsDoPerfil.length : null,
       porModulo,
       membros: (usuarios || []).filter(u => String(u.perfilAcessoId) === String(perfil.id)).length,
+      atendeNaAgenda,
     };
   };
 
@@ -164,11 +168,10 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
         const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
         setEditingPerfil(null);
         setCargoPreenchimento('');
-        cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: perfil.apareceNaAgenda ?? false };
+        cargoSugestaoRef.current = { nome: '', descricao: '' };
         setFormData({
           nome: perfil.nome || '',
           descricao: perfil.descricao || '',
-          apareceNaAgenda: perfil.apareceNaAgenda ?? false,
         });
         setSelectedPermissoes(permissoesAtuais);
         setPerfilBaseCriacao(perfil.nome);
@@ -190,11 +193,10 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       setPerfilEscolha(null);
       setEditingPerfil(null);
       setCargoPreenchimento('');
-      cargoSugestaoRef.current = { nome: '', descricao: '', apareceNaAgenda: perfilOrigem.apareceNaAgenda ?? false };
+      cargoSugestaoRef.current = { nome: '', descricao: '' };
       setFormData({
         nome: nomeNovo,
         descricao: perfilOrigem.descricao || '',
-        apareceNaAgenda: perfilOrigem.apareceNaAgenda ?? false,
       });
       setSelectedPermissoes(permissoesAtuais);
       setPerfilBaseCriacao(perfilOrigem.nome);
@@ -218,20 +220,17 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
     const perfilPreset = perfilPresetId ? (perfisAcesso || []).find(p => String(p.id) === String(perfilPresetId)) : null;
     const cargoLabel = formatCargoLabel(cargo.nome);
     const descricaoSugerida = perfilPreset?.descricao || `Acesso equivalente ao cargo de ${cargoLabel}.`;
-    const apareceNaAgendaSugerida = perfilPreset ? Boolean(perfilPreset.apareceNaAgenda) : false;
     const requestId = ++cargoRequestIdRef.current;
 
     const sugestaoAnterior = cargoSugestaoRef.current;
     cargoSugestaoRef.current = {
       nome: cargoLabel,
       descricao: descricaoSugerida,
-      apareceNaAgenda: apareceNaAgendaSugerida,
     };
 
     setFormData(prev => ({
       nome: (!prev.nome.trim() || prev.nome === sugestaoAnterior.nome) ? cargoLabel : prev.nome,
       descricao: (!prev.descricao.trim() || prev.descricao === sugestaoAnterior.descricao) ? descricaoSugerida : prev.descricao,
-      apareceNaAgenda: perfilPreset ? Boolean(perfilPreset.apareceNaAgenda) : prev.apareceNaAgenda,
     }));
 
     if (!perfilPresetId) return;
@@ -399,7 +398,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                     <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-xs font-semibold px-2.5 py-1 rounded-md">
                       {resumo.carregado ? `${resumo.total} funções habilitadas` : 'Carregando...'}
                     </span>
-                    {p.apareceNaAgenda ? (
+                    {resumo.atendeNaAgenda ? (
                       <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded border border-emerald-200">
                         📅 Atende na Agenda
                       </span>
@@ -459,7 +458,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                     <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-1 rounded-md">
                       {resumo.carregado ? `${resumo.total} funções habilitadas` : 'Carregando...'}
                     </span>
-                    {p.apareceNaAgenda ? (
+                    {resumo.atendeNaAgenda ? (
                       <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded border border-emerald-200">
                         📅 Atende na Agenda
                       </span>
@@ -576,30 +575,13 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
                     />
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 transition-colors hover:border-teal-200">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          📅 Aparece na agenda como profissional?
-                        </span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Define se colaboradores com este perfil aparecem na agenda para marcações e atendimento.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex cursor-pointer items-center shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(formData.apareceNaAgenda)}
-                          onChange={e => setFormData({ ...formData, apareceNaAgenda: e.target.checked })}
-                          className="peer sr-only"
-                        />
-                        <div className="peer h-6 w-11 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-teal-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none"></div>
-                      </label>
-                    </div>
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.apareceNaAgenda ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                        {formData.apareceNaAgenda ? '✓ Sim (Atende na Agenda)' : '✕ Não (Apenas administrativo/apoio)'}
-                      </span>
+                  <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3.5 text-xs text-teal-900 flex items-start gap-2.5">
+                    <span className="text-base leading-none">💡</span>
+                    <div>
+                      <p className="font-semibold text-slate-800">Atendimento na Agenda</p>
+                      <p className="text-slate-600 mt-0.5">
+                        A permissão para atender e aparecer na agenda (<code className="font-mono font-bold text-teal-800">AGENDA_APARECER</code>) agora é configurada no <strong>Passo 2</strong>, dentro do módulo <strong>Agenda</strong>.
+                      </p>
                     </div>
                   </div>
                 </div>

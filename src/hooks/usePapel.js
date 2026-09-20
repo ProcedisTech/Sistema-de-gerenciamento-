@@ -53,10 +53,11 @@ export function usePapel() {
   const isDono          = papel === PERFIS_ACESSO.DONO;
   const isAdmin         = papel === PERFIS_ACESSO.ADMIN || isDono || papel === PERFIS_ACESSO.NIVEL_5 || papel === PERFIS_ACESSO.ADMINISTRADOR;
   const isSocio         = papel === PERFIS_ACESSO.SOCIO;
+  const isProfissionalClinico = papel === PERFIS_ACESSO.PROFISSIONAL_CLINICO;
   const isMedico        = papel === PERFIS_ACESSO.MEDICO;
   const isEnfermeiro    = papel === PERFIS_ACESSO.ENFERMEIRO;
   const isBiomedico     = papel === PERFIS_ACESSO.BIOMEDICO;
-  const isProfissional  = papel === PERFIS_ACESSO.PROFISSIONAL || isMedico || isEnfermeiro || isBiomedico || isAtLeast(PERFIS_ACESSO.NIVEL_3);
+  const isProfissional  = papel === PERFIS_ACESSO.PROFISSIONAL || isProfissionalClinico || isMedico || isEnfermeiro || isBiomedico || isAtLeast(PERFIS_ACESSO.NIVEL_3);
   const isRecepcionista = papel === PERFIS_ACESSO.RECEPCIONISTA || papel === PERFIS_ACESSO.SECRETARIA || isAtLeast(PERFIS_ACESSO.NIVEL_2);
   const isCustomProfile = typeof papel === 'string' && papel.startsWith('CST_');
   const isNivel1        = papel === PERFIS_ACESSO.NIVEL_1 || papel === PERFIS_ACESSO.APOIO || (!isCustomProfile && meuPeso <= 10);
@@ -72,6 +73,7 @@ export function usePapel() {
   const canSeeAgendaMulti       = hasPerm(PERMISSOES.AGENDA_MULTI_VER, PERFIS_ACESSO.NIVEL_2);
   const canSeeAgendaPropria     = hasPerm(PERMISSOES.AGENDA_PROPRIA_VER, PERFIS_ACESSO.NIVEL_3);
   const canEncaixarForaDisp     = hasPerm(PERMISSOES.AGENDA_FORA_DISP_ENCAIXAR, PERFIS_ACESSO.NIVEL_4);
+  const canAparecerNaAgenda     = hasPerm(PERMISSOES.AGENDA_APARECER, PERFIS_ACESSO.NIVEL_3);
 
   // ── Módulo: Pacientes ────────────────────────────────────────────────────
   const canSeePacientes         = hasPerm(PERMISSOES.PACIENTE_VER, PERFIS_ACESSO.NIVEL_1);
@@ -158,6 +160,7 @@ export function usePapel() {
     // Legado & Identidade
     isAdmin,
     isSocio,
+    isProfissionalClinico,
     isMedico,
     isEnfermeiro,
     isBiomedico,
@@ -185,6 +188,7 @@ export function usePapel() {
     canSeeAgendaMulti,
     canSeeAgendaPropria,
     canEncaixarForaDisp,
+    canAparecerNaAgenda,
 
     // Pacientes
     canCreatePacientes,
