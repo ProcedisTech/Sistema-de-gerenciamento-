@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { CheckSquare, Square, Loader2, ChevronDown } from 'lucide-react';
 
-// Apenas as permissões de visualização raiz dos módulos são ocultadas como checkbox individual
-// e marcadas automaticamente ao expandir o módulo pelo botão "Ver".
+// As permissões de visualização raiz e intrínsecas dos módulos são ocultadas como checkbox individual
+// e marcadas automaticamente ao expandir o módulo pelo botão "Ver" para evitar erros operacionais.
 // Permissões funcionais específicas (ex: PACIENTE_GALERIA_VER, ANAMNESE_PREENCHIMENTO_VER,
-// AGENDA_MULTI_VER, AGENDA_PROPRIA_VER, PACIENTE_NOTA_VER, PACIENTE_DOCUMENTO_VER,
+// AGENDA_MULTI_VER, PACIENTE_NOTA_VER, PACIENTE_DOCUMENTO_VER,
 // PACIENTE_ORCAMENTO_VER, PERFIL_ACESSO_VER e todas as etapas de Atendimento)
 // permanecem visíveis como checkboxes de controle explícito pelo usuário.
 const PERMISSOES_RAIZ_MODULO = new Set([
   'AGENDA_VER',
+  'AGENDA_PROPRIA_VER',
   'PACIENTE_VER',
   'PRONTUARIO_VER',
   'CATALOGO_VER',
@@ -27,13 +28,12 @@ const ehPermissaoRaizModulo = (p) => PERMISSOES_RAIZ_MODULO.has((p.codigo || '')
  *
  * Em modo editável (disabled=false), cada módulo vem fechado e só mostra as permissões
  * de ação e funcionais. Abrir o módulo pelo botão "Ver" já marca sozinho a permissão
- * raiz "_VER" daquele módulo (ex: PRONTUARIO_VER, AGENDA_VER) — não faz sentido dar acesso
+ * raiz "_VER" daquele módulo (ex: PRONTUARIO_VER, AGENDA_VER e AGENDA_PROPRIA_VER) — não faz sentido dar acesso
  * pra mexer em algo sem poder ver aquele algo. Permissões de escopo funcional específico
  * (como fotos, respostas de anamnese e etapas do atendimento) ficam visíveis para seleção.
  */
 export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, disabled = false, loading = false, columns = 2, showModuloActions = false, onToggleModulo }) {
   const [gruposAbertos, setGruposAbertos] = useState(() => new Set());
-  const modulosIniciadosRef = React.useRef(new Set());
 
   const permissoesPorModulo = (permissoes || []).reduce((acc, perm) => {
     const mod = perm.modulo || 'Geral';
@@ -68,21 +68,12 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
     });
 
     const idsRaiz = perms.filter(ehPermissaoRaizModulo).map(p => p.permissaoId);
-    const permAgendaPropria = perms.find(p => (p.codigo || '').toUpperCase() === 'AGENDA_PROPRIA_VER');
-    const idsPadraoAbertura = [...idsRaiz];
 
-    const ehPrimeiraAbertura = !modulosIniciadosRef.current.has(modulo);
-    modulosIniciadosRef.current.add(modulo);
-
-    if (ehPrimeiraAbertura && permAgendaPropria && !(selecionadas || []).includes(permAgendaPropria.permissaoId)) {
-      idsPadraoAbertura.push(permAgendaPropria.permissaoId);
-    }
-
-    if (idsPadraoAbertura.length) {
+    if (idsRaiz.length) {
       if (onToggleModulo) {
-        onToggleModulo(idsPadraoAbertura, true);
+        onToggleModulo(idsRaiz, true);
       } else {
-        idsPadraoAbertura.forEach(id => {
+        idsRaiz.forEach(id => {
           if (!(selecionadas || []).includes(id)) onChange(id, true);
         });
       }

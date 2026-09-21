@@ -82,7 +82,7 @@ describe('PermissoesPorModuloPanel', () => {
     expect(screen.getByText('Acessar Orientações Pós-Procedimento')).toBeInTheDocument();
   });
 
-  it('no módulo Agenda, exibe Cancelamento de Agendamento do Paciente para AGENDA_EXCLUIR e auto-marca AGENDA_VER e AGENDA_PROPRIA_VER ao abrir', () => {
+  it('no módulo Agenda, exibe Cancelamento de Agendamento do Paciente para AGENDA_EXCLUIR e auto-marca AGENDA_VER e AGENDA_PROPRIA_VER de forma invisível ao abrir', () => {
     const handleChange = vi.fn();
 
     render(
@@ -101,11 +101,9 @@ describe('PermissoesPorModuloPanel', () => {
     expect(handleChange).toHaveBeenCalledWith('p-agenda-ver', true);
     expect(handleChange).toHaveBeenCalledWith('p-agenda-propria', true);
 
-    // AGENDA_VER não aparece como checkbox (raiz oculta)
+    // AGENDA_VER e AGENDA_PROPRIA_VER não aparecem como checkboxes (raízes invisíveis para evitar erro do usuário)
     expect(screen.queryByText('Visualizar Agenda')).not.toBeInTheDocument();
-
-    // AGENDA_PROPRIA_VER aparece como checkbox visível
-    expect(screen.getByText('Visualizar Agenda Própria')).toBeInTheDocument();
+    expect(screen.queryByText('Visualizar Agenda Própria')).not.toBeInTheDocument();
 
     // AGENDA_EXCLUIR renomeado para Cancelamento de Agendamento do Paciente aparece visível
     expect(screen.getByText('Cancelamento de Agendamento do Paciente')).toBeInTheDocument();
@@ -114,7 +112,7 @@ describe('PermissoesPorModuloPanel', () => {
     expect(screen.getByText('Visualizar Grade de Todos os Profissionais')).toBeInTheDocument();
   });
 
-  it('ao abrir o módulo Agenda com onToggleModulo, passa idsRaiz e AGENDA_PROPRIA_VER juntos em lote', () => {
+  it('ao abrir o módulo Agenda com onToggleModulo, passa idsRaiz (AGENDA_VER e AGENDA_PROPRIA_VER) juntos em lote', () => {
     const handleToggleModulo = vi.fn();
 
     render(
@@ -132,13 +130,13 @@ describe('PermissoesPorModuloPanel', () => {
     expect(handleToggleModulo).toHaveBeenCalledWith(['p-agenda-ver', 'p-agenda-propria'], true);
   });
 
-  it('ao recolher e reabrir o módulo Agenda na mesma sessão, não força re-marcação de AGENDA_PROPRIA_VER', () => {
+  it('ao recolher e reabrir o módulo Agenda, mantém as permissões raízes invisíveis seguras', () => {
     const handleToggleModulo = vi.fn();
 
     render(
       <PermissoesPorModuloPanel
         permissoes={mockPermissoes}
-        selecionadas={['p-agenda-ver']}
+        selecionadas={['p-agenda-ver', 'p-agenda-propria']}
         onChange={vi.fn()}
         onToggleModulo={handleToggleModulo}
       />
@@ -158,8 +156,7 @@ describe('PermissoesPorModuloPanel', () => {
     // Terceiro clique reabre o módulo Agenda
     const btnReabrir = screen.getAllByRole('button', { name: /ver/i })[0];
     fireEvent.click(btnReabrir);
-    // Não deve incluir p-agenda-propria novamente pois já foi inicializado nesta sessão
-    expect(handleToggleModulo).toHaveBeenCalledWith(['p-agenda-ver'], true);
+    expect(handleToggleModulo).toHaveBeenCalledWith(['p-agenda-ver', 'p-agenda-propria'], true);
   });
 
   it('em modo disabled (somente leitura), exibe todas as permissões incluindo as raízes', () => {
