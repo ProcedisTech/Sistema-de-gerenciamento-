@@ -343,7 +343,7 @@ export function formatWeekRangeLabel(startIso, endIso) {
 export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPatientSync } = {}) {
   const { roleUserId, roleNome } = useOrg();
   const { bumpRevision } = useDisponibilidadeRevision();
-  const { isNivel1, canSeeAgendaMulti, canSeeAgendaPropria, canEncaixarForaDisp } = usePapel();
+  const { isNivel1, canSeeAgendaMulti, canSeeAgendaPropria, canEncaixarForaDisp, canDeleteAgenda } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
   const { todayIso, currentMinutes: currentBrasiliaMinutes } = useBrasiliaTime();
   const [monthDate, setMonthDate] = useState(() => {
@@ -1493,7 +1493,12 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
   const handleCancelar = useCallback(
     async (agendaId, payload, opts = {}) => {
-      if (isNivel1) return false;
+      if (isNivel1 || !canDeleteAgenda) {
+        if (!canDeleteAgenda) {
+          toastError('Sem permissão para cancelar agendamentos.');
+        }
+        return false;
+      }
       if (!agendaId || !payload) return false;
       try {
         await agendasApi.cancelar(agendaId, payload);
@@ -1515,12 +1520,17 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         return false;
       }
     },
-    [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
+    [isNivel1, canDeleteAgenda, loadMonth, refreshWeekGrid, toastSuccess, toastError, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
   );
 
   const handleMarcarNaoCompareceu = useCallback(
     async (agendaId, opts = {}) => {
-      if (isNivel1) return false;
+      if (isNivel1 || !canDeleteAgenda) {
+        if (!canDeleteAgenda) {
+          toastError('Sem permissão para cancelar agendamentos.');
+        }
+        return false;
+      }
       if (!agendaId) return false;
       try {
         const motivoId = await resolveMotivoCancelamentoIdByCodigo(NO_SHOW_MOTIVO_CODIGO);
@@ -1547,7 +1557,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         return false;
       }
     },
-    [isNivel1, handleCancelar, toastError],
+    [isNivel1, canDeleteAgenda, handleCancelar, toastError],
   );
 
   const resetBloqueioConflitosState = useCallback(() => {
@@ -2888,6 +2898,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     canSeeAgendaMulti,
     canSeeAgendaPropria,
     canEncaixarForaDisp,
+    canDeleteAgenda,
+    canCancelarAgendamento: canDeleteAgenda,
     setRoleUserIdAgenda: setRoleUserIdAgendaPublic,
     ensureEquipeLoaded,
     equipeList,

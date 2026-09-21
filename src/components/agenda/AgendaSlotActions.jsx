@@ -26,17 +26,20 @@ export default function AgendaSlotActions({
   disabled = false,
   compact = false,
   panel = false,
+  canCancelar = true,
 }) {
   const status = agenda?.status;
   const tipo = agenda?.tipo;
   const v = getAgendaSlotActionVisibility(status, { tipo });
+  const showCancelar = Boolean(v.showCancelar && onCancelar && canCancelar);
+  const showNaoCompareceu = Boolean(v.showNaoCompareceu && onMarcarNaoCompareceu && canCancelar);
   const anyChip =
     v.showRealizado ||
-    v.showNaoCompareceu ||
+    showNaoCompareceu ||
     v.showWhatsApp ||
     v.showAnamnese ||
     v.showReagendar ||
-    v.showCancelar ||
+    showCancelar ||
     v.showRemoverBloqueio;
 
   const { codigo: motivoCodigo, nome: motivoNome } =
@@ -74,7 +77,7 @@ export default function AgendaSlotActions({
                 Realizado
               </button>
             ) : null}
-            {v.showNaoCompareceu ? (
+            {showNaoCompareceu ? (
               <button
                 type="button"
                 onClick={onMarcarNaoCompareceu}
@@ -122,7 +125,7 @@ export default function AgendaSlotActions({
                 Reagendar
               </button>
             ) : null}
-            {v.showCancelar ? (
+            {showCancelar ? (
               <button
                 type="button"
                 onClick={onCancelar}
@@ -177,7 +180,7 @@ export default function AgendaSlotActions({
             <Check className="h-3.5 w-3.5" aria-hidden />
           </button>
         ) : null}
-        {v.showNaoCompareceu ? (
+        {showNaoCompareceu ? (
           <button
             type="button"
             onClick={onMarcarNaoCompareceu}
@@ -225,7 +228,7 @@ export default function AgendaSlotActions({
             <Calendar className="h-3.5 w-3.5" aria-hidden />
           </button>
         ) : null}
-        {v.showCancelar ? (
+        {showCancelar ? (
           <button
             type="button"
             onClick={onCancelar}
@@ -284,7 +287,7 @@ export default function AgendaSlotActions({
               Realizado
             </button>
           ) : null}
-          {v.showNaoCompareceu ? (
+          {showNaoCompareceu ? (
             <button
               type="button"
               onClick={onMarcarNaoCompareceu}
@@ -332,7 +335,7 @@ export default function AgendaSlotActions({
               Reagendar
             </button>
           ) : null}
-          {v.showCancelar ? (
+          {showCancelar ? (
             <button
               type="button"
               onClick={onCancelar}

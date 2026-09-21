@@ -8,6 +8,7 @@ describe('PermissoesPorModuloPanel', () => {
   const mockPermissoes = [
     // Agenda
     { permissaoId: 'p-agenda-ver', codigo: 'AGENDA_VER', nome: 'Visualizar Agenda', modulo: 'Agenda', descricao: 'Permite visualizar os horários' },
+    { permissaoId: 'p-agenda-propria', codigo: 'AGENDA_PROPRIA_VER', nome: 'Visualizar Agenda Própria', modulo: 'Agenda', descricao: 'Permite ao profissional clínico visualizar sua própria grade' },
     { permissaoId: 'p-agenda-excluir', codigo: 'AGENDA_EXCLUIR', nome: 'Cancelamento de Agendamento do Paciente', modulo: 'Agenda', descricao: 'Permite cancelar agendamentos' },
     { permissaoId: 'p-agenda-multi', codigo: 'AGENDA_MULTI_VER', nome: 'Visualizar Grade de Todos os Profissionais', modulo: 'Agenda', descricao: 'Permite ver todas as colunas' },
     
@@ -81,7 +82,7 @@ describe('PermissoesPorModuloPanel', () => {
     expect(screen.getByText('Acessar Orientações Pós-Procedimento')).toBeInTheDocument();
   });
 
-  it('no módulo Agenda, exibe Cancelamento de Agendamento do Paciente para AGENDA_EXCLUIR e auto-marca AGENDA_VER ao abrir', () => {
+  it('no módulo Agenda, exibe Cancelamento de Agendamento do Paciente para AGENDA_EXCLUIR e auto-marca AGENDA_VER e AGENDA_PROPRIA_VER ao abrir', () => {
     const handleChange = vi.fn();
 
     render(
@@ -96,17 +97,69 @@ describe('PermissoesPorModuloPanel', () => {
     const botoesVer = screen.getAllByRole('button', { name: /ver/i });
     fireEvent.click(botoesVer[0]);
 
-    // AGENDA_VER foi auto-marcado
+    // AGENDA_VER e AGENDA_PROPRIA_VER foram auto-marcados
     expect(handleChange).toHaveBeenCalledWith('p-agenda-ver', true);
+    expect(handleChange).toHaveBeenCalledWith('p-agenda-propria', true);
 
-    // AGENDA_VER não aparece como checkbox
+    // AGENDA_VER não aparece como checkbox (raiz oculta)
     expect(screen.queryByText('Visualizar Agenda')).not.toBeInTheDocument();
+
+    // AGENDA_PROPRIA_VER aparece como checkbox visível
+    expect(screen.getByText('Visualizar Agenda Própria')).toBeInTheDocument();
 
     // AGENDA_EXCLUIR renomeado para Cancelamento de Agendamento do Paciente aparece visível
     expect(screen.getByText('Cancelamento de Agendamento do Paciente')).toBeInTheDocument();
 
     // AGENDA_MULTI_VER também fica visível
     expect(screen.getByText('Visualizar Grade de Todos os Profissionais')).toBeInTheDocument();
+  });
+
+  it('ao abrir o módulo Agenda com onToggleModulo, passa idsRaiz e AGENDA_PROPRIA_VER juntos em lote', () => {
+    const handleToggleModulo = vi.fn();
+
+    render(
+      <PermissoesPorModuloPanel
+        permissoes={mockPermissoes}
+        selecionadas={[]}
+        onChange={vi.fn()}
+        onToggleModulo={handleToggleModulo}
+      />
+    );
+
+    const botoesVer = screen.getAllByRole('button', { name: /ver/i });
+    fireEvent.click(botoesVer[0]);
+
+    expect(handleToggleModulo).toHaveBeenCalledWith(['p-agenda-ver', 'p-agenda-propria'], true);
+  });
+
+  it('ao recolher e reabrir o módulo Agenda na mesma sessão, não força re-marcação de AGENDA_PROPRIA_VER', () => {
+    const handleToggleModulo = vi.fn();
+
+    render(
+      <PermissoesPorModuloPanel
+        permissoes={mockPermissoes}
+        selecionadas={['p-agenda-ver']}
+        onChange={vi.fn()}
+        onToggleModulo={handleToggleModulo}
+      />
+    );
+
+    // Primeiro clique abre o módulo Agenda
+    const btnVer = screen.getAllByRole('button', { name: /ver/i })[0];
+    fireEvent.click(btnVer);
+    expect(handleToggleModulo).toHaveBeenCalledWith(['p-agenda-ver', 'p-agenda-propria'], true);
+    handleToggleModulo.mockClear();
+
+    // Segundo clique oculta o módulo Agenda
+    const btnOcultar = screen.getByRole('button', { name: /ocultar/i });
+    fireEvent.click(btnOcultar);
+    expect(handleToggleModulo).not.toHaveBeenCalled();
+
+    // Terceiro clique reabre o módulo Agenda
+    const btnReabrir = screen.getAllByRole('button', { name: /ver/i })[0];
+    fireEvent.click(btnReabrir);
+    // Não deve incluir p-agenda-propria novamente pois já foi inicializado nesta sessão
+    expect(handleToggleModulo).toHaveBeenCalledWith(['p-agenda-ver'], true);
   });
 
   it('em modo disabled (somente leitura), exibe todas as permissões incluindo as raízes', () => {

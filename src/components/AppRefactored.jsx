@@ -182,6 +182,7 @@ function AppRefactoredInner() {
     canSeeConfigClinica,
     canSeeConfigAgenda,
     canSeeConfigEquipe,
+    canDeleteAgenda,
   } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
@@ -769,6 +770,11 @@ function AppRefactoredInner() {
 
   const handleScheduleConfirmCancelar = React.useCallback(
     async (payload) => {
+      if (!canDeleteAgenda) {
+        toast.error('Sem permissão para cancelar agendamentos.');
+        setScheduleCancelRow(null);
+        return;
+      }
       const row = scheduleCancelRow?.agenda;
       const group = scheduleCancelRow?.groupAppointments;
       if (!row?.agendaId || !payload) {
@@ -821,7 +827,7 @@ function AppRefactoredInner() {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow, toast],
+    [agendaSchedule, canDeleteAgenda, scheduleCancelRow, toast],
   );
 
   const scheduleCancelRetornosVinculados = React.useMemo(() => {
@@ -4978,10 +4984,10 @@ function AppRefactoredInner() {
                       profileNav={profileNav}
                       clearProfileNavSnapshot={clearProfileNavSnapshot}
                       agendaSchedule={agendaSchedule}
-                      onSlotCancelar={(target) => {
+                      onSlotCancelar={canDeleteAgenda ? (target) => {
                         const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                         if (row) setScheduleCancelRow(row);
-                      }}
+                      } : null}
                     />
                   </RoleGuard>
                 )}
@@ -5037,10 +5043,10 @@ function AppRefactoredInner() {
                         clinicaSlug={clinicaInfo.slug}
                         profissionalNome={perfilInfo.nomeCompleto || roleNome}
                         onStartAttendance={handleAgendaStartAttendance}
-                        onSlotCancelar={(target) => {
+                        onSlotCancelar={canDeleteAgenda ? (target) => {
                           const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                           if (row) setScheduleCancelRow(row);
-                        }}
+                        } : null}
                         onSlotReagendar={handleSlotReagendar}
                         shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
                       />
@@ -5170,7 +5176,7 @@ function AppRefactoredInner() {
           <AgendaFormModal agenda={agendaSchedule} />
           <AgendaBloqueioModal agenda={agendaSchedule} />
           {agendaSchedule.foraDispModal}
-          {scheduleCancelRow?.agenda ? (
+          {canDeleteAgenda && scheduleCancelRow?.agenda ? (
             <CancelarAgendaModal
               agenda={scheduleCancelRow.agenda}
               retornosVinculados={scheduleCancelRetornosVinculados}

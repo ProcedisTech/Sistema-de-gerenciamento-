@@ -67,6 +67,8 @@ export function usePapel() {
   const canCreateAgenda         = hasPerm(PERMISSOES.AGENDA_CRIAR, PERFIS_ACESSO.NIVEL_2);
   const canEditAgenda           = hasPerm(PERMISSOES.AGENDA_EDITAR, PERFIS_ACESSO.NIVEL_2);
   const canDeleteAgenda         = hasPerm(PERMISSOES.AGENDA_EXCLUIR, PERFIS_ACESSO.NIVEL_3);
+  const canCancelarAgendamento  = canDeleteAgenda;
+  const canExcluirAgenda        = canDeleteAgenda;
   const canWriteAgenda          = canCreateAgenda || canEditAgenda;
   const canManageBloqueiosAgenda = hasPerm(PERMISSOES.AGENDA_BLOQUEIO_GERENCIAR, PERFIS_ACESSO.NIVEL_3);
   const canManageConfirmacoes   = hasPerm(PERMISSOES.CONFIRMACAO_GERENCIAR, PERFIS_ACESSO.NIVEL_2);
@@ -185,6 +187,8 @@ export function usePapel() {
     canCreateAgenda,
     canEditAgenda,
     canDeleteAgenda,
+    canCancelarAgendamento,
+    canExcluirAgenda,
     canWriteAgenda,
     canManageBloqueiosAgenda,
     canManageConfirmacoes,

@@ -33,6 +33,7 @@ const ehPermissaoRaizModulo = (p) => PERMISSOES_RAIZ_MODULO.has((p.codigo || '')
  */
 export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, disabled = false, loading = false, columns = 2, showModuloActions = false, onToggleModulo }) {
   const [gruposAbertos, setGruposAbertos] = useState(() => new Set());
+  const modulosIniciadosRef = React.useRef(new Set());
 
   const permissoesPorModulo = (permissoes || []).reduce((acc, perm) => {
     const mod = perm.modulo || 'Geral';
@@ -50,25 +51,42 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
   }
 
   const alternarGrupo = (modulo, perms) => {
-    setGruposAbertos(prev => {
-      const next = new Set(prev);
-      if (next.has(modulo)) {
+    const jaAberto = gruposAbertos.has(modulo);
+    if (jaAberto) {
+      setGruposAbertos(prev => {
+        const next = new Set(prev);
         next.delete(modulo);
         return next;
-      }
+      });
+      return;
+    }
+
+    setGruposAbertos(prev => {
+      const next = new Set(prev);
       next.add(modulo);
-      const idsRaiz = perms.filter(ehPermissaoRaizModulo).map(p => p.permissaoId);
-      if (idsRaiz.length) {
-        if (onToggleModulo) {
-          onToggleModulo(idsRaiz, true);
-        } else {
-          idsRaiz.forEach(id => {
-            if (!(selecionadas || []).includes(id)) onChange(id, true);
-          });
-        }
-      }
       return next;
     });
+
+    const idsRaiz = perms.filter(ehPermissaoRaizModulo).map(p => p.permissaoId);
+    const permAgendaPropria = perms.find(p => (p.codigo || '').toUpperCase() === 'AGENDA_PROPRIA_VER');
+    const idsPadraoAbertura = [...idsRaiz];
+
+    const ehPrimeiraAbertura = !modulosIniciadosRef.current.has(modulo);
+    modulosIniciadosRef.current.add(modulo);
+
+    if (ehPrimeiraAbertura && permAgendaPropria && !(selecionadas || []).includes(permAgendaPropria.permissaoId)) {
+      idsPadraoAbertura.push(permAgendaPropria.permissaoId);
+    }
+
+    if (idsPadraoAbertura.length) {
+      if (onToggleModulo) {
+        onToggleModulo(idsPadraoAbertura, true);
+      } else {
+        idsPadraoAbertura.forEach(id => {
+          if (!(selecionadas || []).includes(id)) onChange(id, true);
+        });
+      }
+    }
   };
 
   return (

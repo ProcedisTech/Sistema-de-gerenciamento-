@@ -125,4 +125,26 @@ describe('Catálogo de Permissões e usePapel', () => {
     expect(result.current.isProfissionalClinico).toBe(true);
     expect(result.current.canAparecerNaAgenda).toBe(true);
   });
+
+  it('deve controlar canDeleteAgenda, canCancelarAgendamento e canExcluirAgenda com base em AGENDA_EXCLUIR', () => {
+    vi.mocked(OrgContextModule.useOrg).mockReturnValue({
+      papel: 'CUSTOM_ROLE',
+      permissoes: [PERMISSOES.AGENDA_VER],
+    });
+
+    const { result: semPerm } = renderHook(() => usePapel());
+    expect(semPerm.current.canDeleteAgenda).toBe(false);
+    expect(semPerm.current.canCancelarAgendamento).toBe(false);
+    expect(semPerm.current.canExcluirAgenda).toBe(false);
+
+    vi.mocked(OrgContextModule.useOrg).mockReturnValue({
+      papel: 'CUSTOM_ROLE',
+      permissoes: [PERMISSOES.AGENDA_VER, PERMISSOES.AGENDA_EXCLUIR],
+    });
+
+    const { result: comPerm } = renderHook(() => usePapel());
+    expect(comPerm.current.canDeleteAgenda).toBe(true);
+    expect(comPerm.current.canCancelarAgendamento).toBe(true);
+    expect(comPerm.current.canExcluirAgenda).toBe(true);
+  });
 });
