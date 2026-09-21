@@ -1,7 +1,26 @@
+/* global process */
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
+
+const screenshotsDir = process.env.SCREENSHOTS_DIR || (process.platform === 'win32' ? 'c:/Procedi/screenshots_e2e' : './screenshots_e2e');
+if (!fs.existsSync(screenshotsDir)) {
+  try {
+    fs.mkdirSync(screenshotsDir, { recursive: true });
+  } catch {
+    /* ignore */
+  }
+}
 
 test.describe('Procedi - Full System E2E Flow', () => {
   test.setTimeout(180000); // 3 minutes timeout for complete multi-step flow
+
+  test.beforeEach(async () => {
+    test.skip(
+      !!process.env.CI && !process.env.E2E_LIVE_BACKEND,
+      'Teste E2E de integração requer backend Spring Boot e banco ativo (ignorado no CI isolado).'
+    );
+  });
 
   test('executa fluxo completo ponta a ponta no sistema', async ({ page }) => {
     // Configura viewport padrão desktop grande
@@ -33,7 +52,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
     await page.waitForSelector('nav', { timeout: 30000 });
     const pacientesNavBtn = page.locator('button[title="Pacientes"]').or(page.locator('nav button:has-text("Pacientes")')).first();
     await expect(pacientesNavBtn).toBeVisible({ timeout: 20000 });
-    await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/01_dashboard.png', fullPage: true });
+    await page.screenshot({ path: path.join(screenshotsDir, '01_dashboard.png'), fullPage: true });
     console.log('>>> [OK] Dashboard carregado com sucesso!');
 
     // ----------------------------------------------------
@@ -46,7 +65,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
     
     const membrosTab = page.locator('button:has-text("Membros da Equipe")').or(page.locator('button:has-text("Membros")')).first();
     await expect(membrosTab).toBeVisible();
-    await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/02_gestao_equipe_membros.png', fullPage: true });
+    await page.screenshot({ path: path.join(screenshotsDir, '02_gestao_equipe_membros.png'), fullPage: true });
 
     // Aba Perfis de Acesso
     console.log('>>> Acessando aba Perfis de Acesso...');
@@ -85,7 +104,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
       const salvarPerfilBtn = page.locator('button[type="submit"]:has-text("Salvar Alterações")').or(page.locator('button:has-text("Salvar")')).first();
       await salvarPerfilBtn.click();
       await page.waitForTimeout(3000);
-      await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/03_perfil_customizado_criado.png', fullPage: true });
+      await page.screenshot({ path: path.join(screenshotsDir, '03_perfil_customizado_criado.png'), fullPage: true });
       console.log('>>> [OK] Perfil Customizado criado com permissões com sucesso!');
     }
 
@@ -99,7 +118,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
     if (await editMemberBtn.isVisible()) {
       await editMemberBtn.click();
       await page.waitForTimeout(1500);
-      await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/04_modal_editar_membro.png', fullPage: true });
+      await page.screenshot({ path: path.join(screenshotsDir, '04_modal_editar_membro.png'), fullPage: true });
       
       // Fecha modal de edição pelo botão X ou Escape
       const closeBtn = page.locator('div.fixed.inset-0 button').filter({ has: page.locator('svg') }).first();
@@ -182,7 +201,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
     await salvarPacienteBtn.click();
     // Aguarda o salvamento e o retorno automático para a lista (1.5s)
     await page.waitForTimeout(4000);
-    await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/05_paciente_cadastrado.png', fullPage: true });
+    await page.screenshot({ path: path.join(screenshotsDir, '05_paciente_cadastrado.png'), fullPage: true });
     console.log('>>> [OK] Paciente cadastrado com sucesso!');
 
     // Garante que qualquer modal aberto seja fechado
@@ -196,7 +215,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
     const agendaNavBtn = page.locator('button[title="Agenda"]').or(page.locator('nav button:has-text("Agenda")')).first();
     await agendaNavBtn.click();
     await page.waitForTimeout(2500);
-    await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/06_agenda_dashboard.png', fullPage: true });
+    await page.screenshot({ path: path.join(screenshotsDir, '06_agenda_dashboard.png'), fullPage: true });
 
     // Abrir Modal de Agendamento
     console.log('>>> Abrindo criação de Agendamento...');
@@ -216,7 +235,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
         }
       }
 
-      await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/07_modal_agendamento.png', fullPage: true });
+      await page.screenshot({ path: path.join(screenshotsDir, '07_modal_agendamento.png'), fullPage: true });
       console.log('>>> [OK] Modal de agendamento validado com sucesso!');
       
       // Fecha modal de agendamento
@@ -241,11 +260,11 @@ test.describe('Procedi - Full System E2E Flow', () => {
       const iniciarAtendimentoBtn = page.locator('button:has-text("Iniciar Atendimento")').or(page.locator('button:has-text("Iniciar atendimento")')).first();
       if (await iniciarAtendimentoBtn.isVisible()) {
         console.log('>>> Botão Iniciar Atendimento visível no prontuário!');
-        await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/08_prontuario_paciente.png', fullPage: true });
+        await page.screenshot({ path: path.join(screenshotsDir, '08_prontuario_paciente.png'), fullPage: true });
         
         await iniciarAtendimentoBtn.click();
         await page.waitForTimeout(2500);
-        await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/09_atendimento_clinico.png', fullPage: true });
+        await page.screenshot({ path: path.join(screenshotsDir, '09_atendimento_clinico.png'), fullPage: true });
         console.log('>>> [OK] Fluxo de atendimento clínico iniciado com sucesso!');
 
         // Fecha fluxo/modal com Escape
@@ -265,7 +284,7 @@ test.describe('Procedi - Full System E2E Flow', () => {
     if (await auditoriaTabBtn.isVisible()) {
       await auditoriaTabBtn.click();
       await page.waitForTimeout(3000);
-      await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/10_auditoria_historico.png', fullPage: true });
+      await page.screenshot({ path: path.join(screenshotsDir, '10_auditoria_historico.png'), fullPage: true });
       console.log('>>> [OK] Trilha de Auditoria validada com sucesso!');
     }
 

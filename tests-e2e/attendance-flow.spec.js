@@ -1,7 +1,26 @@
+/* global process */
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
+
+const screenshotsDir = process.env.SCREENSHOTS_DIR || (process.platform === 'win32' ? 'c:/Procedi/screenshots_e2e' : './screenshots_e2e');
+if (!fs.existsSync(screenshotsDir)) {
+  try {
+    fs.mkdirSync(screenshotsDir, { recursive: true });
+  } catch {
+    /* ignore */
+  }
+}
 
 test.describe('Procedi - Attendance & Clinical Journey Flow', () => {
   test.setTimeout(90000);
+
+  test.beforeEach(async () => {
+    test.skip(
+      !!process.env.CI && !process.env.E2E_LIVE_BACKEND,
+      'Teste E2E de integração requer backend Spring Boot e banco ativo (ignorado no CI isolado).'
+    );
+  });
 
   test('abre prontuario do paciente e valida inicio de atendimento', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
@@ -31,7 +50,7 @@ test.describe('Procedi - Attendance & Clinical Journey Flow', () => {
     const verMaisBtn = page.locator('button:has-text("Ver mais")').last();
     await verMaisBtn.click();
     await page.waitForTimeout(2000);
-    await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/08_prontuario_paciente.png', fullPage: true });
+    await page.screenshot({ path: path.join(screenshotsDir, '08_prontuario_paciente.png'), fullPage: true });
     console.log('>>> [OK] Prontuário aberto com sucesso!');
 
     // Localiza e clica no botão "Iniciar Atendimento" visível no drawer
@@ -40,7 +59,7 @@ test.describe('Procedi - Attendance & Clinical Journey Flow', () => {
     await expect(iniciarBtn).toBeVisible({ timeout: 10000 });
     await iniciarBtn.click();
     await page.waitForTimeout(3000);
-    await page.screenshot({ path: 'c:/Procedi/screenshots_e2e/09_atendimento_clinico.png', fullPage: true });
+    await page.screenshot({ path: path.join(screenshotsDir, '09_atendimento_clinico.png'), fullPage: true });
     console.log('>>> [OK] Atendimento Clínico iniciado com sucesso!');
   });
 });
