@@ -113,7 +113,7 @@ export function usePapel() {
 
   // ── Módulo: Documentos & Assinaturas ─────────────────────────────────────
   const canSeeDocumentos        = hasPerm(PERMISSOES.PACIENTE_DOCUMENTO_VER, PERFIS_ACESSO.NIVEL_3);
-  const canCreateAssinaturaDigital = canSeeHubTermos; // Unificado em HUB_TERMOS_VER (V164)
+  const canCreateAssinaturaDigital = canSeeHubTermos; // Unificado em HUB_TERMOS_VER (V163)
   const canSeeConfigTermos      = hasPerm(PERMISSOES.DOC_MODELO_VER, PERFIS_ACESSO.NIVEL_4);
   const canEditConfigTermos     = hasPerm(PERMISSOES.DOC_MODELO_EDITAR, PERFIS_ACESSO.NIVEL_5);
 
