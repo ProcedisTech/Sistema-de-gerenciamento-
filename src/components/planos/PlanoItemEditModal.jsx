@@ -10,6 +10,7 @@ function PlanoItemEditForm({
   catalogoOptions,
   catalogoLoading,
   mutating,
+  canEditPreco = true,
   onClose,
   onSave,
 }) {
@@ -63,9 +64,9 @@ function PlanoItemEditForm({
         />
         <ValorOrcadoInput
           value={valorDisplay}
-          disabled={mutating}
+          disabled={mutating || !canEditPreco}
           onChange={setValorDisplay}
-          className="w-full rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-2.5 text-[13px] font-medium outline-none focus:border-[#00a88e] focus:ring-4 focus:ring-[#00a88e]/10"
+          className="w-full rounded-xl border border-slate-200 bg-[#f8fbfb] px-4 py-2.5 text-[13px] font-medium outline-none focus:border-[#00a88e] focus:ring-4 focus:ring-[#00a88e]/10 disabled:opacity-60 disabled:cursor-not-allowed"
         />
         <AppDateInput value={data} disabled={mutating} onChange={(e) => setData(e.target.value)} />
       </div>
@@ -98,6 +99,7 @@ export function PlanoItemEditModal({
   catalogoOptions,
   catalogoLoading,
   mutating,
+  canEditPreco = true,
   onClose,
   onSave,
 }) {
@@ -114,7 +116,7 @@ export function PlanoItemEditModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+        className="w-full max-w-md rounded-2xl border border-app-border bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <PlanoItemEditForm
@@ -123,6 +125,7 @@ export function PlanoItemEditModal({
           catalogoOptions={catalogoOptions}
           catalogoLoading={catalogoLoading}
           mutating={mutating}
+          canEditPreco={canEditPreco}
           onClose={onClose}
           onSave={onSave}
         />

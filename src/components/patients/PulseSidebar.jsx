@@ -119,7 +119,7 @@ function AgendaRow({
   onSolicitarAnamnese,
   onSlotCancelar,
 }) {
-  const { isNivel1, canStartAnamnese } = usePapel();
+  const { isNivel1, canStartAnamnese, canDeleteAgenda } = usePapel();
   const nome = slot?.pacienteNome || 'Paciente';
   const hora = slot?.horaInicio ? String(slot.horaInicio).slice(0, 5) : '';
   const procedimento = slot?.procedimentoNome || '';
@@ -155,14 +155,14 @@ function AgendaRow({
         <div className="border-t border-[#f1f5f9] pt-2">
           <AgendaRailCardActions
             appointment={slot}
-            actions={getRailCardActions(slot.status, canStartAnamnese)}
+            actions={getRailCardActions(slot.status, canStartAnamnese, Boolean(canDeleteAgenda && onSlotCancelar))}
             compact={true}
             onConfirmar={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'confirmado')}
             onIniciarAtendimento={() => onStartAttendance?.(slot)}
             onWhatsApp={() => agendaSchedule.handleEnviarWhatsApp(slot.agendaId)}
             onEnviarAnamnese={() => onSolicitarAnamnese?.(slot)}
             onReagendar={() => agendaSchedule.openReagendarModal(slot, [slot])}
-            onCancelar={() => onSlotCancelar?.(slot)}
+            onCancelar={canDeleteAgenda && onSlotCancelar ? () => onSlotCancelar?.(slot) : null}
           />
         </div>
       )}

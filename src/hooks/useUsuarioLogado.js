@@ -23,16 +23,20 @@ export function isClinicalRoleCodigo(roleCodigo) {
 }
 
 export function useUsuarioLogado() {
-  const { roleUserId, roleNome } = useOrg();
+  const { roleUserId, roleNome, apareceNaAgenda } = useOrg();
 
   return useMemo(() => {
     const role = normalizeRoleCodigo(roleNome);
-    const ehProfissionalClinico = isClinicalRoleCodigo(role);
+    const ehProfissionalClinico = typeof apareceNaAgenda === 'boolean'
+      ? apareceNaAgenda
+      : isClinicalRoleCodigo(role);
+
     return {
       roleUserId: roleUserId ? String(roleUserId) : '',
       role,
       roleNome: roleNome ? String(roleNome) : '',
       ehProfissionalClinico,
+      apareceNaAgenda,
     };
-  }, [roleUserId, roleNome]);
+  }, [roleUserId, roleNome, apareceNaAgenda]);
 }

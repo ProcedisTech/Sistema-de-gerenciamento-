@@ -42,3 +42,7 @@ diff_availability.txt
 # Documentos exportados para leitura / WhatsApp
 docs_export/
 *.html
+
+# Playwright Test Artifacts
+playwright-report/
+test-results/

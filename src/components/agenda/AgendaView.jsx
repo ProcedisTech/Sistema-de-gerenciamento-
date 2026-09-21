@@ -3,6 +3,7 @@ import { Calendar, Loader2, UserPlus } from 'lucide-react';
 import { AgendaModal } from './AgendaModal';
 import { MarcarCompromissoModal } from './MarcarCompromissoModal';
 import CancelarAgendaModal from './CancelarAgendaModal.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 
 export function AgendaView({
   openAgendaModal,
@@ -30,6 +31,7 @@ export function AgendaView({
   agendasLoading,
   agendasError,
 }) {
+  const { canDeleteAgenda } = usePapel();
   const stats = agendaStats || {
     monthTotal: monthPatientCpfs?.size ?? 0,
     monthConfirmed: monthConfirmedPatientCpfs?.size ?? 0,
@@ -237,7 +239,7 @@ export function AgendaView({
                             <UserPlus className="w-3.5 h-3.5" /> Marcar atendimento
                           </button>
                         )}
-                        {status !== 'cancelado' && (
+                        {status !== 'cancelado' && canDeleteAgenda && (
                           <button
                             type="button"
                             onClick={() => openCancelAppointmentModal(a.id)}
@@ -258,7 +260,7 @@ export function AgendaView({
 
       <AgendaModal {...agendaModalProps} />
       <MarcarCompromissoModal {...compromissoModalProps} />
-      {cancelModalSlotId ? (
+      {canDeleteAgenda && cancelModalSlotId ? (
         <CancelarAgendaModal
           agenda={null}
           onClose={closeCancelAppointmentModal}

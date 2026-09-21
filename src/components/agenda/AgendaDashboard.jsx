@@ -21,6 +21,7 @@ import { agendaEnterClass } from './agendaEnterClasses.js';
 import { useAgendaKeyboardShortcuts } from './hooks/useAgendaKeyboardShortcuts.js';
 import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { useToast } from '../../contexts/useToast.js';
+import { usePapel } from '../../hooks/usePapel.js';
 import { buildAdvanceOffersByAgendaId } from '../../utils/agendaAdvanceOffer.js';
 import { addMinutesToTime } from '../../utils/agendaMapping.js';
 import {
@@ -195,6 +196,7 @@ export function AgendaDashboard({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const isMobile = !isDesktop;
   const toast = useToast();
+  const { canDeleteAgenda } = usePapel();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
@@ -288,7 +290,9 @@ export function AgendaDashboard({
     [listDaySummary],
   );
 
-  const showProfissional = (agenda.equipeList?.length || 0) > 1;
+  const showProfissional =
+    (agenda.canSeeAgendaMulti !== false) &&
+    ((agenda.equipeList?.filter((p) => p.apareceNaAgenda !== false).length || 0) > 1);
 
   const todayAppointments = React.useMemo(() => {
     return agenda.appointments.filter((item) => String(item.data) === String(agenda.todayIso));
@@ -402,7 +406,7 @@ export function AgendaDashboard({
             }
             if (primary.agendaId) agenda.handleAtualizarStatus(primary.agendaId, 'realizado');
           }}
-          onMarcarNaoCompareceu={async () => {
+          onMarcarNaoCompareceu={canDeleteAgenda ? async () => {
             if (isGroup) {
               const result = await applyGroupActionAndRefresh(
                 items,
@@ -417,15 +421,16 @@ export function AgendaDashboard({
               return;
             }
             if (primary.agendaId) agenda.handleMarcarNaoCompareceu(primary.agendaId);
-          }}
+          } : null}
           onReagendar={() => {
             closeOverlay?.();
             onSlotReagendar?.(items.length > 1 ? target : primary);
           }}
-          onCancelar={() => {
+          onCancelar={canDeleteAgenda && onSlotCancelar ? () => {
             closeOverlay?.();
             onSlotCancelar?.(items.length > 1 ? target : primary);
-          }}
+          } : null}
+          canCancelar={Boolean(canDeleteAgenda && onSlotCancelar)}
           onEnviarWhatsApp={async () => {
             if (isGroup) {
               const result = await applyGroupActionAndRefresh(
@@ -447,7 +452,7 @@ export function AgendaDashboard({
         />
       );
     },
-    [agenda, batchRefresh, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese],
+    [agenda, batchRefresh, canDeleteAgenda, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese],
   );
 
   const handlePrimary = React.useCallback((target) => {
@@ -682,7 +687,7 @@ export function AgendaDashboard({
     onWhatsApp: handleRailWhatsApp,
     onEnviarAnamnese: handleRailAnamnese,
     onReagendar: handleRailReagendar,
-    onCancelar: handleRailCancelar,
+    onCancelar: canDeleteAgenda && onSlotCancelar ? handleRailCancelar : null,
     onRemoverBloqueio: agenda.handleRemoverBloqueio,
     onOpenSlotDetail: onOpenWeekSlotDetail,
     submittingRemoverBloqueioId: agenda.submittingRemoverBloqueioId,

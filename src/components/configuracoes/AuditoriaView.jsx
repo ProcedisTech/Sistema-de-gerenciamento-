@@ -5,6 +5,7 @@ import {
   Search,
   FileText,
   AlertTriangle,
+  Shield,
 } from 'lucide-react';
 import { auditoriaApi, equipeApi } from '../../services/api';
 import { AuditoriaDetailsModal } from './AuditoriaDetailsModal';
@@ -42,8 +43,7 @@ function calcularDataLimite(periodo) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function AuditoriaView() {
-  const { hasPerm } = usePapel();
-  const canExportPdf = hasPerm('PDF_EXPORTAR', 'NIVEL_5');
+  const { canExportPdf } = usePapel();
   const toast = useToast();
 
   const [registros, setRegistros] = useState([]);
@@ -116,6 +116,11 @@ export function AuditoriaView() {
       const q = busca.toLowerCase();
       lista = lista.filter(r =>
         r.nomeUsuario?.toLowerCase().includes(q) ||
+        r.papel?.toLowerCase().includes(q) ||
+        r.perfilAcessoNome?.toLowerCase().includes(q) ||
+        r.permissaoNome?.toLowerCase().includes(q) ||
+        r.permissaoCodigo?.toLowerCase().includes(q) ||
+        r.permissaoModulo?.toLowerCase().includes(q) ||
         r.acao?.toLowerCase().includes(q) ||
         r.entidade?.toLowerCase().includes(q) ||
         r.descricao?.toLowerCase().includes(q) ||
@@ -180,6 +185,31 @@ export function AuditoriaView() {
     </div>
   );
 
+function sanitizeForPdf(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/[\u2190-\u21FF\u2790-\u27BF]/g, ' -> ')
+    .replace(/➔|➜|→|➡/g, ' -> ')
+    .replace(/—|–/g, ' - ')
+    .replace(/[•·]/g, ' | ')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\r\n/g, '\n')
+    .trim();
+}
+
+function formatDescricaoForPdf(desc) {
+  if (!desc) return '-';
+  const clean = sanitizeForPdf(desc);
+  if (clean.includes(' - Alterado: ')) {
+    const parts = clean.split(' - Alterado: ');
+    const titulo = parts[0];
+    const diffs = parts[1];
+    return `${titulo}\nAlterado: ${diffs}`;
+  }
+  return clean;
+}
+
   const exportarParaPDF = async () => {
     try {
       await auditoriaApi.registrarExportacao();
@@ -199,7 +229,7 @@ export function AuditoriaView() {
         doc.setFontSize(11);
         let linhaAtual = 30;
         if (clinica && clinica.nomeFantasia) {
-          doc.text(`${clinica.nomeFantasia}${clinica.cnpj ? ` - CNPJ: ${clinica.cnpj}` : ''}`, 14, linhaAtual);
+          doc.text(`${sanitizeForPdf(clinica.nomeFantasia)}${clinica.cnpj ? ` - CNPJ: ${sanitizeForPdf(clinica.cnpj)}` : ''}`, 14, linhaAtual);
           linhaAtual += 6;
         }
         doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`, 14, linhaAtual);
@@ -211,19 +241,27 @@ export function AuditoriaView() {
           linhaAtual += 6;
         }
 
-        const tableColumn = ["Data e Hora", "Profissional", "Ação", "Módulo", "Descrição", "IP", "Suspeito?"];
+        const tableColumn = ["Data e Hora", "Profissional", "Perfil", "Ação (Permissão)", "Módulo", "Descrição", "IP", "Suspeito"];
         const tableRows = [];
 
         filtrados.forEach(item => {
           const acaoMap = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação' };
+          const acaoComPermissao = item.permissaoNome
+            ? `${acaoMap.label} (${sanitizeForPdf(item.permissaoNome)})`
+            : acaoMap.label;
+
+          const perfilTexto = item.perfilAcessoNome
+            ? `${sanitizeForPdf(item.papel)} | ${sanitizeForPdf(item.perfilAcessoNome)}`
+            : (sanitizeForPdf(item.papel) || '-');
 
           const rowData = [
             formatData(item.criadoEm),
-            item.nomeUsuario,
-            acaoMap.label,
-            item.entidade,
-            item.descricao || '-',
-            item.ipOrigem || 'Desconhecido',
+            sanitizeForPdf(item.nomeUsuario),
+            perfilTexto,
+            sanitizeForPdf(acaoComPermissao),
+            sanitizeForPdf(item.entidade),
+            formatDescricaoForPdf(item.descricao),
+            sanitizeForPdf(item.ipOrigem || 'Desconhecido'),
             item.suspeito ? 'SIM' : 'NÃO'
           ];
           tableRows.push(rowData);
@@ -233,16 +271,31 @@ export function AuditoriaView() {
           head: [tableColumn],
           body: tableRows,
           startY: linhaAtual,
-          styles: { fontSize: 9 },
-          headStyles: { fillColor: [0, 168, 142] },
+          margin: { left: 10, right: 10 },
+          styles: { 
+            fontSize: 7.5, 
+            cellPadding: 2, 
+            overflow: 'linebreak',
+            valign: 'top'
+          },
+          headStyles: { 
+            fillColor: [0, 168, 142],
+            textColor: 255,
+            fontStyle: 'bold',
+            valign: 'middle'
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252]
+          },
           columnStyles: {
-            0: { cellWidth: 32 },
-            1: { cellWidth: 35 },
-            2: { cellWidth: 35 },
-            3: { cellWidth: 25 },
-            4: { cellWidth: 'auto' },
-            5: { cellWidth: 28 },
-            6: { cellWidth: 20 }
+            0: { cellWidth: 25 },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 26 },
+            3: { cellWidth: 35 },
+            4: { cellWidth: 20 },
+            5: { cellWidth: 'auto' },
+            6: { cellWidth: 25 },
+            7: { cellWidth: 16 }
           }
         });
 
@@ -395,7 +448,9 @@ export function AuditoriaView() {
                       <div className="font-bold text-base text-slate-900 truncate leading-tight">
                         {item.nomeUsuario}
                       </div>
-                      <div className="text-xs font-medium text-slate-400 truncate mt-0.5">{item.papel}</div>
+                      <div className="text-xs font-medium text-slate-400 truncate mt-0.5">
+                        {item.papel}{item.perfilAcessoNome ? ` • ${item.perfilAcessoNome}` : ''}
+                      </div>
                     </div>
                   </div>
                   <span className={`shrink-0 px-2.5 py-1 border rounded-md text-[10px] uppercase tracking-wider font-bold ${BADGE_CORES[acao.cor]}`}>
@@ -409,7 +464,7 @@ export function AuditoriaView() {
                   </div>
                 )}
 
-                {/* linha 2: data + entidade */}
+                {/* linha 2: data + entidade + permissao */}
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100/50">
                   <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
                     <Clock className="h-4 w-4 text-slate-400" />
@@ -419,6 +474,12 @@ export function AuditoriaView() {
                     <div className="text-slate-400">{getIconForEntidade(item.entidade)}</div>
                     {formatarEntidade(item.entidade)}
                   </span>
+                  {item.permissaoNome && (
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100/70" title={item.permissaoCodigo}>
+                      <Shield className="w-3 h-3 text-teal-600 shrink-0" />
+                      [{item.permissaoModulo || 'RBAC'}] {item.permissaoNome}
+                    </span>
+                  )}
                 </div>
 
                 {/* linha 3: descrição + botão de detalhes */}
@@ -511,7 +572,9 @@ export function AuditoriaView() {
                           </div>
                           <div className="flex flex-col">
                             <span className="font-bold text-[14px] text-slate-900 group-hover:text-teal-700 transition-colors">{item.nomeUsuario}</span>
-                            <span className="text-[12px] font-medium text-slate-400">{item.papel}</span>
+                            <span className="text-[12px] font-medium text-slate-400">
+                              {item.papel}{item.perfilAcessoNome ? ` • ${item.perfilAcessoNome}` : ''}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -519,6 +582,12 @@ export function AuditoriaView() {
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${BADGE_CORES[acao.cor]}`}>
                           {acao.label}
                         </span>
+                        {item.permissaoNome && (
+                          <div className="mt-1 flex items-center gap-1 text-teal-700 text-[11px] font-semibold" title={item.permissaoCodigo}>
+                            <Shield className="w-3 h-3 text-teal-600 shrink-0" />
+                            <span className="truncate max-w-[170px]">[{item.permissaoModulo || 'RBAC'}] {item.permissaoNome}</span>
+                          </div>
+                        )}
                         {item.suspeito && (
                           <div className="mt-1 flex items-center gap-1 text-red-600 text-[10px] font-bold">
                             <AlertTriangle className="w-3 h-3" /> SUSPEITO

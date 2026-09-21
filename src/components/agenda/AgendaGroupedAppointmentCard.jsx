@@ -43,12 +43,13 @@ export function AgendaGroupedAppointmentCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
-  const { canStartAnamnese } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda } = usePapel();
   if (!primary) return null;
 
   const badge = getGroupedStatusBadgePresentation(appointments);
   const stripe = getGroupedRailStripeClass(appointments);
-  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese);
+  const canCancelar = Boolean(canDeleteAgenda && onCancelar);
+  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese, canCancelar);
   const idsLabel = appointments
     .map((a) => formatAgendaShortId(a.agendaId || a.id))
     .join(' ');
@@ -107,7 +108,7 @@ export function AgendaGroupedAppointmentCard({
             onIniciarAtendimento={() => onIniciarAtendimento?.(group)}
             onWhatsApp={() => onWhatsApp?.(group)}
             onReagendar={() => onReagendar?.(group)}
-            onCancelar={() => onCancelar?.(group)}
+            onCancelar={canCancelar ? () => onCancelar?.(group) : null}
             onEnviarAnamnese={() => onEnviarAnamnese?.(group)}
           />
         ) : null}

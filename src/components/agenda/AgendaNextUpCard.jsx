@@ -21,11 +21,12 @@ export function AgendaNextUpCard({
   onCancelar,
   onOpenSlotDetail,
 }) {
-  const { canStartAnamnese } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda } = usePapel();
   if (!appointment) return null;
 
   const countdown = formatCountdown(appointment.horaInicio, now);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese);
+  const canCancelar = Boolean(canDeleteAgenda && onCancelar);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar);
 
   return (
     <article
@@ -80,7 +81,7 @@ export function AgendaNextUpCard({
             onWhatsApp={onWhatsApp}
             onEnviarAnamnese={onEnviarAnamnese}
             onReagendar={onReagendar}
-            onCancelar={onCancelar}
+            onCancelar={canCancelar ? onCancelar : null}
           />
         </div>
       ) : null}

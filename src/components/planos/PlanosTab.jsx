@@ -49,6 +49,7 @@ import { PlanoItemEditModal } from './PlanoItemEditModal.jsx';
 import { PlanoConcluirRetornoConfirmModal } from './PlanoConcluirRetornoConfirmModal.jsx';
 import { PlanoEncerrarConfirmModal } from './PlanoEncerrarConfirmModal.jsx';
 import { ValorOrcadoInput } from './ValorOrcadoInput.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 import { PlanoVisitasTimeline } from './PlanoVisitasTimeline.jsx';
 import { resolverFotosEPlanos } from '../../utils/planoGaleriaResolver.js';
 import { normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
@@ -1128,7 +1129,7 @@ export function PlanosTab({
   } = usePlanoDraft();
   const hydratedPlanIdsRef = useRef(new Set());
   const toast = useToast();
-
+  const { canEditPrecosOrcados } = usePapel();
   const { options: catalogoOptions, loading: catalogoLoading } = useProcedimentosOptions();
   const [expandidos, setExpandidos] = useState({});
   const [_novoItemPorPlano, _setNovoItemPorPlano] = useState({});
@@ -2013,6 +2014,7 @@ export function PlanosTab({
     [catalogoOptions, editItemState, updateItem],
   );
 
+
   const displayError = actionError || error;
 
   const renderConsultaPlanosList = () => {
@@ -2690,6 +2692,7 @@ export function PlanosTab({
         catalogoOptions={catalogoOptions}
         catalogoLoading={catalogoLoading}
         mutating={mutating || Boolean(savingPlanoId)}
+        canEditPreco={canEditPrecosOrcados}
         onClose={() => setEditItemState(null)}
         onSave={handleEditItemSave}
       />

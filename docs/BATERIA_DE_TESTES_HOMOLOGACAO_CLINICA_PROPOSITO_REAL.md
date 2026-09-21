@@ -39,6 +39,7 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
   - O item de planejamento aparece listado com status **"PLANEJADO"** (ou badge correspondente) e botão de **"Agendar"** visível.
   - O valor total do plano reflete exatamente R$ 1.800,00.
 - **Validação no Banco de Dados**:
+
   ```sql
   SELECT id, paciente_id, titulo, status, valor_total FROM planos_tratamento WHERE paciente_id = '<ID_PACIENTE>';
   SELECT id, plano_id, procedimento_id, sessoes_total, sessoes_feitas, status FROM itens_planejamento WHERE plano_id = '<ID_PLANO>';
@@ -46,6 +47,7 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
 
   - _1 registro em `planos_tratamento` com status correspondente e valor 1800.00._
   - _1 registro em `itens_planejamento` associado ao plano com `sessoes_total = 1` e `sessoes_feitas = 0`._
+
 - **O que NÃO pode acontecer**: Erro 500 no backend; card sumir após F5; valor total zerado.
 - [ ] Aprovado | [ ] Reprovado
 
@@ -127,12 +129,14 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
   - No plano de tratamento, o item passa para o status **"AGENDADO"**, exibindo a data, hora e nome do profissional.
   - Na tela da **Agenda**, no dia e horário selecionados, o compromisso aparece no slot com tag de identificação do plano.
 - **Validação no Banco de Dados**:
+
   ```sql
   SELECT id, paciente_id, procedimento_id, planejamento_item_id, data_hora_inicio, status
   FROM agendamentos WHERE planejamento_item_id = '<ID_ITEM>';
   ```
 
   - `planejamento_item_id` deve estar estritamente preenchido apontando para o item.
+
 - [ ] Aprovado | [ ] Reprovado
 
 ---
@@ -227,6 +231,7 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
     - Na aba **"Planos & Evolução"**, o item do plano avança de sessão (ex: de 0/1 para 1/1, ou de 1/3 para 2/3).
     - As fotos registradas aparecem na visita correspondente do plano.
 - **Validação no Banco de Dados**:
+
   ```sql
   SELECT id, paciente_id, procedimento_id, planejamento_item_id, status, observacao, profissional_id, criado_em
   FROM procedimentos_feitos WHERE paciente_id = '<ID_PACIENTE>' ORDER BY criado_em DESC LIMIT 1;
@@ -234,6 +239,7 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
 
   - `planejamento_item_id` deve corresponder ao ID do item do plano.
   - `itens_planejamento.sessoes_feitas` incrementado em +1.
+
 - [ ] Aprovado | [ ] Reprovado
 
 ---
@@ -328,12 +334,14 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
     - `AVALIAÇÃO · 1 FOTO` (com miniatura)
   - Layout limpo, sem sobreposição, com badges neutros e rolagem horizontal suave em cada prateleira se houver mais fotos.
 - **Validação no Banco de Dados**:
+
   ```sql
   SELECT id, paciente_id, categoria, planejamento_item_id, procedimento_feito_id, url
   FROM paciente_galeria_arquivos WHERE paciente_id = '<ID_PACIENTE>' ORDER BY criado_em DESC;
   ```
 
   - Cada arquivo com sua respectiva categoria (`antes`, `mapa`, `depois`, `avaliacao`) e chaves estrangeiras preenchidas.
+
 - [ ] Aprovado | [ ] Reprovado
 
 ---
@@ -350,11 +358,13 @@ _Critério de Liberação: 100% dos testes Críticos e Altos aprovados sem desvi
   - A miniatura exibe os círculos vermelhos/brancos com as marcações perfeitamente alinhadas sobre a foto base.
   - No lightbox em tela cheia, os pontos escalam perfeitamente junto com a imagem sem deslocamento de coordenadas.
 - **Validação no Banco**:
+
   ```sql
   SELECT id, foto_id, marcacoes_json FROM mapas_marcacao WHERE foto_id = '<ID_FOTO>';
   ```
 
   - `marcacoes_json` contém o array com as coordenadas `x`, `y` (em porcentagem relativa) e dosagens.
+
 - [ ] Aprovado | [ ] Reprovado
 
 ---

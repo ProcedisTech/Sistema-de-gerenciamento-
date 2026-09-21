@@ -877,12 +877,12 @@ export function AgendaFormModal({ agenda }) {
               <div className="[&_input]:!h-[38px] [&_input]:!py-2 [&_>div]:min-h-[38px]">
                 <ProfissionalSearchInput
                   roleUserIdAgenda={agenda.roleUserIdAgenda}
-                  equipeList={agenda.equipeList}
+                  equipeList={(agenda.equipeList || []).filter((p) => p.apareceNaAgenda !== false)}
                   equipeLoading={agenda.equipeLoading}
                   equipeError={agenda.equipeError}
                   onSelecionar={(id) => agenda.setRoleUserIdAgenda(id)}
                   onClear={() => agenda.setRoleUserIdAgenda('')}
-                  locked={isReagendar || lockPlanejamento}
+                  locked={isReagendar || lockPlanejamento || (!agenda.canSeeAgendaMulti && Boolean(agenda.roleUserId))}
                 />
               </div>
             </div>

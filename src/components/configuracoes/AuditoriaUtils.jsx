@@ -2,7 +2,32 @@ import React from 'react';
 import { User, Calendar, FileText, Activity } from 'lucide-react';
 
 export const ACOES_MAP = {
-  // Paciente
+  // Códigos Canônicos RBAC
+  PACIENTE_CRIAR:         { label: 'Criou paciente',        cor: 'green' },
+  PACIENTE_EDITAR:        { label: 'Editou paciente',        cor: 'blue' },
+  PACIENTE_EXCLUIR:       { label: 'Inativou paciente',      cor: 'red' },
+  AGENDA_CRIAR:           { label: 'Criou agenda',           cor: 'green' },
+  AGENDA_EDITAR:          { label: 'Editou agenda',          cor: 'blue' },
+  AGENDA_EXCLUIR:         { label: 'Cancelou agenda',        cor: 'red' },
+  USUARIO_CRIAR:          { label: 'Criou membro',           cor: 'green' },
+  USUARIO_EDITAR:         { label: 'Editou membro',          cor: 'blue' },
+  USUARIO_EXCLUIR:        { label: 'Desativou membro',       cor: 'red' },
+  PERFIL_ACESSO_EDITAR:   { label: 'Editou perfil',          cor: 'purple' },
+  PRONTUARIO_CRIAR:       { label: 'Atendimento clínico',    cor: 'purple' },
+  PACIENTE_NOTA_CRIAR:    { label: 'Criou nota',             cor: 'green' },
+  PACIENTE_NOTA_EDITAR:   { label: 'Editou nota',            cor: 'blue' },
+  ANAMNESE_PREENCHIMENTO_CRIAR: { label: 'Preencheu anamnese', cor: 'purple' },
+  ANAMNESE_MODELO_EDITAR: { label: 'Editou modelo anamnese', cor: 'blue' },
+  CLINICA_EDITAR:         { label: 'Editou dados clínica',   cor: 'blue' },
+  HORARIO_EDITAR:         { label: 'Editou horários',        cor: 'blue' },
+  FERIADO_EDITAR:         { label: 'Gerenciou feriado',      cor: 'purple' },
+  DOCUMENTO_ASSINATURA_CRIAR: { label: 'Assinatura de termo', cor: 'purple' },
+  HUB_TERMOS_VER:             { label: 'Assinatura de termo', cor: 'purple' },
+  DOC_MODELO_EDITAR:      { label: 'Editou modelo de termo', cor: 'blue' },
+  CATALOGO_EDITAR:        { label: 'Editou catálogo',        cor: 'blue' },
+  PDF_EXPORTAR:           { label: 'Exportou PDF',           cor: 'purple' },
+
+  // Paciente (Legado)
   CRIAR_PACIENTE:         { label: 'Criou paciente',        cor: 'green' },
   EDITAR_PACIENTE:        { label: 'Editou paciente',        cor: 'blue' },
   DESATIVAR_PACIENTE:     { label: 'Inativou paciente',      cor: 'red' },

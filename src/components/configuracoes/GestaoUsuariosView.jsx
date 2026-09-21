@@ -208,6 +208,15 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
     return { total, ativos, medicos };
   }, [usuarios]);
 
+  const filteredUsers = React.useMemo(() => {
+    return usuarios.filter(u => {
+      const matchName = searchName === '' || (u.nomeCompleto || u.usuarioNome || '').toLowerCase().includes(searchName.toLowerCase());
+      const matchRole = filterRole === '' || String(u.roleId || u.role?.id) === String(filterRole);
+      const matchLevel = filterLevel === '' || String(u.perfilAcessoId) === String(filterLevel);
+      return matchName && matchRole && matchLevel;
+    });
+  }, [usuarios, searchName, filterRole, filterLevel]);
+
   const handleDeactivate = async (id) => {
     // eslint-disable-next-line no-alert
     if (!window.confirm('Tem certeza que deseja desativar este acesso?')) return;
@@ -284,6 +293,18 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
           <span className="text-center leading-tight">Histórico <span className="hidden sm:inline">de Ações</span></span>
         </button>
       </div>
+
+      {/* Botão de ação primária da aba Membros */}
+      {activeTab === 'membros' && (
+        <button
+          type="button"
+          onClick={() => setShowInviteModal(true)}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#00a88e] to-teal-500 text-white text-sm font-semibold rounded-xl shadow-sm shadow-teal-500/20 hover:shadow-md hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 transition-all touch-manipulation cursor-pointer shrink-0"
+        >
+          <UserPlus className="h-4 w-4" />
+          <span>Convidar Membro</span>
+        </button>
+      )}
       </div>
 
       {activeTab === 'membros' ? (
@@ -396,53 +417,64 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
 
           <div className={`space-y-6 ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}>
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Buscar por nome..."
-                value={searchName}
-                onChange={e => setSearchName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10"
-              />
+          <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  placeholder="Buscar por nome..."
+                  value={searchName}
+                  onChange={e => setSearchName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10"
+                />
+              </div>
+              <div className="sm:w-48">
+                <select
+                  value={filterRole}
+                  onChange={e => setFilterRole(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
+                >
+                  <option value="">Todos os cargos</option>
+                  {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
+                    <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:w-48">
+                <select
+                  value={filterLevel}
+                  onChange={e => setFilterLevel(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
+                >
+                  <option value="">Todos os níveis</option>
+                  {perfisAcesso.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '')).map(p => (
+                    <option key={p.id} value={p.id}>{p.nome}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="sm:w-48">
-              <select
-                value={filterRole}
-                onChange={e => setFilterRole(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
-              >
-                <option value="">Todos os cargos</option>
-                {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
-                  <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:w-48">
-              <select
-                value={filterLevel}
-                onChange={e => setFilterLevel(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
-              >
-                <option value="">Todos os níveis</option>
-                {perfisAcesso.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '')).map(p => (
-                  <option key={p.id} value={p.id}>{p.nome}</option>
-                ))}
-              </select>
-            </div>
+
+            {/* Contador de resultados e botão para limpar filtros */}
+            {(searchName || filterRole || filterLevel) && (
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
+                <span>
+                  Mostrando <strong className="font-semibold text-slate-800">{filteredUsers.length}</strong> de <strong className="font-semibold text-slate-800">{usuarios.length}</strong> membros
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setSearchName(''); setFilterRole(''); setFilterLevel(''); }}
+                  className="font-semibold text-[#00a88e] hover:text-teal-700 transition-colors cursor-pointer"
+                >
+                  Limpar filtros
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Unified Rich Card Grid */}
           {loading ? (
             <ConfigTableSkeleton rows={6} mobileCards />
           ) : (() => {
-            const filteredUsers = usuarios.filter(u => {
-              const matchName = searchName === '' || (u.nomeCompleto || u.usuarioNome || '').toLowerCase().includes(searchName.toLowerCase());
-              const matchRole = filterRole === '' || String(u.roleId || u.role?.id) === String(filterRole);
-              const matchLevel = filterLevel === '' || String(u.perfilAcessoId) === String(filterLevel);
-              return matchName && matchRole && matchLevel;
-            });
-
             if (filteredUsers.length === 0) {
               return (
                 <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-20 px-6 text-center">
@@ -453,6 +485,15 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
                     <h4 className="text-lg font-bold text-slate-900">Nenhum membro encontrado</h4>
                     <p className="text-sm font-medium text-slate-500 mt-1 max-w-sm mx-auto">Não há membros correspondentes aos filtros aplicados.</p>
                   </div>
+                  {(searchName || filterRole || filterLevel) && (
+                    <button
+                      type="button"
+                      onClick={() => { setSearchName(''); setFilterRole(''); setFilterLevel(''); }}
+                      className="mt-1 inline-flex items-center justify-center px-4 py-2 text-xs font-bold text-[#00a88e] bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Limpar filtros de busca
+                    </button>
+                  )}
                 </div>
               );
             }
@@ -463,6 +504,13 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
 
                 const isDono = (u.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
                 const isProfissional = (u.roleName || '').toUpperCase().includes('PROFISSIONAL');
+                const isMe = String(u.id) === String(currentRoleUserId);
+                const cannotDeactivate = isDono || isMe;
+                const deactivateTitle = isDono
+                  ? 'O proprietário da clínica não pode ser desativado.'
+                  : isMe
+                  ? 'Você não pode desativar o próprio acesso.'
+                  : 'Desativar acesso';
                 const perfilData = perfisAcesso.find(p => String(p.id) === String(u.perfilAcessoId)) || {};
                 const nivelNome = u.perfilAcessoNome || perfilData.nome || (isDono ? 'Dono' : 'Nível não definido');
                 // Generate avatar initials from full name
@@ -607,9 +655,15 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
                           <span className="truncate">Editar</span>
                         </button>
                         <button
-                          onClick={() => handleDeactivate(u.id)}
-                          title="Desativar acesso"
-                          className="flex flex-none items-center justify-center rounded-xl bg-white border border-slate-200 p-2.5 text-slate-400 shadow-sm transition hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 touch-manipulation"
+                          type="button"
+                          disabled={cannotDeactivate}
+                          onClick={() => !cannotDeactivate && handleDeactivate(u.id)}
+                          title={deactivateTitle}
+                          className={`flex flex-none items-center justify-center rounded-xl border p-2.5 shadow-sm transition touch-manipulation ${
+                            cannotDeactivate
+                              ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed'
+                              : 'bg-white border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 cursor-pointer'
+                          }`}
                         >
                           <UserX className="h-4 w-4" />
                         </button>

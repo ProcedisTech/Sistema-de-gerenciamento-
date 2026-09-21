@@ -516,7 +516,7 @@ function PatientPreviewPanel({
   onSolicitarAnamnese,
   onSlotCancelar,
 }) {
-  const { isNivel1, canSeeProntuario, canStartAnamnese } = usePapel();
+  const { isNivel1, canSeeProntuario, canStartAnamnese, canDeleteAgenda } = usePapel();
 
   const [expandedRetornosMap, setExpandedRetornosMap] = useState({});
 
@@ -677,14 +677,14 @@ function PatientPreviewPanel({
           <h4 className="text-[13px] font-bold text-[#0f172a]">Agendamento de Hoje</h4>
           <AgendaRailCardActions
             appointment={previewAgendaSlot}
-            actions={getRailCardActions(previewAgendaSlot.status, canStartAnamnese)}
+            actions={getRailCardActions(previewAgendaSlot.status, canStartAnamnese, Boolean(canDeleteAgenda && onSlotCancelar))}
             compact={false}
             onConfirmar={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'confirmado')}
             onIniciarAtendimento={() => onStartAttendance?.(selectedPatient, buildAgendaSlotOptions(previewAgendaSlot))}
             onWhatsApp={() => agendaSchedule?.handleEnviarWhatsApp(previewAgendaSlot.agendaId)}
             onEnviarAnamnese={() => onSolicitarAnamnese?.(previewAgendaSlot)}
             onReagendar={() => agendaSchedule?.openReagendarModal(previewAgendaSlot, [previewAgendaSlot])}
-            onCancelar={() => onSlotCancelar?.(previewAgendaSlot)}
+            onCancelar={canDeleteAgenda && onSlotCancelar ? () => onSlotCancelar?.(previewAgendaSlot) : null}
             className="w-full"
           />
         </div>
