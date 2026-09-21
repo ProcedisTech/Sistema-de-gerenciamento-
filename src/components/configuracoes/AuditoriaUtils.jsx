@@ -22,6 +22,7 @@ export const ACOES_MAP = {
   HORARIO_EDITAR:         { label: 'Editou horários',        cor: 'blue' },
   FERIADO_EDITAR:         { label: 'Gerenciou feriado',      cor: 'purple' },
   DOCUMENTO_ASSINATURA_CRIAR: { label: 'Assinatura de termo', cor: 'purple' },
+  HUB_TERMOS_VER:             { label: 'Assinatura de termo', cor: 'purple' },
   DOC_MODELO_EDITAR:      { label: 'Editou modelo de termo', cor: 'blue' },
   CATALOGO_EDITAR:        { label: 'Editou catálogo',        cor: 'blue' },
   PDF_EXPORTAR:           { label: 'Exportou PDF',           cor: 'purple' },

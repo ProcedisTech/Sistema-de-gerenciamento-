@@ -18,7 +18,7 @@ export const MODULOS_SISTEMA = Object.freeze({
   SISTEMA: 'Sistema',
 });
 
-// ── 54 Permissões Canônicas Ativas ───────────────────────────────────────────
+// ── 53 Permissões Canônicas Ativas ───────────────────────────────────────────
 export const PERMISSOES = Object.freeze({
   // 1. Módulo Agenda (10)
   AGENDA_VER: 'AGENDA_VER',
@@ -61,9 +61,8 @@ export const PERMISSOES = Object.freeze({
   PACIENTE_GALERIA_VER: 'PACIENTE_GALERIA_VER',
   ANAMNESE_PREENCHIMENTO_VER: 'ANAMNESE_PREENCHIMENTO_VER',
 
-  // 6. Módulo Documentos (4)
+  // 6. Módulo Documentos (3)
   PACIENTE_DOCUMENTO_VER: 'PACIENTE_DOCUMENTO_VER',
-  DOCUMENTO_ASSINATURA_CRIAR: 'DOCUMENTO_ASSINATURA_CRIAR',
   DOC_MODELO_VER: 'DOC_MODELO_VER',
   DOC_MODELO_EDITAR: 'DOC_MODELO_EDITAR',
 

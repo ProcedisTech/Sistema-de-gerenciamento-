@@ -8,9 +8,9 @@ vi.mock('../contexts/OrgContext', () => ({
 }));
 
 describe('Catálogo de Permissões e usePapel', () => {
-  it('deve conter exatamente 54 permissões canônicas ativas', () => {
+  it('deve conter exatamente 53 permissões canônicas ativas', () => {
     const codigos = Object.values(PERMISSOES);
-    expect(codigos).toHaveLength(54);
+    expect(codigos).toHaveLength(53);
     expect(PERMISSOES.AGENDA_APARECER).toBe('AGENDA_APARECER');
   });
 
@@ -51,7 +51,7 @@ describe('Catálogo de Permissões e usePapel', () => {
         PERMISSOES.PACIENTE_VER,
         PERMISSOES.PACIENTE_CRIAR,
         PERMISSOES.PACIENTE_EDITAR,
-        PERMISSOES.DOCUMENTO_ASSINATURA_CRIAR,
+        PERMISSOES.HUB_TERMOS_VER,
         PERMISSOES.CATALOGO_VER,
         PERMISSOES.NOTIFICACAO_VER,
       ],
@@ -146,5 +146,23 @@ describe('Catálogo de Permissões e usePapel', () => {
     expect(comPerm.current.canDeleteAgenda).toBe(true);
     expect(comPerm.current.canCancelarAgendamento).toBe(true);
     expect(comPerm.current.canExcluirAgenda).toBe(true);
+  });
+
+  it('deve vincular canCreateAssinaturaDigital à permissão de termos do atendimento (HUB_TERMOS_VER)', () => {
+    vi.mocked(OrgContextModule.useOrg).mockReturnValue({
+      papel: 'CUSTOM_ROLE',
+      permissoes: [PERMISSOES.AGENDA_VER],
+    });
+
+    const { result: semPerm } = renderHook(() => usePapel());
+    expect(semPerm.current.canCreateAssinaturaDigital).toBe(false);
+
+    vi.mocked(OrgContextModule.useOrg).mockReturnValue({
+      papel: 'CUSTOM_ROLE',
+      permissoes: [PERMISSOES.HUB_TERMOS_VER],
+    });
+
+    const { result: comPerm } = renderHook(() => usePapel());
+    expect(comPerm.current.canCreateAssinaturaDigital).toBe(true);
   });
 });
