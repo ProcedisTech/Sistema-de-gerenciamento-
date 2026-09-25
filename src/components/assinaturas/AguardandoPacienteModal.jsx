@@ -20,6 +20,8 @@ export function AguardandoPacienteModal({
   const [sessaoData, setSessaoData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [errorFromCancel, setErrorFromCancel] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [concluido, setConcluido] = useState(false);
   const [recusado, setRecusado] = useState(false);
   const pollingRef = useRef(null);
@@ -43,6 +45,8 @@ export function AguardandoPacienteModal({
       setSessaoData(null);
       setLoading(true);
       setError(null);
+      setErrorFromCancel(false);
+      setCancelando(false);
       setConcluido(false);
       setRecusado(false);
       return;
@@ -77,6 +81,7 @@ export function AguardandoPacienteModal({
       } catch (err) {
         if (isSubscribed) {
           setError(err.message);
+          setErrorFromCancel(false);
           setLoading(false);
         }
       }
@@ -118,6 +123,7 @@ export function AguardandoPacienteModal({
           } else if (data.status === 'EXPIRADO' || data.status === 'CANCELADO') {
             clearInterval(pollingRef.current);
             setError(`Sessão ${data.status.toLowerCase()}`);
+            setErrorFromCancel(false);
           }
         } catch (err) {
           console.error('Erro no polling', err);
@@ -133,6 +139,21 @@ export function AguardandoPacienteModal({
     };
   }, [open, metodoCodigo, canalCodigo, termoAssinaturaId, telefonePaciente]);
 
+  const handleCancelarClick = async () => {
+    if (!onCancelar || cancelando) return;
+    setCancelando(true);
+    setError(null);
+    setErrorFromCancel(false);
+    try {
+      await onCancelar();
+    } catch (err) {
+      setError(err?.message || 'Falha ao cancelar o envio');
+      setErrorFromCancel(true);
+    } finally {
+      setCancelando(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -140,8 +161,10 @@ export function AguardandoPacienteModal({
       <div className="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-300">
         <header className="flex justify-end p-3">
           <button
+            type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+            disabled={cancelando}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -150,17 +173,17 @@ export function AguardandoPacienteModal({
         <div className="px-6 pb-8 text-center flex flex-col items-center">
           {concluido ? (
             recusado ? (
-            <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-500">
-                <X className="h-10 w-10" strokeWidth={2.5} />
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="rounded-full bg-amber-100 p-4 text-amber-600">
+                <X className="h-10 w-10" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900">Termo recusado</h3>
-              <p className="text-sm text-slate-500">O paciente recusou assinar o documento.</p>
+              <h3 className="text-xl font-bold text-slate-900">Assinatura recusada</h3>
+              <p className="text-sm text-slate-500">O paciente recusou assinar este termo.</p>
             </div>
             ) : (
-            <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-500">
-                <CheckCircle2 className="h-10 w-10" strokeWidth={2.5} />
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="rounded-full bg-emerald-100 p-4 text-emerald-600">
+                <CheckCircle2 className="h-10 w-10" />
               </div>
               <h3 className="text-xl font-bold text-slate-900">Assinatura Recebida!</h3>
               <p className="text-sm text-slate-500">O documento foi assinado com sucesso pelo paciente.</p>
@@ -178,10 +201,16 @@ export function AguardandoPacienteModal({
               </div>
               <p className="text-slate-800 font-bold">{error}</p>
               <button
-                onClick={onCancelar}
-                className="mt-2 text-sm font-semibold text-slate-500 underline"
+                type="button"
+                onClick={handleCancelarClick}
+                disabled={cancelando}
+                className="mt-2 text-sm font-semibold text-slate-500 underline disabled:opacity-50"
               >
-                Tentar outro método
+                {cancelando
+                  ? 'Cancelando…'
+                  : errorFromCancel
+                    ? 'Tentar novamente'
+                    : 'Tentar outro método'}
               </button>
             </div>
           ) : (
@@ -227,10 +256,12 @@ export function AguardandoPacienteModal({
               </div>
 
               <button
-                onClick={onCancelar}
-                className="mt-2 text-sm font-semibold text-slate-400 hover:text-slate-600 underline"
+                type="button"
+                onClick={handleCancelarClick}
+                disabled={cancelando}
+                className="mt-2 text-sm font-semibold text-slate-400 hover:text-slate-600 underline disabled:opacity-50"
               >
-                Cancelar e usar o Tablet
+                {cancelando ? 'Cancelando…' : 'Cancelar e usar o Tablet'}
               </button>
             </div>
           )}

@@ -267,4 +267,114 @@ describe('AguardandoPacienteModal', () => {
     expect(screen.queryByText('Aguardando Paciente')).not.toBeInTheDocument();
     expect(screen.getByText('Gerando sessão segura...')).toBeInTheDocument();
   });
+
+  it('Cancelar e usar o Tablet chama onCancelar; se falhar, mantém modal e mostra Tentar novamente', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          sessaoId: 'sess-cancel',
+          urlPublica: 'https://procedi.app/assinar/sess-cancel',
+        }),
+    });
+
+    const onCancelar = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Falha ao cancelar o envio'))
+      .mockResolvedValueOnce(undefined);
+
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+
+    render(
+      <AguardandoPacienteModal
+        open={true}
+        onClose={vi.fn()}
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null }}
+        sessaoExternaPayload={{
+          termoAssinaturaId: 'termo-cancel',
+          telefonePaciente: '',
+        }}
+        onAssinaturaConcluida={vi.fn()}
+        onCancelar={onCancelar}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Cancelar e usar o Tablet')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Cancelar e usar o Tablet'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Falha ao cancelar o envio')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Tentar novamente')).toBeInTheDocument();
+    expect(screen.queryByText('Cancelar e usar o Tablet')).not.toBeInTheDocument();
+    expect(onCancelar).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByText('Tentar novamente'));
+    await waitFor(() => {
+      expect(onCancelar).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('ao fechar (open=false) limpa o polling (clearInterval)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const clearSpy = vi.spyOn(globalThis, 'clearInterval');
+
+    fetch.mockImplementation((url) => {
+      if (String(url).includes('/gerar')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              sessaoId: 'sess-poll',
+              urlPublica: 'https://procedi.app/assinar/sess-poll',
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ status: 'PENDENTE' }),
+      });
+    });
+
+    const { rerender } = render(
+      <AguardandoPacienteModal
+        open={true}
+        onClose={vi.fn()}
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null }}
+        sessaoExternaPayload={{
+          termoAssinaturaId: 'termo-poll',
+          telefonePaciente: '',
+        }}
+        onAssinaturaConcluida={vi.fn()}
+        onCancelar={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Aguardando Paciente')).toBeInTheDocument();
+    });
+
+    clearSpy.mockClear();
+    rerender(
+      <AguardandoPacienteModal
+        open={false}
+        onClose={vi.fn()}
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_LOCAL', canalCodigo: null }}
+        sessaoExternaPayload={{
+          termoAssinaturaId: 'termo-poll',
+          telefonePaciente: '',
+        }}
+        onAssinaturaConcluida={vi.fn()}
+        onCancelar={vi.fn()}
+      />
+    );
+
+    expect(clearSpy).toHaveBeenCalled();
+    vi.useRealTimers();
+    clearSpy.mockRestore();
+  });
 });

@@ -21,6 +21,7 @@ import {
 import {
   authHeadersForFetch,
   termoAssinaturaApi,
+  assinaturaExternaApi,
   termosApi,
   notificacoesApi,
   getApiErrorToastMessage,
@@ -75,6 +76,9 @@ export function SignatureFullscreenModal({
   hasStrokeRef,
   mobilePortrait,
   onConfirm,
+  error = null,
+  saving = false,
+  retryable = true,
 }) {
   const wrapRef = useRef(null);
   const drawingRef = useRef(false);
@@ -135,6 +139,7 @@ export function SignatureFullscreenModal({
   };
 
   const onPointerDown = (event) => {
+    if (saving) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const point = getPoint(event);
@@ -154,7 +159,7 @@ export function SignatureFullscreenModal({
   };
 
   const onPointerMove = (event) => {
-    if (!drawingRef.current) return;
+    if (!drawingRef.current || saving) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const point = getPoint(event);
@@ -170,6 +175,7 @@ export function SignatureFullscreenModal({
   };
 
   const clearCanvas = () => {
+    if (saving) return;
     hasStrokeRef.current = false;
     setStrokePresent(false);
     drawingRef.current = false;
@@ -188,7 +194,7 @@ export function SignatureFullscreenModal({
 
   const handleConfirm = () => {
     const canvas = canvasRef.current;
-    if (!canvas || !hasStrokeRef.current) return;
+    if (!canvas || !hasStrokeRef.current || saving) return;
     onConfirm(canvas.toDataURL('image/png'));
   };
 
@@ -201,7 +207,8 @@ export function SignatureFullscreenModal({
         <button
           type="button"
           onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9]"
+          disabled={saving}
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-[#64748b] hover:bg-[#f1f5f9] disabled:opacity-50"
           aria-label="Fechar"
         >
           <X className="h-5 w-5" strokeWidth={2.5} />
@@ -233,6 +240,25 @@ export function SignatureFullscreenModal({
         ) : null}
       </div>
 
+      {error ? (
+        <div className="flex shrink-0 flex-col items-center gap-2 border-t border-[#e2e8f0] px-4 py-3">
+          <div className="rounded-full bg-red-100 p-3 text-red-500">
+            <X className="h-6 w-6" />
+          </div>
+          <p className="text-center text-sm font-bold text-slate-800">{error}</p>
+          {retryable ? (
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={!strokePresent || saving}
+              className="mt-1 text-sm font-semibold text-slate-500 underline disabled:opacity-50"
+            >
+              Tentar novamente
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {mobilePortrait ? (
         <div className="flex shrink-0 items-center gap-2 border-t border-[#e2e8f0] bg-[#e6f7f5] px-4 py-2.5 text-[11px] font-bold text-[#0f766e]">
           <RotateCw className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
@@ -244,17 +270,18 @@ export function SignatureFullscreenModal({
         <button
           type="button"
           onClick={clearCanvas}
-          className="h-12 w-full rounded-lg border-2 border-[#e2e8f0] bg-white text-[14px] font-semibold text-[#64748b] active:bg-[#f8fafc] sm:h-11 sm:flex-1 sm:text-[13px] sm:hover:bg-[#f8fafc]"
+          disabled={saving}
+          className="h-12 w-full rounded-lg border-2 border-[#e2e8f0] bg-white text-[14px] font-semibold text-[#64748b] active:bg-[#f8fafc] disabled:opacity-50 sm:h-11 sm:flex-1 sm:text-[13px] sm:hover:bg-[#f8fafc]"
         >
           Limpar
         </button>
         <button
           type="button"
-          disabled={!strokePresent}
+          disabled={!strokePresent || saving}
           onClick={handleConfirm}
           className="h-12 w-full rounded-lg bg-[#00a88e] text-[14px] font-semibold text-white transition-colors active:bg-[#00967f] disabled:cursor-not-allowed disabled:bg-[#e2e8f0] disabled:text-[#94a3b8] sm:h-11 sm:flex-1 sm:text-[13px] sm:hover:bg-[#00967f]"
         >
-          Confirmar assinatura
+          {saving ? 'Salvando…' : 'Confirmar assinatura'}
         </button>
       </footer>
     </div>
@@ -303,6 +330,10 @@ export function Step3Termos({
   const termoSearchInputRef = useRef(null);
   const [profSigningOpen, setProfSigningOpen] = useState(false);
   const [patSigningOpen, setPatSigningOpen] = useState(false);
+  const [patSigningError, setPatSigningError] = useState(null);
+  const [patSigningSaving, setPatSigningSaving] = useState(false);
+  const [patSigningRetryable, setPatSigningRetryable] = useState(true);
+  const pendingPatDataUrlRef = useRef(null);
   const profCanvasRef = useRef(null);
   const patCanvasRef = useRef(null);
   const profHasStrokeRef = useRef(false);
@@ -780,13 +811,127 @@ export function Step3Termos({
     }
   };
 
-  const handleConfirmPat = (dataUrl) => {
-    setTermoAssinaturaDataUrl(dataUrl);
-    if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
-    setStep4Errors((prev) => ({ ...prev, termoLido: false }));
-    setPatAssinaturaTimestamp(Date.now());
-    setPatSigningOpen(false);
-    toast.success('Assinatura do paciente registrada');
+  const handleConfirmPat = async (dataUrl) => {
+    pendingPatDataUrlRef.current = dataUrl;
+    setPatSigningSaving(true);
+    setPatSigningError(null);
+    setPatSigningRetryable(true);
+
+    const finalizeSuccess = (resultado) => {
+      const evidence = resultado?.assinaturaPaciente || pendingPatDataUrlRef.current;
+      setTermoAssinaturaDataUrl(evidence);
+      setPatAssinaturaTimestamp(Date.now());
+      setAssinaturaPersistida(true);
+      if (resultado?.id) setBackendAssinaturaId(resultado.id);
+      if (typeof setTermoAssinado === 'function') setTermoAssinado(true);
+      setStep4Errors((prev) => ({ ...prev, termoLido: false }));
+      setPatSigningOpen(false);
+      setPatSigningError(null);
+      setPatSigningSaving(false);
+      toast.success('Assinatura do paciente registrada');
+      if (resultado) registrarTermoNaJornada(resultado);
+    };
+
+    try {
+      if (backendAssinaturaId) {
+        try {
+          const resultado = await termoAssinaturaApi.concluirPresencial(backendAssinaturaId, {
+            assinaturaPaciente: dataUrl,
+            pacienteAssinouEm: new Date().toISOString(),
+            metodoCodigo: 'DISPOSITIVO_CLINICA',
+          });
+          finalizeSuccess(resultado);
+          return;
+        } catch (e) {
+          if (e?.status === 409) {
+            try {
+              const res = await termoAssinaturaApi.buscar(backendAssinaturaId);
+              if (res && (res.statusCodigo === 'ASSINADO' || res.assinaturaPaciente)) {
+                finalizeSuccess(res);
+                return;
+              }
+            } catch {
+              // fall through to non-retryable error
+            }
+            setPatSigningError(
+              'Esta assinatura já foi finalizada por outro caminho e não pode ser concluída no tablet.',
+            );
+            setPatSigningRetryable(false);
+            setPatSigningSaving(false);
+            return;
+          }
+          throw e;
+        }
+      }
+
+      if (!profissionalAssinaturaDataUrl) {
+        setTermoAssinaturaDataUrl(dataUrl);
+        setPatAssinaturaTimestamp(Date.now());
+        setPatSigningOpen(false);
+        setPatSigningSaving(false);
+        return;
+      }
+
+      setAssinaturaPersistida(true);
+      const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
+      let ipAddress = null;
+      try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        if (res.ok) {
+          const data = await res.json();
+          ipAddress = data.ip;
+        }
+      } catch {
+        // ignore
+      }
+
+      const resultado = await termoAssinaturaApi.criar({
+        termoId: termoSelecionadoId,
+        pacienteId,
+        procedimentoFeitoId: procedimentoFeitoId ?? null,
+        roleUserId: roleUserId ?? null,
+        assinaturaProfissional: profissionalAssinaturaDataUrl,
+        assinaturaPaciente: dataUrl,
+        pacienteRecusou: false,
+        statusCodigo: 'ASSINADO',
+        profissionalAssinouEm:
+          profAssinaturaTimestamp != null
+            ? new Date(profAssinaturaTimestamp).toISOString()
+            : new Date().toISOString(),
+        pacienteAssinouEm: new Date().toISOString(),
+        conteudoSnapshot,
+        userAgent: navigator.userAgent,
+        ipAddress,
+      });
+      finalizeSuccess(resultado);
+    } catch (e) {
+      setAssinaturaPersistida(false);
+      setPatSigningError(e?.message || 'Erro ao salvar assinatura');
+      setPatSigningRetryable(true);
+      setPatSigningSaving(false);
+    }
+  };
+
+  const handleCancelarEnvioParaTablet = async () => {
+    if (backendAssinaturaId) {
+      await assinaturaExternaApi.cancelarEnvioExterno(backendAssinaturaId);
+    }
+    setModalAguardandoOpen(false);
+    setMetodoEscolhido(null);
+    setPatSigningError(null);
+    setPatSigningOpen(true);
+  };
+
+  const handleFecharAguardando = async () => {
+    try {
+      if (backendAssinaturaId) {
+        await assinaturaExternaApi.cancelarEnvioExterno(backendAssinaturaId);
+      }
+    } catch {
+      toast.error('Não foi possível cancelar o link. Ele pode permanecer ativo.');
+    }
+    setModalAguardandoOpen(false);
+    setMetodoEscolhido(null);
   };
 
   const handleVerificarAssinaturaRemota = async () => {
@@ -1419,11 +1564,18 @@ export function Step3Termos({
       <SignatureFullscreenModal
         open={patSigningOpen}
         title={`Assinatura do Paciente: ${pacienteCtx?.nome ?? 'Paciente'}`}
-        onClose={() => setPatSigningOpen(false)}
+        onClose={() => {
+          if (patSigningSaving) return;
+          setPatSigningOpen(false);
+          setPatSigningError(null);
+        }}
         canvasRef={patCanvasRef}
         hasStrokeRef={patHasStrokeRef}
         mobilePortrait={mobilePortrait}
         onConfirm={handleConfirmPat}
+        error={patSigningError}
+        saving={patSigningSaving}
+        retryable={patSigningRetryable}
       />
 
       <ModalEscolhaAssinatura
@@ -1431,6 +1583,7 @@ export function Step3Termos({
         onClose={() => setModalEscolhaOpen(false)}
         onSelectTablet={() => {
           setModalEscolhaOpen(false);
+          setPatSigningError(null);
           setPatSigningOpen(true);
         }}
         onSelectQrCode={() => handlePrepararSessaoExterna({
@@ -1447,10 +1600,7 @@ export function Step3Termos({
 
       <AguardandoPacienteModal
         open={modalAguardandoOpen}
-        onClose={() => {
-          setModalAguardandoOpen(false);
-          setMetodoEscolhido(null);
-        }}
+        onClose={handleFecharAguardando}
         escolha={metodoEscolhido}
         sessaoExternaPayload={{
           termoAssinaturaId: backendAssinaturaId,
@@ -1461,11 +1611,7 @@ export function Step3Termos({
           setMetodoEscolhido(null);
           handleVerificarAssinaturaRemota();
         }}
-        onCancelar={() => {
-          setModalAguardandoOpen(false);
-          setMetodoEscolhido(null);
-          setPatSigningOpen(true);
-        }}
+        onCancelar={handleCancelarEnvioParaTablet}
       />
 
       {showSalvarPadraoPrompt ? (
