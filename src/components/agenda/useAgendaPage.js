@@ -12,6 +12,7 @@ import {
   equipeApi,
   getApiErrorToastMessage,
   isAbortError,
+  organizacoesHorariosApi,
   pacientesApi,
   planejamentosApi,
   procedimentosApi,
@@ -341,7 +342,8 @@ export function formatWeekRangeLabel(startIso, endIso) {
 }
 
 export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPatientSync } = {}) {
-  const { roleUserId, roleNome } = useOrg();
+  const { roleUserId, roleNome, orgId } = useOrg();
+  const orgIdStr = String(orgId || '');
   const { bumpRevision } = useDisponibilidadeRevision();
   const { isNivel1, canSeeAgendaMulti, canSeeAgendaPropria, canEncaixarForaDisp, canDeleteAgenda } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
@@ -370,6 +372,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
   const [disponibilidades, setDisponibilidades] = useState({});
+  const [clinicaHorarios, setClinicaHorarios] = useState([]);
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
@@ -416,6 +419,38 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const planejamentoItemIdVinculoRef = useRef(null);
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
+
+  const reloadClinicaHorarios = useCallback(async () => {
+    if (!authEnabled || !orgIdStr) {
+      setClinicaHorarios([]);
+      return;
+    }
+    try {
+      const list = await organizacoesHorariosApi.buscar(orgIdStr);
+      setClinicaHorarios(Array.isArray(list) ? list : []);
+    } catch {
+      setClinicaHorarios([]);
+    }
+  }, [authEnabled, orgIdStr]);
+
+  useEffect(() => {
+    if (!authEnabled || !orgIdStr) {
+      setClinicaHorarios([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await organizacoesHorariosApi.buscar(orgIdStr);
+        if (!cancelled) setClinicaHorarios(Array.isArray(list) ? list : []);
+      } catch {
+        if (!cancelled) setClinicaHorarios([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, orgIdStr]);
 
   const [dispMonthDate, setDispMonthDate] = useState(() => {
     const now = new Date();
@@ -685,6 +720,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     async ({ roleUserId: roleToInvalidate, scope = 'role' } = {}) => {
       dispMonthCacheRef.current = {};
 
+      if (scope === 'all') {
+        await reloadClinicaHorarios();
+      }
+
       const rolesToRefetch =
         scope === 'all'
           ? Object.keys(disponibilidadesRef.current).filter(Boolean)
@@ -722,7 +761,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
       bumpRevision();
     },
-    [bumpRevision, modalMode, bloqueioModalOpen, dispMonthDate, ensureDispMonthLoaded]
+    [bumpRevision, modalMode, bloqueioModalOpen, dispMonthDate, ensureDispMonthLoaded, reloadClinicaHorarios]
   );
 
   useEffect(() => {
@@ -1199,12 +1238,30 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     if (!modalMode) return null;
     const role = String(roleUserIdAgenda || '').trim();
     if (role) return null;
+    if (Array.isArray(clinicaHorarios) && clinicaHorarios.length > 0) {
+      return buildMonthHeatmap({
+        monthDate: dispMonthDate,
+        disponibilidade: clinicaHorarios,
+        dtos: dispMonthDtos,
+        todayIso,
+        selectedIso: toDateKey(form.data) || dispCalendarioDia,
+      });
+    }
     return buildNeutralMonthHeatmap({
       monthDate: dispMonthDate,
       todayIso,
       selectedIso: toDateKey(form.data) || dispCalendarioDia,
     });
-  }, [modalMode, roleUserIdAgenda, dispMonthDate, todayIso, form.data, dispCalendarioDia]);
+  }, [
+    modalMode,
+    roleUserIdAgenda,
+    clinicaHorarios,
+    dispMonthDate,
+    dispMonthDtos,
+    todayIso,
+    form.data,
+    dispCalendarioDia,
+  ]);
 
   const dispCalendarioHeatmap = dispHeatmap ?? dispNeutralHeatmap;
 
@@ -1264,6 +1321,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     return buildDaySlotList({
       iso,
       disponibilidade: dispProfissionalDisponibilidade,
+      clinicaHorarios,
       dtos: dispMonthDtos,
       duracaoMin: 30,
       excludeAgendaId: editingAppointment?.agendaId,
@@ -1280,6 +1338,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     form.horaInicio,
     form.horaFimSlot,
     dispProfissionalDisponibilidade,
+    clinicaHorarios,
     dispMonthDtos,
     editingAppointment?.agendaId,
     roleUserIdAgenda,
@@ -2803,6 +2862,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     openDaySheet,
     closeDaySheet,
     disponibilidades,
+    clinicaHorarios,
     invalidateDisponibilidade,
     editingAppointment,
     foraDispModal,

@@ -30,6 +30,7 @@ export function AgendaDayRail({
   onRemoverBloqueio,
   onOpenSlotDetail,
   submittingRemoverBloqueioId,
+  clinicaHorarios,
 }) {
   const now = useTickInterval(60_000);
   const [highlight, setHighlight] = useState({ day: null, id: null });
@@ -83,6 +84,7 @@ export function AgendaDayRail({
         onBlockClick={highlightCard}
         compact={compact}
         dense={dense}
+        clinicaHorarios={clinicaHorarios}
       />
 
       <AgendaDayRailBody
