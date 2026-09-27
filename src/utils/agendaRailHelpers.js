@@ -88,7 +88,14 @@ export function getHeroStats(appointments) {
   return { agendados, cancelados };
 }
 
-export function getTimelineBlocks(appointments) {
+/**
+ * @param {Array} appointments
+ * @param {{ startMin?: number, endMin?: number }} [axis] — eixo dinâmico; default = TIMELINE_* 06–22
+ */
+export function getTimelineBlocks(appointments, axis) {
+  const axisStart = axis?.startMin != null ? axis.startMin : TIMELINE_START_MIN;
+  const axisEnd = axis?.endMin != null ? axis.endMin : TIMELINE_END_MIN;
+  const span = Math.max(1, axisEnd - axisStart);
   const blocks = [];
   for (const item of appointments || []) {
     if (item.tipo === 'bloqueio' && item.status === 'cancelado') continue;
@@ -97,12 +104,12 @@ export function getTimelineBlocks(appointments) {
     const startMin = parseHmToMinutes(item.horaInicio);
     const dur = Number(item.duracaoMin) || 30;
     const endMin = startMin + dur;
-    if (endMin <= TIMELINE_START_MIN || startMin >= TIMELINE_END_MIN) continue;
+    if (endMin <= axisStart || startMin >= axisEnd) continue;
 
-    const clampedStart = Math.max(startMin, TIMELINE_START_MIN);
-    const clampedEnd = Math.min(endMin, TIMELINE_END_MIN);
-    let leftPercent = ((clampedStart - TIMELINE_START_MIN) / TIMELINE_SPAN_MIN) * 100;
-    let widthPercent = ((clampedEnd - clampedStart) / TIMELINE_SPAN_MIN) * 100;
+    const clampedStart = Math.max(startMin, axisStart);
+    const clampedEnd = Math.min(endMin, axisEnd);
+    let leftPercent = ((clampedStart - axisStart) / span) * 100;
+    let widthPercent = ((clampedEnd - clampedStart) / span) * 100;
     widthPercent = Math.max(widthPercent, 2);
 
     const statusBucket =
@@ -122,11 +129,20 @@ export function getTimelineBlocks(appointments) {
   return blocks;
 }
 
-export function getNowLineLeftPercent(now, selectedDay, todayIso) {
+/**
+ * @param {Date} now
+ * @param {string} selectedDay
+ * @param {string} todayIso
+ * @param {{ startMin?: number, endMin?: number }} [axis]
+ */
+export function getNowLineLeftPercent(now, selectedDay, todayIso, axis) {
   if (!selectedDay || !todayIso || selectedDay !== todayIso) return null;
+  const axisStart = axis?.startMin != null ? axis.startMin : TIMELINE_START_MIN;
+  const axisEnd = axis?.endMin != null ? axis.endMin : TIMELINE_END_MIN;
+  const span = Math.max(1, axisEnd - axisStart);
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  if (nowMin < TIMELINE_START_MIN || nowMin > TIMELINE_END_MIN) return null;
-  return ((nowMin - TIMELINE_START_MIN) / TIMELINE_SPAN_MIN) * 100;
+  if (nowMin < axisStart || nowMin > axisEnd) return null;
+  return ((nowMin - axisStart) / span) * 100;
 }
 
 const PERIOD_ORDER = ['manha', 'tarde', 'noite'];

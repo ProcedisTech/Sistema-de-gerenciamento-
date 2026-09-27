@@ -212,6 +212,7 @@ export function buildDaySlotList({
   duracaoMin,
   excludeAgendaId,
   profissionalRoleUserId,
+  clinicaHorarios,
   selectedFormIso,
   selectedFormHora,
   selectedRangeFimSlot,
@@ -231,12 +232,26 @@ export function buildDaySlotList({
     };
   }
 
-  const real = getDayWindowsForIso(iso, disponibilidade);
+  const hasProf = Boolean(profissionalRoleUserId);
+  let windows;
   let isFallback = false;
-  let windows = real;
-  if (real.length === 0) {
+
+  if (hasProf) {
+    const real = getDayWindowsForIso(iso, disponibilidade);
+    if (real.length === 0) {
+      windows = commercialWindowsForIso(iso);
+      isFallback = true;
+    } else {
+      windows = real;
+    }
+  } else if (Array.isArray(clinicaHorarios) && clinicaHorarios.length > 0) {
+    // Clínica configurada: dia fechado → windows [] → zero slots (sem comercial).
+    windows = getDayWindowsForIso(iso, clinicaHorarios);
+    isFallback = false;
+  } else {
+    // Clínica sem cadastro / erro na busca → comportamento atual (comercial).
     windows = commercialWindowsForIso(iso);
-    isFallback = Boolean(profissionalRoleUserId);
+    isFallback = false;
   }
   const { dayStartMin, dayEndMin } = dayBoundsFromWindows(windows);
   const dur = Number(duracaoMin) || AGENDA_SLOT_STEP_MIN;
