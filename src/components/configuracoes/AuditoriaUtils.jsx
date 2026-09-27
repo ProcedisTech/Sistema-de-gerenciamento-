@@ -26,6 +26,7 @@ export const ACOES_MAP = {
   DOC_MODELO_EDITAR:      { label: 'Editou modelo de termo', cor: 'blue' },
   CATALOGO_EDITAR:        { label: 'Editou catálogo',        cor: 'blue' },
   PDF_EXPORTAR:           { label: 'Exportou PDF',           cor: 'purple' },
+  SISTEMA:                { label: 'Ação no Sistema',        cor: 'blue' },
 
   // Paciente (Legado)
   CRIAR_PACIENTE:         { label: 'Criou paciente',        cor: 'green' },

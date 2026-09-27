@@ -181,8 +181,9 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
     }
   }
 
-  const diffsDaDescricao = extractDiffsFromDescricao(registro.descricao);
-  const cleanDescricao = getCleanDescricao(registro.descricao);
+  const descRaw = registro.descricao || registro.permissaoDescricao;
+  const diffsDaDescricao = extractDiffsFromDescricao(descRaw);
+  const cleanDescricao = getCleanDescricao(descRaw);
   const temDiffsDescricao = diffsDaDescricao.length > 0;
   const showDiffsInDescricao = temDiffsDescricao && (!hasDiffs || changedKeys.length === 0);
 
@@ -202,7 +203,7 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-bold text-slate-900 leading-tight">Detalhes da Ação</h2>
-                {registro.suspeito && (
+                {(registro.suspeito || registro.isSuspeito) && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-bold uppercase tracking-wider">
                     <AlertTriangle className="w-3.5 h-3.5" />
                     Suspeito
@@ -250,14 +251,14 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
                <div>
                   <div className="flex items-center gap-2 mb-2">
                     <FileText className="h-4 w-4 text-slate-400" />
-                    <h3 className="text-sm font-bold text-slate-700">Ação / Entidade</h3>
+                    <h3 className="text-sm font-bold text-slate-700">Ação / Módulo</h3>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${BADGE_CORES[acao.cor]}`}>
-                      {acao.label}
+                      {registro.permissaoNome || acao.label}
                     </span>
                     <span className="text-sm font-medium text-slate-600 ml-2">
-                      {formatarEntidade(registro.entidade)}
+                      Módulo: {registro.permissaoModulo || formatarEntidade(registro.entidade) || 'Geral'}
                     </span>
                   </div>
                </div>
@@ -294,7 +295,7 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
               </div>
             </div>
 
-            {registro.descricao && (
+            {descRaw && (
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 sm:col-span-2">
                 <div className="flex items-center gap-2 mb-3">
                   <FileText className="h-4 w-4 text-slate-400" />
@@ -304,7 +305,7 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
                 {showDiffsInDescricao ? (
                   <div className="space-y-3">
                     <p className="text-sm font-semibold text-slate-800 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs leading-relaxed">
-                      {cleanDescricao || registro.descricao}
+                      {cleanDescricao || descRaw}
                     </p>
 
                     <div className="space-y-3">
@@ -342,7 +343,7 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
                   </div>
                 ) : (
                   <p className="text-sm text-slate-800 bg-white p-3 rounded-xl border border-slate-200 shadow-sm leading-relaxed">
-                    {(hasDiffs && changedKeys.length > 0 ? cleanDescricao : null) || registro.descricao}
+                    {(hasDiffs && changedKeys.length > 0 ? cleanDescricao : null) || descRaw}
                   </p>
                 )}
               </div>
