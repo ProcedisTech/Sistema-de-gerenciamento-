@@ -18,7 +18,7 @@ import { ConfigDetailView } from './ConfigDetailView';
  * @param {string}  props.configSection
  * @param {(s: string) => void} props.setConfigSection
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada]
- * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
+ * @param {(data: { nomeCompleto?: string, apelido?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
  * @param {() => void} [props.onPacientesCatalogRefresh]
  * @param {(opts?: { roleUserId?: string, scope?: 'all' | 'role' }) => void | Promise<void>} [props.onDisponibilidadeInvalidate]
  * @param {(isDirty: boolean) => void} [props.onDirtyHorariosChange]
