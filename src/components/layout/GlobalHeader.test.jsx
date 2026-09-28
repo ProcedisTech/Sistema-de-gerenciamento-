@@ -54,34 +54,50 @@ describe('GlobalHeader com pageSlot', () => {
     );
 
     expect(screen.getByText('Agenda')).toBeInTheDocument();
-    expect(within(screen.getByTestId('global-header-brand')).getByText('Procedi')).toBeInTheDocument();
+    expect(screen.queryByText('Procedi')).not.toBeInTheDocument();
   });
 
   it('não renderiza o container do slot quando pageSlot for omitido', () => {
     render(<GlobalHeader activeView="agenda" clinicaNome="Clínica Teste" />);
 
     expect(screen.queryByTestId('global-header-page-slot')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('global-header-brand')).getByText('Procedi')).toBeInTheDocument();
+  });
+
+  it('o nome da tela e o divisor ficam escondidos abaixo de 1280px', () => {
+    render(
+      <GlobalHeader
+        activeView="agenda"
+        clinicaNome="Clínica Teste"
+        pageSlot={<PageSlot icon={CalendarDays} title="Agenda" />}
+      />
+    );
+
+    const wrapper = screen.getByTestId('global-header-page-slot').parentElement;
+    expect(wrapper).toHaveClass('hidden', 'min-w-0', 'xl:flex');
+    expect(wrapper.previousElementSibling).toHaveClass('hidden', 'xl:block');
   });
 });
 
 describe('GlobalHeader com identidade', () => {
-  it('a marca fica escondida a partir de xl', () => {
+  it('a marca Procedi não aparece no header', () => {
     render(<GlobalHeader activeView="pacientes" clinicaNome="Clínica Teste" />);
 
-    expect(screen.getByTestId('global-header-brand')).toHaveClass('xl:hidden');
+    expect(screen.queryByTestId('global-header-brand')).not.toBeInTheDocument();
+    expect(screen.queryByText('Procedi')).not.toBeInTheDocument();
   });
 
-  it('mostra o nome da clínica no bloco da clínica, visível só a partir de xl', () => {
-    render(<GlobalHeader activeView="pacientes" clinicaNome="Clínica Teste" />);
+  it('mostra o bloco da clínica em todas as larguras, com logo de 36px e 40px a partir de lg', () => {
+    const { container } = render(<GlobalHeader activeView="pacientes" clinicaNome="Clínica Teste" />);
 
     const nome = screen.getByRole('heading', { level: 1, name: 'Clínica Teste' });
-    const bloco = nome.closest('div.xl\\:flex');
-    expect(bloco).not.toBeNull();
-    expect(bloco).toHaveClass('hidden');
+    const bloco = nome.parentElement.parentElement;
+    expect(bloco).not.toHaveClass('hidden', 'xl:flex');
+    expect(bloco.parentElement).toHaveClass('min-w-0', 'flex-1', 'lg:flex-initial');
+    const caixa = container.querySelector('svg').parentElement;
+    expect(caixa).toHaveClass('h-9', 'w-9', 'lg:h-10', 'lg:w-10');
   });
 
-  it('mostra o cartão do usuário visível só a partir de xl, com o texto só a partir de 1440px', () => {
+  it('mostra a foto do usuário em todas as larguras, com o texto só a partir de 1440px', () => {
     render(
       <GlobalHeader
         activeView="pacientes"
@@ -94,7 +110,28 @@ describe('GlobalHeader com identidade', () => {
     const texto = nome.parentElement;
     expect(texto).toHaveClass('hidden', 'min-[1440px]:block');
     const cartao = texto.parentElement;
-    expect(cartao).toHaveClass('hidden', 'xl:flex');
+    expect(cartao).not.toHaveClass('hidden', 'xl:flex');
+    expect(cartao).toHaveClass('min-w-0', 'p-1.5', 'lg:p-0');
+    expect(screen.getByText('MS')).toHaveClass('h-8', 'w-8', 'lg:h-10', 'lg:w-10', 'shrink-0');
+  });
+
+  it('Agendamento: só o ícone abaixo de 1280px, com aria-label e title', () => {
+    render(<GlobalHeader activeView="pacientes" clinicaNome="Clínica Teste" />);
+
+    const botao = screen.getByRole('button', { name: 'Agendamento' });
+    expect(botao).toHaveAttribute('title', 'Agendamento');
+    expect(botao).toHaveClass('h-10', 'w-10', 'xl:w-auto', 'shrink-0');
+    expect(within(botao).getByText('Agendamento')).toHaveClass('hidden', 'xl:inline');
+  });
+
+  it('botões e sino não encolhem; o grupo da direita pode encolher', () => {
+    render(<GlobalHeader activeView="pacientes" clinicaNome="Clínica Teste" />);
+
+    expect(screen.getByRole('button', { name: 'Novo Paciente' })).toHaveClass('shrink-0');
+    const sinoWrapper = screen.getByTestId('notification-bell').parentElement;
+    expect(sinoWrapper).toHaveClass('shrink-0');
+    expect(sinoWrapper.parentElement).toHaveClass('ml-auto', 'min-w-0');
+    expect(sinoWrapper.parentElement).not.toHaveClass('shrink-0');
   });
 
   it('mantém o pageSlot recebido igual ao de hoje', () => {

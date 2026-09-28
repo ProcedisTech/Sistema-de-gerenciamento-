@@ -23,9 +23,9 @@ const OUTER_CLASSES = {
   },
   header: {
     button:
-      'hidden shrink-0 items-center gap-3 rounded-full p-0 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 xl:flex min-[1440px]:bg-app-nav-active min-[1440px]:pr-4 min-[1440px]:shadow-app-card min-[1440px]:ring-1 min-[1440px]:ring-app-border min-[1440px]:hover:bg-[#e8f5f3] min-[1440px]:focus-visible:ring-2 min-[1440px]:focus-visible:ring-emerald-300/60',
+      'flex min-w-0 items-center gap-3 rounded-full p-1.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 lg:p-0 min-[1440px]:bg-app-nav-active min-[1440px]:pr-4 min-[1440px]:shadow-app-card min-[1440px]:ring-1 min-[1440px]:ring-app-border min-[1440px]:hover:bg-[#e8f5f3] min-[1440px]:focus-visible:ring-2 min-[1440px]:focus-visible:ring-emerald-300/60',
     static:
-      'hidden shrink-0 items-center gap-3 rounded-full p-0 xl:flex min-[1440px]:bg-app-nav-active min-[1440px]:pr-4 min-[1440px]:shadow-app-card min-[1440px]:ring-1 min-[1440px]:ring-app-border',
+      'flex min-w-0 items-center gap-3 rounded-full p-1.5 lg:p-0 min-[1440px]:bg-app-nav-active min-[1440px]:pr-4 min-[1440px]:shadow-app-card min-[1440px]:ring-1 min-[1440px]:ring-app-border',
   },
 };
 
@@ -40,7 +40,6 @@ const OUTER_CLASSES = {
  *   roleLabel: string,
  *   canSeeConfig?: boolean,
  *   onOpenPerfilSettings?: () => void,
- *   className?: string,
  * }} props
  */
 export function UsuarioIdentityCard({
@@ -51,18 +50,16 @@ export function UsuarioIdentityCard({
   roleLabel,
   canSeeConfig,
   onOpenPerfilSettings,
-  className = '',
 }) {
   const isHeader = variant === 'header';
   const outer = OUTER_CLASSES[variant] || OUTER_CLASSES.sidebar;
-  const extra = className ? ` ${className}` : '';
 
   const content = (
     <>
       <div
         className={
           isHeader
-            ? 'relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-app-accent text-sm font-bold text-white ring-[1.5px] ring-app-accent ring-offset-2 ring-offset-white'
+            ? 'relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-app-accent text-sm font-bold text-white ring-[1.5px] ring-app-accent ring-offset-2 ring-offset-white lg:h-10 lg:w-10'
             : 'relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white'
         }
       >
@@ -86,7 +83,7 @@ export function UsuarioIdentityCard({
       <button
         type="button"
         onClick={() => onOpenPerfilSettings?.()}
-        className={`${outer.button}${extra}`}
+        className={outer.button}
         aria-label="Abrir perfil do profissional"
       >
         {content}
@@ -95,7 +92,7 @@ export function UsuarioIdentityCard({
   }
 
   return (
-    <div className={`${outer.static}${extra}`}>
+    <div className={outer.static}>
       {content}
     </div>
   );

@@ -3,7 +3,6 @@ import { CalendarPlus, Plus, Search } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel';
 import { PacienteSearchInput } from '../agenda/PacienteSearchInput.jsx';
 import NotificationBell from './NotificationBell.jsx';
-import { ProcediSymbol } from './ProcediSymbol.jsx';
 import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
 import { UsuarioIdentityCard } from './UsuarioIdentityCard.jsx';
 import { resolveIdentity } from './identityDisplay';
@@ -63,13 +62,6 @@ export function GlobalHeader({
   const showAgendamento = canWriteAgenda && !isNivel1;
   const showNovoPaciente = canCreatePacientes;
 
-  const brandBlock = (
-    <div className="flex shrink-0 items-center gap-2 xl:hidden" data-testid="global-header-brand">
-      <ProcediSymbol className="h-8 w-8 shrink-0" />
-      <span className="truncate font-semibold text-teal-700">Procedi</span>
-    </div>
-  );
-
   const searchSlot = isPacientesView ? (
     <div className="relative hidden min-w-[12rem] max-w-md flex-1 lg:block">
       <Search
@@ -102,8 +94,7 @@ export function GlobalHeader({
   return (
     <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center border-b border-app-border bg-white/95 px-4 backdrop-blur-sm lg:h-auto lg:py-2.5 sm:px-6 lg:px-8">
       <div className="flex w-full items-center gap-3">
-        <div className="flex shrink-0 items-center gap-3">
-          {brandBlock}
+        <div className="flex min-w-0 flex-1 items-center gap-3 lg:flex-initial">
           <ClinicaIdentityBlock
             variant="header"
             tituloClinica={tituloClinica}
@@ -113,8 +104,8 @@ export function GlobalHeader({
           />
           {pageSlot ? (
             <>
-              <div className="hidden h-4 w-px shrink-0 bg-[#e2e8f0] lg:block" aria-hidden="true" />
-              <div className="hidden min-w-0 items-center lg:flex">
+              <div className="hidden h-4 w-px shrink-0 bg-[#e2e8f0] xl:block" aria-hidden="true" />
+              <div className="hidden min-w-0 items-center xl:flex">
                 {pageSlot}
               </div>
             </>
@@ -123,15 +114,17 @@ export function GlobalHeader({
 
         {searchSlot}
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
           {showAgendamento ? (
             <button
               type="button"
               onClick={onAgendamento}
-              className="hidden h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 text-[13px] font-medium text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 lg:inline-flex"
+              aria-label="Agendamento"
+              title="Agendamento"
+              className="hidden h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-3 text-[13px] font-medium text-ink-700 transition-colors hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 lg:inline-flex xl:w-auto"
             >
               <CalendarPlus className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
-              Agendamento
+              <span className="hidden xl:inline">Agendamento</span>
             </button>
           ) : null}
 
@@ -139,18 +132,20 @@ export function GlobalHeader({
             <button
               type="button"
               onClick={onNovoPaciente}
-              className="hidden h-10 items-center gap-2 rounded-xl bg-[#00a88e] px-3 text-[13px] font-medium text-white transition-colors hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 lg:inline-flex"
+              className="hidden h-10 shrink-0 items-center gap-2 rounded-xl bg-[#00a88e] px-3 text-[13px] font-medium text-white transition-colors hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-vivid-teal-500/40 lg:inline-flex"
             >
               <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
               Novo Paciente
             </button>
           ) : null}
 
-          <NotificationBell
-            variant="header"
-            onVerTodas={onOpenNotificacoes}
-            notificacoesRefreshKey={notificacoesRefreshKey}
-          />
+          <div className="shrink-0">
+            <NotificationBell
+              variant="header"
+              onVerTodas={onOpenNotificacoes}
+              notificacoesRefreshKey={notificacoesRefreshKey}
+            />
+          </div>
 
           <UsuarioIdentityCard
             variant="header"

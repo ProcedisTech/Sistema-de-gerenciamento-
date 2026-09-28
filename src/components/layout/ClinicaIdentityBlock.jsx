@@ -14,8 +14,8 @@ const OUTER_CLASSES = {
   },
   header: {
     button:
-      'hidden min-w-0 items-center gap-3 rounded-xl text-left transition-colors hover:bg-app-nav-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 xl:flex',
-    static: 'hidden min-w-0 items-center gap-3 xl:flex',
+      'flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left transition-colors hover:bg-app-nav-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 md:flex-initial lg:flex-none',
+    static: 'flex min-w-0 flex-1 items-center gap-3 md:flex-initial lg:flex-none',
   },
 };
 
@@ -28,7 +28,6 @@ const OUTER_CLASSES = {
  *   clinicaLogoResolved?: string,
  *   canSeeConfig?: boolean,
  *   onOpenClinicaSettings?: () => void,
- *   className?: string,
  * }} props
  */
 export function ClinicaIdentityBlock({
@@ -37,18 +36,16 @@ export function ClinicaIdentityBlock({
   clinicaLogoResolved,
   canSeeConfig,
   onOpenClinicaSettings,
-  className = '',
 }) {
   const isHeader = variant === 'header';
   const outer = OUTER_CLASSES[variant] || OUTER_CLASSES['sidebar-desktop'];
-  const extra = className ? ` ${className}` : '';
 
   const content = (
     <>
       <div
         className={
           isHeader
-            ? 'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-app-accent shadow-sm ring-1 ring-app-accent/35'
+            ? 'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-app-accent shadow-sm ring-1 ring-app-accent/35 lg:h-10 lg:w-10'
             : 'shrink-0 rounded-xl border border-white/30 bg-[#00a88e] p-2 shadow-sm'
         }
       >
@@ -56,16 +53,20 @@ export function ClinicaIdentityBlock({
           <img
             src={clinicaLogoResolved}
             alt="Logo"
-            className={isHeader ? 'h-10 w-10 object-cover' : 'h-10 w-10 rounded-xl object-cover'}
+            className={isHeader ? 'h-9 w-9 object-cover lg:h-10 lg:w-10' : 'h-10 w-10 rounded-xl object-cover'}
           />
         ) : (
           <Shield className="h-6 w-6 text-white" strokeWidth={2} />
         )}
       </div>
-      <div className={isHeader ? 'min-w-0 max-w-[120px]' : 'min-w-0 flex-1'}>
+      <div
+        className={
+          isHeader ? 'min-w-0 flex-1 md:max-w-[240px] md:flex-initial lg:max-w-[120px]' : 'min-w-0 flex-1'
+        }
+      >
         {isHeader ? (
           <h1
-            className="line-clamp-2 break-words text-[16px] font-bold leading-tight text-[#0f172a]"
+            className="line-clamp-2 break-words text-[16px] font-bold leading-tight text-app-ink"
             title={tituloClinica}
           >
             {tituloClinica}
@@ -82,7 +83,7 @@ export function ClinicaIdentityBlock({
       <button
         type="button"
         onClick={() => onOpenClinicaSettings?.()}
-        className={`${outer.button}${extra}`}
+        className={outer.button}
         aria-label="Abrir dados da clínica"
       >
         {content}
@@ -91,7 +92,7 @@ export function ClinicaIdentityBlock({
   }
 
   return (
-    <div className={`${outer.static}${extra}`}>
+    <div className={outer.static}>
       {content}
     </div>
   );

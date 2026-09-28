@@ -33,34 +33,50 @@ describe('ClinicaIdentityBlock', () => {
     expect(screen.getByText('Clínica Teste')).toBeInTheDocument();
   });
 
-  it('variant header: nome em até 2 linhas, largura máxima e title', () => {
+  it('variant header: nome em até 2 linhas, largura máxima por faixa e title', () => {
     render(<ClinicaIdentityBlock variant="header" tituloClinica="Premier Harmonização" />);
 
     const h1 = screen.getByRole('heading', { level: 1 });
-    expect(h1).toHaveClass('line-clamp-2', 'break-words', 'text-[16px]');
+    expect(h1).toHaveClass('line-clamp-2', 'break-words', 'text-[16px]', 'text-app-ink');
     expect(h1).not.toHaveClass('truncate');
     expect(h1).toHaveAttribute('title', 'Premier Harmonização');
-    expect(h1.parentElement).toHaveClass('max-w-[120px]');
+    expect(h1.parentElement).toHaveClass('min-w-0', 'flex-1', 'md:max-w-[240px]', 'lg:max-w-[120px]');
   });
 
-  it('variant header com logo: caixa de 40px sem padding nem borda, imagem ocupando tudo', () => {
+  it('variant header: visível em todas as larguras, ocupa o espaço livre no celular e não encolhe a partir de lg', () => {
+    render(<ClinicaIdentityBlock variant="header" tituloClinica="Clínica Teste" canSeeConfig />);
+
+    const bloco = screen.getByRole('button', { name: 'Abrir dados da clínica' });
+    expect(bloco).toHaveClass('flex', 'min-w-0', 'flex-1', 'md:flex-initial', 'lg:flex-none');
+    expect(bloco).not.toHaveClass('hidden', 'xl:flex');
+  });
+
+  it('variant header sem canSeeConfig é uma div, sem botão', () => {
+    const { container } = render(<ClinicaIdentityBlock variant="header" tituloClinica="Clínica Teste" />);
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(container.firstChild.tagName).toBe('DIV');
+    expect(container.firstChild).not.toHaveClass('hidden');
+  });
+
+  it('variant header com logo: caixa de 36px (40px a partir de lg) sem padding nem borda', () => {
     render(
       <ClinicaIdentityBlock variant="header" tituloClinica="Clínica Teste" clinicaLogoResolved="https://cdn/x.png" />,
     );
 
     const img = screen.getByAltText('Logo');
-    expect(img).toHaveClass('h-10', 'w-10', 'object-cover');
+    expect(img).toHaveClass('h-9', 'w-9', 'lg:h-10', 'lg:w-10', 'object-cover');
     const caixa = img.parentElement;
-    expect(caixa).toHaveClass('h-10', 'w-10', 'rounded-xl', 'overflow-hidden', 'ring-1');
+    expect(caixa).toHaveClass('h-9', 'w-9', 'lg:h-10', 'lg:w-10', 'rounded-xl', 'overflow-hidden', 'ring-1');
     expect(caixa).not.toHaveClass('p-1', 'p-2', 'border');
   });
 
-  it('variant header sem logo: caixa de 40px com o Shield', () => {
+  it('variant header sem logo: a mesma caixa com o Shield', () => {
     const { container } = render(<ClinicaIdentityBlock variant="header" tituloClinica="Clínica Teste" />);
 
     const svg = container.querySelector('svg');
     expect(svg).not.toBeNull();
-    expect(svg.parentElement).toHaveClass('h-10', 'w-10', 'items-center', 'justify-center');
+    expect(svg.parentElement).toHaveClass('h-9', 'w-9', 'lg:h-10', 'lg:w-10', 'items-center', 'justify-center');
   });
 
   it.each(['sidebar-desktop', 'sidebar-tablet'])('variant %s mantém a caixa do logo de hoje', (variant) => {

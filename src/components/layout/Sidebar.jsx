@@ -66,7 +66,6 @@ export function Sidebar({
       perfilFotoUrl,
       authUser,
     });
-  const identityHideXl = identidadeNoHeader ? 'xl:hidden' : '';
   const isTabletSidebar = useMediaQuery('(min-width: 768px) and (max-width: 1023px)');
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
@@ -137,26 +136,28 @@ export function Sidebar({
               </button>
             </div>
 
-            <div className={`flex justify-center py-3 ${identityHideXl}`} data-testid="sidebar-rail-avatar">
-              {canSeeConfig ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenPerfilSettings?.()}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white transition-opacity duration-200 hover:opacity-95"
-                  title={displayName}
-                  aria-label="Abrir perfil do profissional"
-                >
-                  <UsuarioAvatarInner perfilFotoResolved={perfilFotoResolved} displayName={displayName} />
-                </button>
-              ) : (
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white"
-                  title={displayName}
-                >
-                  <UsuarioAvatarInner perfilFotoResolved={perfilFotoResolved} displayName={displayName} />
-                </div>
-              )}
-            </div>
+            {!identidadeNoHeader ? (
+              <div className="flex justify-center py-3" data-testid="sidebar-rail-avatar">
+                {canSeeConfig ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenPerfilSettings?.()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white transition-opacity duration-200 hover:opacity-95"
+                    title={displayName}
+                    aria-label="Abrir perfil do profissional"
+                  >
+                    <UsuarioAvatarInner perfilFotoResolved={perfilFotoResolved} displayName={displayName} />
+                  </button>
+                ) : (
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#00a88e] text-sm font-bold text-white"
+                    title={displayName}
+                  >
+                    <UsuarioAvatarInner perfilFotoResolved={perfilFotoResolved} displayName={displayName} />
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             <nav className="flex flex-1 flex-col gap-2 px-1 pt-1">
               {visibleNavItems.map((item) => {
@@ -195,20 +196,20 @@ export function Sidebar({
         {!narrowRail && isDesktop ? (
           <>
             <div className="flex items-center gap-2 border-b border-app-border p-4 pl-4 pr-3 transition-opacity duration-200">
-              <ClinicaIdentityBlock
-                variant="sidebar-desktop"
-                tituloClinica={tituloClinica}
-                clinicaLogoResolved={clinicaLogoResolved}
-                canSeeConfig={canSeeConfig}
-                onOpenClinicaSettings={onOpenClinicaSettings}
-                className={identityHideXl}
-              />
               {identidadeNoHeader ? (
-                <div className="hidden min-w-0 flex-1 items-center gap-2 xl:flex" data-testid="sidebar-brand">
+                <div className="flex min-w-0 flex-1 items-center gap-2" data-testid="sidebar-brand">
                   <ProcediSymbol className="h-8 w-8 shrink-0" />
                   <span className="truncate font-semibold text-teal-700">Procedi</span>
                 </div>
-              ) : null}
+              ) : (
+                <ClinicaIdentityBlock
+                  variant="sidebar-desktop"
+                  tituloClinica={tituloClinica}
+                  clinicaLogoResolved={clinicaLogoResolved}
+                  canSeeConfig={canSeeConfig}
+                  onOpenClinicaSettings={onOpenClinicaSettings}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => setDesktopCollapsed(true)}
@@ -220,16 +221,17 @@ export function Sidebar({
               </button>
             </div>
 
-            <UsuarioIdentityCard
-              variant="sidebar"
-              displayName={displayName}
-              shortName={shortName}
-              perfilFotoResolved={perfilFotoResolved}
-              roleLabel={roleLabel}
-              canSeeConfig={canSeeConfig}
-              onOpenPerfilSettings={onOpenPerfilSettings}
-              className={identityHideXl}
-            />
+            {!identidadeNoHeader ? (
+              <UsuarioIdentityCard
+                variant="sidebar"
+                displayName={displayName}
+                shortName={shortName}
+                perfilFotoResolved={perfilFotoResolved}
+                roleLabel={roleLabel}
+                canSeeConfig={canSeeConfig}
+                onOpenPerfilSettings={onOpenPerfilSettings}
+              />
+            ) : null}
 
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
               {visibleNavItems.map((item) => {
@@ -268,7 +270,7 @@ export function Sidebar({
 
         {!narrowRail && isTabletSidebar && tabletExpanded ? (
           <>
-            <div className="flex w-full items-center border-b border-app-border px-4 pt-3">
+            <div className="flex w-full items-center gap-2 border-b border-app-border px-4 pt-3">
               <button
                 type="button"
                 onClick={() => setTabletExpanded(false)}
@@ -278,25 +280,35 @@ export function Sidebar({
               >
                 <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2.25} />
               </button>
+              {identidadeNoHeader ? (
+                <div className="flex min-w-0 flex-1 items-center gap-2" data-testid="sidebar-tablet-brand">
+                  <ProcediSymbol className="h-8 w-8 shrink-0" />
+                  <span className="truncate font-semibold text-teal-700">Procedi</span>
+                </div>
+              ) : null}
             </div>
 
-            <ClinicaIdentityBlock
-              variant="sidebar-tablet"
-              tituloClinica={tituloClinica}
-              clinicaLogoResolved={clinicaLogoResolved}
-              canSeeConfig={canSeeConfig}
-              onOpenClinicaSettings={onOpenClinicaSettings}
-            />
+            {!identidadeNoHeader ? (
+              <>
+                <ClinicaIdentityBlock
+                  variant="sidebar-tablet"
+                  tituloClinica={tituloClinica}
+                  clinicaLogoResolved={clinicaLogoResolved}
+                  canSeeConfig={canSeeConfig}
+                  onOpenClinicaSettings={onOpenClinicaSettings}
+                />
 
-            <UsuarioIdentityCard
-              variant="sidebar"
-              displayName={displayName}
-              shortName={shortName}
-              perfilFotoResolved={perfilFotoResolved}
-              roleLabel={roleLabel}
-              canSeeConfig={canSeeConfig}
-              onOpenPerfilSettings={onOpenPerfilSettings}
-            />
+                <UsuarioIdentityCard
+                  variant="sidebar"
+                  displayName={displayName}
+                  shortName={shortName}
+                  perfilFotoResolved={perfilFotoResolved}
+                  roleLabel={roleLabel}
+                  canSeeConfig={canSeeConfig}
+                  onOpenPerfilSettings={onOpenPerfilSettings}
+                />
+              </>
+            ) : null}
 
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
               {visibleNavItems.map((item) => {
