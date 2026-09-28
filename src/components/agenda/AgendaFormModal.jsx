@@ -220,8 +220,8 @@ export function AgendaFormModal({ agenda }) {
   const isReagendar = agenda.modalMode === 'reagendar';
   const lockPlanejamento = Boolean(agenda.isModoPlanejamento);
   const lockPatient = Boolean(agenda.patientSelectLocked);
-  const profissionalFixado = ehProfissionalClinico || Boolean(agenda.roleUserIdAgenda);
-  const roleUserIdFiltro = ehProfissionalClinico ? roleLogadoId : (agenda.roleUserIdAgenda || '');
+  const roleUserIdFiltro = agenda.roleUserIdAgenda || (ehProfissionalClinico ? roleLogadoId : '');
+  const profissionalFixado = Boolean(agenda.roleUserIdAgenda || (ehProfissionalClinico && !agenda.canSeeAgendaMulti));
   const rangePhase = deriveRangePhase(agenda.form.horaInicio, agenda.form.horaFimSlot);
   const duracaoTotalMin =
     rangePhase === 'complete'

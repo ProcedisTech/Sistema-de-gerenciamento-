@@ -948,6 +948,8 @@ export const agendasApi = {
     }
     return request(url, { signal: opts.signal });
   },
+  ocupacoes: (start, end, profissionalRoleUserId) =>
+    request(`/api/v1/agendas/ocupacoes?start=${start}&end=${end}&profissionalRoleUserId=${encodeURIComponent(String(profissionalRoleUserId).trim())}`),
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
   create: (data, opts = {}) => {

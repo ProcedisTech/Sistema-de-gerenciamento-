@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
+import { invalidateAuthMeCache } from '../utils/authMeProbe';
 import { DEFAULT_ORG_ID, ALT_ORG_ID, sanitizeOrgId } from '../config/apiEnv';
 
 const LS_ORG = 'procedi_org_id';
@@ -21,7 +22,7 @@ function readLs(key, fallback) {
 
 function readInitialOrgIdSynced() {
   const fromLs = readLs(LS_ORG, '');
-  const initial = sanitizeOrgId(fromLs) || sanitizeOrgId(DEFAULT_ORG_ID) || '';
+  const initial = sanitizeOrgId(fromLs) || '';
   // Seed presa no LS de sessões antigas → limpar e não reinjetar.
   if (fromLs && !initial) {
     try {
@@ -39,7 +40,7 @@ function readInitialOrgIdSynced() {
 export function OrgProvider({ children }) {
   const [orgId, setOrgIdState] = useState(readInitialOrgIdSynced);
   const [orgSlug, setOrgSlugState] = useState(() => readLs(LS_SLUG, ''));
-  const [roleUserId, setRoleUserIdState] = useState(() => readLs(LS_ROLE, ''));
+  const [roleUserId, setRoleUserIdState] = useState('');
   // Não inicializa a partir do localStorage: o papel só é confiável depois que /me responder,
   // para não aplicar um papel desatualizado/de outro usuário por uma fração de segundo.
   const [papel, setPapelState] = useState(null);
@@ -49,6 +50,7 @@ export function OrgProvider({ children }) {
   const [permissoes, setPermissoesState] = useState([]);
   /** Flag de elegibilidade para aparecer na agenda como profissional vinda do perfil de acesso (/me). */
   const [apareceNaAgenda, setApareceNaAgendaState] = useState(null);
+  const [contextStatus, setContextStatus] = useState('idle');
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -56,6 +58,14 @@ export function OrgProvider({ children }) {
 
   const setOrgId = useCallback((id, slug = '') => {
     const next = sanitizeOrgId(id);
+    apiSetOrgId(next);
+    invalidateAuthMeCache();
+    setRoleUserIdState('');
+    setPapelState(null);
+    setRoleNomeState('');
+    setPermissoesState([]);
+    setApareceNaAgendaState(null);
+    setContextStatus(next ? 'loading' : 'idle');
     if (!next) {
       // falsy / placeholder: limpa org (nunca reinjeta seed)
       setOrgIdState('');
@@ -131,7 +141,9 @@ export function OrgProvider({ children }) {
     setRoleNomeState('');
     setPermissoesState([]);
     setApareceNaAgendaState(null);
+    setContextStatus('idle');
     apiSetOrgId('');
+    invalidateAuthMeCache();
   }, []);
 
   const value = useMemo(
@@ -151,9 +163,11 @@ export function OrgProvider({ children }) {
       setPermissoes,
       apareceNaAgenda,
       setApareceNaAgenda,
+      contextStatus,
+      setContextStatus,
       clearOrgSession,
     }),
-    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, clearOrgSession]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, contextStatus, clearOrgSession]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -178,6 +192,8 @@ export function useOrg() {
       setPermissoes: () => {},
       apareceNaAgenda: null,
       setApareceNaAgenda: () => {},
+      contextStatus: 'idle',
+      setContextStatus: () => {},
       clearOrgSession: () => {},
     };
   }

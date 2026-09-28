@@ -14,7 +14,7 @@ import { EditRoleModal } from './EditRoleModal';
 import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
 import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
 
-export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
+export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvalidate }) {
   // eslint-disable-next-line no-unused-vars
   const { isAdmin, canSeeConfigEquipe } = usePapel();
   const { roleUserId: currentRoleUserId } = useOrg();
@@ -699,7 +699,14 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate }) {
               permissoes={permissoes}
               especialidadesList={especialidadesList}
               onClose={() => setShowEditModal(false)}
-              onSuccess={() => { setShowEditModal(false); loadData(); }}
+              onSuccess={({ ownerAgendaUpdated, roleUserId } = {}) => {
+                setShowEditModal(false);
+                loadData();
+                if (ownerAgendaUpdated) {
+                  onEquipeInvalidate?.();
+                  onDisponibilidadeInvalidate?.({ scope: 'role', roleUserId });
+                }
+              }}
               fetchHeaders={fetchHeaders}
               readOnly={editModalReadOnly}
               onEditarPerfilNaAba={onEditarPerfilNaAba}

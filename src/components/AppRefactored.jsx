@@ -168,7 +168,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 function AppRefactoredInner() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, setApareceNaAgenda, clearOrgSession } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, setApareceNaAgenda, contextStatus, setContextStatus, clearOrgSession } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -191,7 +191,7 @@ function AppRefactoredInner() {
   const [postLoginGate, setPostLoginGate] = React.useState(null);
   /** Incrementado após CompletarPerfil para re-rodar descoberta sem loop profile↔checking. */
   const [orgDiscoveryNonce, setOrgDiscoveryNonce] = React.useState(0);
-  const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
+  const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready' && contextStatus === 'ready';
 
   React.useEffect(() => {
     if (!authState.isLoggedIn) {
@@ -240,24 +240,6 @@ function AppRefactoredInner() {
           setPostLoginGate('profile');
           return;
         }
-        const roleId = meJson?.roleUserId ?? meJson?.role_user_id ?? null;
-        if (roleId && typeof setRoleUserId === 'function') {
-          setRoleUserId(String(roleId));
-        }
-        const roleNome = meJson?.perfilAcessoCodigo ?? meJson?.perfil_acesso_codigo ?? meJson?.role?.nome ?? meJson?.role_nome ?? meJson?.role ?? null;
-        if (typeof setRoleNome === 'function') {
-          setRoleNome(roleNome != null ? String(roleNome) : '');
-        }
-        if (typeof setPapel === 'function') {
-          setPapel(resolverPapel(roleNome));
-        }
-        if (typeof setPermissoes === 'function') {
-          setPermissoes(meJson?.permissoes || []);
-        }
-        if (typeof setApareceNaAgenda === 'function') {
-          const aparece = meJson?.apareceNaAgenda ?? meJson?.aparece_na_agenda ?? null;
-          setApareceNaAgenda(aparece);
-        }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
           headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
@@ -275,9 +257,12 @@ function AppRefactoredInner() {
         }
         const list = Array.isArray(orgJson) ? orgJson : orgJson?.content ?? orgJson?.organizacoes ?? orgJson?.data ?? [];
         const arr = Array.isArray(list) ? list : [];
-        if (arr.length === 1) {
-          const id = arr[0]?.id ?? arr[0]?.organizacaoSaudeId;
-          if (id) setOrgId(String(id), arr[0]?.slug || '');
+        const persistedId = localStorage.getItem('procedi_org_id');
+        const selected = arr.length === 1 ? arr[0] : arr.find((item) =>
+          String(item?.id ?? item?.organizacaoSaudeId) === persistedId);
+        if (selected) {
+          const id = selected?.id ?? selected?.organizacaoSaudeId;
+          if (id) setOrgId(String(id), selected?.slug || '');
           const clinicaRes = await fetch(resolveApiUrl('/api/v1/clinica'), {
             credentials: 'include',
             headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
@@ -326,6 +311,42 @@ function AppRefactoredInner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- toast estável; orgDiscoveryNonce re-dispara após CompletarPerfil
   }, [authState.isLoggedIn, authState.authUser?.id, authState.authReady, setOrgId, orgDiscoveryNonce]);
+  // Permissões do Dono são por clínica; nunca reaproveitar o /me de outra organização.
+  React.useEffect(() => {
+    if (!authState.authReady || !authState.isLoggedIn || !orgId) return undefined;
+    let cancelled = false;
+    setContextStatus('loading');
+    (async () => {
+      try {
+        const response = await fetch(resolveApiUrl('/api/auth/me'), {
+          credentials: 'include',
+          headers: await authHeadersForFetch({ needsOrg: true }),
+        });
+        if (cancelled) return;
+        if (!response.ok) throw new Error('Falha ao atualizar permissões da clínica');
+        const me = await response.json();
+        if (cancelled) return;
+        if (me.organizacaoId !== orgId) throw new Error('Contexto de clínica inválido');
+        setRoleUserId(me.roleUserId ?? '');
+        setRoleNome(me.perfilAcessoCodigo ?? me.role ?? '');
+        setPapel(resolverPapel(me.perfilAcessoCodigo ?? me.role ?? ''));
+        setPermissoes(me.permissoes || []);
+        setApareceNaAgenda(me.apareceNaAgenda);
+        setContextStatus('ready');
+      } catch {
+        if (!cancelled) {
+          setPermissoes([]);
+          setApareceNaAgenda(null);
+          setRoleUserId('');
+          setPapel(null);
+          setContextStatus('error');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authState.authReady, authState.isLoggedIn, orgId,
+    setRoleUserId, setRoleNome, setPapel, setPermissoes, setApareceNaAgenda, setContextStatus]);
+
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   const mapaAplicacaoState = useMapaAplicacaoState();
@@ -5031,6 +5052,7 @@ function AppRefactoredInner() {
                   <RoleGuard requiredPermission={PERMISSOES.USUARIO_VER} minLevel="NIVEL_5" showError>
                     <GestaoUsuariosView
                       onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                      onEquipeInvalidate={agendaSchedule.refreshEquipe}
                     />
                   </RoleGuard>
                 )}

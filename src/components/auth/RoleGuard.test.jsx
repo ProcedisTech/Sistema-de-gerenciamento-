@@ -71,7 +71,7 @@ describe('RoleGuard RBAC', () => {
     expect(screen.getByText('Acesso Negado')).toBeInTheDocument();
   });
 
-  it('Dono sempre tem permissão mesmo que não conste na lista explícita', () => {
+  it('Dono aguarda permissões contextuais antes de renderizar conteúdo protegido', () => {
     vi.mocked(OrgContextModule.useOrg).mockReturnValue({
       papel: 'DONO',
       permissoes: [],
@@ -83,6 +83,6 @@ describe('RoleGuard RBAC', () => {
       </RoleGuard>
     );
 
-    expect(screen.getByText('Painel do Dono')).toBeInTheDocument();
+    expect(screen.queryByText('Painel do Dono')).not.toBeInTheDocument();
   });
 });
