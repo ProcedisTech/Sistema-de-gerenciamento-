@@ -691,6 +691,7 @@ export function AgendaDashboard({
     onRemoverBloqueio: agenda.handleRemoverBloqueio,
     onOpenSlotDetail: onOpenWeekSlotDetail,
     submittingRemoverBloqueioId: agenda.submittingRemoverBloqueioId,
+    clinicaHorarios: agenda.clinicaHorarios,
   };
 
   return (
@@ -790,6 +791,7 @@ export function AgendaDashboard({
                 onOpenSlotDetail={onOpenWeekSlotDetail}
                 onClickEmptySlot={agenda.isNivel1 ? null : openWeekCreateAtSlot}
                 disponibilidades={agenda.disponibilidades}
+                clinicaHorarios={agenda.clinicaHorarios}
                 advanceOfferByAgendaId={advanceOfferByAgendaId}
                 onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
                 onRemoverBloqueio={agenda.isNivel1 ? null : agenda.handleRemoverBloqueio}
