@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * Símbolo Procedi (3 nós) — cores travadas do protótipo aprovado.
- * Usado apenas no GlobalHeader; favicon estático em public/favicon.svg.
+ * Usado no GlobalHeader e na Sidebar; favicon estático em public/favicon.svg.
  */
 export function ProcediSymbol({ className = 'h-8 w-8', ...props }) {
   return (

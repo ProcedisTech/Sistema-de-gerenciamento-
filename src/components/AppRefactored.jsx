@@ -296,7 +296,7 @@ function AppRefactoredInner() {
             if (nomeClinica || logoUrl || clinicaJson) {
               setClinicaInfo((prev) => ({
                 ...prev,
-                ...(nomeClinica ? { nome: nomeClinica, subtitulo: 'Harmonização Premium' } : {}),
+                ...(nomeClinica ? { nome: nomeClinica } : {}),
                 ...(logoUrl ? { logoUrl } : {}),
                 endereco: endCompleto,
                 telefone: String(clinicaJson?.telefone ?? clinicaJson?.celular ?? '').trim(),
@@ -355,10 +355,9 @@ function AppRefactoredInner() {
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
   const [clinicaInfo, setClinicaInfo] = useState({
     nome: 'Procedi',
-    subtitulo: 'Harmonização Premium',
     logoUrl: '',
   });
-  const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', fotoUrl: '' });
+  const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', apelido: '', fotoUrl: '' });
   const [configSection, setConfigSectionState] = useState(readStoredSection);
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
@@ -1492,6 +1491,7 @@ function AppRefactoredInner() {
           const p = await perfilRes.json().catch(() => ({}));
           setPerfilInfo({
             nomeCompleto: String(p?.nomeCompleto ?? p?.nome_completo ?? '').trim(),
+            apelido: String(p?.apelido ?? '').trim(),
             fotoUrl: String(p?.fotoUrl ?? p?.foto_url ?? '').trim(),
             cpf: String(p?.cpf ?? '').trim(),
             crm: String(p?.crm ?? '').trim(),
@@ -1511,7 +1511,7 @@ function AppRefactoredInner() {
 
           setClinicaInfo((prev) => ({
             ...prev,
-            ...(nomeClinica ? { nome: String(nomeClinica).trim(), subtitulo: 'Harmonização Premium' } : {}),
+            ...(nomeClinica ? { nome: String(nomeClinica).trim() } : {}),
             ...(logoUrl ? { logoUrl } : {}),
             endereco: endCompleto,
             telefone: String(c?.telefone ?? c?.celular ?? '').trim(),
@@ -1531,7 +1531,7 @@ function AppRefactoredInner() {
 
   React.useEffect(() => {
     if (!isLoggedIn) {
-      setPerfilInfo({ nomeCompleto: '', fotoUrl: '' });
+      setPerfilInfo({ nomeCompleto: '', apelido: '', fotoUrl: '' });
     }
   }, [isLoggedIn]);
 
@@ -3774,6 +3774,8 @@ function AppRefactoredInner() {
   // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
   const isJornadaView = activeView === 'jornada';
   const isConsultaView = activeView === 'consulta';
+  /** Jornada e Consulta não montam o GlobalHeader: a identidade continua na Sidebar. */
+  const identidadeNoHeader = !isJornadaView && !isConsultaView;
   const alertasClinicosConsulta = useAlertasClinicos(pacienteAtual?.id, {
     refreshKey: alertasClinicosRefreshKey,
     sexoPaciente: pacienteAtual?.sexo,
@@ -3919,12 +3921,13 @@ function AppRefactoredInner() {
         authUser={authUser}
         onRailWidthPxChange={setSidebarRailWidthPx}
         clinicaNome={clinicaInfo.nome}
-        clinicaSubtitulo={clinicaInfo.subtitulo}
         clinicaLogoUrl={clinicaInfo.logoUrl}
         perfilNomeCompleto={perfilInfo.nomeCompleto}
+        perfilApelido={perfilInfo.apelido}
         perfilFotoUrl={perfilInfo.fotoUrl}
         onOpenClinicaSettings={onOpenClinicaSettings}
         onOpenPerfilSettings={onOpenPerfilSettings}
+        identidadeNoHeader={identidadeNoHeader}
       />
 
       {/* Main Content */}
@@ -4902,6 +4905,14 @@ function AppRefactoredInner() {
               notificacoesRefreshKey={notifVersion}
               patientSearchQuery={patientSearchQuery}
               setPatientSearchQuery={setPatientSearchQuery}
+              authUser={authUser}
+              clinicaNome={clinicaInfo.nome}
+              clinicaLogoUrl={clinicaInfo.logoUrl}
+              perfilNomeCompleto={perfilInfo.nomeCompleto}
+              perfilApelido={perfilInfo.apelido}
+              perfilFotoUrl={perfilInfo.fotoUrl}
+              onOpenClinicaSettings={onOpenClinicaSettings}
+              onOpenPerfilSettings={onOpenPerfilSettings}
             />
             <div
               className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
@@ -5005,7 +5016,7 @@ function AppRefactoredInner() {
                       configSection={configSection}
                       setConfigSection={setConfigSection}
                       onClinicaAtualizada={(nome, logoUrl) =>
-                        setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
+                        setClinicaInfo({ nome, logoUrl: logoUrl ?? '' })
                       }
                       onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}

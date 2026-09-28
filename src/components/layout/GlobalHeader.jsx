@@ -4,6 +4,9 @@ import { usePapel } from '../../hooks/usePapel';
 import { PacienteSearchInput } from '../agenda/PacienteSearchInput.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import { ProcediSymbol } from './ProcediSymbol.jsx';
+import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
+import { UsuarioIdentityCard } from './UsuarioIdentityCard.jsx';
+import { resolveIdentity } from './identityDisplay';
 
 /**
  * @param {{
@@ -16,6 +19,14 @@ import { ProcediSymbol } from './ProcediSymbol.jsx';
  *   notificacoesRefreshKey?: number,
  *   patientSearchQuery?: string,
  *   setPatientSearchQuery?: (v: string) => void,
+ *   authUser?: object,
+ *   clinicaNome?: string,
+ *   clinicaLogoUrl?: string,
+ *   perfilNomeCompleto?: string,
+ *   perfilApelido?: string,
+ *   perfilFotoUrl?: string,
+ *   onOpenClinicaSettings?: () => void,
+ *   onOpenPerfilSettings?: () => void,
  * }} props
  */
 export function GlobalHeader({
@@ -28,15 +39,32 @@ export function GlobalHeader({
   notificacoesRefreshKey = 0,
   patientSearchQuery = '',
   setPatientSearchQuery,
+  authUser,
+  clinicaNome,
+  clinicaLogoUrl,
+  perfilNomeCompleto,
+  perfilApelido,
+  perfilFotoUrl,
+  onOpenClinicaSettings,
+  onOpenPerfilSettings,
 }) {
-  const { canCreatePacientes, canWriteAgenda, isNivel1 } = usePapel();
+  const { canCreatePacientes, canWriteAgenda, isNivel1, canSeeConfig } = usePapel();
+  const { tituloClinica, clinicaLogoResolved, displayName, shortName, perfilFotoResolved, roleLabel } =
+    resolveIdentity({
+      clinicaNome,
+      clinicaLogoUrl,
+      perfilNomeCompleto,
+      perfilApelido,
+      perfilFotoUrl,
+      authUser,
+    });
 
   const isPacientesView = activeView === 'pacientes';
   const showAgendamento = canWriteAgenda && !isNivel1;
   const showNovoPaciente = canCreatePacientes;
 
   const brandBlock = (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2 xl:hidden" data-testid="global-header-brand">
       <ProcediSymbol className="h-8 w-8 shrink-0" />
       <span className="truncate font-semibold text-teal-700">Procedi</span>
     </div>
@@ -76,6 +104,13 @@ export function GlobalHeader({
       <div className="flex w-full items-center gap-3">
         <div className="flex shrink-0 items-center gap-3">
           {brandBlock}
+          <ClinicaIdentityBlock
+            variant="header"
+            tituloClinica={tituloClinica}
+            clinicaLogoResolved={clinicaLogoResolved}
+            canSeeConfig={canSeeConfig}
+            onOpenClinicaSettings={onOpenClinicaSettings}
+          />
           {pageSlot ? (
             <>
               <div className="hidden h-4 w-px shrink-0 bg-[#e2e8f0] lg:block" aria-hidden="true" />
@@ -115,6 +150,16 @@ export function GlobalHeader({
             variant="header"
             onVerTodas={onOpenNotificacoes}
             notificacoesRefreshKey={notificacoesRefreshKey}
+          />
+
+          <UsuarioIdentityCard
+            variant="header"
+            displayName={displayName}
+            shortName={shortName}
+            perfilFotoResolved={perfilFotoResolved}
+            roleLabel={roleLabel}
+            canSeeConfig={canSeeConfig}
+            onOpenPerfilSettings={onOpenPerfilSettings}
           />
         </div>
       </div>
