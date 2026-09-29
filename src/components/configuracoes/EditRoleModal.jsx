@@ -7,7 +7,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
-import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
+import { formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
@@ -27,11 +27,6 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
   const [perfilAcessoId, setPerfilAcessoId] = useState(usuario.perfilAcessoId || '');
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
   const [showCpf, setShowCpf] = useState(false);
-
-  const selectedRoleInitial = (roles || []).find(r => String(r.id) === String(usuario.roleId || usuario.role?.id));
-  const presetInitial = selectedRoleInitial ? getPresetProfileId(selectedRoleInitial, perfisAcesso) : null;
-  const isInitiallyCustom = Boolean(usuario.perfilAcessoId && presetInitial && String(presetInitial) !== String(usuario.perfilAcessoId));
-  const [customizarPerfil, setCustomizarPerfil] = useState(isInitiallyCustom);
 
   // Só leitura: mostra o que o perfil atribuído inclui. Editar de verdade acontece na aba Perfis de Acesso.
   const [permissoesDoNivel, setPermissoesDoNivel] = useState([]);
@@ -160,16 +155,6 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
 
   const handleRoleChangeEdit = (selectedRoleId) => {
     setRoleId(selectedRoleId);
-    // Não altera o nível de acesso do DONO — ele fica sempre bloqueado
-    if (isUserOwner) return;
-    const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
-    if (selectedRole) {
-      const presetId = getPresetProfileId(selectedRole, perfisAcesso);
-      if (presetId && (!customizarPerfil || presetId !== perfilAcessoId)) {
-        setPerfilAcessoId(presetId);
-        loadPermissoesDoNivel(presetId);
-      }
-    }
   };
 
   const handlePerfilChangeEdit = (selectedPerfilId) => {
@@ -605,85 +590,43 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
                 )}
               </div>
 
-              {/* Card Resumo do Perfil Atrelado ao Cargo (Não-Dono) */}
+              {!isUserOwner && (
+                <div className="mt-4">
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-800">
+                    Perfil de acesso
+                  </label>
+                  <select
+                    required
+                    value={perfilAcessoId}
+                    disabled={isReadOnly}
+                    onChange={e => handlePerfilChangeEdit(e.target.value)}
+                    className="w-full rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  >
+                    <option value="">Selecione o perfil de acesso...</option>
+                    {[...perfisAcesso]
+                      .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                      .sort((a, b) => {
+                        const ordA = CODIGO_ORDER[(a.codigo || '').toUpperCase()] || 99;
+                        const ordB = CODIGO_ORDER[(b.codigo || '').toUpperCase()] || 99;
+                        if (ordA !== ordB) return ordA - ordB;
+                        return (a.nome || '').localeCompare(b.nome || '');
+                      })
+                      .map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                </div>
+              )}
               {!isUserOwner && perfilSelecionado && (
-                <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/40 p-4 transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start sm:items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm">
-                        <Shield className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-bold text-slate-900">
-                            Perfil: {perfilSelecionado.nome}
-                          </span>
-                          {perfilSelecionadoAtendeAgenda ? (
-                            <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              📅 Atende na Agenda
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
-                              🚫 Sem Agenda
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {perfilSelecionado.descricao || 'Perfil de acesso com permissões oficiais para esta função.'}
-                        </p>
-                      </div>
+                <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/40 p-4">
+                  <div className="flex items-center gap-3">
+                    <Shield className="h-5 w-5 text-teal-700" />
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">Perfil: {perfilSelecionado.nome}</div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {perfilSelecionado.descricao || 'Permissões deste perfil de acesso.'}
+                        {' '}{perfilSelecionadoAtendeAgenda ? 'Pode aparecer na agenda.' : 'Não aparece na agenda.'}
+                      </p>
                     </div>
-
-                    {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextState = !customizarPerfil;
-                          setCustomizarPerfil(nextState);
-                          if (!nextState && roleId) {
-                            const selectedRole = roles.find(r => String(r.id) === String(roleId));
-                            const presetId = selectedRole ? getPresetProfileId(selectedRole, perfisAcesso) : null;
-                            if (presetId) handlePerfilChangeEdit(presetId);
-                          }
-                        }}
-                        className="text-xs font-bold text-teal-700 hover:text-teal-900 underline self-start sm:self-center shrink-0"
-                      >
-                        {customizarPerfil ? 'Voltar ao perfil padrão do cargo' : 'Alterar perfil de acesso'}
-                      </button>
-                    )}
                   </div>
-
-                  {customizarPerfil && !isReadOnly && (
-                    <div className="mt-4 pt-4 border-t border-teal-200/60">
-                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-800">
-                        Selecionar outro Perfil de Acesso
-                      </label>
-                      <select
-                        value={perfilAcessoId}
-                        disabled={isReadOnly}
-                        onChange={e => handlePerfilChangeEdit(e.target.value)}
-                        className="w-full rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                      >
-                        {[...perfisAcesso]
-                          .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                          .sort((a, b) => {
-                            const ordA = CODIGO_ORDER[(a.codigo || '').toUpperCase()] || 99;
-                            const ordB = CODIGO_ORDER[(b.codigo || '').toUpperCase()] || 99;
-                            if (ordA !== ordB) return ordA - ordB;
-                            return (a.nome || '').localeCompare(b.nome || '');
-                          })
-                          .map(p => {
-                            const isClinico = (p.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO';
-                            return (
-                              <option key={p.id} value={p.id}>
-                                {p.nome} {isClinico ? '(Atende na Agenda)' : ''}
-                              </option>
-                            );
-                          })
-                        }
-                      </select>
-                    </div>
-                  )}
                 </div>
               )}
 

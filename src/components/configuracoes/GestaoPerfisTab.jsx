@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Settings2, Plus, Edit2, Trash2, Shield, Crown, Loader2, X } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { getApiErrorDetail } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
-import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER, MODULO_LABEL_CURTO } from './gestaoUsuariosUtils';
+import { CODIGO_ORDER, MODULO_LABEL_CURTO } from './gestaoUsuariosUtils';
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesCustomizadasModal } from './PermissoesCustomizadasModal';
 
 const isPerfilGlobal = (perfil) => !perfil.organizacaoSaudeDona && !perfil.organizacaoSaudeDonaId;
 
-export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onReload, fetchHeaders, perfilParaAbrir, onPerfilParaAbrirConsumido }) {
+export function GestaoPerfisTab({ perfisAcesso, permissoes, usuarios, onReload, fetchHeaders, perfilParaAbrir, onPerfilParaAbrirConsumido }) {
   const toast = useToast();
   const [showModal, setShowModal] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -23,17 +23,6 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   const [selectedPermissoes, setSelectedPermissoes] = useState([]);
   const [loadingPermissoes, setLoadingPermissoes] = useState(false);
 
-  // Só pra pré-preencher os checkboxes a partir do cargo escolhido — não é salvo no perfil.
-  const [cargoPreenchimento, setCargoPreenchimento] = useState('');
-
-  // Guarda a última sugestão de nome/descrição que o próprio handleCargoChange aplicou,
-  // pra distinguir "usuário editou por conta própria" (não sobrescreve mais) de "ainda é
-  // a sugestão do cargo anterior" (pode trocar pela sugestão do novo cargo escolhido).
-  const cargoSugestaoRef = useRef({ nome: '', descricao: '' });
-  // Evita que a resposta de uma troca de cargo antiga (mais lenta) sobrescreva, ao
-  // chegar depois, o resultado de uma troca mais recente.
-  const cargoRequestIdRef = useRef(0);
-
   // Pop-up de escolha (criar novo vs editar existente), só pra perfis já customizados.
   const [perfilEscolha, setPerfilEscolha] = useState(null);
   const [carregandoEscolha, setCarregandoEscolha] = useState(false);
@@ -45,15 +34,12 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   const fecharModal = () => {
     setShowModal(false);
     setPerfilBaseCriacao(null);
-    setCargoPreenchimento('');
     setWizardStep(1);
   };
 
   const openNew = () => {
     setEditingPerfil(null);
     setPerfilBaseCriacao(null);
-    setCargoPreenchimento('');
-    cargoSugestaoRef.current = { nome: '', descricao: '' };
     setFormData({ nome: '', descricao: '' });
     setSelectedPermissoes([]);
     setWizardStep(1);
@@ -63,8 +49,6 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
   const openEdit = async (perfil) => {
     setEditingPerfil(perfil);
     setPerfilBaseCriacao(null);
-    setCargoPreenchimento('');
-    cargoSugestaoRef.current = { nome: '', descricao: '' };
     setFormData({
       nome: perfil.nome || '',
       descricao: perfil.descricao || '',
@@ -155,9 +139,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       try {
         const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
         setEditingPerfil(null);
-        setCargoPreenchimento('');
-        cargoSugestaoRef.current = { nome: '', descricao: '' };
-        setFormData({
+                setFormData({
           nome: perfil.nome || '',
           descricao: perfil.descricao || '',
         });
@@ -180,9 +162,7 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       const permissoesAtuais = await buscarPermissoesAtuais(perfilOrigem.id);
       setPerfilEscolha(null);
       setEditingPerfil(null);
-      setCargoPreenchimento('');
-      cargoSugestaoRef.current = { nome: '', descricao: '' };
-      setFormData({
+          setFormData({
         nome: nomeNovo,
         descricao: perfilOrigem.descricao || '',
       });
@@ -192,43 +172,6 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
       setShowModal(true);
     } finally {
       setCarregandoEscolha(false);
-    }
-  };
-
-  // Preenche Nome/Descrição e os checkboxes automaticamente com a norma do Nível global
-  // equivalente ao cargo escolhido (mesmo mapeamento já usado no Convidar/Editar Membro).
-  // Só sugere Nome/Descrição se o usuário ainda não tiver digitado nada — não sobrescreve
-  // o que ele já preencheu. O usuário pode editar tudo livremente depois.
-  const handleCargoChange = async (cargoId) => {
-    setCargoPreenchimento(cargoId);
-    if (!cargoId) return;
-    const cargo = (roles || []).find(r => String(r.id) === String(cargoId));
-    if (!cargo) return;
-    const perfilPresetId = getPresetProfileId(cargo.nome, perfisAcesso);
-    const perfilPreset = perfilPresetId ? (perfisAcesso || []).find(p => String(p.id) === String(perfilPresetId)) : null;
-    const cargoLabel = formatCargoLabel(cargo.nome);
-    const descricaoSugerida = perfilPreset?.descricao || `Acesso equivalente ao cargo de ${cargoLabel}.`;
-    const requestId = ++cargoRequestIdRef.current;
-
-    const sugestaoAnterior = cargoSugestaoRef.current;
-    cargoSugestaoRef.current = {
-      nome: cargoLabel,
-      descricao: descricaoSugerida,
-    };
-
-    setFormData(prev => ({
-      nome: (!prev.nome.trim() || prev.nome === sugestaoAnterior.nome) ? cargoLabel : prev.nome,
-      descricao: (!prev.descricao.trim() || prev.descricao === sugestaoAnterior.descricao) ? descricaoSugerida : prev.descricao,
-    }));
-
-    if (!perfilPresetId) return;
-    setLoadingPermissoes(true);
-    try {
-      const permissoesPreset = await buscarPermissoesAtuais(perfilPresetId);
-      if (cargoRequestIdRef.current !== requestId) return;
-      setSelectedPermissoes(permissoesPreset);
-    } finally {
-      if (cargoRequestIdRef.current === requestId) setLoadingPermissoes(false);
     }
   };
 
@@ -515,30 +458,6 @@ export function GestaoPerfisTab({ perfisAcesso, permissoes, roles, usuarios, onR
             <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0">
               {wizardStep === 1 ? (
                 <div className="w-full max-w-md mx-auto space-y-4 py-2 flex-1 min-h-0 overflow-y-auto">
-                  {!editingPerfil && (
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Basear no Perfil do Cargo</label>
-                      <select
-                        value={cargoPreenchimento}
-                        onChange={e => handleCargoChange(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
-                      >
-                        <option value="">Selecione um cargo para preenchimento rápido (opcional)...</option>
-                        {[...(roles || [])]
-                          .sort((a, b) => {
-                            const ordA = ROLE_DISPLAY_ORDER[(a.nome || '').toUpperCase()] || 99;
-                            const ordB = ROLE_DISPLAY_ORDER[(b.nome || '').toUpperCase()] || 99;
-                            if (ordA !== ordB) return ordA - ordB;
-                            return (a.nome || '').localeCompare(b.nome || '');
-                          })
-                          .map(r => (
-                            <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
-                          ))
-                        }
-                      </select>
-                      <p className="text-[11px] text-slate-400 mt-1 ml-1">Carrega o conjunto de permissões oficiais deste cargo como ponto de partida para o novo perfil customizado.</p>
-                    </div>
-                  )}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Nome do Perfil</label>
                     <input
