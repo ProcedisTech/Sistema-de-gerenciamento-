@@ -128,7 +128,7 @@ export function AuditoriaView() {
       );
     }
     if (filtroSuspeito) {
-      lista = lista.filter(r => r.suspeito === true);
+      lista = lista.filter(r => (r.suspeito ?? r.isSuspeito) === true);
     }
     return [...lista].sort((a, b) => {
       const diff = new Date(b.criadoEm) - new Date(a.criadoEm);
@@ -254,15 +254,18 @@ function formatDescricaoForPdf(desc) {
             ? `${sanitizeForPdf(item.papel)} | ${sanitizeForPdf(item.perfilAcessoNome)}`
             : (sanitizeForPdf(item.papel) || '-');
 
+          const moduloTexto = item.entidade || item.permissaoModulo || '-';
+          const descTexto = item.descricao || item.permissaoDescricao || '-';
+
           const rowData = [
             formatData(item.criadoEm),
             sanitizeForPdf(item.nomeUsuario),
             perfilTexto,
             sanitizeForPdf(acaoComPermissao),
-            sanitizeForPdf(item.entidade),
-            formatDescricaoForPdf(item.descricao),
+            sanitizeForPdf(moduloTexto),
+            formatDescricaoForPdf(descTexto),
             sanitizeForPdf(item.ipOrigem || 'Desconhecido'),
-            item.suspeito ? 'SIM' : 'NÃO'
+            (item.suspeito ?? item.isSuspeito) ? 'SIM' : 'NÃO'
           ];
           tableRows.push(rowData);
         });
@@ -457,7 +460,7 @@ function formatDescricaoForPdf(desc) {
                     {acao.label}
                   </span>
                 </div>
-                {item.suspeito && (
+                {(item.suspeito || item.isSuspeito) && (
                   <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg border border-red-100 text-[11px] font-bold">
                     <AlertTriangle className="w-3.5 h-3.5" />
                     AÇÃO SUSPEITA DETECTADA
@@ -471,8 +474,8 @@ function formatDescricaoForPdf(desc) {
                     {formatData(item.criadoEm)}
                   </span>
                   <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
-                    <div className="text-slate-400">{getIconForEntidade(item.entidade)}</div>
-                    {formatarEntidade(item.entidade)}
+                    <div className="text-slate-400">{getIconForEntidade(item.entidade || item.permissaoModulo)}</div>
+                    {formatarEntidade(item.entidade || item.permissaoModulo)}
                   </span>
                   {item.permissaoNome && (
                     <span className="flex items-center gap-1.5 text-[12px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100/70" title={item.permissaoCodigo}>
@@ -484,8 +487,8 @@ function formatDescricaoForPdf(desc) {
 
                 {/* linha 3: descrição + botão de detalhes */}
                 <div className="mt-3 flex items-center justify-between">
-                  <p className="text-[13px] text-slate-500 leading-relaxed truncate max-w-[70%]" title={item.descricao || ''}>
-                    {item.descricao || '-'}
+                  <p className="text-[13px] text-slate-500 leading-relaxed truncate max-w-[70%]" title={item.descricao || item.permissaoDescricao || ''}>
+                    {item.descricao || item.permissaoDescricao || '-'}
                   </p>
                   <button
                     onClick={() => setSelectedRegistro(item)}
@@ -588,7 +591,7 @@ function formatDescricaoForPdf(desc) {
                             <span className="truncate max-w-[170px]">[{item.permissaoModulo || 'RBAC'}] {item.permissaoNome}</span>
                           </div>
                         )}
-                        {item.suspeito && (
+                        {(item.suspeito || item.isSuspeito) && (
                           <div className="mt-1 flex items-center gap-1 text-red-600 text-[10px] font-bold">
                             <AlertTriangle className="w-3 h-3" /> SUSPEITO
                           </div>
@@ -596,12 +599,12 @@ function formatDescricaoForPdf(desc) {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 text-[13px] font-medium text-slate-600">
-                          <div className="text-slate-400">{getIconForEntidade(item.entidade)}</div>
-                          {formatarEntidade(item.entidade)}
+                          <div className="text-slate-400">{getIconForEntidade(item.entidade || item.permissaoModulo)}</div>
+                          {formatarEntidade(item.entidade || item.permissaoModulo)}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-[13px] font-medium text-slate-500 max-w-xs truncate" title={item.descricao || ''}>
-                        {item.descricao || '-'}
+                      <td className="px-6 py-4 text-[13px] font-medium text-slate-500 max-w-xs truncate" title={item.descricao || item.permissaoDescricao || ''}>
+                        {item.descricao || item.permissaoDescricao || '-'}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button
