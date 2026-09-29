@@ -405,6 +405,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState('');
   const equipeFetchedRef = useRef(false);
+  const equipeOrgRef = useRef(orgIdStr);
   const dispMonthCacheRef = useRef({});
   const monthLoadAbortRef = useRef(null);
   const monthLoadGenRef = useRef(0);
@@ -420,6 +421,25 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const planejamentoItemIdVinculoRef = useRef(null);
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
+
+  useEffect(() => {
+    if (equipeOrgRef.current === orgIdStr) return;
+    equipeOrgRef.current = orgIdStr;
+    equipeFetchedRef.current = false;
+    monthLoadAbortRef.current?.abort();
+    hojeLoadAbortRef.current?.abort();
+    monthLoadGenRef.current += 1;
+    dispMonthCacheRef.current = {};
+    setEquipeList([]);
+    setEquipeError('');
+    setRoleUserIdAgenda('');
+    setAppointments([]);
+    setWeekGridAppointments([]);
+    setSlotsOcupados([]);
+    setDispMonthDtos([]);
+    setDisponibilidades({});
+    setHojeSessionCount(0);
+  }, [orgIdStr]);
 
   const reloadClinicaHorarios = useCallback(async () => {
     if (!authEnabled || !orgIdStr) {
@@ -515,7 +535,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     return () => {
       cancelled = true;
     };
-  }, [authEnabled]);
+  }, [authEnabled, orgIdStr]);
 
   const refreshEquipe = useCallback(async () => {
     if (!authEnabled) return;
