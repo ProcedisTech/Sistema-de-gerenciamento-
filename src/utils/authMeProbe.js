@@ -1,10 +1,11 @@
 import { resolveApiUrl } from '../config/apiEnv.js';
-import { authHeadersForFetch } from '../services/api.js';
+import { authHeadersForFetch, getOrgId } from '../services/api.js';
 
 const AUTH_ME_PATH = '/api/auth/me';
 const TTL_MS = 5000;
 
 let cache = {
+  key: '',
   /** @type {Promise<{ status: number, payload: object | null, ok: boolean }> | null} */
   inFlight: null,
   /** @type {number} */
@@ -14,7 +15,7 @@ let cache = {
 };
 
 export function invalidateAuthMeCache() {
-  cache = { inFlight: null, expiresAt: 0, snapshot: null };
+  cache = { key: '', inFlight: null, expiresAt: 0, snapshot: null };
 }
 
 /**
@@ -26,19 +27,19 @@ export function invalidateAuthMeCache() {
  * Se você está logado e vê 401 em /auth/me e em /api/v1/*, confira VITE_API_BASE_URL vazio em dev (proxy :5173).
  */
 export async function fetchAuthMeSnapshot() {
+  const headers = { ...(await authHeadersForFetch({ needsOrg: false })) };
+  const key = `${headers.Authorization ?? ''}:${getOrgId()}`;
   const now = Date.now();
-  if (cache.snapshot && cache.expiresAt > now) {
+  if (cache.key === key && cache.snapshot && cache.expiresAt > now) {
     return cache.snapshot;
   }
-  if (cache.inFlight) {
+  if (cache.key === key && cache.inFlight) {
     return cache.inFlight;
   }
 
   const url = resolveApiUrl(AUTH_ME_PATH);
-  cache.inFlight = (async () => {
+  const inFlight = (async () => {
     try {
-      const headers = { ...(await authHeadersForFetch({ needsOrg: false })) };
-      console.log(`[authMeProbe] about to fetch ${url}. Headers:`, headers);
       const res = await fetch(url, {
         method: 'GET',
         credentials: 'include',
@@ -51,13 +52,16 @@ export async function fetchAuthMeSnapshot() {
         payload = await res.json().catch(() => ({}));
       }
       const data = { status, payload, ok: res.ok };
-      cache.snapshot = data;
-      cache.expiresAt = Date.now() + TTL_MS;
+      if (cache.key === key) {
+        cache.snapshot = data;
+        cache.expiresAt = Date.now() + TTL_MS;
+      }
       return data;
     } finally {
-      cache.inFlight = null;
+      if (cache.key === key) cache.inFlight = null;
     }
   })();
+  cache = { key, inFlight, expiresAt: 0, snapshot: null };
 
-  return cache.inFlight;
+  return inFlight;
 }

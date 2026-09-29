@@ -32,7 +32,7 @@ const ehPermissaoRaizModulo = (p) => PERMISSOES_RAIZ_MODULO.has((p.codigo || '')
  * pra mexer em algo sem poder ver aquele algo. Permissões de escopo funcional específico
  * (como fotos, respostas de anamnese e etapas do atendimento) ficam visíveis para seleção.
  */
-export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, disabled = false, loading = false, columns = 2, showModuloActions = false, onToggleModulo }) {
+export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, disabled = false, loading = false, columns = 2, showModuloActions = false, onToggleModulo, editableCodes = [] }) {
   const [gruposAbertos, setGruposAbertos] = useState(() => new Set());
 
   const permissoesPorModulo = (permissoes || []).reduce((acc, perm) => {
@@ -126,10 +126,11 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${columns === 3 ? 'lg:grid-cols-3' : ''} gap-2 pl-1`}>
               {permsExibidas.map(p => {
                 const checked = (selecionadas || []).includes(p.permissaoId);
+                const itemDisabled = disabled && !editableCodes.includes(p.codigo);
                 return (
                   <label
                     key={p.permissaoId}
-                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${checked ? 'border-teal-200 bg-teal-50/40 shadow-sm' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${itemDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${checked ? 'border-teal-200 bg-teal-50/40 shadow-sm' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
                   >
                     <div className="mt-0.5 text-teal-600 shrink-0">
                       {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-slate-500" />}
@@ -147,9 +148,9 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
                     </div>
                     <input
                       type="checkbox"
-                      className="hidden"
+                      className={itemDisabled ? 'hidden' : 'sr-only'}
                       checked={checked}
-                      disabled={disabled}
+                      disabled={itemDisabled}
                       onChange={(e) => onChange(p.permissaoId, e.target.checked)}
                     />
                   </label>

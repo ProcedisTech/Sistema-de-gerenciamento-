@@ -18,18 +18,11 @@ export function usePapel() {
 
   /**
    * Helper central para verificar se o usuário possui a permissão no array
-   * retornado pela API ou aplica o fallback pelo peso do perfil padrão.
+   * retornado pela API para a organização selecionada.
    * @param {string} code Código canônico da permissão (ex: PERMISSOES.AGENDA_VER)
    * @param {'DONO'|'NIVEL_5'|'NIVEL_4'|'NIVEL_3'|'NIVEL_2'|'NIVEL_1'} fallbackLevel
    */
-  const hasPerm = (code, fallbackLevel) => {
-    if (permissoes && permissoes.length > 0) {
-      // Dono sempre tem controle absoluto
-      if (papel === PERFIS_ACESSO.DONO) return true;
-      return permissoes.includes(code);
-    }
-    return isAtLeast(fallbackLevel);
-  };
+  const hasPerm = (code) => Array.isArray(permissoes) && permissoes.includes(code);
 
   /**
    * Verifica se o usuário possui TODAS as permissões especificadas.
@@ -126,17 +119,16 @@ export function usePapel() {
 
   // ── Módulo: Clínica & Parâmetros ─────────────────────────────────────────
   const canSeeConfigClinica     = hasPerm(PERMISSOES.CLINICA_EDITAR, PERFIS_ACESSO.NIVEL_5);
-  const canSeeConfigAgenda      = hasPerm(PERMISSOES.HORARIO_EDITAR, PERFIS_ACESSO.NIVEL_5) || 
-                                  hasPerm(PERMISSOES.FERIADO_EDITAR, PERFIS_ACESSO.NIVEL_5) || 
-                                  isAtLeast(PERFIS_ACESSO.NIVEL_5);
+  const canSeeConfigAgenda      = hasPerm(PERMISSOES.HORARIO_EDITAR, PERFIS_ACESSO.NIVEL_5) ||
+                                  hasPerm(PERMISSOES.FERIADO_EDITAR, PERFIS_ACESSO.NIVEL_5);
   const canManageEspecialidades = hasPerm(PERMISSOES.ESPECIALIDADE_GERENCIAR, PERFIS_ACESSO.NIVEL_5);
 
   // ── Módulo: Equipe & Perfis ──────────────────────────────────────────────
   const canSeeConfigEquipe      = hasPerm(PERMISSOES.USUARIO_VER, PERFIS_ACESSO.NIVEL_5);
   const canCreateUsers          = hasPerm(PERMISSOES.USUARIO_CRIAR, PERFIS_ACESSO.NIVEL_5);
-  const canManageUsers          = isDono || hasPerm(PERMISSOES.USUARIO_EDITAR, PERFIS_ACESSO.NIVEL_5);
+  const canManageUsers          = hasPerm(PERMISSOES.USUARIO_EDITAR, PERFIS_ACESSO.NIVEL_5);
   const canDeleteUsers          = hasPerm(PERMISSOES.USUARIO_EXCLUIR, PERFIS_ACESSO.NIVEL_5);
-  const canSeeConfigPerfil      = hasPerm(PERMISSOES.PERFIL_ACESSO_VER, PERFIS_ACESSO.NIVEL_4) || isAtLeast(PERFIS_ACESSO.NIVEL_4);
+  const canSeeConfigPerfil      = hasPerm(PERMISSOES.PERFIL_ACESSO_VER, PERFIS_ACESSO.NIVEL_4);
   const canEditConfigPerfil     = hasPerm(PERMISSOES.PERFIL_ACESSO_EDITAR, PERFIS_ACESSO.NIVEL_5);
 
   // ── Módulo: Sistema & Auditoria ──────────────────────────────────────────
@@ -153,8 +145,7 @@ export function usePapel() {
                        canSeeConfigClinica || 
                        canSeeConfigAgenda || 
                        canSeeConfigEquipe || 
-                       canSeeConfigAuditoria || 
-                       isAtLeast(PERFIS_ACESSO.NIVEL_3);
+                       canSeeConfigAuditoria;
 
   return {
     papel,

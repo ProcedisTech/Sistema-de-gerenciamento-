@@ -7,14 +7,15 @@ import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext';
 import { COUNTRY_PHONE_CODES, countrySelectDisplayLabel, getCountryByCode } from '../../data/countryPhoneCodes';
 import { formatPhoneAsYouType, getDdi, isPhoneValid, formatPhoneForApi, parsePhoneFromApi } from '../../utils/phoneUtils';
-import { getPresetProfileId, formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
+import { formatCargoLabel, CODIGO_ORDER, ROLE_DISPLAY_ORDER } from './gestaoUsuariosUtils';
 import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
 import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
 
 export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especialidadesList, onClose, onSuccess, fetchHeaders, readOnly: initialReadOnly = false, onEditarPerfilNaAba }) {
-  const { roleUserId: currentRoleUserId, papel } = useOrg();
+  const { roleUserId: currentRoleUserId, papel,
+    setPermissoes: setPermissoesSessao, setApareceNaAgenda } = useOrg();
   const toast = useToast();
   const [isReadOnly, setIsReadOnly] = useState(initialReadOnly);
 
@@ -27,15 +28,11 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
   const [nome, setNome] = useState(usuario.nomeCompleto || usuario.usuarioNome || '');
   const [showCpf, setShowCpf] = useState(false);
 
-  const selectedRoleInitial = (roles || []).find(r => String(r.id) === String(usuario.roleId || usuario.role?.id));
-  const presetInitial = selectedRoleInitial ? getPresetProfileId(selectedRoleInitial, perfisAcesso) : null;
-  const isInitiallyCustom = Boolean(usuario.perfilAcessoId && presetInitial && String(presetInitial) !== String(usuario.perfilAcessoId));
-  const [customizarPerfil, setCustomizarPerfil] = useState(isInitiallyCustom);
-
   // Só leitura: mostra o que o perfil atribuído inclui. Editar de verdade acontece na aba Perfis de Acesso.
   const [permissoesDoNivel, setPermissoesDoNivel] = useState([]);
   const [permissoesExpandidas, setPermissoesExpandidas] = useState(true);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [permissoesDonoCarregadas, setPermissoesDonoCarregadas] = useState(false);
   const [showConfirmEditarPerfil, setShowConfirmEditarPerfil] = useState(false);
 
   const parsedPhone = parsePhoneFromApi(usuario.telefone || usuario.usuarioTelefone);
@@ -59,6 +56,8 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
   const isUserOwner = (usuario.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
   const isSelfEdit = String(usuario.id) === String(currentRoleUserId);
   const isDono = papel === 'DONO';
+  const podeEditarFuncoesDono = isUserOwner && isSelfEdit && isDono;
+  const codigosEditaveisDono = ['AGENDA_APARECER', 'AGENDA_MULTI_VER'];
   // E-mail também fica bloqueado para o próprio dono editando a si mesmo
   const lockEmailField = isUserOwner || (isSelfEdit && isDono);
 
@@ -68,6 +67,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
       return;
     }
     setLoadingTemplate(true);
+    if (isUserOwner) setPermissoesDonoCarregadas(false);
     try {
       const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
         headers: await fetchHeaders(),
@@ -75,7 +75,16 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
       });
       if (res.ok) {
         const data = await res.json();
-        setPermissoesDoNivel(Array.isArray(data) ? data : []);
+        const idsAtivos = Array.isArray(data) ? data : [];
+        if (isUserOwner) {
+          setPermissoesDonoCarregadas(true);
+          setPermissoesDoNivel((permissoes || [])
+            .filter(p => !['AGENDA_APARECER', 'AGENDA_MULTI_VER'].includes(p.codigo)
+              || idsAtivos.includes(p.permissaoId))
+            .map(p => p.permissaoId));
+        } else {
+          setPermissoesDoNivel(idsAtivos);
+        }
       } else {
         setPermissoesDoNivel([]);
       }
@@ -89,9 +98,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
 
   useEffect(() => {
     // Carrega as permissões atuais do membro (perfil global ou já customizado) ao abrir o modal.
-    if (!isUserOwner && perfilAcessoId) {
-      loadPermissoesDoNivel(perfilAcessoId);
-    }
+    if (perfilAcessoId) loadPermissoesDoNivel(perfilAcessoId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -148,16 +155,6 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
 
   const handleRoleChangeEdit = (selectedRoleId) => {
     setRoleId(selectedRoleId);
-    // Não altera o nível de acesso do DONO — ele fica sempre bloqueado
-    if (isUserOwner) return;
-    const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
-    if (selectedRole) {
-      const presetId = getPresetProfileId(selectedRole, perfisAcesso);
-      if (presetId && (!customizarPerfil || presetId !== perfilAcessoId)) {
-        setPerfilAcessoId(presetId);
-        loadPermissoesDoNivel(presetId);
-      }
-    }
   };
 
   const handlePerfilChangeEdit = (selectedPerfilId) => {
@@ -167,8 +164,18 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (podeEditarFuncoesDono && !permissoesDonoCarregadas) {
+      toast.error('Aguarde o carregamento das funções da agenda.');
+      return;
+    }
     setSaving(true);
     try {
+      const agendaPermIdAtual = (permissoes || []).find(p => p.codigo === 'AGENDA_APARECER')?.permissaoId;
+      const agendaMultiIdAtual = (permissoes || []).find(p => p.codigo === 'AGENDA_MULTI_VER')?.permissaoId;
+      const alteracoesAgenda = podeEditarFuncoesDono ? {
+        apareceNaAgenda: Boolean(agendaPermIdAtual && permissoesDoNivel.includes(agendaPermIdAtual)),
+        agendaMultiVer: Boolean(agendaMultiIdAtual && permissoesDoNivel.includes(agendaMultiIdAtual)),
+      } : {};
       await equipeApi.update(usuario.id, {
         usuarioId: usuario.usuarioId || usuario.usuario?.id,
         nomeCompleto: nome,
@@ -185,10 +192,20 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
         bairro: bairro || "",
         cidade: cidade || "",
         uf: uf || "",
-        especialidades: especialidades
+        especialidades: especialidades,
+        ...alteracoesAgenda
       });
+      if (podeEditarFuncoesDono) {
+        const meRes = await fetch(resolveApiUrl('/api/auth/me'), {
+          headers: await fetchHeaders(), credentials: 'include'
+        });
+        if (!meRes.ok) throw new Error('Não foi possível atualizar as funções da sessão');
+        const me = await meRes.json();
+        setPermissoesSessao(me.permissoes || []);
+        setApareceNaAgenda(me.apareceNaAgenda);
+      }
       toast.success('Acesso atualizado com sucesso.');
-      onSuccess();
+      onSuccess({ ownerAgendaUpdated: podeEditarFuncoesDono, roleUserId: usuario.id });
     } catch (err) {
       console.error('Erro ao atualizar papel:', err);
       toast.error(getApiErrorToastMessage(err, 'Erro ao atualizar acesso.'));
@@ -573,105 +590,63 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
                 )}
               </div>
 
-              {/* Card Resumo do Perfil Atrelado ao Cargo (Não-Dono) */}
+              {!isUserOwner && (
+                <div className="mt-4">
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-800">
+                    Perfil de acesso
+                  </label>
+                  <select
+                    required
+                    value={perfilAcessoId}
+                    disabled={isReadOnly}
+                    onChange={e => handlePerfilChangeEdit(e.target.value)}
+                    className="w-full rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
+                  >
+                    <option value="">Selecione o perfil de acesso...</option>
+                    {[...perfisAcesso]
+                      .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
+                      .sort((a, b) => {
+                        const ordA = CODIGO_ORDER[(a.codigo || '').toUpperCase()] || 99;
+                        const ordB = CODIGO_ORDER[(b.codigo || '').toUpperCase()] || 99;
+                        if (ordA !== ordB) return ordA - ordB;
+                        return (a.nome || '').localeCompare(b.nome || '');
+                      })
+                      .map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                </div>
+              )}
               {!isUserOwner && perfilSelecionado && (
-                <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/40 p-4 transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start sm:items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm">
-                        <Shield className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-bold text-slate-900">
-                            Perfil: {perfilSelecionado.nome}
-                          </span>
-                          {perfilSelecionadoAtendeAgenda ? (
-                            <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              📅 Atende na Agenda
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
-                              🚫 Sem Agenda
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {perfilSelecionado.descricao || 'Perfil de acesso com permissões oficiais para esta função.'}
-                        </p>
-                      </div>
+                <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/40 p-4">
+                  <div className="flex items-center gap-3">
+                    <Shield className="h-5 w-5 text-teal-700" />
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">Perfil: {perfilSelecionado.nome}</div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {perfilSelecionado.descricao || 'Permissões deste perfil de acesso.'}
+                        {' '}{perfilSelecionadoAtendeAgenda ? 'Pode aparecer na agenda.' : 'Não aparece na agenda.'}
+                      </p>
                     </div>
-
-                    {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextState = !customizarPerfil;
-                          setCustomizarPerfil(nextState);
-                          if (!nextState && roleId) {
-                            const selectedRole = roles.find(r => String(r.id) === String(roleId));
-                            const presetId = selectedRole ? getPresetProfileId(selectedRole, perfisAcesso) : null;
-                            if (presetId) handlePerfilChangeEdit(presetId);
-                          }
-                        }}
-                        className="text-xs font-bold text-teal-700 hover:text-teal-900 underline self-start sm:self-center shrink-0"
-                      >
-                        {customizarPerfil ? 'Voltar ao perfil padrão do cargo' : 'Alterar perfil de acesso'}
-                      </button>
-                    )}
                   </div>
-
-                  {customizarPerfil && !isReadOnly && (
-                    <div className="mt-4 pt-4 border-t border-teal-200/60">
-                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-800">
-                        Selecionar outro Perfil de Acesso
-                      </label>
-                      <select
-                        value={perfilAcessoId}
-                        disabled={isReadOnly}
-                        onChange={e => handlePerfilChangeEdit(e.target.value)}
-                        className="w-full rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-[14px] text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 shadow-sm appearance-none"
-                      >
-                        {[...perfisAcesso]
-                          .filter(p => (p.codigo || '').toUpperCase() !== 'DONO' && (p.nome || '').toLowerCase() !== 'dono')
-                          .sort((a, b) => {
-                            const ordA = CODIGO_ORDER[(a.codigo || '').toUpperCase()] || 99;
-                            const ordB = CODIGO_ORDER[(b.codigo || '').toUpperCase()] || 99;
-                            if (ordA !== ordB) return ordA - ordB;
-                            return (a.nome || '').localeCompare(b.nome || '');
-                          })
-                          .map(p => {
-                            const isClinico = (p.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO';
-                            return (
-                              <option key={p.id} value={p.id}>
-                                {p.nome} {isClinico ? '(Atende na Agenda)' : ''}
-                              </option>
-                            );
-                          })
-                        }
-                      </select>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {!isUserOwner && perfilAcessoId && (
+              {((!isUserOwner && perfilAcessoId) || isUserOwner) && (
                 <div className="mt-4">
                   <PermissoesResumoToggle
                     ativas={permissoesDoNivel.length}
                     total={(permissoes || []).length}
                     expandido={permissoesExpandidas}
                     onToggle={() => setPermissoesExpandidas(prev => !prev)}
-                    readOnly
+                    readOnly={!podeEditarFuncoesDono || isReadOnly}
                   />
-                  <button
+                  {!isUserOwner && <button
                     type="button"
                     onClick={handleEditarPerfilClick}
                     className="mt-2 flex items-center gap-1.5 text-[12.5px] font-bold text-slate-500 hover:text-teal-700 transition-colors"
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
                     Editar este perfil na aba Perfis de Acesso
-                  </button>
+                  </button>}
                   {permissoesExpandidas && (
                     <div className="mt-3 overflow-hidden animate-in fade-in duration-200">
                       <PermissoesPorModuloPanel
@@ -679,7 +654,10 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
                         selecionadas={permissoesDoNivel}
                         loading={loadingTemplate}
                         disabled
-                        onChange={() => {}}
+                        editableCodes={podeEditarFuncoesDono && !isReadOnly ? codigosEditaveisDono : []}
+                        onChange={(permissaoId, ativo) => setPermissoesDoNivel(prev => ativo
+                          ? [...new Set([...prev, permissaoId])]
+                          : prev.filter(id => id !== permissaoId))}
                       />
                     </div>
                   )}
@@ -718,7 +696,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || (podeEditarFuncoesDono && !permissoesDonoCarregadas)}
                   className="w-full sm:w-48 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 py-2.5 text-sm font-bold text-white transition-all hover:shadow-lg hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:pointer-events-none touch-manipulation cursor-pointer"
                 >
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -176,6 +176,21 @@ describe('PermissoesPorModuloPanel', () => {
     expect(screen.getByText('Realizar Atendimento')).toBeInTheDocument();
   });
 
+  it('em prévia do Dono, somente as funções liberadas aceitam edição', () => {
+    const onChange = vi.fn();
+    render(<PermissoesPorModuloPanel
+      permissoes={mockPermissoes}
+      selecionadas={['p-agenda-ver', 'p-agenda-excluir', 'p-agenda-multi']}
+      onChange={onChange}
+      disabled
+      editableCodes={['AGENDA_MULTI_VER']}
+    />);
+    fireEvent.click(screen.getByText('Visualizar Grade de Todos os Profissionais'));
+    expect(onChange).toHaveBeenCalledWith('p-agenda-multi', false);
+    fireEvent.click(screen.getByText('Cancelamento de Agendamento do Paciente'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   it('MODULO_LABEL_CURTO mapeia corretamente Atendimento e módulos acentuados', () => {
     expect(MODULO_LABEL_CURTO.ATENDIMENTO).toBe('Atendimento');
     expect(MODULO_LABEL_CURTO['PRONTUÁRIO']).toBe('Pront.');

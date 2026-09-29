@@ -24,7 +24,7 @@ describe('Catálogo de Permissões e usePapel', () => {
     expect(PERFIS_ACESSO.NIVEL_1).toBe('NIVEL_1');
   });
 
-  it('deve garantir que DONO tem bypass total em todas as permissões', () => {
+  it('nega controles enquanto o contexto do DONO ainda não trouxe permissões', () => {
     vi.mocked(OrgContextModule.useOrg).mockReturnValue({
       papel: 'DONO',
       permissoes: [], // mesmo sem permissões explícitas
@@ -33,11 +33,27 @@ describe('Catálogo de Permissões e usePapel', () => {
     const { result } = renderHook(() => usePapel());
 
     expect(result.current.isDono).toBe(true);
-    expect(result.current.canSeeAgenda).toBe(true);
-    expect(result.current.canSeeGaleria).toBe(true);
-    expect(result.current.canSeeRespostasAnamnese).toBe(true);
-    expect(result.current.canManageUsers).toBe(true);
-    expect(result.current.hasPerm(PERMISSOES.AGENDA_BLOQUEIO_GERENCIAR)).toBe(true);
+    expect(result.current.canSeeAgenda).toBe(false);
+    expect(result.current.canSeeGaleria).toBe(false);
+    expect(result.current.canSeeRespostasAnamnese).toBe(false);
+    expect(result.current.canManageUsers).toBe(false);
+    expect(result.current.hasPerm(PERMISSOES.AGENDA_BLOQUEIO_GERENCIAR)).toBe(false);
+  });
+
+  it.each([
+    [false, false], [false, true], [true, false], [true, true],
+  ])('Dono com Atender=%s e Ver todas=%s mantém decisões independentes', (atende, multi) => {
+    vi.mocked(OrgContextModule.useOrg).mockReturnValue({
+      papel: 'DONO',
+      permissoes: [PERMISSOES.AGENDA_VER, PERMISSOES.AGENDA_CRIAR, PERMISSOES.AGENDA_PROPRIA_VER,
+        ...(atende ? [PERMISSOES.AGENDA_APARECER] : []),
+        ...(multi ? [PERMISSOES.AGENDA_MULTI_VER] : [])],
+    });
+    const { result } = renderHook(() => usePapel());
+    expect(result.current.canAparecerNaAgenda).toBe(atende);
+    expect(result.current.canSeeAgendaMulti).toBe(multi);
+    expect(result.current.canCreateAgenda).toBe(true);
+    expect(result.current.canSeeAgendaPropria).toBe(true);
   });
 
   it('deve garantir que NIVEL_2 (Recepção) NÃO tem acesso à Galeria nem Anamnese por padrão', () => {
