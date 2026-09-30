@@ -48,7 +48,7 @@ export async function renderMapPhotoWithPoints(imageBlobOrUrl, pontos = [], unid
   // 2. Desenha traços/linhas
   for (const p of pontos) {
     if (p.tipoGeometria === 'traco' && Array.isArray(p.vertices) && p.vertices.length > 0) {
-      const cor = corParaProcedimento(p.catalogoId || p.catalogoProcedimentoSaudeId);
+      const cor = p.cor || corParaProcedimento(p.catalogoId || p.catalogoProcedimentoSaudeId);
       ctx.beginPath();
       ctx.strokeStyle = cor;
       ctx.lineWidth = Math.max(4, Math.round(w * 0.006));
@@ -79,7 +79,7 @@ export async function renderMapPhotoWithPoints(imageBlobOrUrl, pontos = [], unid
 
     const cx = (Number(posX) / 100) * w;
     const cy = (Number(posY) / 100) * h;
-    const cor = corParaProcedimento(p.catalogoId || p.catalogoProcedimentoSaudeId);
+    const cor = p.cor || corParaProcedimento(p.catalogoId || p.catalogoProcedimentoSaudeId);
     const tamanhoNorm = normalizeTamanho(p.tamanho || 1.0);
     const radius = Math.max(8, Math.round((markerSizePx(tamanhoNorm) / 2) * (w / 600)));
 

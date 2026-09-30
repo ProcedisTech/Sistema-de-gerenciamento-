@@ -72,67 +72,37 @@ function commitImgLayoutIfChanged(setImgLayout, container, img, displayUrl) {
 }
 
 export function FotoVistaCanvasCore({
-
+  transformWrapperRef,
   vistaAtual,
-
   foto,
-
   procedimentoArmado,
-
   pontosVista = [],
-
   onAddPonto,
-
   onEditarPonto,
-
   onRemovePonto,
-
   className = '',
-
   showToolbar = true,
-
   readOnly = false,
-
   fillViewport = false,
-
   maxHeightClass = 'max-h-[min(70dvh,640px)]',
-
   mediaBusy = false,
-
   onOpenGaleria,
-
   onRequestCapture,
-
   onRequestUpload,
-
   onRequestFullscreen,
-
   emptyTitle = 'Adicione uma foto para esta vista',
-
   emptySubtitle = 'Escolha da galeria, capture ou faça upload do dispositivo.',
-  
   previewMode = false,
-
   tamanhoGlobalPonto = 1.0,
-
   unidadeMedida,
-
   onUnidadeMedidaChange,
-
   pacienteId,
-
   catalogoId,
-
   isRetorno,
-
   passo,
-
   externalModo,
-
   onModoChange,
-  
   configMarcacao,
-  
   mostrarValores: externalMostrarValores,
 }) {
   const containerRef = useRef(null);
@@ -142,11 +112,11 @@ export function FotoVistaCanvasCore({
   const [pendingClick, setPendingClick] = useState(null);
   const [pontoSelecionado, setPontoSelecionado] = useState(null);
   const [imgLayout, setImgLayout] = useState(EMPTY_LAYOUT);
-  
+
   // Novos estados do modo traço e valores
   const [internalModo, setInternalModo] = useState('ponto');
   const [internalMostrarValores, setInternalMostrarValores] = useState(true);
-  
+
   const modo = externalModo !== undefined ? externalModo : internalModo;
   const setModo = onModoChange !== undefined ? onModoChange : setInternalModo;
   const mostrarValores = externalMostrarValores !== undefined ? externalMostrarValores : internalMostrarValores;
@@ -156,7 +126,7 @@ export function FotoVistaCanvasCore({
   const isDrawing = useRef(false);
   const liveVerticesRef = useRef([]); // Guarda os vértices sem depender do ciclo do React
   const [liveVertices, setLiveVertices] = useState([]); // Apenas para re-render visual
-  
+
   // Overlay Historico
   const [comparacaoModalOpen, setComparacaoModalOpen] = useState(false);
   const [mapaComparacaoSelecionado, setMapaComparacaoSelecionado] = useState(null);
@@ -261,7 +231,7 @@ export function FotoVistaCanvasCore({
     if (modo === 'ponto') {
       const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
       if (!coords) return;
-      
+
       if (configMarcacao?.confirmarDose === false) {
         onAddPonto?.(vistaAtual, {
           ...coords,
@@ -279,7 +249,7 @@ export function FotoVistaCanvasCore({
     if (modo === 'traco') {
       const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
       if (!coords) return;
-      
+
       e.currentTarget.setPointerCapture(e.pointerId);
       isDrawing.current = true;
       const initialPoint = { x: coords.posX, y: coords.posY };
@@ -297,10 +267,10 @@ export function FotoVistaCanvasCore({
 
     const prev = liveVerticesRef.current;
     if (prev.length === 0) return;
-    
+
     const last = prev[prev.length - 1];
     const p = { x: coords.posX, y: coords.posY };
-    
+
     // Throttle: adiciona vértice apenas se moveu mais que 1% (~8px dependendo da tela)
     if (distance(last, p) > 1.0) {
       const newArray = [...prev, p];
@@ -312,7 +282,7 @@ export function FotoVistaCanvasCore({
   const handlePointerUpOrCancel = (e) => {
     if (readOnly) return;
     if (!isDrawing.current || modo !== 'traco') return;
-    
+
     isDrawing.current = false;
     e.currentTarget.releasePointerCapture(e.pointerId);
 
@@ -334,7 +304,7 @@ export function FotoVistaCanvasCore({
         }
       }
     }
-    
+
     liveVerticesRef.current = [];
     setLiveVertices([]);
   };
@@ -343,7 +313,7 @@ export function FotoVistaCanvasCore({
 
   const handleConfirmQty = (quantidade, tamanho) => {
     if (!procedimentoArmado?.id) return;
-    
+
     if (pendingClick) {
       onAddPonto?.(vistaAtual, {
         ...pendingClick,
@@ -378,7 +348,7 @@ export function FotoVistaCanvasCore({
 
     let posX = p.posX;
     let posY = p.posY;
-    
+
     // Se for traço, a âncora do popover será no último vértice (onde fica o marcador visual)
     if (p.tipoGeometria === 'traco' && p.vertices?.length > 0) {
       const lastV = p.vertices[p.vertices.length - 1];
@@ -491,23 +461,23 @@ export function FotoVistaCanvasCore({
             <div className="flex flex-wrap justify-center gap-3">
 
               {typeof onOpenGaleria === 'function' ? (
-              <button
+                <button
 
-                type="button"
+                  type="button"
 
-                disabled={mediaBusy}
+                  disabled={mediaBusy}
 
-                onClick={() => onOpenGaleria()}
+                  onClick={() => onOpenGaleria()}
 
-                className="inline-flex items-center gap-2 rounded-xl border border-app-accent/40 bg-white px-4 py-2.5 text-[13px] font-semibold text-[#00a88e] shadow-sm hover:bg-app-nav-active disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-xl border border-app-accent/40 bg-white px-4 py-2.5 text-[13px] font-semibold text-[#00a88e] shadow-sm hover:bg-app-nav-active disabled:cursor-not-allowed disabled:opacity-60"
 
-              >
+                >
 
-                {mediaBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                  {mediaBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
 
-                Galeria
+                  Galeria
 
-              </button>
+                </button>
               ) : null}
 
               <button
@@ -570,13 +540,14 @@ export function FotoVistaCanvasCore({
         <>
 
           <div
-            className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-[#0f172a] overflow-hidden"
+            className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-[#0b0f19] overflow-hidden"
             role="presentation"
           >
             <TransformWrapper
-              panning={{ disabled: modo !== 'mover' }}
+              ref={transformWrapperRef}
+              panning={{ activationKeys: [' '] }}
               doubleClick={{ disabled: true }}
-              wheel={{ disabled: modo !== 'mover', step: 0.05, smoothStep: 0.01 }}
+              wheel={{ step: 0.05, smoothStep: 0.01 }}
               minScale={1}
               maxScale={5}
             >
@@ -585,97 +556,97 @@ export function FotoVistaCanvasCore({
                   <div
                     ref={containerRef}
 
-              className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${previewMode && onRequestFullscreen ? 'cursor-pointer' : canMark ? 'cursor-crosshair' : readOnly && onRequestFullscreen ? 'cursor-zoom-in' : ''} touch-none`}
-              style={{
-                ...(effectiveAspect ? { aspectRatio: effectiveAspect } : {}),
-                ...(nativeMaxWidthPx ? { maxWidth: `${nativeMaxWidthPx}px` } : {}),
-              }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUpOrCancel}
-              onPointerCancel={handlePointerUpOrCancel}
-              role="presentation"
-            >
-              {readOnly && onRequestFullscreen ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRequestFullscreen();
-                  }}
-                  className="absolute right-3 top-3 z-[30] flex items-center gap-1.5 rounded-lg border border-white/20 bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-md backdrop-blur transition-colors hover:bg-slate-900 hover:border-white/40"
-                  title="Clique para abrir em tela cheia e dar zoom"
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-[#00a88e]" />
-                  <span>Ampliar e dar zoom</span>
-                </button>
-              ) : previewMode && onRequestFullscreen ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRequestFullscreen();
-                  }}
-                  className="absolute right-3 top-3 z-[30] flex items-center gap-1.5 rounded-lg border border-app-accent/40 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] shadow-md backdrop-blur transition-all hover:bg-app-nav-active"
-                  title="Clique no mapa para abrir o mapeamento em tela cheia"
-                >
-                  <Maximize2 className="h-3.5 w-3.5" />
-                  <span>Abrir Mapeamento</span>
-                </button>
-              ) : null}
-              <ProtectedPatientMedia
-                ref={imgRef}
-                interactive={true}
-                src={displayUrl}
-                alt=""
-                className="z-0 h-full w-full pointer-events-none"
-                imgClassName="h-full w-full object-contain pointer-events-none"
-                onLoad={handleImgLoad}
-              />
+                    className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${previewMode && onRequestFullscreen ? 'cursor-pointer' : canMark ? 'cursor-crosshair' : readOnly && onRequestFullscreen ? 'cursor-zoom-in' : ''} touch-none`}
+                    style={{
+                      ...(effectiveAspect ? { aspectRatio: effectiveAspect } : {}),
+                      ...(nativeMaxWidthPx ? { maxWidth: `${nativeMaxWidthPx}px` } : {}),
+                    }}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUpOrCancel}
+                    onPointerCancel={handlePointerUpOrCancel}
+                    role="presentation"
+                  >
+                    {readOnly && onRequestFullscreen ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRequestFullscreen();
+                        }}
+                        className="absolute right-3 top-3 z-[30] flex items-center gap-1.5 rounded-lg border border-white/20 bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-md backdrop-blur transition-colors hover:bg-slate-900 hover:border-white/40"
+                        title="Clique para abrir em tela cheia e dar zoom"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5 text-[#00a88e]" />
+                        <span>Ampliar e dar zoom</span>
+                      </button>
+                    ) : previewMode && onRequestFullscreen ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRequestFullscreen();
+                        }}
+                        className="absolute right-3 top-3 z-[30] flex items-center gap-1.5 rounded-lg border border-app-accent/40 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] shadow-md backdrop-blur transition-all hover:bg-app-nav-active"
+                        title="Clique no mapa para abrir o mapeamento em tela cheia"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        <span>Abrir Mapeamento</span>
+                      </button>
+                    ) : null}
+                    <ProtectedPatientMedia
+                      ref={imgRef}
+                      interactive={true}
+                      src={displayUrl}
+                      alt=""
+                      className="z-0 h-full w-full pointer-events-none"
+                      imgClassName="h-full w-full object-contain pointer-events-none"
+                      onLoad={handleImgLoad}
+                    />
 
-              <MapaRetornoOverlay 
-                mapaComparacao={mapaComparacaoSelecionado} 
-                layoutMetrics={layoutMetrics} 
-              />
+                    <MapaRetornoOverlay
+                      mapaComparacao={mapaComparacaoSelecionado}
+                      layoutMetrics={layoutMetrics}
+                    />
 
-              <TracadoEmProgresso 
-                vertices={liveVertices} 
-                layoutMetrics={layoutMetrics} 
-              />
+                    <TracadoEmProgresso
+                      vertices={liveVertices}
+                      layoutMetrics={layoutMetrics}
+                    />
 
-              <MapaMarcacoesOverlay
-                pontos={allPontos}
-                layoutMetrics={layoutMetrics}
-                density="full"
-                mostrarValores={mostrarValores}
-                unidadeMedida={unidadeMedida}
-                interactive={!readOnly}
-                selectedLocalId={pontoSelecionado?.localId ?? null}
-                onMarkerPointerDown={handleMarkerClick}
-              />
+                    <MapaMarcacoesOverlay
+                      pontos={allPontos}
+                      layoutMetrics={layoutMetrics}
+                      density="full"
+                      mostrarValores={mostrarValores}
+                      unidadeMedida={unidadeMedida}
+                      interactive={!readOnly}
+                      selectedLocalId={pontoSelecionado?.localId ?? null}
+                      onMarkerPointerDown={handleMarkerClick}
+                    />
 
-              <div style={{ transform: `scale(${1 / (state?.scale || 1)})`, transformOrigin: 'bottom center', position: 'absolute', top: `${popoverAnchor?.top}%`, left: `${popoverAnchor?.left}%`, zIndex: 40 }}>
-                <PontoMarcadorPopover
-                  open={Boolean(pontoSelecionado)}
-                  ponto={pontoSelecionado?.ponto}
-                  nomeProcedimento={pontoSelecionado?.nomeProcedimento}
-                  catalogoId={pontoSelecionado?.catalogoId}
-                  anchorLeft={0}
-                  anchorTop={0}
-                  onSave={handleSavePonto}
-                  onRemove={handleRemovePonto}
-                  onCancel={() => setPontoSelecionado(null)}
-                  unidadeMedida={unidadeMedida}
-                  onUnidadeMedidaChange={onUnidadeMedidaChange}
-                  passo={passo}
-                />
-              </div>
+                    <div style={{ transform: `scale(${1 / (state?.scale || 1)})`, transformOrigin: 'bottom center', position: 'absolute', top: `${popoverAnchor?.top}%`, left: `${popoverAnchor?.left}%`, zIndex: 40 }}>
+                      <PontoMarcadorPopover
+                        open={Boolean(pontoSelecionado)}
+                        ponto={pontoSelecionado?.ponto}
+                        nomeProcedimento={pontoSelecionado?.nomeProcedimento}
+                        catalogoId={pontoSelecionado?.catalogoId}
+                        anchorLeft={0}
+                        anchorTop={0}
+                        onSave={handleSavePonto}
+                        onRemove={handleRemovePonto}
+                        onCancel={() => setPontoSelecionado(null)}
+                        unidadeMedida={unidadeMedida}
+                        onUnidadeMedidaChange={onUnidadeMedidaChange}
+                        passo={passo}
+                      />
+                    </div>
 
-            </div>
-          </TransformComponent>
-        )}
-      </TransformWrapper>
-    </div>
+                  </div>
+                </TransformComponent>
+              )}
+            </TransformWrapper>
+          </div>
 
           {effectiveShowToolbar ? (
             <div className="mt-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-app-border bg-white px-3 py-2 shadow-sm">
@@ -693,100 +664,123 @@ export function FotoVistaCanvasCore({
                 >
                   {mostrarValores ? <Eye className="h-4 w-4" strokeWidth={2} /> : <EyeOff className="h-4 w-4" strokeWidth={2} />}
                 </button>
-                <MapaToolbarModo modo={modo} setModo={setModo} />
+                <div className="flex items-center gap-2">
+                  <MapaToolbarModo modo={modo} setModo={setModo} />
+                  <button
+                    type="button"
+                    title="Enquadrar na tela (Resetar Zoom)"
+                    onClick={() => transformWrapperRef?.current?.resetTransform?.()}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors pointer-events-auto cursor-pointer"
+                  >
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                    </svg>
+                    <span>Enquadrar</span>
+                  </button>
+                </div>
                 <div className="h-6 w-px bg-app-border"></div>
                 <div className="flex flex-wrap gap-2">
 
-                <button
-
-                  type="button"
-
-                  disabled={mediaBusy}
-
-                  onClick={() => onOpenGaleria?.()}
-
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
-
-                >
-
-                  {mediaBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-
-                  Trocar foto
-
-                </button>
-
-                <button
-
-                  type="button"
-
-                  disabled={mediaBusy}
-
-                  onClick={() => fileInputRef.current?.click()}
-
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
-
-                >
-
-                  <Upload className="h-3.5 w-3.5" />
-
-                  Upload
-
-                </button>
-
-                <input
-
-                  ref={fileInputRef}
-
-                  type="file"
-
-                  accept="image/*"
-
-                  className="hidden"
-
-                  onChange={handleFileChange}
-
-                />
-
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {(isRetorno || (pacienteId && catalogoId)) ? (
                   <button
+
                     type="button"
-                    onClick={() => setComparacaoModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-slate-50 transition-colors"
+
+                    disabled={mediaBusy}
+
+                    onClick={() => onOpenGaleria?.()}
+
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
+
                   >
-                    Comparar com mapa anterior
+
+                    {mediaBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+
+                    Trocar foto
+
                   </button>
-                ) : null}
 
-                {onRequestFullscreen ? (
+                  <button
 
-                <button
+                    type="button"
 
-                  type="button"
+                    disabled={mediaBusy}
 
-                  onClick={onRequestFullscreen}
+                    onClick={() => fileInputRef.current?.click()}
 
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-app-nav-active px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] hover:bg-[#e6f7f5]"
+                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
 
-                >
+                  >
 
-                  <Maximize2 className="h-3.5 w-3.5" />
+                    <Upload className="h-3.5 w-3.5" />
 
-                  Tela cheia
+                    Upload
 
-                </button>
+                  </button>
 
-              ) : null}
+                  <input
 
+                    ref={fileInputRef}
+
+                    type="file"
+
+                    accept="image/*"
+
+                    className="hidden"
+
+                    onChange={handleFileChange}
+
+                  />
+
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {(isRetorno || (pacienteId && catalogoId)) ? (
+                    <button
+                      type="button"
+                      onClick={() => setComparacaoModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-slate-50 transition-colors"
+                    >
+                      Comparar com mapa anterior
+                    </button>
+                  ) : null}
+
+                  {onRequestFullscreen ? (
+
+                    <button
+
+                      type="button"
+
+                      onClick={onRequestFullscreen}
+
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-app-nav-active px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] hover:bg-[#e6f7f5]"
+
+                    >
+
+                      <Maximize2 className="h-3.5 w-3.5" />
+
+                      Tela cheia
+
+                    </button>
+
+                  ) : null}
+
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : null}
+          ) : null}
 
-    </>
-  )}
+        </>
+      )}
 
 
 

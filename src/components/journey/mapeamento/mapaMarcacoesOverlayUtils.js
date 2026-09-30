@@ -16,6 +16,7 @@ export function marcacoesApiToOverlayPontos(marcacoes) {
       tipoGeometria: m.tipoGeometria || 'ponto',
       quantidade: m.quantidade,
       tamanho: m.tamanho,
+      cor: m.corHex || m.cor || null,
       vertices,
       posX: first?.posX,
       posY: first?.posY,

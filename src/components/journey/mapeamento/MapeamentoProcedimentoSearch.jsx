@@ -1,10 +1,10 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { Check, Plus, Search } from 'lucide-react';
-import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
-import { SearchDropdownShell } from '../../agenda/SearchDropdownShell.jsx';
-
-const INPUT_CLASS =
-  'w-full rounded-xl border border-app-border bg-white py-2.5 pl-10 pr-3 text-[13px] font-medium text-app-ink outline-none focus:border-app-accent focus:ring-4 focus:ring-[#00a88e]/10';
+import React, { useMemo, useRef, useState } from 'react';
+import { Check, Plus, Search, X, Loader2 } from 'lucide-react';
+import {
+  MAPEAMENTO_PALETA_CORES,
+  corParaProcedimento,
+  getCorLivreParaProcedimento,
+} from '../../../constants/mapeamentoPaletaCores.js';
 
 export function MapeamentoProcedimentoSearch({
   options = [],
@@ -12,165 +12,185 @@ export function MapeamentoProcedimentoSearch({
   procedimentoArmado,
   procedimentosUsados = [],
   onArmar,
+  onClose,
 }) {
   const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
 
-  const close = useCallback(() => setOpen(false), []);
-
   const termo = query.trim().toLowerCase();
-  const lista = options.filter((p) => !termo || p.nome.toLowerCase().includes(termo));
+  const lista = useMemo(() => {
+    return options.filter((p) => !termo || p.nome?.toLowerCase().includes(termo));
+  }, [options, termo]);
+
   const armId = procedimentoArmado?.id ? String(procedimentoArmado.id) : null;
 
-  const usedMap = new Map();
-  procedimentosUsados.forEach((p) => {
-    if (p?.id) usedMap.set(String(p.id), p);
-  });
-  if (armId && procedimentoArmado?.nome) {
-    usedMap.set(armId, { id: armId, nome: procedimentoArmado.nome });
-  }
-  const usados = Array.from(usedMap.values());
+  const usedMap = useMemo(() => {
+    const map = new Map();
+    procedimentosUsados.forEach((p) => {
+      if (p?.id) map.set(String(p.id), p);
+    });
+    if (armId && procedimentoArmado?.nome) {
+      map.set(armId, { ...procedimentoArmado, id: armId });
+    }
+    return map;
+  }, [procedimentosUsados, armId, procedimentoArmado]);
 
-  const handleToggleUsado = (proc) => {
-    onArmar?.(proc);
-    setOpen(false);
+  const coresOcupadas = useMemo(() => {
+    const set = new Set();
+    procedimentosUsados.forEach((p) => {
+      const c = p?.corHex || corParaProcedimento(p?.id);
+      if (c) set.add(String(c).trim().toLowerCase());
+    });
+    if (procedimentoArmado?.id) {
+      const c = procedimentoArmado.corHex || corParaProcedimento(procedimentoArmado.id);
+      if (c) set.add(String(c).trim().toLowerCase());
+    }
+    return set;
+  }, [procedimentosUsados, procedimentoArmado]);
+
+  const getCorParaExibir = (proc) => {
+    const procId = String(proc.id);
+    const procUsado = usedMap.get(procId);
+    if (procUsado?.corHex) return procUsado.corHex;
+
+    const corPref = String(proc.corHex || corParaProcedimento(proc.id)).toLowerCase();
+    if (!coresOcupadas.has(corPref)) {
+      return proc.corHex || corParaProcedimento(proc.id);
+    }
+    return getCorLivreParaProcedimento(proc.id, coresOcupadas);
   };
 
-  const handleSelectBusca = (proc) => {
-    onArmar?.(proc);
-    setOpen(false);
+  const handleSelect = (proc) => {
+    const cor = getCorParaExibir(proc);
+    onArmar?.({ ...proc, corHex: cor });
   };
-
-  const dropdown = open ? (
-    <ul role="listbox" aria-label="Procedimentos" className="py-1">
-      {lista.length === 0 ? (
-        <li className="px-3 py-2.5 text-[12px] font-medium text-[#94a3b8]">
-          {termo ? `Nenhum resultado para "${query}"` : 'Nenhum procedimento disponível'}
-        </li>
-      ) : (
-        lista.map((proc) => {
-          const selecionado = armId === String(proc.id);
-          const cor = corParaProcedimento(proc.id);
-          return (
-            <li key={proc.id} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={selecionado}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleSelectBusca(proc)}
-                className={`flex w-full items-center gap-3 border-b border-[#f1f5f9] px-3 py-2.5 text-left last:border-0 ${
-                  selecionado ? 'bg-app-nav-active' : 'hover:bg-[#f8fafc]'
-                }`}
-              >
-                <span
-                  className="h-3 w-3 shrink-0 rounded-full ring-2 ring-white"
-                  style={{ backgroundColor: cor }}
-                  aria-hidden
-                />
-                <span className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${selecionado ? 'text-[#0f766e]' : 'text-app-ink'}`}>
-                  {proc.nome}
-                </span>
-                {selecionado ? (
-                  <Check className="h-4 w-4 shrink-0 text-app-accent" />
-                ) : (
-                  <Plus className="h-4 w-4 shrink-0 text-[#94a3b8]" />
-                )}
-              </button>
-            </li>
-          );
-        })
-      )}
-    </ul>
-  ) : null;
 
   return (
-    <div className="rounded-xl border border-app-border bg-white p-5 shadow-app-card">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">Procedimento</p>
-        <span className="rounded-md bg-[#e6f7f5] px-2 py-0.5 text-[10px] font-semibold text-[#00a88e]">
-          Padrão por ponto
-        </span>
+    <div className="w-full rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xl backdrop-blur-md">
+      {/* Cabeçalho do Card */}
+      <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+        <div className="flex items-center gap-2">
+          <p className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Procedimentos</p>
+          <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-teal-700 border border-teal-200/50">
+            Catálogo
+          </span>
+        </div>
+        {typeof onClose === 'function' ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            title="Fechar busca"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
 
+      {/* Input de Busca */}
+      <div className="relative mb-3">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+          aria-hidden
+        />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar procedimento..."
+          autoFocus
+          className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2 pl-9 pr-8 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/15"
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      {/* Lista de Procedimentos Direta e Fluida (Sem rolagem dupla e sem corte) */}
       {loading ? (
-        <p className="text-[13px] text-[#94a3b8]">Carregando catálogo…</p>
-      ) : (
-        <SearchDropdownShell open={open} onRequestClose={close} dropdown={dropdown}>
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-[#94a3b8]"
-            aria-hidden
-          />
-          <input
-            ref={inputRef}
-            type="search"
-            role="combobox"
-            aria-expanded={open}
-            aria-label="Buscar procedimento"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onClick={() => setOpen(true)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                close();
-                e.preventDefault();
-              }
-            }}
-            placeholder="Buscar procedimento..."
-            className={INPUT_CLASS}
-            autoComplete="off"
-          />
-        </SearchDropdownShell>
-      )}
-
-      {usados.length > 0 ? (
-        <ul className="mt-3 space-y-1.5">
-          {usados.map((proc) => {
-            const cor = corParaProcedimento(proc.id);
-            const armado = armId === String(proc.id);
-            return (
-              <li key={proc.id}>
-                <button
-                  type="button"
-                  onClick={() => handleToggleUsado(proc)}
-                  className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
-                    armado
-                      ? 'border-app-accent/40 bg-app-nav-active shadow-sm'
-                      : 'border-[#e2e8f0] bg-[#f8fafc] hover:border-app-accent/30'
-                  }`}
-                >
-                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: cor }} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-app-ink">{proc.nome}</span>
-                  {armado ? (
-                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#00a88e]">Armado</span>
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-
-      {procedimentoArmado ? (
-        <div className="mt-3 inline-flex w-full items-center gap-2 rounded-xl border border-app-accent/40 bg-app-nav-active px-4 py-2.5 shadow-sm">
-          <span
-            className="h-3 w-3 shrink-0 rounded-full ring-2 ring-white"
-            style={{ backgroundColor: corParaProcedimento(procedimentoArmado.id) }}
-            aria-hidden
-          />
-          <span className="text-[12px] font-medium text-[#64748b]">Armado para marcar:</span>
-          <span className="truncate text-[13px] font-bold text-[#0f766e]">{procedimentoArmado.nome}</span>
+        <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
+          <span>Carregando catálogo…</span>
+        </div>
+      ) : lista.length === 0 ? (
+        <div className="py-6 text-center text-xs text-slate-400">
+          {termo ? `Nenhum procedimento encontrado para "${query}"` : 'Nenhum procedimento cadastrado'}
         </div>
       ) : (
-        <p className="mt-3 text-[12px] font-medium text-[#94a3b8]">
-          Selecione um procedimento para marcar pontos na foto.
-        </p>
+        <div className="max-h-[300px] overflow-y-auto space-y-1 pr-1 overscroll-contain">
+          {lista.map((proc) => {
+            const isUsado = usedMap.has(String(proc.id));
+            const isArmado = armId === String(proc.id);
+            const cor = getCorParaExibir(proc);
+
+            return (
+              <button
+                key={proc.id}
+                type="button"
+                onClick={() => handleSelect(proc)}
+                className={`flex w-full items-center justify-between gap-2.5 rounded-xl border p-2 text-left transition-all ${
+                  isArmado
+                    ? 'border-teal-500 bg-teal-50/80 shadow-2xs'
+                    : isUsado
+                      ? 'border-slate-200 bg-slate-50/80 hover:border-teal-300'
+                      : 'border-slate-100 bg-white hover:border-teal-300 hover:bg-teal-50/40'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <span
+                    className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/10 shadow-2xs"
+                    style={{ backgroundColor: cor }}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-xs font-semibold truncate ${isArmado ? 'text-teal-900' : 'text-slate-800'}`}>
+                      {proc.nome}
+                    </p>
+                    {proc.unidadeMedida ? (
+                      <p className="text-[10px] text-slate-400 font-medium uppercase">
+                        {proc.unidadeMedida}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="shrink-0 flex items-center">
+                  {isArmado ? (
+                    <Check className="h-4 w-4 text-teal-600" />
+                  ) : isUsado ? (
+                    <span className="text-[10px] font-bold text-teal-700 bg-teal-100/70 px-1.5 py-0.5 rounded-md">
+                      Ativo
+                    </span>
+                  ) : (
+                    <div className="h-6 w-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-teal-500 hover:text-white transition-colors">
+                      <Plus className="h-3.5 w-3.5" />
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       )}
+
+      {/* Procedimento Ativo / Armado */}
+      {procedimentoArmado ? (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/70 px-3 py-2 text-xs">
+          <span
+            className="h-3 w-3 shrink-0 rounded-full border border-black/10"
+            style={{ backgroundColor: procedimentoArmado.corHex || corParaProcedimento(procedimentoArmado.id) }}
+          />
+          <span className="text-[11px] font-medium text-slate-500">Selecionado:</span>
+          <span className="font-bold text-teal-800 truncate">{procedimentoArmado.nome}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

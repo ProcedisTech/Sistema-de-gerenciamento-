@@ -218,49 +218,49 @@ export function MapaAplicacaoPanel({
     Promise.all([
       mapasApi.buscarPorProcedimento(procedimentoFeitoId).catch(() => null),
     ]).then(async ([mapaResp]) => {
-        if (cancelled) return;
-        if (mapaResp == null) return;
+      if (cancelled) return;
+      if (mapaResp == null) return;
 
-        const { applied, data } = hydrateFromApi(mapaResp);
-        if (!applied || !data) return;
+      const { applied, data } = hydrateFromApi(mapaResp);
+      if (!applied || !data) return;
 
-        if (!cancelled) {
-          markHydratedFromServer?.(procedimentoFeitoId);
-        }
-        if (!cancelled && data.unidadeMedida) {
-          setUnidadeMedida(normalizeUnidadeMedida(data.unidadeMedida));
-          setPasso(getPassoFallback(data.unidadeMedida, data.passo));
-        }
-        const ids = Object.entries(data.fotoGaleriaIdPorVista || {});
-        if (!ids.length) return;
+      if (!cancelled) {
+        markHydratedFromServer?.(procedimentoFeitoId);
+      }
+      if (!cancelled && data.unidadeMedida) {
+        setUnidadeMedida(normalizeUnidadeMedida(data.unidadeMedida));
+        setPasso(getPassoFallback(data.unidadeMedida, data.passo));
+      }
+      const ids = Object.entries(data.fotoGaleriaIdPorVista || {});
+      if (!ids.length) return;
 
-        let items = [];
-        try {
-          const raw = await pacientesGaleriaApi.list(pacienteId, { procedimentoFeitoId });
-          items = normalizePacienteGaleriaResponse(raw);
-        } catch {
-          items = [];
-        }
+      let items = [];
+      try {
+        const raw = await pacientesGaleriaApi.list(pacienteId, { procedimentoFeitoId });
+        items = normalizePacienteGaleriaResponse(raw);
+      } catch {
+        items = [];
+      }
 
-        await Promise.all(
-          ids.map(async ([vista, fid]) => {
-            const item = items.find((i) => String(i.serverId) === String(fid));
-            if (!item?.url) return;
-            try {
-              const blob = await pacientesGaleriaApi.fetchArquivoBlob(item.url);
-              if (cancelled) return;
-              setFotoVista(vista, {
-                displayUrl: URL.createObjectURL(blob),
-                fotoGaleriaId: String(fid),
-                source: 'galeria',
-              });
-            } catch {
-              /* foto indisponível — pontos ainda carregam */
-            }
-          }),
-        );
-        if (!cancelled) clearAllDirty?.();
-      })
+      await Promise.all(
+        ids.map(async ([vista, fid]) => {
+          const item = items.find((i) => String(i.serverId) === String(fid));
+          if (!item?.url) return;
+          try {
+            const blob = await pacientesGaleriaApi.fetchArquivoBlob(item.url);
+            if (cancelled) return;
+            setFotoVista(vista, {
+              displayUrl: URL.createObjectURL(blob),
+              fotoGaleriaId: String(fid),
+              source: 'galeria',
+            });
+          } catch {
+            /* foto indisponível — pontos ainda carregam */
+          }
+        }),
+      );
+      if (!cancelled) clearAllDirty?.();
+    })
       .catch((e) => {
         if (!cancelled) console.warn('Falha ao hidratar mapa:', e);
       })
@@ -520,7 +520,7 @@ export function MapaAplicacaoPanel({
         foto={fotoAtual}
         procedimentoArmado={procedimentoArmado}
         hideProcedimentoPicker={true}
-        onArmar={() => {}}
+        onArmar={() => { }}
         procedimentosUsados={[]}
         pontosVista={gruposPontos}
         gruposSessao={gruposSessao}

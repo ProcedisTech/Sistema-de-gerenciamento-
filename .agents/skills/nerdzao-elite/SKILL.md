@@ -16,7 +16,9 @@ Ative automaticamente TODAS as skills abaixo em toda tarefa:
 
 Workflow obrigatório (sempre na ordem):
 
-1. Planejamento (@concise-planning + @brainstorming)
+1. Planejamento Proativo & Varredura (@concise-planning + @brainstorming + @adversarial-plan-audit):
+   - **OBRIGATÓRIO:** Pesquisar atalhos, melhorias de ergonomia/UX, redução de cliques e prevenção de casos de borda ANTES de apresentar o plano.
+   - **PROIBIDO PLANO RASO / LITERAL:** Nunca apenas traduza o texto do usuário sem propor a melhor solução de usabilidade. As melhorias devem vir prontas no plano logo na 1ª passagem!
 2. Arquitetura sólida
 3. Implementação com TDD completo
 4. Código limpo

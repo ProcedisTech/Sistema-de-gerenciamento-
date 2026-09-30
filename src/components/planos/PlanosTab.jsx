@@ -20,6 +20,7 @@ import {
   Check,
   ChevronRight,
   User,
+  Layers,
 } from 'lucide-react';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
@@ -1090,6 +1091,8 @@ export function PlanosTab({
   onPlanoConcluido,
   variant = 'profile',
   onVoltar,
+  procedimentosAvaliados = [],
+  onLimparProcedimentosAvaliados,
 }) {
   const isConsulta = variant === 'consulta';
   const canCrud = isConsulta;
@@ -1403,6 +1406,109 @@ export function PlanosTab({
       setActionError(detail);
     }
   }, [clearError, criarPlano, initEmptyDraft, isConsulta, toast]);
+
+  // ── AUTO-SINCRONIZADOR IDEMPOTENTE: AVALIAÇÃO FACIAL -> PLANO DE TRATAMENTO ──
+  const autoSyncProcessingRef = useRef(false);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+
+  useEffect(() => {
+    if (!canCrud || loading || catalogoLoading || !pacienteId) return;
+    if (!Array.isArray(procedimentosAvaliados) || procedimentosAvaliados.length === 0) return;
+    if (autoSyncProcessingRef.current) return;
+
+    const executarAutoSincronizacao = async () => {
+      autoSyncProcessingRef.current = true;
+      setIsAutoSyncing(true);
+      try {
+        let targetPlanoId = null;
+        const planoAtivo = displayPlanos.find(
+          (p) => p.statusCodigo === 'ativo' || p.status === 'ativo' || p.status === 'em_andamento'
+        );
+
+        if (planoAtivo) {
+          targetPlanoId = String(planoAtivo.id);
+        } else {
+          const created = await criarPlano('');
+          const novoId = created?.planejamentoId ?? created?.id;
+          if (novoId) {
+            targetPlanoId = String(novoId);
+            initEmptyDraft(targetPlanoId);
+            hydratedPlanIdsRef.current.add(targetPlanoId);
+          }
+        }
+
+        if (!targetPlanoId) return;
+
+        const targetPlano = displayPlanos.find((p) => String(p.id) === targetPlanoId);
+        const draftAtivo = getDraft(targetPlanoId);
+        const itensAtuais = draftAtivo?.itens || targetPlano?.itens || [];
+        const existingCatIds = new Set(
+          itensAtuais.map((i) => String(i.catalogoProcedimentoSaudeId || i.catalogoId || ''))
+        );
+
+        const itensParaInserir = procedimentosAvaliados.filter(
+          (p) => isRealUuid(p.catalogoProcedimentoSaudeId) && !existingCatIds.has(String(p.catalogoProcedimentoSaudeId))
+        );
+
+        if (itensParaInserir.length === 0) {
+          if (typeof onLimparProcedimentosAvaliados === 'function') {
+            onLimparProcedimentosAvaliados();
+          }
+          return;
+        }
+
+        for (const proc of itensParaInserir) {
+          const opt = catalogoOptions.find((c) => String(c.id) === String(proc.catalogoProcedimentoSaudeId));
+          const valor = opt?.valorPadrao ?? opt?.valorBase ?? 0;
+          await planejamentosApi.adicionarItem(targetPlanoId, {
+            catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
+            tipo: 'manual',
+            valorOrcado: valor,
+            dataPlanejada: null,
+            roleUserId: roleUserId || null,
+            statusProcedimentoId: null,
+          });
+        }
+
+        const detalhe = await planejamentosApi.detalhe(targetPlanoId);
+        applyDetalhe(targetPlanoId, detalhe, catalogoOptions);
+        hydratedPlanIdsRef.current.add(targetPlanoId);
+        setExpandidos((prev) => ({ ...prev, [targetPlanoId]: true }));
+        await refresh();
+
+        toast.success(
+          `${itensParaInserir.length} procedimento${itensParaInserir.length > 1 ? 's' : ''} da avaliação facial incluído${itensParaInserir.length > 1 ? 's' : ''} no plano.`
+        );
+
+        if (typeof onLimparProcedimentosAvaliados === 'function') {
+          onLimparProcedimentosAvaliados();
+        }
+      } catch (err) {
+        console.error('[PlanosTab] Erro na auto-inclusão de procedimentos da avaliação:', err);
+      } finally {
+        autoSyncProcessingRef.current = false;
+        setIsAutoSyncing(false);
+      }
+    };
+
+    executarAutoSincronizacao();
+  }, [
+    applyDetalhe,
+    canCrud,
+    catalogoLoading,
+    catalogoOptions,
+    criarPlano,
+    displayPlanos,
+    getDraft,
+    initEmptyDraft,
+    loading,
+    onLimparProcedimentosAvaliados,
+    pacienteId,
+    procedimentosAvaliados,
+    refresh,
+    roleUserId,
+    toast,
+  ]);
 
   const handleSalvarPlano = useCallback(
     async (planoId) => {
@@ -2567,6 +2673,14 @@ export function PlanosTab({
           </button>
         ) : null}
       </div>
+
+      {/* ── INDICADOR DE SINCRONIZAÇÃO DA AVALIAÇÃO FACIAL ── */}
+      {isAutoSyncing && (
+        <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/80 px-3 py-2 text-xs text-teal-800 shadow-2xs animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" />
+          <span>Incluindo procedimentos mapeados na avaliação facial no plano...</span>
+        </div>
+      )}
 
       {/* ── BARRA DE BUSCA RÁPIDA (ATALHO "/") + TOP 5 CHIPS FAVORITOS ── */}
       {canCrud && displayPlanos.length > 0 && (

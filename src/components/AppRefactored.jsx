@@ -117,6 +117,7 @@ import {
   loteConcluiuPlano,
 } from './planos/planoConcluidoClinica.js';
 import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
+import { AnnotationCanvasAvaliacao } from './journey/AnnotationCanvasAvaliacao.jsx';
 import {
   normalizeOrientacoesTemplateResponse,
   orientacoesTemplateSignature,
@@ -1169,10 +1170,30 @@ function AppRefactoredInner() {
   };
 
   /** Grava na lista da câmera o JPEG já com desenho (etapa 3), para LGPD/galeria usarem a mesma imagem. */
-  const handleAnnotatedCaptureSaved = ({ index, newUrl, blob }) => {
+  const handleAnnotatedCaptureSaved = ({ index, newUrl, blob, procedimentosMapeados }) => {
     cameraState.replaceEvaluationCapturedPhotoAt(index, { url: newUrl, blob });
     journeyState.setImageSrc(newUrl);
     journeyState.setPaths([]);
+    if (Array.isArray(procedimentosMapeados) && procedimentosMapeados.length > 0) {
+      journeyState.setProcedimentosAvaliados((prev) => {
+        const map = new Map();
+        (prev || []).forEach((p) => map.set(p.catalogoProcedimentoSaudeId, p));
+        procedimentosMapeados.forEach((p) => {
+          const existing = map.get(p.catalogoProcedimentoSaudeId);
+          if (existing) {
+            map.set(p.catalogoProcedimentoSaudeId, {
+              ...existing,
+              ...p,
+              pontosCount: (existing.pontosCount || 0) + (p.pontosCount || 0),
+              quantidadeTotal: (existing.quantidadeTotal || 0) + (p.quantidadeTotal || 0),
+            });
+          } else {
+            map.set(p.catalogoProcedimentoSaudeId, p);
+          }
+        });
+        return Array.from(map.values());
+      });
+    }
   };
 
   const handleConfirmProcedurePhoto = () => {
@@ -3021,6 +3042,7 @@ function AppRefactoredInner() {
               procedimentoFeitoId: pid,
               catalogoProcedimentoSaudeId: catalogoId,
               snapshot,
+              tipoMapaCodigo: 'retorno',
             });
           } catch (mapErr) {
             console.error('Erro ao salvar mapa de retoque:', mapErr);
@@ -4210,6 +4232,25 @@ function AppRefactoredInner() {
                 (photoAnnotationScope === 'procedure'
                   ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                   : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+                photoAnnotationScope === 'evaluation' ? (
+                  <AnnotationCanvasAvaliacao
+                    photos={cameraState.evaluationCapturedPhotos || []}
+                    editingIndex={photoAnnotationIndex}
+                    setEditingIndex={setPhotoAnnotationIndex}
+                    onSelectCapturedPhoto={(i) => {
+                      handleSelectCapturedPhoto(i);
+                      setPhotoAnnotationIndex(i);
+                    }}
+                    imageSrc={
+                      (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
+                      journeyState.imageSrc
+                    }
+                    onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                    persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                    onClose={closeJourneyPhotoAnnotation}
+                    pacienteId={pacienteAtual?.id}
+                  />
+                ) : (
                 <JourneyPhotoAnnotationEditor
                   sidebarInsetPx={sidebarRailWidthPx}
                   photos={
@@ -4279,6 +4320,7 @@ function AppRefactoredInner() {
                   }
                   onClose={closeJourneyPhotoAnnotation}
                 />
+                )
               ) : null}
 
               <div
@@ -4558,6 +4600,8 @@ function AppRefactoredInner() {
                       handleConcluirPlanoComRetorno(pacienteAtual, plano, refresh)
                     }
                     onPlanoConcluido={() => handlePlanoConcluidoAposBaixa(pacienteAtual)}
+                    procedimentosAvaliados={journeyState.procedimentosAvaliados}
+                    onLimparProcedimentosAvaliados={() => journeyState.setProcedimentosAvaliados([])}
                   />
                 ) : null}
                 {consultaModule === 'termos' ? (
@@ -4809,6 +4853,25 @@ function AppRefactoredInner() {
               (photoAnnotationScope === 'procedure'
                 ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                 : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+              photoAnnotationScope === 'evaluation' ? (
+                <AnnotationCanvasAvaliacao
+                  photos={cameraState.evaluationCapturedPhotos || []}
+                  editingIndex={photoAnnotationIndex}
+                  setEditingIndex={setPhotoAnnotationIndex}
+                  onSelectCapturedPhoto={(i) => {
+                    handleSelectCapturedPhoto(i);
+                    setPhotoAnnotationIndex(i);
+                  }}
+                  imageSrc={
+                    (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
+                    journeyState.imageSrc
+                  }
+                  onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                  persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                  onClose={closeJourneyPhotoAnnotation}
+                  pacienteId={pacienteAtual?.id}
+                />
+              ) : (
               <JourneyPhotoAnnotationEditor
                 sidebarInsetPx={sidebarRailWidthPx}
                 photos={
@@ -4878,6 +4941,7 @@ function AppRefactoredInner() {
                 }
                 onClose={closeJourneyPhotoAnnotation}
               />
+              )
             ) : null}
           </>
         ) : (

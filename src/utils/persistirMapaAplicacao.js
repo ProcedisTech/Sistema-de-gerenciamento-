@@ -82,6 +82,7 @@ export async function persistirMapaAplicacao({
   procedimentoFeitoId,
   catalogoProcedimentoSaudeId,
   snapshot,
+  tipoMapaCodigo,
 }) {
   const erros = [];
   if (!procedimentoFeitoId) {
@@ -146,12 +147,16 @@ export async function persistirMapaAplicacao({
 
   if (marcacoes.length > 0) {
     try {
-      await mapasApi.salvar({
+      const payloadSalvar = {
         origemTipo: 'procedimento',
         origemId: procedimentoFeitoId,
         fotoGaleriaIdPorVista,
-        marcacoes
-      });
+        marcacoes,
+      };
+      if (tipoMapaCodigo) {
+        payloadSalvar.tipoMapaCodigo = tipoMapaCodigo;
+      }
+      await mapasApi.salvar(payloadSalvar);
     } catch (e) {
       erros.push(`Erro ao salvar mapa: ${mapApiErrorMessage(e)}`);
     }
