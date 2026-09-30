@@ -869,7 +869,7 @@ export function PatientProfileView({
   patientListBump,
 }) {
   const toast = useToast();
-  const { isNivel1: _isNivel1, canEditPacientes, papel, canStartAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos } = usePapel();
+  const { canEditPacientes, papel, canStartAnamnese, canSeeRespostasAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos, canSeeOrcamentos } = usePapel();
   const { orgId } = useOrg();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
@@ -1270,14 +1270,26 @@ export function PatientProfileView({
   ]);
 
   useEffect(() => {
+    const defaultTab = canSeeOrcamentos
+      ? 'planos'
+      : (canSeeProntuario
+          ? 'prontuario'
+          : ((canStartAnamnese || canSeeRespostasAnamnese)
+              ? 'anamnese'
+              : (canSeeGaleria
+                  ? 'galeria'
+                  : 'documentos')));
+
     if (
       patientDetailTab === 'timeline' ||
       patientDetailTab === 'cadastro' ||
       patientDetailTab === 'atendimento'
     ) {
-      setPatientDetailTab('planos');
+      setPatientDetailTab(defaultTab);
+    } else if (patientDetailTab === 'planos' && !canSeeOrcamentos) {
+      setPatientDetailTab(defaultTab);
     }
-  }, [patientDetailTab, setPatientDetailTab]);
+  }, [patientDetailTab, setPatientDetailTab, canSeeOrcamentos, canSeeProntuario, canStartAnamnese, canSeeRespostasAnamnese, canSeeGaleria]);
 
   const isEditing = Boolean(editing);
 
@@ -2262,10 +2274,10 @@ export function PatientProfileView({
           <div className="overflow-hidden rounded-[18px] border border-[#e2e8f0] bg-white shadow-md">
             <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch gap-0.5 overflow-x-auto no-scrollbar border-b border-[#e2e8f0] bg-white px-2 sm:gap-1 sm:px-3">
               {[
-                { key: 'planos', label: 'Planos & Evolução', title: 'Planos de Tratamento & Evolução Fotográfica', icon: BookOpen },
+                canSeeOrcamentos && { key: 'planos', label: 'Planos & Evolução', title: 'Planos de Tratamento & Evolução Fotográfica', icon: BookOpen },
                 { key: 'avulsos', label: 'Atendimentos Avulsos', title: 'Atendimentos e Procedimentos Avulsos', icon: Sparkles },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
-                canStartAnamnese && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
+                (canStartAnamnese || canSeeRespostasAnamnese) && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 canSeeDocumentos && { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
               ].filter(Boolean).map(({ key, label, title, icon }) => {
                 const TabIcon = icon;
@@ -2870,7 +2882,7 @@ export function PatientProfileView({
                 />
               )}
 
-              {patientDetailTab === 'planos' && (
+              {patientDetailTab === 'planos' && canSeeOrcamentos && (
                 <PlanosTab
                   variant="profile"
                   pacienteId={selectedPatient?.id ?? null}

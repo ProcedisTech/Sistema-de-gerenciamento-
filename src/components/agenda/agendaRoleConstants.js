@@ -1,15 +1,9 @@
-/** Roles que podem pré-selecionar a própria pill de profissional no modal (espelha PR-2A backend). */
-export const ROLES_AGENDA_PRESELECT = Object.freeze([
-  'medico',
-  'médico',
-  'esteticista',
-  'dentista',
-  'biomedico',
-  'administrador',
-  'admin',
-]);
+/**
+ * @deprecated Arquivo descontinuado na migração para RBAC puro.
+ * A governança de pré-seleção e visibilidade agora reside em useAgendaPage e AGENDA_APARECER.
+ */
+export const ROLES_AGENDA_PRESELECT = Object.freeze([]);
 
-export function isRoleAgendaPreselect(roleNome) {
-  const n = String(roleNome || '').trim().toLowerCase();
-  return ROLES_AGENDA_PRESELECT.includes(n);
+export function isRoleAgendaPreselect() {
+  return false;
 }

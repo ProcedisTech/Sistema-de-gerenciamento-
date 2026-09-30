@@ -15,8 +15,8 @@ function findOrgRow(list, orgId) {
 export function MetodosAssinaturaPanel() {
   const toast = useToast();
   const { orgId } = useOrg();
-  const { canSeeConfigClinica, isAdmin } = usePapel();
-  const canEdit = canSeeConfigClinica || isAdmin;
+  const { canSeeConfigClinica } = usePapel();
+  const canEdit = canSeeConfigClinica;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

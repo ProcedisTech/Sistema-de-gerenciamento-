@@ -96,11 +96,12 @@ export function AgendaBloqueioModal({ agenda }) {
             <FieldLabel required>Profissional</FieldLabel>
             <ProfissionalSearchInput
               roleUserIdAgenda={agenda.roleUserIdAgenda}
-              equipeList={agenda.equipeList}
+              equipeList={(agenda.equipeList || []).filter((p) => p.apareceNaAgenda !== false)}
               equipeLoading={agenda.equipeLoading}
               equipeError={agenda.equipeError}
               onSelecionar={(id) => agenda.setRoleUserIdAgenda(id)}
               onClear={() => agenda.setRoleUserIdAgenda('')}
+              locked={!agenda.canSeeAgendaMulti && Boolean(agenda.roleUserId)}
             />
           </FieldWrap>
 

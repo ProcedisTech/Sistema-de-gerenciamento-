@@ -82,7 +82,7 @@ function resolveFotoSrc(fotoUrl) {
 /**
  * @param {{
  *   getAuthHeaders: () => Record<string, string>,
- *   onPerfilAtualizado?: (data: { nomeCompleto: string, fotoUrl: string }) => void,
+ *   onPerfilAtualizado?: (data: { nomeCompleto: string, apelido?: string, fotoUrl: string }) => void,
  * }} props
  */
 export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) {
@@ -413,6 +413,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
       }
       onPerfilAtualizado?.({
         nomeCompleto: body.nomeCompleto,
+        apelido: body.apelido,
         fotoUrl: fotoUrlServidor,
       });
       toast.success('Perfil salvo com sucesso.');

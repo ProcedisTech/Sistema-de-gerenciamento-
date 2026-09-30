@@ -1,19 +1,23 @@
 /**
  * Matriz de ações do Day Rail (Rich card + Next-up).
  * @param {string} status
+ * @param {boolean} [canStartAnamnese=true]
+ * @param {boolean} [canCancelarAgendamento=true]
  * @returns {{ primary: 'confirmar' | 'iniciar' | null, secondary: Array<'anamnese' | 'whatsapp' | 'reagendar' | 'cancelar'> }}
  */
-export function getRailCardActions(status, canStartAnamnese = true) {
+export function getRailCardActions(status, canStartAnamnese = true, canCancelarAgendamento = true) {
   const s = String(status || '');
   const isPending = s === 'pendente' || s === 'aguardando_confirmacao';
   const isConfirmed = s === 'confirmado';
 
+  const secondary = ['anamnese', 'whatsapp', 'reagendar'];
+  if ((isPending || isConfirmed) && canCancelarAgendamento) {
+    secondary.push('cancelar');
+  }
+
   return {
     primary: isPending ? 'confirmar' : (isConfirmed && canStartAnamnese) ? 'iniciar' : null,
-    secondary:
-      isPending || isConfirmed
-        ? ['anamnese', 'whatsapp', 'reagendar', 'cancelar']
-        : ['anamnese', 'whatsapp', 'reagendar'],
+    secondary,
   };
 }
 
@@ -26,8 +30,10 @@ export function getRailPrimaryLabel(primary) {
 /**
  * Matriz de ações para card agrupado (status misto ou uniforme).
  * @param {string[]} statuses — status bruto de cada agenda do grupo
+ * @param {boolean} [canStartAnamnese=true]
+ * @param {boolean} [canCancelarAgendamento=true]
  */
-export function getGroupedRailCardActions(statuses = [], canStartAnamnese = true) {
+export function getGroupedRailCardActions(statuses = [], canStartAnamnese = true, canCancelarAgendamento = true) {
   const list = (statuses || []).map((s) => String(s || ''));
   const hasPending = list.some((s) => s === 'pendente' || s === 'aguardando_confirmacao');
   const allConfirmed = list.length > 0 && list.every((s) => s === 'confirmado');
@@ -39,8 +45,13 @@ export function getGroupedRailCardActions(statuses = [], canStartAnamnese = true
   if (hasPending) primary = 'confirmar';
   else if (allConfirmed && canStartAnamnese) primary = 'iniciar';
 
+  const secondary = ['anamnese', 'whatsapp', 'reagendar'];
+  if (anyActive && canCancelarAgendamento) {
+    secondary.push('cancelar');
+  }
+
   return {
     primary,
-    secondary: anyActive ? ['anamnese', 'whatsapp', 'reagendar', 'cancelar'] : ['anamnese', 'whatsapp', 'reagendar'],
+    secondary,
   };
 }

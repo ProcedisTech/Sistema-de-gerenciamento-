@@ -11,10 +11,15 @@ import {
   bloqueioHoraFimLabel,
   bloqueioMotivoLabel,
 } from './agendaBloqueioStyles.js';
+import {
+  WEEK_DEFAULT_END_MIN,
+  WEEK_DEFAULT_START_MIN,
+  computeWeekRangeFromClinic,
+} from '../../utils/clinicaHorarioRange.js';
 
 const SLOT_HEIGHT = 48;
-const DEFAULT_START_MIN = 7 * 60;
-const DEFAULT_END_MIN = 20 * 60;
+const DEFAULT_START_MIN = WEEK_DEFAULT_START_MIN;
+const DEFAULT_END_MIN = WEEK_DEFAULT_END_MIN;
 const SLOT_MIN = 30;
 
 const WEEK_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -28,7 +33,10 @@ function timeToMinutes(t) {
   return h * 60 + (Number.isNaN(m) ? 0 : m);
 }
 
-function computeGridRange(appointments = []) {
+function computeGridRange(appointments = [], weekDayIsos = [], clinicaHorarios) {
+  if (Array.isArray(clinicaHorarios)) {
+    return computeWeekRangeFromClinic(weekDayIsos, clinicaHorarios, appointments);
+  }
   let min = DEFAULT_START_MIN;
   let max = DEFAULT_END_MIN;
   for (const appt of appointments || []) {
@@ -453,13 +461,17 @@ export function WeekTimeGrid({
   onOpenSlotDetail,
   onClickEmptySlot,
   disponibilidades,
+  clinicaHorarios,
   advanceOfferByAgendaId,
   onAdvanceClick,
   onRemoverBloqueio,
   submittingRemoverBloqueioId,
 }) {
   const scrollRef = React.useRef(null);
-  const { startMin, endMin } = React.useMemo(() => computeGridRange(appointments), [appointments]);
+  const { startMin, endMin } = React.useMemo(
+    () => computeGridRange(appointments, weekDayIsos, clinicaHorarios),
+    [appointments, weekDayIsos, clinicaHorarios]
+  );
   const slots = React.useMemo(() => buildTimeSlots(startMin, endMin), [startMin, endMin]);
   const gridHeight = slots.length * SLOT_HEIGHT;
 

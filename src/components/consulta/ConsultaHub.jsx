@@ -1,11 +1,12 @@
 import React from 'react';
-import { BookOpen, ClipboardList, Eye, FileText, RotateCcw, Syringe } from 'lucide-react';
+import { BookOpen, ClipboardList, Eye, FileText, Lock, RotateCcw, Syringe } from 'lucide-react';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { useTermosPendentes } from '../../hooks/useTermosPendentes';
 import { useAnamneseStatusPaciente } from '../../hooks/useAnamneseStatusPaciente';
 import { temFaltantes, consentimentosAguardandoExecucao } from '../../utils/termoResolucao';
 import { usePlanosPaciente } from '../planos/usePlanosPaciente.js';
 import { calcSessoesPlano } from '../../utils/planejamentoProfileMetrics.js';
+import { usePapel } from '../../hooks/usePapel.js';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -84,15 +85,7 @@ function getCardPendingDot(cardId, paciente, termosPendentes, progressoPlano, an
 
 function buildModuleCards(isRetorno) {
   if (isRetorno) {
-    return [
-      {
-        id: 'retorno',
-        label: 'Retorno',
-        description: 'Avaliação do resultado, foto e retoque',
-        icon: RotateCcw,
-      },
-      { id: 'termos', label: 'Termos', description: 'Consentimentos', icon: ClipboardList },
-    ];
+    return MODULE_CARDS.filter((c) => c.id !== 'planejamento' && c.id !== 'retorno-avulso');
   }
   return MODULE_CARDS;
 }
@@ -121,6 +114,28 @@ export function ConsultaHub({
   const anamneseStatus = useAnamneseStatusPaciente(paciente, {
     enabled: Boolean(paciente?.id) && !isRetorno,
   });
+  const papel = usePapel();
+  const isCardAllowed = (cardId) => {
+    if (!papel || (!papel.papel && (!papel.permissoes || papel.permissoes.length === 0))) {
+      return true;
+    }
+    switch (cardId) {
+      case 'avaliacao':
+        return Boolean(papel.canSeeHubAvaliacao);
+      case 'anamnese':
+        return Boolean(papel.canSeeHubAnamnese);
+      case 'planejamento':
+        return Boolean(papel.canSeeOrcamentos);
+      case 'termos':
+        return Boolean(papel.canSeeHubTermos);
+      case 'procedimento':
+        return Boolean(papel.canExecuteHubProcedimento);
+      case 'retorno-avulso':
+        return Boolean(papel.canSeeHubOrientacao);
+      default:
+        return true;
+    }
+  };
   const progressoPlano = (() => {
     const ativo = (planos || []).find((p) => p.statusCodigo === 'ativo');
     if (!ativo) return null;
@@ -131,6 +146,9 @@ export function ConsultaHub({
   const semVinculo = termosPendentes.resolucao?.procedimentosSemVinculo || [];
 
   const handleSelectModule = (id) => {
+    if (!isCardAllowed(id)) {
+      return;
+    }
     if (
       id === 'procedimento' &&
       exigirFilaVinculo &&
@@ -183,6 +201,7 @@ export function ConsultaHub({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const ModuleIcon = card.icon;
+          const allowed = isCardAllowed(card.id);
           const pendingDot = getCardPendingDot(card.id, paciente, termosPendentes, progressoPlano, anamneseStatus);
           const consentDot =
             pendingDot == null
@@ -193,16 +212,26 @@ export function ConsultaHub({
             <button
               key={card.id}
               type="button"
+              disabled={!allowed}
               onClick={() => {
+                if (!allowed) return;
                 if (card.id === 'retorno-avulso') {
                   onIniciarRetornoAvulso?.();
                   return;
                 }
                 handleSelectModule(card.id);
               }}
-              className="group relative flex flex-col gap-3 rounded-xl border border-app-border bg-white p-4 text-left transition-colors hover:bg-app-nav-hover active:bg-app-nav-active sm:p-5"
+              className={`group relative flex flex-col gap-3 rounded-xl border p-4 text-left transition-colors sm:p-5 ${
+                allowed
+                  ? 'border-app-border bg-white hover:bg-app-nav-hover active:bg-app-nav-active cursor-pointer'
+                  : 'border-slate-200 bg-slate-50/80 opacity-60 cursor-not-allowed'
+              }`}
             >
-              {statusDot ? (
+              {!allowed ? (
+                <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5 inline-flex items-center gap-1 rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">
+                  <Lock className="h-3 w-3" /> Bloqueado
+                </span>
+              ) : statusDot ? (
                 <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5">
                   <span
                     tabIndex={0}

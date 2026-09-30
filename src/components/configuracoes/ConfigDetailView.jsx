@@ -35,7 +35,7 @@ import { authHeadersForFetch } from '../../services/api';
  * @param {boolean} props.canSeeAgendaConfig
  * @param {boolean} props.canSeeEquipe
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada]
- * @param {(data: { nomeCompleto?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
+ * @param {(data: { nomeCompleto?: string, apelido?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
  * @param {() => void} [props.onPacientesCatalogRefresh]
  * @param {(opts?) => void} [props.onDisponibilidadeInvalidate]
  * @param {(isDirty: boolean) => void} [props.onDirtyHorariosChange]

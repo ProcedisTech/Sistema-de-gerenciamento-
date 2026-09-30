@@ -60,6 +60,7 @@ export function CadastrarClinica({ onComplete }) {
 
   const [responsavelTecnicoNome, setResponsavelTecnicoNome] = useState('');
   const [responsavelTecnicoRegistro, setResponsavelTecnicoRegistro] = useState('');
+  const [cargo, setCargo] = useState('esteticista');
 
   const inputClass =
     'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition focus:border-[#00a88e]/35';
@@ -138,6 +139,7 @@ export function CadastrarClinica({ onComplete }) {
       razaoSocial: rs,
       nome: nf,
       cnpj: cnpjDigits,
+      cargo: cargo || 'esteticista',
       inscricaoEstadual: strOrNull(inscricaoEstadual),
       inscricaoMunicipal: strOrNull(inscricaoMunicipal),
       telefonePrincipal: strOrNull(telefonePrincipal),
@@ -457,6 +459,31 @@ export function CadastrarClinica({ onComplete }) {
                 onChange={(ev) => setEnderecoPais(ev.target.value)}
                 className={inputClass}
               />
+            </div>
+          </div>
+
+          <div className={cardClass}>
+            <h3 className="text-[15px] font-bold text-[#0f172a]">Atuação do Fundador</h3>
+            <div>
+              <label className={labelClass} htmlFor={`${formId}-cargo`}>
+                Sua profissão / cargo na clínica
+              </label>
+              <p className="mb-2 text-[12px] font-medium text-slate-500">
+                Define sua atuação inicial e exibição na agenda de atendimentos.
+              </p>
+              <select
+                id={`${formId}-cargo`}
+                value={cargo}
+                onChange={(ev) => setCargo(ev.target.value)}
+                className={inputClass}
+              >
+                <option value="esteticista">Esteticista</option>
+                <option value="biomedico">Biomédico(a)</option>
+                <option value="medico">Médico(a)</option>
+                <option value="dentista">Cirurgião(ã)-Dentista</option>
+                <option value="enfermeiro">Enfermeiro(a)</option>
+                <option value="administrador">Apenas Administrador / Gestor (Não atende pacientes)</option>
+              </select>
             </div>
           </div>
 

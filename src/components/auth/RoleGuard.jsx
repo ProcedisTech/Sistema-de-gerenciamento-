@@ -1,11 +1,20 @@
 import React from 'react';
 import { usePapel } from '../../hooks/usePapel';
+import { PERMISSOES, PERFIS_ACESSO } from '../../constants/permissoes';
 import { ShieldAlert } from 'lucide-react';
 
+export { PERMISSOES, PERFIS_ACESSO };
+
 /**
+ * Componente de controle de acesso visual por perfil e permissões canônicas (RBAC).
+ *
  * @param {{
  *   allowedRoles?: string[],
  *   minLevel?: 'DONO'|'NIVEL_5'|'NIVEL_4'|'NIVEL_3'|'NIVEL_2'|'NIVEL_1',
+ *   requiredPermission?: string | string[],
+ *   requiredPermissions?: string[],
+ *   anyPermission?: string[],
+ *   condition?: boolean,
  *   fallback?: React.ReactNode,
  *   showError?: boolean,
  *   children: React.ReactNode
@@ -15,6 +24,8 @@ export function RoleGuard({
   allowedRoles, 
   minLevel, 
   requiredPermission,
+  requiredPermissions,
+  anyPermission,
   condition,
   fallback = null, 
   showError = false, 
@@ -33,10 +44,26 @@ export function RoleGuard({
     if (!condition) {
       isAuthorized = false;
     }
-  } else if (requiredPermission) {
-    // Se exige permissao especifica, checa se tem a permissao OU o nivel de fallback
-    if (!hasPerm(requiredPermission, minLevel)) {
+  } else if (anyPermission && anyPermission.length > 0) {
+    // Ao menos uma permissão da lista é necessária
+    if (!anyPermission.some(p => hasPerm(p, minLevel))) {
       isAuthorized = false;
+    }
+  } else if (requiredPermissions && requiredPermissions.length > 0) {
+    // Todas as permissões da lista são necessárias
+    if (!requiredPermissions.every(p => hasPerm(p, minLevel))) {
+      isAuthorized = false;
+    }
+  } else if (requiredPermission) {
+    // Se for array ou string única
+    if (Array.isArray(requiredPermission)) {
+      if (!requiredPermission.every(p => hasPerm(p, minLevel))) {
+        isAuthorized = false;
+      }
+    } else {
+      if (!hasPerm(requiredPermission, minLevel)) {
+        isAuthorized = false;
+      }
     }
   } else if (minLevel && !isAtLeast(minLevel)) {
     // Modo legado apenas por nivel (falha para CST_)

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { AnamneseDocumentoView } from './AnamneseDocumentoAssinadoView.jsx';
@@ -325,5 +325,34 @@ describe('AnamneseDocumentoView', () => {
     expect(screen.getByText('dexametasona — Coceira')).toBeInTheDocument();
     expect(screen.getAllByText('Dorflex').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('Qual foi a reacao?')).not.toBeInTheDocument();
+  });
+
+  it('onEnvioAtivoChange recebe o envioAtivo do documento depois de carregar', async () => {
+    const envio = { id: 'env1', status: 'PENDENTE', expiraEm: '2026-08-16T15:00:00Z' };
+    anamneseApi.getDocumento.mockResolvedValue({
+      ...baseDoc,
+      assinaturaPaciente: null,
+      envioAtivo: envio,
+    });
+    const onEnvioAtivoChange = vi.fn();
+
+    render(
+      <AnamneseDocumentoView pacienteId="pac1" preenchimentoId="p1" onEnvioAtivoChange={onEnvioAtivoChange} />,
+    );
+
+    await waitFor(() => expect(onEnvioAtivoChange).toHaveBeenLastCalledWith(envio));
+    expect(onEnvioAtivoChange).not.toHaveBeenCalledWith(undefined);
+  });
+
+  it('onEnvioAtivoChange recebe null quando o documento não tem envio', async () => {
+    anamneseApi.getDocumento.mockResolvedValue({ ...baseDoc, envioAtivo: null });
+    const onEnvioAtivoChange = vi.fn();
+
+    render(
+      <AnamneseDocumentoView pacienteId="pac1" preenchimentoId="p1" onEnvioAtivoChange={onEnvioAtivoChange} />,
+    );
+
+    await screen.findAllByText('Marina Alves');
+    await waitFor(() => expect(onEnvioAtivoChange).toHaveBeenLastCalledWith(null));
   });
 });

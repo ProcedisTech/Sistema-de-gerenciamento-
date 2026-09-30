@@ -20,12 +20,13 @@ import { CadastrarClinica } from './auth/CadastrarClinica.jsx';
 import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 
 // Componentes de Layout
-import { RoleGuard } from './auth/RoleGuard.jsx';
+import { RoleGuard, PERMISSOES } from './auth/RoleGuard.jsx';
 import { Sidebar, Stepper, MobileNavigation, GlobalHeader, PageSlot } from './layout';
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
 import { useAlertasClinicos } from '../hooks/useAlertasClinicos';
+import { useSolicitarAnamneseConsulta } from './consulta/useSolicitarAnamneseConsulta.jsx';
 import { AlertasClinicosPanel } from './patients/AlertasClinicosPanel.jsx';
 import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
@@ -169,7 +170,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 function AppRefactoredInner() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, clearOrgSession } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, setApareceNaAgenda, contextStatus, setContextStatus, clearOrgSession } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -183,6 +184,7 @@ function AppRefactoredInner() {
     canSeeConfigClinica,
     canSeeConfigAgenda,
     canSeeConfigEquipe,
+    canDeleteAgenda,
   } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
@@ -191,7 +193,7 @@ function AppRefactoredInner() {
   const [postLoginGate, setPostLoginGate] = React.useState(null);
   /** Incrementado após CompletarPerfil para re-rodar descoberta sem loop profile↔checking. */
   const [orgDiscoveryNonce, setOrgDiscoveryNonce] = React.useState(0);
-  const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready';
+  const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready' && contextStatus === 'ready';
 
   React.useEffect(() => {
     if (!authState.isLoggedIn) {
@@ -240,20 +242,6 @@ function AppRefactoredInner() {
           setPostLoginGate('profile');
           return;
         }
-        const roleId = meJson?.roleUserId ?? meJson?.role_user_id ?? null;
-        if (roleId && typeof setRoleUserId === 'function') {
-          setRoleUserId(String(roleId));
-        }
-        const roleNome = meJson?.perfilAcessoCodigo ?? meJson?.perfil_acesso_codigo ?? meJson?.role?.nome ?? meJson?.role_nome ?? meJson?.role ?? null;
-        if (typeof setRoleNome === 'function') {
-          setRoleNome(roleNome != null ? String(roleNome) : '');
-        }
-        if (typeof setPapel === 'function') {
-          setPapel(resolverPapel(roleNome));
-        }
-        if (typeof setPermissoes === 'function') {
-          setPermissoes(meJson?.permissoes || []);
-        }
         const orgRes = await fetch(resolveApiUrl('/api/v1/organizacoes/minhas'), {
           credentials: 'include',
           headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
@@ -271,9 +259,12 @@ function AppRefactoredInner() {
         }
         const list = Array.isArray(orgJson) ? orgJson : orgJson?.content ?? orgJson?.organizacoes ?? orgJson?.data ?? [];
         const arr = Array.isArray(list) ? list : [];
-        if (arr.length === 1) {
-          const id = arr[0]?.id ?? arr[0]?.organizacaoSaudeId;
-          if (id) setOrgId(String(id), arr[0]?.slug || '');
+        const persistedId = localStorage.getItem('procedi_org_id');
+        const selected = arr.length === 1 ? arr[0] : arr.find((item) =>
+          String(item?.id ?? item?.organizacaoSaudeId) === persistedId);
+        if (selected) {
+          const id = selected?.id ?? selected?.organizacaoSaudeId;
+          if (id) setOrgId(String(id), selected?.slug || '');
           const clinicaRes = await fetch(resolveApiUrl('/api/v1/clinica'), {
             credentials: 'include',
             headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
@@ -292,7 +283,7 @@ function AppRefactoredInner() {
             if (nomeClinica || logoUrl || clinicaJson) {
               setClinicaInfo((prev) => ({
                 ...prev,
-                ...(nomeClinica ? { nome: nomeClinica, subtitulo: 'Harmonização Premium' } : {}),
+                ...(nomeClinica ? { nome: nomeClinica } : {}),
                 ...(logoUrl ? { logoUrl } : {}),
                 endereco: endCompleto,
                 telefone: String(clinicaJson?.telefone ?? clinicaJson?.celular ?? '').trim(),
@@ -322,6 +313,42 @@ function AppRefactoredInner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- toast estável; orgDiscoveryNonce re-dispara após CompletarPerfil
   }, [authState.isLoggedIn, authState.authUser?.id, authState.authReady, setOrgId, orgDiscoveryNonce]);
+  // Permissões do Dono são por clínica; nunca reaproveitar o /me de outra organização.
+  React.useEffect(() => {
+    if (!authState.authReady || !authState.isLoggedIn || !orgId) return undefined;
+    let cancelled = false;
+    setContextStatus('loading');
+    (async () => {
+      try {
+        const response = await fetch(resolveApiUrl('/api/auth/me'), {
+          credentials: 'include',
+          headers: await authHeadersForFetch({ needsOrg: true }),
+        });
+        if (cancelled) return;
+        if (!response.ok) throw new Error('Falha ao atualizar permissões da clínica');
+        const me = await response.json();
+        if (cancelled) return;
+        if (me.organizacaoId !== orgId) throw new Error('Contexto de clínica inválido');
+        setRoleUserId(me.roleUserId ?? '');
+        setRoleNome(me.perfilAcessoCodigo ?? me.role ?? '');
+        setPapel(resolverPapel(me.perfilAcessoCodigo ?? me.role ?? ''));
+        setPermissoes(me.permissoes || []);
+        setApareceNaAgenda(me.apareceNaAgenda);
+        setContextStatus('ready');
+      } catch {
+        if (!cancelled) {
+          setPermissoes([]);
+          setApareceNaAgenda(null);
+          setRoleUserId('');
+          setPapel(null);
+          setContextStatus('error');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authState.authReady, authState.isLoggedIn, orgId,
+    setRoleUserId, setRoleNome, setPapel, setPermissoes, setApareceNaAgenda, setContextStatus]);
+
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   const mapaAplicacaoState = useMapaAplicacaoState();
@@ -351,10 +378,9 @@ function AppRefactoredInner() {
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
   const [clinicaInfo, setClinicaInfo] = useState({
     nome: 'Procedi',
-    subtitulo: 'Harmonização Premium',
     logoUrl: '',
   });
-  const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', fotoUrl: '' });
+  const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', apelido: '', fotoUrl: '' });
   const [configSection, setConfigSectionState] = useState(readStoredSection);
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
@@ -766,6 +792,11 @@ function AppRefactoredInner() {
 
   const handleScheduleConfirmCancelar = React.useCallback(
     async (payload) => {
+      if (!canDeleteAgenda) {
+        toast.error('Sem permissão para cancelar agendamentos.');
+        setScheduleCancelRow(null);
+        return;
+      }
       const row = scheduleCancelRow?.agenda;
       const group = scheduleCancelRow?.groupAppointments;
       if (!row?.agendaId || !payload) {
@@ -818,7 +849,7 @@ function AppRefactoredInner() {
         setScheduleCancelSubmitting(false);
       }
     },
-    [agendaSchedule, scheduleCancelRow, toast],
+    [agendaSchedule, canDeleteAgenda, scheduleCancelRow, toast],
   );
 
   const scheduleCancelRetornosVinculados = React.useMemo(() => {
@@ -1503,6 +1534,7 @@ function AppRefactoredInner() {
           const p = await perfilRes.json().catch(() => ({}));
           setPerfilInfo({
             nomeCompleto: String(p?.nomeCompleto ?? p?.nome_completo ?? '').trim(),
+            apelido: String(p?.apelido ?? '').trim(),
             fotoUrl: String(p?.fotoUrl ?? p?.foto_url ?? '').trim(),
             cpf: String(p?.cpf ?? '').trim(),
             crm: String(p?.crm ?? '').trim(),
@@ -1522,7 +1554,7 @@ function AppRefactoredInner() {
 
           setClinicaInfo((prev) => ({
             ...prev,
-            ...(nomeClinica ? { nome: String(nomeClinica).trim(), subtitulo: 'Harmonização Premium' } : {}),
+            ...(nomeClinica ? { nome: String(nomeClinica).trim() } : {}),
             ...(logoUrl ? { logoUrl } : {}),
             endereco: endCompleto,
             telefone: String(c?.telefone ?? c?.celular ?? '').trim(),
@@ -1542,7 +1574,7 @@ function AppRefactoredInner() {
 
   React.useEffect(() => {
     if (!isLoggedIn) {
-      setPerfilInfo({ nomeCompleto: '', fotoUrl: '' });
+      setPerfilInfo({ nomeCompleto: '', apelido: '', fotoUrl: '' });
     }
   }, [isLoggedIn]);
 
@@ -3786,12 +3818,31 @@ function AppRefactoredInner() {
   // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
   const isJornadaView = activeView === 'jornada';
   const isConsultaView = activeView === 'consulta';
+  /** Jornada e Consulta não montam o GlobalHeader: a identidade continua na Sidebar. */
+  const identidadeNoHeader = !isJornadaView && !isConsultaView;
   const alertasClinicosConsulta = useAlertasClinicos(pacienteAtual?.id, {
     refreshKey: alertasClinicosRefreshKey,
     sexoPaciente: pacienteAtual?.sexo,
     onAlergiasResumo: (texto) => {
       mergePatientById?.(pacienteAtual?.id, (prev) => ({ ...prev, alergias: texto }));
     },
+  });
+  const handleSolicitacaoRespondida = () => {
+    setAlertasClinicosRefreshKey((n) => n + 1);
+    anamneseRef.current?.recarregarAposSolicitacao?.();
+  };
+  const { abrirSolicitacao, modaisSolicitacao } = useSolicitarAnamneseConsulta({
+    paciente: {
+      pacienteId: pacienteAtual?.id,
+      nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
+      cpf: pacienteAtual?.cpf,
+      telefone: pacienteAtual?.telefone || pacienteAtual?.celular,
+    },
+    clinicaSlug: clinicaInfo?.slug,
+    toast,
+    onEnvioGerado: (d) => anamneseRef.current?.registrarEnvioSolicitacao?.(d),
+    onEnvioLimpo: () => anamneseRef.current?.registrarEnvioSolicitacao?.(null),
+    onRespondido: handleSolicitacaoRespondida,
   });
   const isAgendaView = activeView === 'agenda';
   const isPaginaPublica =
@@ -3931,12 +3982,13 @@ function AppRefactoredInner() {
         authUser={authUser}
         onRailWidthPxChange={setSidebarRailWidthPx}
         clinicaNome={clinicaInfo.nome}
-        clinicaSubtitulo={clinicaInfo.subtitulo}
         clinicaLogoUrl={clinicaInfo.logoUrl}
         perfilNomeCompleto={perfilInfo.nomeCompleto}
+        perfilApelido={perfilInfo.apelido}
         perfilFotoUrl={perfilInfo.fotoUrl}
         onOpenClinicaSettings={onOpenClinicaSettings}
         onOpenPerfilSettings={onOpenPerfilSettings}
+        identidadeNoHeader={identidadeNoHeader}
       />
 
       {/* Main Content */}
@@ -4461,7 +4513,7 @@ function AppRefactoredInner() {
                 variant="hub"
                 resumo={alertasClinicosConsulta.resumo}
                 isLoading={alertasClinicosConsulta.isLoading}
-                onSolicitarAnamnese={() => setConsultaModule('anamnese')}
+                onSolicitarAnamnese={abrirSolicitacao}
               />
             </header>
             <ConsultaViewShell compact={consultaModule === 'anamnese'}>
@@ -4564,6 +4616,8 @@ function AppRefactoredInner() {
                       consultaMode
                       onConcluirAnamnese={handleConcluirAnamnese}
                       isConcluirAnamneseBusy={step1Busy}
+                      onSolicitarAoPaciente={abrirSolicitacao}
+                      onSolicitacaoRespondida={handleSolicitacaoRespondida}
                     />
                   </>
                 ) : null}
@@ -4753,6 +4807,7 @@ function AppRefactoredInner() {
                 ) : null}
               </div>
             </ConsultaViewShell>
+            {modaisSolicitacao}
 
             <ConsultaEncerrarConfirmModal
               open={encerrarConsultaOpen}
@@ -4956,6 +5011,14 @@ function AppRefactoredInner() {
               notificacoesRefreshKey={notifVersion}
               patientSearchQuery={patientSearchQuery}
               setPatientSearchQuery={setPatientSearchQuery}
+              authUser={authUser}
+              clinicaNome={clinicaInfo.nome}
+              clinicaLogoUrl={clinicaInfo.logoUrl}
+              perfilNomeCompleto={perfilInfo.nomeCompleto}
+              perfilApelido={perfilInfo.apelido}
+              perfilFotoUrl={perfilInfo.fotoUrl}
+              onOpenClinicaSettings={onOpenClinicaSettings}
+              onOpenPerfilSettings={onOpenPerfilSettings}
             />
             <div
               className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
@@ -4980,7 +5043,7 @@ function AppRefactoredInner() {
               >
 
                 {activeView === 'pacientes' && (
-                  <RoleGuard requiredPermission="PACIENTE_VER" minLevel="NIVEL_1" showError>
+                  <RoleGuard requiredPermission={PERMISSOES.PACIENTE_VER} minLevel="NIVEL_1" showError>
                     <PatientsView
                       isRecepcionista={isRecepcionista}
                       patients={patients}
@@ -5038,10 +5101,10 @@ function AppRefactoredInner() {
                       profileNav={profileNav}
                       clearProfileNavSnapshot={clearProfileNavSnapshot}
                       agendaSchedule={agendaSchedule}
-                      onSlotCancelar={(target) => {
+                      onSlotCancelar={canDeleteAgenda ? (target) => {
                         const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                         if (row) setScheduleCancelRow(row);
-                      }}
+                      } : null}
                     />
                   </RoleGuard>
                 )}
@@ -5059,7 +5122,7 @@ function AppRefactoredInner() {
                       configSection={configSection}
                       setConfigSection={setConfigSection}
                       onClinicaAtualizada={(nome, logoUrl) =>
-                        setClinicaInfo({ nome, subtitulo: 'Harmonização Premium', logoUrl: logoUrl ?? '' })
+                        setClinicaInfo({ nome, logoUrl: logoUrl ?? '' })
                       }
                       onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}
@@ -5071,9 +5134,10 @@ function AppRefactoredInner() {
                 )}
 
                 {activeView === 'gestao-equipe' && (
-                  <RoleGuard requiredPermission="USUARIO_VER" minLevel="NIVEL_5" showError>
+                  <RoleGuard requiredPermission={PERMISSOES.USUARIO_VER} minLevel="NIVEL_5" showError>
                     <GestaoUsuariosView
                       onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                      onEquipeInvalidate={agendaSchedule.refreshEquipe}
                     />
                   </RoleGuard>
                 )}
@@ -5088,7 +5152,7 @@ function AppRefactoredInner() {
                 )}
 
                 {activeView === 'agenda' && (
-                  <RoleGuard requiredPermission="AGENDA_VER" minLevel="NIVEL_1" showError>
+                  <RoleGuard requiredPermission={PERMISSOES.AGENDA_VER} minLevel="NIVEL_1" showError>
                     <div className="flex min-h-0 flex-1 flex-col">
                       <AgendaDashboard
                         agenda={agendaSchedule}
@@ -5097,10 +5161,10 @@ function AppRefactoredInner() {
                         clinicaSlug={clinicaInfo.slug}
                         profissionalNome={perfilInfo.nomeCompleto || roleNome}
                         onStartAttendance={handleAgendaStartAttendance}
-                        onSlotCancelar={(target) => {
+                        onSlotCancelar={canDeleteAgenda ? (target) => {
                           const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                           if (row) setScheduleCancelRow(row);
-                        }}
+                        } : null}
                         onSlotReagendar={handleSlotReagendar}
                         shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
                       />
@@ -5230,7 +5294,7 @@ function AppRefactoredInner() {
           <AgendaFormModal agenda={agendaSchedule} />
           <AgendaBloqueioModal agenda={agendaSchedule} />
           {agendaSchedule.foraDispModal}
-          {scheduleCancelRow?.agenda ? (
+          {canDeleteAgenda && scheduleCancelRow?.agenda ? (
             <CancelarAgendaModal
               agenda={scheduleCancelRow.agenda}
               retornosVinculados={scheduleCancelRetornosVinculados}

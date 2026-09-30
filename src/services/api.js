@@ -948,6 +948,8 @@ export const agendasApi = {
     }
     return request(url, { signal: opts.signal });
   },
+  ocupacoes: (start, end, profissionalRoleUserId) =>
+    request(`/api/v1/agendas/ocupacoes?start=${start}&end=${end}&profissionalRoleUserId=${encodeURIComponent(String(profissionalRoleUserId).trim())}`),
   byProfissional: (roleUserId, date) =>
     request(`/api/v1/agendas/by-profissional?roleUserId=${roleUserId}&date=${date}`),
   create: (data, opts = {}) => {
@@ -1360,6 +1362,20 @@ export const termoAssinaturaApi = {
     }),
 
   verificarGravada: (id) => request(`/api/v1/termos/assinaturas/${id}/gravada/verificar`),
+
+  concluirPresencial: (id, data) =>
+    request(`/api/v1/termos/assinaturas/${id}/concluir-presencial`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+};
+
+/** Cancelamento autenticado do envio externo de termo (QR/link). */
+export const assinaturaExternaApi = {
+  cancelarEnvioExterno: (termoAssinaturaId) =>
+    request(`/api/v1/assinaturas/externa/termo/${termoAssinaturaId}/cancelar`, {
+      method: 'POST',
+    }),
 };
 
 /** Normaliza corpo de GET /api/v1/organizacoes/minhas para lista. */

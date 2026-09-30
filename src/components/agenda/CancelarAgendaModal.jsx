@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import { motivosCancelamentoApi, getApiErrorToastMessage } from '../../services/api.js';
 import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
+import { usePapel } from '../../hooks/usePapel.js';
 
 function formatDataPt(iso) {
   if (!iso) return '';
@@ -21,6 +22,7 @@ export default function CancelarAgendaModal({
   onConfirm,
   isSubmitting = false,
 }) {
+  const { canDeleteAgenda } = usePapel();
   const [motivos, setMotivos] = useState([]);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,8 @@ export default function CancelarAgendaModal({
       cancelarRetornos: cancelarRetornoJunto ? retornosVinculados : [],
     });
   };
+
+  if (!canDeleteAgenda) return null;
 
   return (
     <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/50 p-4">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
 import { useToast } from '../../contexts/useToast.js';
+import { usePapel } from '../../hooks/usePapel.js';
 import {
   agendasApi,
   getPacienteCreateErrorFeedback,
@@ -18,6 +19,7 @@ const normalizeCpf = (v) => String(v || '').replace(/\D/g, '');
 export function useAgendaController({ patients, setPatients, maskCPF, authEnabled = false }) {
   const toast = useToast();
   const { roleUserId } = useOrg();
+  const { canDeleteAgenda } = usePapel();
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const [appointments, setAppointments] = useState([]);
@@ -389,9 +391,9 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   const openCancelAppointmentModal = useCallback((appointmentId) => {
-    if (!appointmentId) return;
+    if (!canDeleteAgenda || !appointmentId) return;
     setCancelSlotId(String(appointmentId));
-  }, []);
+  }, [canDeleteAgenda]);
 
   const closeCancelAppointmentModal = useCallback(() => {
     setCancelSlotId(null);
@@ -399,6 +401,10 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
 
   const confirmCancelAppointment = useCallback(
     async (payload) => {
+      if (!canDeleteAgenda) {
+        toast.error('Sem permissão para cancelar agendamentos.');
+        return false;
+      }
       if (!cancelSlotId || !payload?.motivoCancelamentoId) return false;
       setCancelSubmitting(true);
       try {
@@ -417,7 +423,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
         setCancelSubmitting(false);
       }
     },
-    [cancelSlotId, fetchMonthAgendas, toast]
+    [canDeleteAgenda, cancelSlotId, fetchMonthAgendas, toast]
   );
 
   const goPrevCalendarMonth = () => {
@@ -526,5 +532,7 @@ export function useAgendaController({ patients, setPatients, maskCPF, authEnable
     openMarcarCompromisso,
     agendaModalProps,
     compromissoModalProps,
+    canDeleteAgenda,
+    canCancelarAgendamento: canDeleteAgenda,
   };
 }

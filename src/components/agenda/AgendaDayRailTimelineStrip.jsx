@@ -1,12 +1,16 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import {
   getNowLineLeftPercent,
   getTimelineBlocks,
+  TIMELINE_END_MIN,
   TIMELINE_START_MIN,
-  TIMELINE_SPAN_MIN,
 } from '../../utils/agendaRailHelpers.js';
+import {
+  computeDayRailRange,
+  hourLabelsForRange,
+} from '../../utils/clinicaHorarioRange.js';
 
-const HOUR_LABELS = [6, 8, 10, 12, 14, 16, 18, 20, 22];
+const DEFAULT_HOUR_LABELS = [6, 8, 10, 12, 14, 16, 18, 20, 22];
 
 function AgendaDayRailTimelineStripInner({
   appointments,
@@ -16,9 +20,25 @@ function AgendaDayRailTimelineStripInner({
   onBlockClick,
   compact = false,
   dense = false,
+  clinicaHorarios,
 }) {
-  const blocks = getTimelineBlocks(appointments);
-  const nowLeft = getNowLineLeftPercent(now, selectedDay, todayIso);
+  const axis = useMemo(() => {
+    if (Array.isArray(clinicaHorarios)) {
+      return computeDayRailRange(selectedDay, clinicaHorarios, appointments);
+    }
+    return { startMin: TIMELINE_START_MIN, endMin: TIMELINE_END_MIN };
+  }, [clinicaHorarios, selectedDay, appointments]);
+
+  const hourLabels = useMemo(() => {
+    if (Array.isArray(clinicaHorarios)) {
+      return hourLabelsForRange(axis.startMin, axis.endMin);
+    }
+    return DEFAULT_HOUR_LABELS;
+  }, [clinicaHorarios, axis.startMin, axis.endMin]);
+
+  const span = Math.max(1, axis.endMin - axis.startMin);
+  const blocks = getTimelineBlocks(appointments, axis);
+  const nowLeft = getNowLineLeftPercent(now, selectedDay, todayIso, axis);
   const useDense = dense && !compact;
   const labelSizeClass = compact || useDense ? 'text-[9px]' : 'text-[10px]';
   const blockSizeClass = compact || useDense ? 'text-[9px]' : 'text-[9.5px]';
@@ -28,8 +48,8 @@ function AgendaDayRailTimelineStripInner({
   return (
     <section className={`shrink-0 border-b border-ink-150 bg-white ${stripPaddingClass}`}>
       <div className={`relative mb-1 ${compact || useDense ? 'h-2.5' : 'h-3'}`}>
-        {HOUR_LABELS.map((h) => {
-          const left = ((h * 60 - TIMELINE_START_MIN) / TIMELINE_SPAN_MIN) * 100;
+        {hourLabels.map((h) => {
+          const left = ((h * 60 - axis.startMin) / span) * 100;
           return (
             <span
               key={h}

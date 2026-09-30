@@ -220,8 +220,8 @@ export function AgendaFormModal({ agenda }) {
   const isReagendar = agenda.modalMode === 'reagendar';
   const lockPlanejamento = Boolean(agenda.isModoPlanejamento);
   const lockPatient = Boolean(agenda.patientSelectLocked);
-  const profissionalFixado = ehProfissionalClinico || Boolean(agenda.roleUserIdAgenda);
-  const roleUserIdFiltro = ehProfissionalClinico ? roleLogadoId : (agenda.roleUserIdAgenda || '');
+  const roleUserIdFiltro = agenda.roleUserIdAgenda || (ehProfissionalClinico ? roleLogadoId : '');
+  const profissionalFixado = Boolean(agenda.roleUserIdAgenda || (ehProfissionalClinico && !agenda.canSeeAgendaMulti));
   const rangePhase = deriveRangePhase(agenda.form.horaInicio, agenda.form.horaFimSlot);
   const duracaoTotalMin =
     rangePhase === 'complete'
@@ -877,12 +877,12 @@ export function AgendaFormModal({ agenda }) {
               <div className="[&_input]:!h-[38px] [&_input]:!py-2 [&_>div]:min-h-[38px]">
                 <ProfissionalSearchInput
                   roleUserIdAgenda={agenda.roleUserIdAgenda}
-                  equipeList={agenda.equipeList}
+                  equipeList={(agenda.equipeList || []).filter((p) => p.apareceNaAgenda !== false)}
                   equipeLoading={agenda.equipeLoading}
                   equipeError={agenda.equipeError}
                   onSelecionar={(id) => agenda.setRoleUserIdAgenda(id)}
                   onClear={() => agenda.setRoleUserIdAgenda('')}
-                  locked={isReagendar || lockPlanejamento}
+                  locked={isReagendar || lockPlanejamento || (!agenda.canSeeAgendaMulti && Boolean(agenda.roleUserId))}
                 />
               </div>
             </div>

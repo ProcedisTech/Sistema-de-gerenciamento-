@@ -32,11 +32,12 @@ export function AgendaGroupedNextUpCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
-  const { canStartAnamnese } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda } = usePapel();
   if (!primary) return null;
 
   const countdown = formatCountdown(group.horaInicio || primary.horaInicio, now);
-  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese);
+  const canCancelar = Boolean(canDeleteAgenda && onCancelar);
+  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese, canCancelar);
 
   return (
     <article
@@ -105,7 +106,7 @@ export function AgendaGroupedNextUpCard({
             onWhatsApp={() => onWhatsApp?.(group)}
             onEnviarAnamnese={() => onEnviarAnamnese?.(group)}
             onReagendar={() => onReagendar?.(group)}
-            onCancelar={() => onCancelar?.(group)}
+            onCancelar={canCancelar ? () => onCancelar?.(group) : null}
           />
         </div>
       ) : null}

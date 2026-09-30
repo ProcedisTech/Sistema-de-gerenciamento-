@@ -41,7 +41,7 @@ export function AgendaAppointmentCardRich({
   onOpenSlotDetail,
   submittingRemoverBloqueioId,
 }) {
-  const { canStartAnamnese } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda } = usePapel();
   const isBloqueio = appointment?.tipo === 'bloqueio' && appointment.status !== 'cancelado';
 
   if (isBloqueio) {
@@ -114,7 +114,8 @@ export function AgendaAppointmentCardRich({
     : rawBadge;
 
   const stripe = getRailStripeClass(appointment);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese);
+  const canCancelar = Boolean(canDeleteAgenda && onCancelar);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar);
   const execSummary = getExecutionSummary(appointment);
   const timingBadge = execSummary?.badge || getTimingBadge(appointment);
 
@@ -174,7 +175,7 @@ export function AgendaAppointmentCardRich({
             onIniciarAtendimento={onIniciarAtendimento}
             onWhatsApp={onWhatsApp}
             onReagendar={onReagendar}
-            onCancelar={onCancelar}
+            onCancelar={canCancelar ? onCancelar : null}
             onEnviarAnamnese={onEnviarAnamnese}
           />
         ) : null}

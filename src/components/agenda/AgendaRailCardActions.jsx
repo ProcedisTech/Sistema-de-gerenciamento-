@@ -101,7 +101,7 @@ export function AgendaRailCardActions({
               {compact ? null : 'Reagendar'}
             </button>
           ) : null}
-          {secondary.includes('cancelar') ? (
+          {secondary.includes('cancelar') && Boolean(onCancelar) ? (
             <button
               type="button"
               onClick={() => onCancelar?.(appointment)}
