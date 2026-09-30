@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -151,6 +151,8 @@ export function AnamneseDocumentoView({
   documento = null,
   /** pacienteConfirmacao: esconde ações profissionais e rodapé “aguardando”. */
   variante = 'hub',
+  /** Recebe `envioAtivo` do documento (ou null) a cada carga concluída. */
+  onEnvioAtivoChange,
 }) {
   const toast = useToast();
   const modoPaciente = variante === 'pacienteConfirmacao';
@@ -188,6 +190,13 @@ export function AnamneseDocumentoView({
     setError(null);
     recarregarDocumento().finally(() => setLoading(false));
   }, [pacienteId, preenchimentoId, documento, recarregarDocumento]);
+
+  const onEnvioAtivoChangeRef = useRef(onEnvioAtivoChange);
+  useEffect(() => { onEnvioAtivoChangeRef.current = onEnvioAtivoChange; }, [onEnvioAtivoChange]);
+  useEffect(() => {
+    if (loading) return;
+    onEnvioAtivoChangeRef.current?.(gravada?.envioAtivo ?? null);
+  }, [gravada, loading]);
 
   const allItens = useMemo(
     () => envelopeItens(gravada?.conteudoJsonb).slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),

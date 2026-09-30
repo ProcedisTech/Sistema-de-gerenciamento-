@@ -30,12 +30,15 @@ import { aplicarMudancaResposta, categoriaVisivelParaSexo, perguntaFilhaVisivel 
 import { searchCatalogoHub } from '../anamnese/anamneseCatalogoSearch.js';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
-
-function resolveStatusCodigo(entry) {
-  if (!entry) return '';
-  if (typeof entry.status === 'string') return entry.status;
-  return entry.status?.codigo ?? entry.statusCodigo ?? '';
-}
+import {
+  escolherPreenchimentoDaFicha,
+  resolveFichaTemplateIdFromEntry,
+  resolveStatusCodigo,
+  resumirPreenchimentosPorFicha,
+} from './step2Vigente.js';
+import { carregarEnvioAtivoDocumento } from './step2PedidoPendente.js';
+import { usePedidoPendenteAnamnese } from './usePedidoPendenteAnamnese.js';
+import { SolicitacaoPendenteFaixa } from './SolicitacaoPendenteFaixa.jsx';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -54,11 +57,6 @@ function parseQueixaExpectativasObs(observacoes) {
     return { queixa: '', expectativas: observacoes.replace(/^Expectativas:\s*/i, '').trim() };
   }
   return null;
-}
-
-function resolveFichaTemplateIdFromEntry(entry) {
-  const v = entry?.anamneseId ?? entry?.fichaId ?? entry?.anamneseFichaId;
-  return v != null && v !== '' ? String(v) : null;
 }
 
 function isConsultaBasicaFicha(f) {
@@ -80,29 +78,8 @@ function formatRelativo(dataHora) {
   return `há ${meses} meses`;
 }
 
-function historicoEntryMatchesFichaId(entry, fichaId) {
-  const eid = resolveFichaTemplateIdFromEntry(entry);
-  return eid != null && eid === String(fichaId);
-}
-
-function historicoTimestamp(entry) {
-  const raw = entry.dataHora ?? entry.dataPreenchimento ?? entry.createdAt ?? entry.dataCriacao ?? null;
-  const t = raw ? new Date(raw).getTime() : 0;
-  return Number.isFinite(t) ? t : 0;
-}
-
 function respostasMapHasEntries(m) {
   return m && typeof m === 'object' && Object.keys(m).length > 0;
-}
-
-async function carregarEnvioAtivoDocumento(pacienteId, preenchimentoId) {
-  if (!pacienteId || !preenchimentoId) return null;
-  try {
-    const doc = await anamneseApi.getDocumento(pacienteId, preenchimentoId);
-    return doc?.envioAtivo ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /** Hidratação inicial: evita `{}` truthy em `draft || mapa` esconder `respostasAnamnese`. */
@@ -138,6 +115,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   onConcluirAnamnese,
   isConcluirAnamneseBusy = false,
   onAutoSaveAnamnese = null,
+  onSolicitarAoPaciente = null,
+  onSolicitacaoRespondida = null,
 }, ref) {
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saving' | 'saved'
   const [fichas, setFichas] = useState([]);
@@ -172,6 +151,9 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   const [envioAtivo, setEnvioAtivo] = useState(null);
   const [solicitandoAssinatura, setSolicitandoAssinatura] = useState(false);
   const [cancelandoEnvio, setCancelandoEnvio] = useState(false);
+  /** Envios vistos pelo documento / pela solicitação do hub; não alimentam `envioAtivo` (manteria "Nova ficha" travada). */
+  const [envioAtivoDocumento, setEnvioAtivoDocumento] = useState(null);
+  const [documentoRefreshKey, setDocumentoRefreshKey] = useState(0);
 
   const envioPendente = envioAtivo?.status === 'PENDENTE';
   const formularioReadOnly = modoVisualizacao || envioPendente;
@@ -313,37 +295,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     };
   }, [pacienteId]);
 
-  const resumoPreenchimentosPorFicha = useMemo(() => {
-    if (!Array.isArray(historicoPaciente) || historicoPaciente.length === 0) return [];
-    const ultimoPorFicha = new Map();
-    for (const h of historicoPaciente) {
-      const fid = resolveFichaTemplateIdFromEntry(h);
-      if (!fid) continue;
-      const prev = ultimoPorFicha.get(fid);
-      if (!prev || historicoTimestamp(h) >= historicoTimestamp(prev)) {
-        ultimoPorFicha.set(fid, h);
-      }
-    }
-    const rows = Array.from(ultimoPorFicha.entries()).map(([fichaId, ultimo]) => {
-      const f = fichas.find((x) => String(x.id) === fichaId);
-      const nome =
-        f?.nome
-        ?? ultimo.anamneseNome
-        ?? ultimo.fichaNome
-        ?? ultimo.nomeFicha
-        ?? ultimo.nome
-        ?? 'Ficha de anamnese';
-      const dataHora =
-        ultimo.dataHora
-        ?? ultimo.dataPreenchimento
-        ?? ultimo.createdAt
-        ?? ultimo.dataCriacao
-        ?? null;
-      return { fichaId, nome, dataHora, ultimo };
-    });
-    rows.sort((a, b) => historicoTimestamp(b.ultimo) - historicoTimestamp(a.ultimo));
-    return rows;
-  }, [historicoPaciente, fichas]);
+  const resumoPreenchimentosPorFicha = useMemo(
+    () => resumirPreenchimentosPorFicha(historicoPaciente, fichas),
+    [historicoPaciente, fichas],
+  );
 
   const ultimaAnamnese = resumoPreenchimentosPorFicha[0] ?? null;
   const mesesAtrasUltima = ultimaAnamnese?.dataHora
@@ -428,8 +383,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         try {
           const historicoRaw = await anamneseApi.listPaciente(pacienteId);
           const historico = Array.isArray(historicoRaw) ? historicoRaw : [];
-          const candidatos = historico.filter((h) => historicoEntryMatchesFichaId(h, id));
-          const preenchimento = [...candidatos].sort((a, b) => historicoTimestamp(b) - historicoTimestamp(a))[0];
+          const preenchimento = escolherPreenchimentoDaFicha(historico, id);
 
           if (preenchimento) {
             const detalhes = await anamneseApi.getPaciente(pacienteId, preenchimento.id);
@@ -504,6 +458,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     respostasRef.current = {};
     setErrosObrigatorias(new Set());
     setEnvioAtivo(null);
+    setEnvioAtivoDocumento(null);
   }, [pacienteId]);
 
   const handleRespostaChange = useCallback((resposta) => {
@@ -574,6 +529,33 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     }
   }, [pacienteId]);
 
+  const handleModalConcluidoRef = useRef(null);
+  const recarregarAposSolicitacaoRef = useRef(null);
+  const handlePedidoRespondido = useCallback(() => {
+    if (typeof onSolicitacaoRespondida === 'function') onSolicitacaoRespondida();
+    else recarregarAposSolicitacaoRef.current?.();
+  }, [onSolicitacaoRespondida]);
+
+  const {
+    pedido: pedidoPendente,
+    registrar: registrarPedidoPendente,
+    cancelar: cancelarPedidoPendente,
+    limpar: limparPedidoPendente,
+  } = usePedidoPendenteAnamnese({
+    ativo: consultaMode,
+    pacienteId,
+    historicoPaciente,
+    onRespondido: handlePedidoRespondido,
+    onEncerrado: recarregarHistoricoPaciente,
+  });
+
+  const recarregarAposSolicitacao = useCallback(async () => {
+    limparPedidoPendente();
+    setDocumentoRefreshKey((n) => n + 1);
+    await handleModalConcluidoRef.current?.();
+  }, [limparPedidoPendente]);
+  recarregarAposSolicitacaoRef.current = recarregarAposSolicitacao;
+
   useImperativeHandle(ref, () => ({
     getAnamneseData: () => {
       if (!fichaSelecionadaId || !fichaSelecionada) return null;
@@ -641,7 +623,11 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       setForcarNovoPreenchimento(false);
       setModoVisualizacao(true);
     },
+    registrarEnvioSolicitacao: registrarPedidoPendente,
+    recarregarAposSolicitacao,
   }), [
+    registrarPedidoPendente,
+    recarregarAposSolicitacao,
     fichaSelecionadaId,
     fichaSelecionada,
     respostas,
@@ -692,6 +678,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
       await selecionarFichaParaNovo(fichaSelecionadaId);
     }
   }, [recarregarHistoricoPaciente, fichaSelecionadaId, selecionarFichaParaNovo]);
+  handleModalConcluidoRef.current = handleModalConcluido;
 
   const handleModalRecusado = useCallback(async () => {
     setAnamneseSolicitacao(null);
@@ -872,24 +859,54 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
     pacienteId && !loadingHistoricoPaciente && vigente?.id && !forcarNovoPreenchimento
   );
 
+  const mostrarSolicitarAoPaciente = Boolean(
+    consultaMode
+    && typeof onSolicitarAoPaciente === 'function'
+    && !envioPendente
+    && envioAtivoDocumento?.status !== 'PENDENTE'
+    && !pedidoPendente
+  );
+
+  const faixaPedidoPendente = consultaMode && pedidoPendente ? (
+    <SolicitacaoPendenteFaixa
+      pedido={pedidoPendente}
+      onVerQr={onSolicitarAoPaciente}
+      onCancelar={cancelarPedidoPendente}
+    />
+  ) : null;
+
   if (mostrarDocumentoUnico) {
     return (
       <div className="min-w-0">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-[16px] font-semibold text-slate-800">Anamnese</h3>
-          <button
-            type="button"
-            onClick={() => {
-              setForcarNovoPreenchimento(true);
-              setPreenchimentoAnterior(null);
-              setModoVisualizacao(false);
-            }}
-            className="text-[12.5px] font-bold text-[#00a88e] hover:underline"
-          >
-            Nova ficha
-          </button>
+          <div className="flex items-center gap-3">
+            {mostrarSolicitarAoPaciente && (
+              <button
+                type="button"
+                onClick={onSolicitarAoPaciente}
+                className="text-[12.5px] font-bold text-[#00a88e] hover:underline"
+              >
+                Solicitar ao paciente
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setForcarNovoPreenchimento(true);
+                setPreenchimentoAnterior(null);
+                setModoVisualizacao(false);
+              }}
+              className="text-[12.5px] font-bold text-[#00a88e] hover:underline"
+            >
+              Nova ficha
+            </button>
+          </div>
         </div>
+        {faixaPedidoPendente}
         <AnamneseDocumentoView
+          key={documentoRefreshKey}
+          onEnvioAtivoChange={setEnvioAtivoDocumento}
           pacienteId={pacienteId}
           preenchimentoId={vigente.id}
           pacienteTelefone={pacienteTelefone}
@@ -914,6 +931,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           <p className="text-[12px] text-slate-500">Perfil permanente e ficha desta consulta</p>
         </div>
       </div>
+      {faixaPedidoPendente}
 
       {/* Bloco 1 — Perfil Clínico Persistente (dono: perfil do paciente; no hub já está no header) */}
       {pacienteId && !consultaMode && (
