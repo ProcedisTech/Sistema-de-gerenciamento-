@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
 import { invalidateAuthMeCache } from '../utils/authMeProbe';
 import { DEFAULT_ORG_ID, ALT_ORG_ID, sanitizeOrgId } from '../config/apiEnv';
@@ -39,6 +39,7 @@ function readInitialOrgIdSynced() {
 
 export function OrgProvider({ children }) {
   const [orgId, setOrgIdState] = useState(readInitialOrgIdSynced);
+  const orgIdRef = useRef(orgId);
   const [orgSlug, setOrgSlugState] = useState(() => readLs(LS_SLUG, ''));
   const [roleUserId, setRoleUserIdState] = useState('');
   // Não inicializa a partir do localStorage: o papel só é confiável depois que /me responder,
@@ -58,6 +59,16 @@ export function OrgProvider({ children }) {
 
   const setOrgId = useCallback((id, slug = '') => {
     const next = sanitizeOrgId(id);
+    // A descoberta confirma a clínica persistida após /me: não apaga o contexto
+    // já carregado (ou em voo) quando o ID é o mesmo, pois o effect não repetirá.
+    if (next && next === orgIdRef.current) {
+      if (slug) {
+        setOrgSlugState(slug);
+        try { localStorage.setItem(LS_SLUG, slug); } catch { /* ignore */ }
+      }
+      return;
+    }
+    orgIdRef.current = next;
     apiSetOrgId(next);
     invalidateAuthMeCache();
     setRoleUserIdState('');
@@ -126,6 +137,7 @@ export function OrgProvider({ children }) {
 
   /** Limpa org/papel/role do localStorage e do estado no logout. */
   const clearOrgSession = useCallback(() => {
+    orgIdRef.current = '';
     try {
       localStorage.removeItem(LS_ORG);
       localStorage.removeItem(LS_SLUG);
