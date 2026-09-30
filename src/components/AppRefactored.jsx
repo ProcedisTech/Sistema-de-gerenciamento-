@@ -26,6 +26,7 @@ import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
 import { useAlertasClinicos } from '../hooks/useAlertasClinicos';
+import { useSolicitarAnamneseConsulta } from './consulta/useSolicitarAnamneseConsulta.jsx';
 import { AlertasClinicosPanel } from './patients/AlertasClinicosPanel.jsx';
 import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
@@ -3804,6 +3805,23 @@ function AppRefactoredInner() {
       mergePatientById?.(pacienteAtual?.id, (prev) => ({ ...prev, alergias: texto }));
     },
   });
+  const handleSolicitacaoRespondida = () => {
+    setAlertasClinicosRefreshKey((n) => n + 1);
+    anamneseRef.current?.recarregarAposSolicitacao?.();
+  };
+  const { abrirSolicitacao, modaisSolicitacao } = useSolicitarAnamneseConsulta({
+    paciente: {
+      pacienteId: pacienteAtual?.id,
+      nome: pacienteAtual?.nomeCompleto || pacienteAtual?.nome,
+      cpf: pacienteAtual?.cpf,
+      telefone: pacienteAtual?.telefone || pacienteAtual?.celular,
+    },
+    clinicaSlug: clinicaInfo?.slug,
+    toast,
+    onEnvioGerado: (d) => anamneseRef.current?.registrarEnvioSolicitacao?.(d),
+    onEnvioLimpo: () => anamneseRef.current?.registrarEnvioSolicitacao?.(null),
+    onRespondido: handleSolicitacaoRespondida,
+  });
   const isAgendaView = activeView === 'agenda';
   const isPaginaPublica =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/c/');
@@ -4453,7 +4471,7 @@ function AppRefactoredInner() {
                 variant="hub"
                 resumo={alertasClinicosConsulta.resumo}
                 isLoading={alertasClinicosConsulta.isLoading}
-                onSolicitarAnamnese={() => setConsultaModule('anamnese')}
+                onSolicitarAnamnese={abrirSolicitacao}
               />
             </header>
             <ConsultaViewShell compact={consultaModule === 'anamnese'}>
@@ -4556,6 +4574,8 @@ function AppRefactoredInner() {
                       consultaMode
                       onConcluirAnamnese={handleConcluirAnamnese}
                       isConcluirAnamneseBusy={step1Busy}
+                      onSolicitarAoPaciente={abrirSolicitacao}
+                      onSolicitacaoRespondida={handleSolicitacaoRespondida}
                     />
                   </>
                 ) : null}
@@ -4743,6 +4763,7 @@ function AppRefactoredInner() {
                 ) : null}
               </div>
             </ConsultaViewShell>
+            {modaisSolicitacao}
 
             <ConsultaEncerrarConfirmModal
               open={encerrarConsultaOpen}
