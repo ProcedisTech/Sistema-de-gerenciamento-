@@ -2443,13 +2443,14 @@ function AppRefactoredInner() {
 
 
   const uploadEvaluationCapturedPhotos = React.useCallback(
-    async ({ paciente, procIdOpt, dataRefSessao, tipoFotoCodigo = 'AVALIACAO' }) => {
+    async ({ paciente, procIdOpt, dataRefSessao, tipoFotoCodigo = 'AVALIACAO', agendaId = null }) => {
       const ridUpload = roleUserId;
       const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
       const fotosAvaliacao = cameraState.evaluationCapturedPhotos || [];
       const tipo = String(tipoFotoCodigo || 'AVALIACAO').trim().toUpperCase();
       const legendaCategoria =
         tipo === 'DEPOIS' ? GALERIA_CATEGORIA.DEPOIS : GALERIA_CATEGORIA.AVALIACAO;
+      const targetAgendaId = agendaId || journeyState.agendaId || null;
       if (fotosAvaliacao.length > 0 && paciente?.id && ridOk) {
         const uploads = fotosAvaliacao.map(async (foto) => {
           try {
@@ -2463,13 +2464,15 @@ function AppRefactoredInner() {
             }
             if (!fileToUpload) return false;
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
-            await pacientesGaleriaApi.upload(paciente.id, webp, {
+            const uploadOpts = {
               roleUserId: ridUpload,
               procedimentoFeitoId: procIdOpt,
               legenda: formatGaleriaLegendaForUpload(legendaCategoria),
               dataReferencia: dataRefSessao,
               tipoFotoCodigo: tipo,
-            });
+            };
+            if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
+            await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
             return true;
           } catch (e) {
             console.warn('Erro ao salvar foto de avaliação na galeria:', e);
@@ -2498,7 +2501,7 @@ function AppRefactoredInner() {
         );
       }
     },
-    [cameraState, roleUserId, toast]
+    [cameraState, roleUserId, toast, journeyState.agendaId]
   );
 
   const handleConcluirAvaliacao = React.useCallback(async () => {
@@ -2944,13 +2947,14 @@ function AppRefactoredInner() {
   );
 
   const uploadProcedureCapturedPhotos = React.useCallback(
-    async (paciente, pidsArray, dataRefSessao, explicitFotos = null) => {
+    async (paciente, pidsArray, dataRefSessao, explicitFotos = null, agendaIdOpt = null) => {
       const ids = Array.isArray(pidsArray) ? pidsArray : [pidsArray].filter(Boolean);
       if (!ids.length) return;
 
       const ridUpload = roleUserId;
       const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
       const fotosProcedimento = explicitFotos || cameraState.procedureCapturedPhotos || [];
+      const targetAgendaId = agendaIdOpt || journeyState.agendaId || null;
       if (fotosProcedimento.length > 0 && paciente?.id && ridOk) {
         const uploads = fotosProcedimento.map(async (foto) => {
           try {
@@ -2984,6 +2988,7 @@ function AppRefactoredInner() {
                   ),
                   dataReferencia: dataRefSessao,
                 };
+                if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
                 if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
                 await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
                 return true;
@@ -3023,7 +3028,7 @@ function AppRefactoredInner() {
         );
       }
     },
-    [cameraState, journeyState.nomeProcedimento, roleUserId, toast]
+    [cameraState, journeyState.agendaId, journeyState.nomeProcedimento, roleUserId, toast]
   );
 
   const handleConcluirRetorno = React.useCallback(async () => {
@@ -3414,6 +3419,7 @@ function AppRefactoredInner() {
       journeyState.nomeProcedimento,
       journeyState.nomeProcedimentoCatalogoId,
       journeyState.orientacoesItens,
+      journeyState.procedimentosSessao,
       toast,
     ]
   );
@@ -3536,6 +3542,31 @@ function AppRefactoredInner() {
       const novosIdsValidos = todosIds.filter(Boolean);
       let respostasFinalizar = [];
 
+      // Resolução prévia do agendaId da sessão clínica:
+      // Se avulso (sem slot prévio), cria o slot na agenda ANTES de enviar fotos de avaliação e procedimento,
+      // garantindo que todas as fotos da consulta fiquem carimbadas com o agenda_id correto.
+      let targetAgendaId = journeyState.agendaId;
+
+      if (!isApenasSair && !targetAgendaId && paciente?.id && roleUserId) {
+        const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+        const createdSlot = await registrarAgendaAvulsa({
+          journeyState,
+          paciente,
+          roleUserId,
+          novosIdsValidos,
+          attendanceStartTimeIso: startTimeIso,
+          planejamentoItemId: planoItemIdPrincipal,
+        }).catch((err) => {
+          console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa antecipada:', err);
+          return null;
+        });
+        if (createdSlot?.id) {
+          targetAgendaId = String(createdSlot.id);
+          journeyState.setAgendaId(targetAgendaId);
+        }
+        journeyState.setAttendanceStartTime(null, sCpf);
+      }
+
       if (journeyState.procedimentosSessao?.length > 0 && novosIdsValidos.length > 0) {
         journeyState.setProcedimentosSessao(prev =>
           prev.map((p, i) => ({ ...p, id: todosIds[i] || p.id }))
@@ -3543,7 +3574,6 @@ function AppRefactoredInner() {
       }
 
       // Captura síncrona ANTES do updateProcedureByIndex (que é assíncrono no React)
-      // proc.fotosSnapshot lido logo após seria undefined pois o state ainda não teria atualizado
       const activeIndex = journeyState.activeProcedureIndex;
       const activePhotosSync = cameraState.procedureCapturedPhotos || [];
       const activeMapaSnapSync = mapaAplicacaoState.getSnapshotForPersist();
@@ -3554,7 +3584,6 @@ function AppRefactoredInner() {
         fotosSnapshot: activePhotosSync
       });
 
-
       if (novosIdsValidos.length > 0) {
         setLoteProcedimentosFeitosIds(novosIdsValidos);
         const dataRefSessao = toLocalISODate(new Date());
@@ -3563,8 +3592,6 @@ function AppRefactoredInner() {
           novosIdsValidos.map(async (pid, i) => {
             const proc = journeyState.procedimentosSessao[i] || {};
 
-            // Para o índice ativo, usa os valores capturados sincronamente acima
-            // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
             const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
             if (snap) {
               const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
@@ -3573,7 +3600,7 @@ function AppRefactoredInner() {
 
             const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
             if (photos.length > 0) {
-              await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
+              await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos, targetAgendaId);
             }
           })
         );
@@ -3610,7 +3637,12 @@ function AppRefactoredInner() {
       if (cameraState.evaluationCapturedPhotos?.length > 0) {
         const dataRefSessao = toLocalISODate(new Date());
         try {
-          await uploadEvaluationCapturedPhotos({ paciente, procIdOpt: novosIdsValidos[0], dataRefSessao });
+          await uploadEvaluationCapturedPhotos({
+            paciente,
+            procIdOpt: novosIdsValidos[0],
+            dataRefSessao,
+            agendaId: targetAgendaId
+          });
         } catch (e) {
           console.warn('[encerrarAtendimento] erro ao enviar fotos avaliacao:', e);
         }
@@ -3621,23 +3653,7 @@ function AppRefactoredInner() {
         setConsultaModule(null);
         onSairConsulta();
       } else {
-        // Sincronização Retroativa ou Enriquecida da Agenda (aguarda conclusão antes da navegação)
-        let targetAgendaId = journeyState.agendaId;
-
-        if (!targetAgendaId) {
-          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-          await registrarAgendaAvulsa({
-            journeyState,
-            paciente,
-            roleUserId,
-            novosIdsValidos,
-            attendanceStartTimeIso: startTimeIso,
-            planejamentoItemId: planoItemIdPrincipal,
-          }).catch((err) => {
-            console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
-          });
-          journeyState.setAttendanceStartTime(null, sCpf);
-        } else {
+        if (targetAgendaId) {
           const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
           let actualEndHh = getGuaranteedHHMM();
           let actualStartHh = null;
@@ -3725,6 +3741,7 @@ function AppRefactoredInner() {
       setIsFinishing(false);
     }
   }, [
+    journeyProcedureDateIso,
     journeyState,
     procedimentosLote,
     roleUserId,

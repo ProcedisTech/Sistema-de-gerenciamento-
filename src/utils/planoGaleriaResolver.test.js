@@ -205,4 +205,103 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
     // 5. Total do plano consolidado
     expect(resultado.fotosPorPlanoId['plano-multi']).toHaveLength(5);
   });
+
+  it('isola 3 avaliações clínicas distintas realizadas no mesmo dia usando agendaId', () => {
+    const fotosBrutas = [
+      {
+        id: 'foto-aval-1',
+        categoria: 'avaliacao',
+        agendaId: 'agenda-sessao-1',
+        dataReferencia: '2026-09-30',
+        registradoEm: '2026-09-30T10:00:00Z',
+        nomeProcedimento: 'Consulta / Avaliação Clínica',
+      },
+      {
+        id: 'foto-aval-2',
+        categoria: 'avaliacao',
+        agendaId: 'agenda-sessao-2',
+        dataReferencia: '2026-09-30',
+        registradoEm: '2026-09-30T14:30:00Z',
+        nomeProcedimento: 'Consulta / Avaliação Clínica',
+      },
+      {
+        id: 'foto-aval-3',
+        categoria: 'avaliacao',
+        agendaId: 'agenda-sessao-3',
+        dataReferencia: '2026-09-30',
+        registradoEm: '2026-09-30T17:15:00Z',
+        nomeProcedimento: 'Consulta / Avaliação Clínica',
+      },
+    ];
+
+    const resultado = resolverFotosEPlanos([], fotosBrutas, []);
+
+    // Deve gerar exatamente 3 cards independentes de atendimento avulso
+    expect(resultado.atendimentosAvulsos).toHaveLength(3);
+    const agIds = resultado.atendimentosAvulsos.map((a) => a.agendaId);
+    expect(agIds).toContain('agenda-sessao-1');
+    expect(agIds).toContain('agenda-sessao-2');
+    expect(agIds).toContain('agenda-sessao-3');
+
+    // Cada card deve conter apenas a sua respectiva foto
+    const card1 = resultado.atendimentosAvulsos.find((a) => a.agendaId === 'agenda-sessao-1');
+    expect(card1.fotos.map((f) => f.id)).toEqual(['foto-aval-1']);
+    expect(card1.horaInicio).toBe('10:00');
+    expect(card1.nomeProcedimento).toBe('Consulta / Avaliação Clínica');
+
+    const card2 = resultado.atendimentosAvulsos.find((a) => a.agendaId === 'agenda-sessao-2');
+    expect(card2.fotos.map((f) => f.id)).toEqual(['foto-aval-2']);
+    expect(card2.horaInicio).toBe('14:30');
+
+    const card3 = resultado.atendimentosAvulsos.find((a) => a.agendaId === 'agenda-sessao-3');
+    expect(card3.fotos.map((f) => f.id)).toEqual(['foto-aval-3']);
+    expect(card3.horaInicio).toBe('17:15');
+  });
+
+  it('unifica múltiplos procedimentos e fotos realizados na mesma sessão clínica (mesmo agendaId)', () => {
+    const procedimentosFeitos = [
+      {
+        id: 'pf-1',
+        agendaId: 'agenda-sessao-multi',
+        planejamentoItemId: null,
+        procedimentoNome: 'Biópsia de Pele',
+        criadoEm: '2026-09-30T15:00:00Z',
+      },
+      {
+        id: 'pf-2',
+        agendaId: 'agenda-sessao-multi',
+        planejamentoItemId: null,
+        procedimentoNome: 'Drenagem de Abscesso',
+        criadoEm: '2026-09-30T15:05:00Z',
+      },
+    ];
+
+    const fotosBrutas = [
+      {
+        id: 'foto-antes',
+        categoria: 'antes',
+        agendaId: 'agenda-sessao-multi',
+        procedimentoFeitoId: 'pf-1',
+        dataReferencia: '2026-09-30',
+        registradoEm: '2026-09-30T15:00:00Z',
+      },
+      {
+        id: 'foto-depois',
+        categoria: 'depois',
+        agendaId: 'agenda-sessao-multi',
+        procedimentoFeitoId: 'pf-2',
+        dataReferencia: '2026-09-30',
+        registradoEm: '2026-09-30T15:20:00Z',
+      },
+    ];
+
+    const resultado = resolverFotosEPlanos([], fotosBrutas, procedimentosFeitos);
+
+    // Deve unificar em 1 card único para a sessão
+    expect(resultado.atendimentosAvulsos).toHaveLength(1);
+    const cardSessao = resultado.atendimentosAvulsos[0];
+    expect(cardSessao.agendaId).toBe('agenda-sessao-multi');
+    expect(cardSessao.nomeProcedimento).toBe('Biópsia de Pele + Drenagem de Abscesso');
+    expect(cardSessao.fotos.map((f) => f.id)).toEqual(['foto-antes', 'foto-depois']);
+  });
 });

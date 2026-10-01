@@ -34,6 +34,8 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       ...f,
       id: f.id || f.fotoId,
       fotoId: f.fotoId || f.id,
+      agendaId: f.agendaId ? String(f.agendaId).trim() : null,
+      registradoEm: f.registradoEm || f.createdAt || null,
       categoria: cat,
       descricaoLegenda: f.descricaoLegenda || legInfo.descricao,
       dataISO: itemDataReferenciaISO(f) || (f.createdAt ? String(f.createdAt).slice(0, 10) : 'sem-data'),
@@ -245,54 +247,99 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   (procedimentosFeitos || []).forEach((proc) => {
     const pfId = String(proc.id || '').trim();
     const pItemId = proc.planejamentoItemId ? String(proc.planejamentoItemId).trim() : null;
+    const agId = proc.agendaId || proc.agenda?.id ? String(proc.agendaId || proc.agenda?.id).trim() : null;
 
     // Se o procedimento não estiver vinculado a nenhum item de plano e nem mapeado no procedimentoFeitoToPlanoItemMap
     if (pfId && (!pItemId || !itemToPlanoMap.has(pItemId)) && !procedimentoFeitoToPlanoItemMap.has(pfId)) {
       const dataISO = proc.criadoEm ? String(proc.criadoEm).slice(0, 10) : 'sem-data';
-      const chave = `pf_${pfId}`;
+      const horaInicio = proc.criadoEm ? String(proc.criadoEm).slice(11, 16) : null;
+      const chave = agId ? `ag_${agId}` : `pf_${pfId}`;
+      const nomeAtual = proc.procedimentoNome || proc.nome || 'Procedimento Avulso';
 
-      atendimentosAvulsosMap.set(chave, {
-        chave,
-        id: pfId,
-        procedimentoFeitoId: pfId,
-        nomeProcedimento: proc.procedimentoNome || proc.nome || 'Procedimento Avulso',
-        profissionalNome: proc.profissionalNome || '—',
-        statusNome: proc.statusNome || 'FINALIZADO',
-        observacao: proc.observacao || null,
-        dataISO,
-        retornos: Array.isArray(proc.retornos) ? proc.retornos : [],
-        retornosCount: Array.isArray(proc.retornos) ? proc.retornos.length : 0,
-        fotos: [],
-      });
+      if (atendimentosAvulsosMap.has(chave)) {
+        const existente = atendimentosAvulsosMap.get(chave);
+        if (!existente.procedimentosFeitosIds.includes(pfId)) {
+          existente.procedimentosFeitosIds.push(pfId);
+          existente.nomesProcedimentos.push(nomeAtual);
+          existente.nomeProcedimento = existente.nomesProcedimentos.join(' + ');
+        }
+        if (!existente.procedimentoFeitoId) {
+          existente.procedimentoFeitoId = pfId;
+        }
+      } else {
+        atendimentosAvulsosMap.set(chave, {
+          chave,
+          id: agId || pfId || chave,
+          agendaId: agId,
+          procedimentoFeitoId: pfId,
+          procedimentosFeitosIds: [pfId],
+          nomesProcedimentos: [nomeAtual],
+          nomeProcedimento: nomeAtual,
+          profissionalNome: proc.profissionalNome || '—',
+          statusNome: proc.statusNome || 'FINALIZADO',
+          observacao: proc.observacao || null,
+          dataISO,
+          horaInicio,
+          retornos: Array.isArray(proc.retornos) ? proc.retornos : [],
+          retornosCount: Array.isArray(proc.retornos) ? proc.retornos.length : 0,
+          fotos: [],
+        });
+      }
     }
   });
 
   // Agrupar fotos avulsas vinculando-as ao atendimento avulso correspondente ou criando entrada avulsa
   fotosAvulsas.forEach((foto) => {
     const pfId = foto.procedimentoFeitoId ? String(foto.procedimentoFeitoId).trim() : null;
-    const chave = pfId ? `pf_${pfId}` : `data_${foto.dataISO}`;
+    const agId = foto.agendaId ? String(foto.agendaId).trim() : null;
+
+    let chave = null;
+    if (agId && atendimentosAvulsosMap.has(`ag_${agId}`)) {
+      chave = `ag_${agId}`;
+    } else if (pfId && atendimentosAvulsosMap.has(`pf_${pfId}`)) {
+      chave = `pf_${pfId}`;
+    } else if (agId) {
+      chave = `ag_${agId}`;
+    } else if (pfId) {
+      chave = `pf_${pfId}`;
+    } else {
+      chave = `reg_${foto.id || foto.fotoId || foto.dataISO}`;
+    }
 
     if (!atendimentosAvulsosMap.has(chave)) {
+      const horaInicio = foto.registradoEm ? String(foto.registradoEm).slice(11, 16) : null;
       atendimentosAvulsosMap.set(chave, {
         chave,
-        id: pfId || chave,
+        id: agId || pfId || chave,
+        agendaId: agId,
         procedimentoFeitoId: pfId,
-        nomeProcedimento: foto.nomeProcedimento || foto.descricaoLegenda || 'Atendimento / Registro Avulso',
-        profissionalNome: '—',
-        statusNome: 'REGISTRADO',
+        procedimentosFeitosIds: pfId ? [pfId] : [],
+        nomesProcedimentos: [],
+        nomeProcedimento: foto.nomeProcedimento || foto.descricaoLegenda || 'Consulta / Avaliação Clínica',
+        profissionalNome: foto.profissionalNome || '—',
+        statusNome: 'REALIZADO',
         observacao: null,
         dataISO: foto.dataISO,
+        horaInicio,
+        isAvaliacao: true,
         retornos: [],
         retornosCount: 0,
         fotos: [],
       });
     }
-    atendimentosAvulsosMap.get(chave).fotos.push(foto);
+
+    const entry = atendimentosAvulsosMap.get(chave);
+    if (!entry.horaInicio && foto.registradoEm) {
+      entry.horaInicio = String(foto.registradoEm).slice(11, 16);
+    }
+    entry.fotos.push(foto);
   });
 
-  const atendimentosAvulsos = Array.from(atendimentosAvulsosMap.values()).sort(
-    (a, b) => (b.dataISO || '').localeCompare(a.dataISO || '')
-  );
+  const atendimentosAvulsos = Array.from(atendimentosAvulsosMap.values()).sort((a, b) => {
+    const cmpData = (b.dataISO || '').localeCompare(a.dataISO || '');
+    if (cmpData !== 0) return cmpData;
+    return (b.horaInicio || '').localeCompare(a.horaInicio || '');
+  });
 
   return {
     fotosPorPlanoId,

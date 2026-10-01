@@ -120,21 +120,20 @@ export function ConsultaProcedimentoFlow({
       toast.error('Selecione o procedimento no catálogo para continuar.');
       return;
     }
-    if (typeof onValidarTermosCatalogo === 'function' && catId) {
-      const ok = await onValidarTermosCatalogo(catId, nomeP);
-      if (!ok) return;
+
+    if (typeof onValidarTermosCatalogo === 'function') {
+      const todosCats = (procedimentosLote || [])
+        .map((p) => p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId || p.catalogoId)
+        .filter(Boolean);
+      if (catId && !todosCats.includes(catId)) todosCats.push(catId);
+
+      for (const cid of todosCats) {
+        const ok = await onValidarTermosCatalogo(cid, nomeP);
+        if (!ok) return;
+      }
     }
     setStep4Errors({});
-    
-    if (procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1) {
-      // Tem mais procedimentos, vai para o próximo
-      const nextIndex = activeProcedimentoIndex + 1;
-      setActiveProcedimentoIndex(nextIndex);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      // É o último (ou o único), vai para orientações
-      setPhase('orientacoes');
-    }
+    setPhase('orientacoes');
   };
 
   const handleFinalizar = async () => {
@@ -167,22 +166,28 @@ export function ConsultaProcedimentoFlow({
     return (
       <>
         {procedimentosLote && procedimentosLote.length > 1 && (
-          <div className="flex border-b border-[#e2e8f0] mb-6 overflow-x-auto">
-            {procedimentosLote.map((proc, index) => (
-              <button
-                key={index}
-                onClick={() => {
-                  setActiveProcedimentoIndex(index);
-                }}
-                className={`px-5 py-3 font-semibold text-[13px] whitespace-nowrap border-b-2 transition-colors ${
-                  activeProcedimentoIndex === index
-                    ? 'border-[#00a88e] text-[#00a88e]'
-                    : 'border-transparent text-[#64748b] hover:text-[#334155] hover:border-[#cbd5e1]'
-                }`}
-              >
-                {index + 1}. {proc.procedimentoNome || proc.nomeProcedimento || 'Procedimento'}
-              </button>
-            ))}
+          <div className="mb-5 p-3 rounded-xl border border-teal-100 bg-teal-50/50 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800">
+              Sessão Clínica Unificada:
+            </span>
+            {procedimentosLote.map((proc, index) => {
+              const isSelected = index === activeProcedimentoIndex;
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => setActiveProcedimentoIndex(index)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-teal-600 text-white border border-teal-700 shadow-xs'
+                      : 'bg-white border border-teal-200 text-teal-900 hover:bg-teal-50 shadow-2xs'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-white' : 'bg-teal-500'}`} />
+                  {proc.procedimentoNome || proc.nomeProcedimento || `Procedimento ${index + 1}`}
+                </button>
+              );
+            })}
           </div>
         )}
         <Step4Procedimento
@@ -230,11 +235,7 @@ export function ConsultaProcedimentoFlow({
             disabled={isSalvandoProcedimento || execucaoBloqueadaPorTermos}
             className="flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 text-[14px] font-semibold text-white shadow-sm outline-none transition-all hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSalvandoProcedimento 
-              ? 'Salvando…' 
-              : procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1
-                ? 'Próximo Procedimento ➔'
-                : 'Ir para Finalização e Orientações'}
+            {isSalvandoProcedimento ? 'Salvando…' : 'Ir para Finalização e Orientações'}
           </button>
         </div>
       </>
