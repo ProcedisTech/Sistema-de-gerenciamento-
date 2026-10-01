@@ -57,6 +57,7 @@ import {
   nestProcedimentosTimeline,
 } from './procedureTimelineUtils.js';
 import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
+import { getBirthdayBadgeLabel } from '../../utils/birthday.js';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
 import { useToast } from '../../contexts/useToast.js';
@@ -498,7 +499,7 @@ function NotasDrawerBlock({ patient }) {
   );
 }
 
-function PatientPreviewPanel({
+export function PatientPreviewPanel({
   selectedPatient,
   detailTitleId,
   closeDetail,
@@ -569,6 +570,11 @@ function PatientPreviewPanel({
     ? new Date(selectedPatient.dataNascimento).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
     : null;
 
+  const birthdayBadgeLabel =
+    selectedPatient?.ehAniversariante === true
+      ? getBirthdayBadgeLabel(selectedPatient.dataNascimento)
+      : null;
+
   return (
     <div
       className={`relative flex w-full min-w-0 flex-col gap-3.5 rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-lg ${shellClassName}`}
@@ -595,10 +601,10 @@ function PatientPreviewPanel({
             <h3 id={detailTitleId} className="text-[17px] font-bold capitalize leading-snug text-[#0f172a] break-words">
               {selectedPatient.nome}
             </h3>
-            {selectedPatient.ehAniversariante && (
+            {birthdayBadgeLabel && (
               <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-pink-700 shadow-2xs">
                 <Cake className="h-3 w-3" />
-                Aniversariante hoje!
+                {birthdayBadgeLabel}
               </span>
             )}
           </div>

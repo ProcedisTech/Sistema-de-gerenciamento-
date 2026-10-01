@@ -59,6 +59,29 @@ export function getBirthdayAlertInfo(birthParts, now = new Date()) {
   };
 }
 
+/**
+ * Texto do selo de aniversário do painel do paciente (calendário local).
+ * 29/02 em ano não bissexto conta como 28/02.
+ * @returns {string | null}
+ */
+export function getBirthdayBadgeLabel(rawBirthDate, now = new Date()) {
+  const parts = parsePatientBirthDate(rawBirthDate);
+  if (!parts) return null;
+
+  const year = now.getFullYear();
+  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const adjusted = parts.m === 2 && parts.d === 29 && !isLeapYear ? { ...parts, d: 28 } : parts;
+
+  const info = getBirthdayAlertInfo(adjusted, now);
+  if (!info) return null;
+
+  if (info.daysUntil === 0) return 'Aniversariante hoje!';
+  if (info.daysUntil === 1) return 'Aniversário amanhã';
+  if (info.daysUntil >= 2 && info.daysUntil <= 6) return `Aniversário em ${info.daysUntil} dias`;
+  if (parts.m === now.getMonth() + 1) return 'Aniversariante do mês';
+  return null;
+}
+
 export function birthdayModalStorageKey(cpf, dateKey) {
   const c = String(cpf || 'sem-cpf').trim();
   return `procedi_bday_modal_${c}_${dateKey}`;
