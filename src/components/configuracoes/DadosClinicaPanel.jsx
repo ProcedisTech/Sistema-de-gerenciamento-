@@ -11,6 +11,8 @@ import {
 import { formatCnpjInput, isValidCnpj } from '../../utils/cnpj.js';
 import { maskCep, onlyDigitsCep } from '../../utils/cepUtils.js';
 import { useCepLookup } from '../hooks/useCepLookup.js';
+import { useUfs } from '../hooks/useUfs.js';
+import { textoFusoUf } from '../../utils/fusoUf.js';
 import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
 
 function pick(obj, ...keys) {
@@ -101,6 +103,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
   const fileInputRef = useRef(null);
   const formId = useId();
   const { lookup, status: cepLookupStatus, reset: resetCepLookup } = useCepLookup();
+  const { ufs, status: ufsStatus, recarregar: recarregarUfs } = useUfs();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -743,21 +746,43 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
                 <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-uf`}>
                   Estado (UF)
                 </label>
-                <input
+                <select
                   id={`${formId}-uf`}
-                  type="text"
-                  maxLength={2}
                   value={enderecoEstado}
-                  onChange={dis ? undefined : (e) => setEnderecoEstado(e.target.value.slice(0, 2))}
-                  onBlur={
-                    dis
-                      ? undefined
-                      : () => setEnderecoEstado((prev) => prev.trim().toUpperCase().slice(0, 2))
-                  }
+                  onChange={dis ? undefined : (e) => setEnderecoEstado(e.target.value)}
                   disabled={dis}
-                  readOnly={dis}
-                  className={inputCls(amberInput)}
-                />
+                  className={dis ? readonlyInputClass : `${amberInput} appearance-none`}
+                >
+                  <option value="">Sem UF</option>
+                  {ufsStatus !== 'success' && enderecoEstado ? (
+                    <option value={enderecoEstado}>{enderecoEstado}</option>
+                  ) : null}
+                  {ufs.map(({ sigla, nome }) => (
+                    <option key={sigla} value={sigla}>
+                      {sigla} — {nome}
+                    </option>
+                  ))}
+                </select>
+                {ufsStatus === 'error' ? (
+                  <div className="mt-1 flex flex-col gap-2" role="status">
+                    <p className="text-[12px] font-semibold text-amber-800">
+                      Não foi possível carregar a lista de UFs.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={recarregarUfs}
+                      className="flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-[14px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[12px] font-medium text-[#94a3b8]">
+                    {ufsStatus === 'loading'
+                      ? 'Carregando lista de UFs…'
+                      : textoFusoUf(ufs.find((u) => u.sigla === enderecoEstado))}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className={labelCls('text-[#f59e0b]')} htmlFor={`${formId}-pais`}>
