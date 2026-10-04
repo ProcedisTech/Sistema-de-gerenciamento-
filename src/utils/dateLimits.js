@@ -1,68 +1,27 @@
-/**
- * Data local no formato YYYY-MM-DD (evita desvio de fuso de toISOString).
- * @param {Date} [d]
- * @returns {string}
- */
-export function toLocalISODate(d = new Date()) {
-  const x = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(x.getTime())) return toLocalISODate(new Date());
-  const y = x.getFullYear();
-  const m = String(x.getMonth() + 1).padStart(2, '0');
-  const day = String(x.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-const SP_TZ = 'America/Sao_Paulo';
-
-const SP_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
-  timeZone: SP_TZ,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-const SP_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
-  timeZone: SP_TZ,
-  weekday: 'short',
-});
-
-const WEEKDAY_TO_DOW = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+import { agoraDaClinica, hojeDaClinica, instanteMs, parseDataCalendario, isoDeParts, somarDias, ultimoDiaDoMes } from './datasClinica.js';
 
 /**
- * YYYY-MM-DD no fuso America/Sao_Paulo (independente do browser).
- * @param {Date|string|number} [d]
- * @returns {string}
+ * YYYY-MM-DD do instante `d` no fuso da clínica.
+ * @param {Date|string|number} d instante (string ISO com "Z"/offset, Date ou ms)
+ * @param {string} fuso IANA
+ * @returns {string} '' se `d` não for um instante válido
  */
-export function toSaoPauloISODate(d = new Date()) {
-  const x = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(x.getTime())) return toSaoPauloISODate(new Date());
-  const parts = SP_DATE_FORMATTER.formatToParts(x);
-  const y = parts.find((p) => p.type === 'year')?.value;
-  const m = parts.find((p) => p.type === 'month')?.value;
-  const day = parts.find((p) => p.type === 'day')?.value;
-  if (!y || !m || !day) return toSaoPauloISODate(new Date());
-  return `${y}-${m}-${day}`;
+export function isoDateNoFuso(d, fuso) {
+  const ms = instanteMs(d);
+  if (Number.isNaN(ms)) return '';
+  return hojeDaClinica(fuso, ms);
 }
 
 /**
- * Segunda-feira da semana corrente em America/Sao_Paulo, como YYYY-MM-DD.
- * @param {Date|string|number} [d]
+ * Segunda-feira da semana corrente no fuso da clínica, como YYYY-MM-DD.
+ * @param {string} fuso IANA
+ * @param {number} [agoraMs]
  * @returns {string}
  */
-export function startOfWeekSaoPauloISODate(d = new Date()) {
-  const todayIso = toSaoPauloISODate(d);
-  const x = d instanceof Date ? d : new Date(d);
-  const weekdayStr = SP_WEEKDAY_FORMATTER.format(x);
-  const dow = WEEKDAY_TO_DOW[weekdayStr] ?? 1;
-  const daysFromMonday = dow === 0 ? 6 : dow - 1;
-
-  const [y, mo, da] = todayIso.split('-').map(Number);
-  const base = new Date(Date.UTC(y, mo - 1, da));
-  base.setUTCDate(base.getUTCDate() - daysFromMonday);
-  const yy = base.getUTCFullYear();
-  const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(base.getUTCDate()).padStart(2, '0');
-  return `${yy}-${mm}-${dd}`;
+export function inicioSemanaNoFuso(fuso, agoraMs = Date.now()) {
+  const agora = agoraDaClinica(fuso, agoraMs);
+  const daysFromMonday = agora.diaSemana === 0 ? 6 : agora.diaSemana - 1;
+  return somarDias(agora.dataIso, -daysFromMonday);
 }
 
 /** Maior entre duas datas ISO YYYY-MM-DD (ordem lexicográfica). */
@@ -73,17 +32,14 @@ export function maxIsoDate(a, b) {
 }
 
 /**
- * Soma anos calendário a partir de uma data local YYYY-MM-DD.
+ * Soma anos calendário a uma data YYYY-MM-DD (29/02 → 28/02 em ano não bissexto).
  * @param {string} isoYYYYMMDD
  * @param {number} years
+ * @returns {string} '' se a data for inválida
  */
 export function addCalendarYearsToIso(isoYYYYMMDD, years) {
-  const parts = String(isoYYYYMMDD || '').split('-').map(Number);
-  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
-    return toLocalISODate();
-  }
-  const [y, mo, da] = parts;
-  const d = new Date(y, mo - 1, da);
-  d.setFullYear(d.getFullYear() + years);
-  return toLocalISODate(d);
+  const p = parseDataCalendario(isoYYYYMMDD);
+  if (!p) return '';
+  const ano = p.ano + years;
+  return isoDeParts(ano, p.mes, Math.min(p.dia, ultimoDiaDoMes(ano, p.mes)));
 }

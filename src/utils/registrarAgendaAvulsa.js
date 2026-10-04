@@ -1,11 +1,7 @@
 import { agendasApi } from '../services/api.js';
 import { RETORNO_TIPO_CODIGO, CONSULTA_TIPO_CODIGO, resolveTipoProcedimentoIdByCodigo } from './agendaTipoProcedimento.js';
-import { getGuaranteedNow, toGuaranteedLocalDateIso } from './serverTime.js';
-
-/** Converte Date para String 'YYYY-MM-DD' local. */
-function toLocalISODate(d = getGuaranteedNow()) {
-  return toGuaranteedLocalDateIso(d);
-}
+import { getGuaranteedNow } from './serverTime.js';
+import { agoraDaClinica, instanteMs } from './datasClinica.js';
 
 /** Adiciona minutos a um horário HH:MM. */
 function addMinutesToHHMM(hhmm, minutesToAdd) {
@@ -94,6 +90,7 @@ export async function registrarAgendaAvulsa({
   novosIdsValidos = [],
   attendanceStartTimeIso = null,
   planejamentoItemId = null,
+  fuso,
 }) {
   try {
     const pacienteId = paciente?.id;
@@ -103,19 +100,17 @@ export async function registrarAgendaAvulsa({
     }
 
     const endNow = getGuaranteedNow();
-    const endHh = `${String(endNow.getHours()).padStart(2, '0')}:${String(endNow.getMinutes()).padStart(2, '0')}`;
+    const fim = agoraDaClinica(fuso, endNow.getTime());
+    const endHh = fim.hhmm;
 
-    let dataAgendamento = toLocalISODate(endNow);
+    let dataAgendamento = fim.dataIso;
     let startHh = endHh;
 
-    if (attendanceStartTimeIso) {
-      try {
-        const startDt = new Date(attendanceStartTimeIso);
-        dataAgendamento = toLocalISODate(startDt);
-        startHh = `${String(startDt.getHours()).padStart(2, '0')}:${String(startDt.getMinutes()).padStart(2, '0')}`;
-      } catch {
-        startHh = endHh;
-      }
+    const startMs = attendanceStartTimeIso ? instanteMs(attendanceStartTimeIso) : NaN;
+    if (!Number.isNaN(startMs)) {
+      const inicio = agoraDaClinica(fuso, startMs);
+      dataAgendamento = inicio.dataIso;
+      startHh = inicio.hhmm;
     }
 
     // Se início == fim (ex: clicou em encerrar no mesmo minuto), define piso de 1 minuto

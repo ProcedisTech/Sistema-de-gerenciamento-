@@ -18,6 +18,8 @@ import {
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
 import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
 import { formatCargoLabel } from './gestaoUsuariosUtils.js';
+import { hojeDaClinica } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 const STATUS_OPTIONS = [
   { value: 'online', label: 'Online', color: '#22c55e' },
@@ -87,6 +89,7 @@ function resolveFotoSrc(fotoUrl) {
  */
 export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) {
   const toast = useToast();
+  const { fuso } = useFusoClinica();
   const fileInputRef = useRef(null);
   const formId = useId();
   const sigCanvasRef = useRef(null);
@@ -346,7 +349,7 @@ export function PerfilProfissionalPanel({ getAuthHeaders, onPerfilAtualizado }) 
     setDataNascimentoDisplay(formatBirthDigitsBR(digits));
     clearError('dataNascimento');
     if (digits.length === 8) {
-      const r = validateBirthDateDigits8(digits);
+      const r = validateBirthDateDigits8(digits, hojeDaClinica(fuso));
       setDataNascimentoIso(r.ok ? r.iso : '');
     } else {
       setDataNascimentoIso('');

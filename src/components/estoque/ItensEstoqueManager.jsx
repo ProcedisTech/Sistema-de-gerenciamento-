@@ -5,18 +5,18 @@ import { ItemFormModal } from './ItemFormModal';
 import { LoteFormModal } from './LoteFormModal';
 import { EntradaEstoqueModal } from './EntradaEstoqueModal';
 import { BaixaEstoqueModal } from './BaixaEstoqueModal';
+import { diferencaDias } from '../../utils/datasClinica';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica';
 
-function getRowStatus(lote, item) {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-
+/** @param {string} hojeIso hoje no fuso da clínica (dataValidade é data de calendário) */
+function getRowStatus(lote, item, hojeIso) {
   if (!lote) return { level: 'critico', label: 'Sem lote', dias: null };
 
   const saldo = lote.saldoAtual || 0;
   let dias = null;
   if (lote.dataValidade) {
-    const val = new Date(lote.dataValidade + 'T00:00:00');
-    dias = Math.ceil((val - hoje) / 86400000);
+    const d = diferencaDias(hojeIso, lote.dataValidade);
+    dias = Number.isNaN(d) ? null : d;
   }
 
   if (dias !== null && dias < 0) return { level: 'critico', label: 'Vencido', dias };
@@ -52,9 +52,9 @@ function StockBar({ saldo, minimo }) {
   );
 }
 
-function InventoryRow({ row, onEditItem, onEditLote }) {
+function InventoryRow({ row, hojeIso, onEditItem, onEditLote }) {
   const { item, lote } = row;
-  const status = getRowStatus(lote, item);
+  const status = getRowStatus(lote, item, hojeIso);
   const saldo = lote?.saldoAtual ?? 0;
 
   return (
@@ -124,6 +124,7 @@ function InventoryRow({ row, onEditItem, onEditLote }) {
 }
 
 export function ItensEstoqueManager() {
+  const { hojeIso } = useAgoraDaClinica(60000);
   const [itens, setItens] = useState([]);
   const [lotesMap, setLotesMap] = useState({});
   const [loading, setLoading] = useState(true);
@@ -193,10 +194,10 @@ export function ItensEstoqueManager() {
       );
     }
     if (activeFilter !== 'todos') {
-      list = list.filter((r) => getRowStatus(r.lote, r.item).level === activeFilter);
+      list = list.filter((r) => getRowStatus(r.lote, r.item, hojeIso).level === activeFilter);
     }
     return list;
-  }, [rows, searchQuery, activeFilter]);
+  }, [rows, searchQuery, activeFilter, hojeIso]);
 
   const stats = useMemo(() => {
     let totalQty = 0;
@@ -205,10 +206,10 @@ export function ItensEstoqueManager() {
     rows.forEach((r) => {
       itemIds.add(r.item.id);
       totalQty += r.lote?.saldoAtual || 0;
-      if (getRowStatus(r.lote, r.item).level === 'critico') criticos++;
+      if (getRowStatus(r.lote, r.item, hojeIso).level === 'critico') criticos++;
     });
     return { totalQty, criticos, totalProdutos: itemIds.size };
-  }, [rows]);
+  }, [rows, hojeIso]);
 
   const openNewProduct = () => { setItemModalData(null); setItemError(''); setItemModalOpen(true); };
   const openEditItem = (item) => { setItemModalData(item); setItemError(''); setItemModalOpen(true); };
@@ -351,6 +352,7 @@ export function ItensEstoqueManager() {
               <InventoryRow
                 key={`${row.item.id}_${row.lote?.id || 'no-lot'}_${idx}`}
                 row={row}
+                hojeIso={hojeIso}
                 onEditItem={openEditItem}
                 onEditLote={openEditLote}
               />

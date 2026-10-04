@@ -1,8 +1,8 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
-import { toLocalISODate } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { buildPacienteCtx } from '../../utils/pacienteCtx';
 import { Step2Anamnese } from './Step2Anamnese';
@@ -206,7 +206,7 @@ export function JourneyView({
   setOrientacoesItens: setOrientacoesItensProp,
   orientacoesCarregadas: orientacoesCarregadasProp,
   setOrientacoesCarregadas: setOrientacoesCarregadasProp,
-  procedureDateIso = toLocalISODate(),
+  procedureDateIso: procedureDateIsoProp,
   proximoRetornoDisplay: proximoRetornoDisplayProp,
   setProximoRetornoDisplay: setProximoRetornoDisplayProp,
   step5Errors,
@@ -220,6 +220,8 @@ export function JourneyView({
   getPatientInitials,
 }) {
   const toast = useToast();
+  const { hojeIso } = useAgoraDaClinica();
+  const procedureDateIso = procedureDateIsoProp === undefined ? hojeIso : procedureDateIsoProp;
   const [_nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoIdLocal] = React.useState(null);
 
   const [localOrientItens, setLocalOrientItens] = React.useState([]);
@@ -244,8 +246,8 @@ export function JourneyView({
 
   const step5RetornoBloqueiaFinal = React.useMemo(
     () =>
-      evaluateProximoRetornoStep5(procedureDateIso, proximoRetornoDisplay).blocksFinish,
-    [procedureDateIso, proximoRetornoDisplay]
+      evaluateProximoRetornoStep5(procedureDateIso, proximoRetornoDisplay, hojeIso).blocksFinish,
+    [procedureDateIso, proximoRetornoDisplay, hojeIso]
   );
 
   const onFinishJourney = () => {

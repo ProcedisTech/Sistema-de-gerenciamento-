@@ -27,6 +27,10 @@ function compareHm(a, b) {
   return normalizeHm(a).localeCompare(normalizeHm(b));
 }
 
+function hmFromMinutes(nowMinutes) {
+  return normalizeHm(`${Math.floor(nowMinutes / 60)}:${nowMinutes % 60}`);
+}
+
 export function getFirstName(fullName) {
   const parts = String(fullName || '')
     .trim()
@@ -35,15 +39,17 @@ export function getFirstName(fullName) {
   return parts[0] || '';
 }
 
-export function getGreeting(now = new Date()) {
-  const hour = now.getHours();
+/** @param {number | null} nowMinutes minuto do dia no relógio da clínica */
+export function getGreeting(nowMinutes) {
+  if (!Number.isFinite(nowMinutes)) return 'Olá';
+  const hour = Math.floor(nowMinutes / 60);
   if (hour < 12) return 'Bom dia';
   if (hour < 18) return 'Boa tarde';
   return 'Boa noite';
 }
 
-export function formatGreetingLine(userDisplayName, now = new Date()) {
-  const greeting = getGreeting(now);
+export function formatGreetingLine(userDisplayName, nowMinutes) {
+  const greeting = getGreeting(nowMinutes);
   const first = getFirstName(userDisplayName);
   return first ? `${greeting}, ${first}` : greeting;
 }
@@ -83,8 +89,10 @@ export function sortAppointmentsByTime(appointments) {
   return [...(appointments || [])].sort((a, b) => compareHm(a.horaInicio, b.horaInicio));
 }
 
-export function getNextAppointment(appointments, { now = new Date(), todayIso } = {}) {
-  const nowHm = normalizeHm(`${now.getHours()}:${now.getMinutes()}`);
+/** `nowMinutes`/`todayIso` = relógio da clínica; sem `nowMinutes` não há "próximo". */
+export function getNextAppointment(appointments, { nowMinutes, todayIso } = {}) {
+  if (!Number.isFinite(nowMinutes)) return null;
+  const nowHm = hmFromMinutes(nowMinutes);
   const candidates = sortAppointmentsByTime(appointments).filter((item) => {
     if (!isKpiCountableAppointment(item)) return false;
     if (!isActiveSlot(item)) return false;
@@ -94,8 +102,9 @@ export function getNextAppointment(appointments, { now = new Date(), todayIso } 
   return candidates[0] || null;
 }
 
-export function getInProgressAppointment(appointments, { now = new Date() } = {}) {
-  const nowHm = normalizeHm(`${now.getHours()}:${now.getMinutes()}`);
+export function getInProgressAppointment(appointments, { nowMinutes } = {}) {
+  if (!Number.isFinite(nowMinutes)) return null;
+  const nowHm = hmFromMinutes(nowMinutes);
   return (
     sortAppointmentsByTime(appointments).find((item) => {
       if (!ACTIVE_STATUSES.has(item.status) && item.tipo !== 'bloqueio') return false;
@@ -474,8 +483,9 @@ export function resolveActionTargetFromDayAppointments(dayRows, clickedRow) {
 }
 
 /** Próximo slot (single ou group) a partir de entries já agrupadas. */
-export function getNextAppointmentEntry(entries, { now = new Date(), todayIso } = {}) {
-  const nowHm = normalizeHm(`${now.getHours()}:${now.getMinutes()}`);
+export function getNextAppointmentEntry(entries, { nowMinutes, todayIso } = {}) {
+  if (!Number.isFinite(nowMinutes)) return null;
+  const nowHm = hmFromMinutes(nowMinutes);
   for (const entry of entries || []) {
     const primary = getEntryPrimaryAppointment(entry);
     if (!primary) continue;

@@ -8,14 +8,17 @@
  *   - Rodapé discreto com numeração de páginas
  */
 
+import { formatarInstante } from '../../../utils/datasClinica.js';
+
 /**
  * Gera e faz download do PDF do Termo LGPD com o visual do Resumo de Atendimento.
  *
  * @param {string} text       Texto completo do termo (já interpolado)
  * @param {string} [filename] Nome do arquivo baixado
+ * @param {string} [fuso]     Fuso IANA da clínica (data de geração)
  * @returns {Promise<Blob>}
  */
-export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pdf') {
+export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pdf', fuso) {
   /* ── Import lazy (code-splitting) ─────────────────────────────────────── */
   const mod   = await import('jspdf');
   const jsPDF = mod.jsPDF ?? mod.default;
@@ -175,8 +178,7 @@ export async function gerarPdfLgpd(text, filename = 'termo-consentimento-lgpd.pd
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.text(
-    `Gerado em ${new Date().toLocaleString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
+    `Gerado em ${formatarInstante(Date.now(), fuso, {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     })}`,

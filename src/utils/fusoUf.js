@@ -1,4 +1,6 @@
-const FUSO_SEM_UF = 'America/Sao_Paulo';
+import { FUSO_PADRAO } from './datasClinica.js';
+
+const FUSO_SEM_UF = FUSO_PADRAO;
 
 /**
  * Deslocamento do fuso na data dada, ex.: "UTC−5" (sinal de menos U+2212).

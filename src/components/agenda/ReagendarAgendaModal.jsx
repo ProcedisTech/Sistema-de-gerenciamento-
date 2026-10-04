@@ -4,10 +4,7 @@
  */
 import { useState } from 'react';
 import { X } from 'lucide-react';
-
-function toDateInputValue(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 function initialFromAgenda(agenda) {
   if (!agenda) return { novaData: '', novaHoraInicio: '', novaHoraFim: '' };
@@ -27,12 +24,12 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
   const [novaHoraInicio, setNovaHoraInicio] = useState(init.novaHoraInicio);
   const [novaHoraFim, setNovaHoraFim] = useState(init.novaHoraFim);
   const [observacao, setObservacao] = useState('');
+  const { hojeIso } = useAgoraDaClinica();
 
   const valida = () => {
     if (!novaData || !novaHoraInicio || !novaHoraFim) return false;
     if (novaHoraInicio >= novaHoraFim) return false;
-    const hoje = toDateInputValue(new Date());
-    if (novaData < hoje) return false;
+    if (!hojeIso || novaData < hojeIso) return false;
     return true;
   };
 
@@ -46,8 +43,8 @@ export default function ReagendarAgendaModal({ agenda, onClose, onConfirm, isSub
     });
   };
 
-  const minDate = toDateInputValue(new Date());
-  const dataPassada = Boolean(novaData) && novaData < minDate;
+  const minDate = hojeIso ?? undefined;
+  const dataPassada = Boolean(novaData && minDate) && novaData < minDate;
   // BUG #3: feedback inline (a função `valida()` já bloqueia o submit; aqui só mostramos
   // a mensagem vermelha, espelhando o padrão de `dataPassada`).
   const horarioInvalido = Boolean(novaHoraInicio && novaHoraFim && novaHoraInicio >= novaHoraFim);

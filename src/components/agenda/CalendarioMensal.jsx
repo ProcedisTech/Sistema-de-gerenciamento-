@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { HEATMAP_WEEK_LABELS } from '../../utils/agendaDisponibilidadeBuilder.js';
+import { formatarDataCalendario } from '../../utils/datasClinica.js';
 
 const DIAS_SEMANA_CURTOS = HEATMAP_WEEK_LABELS;
 const DIAS_SEMANA_LONGOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -33,27 +34,11 @@ const FOCUS_RING =
 const FECHADO_HATCH =
   'bg-[repeating-linear-gradient(-45deg,#e5e7eb,#e5e7eb_2px,#f3f4f6_2px,#f3f4f6_6px)] text-ink-400';
 
-function toLocalDateIso(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 function formatDataPorExtenso(iso) {
   if (!iso) return '';
-  try {
-    const [y, m, d] = iso.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString('pt-BR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
+  return (
+    formatarDataCalendario(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) || iso
+  );
 }
 
 function formatMinutosLabel(min) {
@@ -177,8 +162,6 @@ export function CalendarioMensal({
   compactChrome = false,
   showFechadoLegend = false,
 }) {
-  const hoje = useMemo(() => toLocalDateIso(new Date()), []);
-
   const monthLabel = heatmap?.monthLabel || '';
 
   const weekRows =
@@ -320,7 +303,7 @@ export function CalendarioMensal({
               return <div key={cell.iso} aria-hidden className="min-h-0" />;
             }
 
-            const isToday = cell.iso === hoje;
+            const isToday = Boolean(cell.isToday);
             const isSelecionado = diaSelecionado === cell.iso;
             const labelExtenso = formatDataPorExtenso(cell.iso);
             const showTimeOnSelected = isSelecionado && selectedTimeLabel && cell.clickable;

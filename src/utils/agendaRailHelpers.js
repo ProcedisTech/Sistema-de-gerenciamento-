@@ -130,17 +130,18 @@ export function getTimelineBlocks(appointments, axis) {
 }
 
 /**
- * @param {Date} now
+ * @param {number | null} nowMinutes minuto do dia no relógio da clínica
  * @param {string} selectedDay
- * @param {string} todayIso
+ * @param {string} todayIso hoje no calendário da clínica
  * @param {{ startMin?: number, endMin?: number }} [axis]
  */
-export function getNowLineLeftPercent(now, selectedDay, todayIso, axis) {
+export function getNowLineLeftPercent(nowMinutes, selectedDay, todayIso, axis) {
   if (!selectedDay || !todayIso || selectedDay !== todayIso) return null;
+  if (!Number.isFinite(nowMinutes)) return null;
   const axisStart = axis?.startMin != null ? axis.startMin : TIMELINE_START_MIN;
   const axisEnd = axis?.endMin != null ? axis.endMin : TIMELINE_END_MIN;
   const span = Math.max(1, axisEnd - axisStart);
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowMin = nowMinutes;
   if (nowMin < axisStart || nowMin > axisEnd) return null;
   return ((nowMin - axisStart) / span) * 100;
 }
@@ -189,9 +190,10 @@ export function getEntryDomId(entry) {
   return String(entry.appointment?.id || '');
 }
 
-export function getPeriodSuffix(period, { selectedDay, todayIso, now }) {
-  if (!selectedDay || !todayIso || selectedDay !== todayIso || !now) return '';
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+/** `nowMinutes` = minuto do dia no relógio da clínica. */
+export function getPeriodSuffix(period, { selectedDay, todayIso, nowMinutes }) {
+  if (!selectedDay || !todayIso || selectedDay !== todayIso || !Number.isFinite(nowMinutes)) return '';
+  const nowMin = nowMinutes;
   if (period === 'manha' && nowMin >= 12 * 60) return 'concluída';
   if (period === 'tarde' && nowMin >= 12 * 60 && nowMin < 18 * 60) return 'em andamento';
   if (period === 'noite' && nowMin >= 18 * 60) return 'em andamento';
@@ -204,10 +206,11 @@ export const PERIOD_LABELS = {
   noite: 'Noite',
 };
 
-export function formatCountdown(targetHm, now) {
+/** `nowMinutes` = minuto do dia no relógio da clínica. */
+export function formatCountdown(targetHm, nowMinutes) {
+  if (!Number.isFinite(nowMinutes)) return '';
   const startMin = parseHmToMinutes(targetHm);
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const diff = startMin - nowMin;
+  const diff = startMin - nowMinutes;
   if (diff <= 0) return 'agora';
   if (diff < 60) return `${diff}min`;
   const h = Math.floor(diff / 60);

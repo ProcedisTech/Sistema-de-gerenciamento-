@@ -14,6 +14,8 @@ import { useToast } from '../../contexts/useToast';
 import { AnamneseAssinaturaActions } from './AnamneseAssinaturaActions.jsx';
 import { resolverEstadoAssinatura } from './anamneseAssinaturaUiState.js';
 import { tipoAlimentaProntuario } from './editorTipoMeta.js';
+import { formatarInstante, instanteMs } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
 const TRIVALENTE = { SIM: 'Sim', NAO: 'Não' , NAO_SEI: 'Não sei' };
 const METODO = {
@@ -42,36 +44,25 @@ function initials(name) {
   return `${a}${b}`.toUpperCase();
 }
 
-function asDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function formatStamp(value) {
-  const d = asDate(value);
-  if (!d) return null;
-  const dia = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
-  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+function formatStamp(value, fuso) {
+  const dia = formatarInstante(value, fuso, { day: '2-digit', month: '2-digit' });
+  if (!dia) return null;
+  const hora = formatarInstante(value, fuso, { hour: '2-digit', minute: '2-digit' });
   return `Assinada em ${dia} às ${hora}`;
 }
 
-function formatDateTime(value) {
-  const d = asDate(value);
-  if (!d) return '—';
-  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+function formatDateTime(value, fuso) {
+  return formatarInstante(value, fuso, 'dataHoraSeg') || '—';
 }
 
-function formatDate(value) {
-  const d = asDate(value);
-  if (!d) return '—';
-  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+function formatDate(value, fuso) {
+  return formatarInstante(value, fuso, 'data') || '—';
 }
 
 function diasRestantes(validadeAte) {
-  const d = asDate(validadeAte);
-  if (!d) return null;
-  return Math.ceil((d.getTime() - Date.now()) / 86400000);
+  const ms = instanteMs(validadeAte);
+  if (Number.isNaN(ms)) return null;
+  return Math.ceil((ms - Date.now()) / 86400000);
 }
 
 function isSim(item) {
@@ -153,7 +144,12 @@ export function AnamneseDocumentoView({
   variante = 'hub',
   /** Recebe `envioAtivo` do documento (ou null) a cada carga concluída. */
   onEnvioAtivoChange,
+  /** Fuso IANA para exibir instantes; páginas públicas passam `payload.fusoHorario`. */
+  fuso: fusoProp = null,
 }) {
+  const { fuso: fusoClinica } = useFusoClinica();
+  const fuso = fusoProp ?? fusoClinica;
+  const formatStampNoFuso = useCallback((value) => formatStamp(value, fuso), [fuso]);
   const toast = useToast();
   const modoPaciente = variante === 'pacienteConfirmacao';
   const [gravada, setGravada] = useState(documento ?? null);
@@ -355,7 +351,7 @@ export function AnamneseDocumentoView({
                 imutavel={imutavel}
                 envioAtivo={envioAtivo}
                 assinadoEm={assinadoEm}
-                formatStamp={formatStamp}
+                formatStamp={formatStampNoFuso}
                 onDocumentoRefresh={recarregarDocumento}
               />
             ) : null}
@@ -371,7 +367,7 @@ export function AnamneseDocumentoView({
             <p className="text-right text-[10.5px] leading-snug text-[#64748b]">
               {gravada.validadeAte ? (
                 <>
-                  Válida até <b className="font-semibold text-[#475569]">{formatDate(gravada.validadeAte)}</b>
+                  Válida até <b className="font-semibold text-[#475569]">{formatDate(gravada.validadeAte, fuso)}</b>
                   {dias != null ? (
                     <>
                       {' '}
@@ -534,7 +530,7 @@ export function AnamneseDocumentoView({
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
               <dt className="text-[#94a3b8]">Assinado em</dt>
-              <dd className="font-semibold text-[#334155]">{formatDateTime(assinadoEm)}</dd>
+              <dd className="font-semibold text-[#334155]">{formatDateTime(assinadoEm, fuso)}</dd>
               {gravada.metodoAssinaturaCodigo ? (
                 <>
                   <dt className="text-[#94a3b8]">Como</dt>

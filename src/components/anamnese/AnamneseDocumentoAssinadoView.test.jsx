@@ -12,6 +12,8 @@ vi.mock('../../services/api', () => ({
   anamneseEnvioApi: {
     status: vi.fn(),
   },
+  getOrgId: () => null,
+  setOrgId: vi.fn(),
 }));
 
 vi.mock('./AnamneseAssinaturaActions.jsx', () => ({

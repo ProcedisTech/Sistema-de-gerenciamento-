@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertTriangle, ClipboardList, Loader2, X } from 'lucide-react';
 import { getPatientInitials } from '../utils/formatters';
 import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 function truncateAlert(text, max = 60) {
   const s = String(text ?? '').trim();
@@ -27,7 +28,8 @@ export function PacienteContextCard({
 }) {
   const nome = patient?.nome || fallbackNome || '—';
   const telefone = patient?.telefone || fallbackTelefone || '';
-  const ultimaData = patient ? lastProcedureDateForCard(patient) : '—';
+  const { fuso } = useFusoClinica();
+  const ultimaData = patient ? lastProcedureDateForCard(patient, fuso) : '—';
   const ultimoProc = patient ? lastProcedureLabel(patient) : '—';
   const allergy = patient ? allergyAlertText(patient) : null;
   const anamneseVencida = Boolean(patient?.anamneseDesatualizada);

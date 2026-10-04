@@ -21,6 +21,7 @@ import {
   groupNotificacoes,
 } from '../../utils/notificacaoFormat.js';
 import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 const GRUPO_ORDER = ['hoje', 'semana', 'anteriores'];
 
@@ -126,6 +127,7 @@ export default function NotificacoesView({
   onNotificacoesChanged,
 }) {
   const { error: toastError } = useToast();
+  const { fuso } = useFusoClinica();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -159,7 +161,7 @@ export default function NotificacoesView({
 
   const chipCounts = useMemo(() => countByChip(items), [items]);
 
-  const groups = useMemo(() => groupNotificacoes(items, chipAtivo), [items, chipAtivo]);
+  const groups = useMemo(() => groupNotificacoes(items, chipAtivo, fuso), [items, chipAtivo, fuso]);
 
   const filteredCount = chipCounts[chipAtivo] ?? 0;
 

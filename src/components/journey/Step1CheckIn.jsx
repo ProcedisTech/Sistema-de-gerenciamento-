@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { UserCheck, AlertTriangle, Search } from 'lucide-react';
 import { pacientesApi } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
+import { hojeDaClinica } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import {
   maskCPF,
   maskRG,
@@ -42,6 +44,7 @@ export function Step1CheckIn({
   selectPatient,
 }) {
   const toast = useToast();
+  const { fuso } = useFusoClinica();
   const [dataNascimentoDisplay, setDataNascimentoDisplay] = useState('');
   const [tipoBusca, setTipoBusca] = useState('nome');
   const [telefoneCountryCode, setTelefoneCountryCode] = useState('BR');
@@ -61,7 +64,8 @@ export function Step1CheckIn({
         .then((pageData) => {
           if (cancelled) return;
           const rows = pageData?.content ?? [];
-          const mapped = Array.isArray(rows) ? rows.map(mapBackendPatient).filter(Boolean) : [];
+          const opts = { fuso, hojeIso: hojeDaClinica(fuso) };
+          const mapped = Array.isArray(rows) ? rows.map((r) => mapBackendPatient(r, opts)).filter(Boolean) : [];
           setRemotePatients(mapped);
         })
         .catch(() => {
@@ -72,7 +76,7 @@ export function Step1CheckIn({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [searchQuery]);
+  }, [searchQuery, fuso]);
 
   const handleBuscaChange = (value) => {
     if (tipoBusca === 'cpf') {
@@ -107,10 +111,11 @@ export function Step1CheckIn({
     setDataNascimentoDisplay(display);
 
     if (digits.length === 8) {
-      const r = validateBirthDateDigits8(digits);
+      const hojeIso = hojeDaClinica(fuso);
+      const r = validateBirthDateDigits8(digits, hojeIso);
       if (r.ok) {
         setDataNascimento(r.iso);
-        const age = calculateAgeFromISODate(r.iso);
+        const age = calculateAgeFromISODate(r.iso, hojeIso);
         setIdade(age !== '' ? age : '');
       } else {
         setDataNascimento('');
@@ -125,7 +130,7 @@ export function Step1CheckIn({
   const birthDigitsForUi = dataNascimentoDisplay.replace(/\D/g, '');
   let dataNascimentoFieldMessage = null;
   if (birthDigitsForUi.length === 8 && !dataNascimento) {
-    const br = validateBirthDateDigits8(birthDigitsForUi);
+    const br = validateBirthDateDigits8(birthDigitsForUi, hojeDaClinica(fuso));
     if (!br.ok) dataNascimentoFieldMessage = birthDateValidationUserMessage(br.reason);
   }
 

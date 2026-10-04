@@ -1,4 +1,4 @@
-import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from './dateLimits.js';
+import { maxIsoDate, addCalendarYearsToIso } from './dateLimits.js';
 import {
   sanitizeBirthDateDigits,
   validateCalendarDateDigits8,
@@ -15,10 +15,11 @@ function isoToBR(iso) {
  * Avalia o campo "próximo retorno" da etapa 5 (DD/MM/AAAA opcional).
  * @param {string | null | undefined} procedureDateIso YYYY-MM-DD
  * @param {string | null | undefined} displayValue texto do input (com ou sem máscara)
+ * @param {string} hojeIso YYYY-MM-DD de hoje no fuso da clínica (`hojeDaClinica(fuso)`)
  * @returns {{ blocksFinish: boolean, fieldMessage: string | null, validIso: string | null }}
  */
-export function evaluateProximoRetornoStep5(procedureDateIso, displayValue) {
-  const todayIso = toLocalISODate();
+export function evaluateProximoRetornoStep5(procedureDateIso, displayValue, hojeIso) {
+  const todayIso = hojeIso;
   const minReturnIso = maxIsoDate(procedureDateIso || todayIso, todayIso);
   const maxReturnIso = addCalendarYearsToIso(todayIso, 10);
 

@@ -8,6 +8,8 @@ import { mapBackendPatient } from '../../utils/patientMapping';
 import {
   patientUltimaVisitaDayFromDto,
 } from '../../utils/patientProfileDerivedDates.js';
+import { hojeDaClinica, instanteMs, parseDataCalendario, proximoAniversario } from '../../utils/datasClinica.js';
+import { useFusoClinica } from './useFusoClinica.js';
 
 const ACTIVE_PATIENT_CPF_KEY = 'selectedPatientCpf';
 const ACTIVE_PATIENT_CPF_LEGACY_KEY = 'activePatientCpf';
@@ -66,34 +68,19 @@ function queryForPacientesSearch(raw) {
   return t;
 }
 
-function ultimaVisitaSortMs(p) {
-  if (p?.ultimaVinda) {
-    const ms = new Date(p.ultimaVinda).getTime();
-    if (!Number.isNaN(ms)) return ms;
-  }
-  const day = patientUltimaVisitaDayFromDto(p);
-  if (!day || day === '-' || day === '—') return 0;
-  const parts = String(day).trim().split('/');
-  if (parts.length === 3) {
-    const [d, m, y] = parts.map((n) => parseInt(n, 10));
-    if (y && m && d) return new Date(y, m - 1, d).getTime();
-  }
-  return 0;
+function ultimaVisitaSortMs(p, fuso) {
+  const ms = instanteMs(p?.ultimaVinda);
+  if (!Number.isNaN(ms)) return ms;
+  const dia = parseDataCalendario(patientUltimaVisitaDayFromDto(p, fuso));
+  return dia ? Date.UTC(dia.ano, dia.mes - 1, dia.dia) : 0;
 }
 
-function daysUntilNextBirthdayMs(dataNascimento) {
-  if (!dataNascimento) return Number.MAX_SAFE_INTEGER;
-  const birth = new Date(dataNascimento);
-  if (Number.isNaN(birth.getTime())) return Number.MAX_SAFE_INTEGER;
-  const now = new Date();
-  let next = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
-  if (next.getTime() < now.getTime()) {
-    next = new Date(now.getFullYear() + 1, birth.getMonth(), birth.getDate());
-  }
-  return next.getTime() - now.getTime();
+function daysUntilNextBirthday(dataNascimento, hojeIso) {
+  const info = dataNascimento && hojeIso ? proximoAniversario(dataNascimento, hojeIso) : null;
+  return info ? info.dias : Number.MAX_SAFE_INTEGER;
 }
 
-function comparePatientsClient(a, b, sortBy) {
+function comparePatientsClient(a, b, sortBy, fuso, hojeIso) {
   switch (sortBy) {
     case 'nome-desc':
       return b.nome.localeCompare(a.nome, 'pt', { sensitivity: 'base' });
@@ -108,11 +95,11 @@ function comparePatientsClient(a, b, sortBy) {
       return (ib ?? -1) - (ia ?? -1);
     }
     case 'visita-desc':
-      return ultimaVisitaSortMs(b) - ultimaVisitaSortMs(a);
+      return ultimaVisitaSortMs(b, fuso) - ultimaVisitaSortMs(a, fuso);
     case 'visita-asc':
-      return ultimaVisitaSortMs(a) - ultimaVisitaSortMs(b);
+      return ultimaVisitaSortMs(a, fuso) - ultimaVisitaSortMs(b, fuso);
     case 'birthday-asc':
-      return daysUntilNextBirthdayMs(a.dataNascimento) - daysUntilNextBirthdayMs(b.dataNascimento);
+      return daysUntilNextBirthday(a.dataNascimento, hojeIso) - daysUntilNextBirthday(b.dataNascimento, hojeIso);
     case 'nome-asc':
     default:
       return a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' });
@@ -127,6 +114,7 @@ function comparePatientsClient(a, b, sortBy) {
  */
 export const usePatientState = (opts = {}) => {
   const { authEnabled = false } = opts;
+  const { fuso } = useFusoClinica();
   const [patients, setPatients] = useState([]);
   const [patientListItems, setPatientListItems] = useState([]);
   const [patientListPage, setPatientListPage] = useState(0);
@@ -167,7 +155,8 @@ export const usePatientState = (opts = {}) => {
     try {
       const pageData = await pacientesApi.search('');
       const lista = pageData.content || [];
-      setPatients(lista.map(mapBackendPatient).filter(Boolean));
+      const mapOpts = { fuso, hojeIso: hojeDaClinica(fuso) };
+      setPatients(lista.map((dto) => mapBackendPatient(dto, mapOpts)).filter(Boolean));
     } catch (err) {
       if (err.status === 401) {
         console.warn('[usePatientState] Sessão ausente ou expirada; lista de pacientes não carregada.');
@@ -175,7 +164,7 @@ export const usePatientState = (opts = {}) => {
         console.warn('[usePatientState] Falha ao buscar pacientes (search):', err.message);
       }
     }
-  }, [authEnabled]);
+  }, [authEnabled, fuso]);
 
   const bumpPatientList = useCallback(() => {
     setPatientListBump((x) => x + 1);
@@ -235,6 +224,7 @@ export const usePatientState = (opts = {}) => {
     const qTrim = patientSearchQuery.trim();
     const qApi = queryForPacientesSearch(patientSearchQuery);
     const isBirthday = patientListSortBy === 'birthday-asc';
+    const mapOpts = { fuso, hojeIso: hojeDaClinica(fuso) };
 
     const failList = (err) => {
       if (cancelled) return;
@@ -270,7 +260,7 @@ export const usePatientState = (opts = {}) => {
         .then((pageData) => {
           if (cancelled) return;
           const mapped = (pageData.content || [])
-            .map(mapBackendPatient)
+            .map((dto) => mapBackendPatient(dto, mapOpts))
             .filter(Boolean);
           setPatientListItems(mapped);
           setPatientListMeta({
@@ -298,9 +288,9 @@ export const usePatientState = (opts = {}) => {
       .then((pageData) => {
         if (cancelled) return;
         const mapped = (pageData.content || [])
-          .map(mapBackendPatient)
+          .map((dto) => mapBackendPatient(dto, mapOpts))
           .filter(Boolean);
-        mapped.sort((a, b) => comparePatientsClient(a, b, patientListSortBy));
+        mapped.sort((a, b) => comparePatientsClient(a, b, patientListSortBy, mapOpts.fuso, mapOpts.hojeIso));
         const total = mapped.length;
         const totalPages = Math.max(1, Math.ceil(total / PATIENT_LIST_PAGE_SIZE));
         const pageIdx = Math.min(patientListPage, Math.max(0, totalPages - 1));
@@ -340,6 +330,7 @@ export const usePatientState = (opts = {}) => {
     semAgendamentoFuturoFilter,
     ehNovoFilter,
     ehAniversarianteFilter,
+    fuso,
   ]);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { resolveApiUrl } from '../config/apiEnv.js';
-import { toLocalISODate } from './dateLimits.js';
+import { diaDoInstante, formatarDataCalendario, instanteMs, normalizarDataCalendario } from './datasClinica.js';
 
 /** Chaves persistidas no prefixo da legenda: `[antes] …` (sem mudança no backend). */
 export const GALERIA_CATEGORIA = {
@@ -64,29 +64,36 @@ export function formatGaleriaLegendaForUpload(categoria, descricaoLivre = '') {
   return d ? `[${cat}] ${d}` : `[${cat}]`;
 }
 
-export function itemDataReferenciaISO(item) {
+function msOuZero(v) {
+  const ms = instanteMs(v);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+/**
+ * Dia (AAAA-MM-DD) da foto: `dataReferencia` é calendário; sem ela, o dia em que `createdAt` (instante) aconteceu na clínica.
+ * @param {string} [fuso] IANA da clínica (ausente → fuso padrão)
+ */
+export function itemDataReferenciaISO(item, fuso) {
   if (item?.dataReferencia != null && String(item.dataReferencia).trim()) {
-    const s = String(item.dataReferencia).trim().slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const dia = normalizarDataCalendario(item.dataReferencia);
+    if (dia) return dia;
   }
   if (item?.createdAt) {
-    const t = new Date(item.createdAt);
-    if (!Number.isNaN(t.getTime())) return toLocalISODate(t);
+    const dia = diaDoInstante(item.createdAt, fuso);
+    if (dia) return dia;
   }
   return null;
 }
 
 /** YYYY-MM para filtros por mês. */
-export function itemMesReferenciaISO(item) {
-  const d = itemDataReferenciaISO(item);
+export function itemMesReferenciaISO(item, fuso) {
+  const d = itemDataReferenciaISO(item, fuso);
   return d ? d.slice(0, 7) : null;
 }
 
 export function formatDataSessaoPtBr(dataISO) {
   if (!dataISO || dataISO === 'sem-data') return '—';
-  const [y, m, day] = dataISO.split('-').map(Number);
-  if (!y || !m || !day) return String(dataISO);
-  return `${String(day).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+  return formatarDataCalendario(dataISO) || String(dataISO);
 }
 
 export function formatMesAnoCurtoPt(dataISO) {
@@ -105,10 +112,11 @@ export function filterGaleriaItemsForUi(items, filters) {
   const categoria = filters?.categoria;
   const mesAno = filters?.mesAno;
   const procedimentoToken = filters?.procedimentoToken;
+  const fuso = filters?.fuso;
   return (items || []).filter((it) => {
     if (categoria && categoria !== 'all' && it.categoria !== categoria) return false;
     if (mesAno && mesAno !== 'all') {
-      const m = itemMesReferenciaISO(it);
+      const m = itemMesReferenciaISO(it, fuso);
       if (m !== mesAno) return false;
     }
     if (procedimentoToken && procedimentoToken !== 'all') {
@@ -121,11 +129,12 @@ export function filterGaleriaItemsForUi(items, filters) {
 
 /**
  * Agrupa fotos em “sessões” (data de referência), ordena fotos Antes → Planejamento/Avaliação → Depois.
+ * @param {string} [fuso] IANA da clínica (ausente → fuso padrão)
  */
-export function groupGaleriaItemsBySession(items) {
+export function groupGaleriaItemsBySession(items, fuso) {
   const groups = new Map();
   for (const it of items || []) {
-    const dataISO = itemDataReferenciaISO(it) || 'sem-data';
+    const dataISO = itemDataReferenciaISO(it, fuso) || 'sem-data';
     const feitoId = it.procedimentoFeitoId != null && String(it.procedimentoFeitoId).trim() !== ''
       ? String(it.procedimentoFeitoId).trim()
       : null;
@@ -157,9 +166,7 @@ export function groupGaleriaItemsBySession(items) {
       const da = order[a.categoria] ?? 99;
       const db = order[b.categoria] ?? 99;
       if (da !== db) return da - db;
-      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return ta - tb;
+      return msOuZero(a.createdAt) - msOuZero(b.createdAt);
     });
   }
 
@@ -170,9 +177,7 @@ export function groupGaleriaItemsBySession(items) {
     if (a.dataISO !== b.dataISO) {
       return a.dataISO.localeCompare(b.dataISO);
     }
-    const timeA = a.fotos[0]?.createdAt ? new Date(a.fotos[0].createdAt).getTime() : 0;
-    const timeB = b.fotos[0]?.createdAt ? new Date(b.fotos[0].createdAt).getTime() : 0;
-    return timeA - timeB;
+    return msOuZero(a.fotos[0]?.createdAt) - msOuZero(b.fotos[0]?.createdAt);
   });
   const sessionNumberByKey = new Map(sortedAsc.map((s, idx) => [s.key, idx + 1]));
 

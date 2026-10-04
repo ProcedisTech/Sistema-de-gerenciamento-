@@ -4,6 +4,7 @@
  */
 
 import { parseGaleriaLegenda, itemDataReferenciaISO } from './pacienteGaleria.js';
+import { diaDoInstante } from './datasClinica.js';
 
 /**
  * Mapeia as fotos da galeria do paciente e os procedimentos executados para seus respectivos planos,
@@ -12,9 +13,10 @@ import { parseGaleriaLegenda, itemDataReferenciaISO } from './pacienteGaleria.js
  * @param {Array} planos - Lista de planos normalizados do paciente
  * @param {Array} fotosBrutas - Lista de fotos da API de galeria
  * @param {Array} procedimentosFeitos - Lista de todos os procedimentos realizados do paciente
+ * @param {string} [fuso] - IANA da clínica; dia das fotos/atendimentos sem data de calendário (ausente → fuso padrão)
  * @returns {Object} { fotosPorPlanoId, fotosPorPlanejamentoItemId, fotosAvulsas, atendimentosAvulsos }
  */
-export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimentosFeitos = []) {
+export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimentosFeitos = [], fuso) {
   // Normalizar lista de fotos com fallback inteligente de categoria (legenda e tipoFotoCodigo)
   const fotos = (Array.isArray(fotosBrutas) ? fotosBrutas : []).map((f) => {
     const legInfo = parseGaleriaLegenda(f.legenda || f.descricaoLegenda);
@@ -36,7 +38,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       fotoId: f.fotoId || f.id,
       categoria: cat,
       descricaoLegenda: f.descricaoLegenda || legInfo.descricao,
-      dataISO: itemDataReferenciaISO(f) || (f.createdAt ? String(f.createdAt).slice(0, 10) : 'sem-data'),
+      dataISO: itemDataReferenciaISO(f, fuso) || 'sem-data',
     };
   });
 
@@ -248,7 +250,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
 
     // Se o procedimento não estiver vinculado a nenhum item de plano e nem mapeado no procedimentoFeitoToPlanoItemMap
     if (pfId && (!pItemId || !itemToPlanoMap.has(pItemId)) && !procedimentoFeitoToPlanoItemMap.has(pfId)) {
-      const dataISO = proc.criadoEm ? String(proc.criadoEm).slice(0, 10) : 'sem-data';
+      const dataISO = diaDoInstante(proc.criadoEm, fuso) || 'sem-data';
       const chave = `pf_${pfId}`;
 
       atendimentosAvulsosMap.set(chave, {

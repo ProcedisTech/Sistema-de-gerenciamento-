@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import DOMPurify from 'dompurify';
 import { replaceTermVariables } from './replaceTermVariables';
+import { FUSO_PADRAO, formatarInstante, hojeDaClinica } from './datasClinica';
 
 export const generateTermoPdf = async ({
   titulo,
@@ -487,8 +488,8 @@ export const generateTermoPdf = async ({
 };
 
 /** Nome de arquivo seguro pra filesystem: remove caracteres reservados do Windows, troca espaço por `_`. */
-function buildFichaFileName(nomePaciente) {
-  const dataStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+function buildFichaFileName(nomePaciente, fuso) {
+  const dataStr = hojeDaClinica(fuso); // YYYY-MM-DD
   const nomeSafe = String(nomePaciente || 'paciente')
     .trim()
     .replace(/[\\/:*?"<>|]/g, '')
@@ -552,7 +553,9 @@ export const generateFichaPacientePdf = ({
   canSeeProntuario,
   perfilClinico,
   historico,
+  fuso = FUSO_PADRAO,
 }) => {
+  const agoraMs = Date.now();
   const doc = new jsPDF('p', 'mm', 'a4');
   const margin = 20;
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -616,7 +619,7 @@ export const generateFichaPacientePdf = ({
   doc.line(dividerX, margin - 2, dividerX, margin - 2 + logoSize);
   const headerTextX = dividerX + 4;
 
-  const emitidaEm = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const emitidaEm = formatarInstante(agoraMs, fuso, 'data');
   y = drawThinHeader(doc, {
     startX: headerTextX,
     margin,
@@ -853,8 +856,7 @@ export const generateFichaPacientePdf = ({
   doc.setTextColor(...INK);
 
   // ── Rodapé de página (nome clínica + data/hora + "Página X de Y") ──
-  const geradoEm = new Date().toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
+  const geradoEm = formatarInstante(agoraMs, fuso, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -874,6 +876,6 @@ export const generateFichaPacientePdf = ({
     doc.setTextColor(0, 0, 0);
   }
 
-  doc.save(fileName || buildFichaFileName(pac.nome));
+  doc.save(fileName || buildFichaFileName(pac.nome, fuso));
 };
 

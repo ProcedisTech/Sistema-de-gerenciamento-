@@ -21,8 +21,14 @@ vi.mock('../../contexts/useToast.js', () => ({
   useToast: vi.fn(),
 }));
 
+const recarregarContextoOrg = vi.fn();
+
 vi.mock('../../contexts/OrgContext.jsx', () => ({
-  useOrg: () => ({ orgId: 'd0000000-0000-0000-0000-0000000000aa' }),
+  useOrg: () => ({
+    orgId: 'd0000000-0000-0000-0000-0000000000aa',
+    fusoHorario: 'America/Sao_Paulo',
+    recarregarContextoOrg,
+  }),
 }));
 
 vi.mock('../../hooks/usePapel.js', () => ({
@@ -191,6 +197,13 @@ describe('DadosClinicaPanel — UF em lista', () => {
 
     const patch = await salvarEObterPatch();
     expect(patch.enderecoEstado).toBe('AC');
+  });
+
+  it('salvar a UF recarrega o /me da clínica (fuso novo sem F5)', async () => {
+    await renderComListaCarregada();
+    fireEvent.change(ufSelect(), { target: { value: 'AC' } });
+    await salvarEObterPatch();
+    await waitFor(() => expect(recarregarContextoOrg).toHaveBeenCalledTimes(1));
   });
 
   it('payload envia "" com "Sem UF"', async () => {

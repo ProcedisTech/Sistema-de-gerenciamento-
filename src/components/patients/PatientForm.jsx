@@ -13,6 +13,8 @@ import { normalizePatientName } from '../../utils/normalizePatientName';
 import { EnderecoFields } from '../common/EnderecoFields.jsx';
 import ProfissaoSelect from './ProfissaoSelect';
 import { EstadoCivilSelect } from './EstadoCivilSelect';
+import { formatarDataCalendario, parseDataCalendario } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 const FieldReq = () => <span className="text-red-500">*</span>;
 
@@ -200,14 +202,15 @@ export function PatientForm({
     Boolean(errors.estadoCivil) ||
     Boolean(errors.profissao);
 
+  const { hojeIso } = useAgoraDaClinica();
   const birthDigitsForUi = String(dataNascimentoDisplay ?? '').replace(/\D/g, '');
   const dataNascimentoFieldMessage = useMemo(() => {
     if (birthDigitsForUi.length === 8 && !dataNascimentoIso) {
-      const br = validateBirthDateDigits8(birthDigitsForUi);
-      if (!br.ok) return birthDateValidationUserMessage(br.reason);
+      const br = validateBirthDateDigits8(birthDigitsForUi, hojeIso);
+      if (!br.ok) return birthDateValidationUserMessage(br.reason, parseDataCalendario(hojeIso)?.ano);
     }
     return null;
-  }, [birthDigitsForUi, dataNascimentoIso]);
+  }, [birthDigitsForUi, dataNascimentoIso, hojeIso]);
 
   const defaultSubmitLabel = mode === 'create' ? 'Cadastrar Paciente' : (submitLabel ?? 'Salvar Alterações');
 
@@ -455,13 +458,12 @@ export function PatientForm({
                           <input
                             type="date"
                             value={dataNascimentoIso || ''}
-                            max={new Date().toISOString().slice(0, 10)}
+                            max={hojeIso || undefined}
                             disabled={readOnly}
                             onChange={(e) => {
                               const iso = e.target.value;
                               if (!iso) return;
-                              const [y, m, d] = iso.split('-');
-                              onDataNascimentoDisplayChange(`${d}/${m}/${y}`);
+                              onDataNascimentoDisplayChange(formatarDataCalendario(iso));
                               clearError?.('dataNascimento');
                             }}
                             className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
@@ -867,13 +869,12 @@ export function PatientForm({
                   <input
                     type="date"
                     value={dataNascimentoIso || ''}
-                    max={new Date().toISOString().slice(0, 10)}
+                    max={hojeIso || undefined}
                     disabled={readOnly}
                     onChange={(e) => {
                       const iso = e.target.value;
                       if (!iso) return;
-                      const [y, m, d] = iso.split('-');
-                      onDataNascimentoDisplayChange(`${d}/${m}/${y}`);
+                      onDataNascimentoDisplayChange(formatarDataCalendario(iso));
                       clearError?.('dataNascimento');
                     }}
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"

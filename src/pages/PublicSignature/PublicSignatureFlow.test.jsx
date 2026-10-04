@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
@@ -94,5 +94,81 @@ describe('PublicSignatureFlow — recusa', () => {
     expect(confirmar).toBeDisabled();
     await userEvent.type(input, '56');
     expect(confirmar).not.toBeDisabled();
+  });
+});
+
+describe('PublicSignatureFlow — data/hora da assinatura no fuso da clínica', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 21:30 em Brasília = 00:30 UTC do dia seguinte = 19:30 em Rio Branco.
+    vi.setSystemTime(new Date('2026-10-01T00:30:00Z'));
+    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('location', { pathname: '/assinar/sessao-fuso-1' });
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      }
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillRect: vi.fn(),
+      setTransform: vi.fn(),
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,AAAA');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function assinarComFuso(fusoHorario) {
+    fetch.mockImplementation((url, opts) => {
+      if (String(url).includes('/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              status: 'PENDENTE',
+              precisaOtp: false,
+              otpValidado: true,
+              titulo: 'Termo',
+              conteudoSnapshot: '<p>Conteúdo</p>',
+              ...(fusoHorario ? { fusoHorario } : {}),
+            }),
+        });
+      }
+      if (String(url).includes('/assinar') && opts?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
+    });
+
+    const { container } = render(<PublicSignatureFlow />);
+    await userEvent.click(await screen.findByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Avançar para Identificação' }));
+    await userEvent.click(screen.getByRole('button', { name: /Tirar Foto/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Avançar' }));
+    const canvas = container.querySelector('canvas');
+    fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10 });
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar Assinatura' }));
+    return screen.findByText(/Data\/Hora:/);
+  }
+
+  it('usa status.fusoHorario (Rio Branco)', async () => {
+    const el = await assinarComFuso('America/Rio_Branco');
+    expect(el.textContent).toContain('30/09/2026, 19:30:00');
+  });
+
+  it('sem fusoHorario cai no FUSO_PADRAO (Brasília)', async () => {
+    const el = await assinarComFuso(null);
+    expect(el.textContent).toContain('30/09/2026, 21:30:00');
   });
 });

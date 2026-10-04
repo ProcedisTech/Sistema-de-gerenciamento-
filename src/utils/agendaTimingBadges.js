@@ -1,4 +1,6 @@
 import { parseSlotLocalDateTime } from './agendaStartTolerance.js';
+import { getGuaranteedNow } from './serverTime.js';
+import { formatarInstante, instanteMs } from './datasClinica.js';
 
 /**
  * Formata duração em minutos para o formato amigável:
@@ -17,19 +19,7 @@ export function formatDurationText(totalMinutes) {
   return `${h}h${m}min`;
 }
 
-function pad2(n) {
-  return String(n).padStart(2, '0');
-}
-
-function formatDateToHhmm(date) {
-  if (!date || Number.isNaN(date.getTime())) return '';
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-}
-
-function formatDateToDdMm(date) {
-  if (!date || Number.isNaN(date.getTime())) return '';
-  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}`;
-}
+const EXECUCAO_VAZIA = { hasExecution: false, dataReal: '', horaInicioReal: '', horaFimReal: '', duracaoRealMin: 0, duracaoText: '', rangeText: '', badge: null };
 
 /**
  * Calcula o badge de pontualidade (Atraso / Adiantamento / No horário)
@@ -38,10 +28,11 @@ function formatDateToDdMm(date) {
  * Tolerância: ±5 minutos = No horário.
  * 
  * @param {object} appointment Objeto do agendamento
+ * @param {string} fuso IANA da clínica (converte o horário previsto)
  * @param {string} [attendanceStartTimeIso] Iso string da hora em que iniciou o atendimento
  * @returns {{ type: 'adiantado' | 'atrasado' | 'pontual', label: string, badgeClass: string } | null}
  */
-export function getTimingBadge(appointment, attendanceStartTimeIso = null) {
+export function getTimingBadge(appointment, fuso, attendanceStartTimeIso = null) {
   if (!appointment) return null;
 
   const dataIso = appointment.dataAgendamento || appointment.data;
@@ -49,7 +40,7 @@ export function getTimingBadge(appointment, attendanceStartTimeIso = null) {
 
   if (!dataIso || !horaAgendada) return null;
 
-  const scheduledDate = parseSlotLocalDateTime(dataIso, horaAgendada);
+  const scheduledDate = parseSlotLocalDateTime(dataIso, horaAgendada, fuso);
   if (!scheduledDate) return null;
 
   // Prioridade da hora real:
@@ -64,13 +55,13 @@ export function getTimingBadge(appointment, attendanceStartTimeIso = null) {
 
   if (!actualIso) return null;
 
-  const actualDate = new Date(actualIso);
-  if (Number.isNaN(actualDate.getTime())) return null;
+  const actualMs = instanteMs(actualIso);
+  if (Number.isNaN(actualMs)) return null;
 
   // Diff em minutos: (agendado - real)
   // Positivo => Real ocorreu ANTES do agendado (Adiantado)
   // Negativo => Real ocorreu DEPOIS do agendado (Atrasado)
-  const diffMinutes = Math.round((scheduledDate.getTime() - actualDate.getTime()) / 60000);
+  const diffMinutes = Math.round((scheduledDate.getTime() - actualMs) / 60000);
 
   // Tolerância de ±5 minutos
   if (Math.abs(diffMinutes) <= 5) {
@@ -104,15 +95,14 @@ export function getTimingBadge(appointment, attendanceStartTimeIso = null) {
  * inclui data real, faixa de horário real e duração real.
  * 
  * @param {object} appointment
+ * @param {string} fuso IANA da clínica (horário previsto e exibição dos horários reais)
  * @param {string} [attendanceStartTimeIso]
  * @returns {{ hasExecution: boolean, dataReal: string, horaInicioReal: string, horaFimReal: string, duracaoRealMin: number, duracaoText: string, rangeText: string, badge: object | null }}
  */
-export function getExecutionSummary(appointment, attendanceStartTimeIso = null) {
-  if (!appointment) {
-    return { hasExecution: false, dataReal: '', horaInicioReal: '', horaFimReal: '', duracaoRealMin: 0, duracaoText: '', rangeText: '', badge: null };
-  }
+export function getExecutionSummary(appointment, fuso, attendanceStartTimeIso = null) {
+  if (!appointment) return { ...EXECUCAO_VAZIA };
 
-  const badge = getTimingBadge(appointment, attendanceStartTimeIso);
+  const badge = getTimingBadge(appointment, fuso, attendanceStartTimeIso);
 
   const startIso =
     attendanceStartTimeIso ||
@@ -120,30 +110,26 @@ export function getExecutionSummary(appointment, attendanceStartTimeIso = null) 
     appointment.horaInicioReal ||
     (appointment.status === 'realizado' ? appointment.criadoEm : null);
 
-  if (!startIso) {
-    return { hasExecution: false, dataReal: '', horaInicioReal: '', horaFimReal: '', duracaoRealMin: 0, duracaoText: '', rangeText: '', badge: null };
-  }
+  if (!startIso) return { ...EXECUCAO_VAZIA };
 
-  const startDate = new Date(startIso);
-  if (Number.isNaN(startDate.getTime())) {
-    return { hasExecution: false, dataReal: '', horaInicioReal: '', horaFimReal: '', duracaoRealMin: 0, duracaoText: '', rangeText: '', badge: null };
-  }
+  const startMs = instanteMs(startIso);
+  if (Number.isNaN(startMs)) return { ...EXECUCAO_VAZIA };
 
-  const dataReal = formatDateToDdMm(startDate);
-  const hiReal = appointment.horaInicioRealStr || formatDateToHhmm(startDate);
+  const dataReal = formatarInstante(startMs, fuso, 'diaMes');
+  const hiReal = appointment.horaInicioRealStr || formatarInstante(startMs, fuso, 'hora');
 
-  let endDate;
+  let endMs;
   if (appointment.horaFimReal) {
-    endDate = new Date(appointment.horaFimReal);
+    endMs = instanteMs(appointment.horaFimReal);
   } else if (appointment.status === 'realizado' && appointment.atualizadoEm) {
-    endDate = new Date(appointment.atualizadoEm);
+    endMs = instanteMs(appointment.atualizadoEm);
   } else {
-    endDate = new Date();
+    endMs = getGuaranteedNow().getTime();
   }
 
-  const hfReal = appointment.horaFimRealStr || formatDateToHhmm(endDate);
+  const hfReal = appointment.horaFimRealStr || (Number.isNaN(endMs) ? '' : formatarInstante(endMs, fuso, 'hora'));
 
-  const diffMs = endDate.getTime() - startDate.getTime();
+  const diffMs = Number.isNaN(endMs) ? 0 : endMs - startMs;
   const rawMin = Math.round(diffMs / 60000);
   const duracaoRealMin = Math.max(1, rawMin >= 0 ? rawMin : 1);
   const duracaoText = `${duracaoRealMin} min`;

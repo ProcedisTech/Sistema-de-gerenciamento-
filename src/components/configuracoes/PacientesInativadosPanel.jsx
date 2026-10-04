@@ -5,6 +5,8 @@ import { maskCPF } from '../utils/formatters';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel';
 import { ConfigTableRowsSkeleton } from '../shared/ConfigPanelSkeletons';
+import { formatarInstante } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
 function mapInativoRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -26,13 +28,9 @@ function maskCpfDigits(digits) {
   return maskCPF(d);
 }
 
-function formatDataPt(isoOrRaw) {
+function formatDataPt(isoOrRaw, fuso) {
   if (!isoOrRaw) return '—';
-  const t = new Date(isoOrRaw);
-  if (!Number.isNaN(t.getTime())) {
-    return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  }
-  return String(isoOrRaw);
+  return formatarInstante(isoOrRaw, fuso, 'data') || String(isoOrRaw);
 }
 
 /**
@@ -40,6 +38,7 @@ function formatDataPt(isoOrRaw) {
  */
 export function PacientesInativadosPanel({ onPacientesCatalogRefresh }) {
   const toast = useToast();
+  const { fuso } = useFusoClinica();
   const { canReativarPacientes } = usePapel();
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -159,7 +158,7 @@ export function PacientesInativadosPanel({ onPacientesCatalogRefresh }) {
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-[13px] text-[#475569]">
                       {maskCpfDigits(r.cpfDigits)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-[#475569]">{formatDataPt(r.dataInativacao)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[#475569]">{formatDataPt(r.dataInativacao, fuso)}</td>
                     <td className="max-w-[220px] truncate px-4 py-3 text-[#64748b]" title={r.motivo || undefined}>
                       {r.motivo || '—'}
                     </td>

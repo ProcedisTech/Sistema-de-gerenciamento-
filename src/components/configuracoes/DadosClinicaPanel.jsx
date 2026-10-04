@@ -12,6 +12,7 @@ import { formatCnpjInput, isValidCnpj } from '../../utils/cnpj.js';
 import { maskCep, onlyDigitsCep } from '../../utils/cepUtils.js';
 import { useCepLookup } from '../hooks/useCepLookup.js';
 import { useUfs } from '../hooks/useUfs.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { textoFusoUf } from '../../utils/fusoUf.js';
 import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
 
@@ -99,6 +100,7 @@ function mapRowToForm(row) {
 export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
   const toast = useToast();
   const { orgId } = useOrg();
+  const { recarregarFuso } = useFusoClinica();
   const { isAdmin } = usePapel();
   const fileInputRef = useRef(null);
   const formId = useId();
@@ -327,6 +329,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
     setSaving(true);
     try {
       await organizacaoApi.atualizar(orgId, patchDto);
+      recarregarFuso();
       toast.success('Dados da clínica salvos com sucesso.');
       await loadOrganizacao({ silent: true });
       const nomeShell = nf || rs;

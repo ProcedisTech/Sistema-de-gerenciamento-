@@ -13,11 +13,14 @@ import { InviteModal } from './InviteModal';
 import { EditRoleModal } from './EditRoleModal';
 import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
 import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
+import { diaDoInstante, parseDataCalendario, proximoAniversario } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvalidate }) {
   // eslint-disable-next-line no-unused-vars
   const { isAdmin, canSeeConfigEquipe } = usePapel();
   const { roleUserId: currentRoleUserId } = useOrg();
+  const { fuso, hojeIso } = useAgoraDaClinica(60000);
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
@@ -135,12 +138,9 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
   const [tempoCasaHoje, setTempoCasaHoje] = useState([]);
 
   useEffect(() => {
-    if (!usuarios || usuarios.length === 0) return;
+    if (!usuarios || usuarios.length === 0 || !hojeIso) return;
 
-    const hoje = new Date();
-    const currentMonth = hoje.getMonth() + 1;
-    const currentDay = hoje.getDate();
-    const currentYear = hoje.getFullYear();
+    const hoje = parseDataCalendario(hojeIso);
 
     const hojeList = [];
     const tempoList = [];
@@ -148,52 +148,31 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
     let minDaysDiff = Infinity;
 
     usuarios.forEach(u => {
-      // 1. Tempo de Casa
-      if (u.criadoEm) {
-        const d = new Date(u.criadoEm);
-        const startMonth = d.getMonth() + 1;
-        const startDay = d.getDate();
-        const startYear = d.getFullYear();
-        if (startMonth === currentMonth && startDay === currentDay && startYear < currentYear) {
-          const anos = currentYear - startYear;
-          tempoList.push({ usuario: u, anos });
-        }
+      // 1. Tempo de Casa (criadoEm é instante: o dia é o da clínica)
+      const inicio = u.criadoEm ? parseDataCalendario(diaDoInstante(u.criadoEm, fuso)) : null;
+      if (inicio && inicio.mes === hoje.mes && inicio.dia === hoje.dia && inicio.ano < hoje.ano) {
+        tempoList.push({ usuario: u, anos: hoje.ano - inicio.ano });
       }
 
       // 2. Aniversários
-      if (!u.dataNascimento) return;
-      const parts = u.dataNascimento.split('-');
-      if (parts.length === 3) {
-        const month = parseInt(parts[1], 10);
-        const day = parseInt(parts[2], 10);
-
-        if (month === currentMonth && day === currentDay) {
-          hojeList.push(u);
-        } else {
-          let nextBDay = new Date(hoje.getFullYear(), month - 1, day);
-          // Se o aniversário já passou este ano, calcula pro ano que vem
-          if (nextBDay < new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) {
-            nextBDay = new Date(hoje.getFullYear() + 1, month - 1, day);
-          }
-          const diffTime = nextBDay - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
-          if (diffDays < minDaysDiff) {
-            minDaysDiff = diffDays;
-            prox = { 
-              usuario: u, 
-              dias: diffDays, 
-              dataStr: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`
-            };
-          }
-        }
+      const aniv = u.dataNascimento ? proximoAniversario(u.dataNascimento, hojeIso) : null;
+      if (!aniv) return;
+      if (aniv.ehHoje) {
+        hojeList.push(u);
+      } else if (aniv.dias < minDaysDiff) {
+        minDaysDiff = aniv.dias;
+        prox = {
+          usuario: u,
+          dias: aniv.dias,
+          dataStr: `${String(aniv.dia).padStart(2, '0')}/${String(aniv.mes).padStart(2, '0')}`
+        };
       }
     });
 
     setAniversariantesHoje(hojeList);
     setProximoAniversariante(prox);
     setTempoCasaHoje(tempoList);
-  }, [usuarios]);
+  }, [usuarios, hojeIso, fuso]);
 
   // Mini Dashboard Stats
   const stats = React.useMemo(() => {

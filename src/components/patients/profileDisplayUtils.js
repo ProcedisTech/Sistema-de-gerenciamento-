@@ -1,34 +1,38 @@
 /** Utilitários de apresentação do perfil (sem lógica de API). */
+import { diaDoInstante, diferencaDias, formatarDataCalendario, formatarInstante } from '../../utils/datasClinica.js';
 
-export function formatDiasAtrasPtBr(iso) {
-  if (!iso) return null;
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return null;
-  const now = new Date();
-  const diffMs = now.getTime() - t.getTime();
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+/**
+ * "hoje" / "há N dias" entre o dia do instante e hoje, ambos no calendário da clínica.
+ * @param {string} iso instante (ISO com "Z"/offset)
+ * @param {string} fuso IANA da clínica
+ * @param {string} hojeIso hoje no calendário da clínica
+ */
+export function formatDiasAtrasPtBr(iso, fuso, hojeIso) {
+  if (!iso || !hojeIso) return null;
+  const dia = diaDoInstante(iso, fuso);
+  if (!dia) return null;
+  const days = diferencaDias(dia, hojeIso);
+  if (Number.isNaN(days)) return null;
   if (days <= 0) return 'hoje';
   if (days === 1) return 'há 1 dia';
   return `há ${days} dias`;
 }
 
-export function formatCreatedAtPtBr(iso) {
+/**
+ * Data de cadastro (instante) no fuso da clínica.
+ * @param {string} iso instante (ISO com "Z"/offset)
+ * @param {string} fuso IANA da clínica
+ */
+export function formatCreatedAtPtBr(iso, fuso) {
   if (!iso) return '—';
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return '—';
-  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return formatarInstante(iso, fuso, 'data') || '—';
 }
 
+/** Data de nascimento (calendário, sem fuso). */
 export function formatBirthDatePtBr(dataNascimento) {
   if (!dataNascimento) return '—';
   const s = String(dataNascimento).trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const t = new Date(s);
-    if (!Number.isNaN(t.getTime())) {
-      return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    }
-  }
-  return s || '—';
+  return formatarDataCalendario(s) || s || '—';
 }
 
 export function formatCityUf(patient) {

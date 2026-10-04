@@ -12,10 +12,12 @@ import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
 import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especialidadesList, onClose, onSuccess, fetchHeaders, readOnly: initialReadOnly = false, onEditarPerfilNaAba }) {
   const { roleUserId: currentRoleUserId, papel,
     setPermissoes: setPermissoesSessao, setApareceNaAgenda } = useOrg();
+  const { hojeIso } = useAgoraDaClinica(60000);
   const toast = useToast();
   const [isReadOnly, setIsReadOnly] = useState(initialReadOnly);
 
@@ -306,7 +308,7 @@ export function EditRoleModal({ usuario, roles, perfisAcesso, permissoes, especi
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Data de Nascimento</label>
                   <input
                     type="date"
-                    max={new Date().toISOString().split("T")[0]}
+                    max={hojeIso ?? undefined}
                     min="1900-01-01"
                     disabled={isReadOnly}
                     value={dataNascimento}
