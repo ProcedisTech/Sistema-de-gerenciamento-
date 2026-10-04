@@ -22,6 +22,7 @@ describe('restauração do contexto da clínica', () => {
       result.current.setRoleNome('DONO');
       result.current.setPermissoes(['PACIENTE_VER']);
       result.current.setApareceNaAgenda(true);
+      result.current.setFusoHorario('America/Rio_Branco');
       result.current.setContextStatus('ready');
     });
   }
@@ -36,7 +37,8 @@ describe('restauração do contexto da clínica', () => {
     loadPermissions(result);
     act(() => result.current.setOrgId(ORG, 'clinica-top'));
     expect(result.current).toMatchObject({ contextStatus: 'ready', papel: 'DONO', roleNome: 'DONO',
-      roleUserId: 'vinculo', permissoes: ['PACIENTE_VER'], apareceNaAgenda: true, orgSlug: 'clinica-top' });
+      roleUserId: 'vinculo', permissoes: ['PACIENTE_VER'], apareceNaAgenda: true, orgSlug: 'clinica-top',
+      fusoHorario: 'America/Rio_Branco' });
     expect(fetchContext).toHaveBeenCalledTimes(1);
   });
 
@@ -47,6 +49,7 @@ describe('restauração do contexto da clínica', () => {
     loadPermissions(result);
     expect(result.current.contextStatus).toBe('ready');
     expect(result.current.permissoes).toEqual(['PACIENTE_VER']);
+    expect(result.current.fusoHorario).toBe('America/Rio_Branco');
   });
 
   it('limpa permissões ao trocar realmente de clínica', () => {
@@ -54,7 +57,7 @@ describe('restauração do contexto da clínica', () => {
     loadPermissions(result);
     act(() => result.current.setOrgId(OTHER));
     expect(result.current).toMatchObject({ orgId: OTHER, contextStatus: 'loading', papel: null,
-      roleUserId: '', roleNome: '', permissoes: [], apareceNaAgenda: null });
+      roleUserId: '', roleNome: '', permissoes: [], apareceNaAgenda: null, fusoHorario: null });
   });
 
   it('recarrega a mesma clínica após logout, sem preservar autorização anterior', () => {
@@ -62,6 +65,6 @@ describe('restauração do contexto da clínica', () => {
     loadPermissions(result);
     act(() => result.current.clearOrgSession());
     act(() => result.current.setOrgId(ORG));
-    expect(result.current).toMatchObject({ orgId: ORG, contextStatus: 'loading', papel: null, permissoes: [] });
+    expect(result.current).toMatchObject({ orgId: ORG, contextStatus: 'loading', papel: null, permissoes: [], fusoHorario: null });
   });
 });

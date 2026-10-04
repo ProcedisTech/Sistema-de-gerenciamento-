@@ -20,14 +20,12 @@ import {
 } from './alertaSeveridadeStyle.js';
 import { buildGroupedChips } from './alertaGrouping.js';
 import { EMPTY_RESUMO, normalizeResumo } from '../../hooks/useAlertasClinicos.js';
+import { formatarInstante } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
-function formatDiaMes(iso) {
+function formatDiaMes(iso, fuso) {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}`;
+  return formatarInstante(iso, fuso, 'diaMes') || null;
 }
 
 function itemNome(item) {
@@ -244,6 +242,7 @@ function RodapeDetalhe({ familiar, historico }) {
 function FaixaHub({ resumo, isLoading, onSolicitarAnamnese }) {
   const [openIndex, setOpenIndex] = useState(-1);
   const [allOpen, setAllOpen] = useState(false);
+  const { fuso } = useFusoClinica();
   const r = useMemo(() => normalizeResumo(resumo), [resumo]);
 
   const naturezas = useMemo(
@@ -319,7 +318,7 @@ function FaixaHub({ resumo, isLoading, onSolicitarAnamnese }) {
   const criticosCount = countAltaGravidade(r.alergiasPrincipioAtivo);
   const estado = criticosCount > 0 ? 'crit' : r.temVigente ? 'ok' : 'nada';
   const detalheAberto = allOpen || openIndex >= 0;
-  const dataCurta = formatDiaMes(r.vigenteEm);
+  const dataCurta = formatDiaMes(r.vigenteEm, fuso);
   const statusQuando = r.vigenteAssinada ? 'assinada' : 'finalizada';
 
   if (isLoading) {

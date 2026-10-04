@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, X, Loader2 } from 'lucide-react';
 import { pacientesApi } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
+import { hojeDaClinica } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 export function MarcarCompromissoModal({
   isOpen,
@@ -24,6 +26,7 @@ export function MarcarCompromissoModal({
   lockedPatientLabel = '',
 }) {
   const [remotePatients, setRemotePatients] = useState([]);
+  const { fuso } = useFusoClinica();
 
   useEffect(() => {
     if (!isOpen) {
@@ -43,7 +46,8 @@ export function MarcarCompromissoModal({
         .then((pageData) => {
           if (cancelled) return;
           const rows = pageData?.content ?? [];
-          const mapped = Array.isArray(rows) ? rows.map(mapBackendPatient).filter(Boolean) : [];
+          const opts = { fuso, hojeIso: hojeDaClinica(fuso) };
+          const mapped = Array.isArray(rows) ? rows.map((r) => mapBackendPatient(r, opts)).filter(Boolean) : [];
           setRemotePatients(mapped);
         })
         .catch(() => {
@@ -54,7 +58,7 @@ export function MarcarCompromissoModal({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [isOpen, patientPickerLocked, patientSearch]);
+  }, [isOpen, patientPickerLocked, patientSearch, fuso]);
 
   const displayedPatients = useMemo(() => {
     if (!isOpen) return [];

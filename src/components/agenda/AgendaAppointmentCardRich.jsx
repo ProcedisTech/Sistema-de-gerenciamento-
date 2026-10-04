@@ -9,6 +9,7 @@ import {
 import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBadges.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
@@ -42,6 +43,7 @@ export function AgendaAppointmentCardRich({
   submittingRemoverBloqueioId,
 }) {
   const { canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { fuso } = useFusoClinica();
   const isBloqueio = appointment?.tipo === 'bloqueio' && appointment.status !== 'cancelado';
 
   if (isBloqueio) {
@@ -116,8 +118,8 @@ export function AgendaAppointmentCardRich({
   const stripe = getRailStripeClass(appointment);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
   const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar);
-  const execSummary = getExecutionSummary(appointment);
-  const timingBadge = execSummary?.badge || getTimingBadge(appointment);
+  const execSummary = getExecutionSummary(appointment, fuso);
+  const timingBadge = execSummary?.badge || getTimingBadge(appointment, fuso);
 
   return (
     <article

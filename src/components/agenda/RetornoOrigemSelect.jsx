@@ -8,16 +8,17 @@ import {
 } from './retornoOrigemUtils.js';
 import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
 import { SearchDropdownShell } from './SearchDropdownShell.jsx';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14B8A6] focus-visible:ring-offset-1';
 
-function OrigemOptionButton({ r, isSelected, onSelect, active }) {
+function OrigemOptionButton({ r, isSelected, onSelect, active, fuso }) {
   const isPlano = r.tipoOrigem === 'plano';
   const nome = nomeProcedimentoRaiz(r);
   const dataFmt = isPlano && !r.jaRealizado
     ? (r.data ? formatDataPt(r.data) : 'Data a definir')
-    : formatProcedimentoRaizData(r.data);
+    : formatProcedimentoRaizData(r.data, fuso);
   const cor = gerarCorAvatar(nome);
 
   const subtext = isPlano
@@ -125,6 +126,7 @@ export function RetornoOrigemSelect({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef(null);
+  const { fuso } = useFusoClinica();
   const listId = `${id}-list`;
 
   // Determina lista de plano e lista de histórico
@@ -149,13 +151,13 @@ export function RetornoOrigemSelect({
   }, [options, optionsPlano, optionsHistorico]);
 
   const filteredPlano = useMemo(
-    () => filtrarProcedimentosRaiz(listaPlano, query),
-    [listaPlano, query],
+    () => filtrarProcedimentosRaiz(listaPlano, query, fuso),
+    [listaPlano, query, fuso],
   );
 
   const filteredHistorico = useMemo(
-    () => filtrarProcedimentosRaiz(listaHistorico, query),
-    [listaHistorico, query],
+    () => filtrarProcedimentosRaiz(listaHistorico, query, fuso),
+    [listaHistorico, query, fuso],
   );
 
   const todosFiltrados = useMemo(
@@ -233,6 +235,7 @@ export function RetornoOrigemSelect({
                 <OrigemOptionButton
                   key={`plano-${r.id}`}
                   r={r}
+                  fuso={fuso}
                   isSelected={String(value) === String(r.id)}
                   onSelect={selectItem}
                   active={flutuante && open && idx === highlight}
@@ -256,6 +259,7 @@ export function RetornoOrigemSelect({
                   <OrigemOptionButton
                     key={`hist-${r.id}`}
                     r={r}
+                    fuso={fuso}
                     isSelected={String(value) === String(r.id)}
                     onSelect={selectItem}
                     active={flutuante && open && globalIdx === highlight}

@@ -10,7 +10,7 @@ function formatHmDisplay(hm) {
 
 export function AgendaNextUpCard({
   appointment,
-  now,
+  nowMinutes,
   showProfissional,
   isNivel1,
   compact = false,
@@ -24,7 +24,7 @@ export function AgendaNextUpCard({
   const { canStartAnamnese, canDeleteAgenda } = usePapel();
   if (!appointment) return null;
 
-  const countdown = formatCountdown(appointment.horaInicio, now);
+  const countdown = formatCountdown(appointment.horaInicio, nowMinutes);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
   const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar);
 

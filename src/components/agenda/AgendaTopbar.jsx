@@ -1,7 +1,9 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
 import { AGENDA_SELECTED_SURFACE } from './agendaSelectionStyles.js';
-import { useNowClock } from './hooks/useNowClock.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
+
+const RELOGIO_TICK_MS = 15_000;
 
 const VIEW_OPTIONS = [
   { mode: 'grid', label: 'Mês' },
@@ -44,7 +46,8 @@ function ViewToggle({ viewMode, onChangeViewMode, onSyncWeekFromSelection }) {
 }
 
 function NowPill() {
-  const clockLabel = useNowClock();
+  const { hhmm } = useAgoraDaClinica(RELOGIO_TICK_MS);
+  const clockLabel = hhmm ?? '--:--';
 
   return (
     <div

@@ -1,6 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useFusoClinica } from './useFusoClinica';
+import { diaDoInstante, hojeDaClinica } from '../../utils/datasClinica';
 
 export const useJourneyState = () => {
+  const { fuso, pronto: fusoPronto } = useFusoClinica();
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
@@ -110,24 +113,27 @@ export const useJourneyState = () => {
     }
     if (patientCpf) {
       try {
-        const payload = JSON.stringify({ time: timeIso, date: timeIso.slice(0, 10) });
+        const date = fusoPronto ? diaDoInstante(timeIso, fuso) : '';
+        const payload = JSON.stringify({ time: timeIso, date });
         sessionStorage.setItem(`procedis_start_time_${patientCpf}`, payload);
       } catch {
         // ignore
       }
     }
-  }, []);
+  }, [fuso, fusoPronto]);
 
   /** Recupera o horário de início do state ou do sessionStorage se for do mesmo dia. */
   const getAttendanceStartTime = useCallback((patientCpf) => {
     if (attendanceStartTimeState) return attendanceStartTimeState;
     if (!patientCpf) return null;
+    // Sem o fuso da clínica não dá para decidir "mesmo dia": adia sem descartar nem restaurar.
+    if (!fusoPronto) return null;
     try {
       const raw = sessionStorage.getItem(`procedis_start_time_${patientCpf}`);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      const todayIso = new Date().toISOString().slice(0, 10);
-      if (parsed?.date === todayIso && parsed?.time) {
+      const diaInicio = parsed?.time ? diaDoInstante(parsed.time, fuso) : '';
+      if (diaInicio && diaInicio === hojeDaClinica(fuso)) {
         return parsed.time;
       }
       sessionStorage.removeItem(`procedis_start_time_${patientCpf}`);
@@ -135,7 +141,7 @@ export const useJourneyState = () => {
       // ignore
     }
     return null;
-  }, [attendanceStartTimeState]);
+  }, [attendanceStartTimeState, fuso, fusoPronto]);
 
   const [retornoAvaliacao, setRetornoAvaliacao] = useState({
     satisfacao: null,

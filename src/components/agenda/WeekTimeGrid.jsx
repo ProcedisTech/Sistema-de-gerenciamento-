@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { toDateKey } from '../../utils/agendaDateUtils';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { isSlotOccupied } from '../../utils/agendaAvailability';
 import { dentroDaDisponibilidade } from '../../utils/disponibilidadeIntersect';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
@@ -52,6 +53,18 @@ function computeGridRange(appointments = [], weekDayIsos = [], clinicaHorarios) 
     }
   }
   return { startMin: Math.max(0, min), endMin: Math.min(24 * 60 - 30, max) };
+}
+
+/**
+ * Linha de "agora" na grade (minuto do dia no relógio da clínica).
+ * @returns {{ show: boolean, top: number }}
+ */
+function computeNowLine(nowMinutes, startMin, endMin) {
+  if (!Number.isFinite(nowMinutes)) return { show: false, top: 0 };
+  return {
+    show: nowMinutes >= startMin && nowMinutes <= endMin + SLOT_MIN,
+    top: ((nowMinutes - startMin) / SLOT_MIN) * SLOT_HEIGHT,
+  };
 }
 
 function formatSlotLabel(totalMin) {
@@ -233,6 +246,7 @@ function DayColumn({
   iso,
   appointments,
   todayIso,
+  nowMinutes,
   onOpenSlotDetail,
   onClickEmptySlot,
   disponibilidades,
@@ -246,12 +260,9 @@ function DayColumn({
   const layouts = React.useMemo(() => layoutDayColumn(appointments, startMin, endMin), [appointments, startMin, endMin]);
   const slots = React.useMemo(() => buildTimeSlots(startMin, endMin), [startMin, endMin]);
   const gridHeight = slots.length * SLOT_HEIGHT;
-  const now = new Date();
-  const showNow =
-    iso === todayIso &&
-    now.getHours() * 60 + now.getMinutes() >= startMin &&
-    now.getHours() * 60 + now.getMinutes() <= endMin + SLOT_MIN;
-  const nowTop = ((now.getHours() * 60 + now.getMinutes() - startMin) / SLOT_MIN) * SLOT_HEIGHT;
+  const nowLine = computeNowLine(nowMinutes, startMin, endMin);
+  const showNow = iso === todayIso && nowLine.show;
+  const nowTop = nowLine.top;
 
   return (
     <div className="relative min-w-0 overflow-hidden border-l border-[#E8E8E8]" style={{ minHeight: gridHeight }}>
@@ -468,6 +479,11 @@ export function WeekTimeGrid({
   submittingRemoverBloqueioId,
 }) {
   const scrollRef = React.useRef(null);
+  const { minutos: nowMinutes } = useAgoraDaClinica(60_000);
+  const nowMinutesRef = React.useRef(nowMinutes);
+  React.useLayoutEffect(() => {
+    nowMinutesRef.current = nowMinutes;
+  }, [nowMinutes]);
   const { startMin, endMin } = React.useMemo(
     () => computeGridRange(appointments, weekDayIsos, clinicaHorarios),
     [appointments, weekDayIsos, clinicaHorarios]
@@ -495,9 +511,8 @@ export function WeekTimeGrid({
   React.useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const now = new Date();
-    const hm = now.getHours() * 60 + now.getMinutes();
-    const anchorMin = hm >= startMin && hm <= endMin + SLOT_MIN ? hm : Math.max(startMin, 8 * 60);
+    const hm = nowMinutesRef.current;
+    const anchorMin = computeNowLine(hm, startMin, endMin).show ? hm : Math.max(startMin, 8 * 60);
     const targetRow = Math.floor((anchorMin - startMin) / SLOT_MIN);
     const y = Math.max(0, targetRow * SLOT_HEIGHT - 80);
     el.scrollTo({ top: y, behavior: 'smooth' });
@@ -506,11 +521,9 @@ export function WeekTimeGrid({
   const mobileDays = React.useMemo(() => getMobileDayIsos(weekDayIsos, todayIso), [weekDayIsos, todayIso]);
 
   const innerGrid = (days) => {
-    const now = new Date();
-    const hm = now.getHours() * 60 + now.getMinutes();
-    const showNowRuler =
-      days.includes(todayIso) && hm >= startMin && hm <= endMin + SLOT_MIN;
-    const nowTopRuler = ((hm - startMin) / SLOT_MIN) * SLOT_HEIGHT;
+    const nowLine = computeNowLine(nowMinutes, startMin, endMin);
+    const showNowRuler = days.includes(todayIso) && nowLine.show;
+    const nowTopRuler = nowLine.top;
 
     return (
     <div className="flex min-h-0 min-w-0 flex-1">
@@ -549,6 +562,7 @@ export function WeekTimeGrid({
             iso={iso}
             appointments={byDay[iso] || []}
             todayIso={todayIso}
+            nowMinutes={nowMinutes}
             onOpenSlotDetail={onOpenSlotDetail}
             onClickEmptySlot={onClickEmptySlot}
             disponibilidades={disponibilidades}

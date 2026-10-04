@@ -16,6 +16,8 @@ import { GaleriaArquivoImage } from '../patients/GaleriaArquivoImage.jsx';
 import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 import { GALERIA_CATEGORIA_LABELS, formatDataSessaoPtBr } from '../../utils/pacienteGaleria.js';
 import { PlanoFotoLightbox } from './PlanoFotoLightbox.jsx';
+import { diaDoInstante } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 const PAGE_SIZE = 15;
 
@@ -24,6 +26,7 @@ function AtendimentoAvulsoItemCard({
   pacienteId,
   onOpenLightbox,
 }) {
+  const { fuso } = useFusoClinica();
   const [expandido, setExpandido] = useState(false);
 
   const fotos = Array.isArray(atendimento.fotos) ? atendimento.fotos : [];
@@ -224,7 +227,7 @@ function AtendimentoAvulsoItemCard({
                   </div>
                   {ret.criadoEm && (
                     <span className="text-[10px] text-slate-500 font-mono">
-                      {formatDataSessaoPtBr(String(ret.criadoEm).slice(0, 10))}
+                      {formatDataSessaoPtBr(diaDoInstante(ret.criadoEm, fuso))}
                     </span>
                   )}
                 </div>

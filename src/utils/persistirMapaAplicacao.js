@@ -1,6 +1,6 @@
 import { pacientesGaleriaApi, mapasApi } from '../services/api.js';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGaleria.js';
-import { toLocalISODate } from './dateLimits.js';
+import { hojeDaClinica } from './datasClinica.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
 
@@ -39,6 +39,7 @@ async function uploadModeloFoto({
   vistaCodigo,
   procedimentoFeitoId,
   catalogoProcedimentoSaudeId,
+  fuso,
 }) {
   const file =
     blob instanceof File
@@ -46,7 +47,7 @@ async function uploadModeloFoto({
       : new File([blob], `modelo_${vistaCodigo}_${Date.now()}.jpg`, {
         type: blob?.type || 'image/jpeg',
       });
-  const dataRef = toLocalISODate(new Date());
+  const dataRef = hojeDaClinica(fuso);
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(
@@ -82,6 +83,7 @@ export async function persistirMapaAplicacao({
   procedimentoFeitoId,
   catalogoProcedimentoSaudeId,
   snapshot,
+  fuso,
 }) {
   const erros = [];
   if (!procedimentoFeitoId) {
@@ -119,6 +121,7 @@ export async function persistirMapaAplicacao({
             vistaCodigo,
             procedimentoFeitoId,
             catalogoProcedimentoSaudeId,
+            fuso,
           });
           if (fid) {
             fotoGaleriaId = String(fid);

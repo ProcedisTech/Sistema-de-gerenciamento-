@@ -1,4 +1,5 @@
-import { startOfWeekSaoPauloISODate, toSaoPauloISODate } from './dateLimits.js';
+import { inicioSemanaNoFuso, isoDateNoFuso } from './dateLimits.js';
+import { hojeDaClinica, instanteMs } from './datasClinica.js';
 
 export const TIPO_VERBO = {
   paciente_confirmou: 'confirmou presença',
@@ -103,10 +104,12 @@ export function formatarMensagemNotificacao(n) {
   }
 }
 
-export function formatarTempoRelativo(iso) {
+export function formatarTempoRelativo(iso, agoraMs = Date.now()) {
   if (!iso) return '';
   try {
-    const diff = (new Date() - new Date(iso)) / 1000;
+    const ms = instanteMs(iso);
+    if (Number.isNaN(ms)) return '';
+    const diff = (agoraMs - ms) / 1000;
     if (diff < 60) return 'agora há pouco';
     if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
     if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
@@ -126,16 +129,18 @@ export function matchesChip(notificacao, chipId) {
 }
 
 /**
- * @param {string|Date} criadoEm
+ * @param {string|Date} criadoEm instante (ISO com "Z")
+ * @param {string} fuso fuso IANA da clínica
+ * @param {number} [agoraMs]
  * @returns {'hoje'|'semana'|'anteriores'}
  */
-export function grupoTemporal(criadoEm) {
-  const dateSp = toSaoPauloISODate(criadoEm);
-  const hojeSp = toSaoPauloISODate();
-  if (dateSp === hojeSp) return 'hoje';
+export function grupoTemporal(criadoEm, fuso, agoraMs = Date.now()) {
+  const dia = isoDateNoFuso(criadoEm, fuso);
+  const hoje = hojeDaClinica(fuso, agoraMs);
+  if (dia === hoje) return 'hoje';
 
-  const inicioSemana = startOfWeekSaoPauloISODate();
-  if (dateSp >= inicioSemana && dateSp < hojeSp) return 'semana';
+  const inicioSemana = inicioSemanaNoFuso(fuso, agoraMs);
+  if (dia && dia >= inicioSemana && dia < hoje) return 'semana';
   return 'anteriores';
 }
 
@@ -154,12 +159,12 @@ export function filterByChip(items, chipId) {
   return list.filter((n) => matchesChip(n, chipId));
 }
 
-/** @param {object[]} items @param {string} chipId */
-export function groupNotificacoes(items, chipId) {
+/** @param {object[]} items @param {string} chipId @param {string} fuso */
+export function groupNotificacoes(items, chipId, fuso) {
   const filtered = filterByChip(items, chipId);
   const groups = { hoje: [], semana: [], anteriores: [] };
   for (const n of filtered) {
-    const g = grupoTemporal(n.criadoEm);
+    const g = grupoTemporal(n.criadoEm, fuso);
     groups[g].push(n);
   }
   return groups;

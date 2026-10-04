@@ -3,6 +3,7 @@ import { CalendarDays, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { feriadosApi, getApiErrorToastMessage } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 function formatarData(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return '—';
@@ -143,15 +144,12 @@ export function FeriadosPanel() {
   const [saving, setSaving] = useState(false);
   const { success, error: toastError } = useToast();
 
-  const ano = new Date().getFullYear();
-  // BUG #8: bloqueia cadastrar feriado em data passada. Calcula no client tz local pra
-  // bater com o que o <input type="date"> exibe.
-  const hojeIso = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
+  // BUG #8: bloqueia cadastrar feriado em data passada — "hoje" no calendário da clínica.
+  const { hojeIso } = useAgoraDaClinica(60000);
+  const ano = hojeIso ? Number(hojeIso.slice(0, 4)) : null;
 
   const carregar = useCallback(async () => {
+    if (!ano) return;
     setLoading(true);
     try {
       const lista = await feriadosApi.listar(`${ano}-01-01`, `${ano}-12-31`);

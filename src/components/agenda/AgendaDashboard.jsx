@@ -300,9 +300,12 @@ export function AgendaDashboard({
 
   const nextAppointment = React.useMemo(() => {
     const entries = groupConsecutiveAppointments(todayAppointments);
-    const nextEntry = getNextAppointmentEntry(entries, { todayIso: agenda.todayIso });
+    const nextEntry = getNextAppointmentEntry(entries, {
+      nowMinutes: agenda.nowMinutes,
+      todayIso: agenda.todayIso,
+    });
     return getEntryPrimaryAppointment(nextEntry);
-  }, [todayAppointments, agenda.todayIso]);
+  }, [todayAppointments, agenda.todayIso, agenda.nowMinutes]);
 
   const handleAdvanceClick = React.useCallback((appointment, offer) => {
     if (!appointment || !offer?.targetHoraInicio || agenda.isNivel1) return;

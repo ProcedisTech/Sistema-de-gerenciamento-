@@ -1191,6 +1191,13 @@ export const dimensoesApi = {
   tiposProcedimento: () => request('/api/v1/dimensoes/tipos-procedimento', { needsOrg: false }),
 };
 
+// ── UFs (sem X-Org-Id: o cadastro da clínica acontece antes de a org existir) ──
+
+export const ufApi = {
+  /** @returns {Promise<Array<{ sigla: string, nome: string, fusoIana: string }>>} */
+  listar: () => request('/api/v1/ufs', { needsOrg: false }),
+};
+
 // ── Anamnese ───────────────────────────────────────────────
 // Categorias/hábitos: mesmo padrão que fichas (X-Org-Id + cookie/Bearer). Omitir needsOrg enviava só GET “ok” e
 // POST/PUT/DELETE sem X-Org-Id → 401 em muitos setups Spring multi-tenant.

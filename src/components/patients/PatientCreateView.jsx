@@ -19,6 +19,8 @@ import { normalizeCepForApi } from '../../utils/cepUtils.js';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { PatientForm } from './PatientForm.jsx';
 import { usePapel } from '../../hooks/usePapel';
+import { parseDataCalendario } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function PatientCreateView({
   setPatientView,
@@ -34,6 +36,7 @@ export function PatientCreateView({
   const scrollBodyRef = useRef(null);
   const toast = useToast();
   const { isNivel1 } = usePapel();
+  const { fuso, hojeIso } = useAgoraDaClinica();
 
   const handleClose = useCallback(() => {
     if (onClose) {
@@ -146,10 +149,10 @@ export function PatientCreateView({
     setDataNascimentoDisplay(display);
 
     if (digits.length === 8) {
-      const r = validateBirthDateDigits8(digits);
+      const r = validateBirthDateDigits8(digits, hojeIso);
       if (r.ok) {
         setDataNascimento(r.iso);
-        const age = calculateAgeFromISODate(r.iso);
+        const age = calculateAgeFromISODate(r.iso, hojeIso);
         setIdade(age !== '' ? age : '');
       } else {
         setDataNascimento('');
@@ -183,12 +186,12 @@ export function PatientCreateView({
     if (!isValid) {
       setErrors(validationErrors);
       const dnDigits = dataNascimentoDisplay.replace(/\D/g, '');
-      const cy = new Date().getFullYear();
+      const cy = parseDataCalendario(hojeIso)?.ano;
       if (validationErrors.dataNascimento) {
         if (dnDigits.length > 0 && dnDigits.length < 8) {
           setErro(birthDateValidationUserMessage('incomplete', cy));
         } else if (dnDigits.length === 8 && !dataNascimento) {
-          const r = validateBirthDateDigits8(dnDigits);
+          const r = validateBirthDateDigits8(dnDigits, hojeIso);
           setErro(!r.ok ? birthDateValidationUserMessage(r.reason, cy) : 'Preencha os campos obrigatórios.');
         } else {
           setErro('Preencha os campos obrigatórios.');
@@ -268,7 +271,7 @@ export function PatientCreateView({
 
       if (onPatientCreated) onPatientCreated();
 
-      const patient = mapBackendPatient(created);
+      const patient = mapBackendPatient(created, { fuso, hojeIso });
       if (isAgendaHost) {
         if (onSuccess && patient) onSuccess(patient);
         handleClose();

@@ -3,15 +3,19 @@ import {
   latestProcedureOccurredInstantIso,
   patientUltimaVisitaDayFromDto,
 } from './patientProfileDerivedDates.js';
+import { instanteMs } from './datasClinica.js';
+
+function msOuZero(iso) {
+  const ms = instanteMs(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+}
 
 export function lastProcedureLabel(p) {
   const procs = Array.isArray(p?.procedures) ? p.procedures : [];
   if (!procs.length) return '—';
   const sorted = [...procs].sort((a, b) => {
-    const ia = latestProcedureOccurredInstantIso([a]);
-    const ib = latestProcedureOccurredInstantIso([b]);
-    const ta = ia ? new Date(ia).getTime() : 0;
-    const tb = ib ? new Date(ib).getTime() : 0;
+    const ta = msOuZero(latestProcedureOccurredInstantIso([a]));
+    const tb = msOuZero(latestProcedureOccurredInstantIso([b]));
     return tb - ta;
   });
   const last = sorted[0] || procs[procs.length - 1];
@@ -19,16 +23,20 @@ export function lastProcedureLabel(p) {
   return n ? String(n) : '—';
 }
 
-/** Data no rodapé: reflete a data mais recente entre ultimaVinda do DTO e lista de procedimentos. */
-export function lastProcedureDateForCard(p) {
+/**
+ * Data no rodapé: reflete a data mais recente entre ultimaVinda do DTO e lista de procedimentos.
+ * @param {object} p paciente mapeado
+ * @param {string} fuso IANA da clínica
+ */
+export function lastProcedureDateForCard(p, fuso) {
   const isoFromProcs = latestProcedureOccurredInstantIso(p?.procedures || []);
-  const dtProcs = isoFromProcs ? new Date(isoFromProcs).getTime() : 0;
-  const dtUltima = p?.ultimaVinda ? new Date(p.ultimaVinda).getTime() : 0;
+  const dtProcs = msOuZero(isoFromProcs);
+  const dtUltima = msOuZero(p?.ultimaVinda);
 
   if (dtProcs > 0 && dtProcs >= dtUltima) {
-    return formatCartaoDiaPtBr(isoFromProcs);
+    return formatCartaoDiaPtBr(isoFromProcs, fuso);
   }
-  const primary = patientUltimaVisitaDayFromDto(p);
+  const primary = patientUltimaVisitaDayFromDto(p, fuso);
   if (primary !== '-') return primary;
-  return isoFromProcs ? formatCartaoDiaPtBr(isoFromProcs) : '—';
+  return isoFromProcs ? formatCartaoDiaPtBr(isoFromProcs, fuso) : '—';
 }

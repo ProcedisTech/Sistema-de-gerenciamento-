@@ -11,9 +11,12 @@ import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 import { CollapsibleSection } from '../shared/CollapsibleSection.jsx';
 import { isAgendamentoHojePassado } from '../../utils/sortAgendamentosHojePulse.js';
+import { formatarDataCalendario } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
-function getSaudacao() {
-  const h = new Date().getHours();
+/** @param {number | null} minutos minutos do dia no relógio da clínica */
+function getSaudacao(minutos) {
+  const h = minutos == null ? 0 : Math.floor(minutos / 60);
   if (h < 12) return 'Bom dia';
   if (h < 18) return 'Boa tarde';
   return 'Boa noite';
@@ -24,9 +27,9 @@ function primeiroNome(nomeCompleto) {
   return String(nomeCompleto).trim().split(/\s+/)[0];
 }
 
-function countAniversariantesEstaSemana(aniversariantesList) {
+function countAniversariantesEstaSemana(aniversariantesList, hojeIso) {
   return (aniversariantesList ?? []).filter((p) => {
-    const info = getPatientNextBirthdayInfo(p);
+    const info = getPatientNextBirthdayInfo(p, hojeIso);
     return info != null && info.daysUntil <= 6;
   }).length;
 }
@@ -92,13 +95,7 @@ function buildWelcomeResumo({ nAtendimentos, nSemPlano, nAniversarios }) {
 }
 
 function formatarDataAniversario(dataNascimento) {
-  if (!dataNascimento) return '';
-  try {
-    const [, m, d] = String(dataNascimento).split('-');
-    return `${d}/${m}`;
-  } catch {
-    return '';
-  }
+  return formatarDataCalendario(dataNascimento, 'diaMes');
 }
 
 function SidebarSkeleton() {
@@ -113,6 +110,7 @@ function SidebarSkeleton() {
 
 function AgendaRow({
   slot,
+  fuso,
   agendaSchedule,
   onStartAttendance,
   getPatientInitials,
@@ -123,7 +121,7 @@ function AgendaRow({
   const nome = slot?.pacienteNome || 'Paciente';
   const hora = slot?.horaInicio ? String(slot.horaInicio).slice(0, 5) : '';
   const procedimento = slot?.procedimentoNome || '';
-  const isPast = isAgendamentoHojePassado(slot);
+  const isPast = isAgendamentoHojePassado(slot, fuso);
 
   return (
     <div
@@ -193,8 +191,8 @@ function PatientRow({ patient, sub, getPatientInitials, onSelect }) {
   );
 }
 
-function BirthdayPatientRow({ patient, getPatientInitials, onSelect }) {
-  const birthday = getPatientNextBirthdayInfo(patient);
+function BirthdayPatientRow({ patient, hojeIso, getPatientInitials, onSelect }) {
+  const birthday = getPatientNextBirthdayInfo(patient, hojeIso);
   const dataAniv = formatarDataAniversario(patient.dataNascimento);
   const countdown = formatBirthdayCountdown(birthday);
   const isToday = countdown.variant === 'today';
@@ -256,6 +254,7 @@ export function PulseSidebar({
   onSlotCancelar,
 }) {
   const nome = primeiroNome(nomeUsuario);
+  const { fuso, hojeIso, minutos } = useAgoraDaClinica();
 
   const agendamentos = kpi?.agendamentosHoje ?? [];
   const semPlano = kpi?.semPlanoList ?? [];
@@ -264,7 +263,7 @@ export function PulseSidebar({
 
   const nAtendimentos = agendamentos.length;
   const nSemPlano = totalSemPlano ?? 0;
-  const nAniversarios = countAniversariantesEstaSemana(aniversariantes);
+  const nAniversarios = countAniversariantesEstaSemana(aniversariantes, hojeIso);
   const welcomeResumo = buildWelcomeResumo({ nAtendimentos, nSemPlano, nAniversarios });
   const resumoVazio = !loading && nAtendimentos === 0 && nSemPlano === 0 && nAniversarios === 0;
 
@@ -290,7 +289,7 @@ export function PulseSidebar({
           </div>
           <div className="relative z-10 min-w-0">
             <p className="min-w-0 break-words text-[15px] font-bold leading-snug text-[#0f172a]">
-              {getSaudacao()}
+              {getSaudacao(minutos)}
               {nome ? `, ${nome}` : ''}{' '}
               <span aria-hidden="true">👋</span>
             </p>
@@ -327,6 +326,7 @@ export function PulseSidebar({
                 <AgendaRow
                   key={slot.id}
                   slot={slot}
+                  fuso={fuso}
                   agendaSchedule={agendaSchedule}
                   onStartAttendance={onStartAttendance}
                   getPatientInitials={getPatientInitials}
@@ -366,7 +366,7 @@ export function PulseSidebar({
             <div className="flex flex-col gap-2">
               {semPlano.slice(0, 5).map((p) => {
                 const ultimaVisitaLabel = p.ultimaVinda
-                  ? `Última visita · ${formatCartaoDiaPtBr(p.ultimaVinda)}`
+                  ? `Última visita · ${formatCartaoDiaPtBr(p.ultimaVinda, fuso)}`
                   : p.ultimaVisita && p.ultimaVisita !== '-'
                     ? `Última visita · ${p.ultimaVisita}`
                     : 'Sem visita registrada';
@@ -404,6 +404,7 @@ export function PulseSidebar({
                 <BirthdayPatientRow
                   key={p.id}
                   patient={p}
+                  hojeIso={hojeIso}
                   getPatientInitials={getPatientInitials}
                   onSelect={onSelectPatient}
                 />

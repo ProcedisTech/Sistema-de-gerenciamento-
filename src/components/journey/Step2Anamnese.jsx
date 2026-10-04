@@ -39,6 +39,8 @@ import {
 import { carregarEnvioAtivoDocumento } from './step2PedidoPendente.js';
 import { usePedidoPendenteAnamnese } from './usePedidoPendenteAnamnese.js';
 import { SolicitacaoPendenteFaixa } from './SolicitacaoPendenteFaixa.jsx';
+import { formatarInstante, instanteMs } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -68,7 +70,7 @@ function isConsultaBasicaFicha(f) {
 function formatRelativo(dataHora) {
   if (!dataHora) return '';
   const dias = Math.floor(
-    (Date.now() - new Date(dataHora).getTime()) / (1000 * 60 * 60 * 24),
+    (Date.now() - instanteMs(dataHora)) / (1000 * 60 * 60 * 24),
   );
   if (dias === 0) return 'hoje';
   if (dias === 1) return 'há 1 dia';
@@ -118,6 +120,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   onSolicitarAoPaciente = null,
   onSolicitacaoRespondida = null,
 }, ref) {
+  const { fuso } = useFusoClinica();
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saving' | 'saved'
   const [fichas, setFichas] = useState([]);
   const draftValido = savedAnamneseState?.pacienteId === pacienteId;
@@ -302,14 +305,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
 
   const ultimaAnamnese = resumoPreenchimentosPorFicha[0] ?? null;
   const mesesAtrasUltima = ultimaAnamnese?.dataHora
-    ? (Date.now() - new Date(ultimaAnamnese.dataHora).getTime()) / (1000 * 60 * 60 * 24 * 30)
+    ? (Date.now() - instanteMs(ultimaAnamnese.dataHora)) / (1000 * 60 * 60 * 24 * 30)
     : null;
   const estaAtualizadaUltima = mesesAtrasUltima !== null && mesesAtrasUltima < 6;
   const dataLinhaUltima =
     ultimaAnamnese && ultimaAnamnese.dataHora
-      ? `${new Date(ultimaAnamnese.dataHora).toLocaleString('pt-BR', {
-          timeZone: 'America/Sao_Paulo',
-        })} · ${formatRelativo(ultimaAnamnese.dataHora)}`
+      ? `${formatarInstante(ultimaAnamnese.dataHora, fuso, 'dataHoraSeg')} · ${formatRelativo(ultimaAnamnese.dataHora)}`
       : ultimaAnamnese
         ? 'data não registrada'
         : '';
@@ -1207,7 +1208,7 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                   <>
                     Preenchida em{' '}
                     {preenchimentoAnterior.dataHora
-                      ? new Date(preenchimentoAnterior.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                      ? formatarInstante(preenchimentoAnterior.dataHora, fuso, 'dataHoraSeg')
                       : 'data não registrada'}
                   </>
                 )}

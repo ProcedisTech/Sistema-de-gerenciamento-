@@ -1,3 +1,5 @@
+import { hojeDaClinica, instanteMs, isoDeParts } from './datasClinica.js';
+
 /** Normaliza data (YYYY-MM-DD ou ISO com hora) para comparação e filtros. */
 export function toDateKey(value) {
   const s = String(value || '');
@@ -46,18 +48,27 @@ export function resolveMonthRefreshAction(currentMonthDate, nextMonthDate) {
   return 'setMonthDateOnly';
 }
 
-export function toLocalDateIso(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(date);
+/**
+ * Dia (YYYY-MM-DD) do instante `date` no fuso da clínica.
+ * @param {Date|number|string} date instante (Date, ms ou ISO com "Z")
+ * @param {string} fuso IANA da clínica
+ */
+export function toLocalDateIso(date, fuso) {
+  const ms = instanteMs(date);
+  return hojeDaClinica(fuso, Number.isNaN(ms) ? Date.now() : ms);
 }
 
-/** Grade 7×6 (domingo = primeira coluna). */
-export function buildCalendarCells(monthDate) {
+/** YYYY-MM-DD dos campos locais de um Date usado como data de calendário (grade do mês). */
+export function isoDeDataCalendario(date) {
+  return isoDeParts(date.getFullYear(), date.getMonth() + 1, date.getDate());
+}
+
+/**
+ * Grade 7×6 (domingo = primeira coluna).
+ * @param {Date} monthDate mês exibido (campos locais)
+ * @param {string | null} hojeIso hoje no calendário da clínica
+ */
+export function buildCalendarCells(monthDate, hojeIso) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
@@ -65,12 +76,12 @@ export function buildCalendarCells(monthDate) {
 
   return Array.from({ length: 42 }).map((_, index) => {
     const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
-    const iso = toLocalDateIso(date);
+    const iso = isoDeDataCalendario(date);
     return {
       iso,
       day: date.getDate(),
       inCurrentMonth: date.getMonth() === month,
-      isToday: iso === toLocalDateIso(),
+      isToday: Boolean(hojeIso) && iso === hojeIso,
     };
   });
 }

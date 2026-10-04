@@ -19,7 +19,7 @@ function statusDotClass(appointment) {
 
 export function AgendaGroupedNextUpCard({
   group,
-  now,
+  nowMinutes,
   showProfissional,
   isNivel1,
   compact = false,
@@ -35,7 +35,7 @@ export function AgendaGroupedNextUpCard({
   const { canStartAnamnese, canDeleteAgenda } = usePapel();
   if (!primary) return null;
 
-  const countdown = formatCountdown(group.horaInicio || primary.horaInicio, now);
+  const countdown = formatCountdown(group.horaInicio || primary.horaInicio, nowMinutes);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
   const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese, canCancelar);
 

@@ -1,5 +1,6 @@
 import { agendasApi } from '../services/api';
-import { monthRangeIso, toDateKey, toLocalDateIso } from './agendaDateUtils';
+import { monthRangeIso, toDateKey } from './agendaDateUtils';
+import { diaDaSemana, somarDias } from './datasClinica.js';
 import {
   fetchDashboardAppointmentsForRange,
   mapAgendaDtoToDashboardRow,
@@ -23,22 +24,13 @@ export function isKpiCountableAgendaDto(dto) {
   return status !== 'reagendado';
 }
 
-function parseIsoLocal(iso) {
-  const k = toDateKey(iso);
-  const [y, m, d] = k.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
 function startOfWeekSundayIso(iso) {
-  const date = parseIsoLocal(iso);
-  date.setDate(date.getDate() - date.getDay());
-  return toLocalDateIso(date);
+  const dow = diaDaSemana(iso);
+  return Number.isNaN(dow) ? '' : somarDias(iso, -dow);
 }
 
 function addDaysIso(iso, delta) {
-  const date = parseIsoLocal(iso);
-  date.setDate(date.getDate() + delta);
-  return toLocalDateIso(date);
+  return somarDias(iso, delta);
 }
 
 export const KPI_DRILLDOWN_PERIOD = {
@@ -47,7 +39,7 @@ export const KPI_DRILLDOWN_PERIOD = {
   MES: 'mes',
 };
 
-/** Range ISO inclusivo para o chip de período. */
+/** Range ISO inclusivo para o chip de período (`todayIso` = hoje no calendário da clínica). */
 export function getKpiDrilldownRange(period, { todayIso, monthDate }) {
   const today = toDateKey(todayIso);
   if (period === KPI_DRILLDOWN_PERIOD.HOJE) {
@@ -91,7 +83,8 @@ export function sortDrilldownRows(rows) {
 }
 
 function monthKeyFromDate(monthDate) {
-  const d = monthDate instanceof Date ? monthDate : new Date();
+  if (!(monthDate instanceof Date)) return '';
+  const d = monthDate;
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 }
@@ -101,6 +94,7 @@ export function canUseMonthAppointmentsCache(period, profissionalRoleUserId, mon
   return (
     period === KPI_DRILLDOWN_PERIOD.MES &&
     !String(profissionalRoleUserId || '').trim() &&
+    monthKeyFromDate(monthDate) !== '' &&
     monthKeyFromDate(monthDate) === String(currentYm || '')
   );
 }

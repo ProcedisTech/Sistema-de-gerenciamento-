@@ -2,6 +2,7 @@
  * Regras de fila de termos: o backend resolve pelo vínculo
  * (tb_termo_procedimento). O front só interpreta o DTO.
  */
+import { instanteMs } from './datasClinica.js';
 
 export function isAssinaturaResolvida(assinatura) {
   if (!assinatura) return false;
@@ -10,7 +11,7 @@ export function isAssinaturaResolvida(assinatura) {
   if (assinatura.statusCodigo && assinatura.statusCodigo !== 'ASSINADO') return false;
   if (typeof assinatura.vigente === 'boolean') return assinatura.vigente;
   if (!assinatura.expiradaEm) return true;
-  return new Date(assinatura.expiradaEm) > new Date();
+  return instanteMs(assinatura.expiradaEm) > Date.now();
 }
 
 /** IDs da fila obrigatória a partir do DTO GET /termos/resolucao. */

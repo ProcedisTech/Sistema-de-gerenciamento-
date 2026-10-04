@@ -1,5 +1,6 @@
 import { Clock3, Lock, Plus, Stethoscope, UserRound } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
@@ -122,6 +123,7 @@ export function AgendaAppointmentSummaryCard({
   const isReagendado = appointment.status === 'reagendado';
   const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
   const { canStartAnamnese } = usePapel();
+  const { fuso } = useFusoClinica();
 
   if (isBloqueio) {
     const motivo = bloqueioMotivoLabel(appointment);
@@ -198,8 +200,8 @@ export function AgendaAppointmentSummaryCard({
       ? 'No-show'
       : statusTone.label || appointment.status;
 
-  const execSummary = getExecutionSummary(appointment);
-  const timingBadge = execSummary?.badge || getTimingBadge(appointment);
+  const execSummary = getExecutionSummary(appointment, fuso);
+  const timingBadge = execSummary?.badge || getTimingBadge(appointment, fuso);
   const isRealizado = appointment.status === 'realizado';
 
   const badgeClass = isRealizado
