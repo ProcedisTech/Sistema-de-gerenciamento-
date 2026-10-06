@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
@@ -9,6 +9,12 @@ import { SolicitarAnamneseModal } from './SolicitarAnamneseModal.jsx';
 import { anamneseEnvioApi } from '../../services/api';
 
 import { resolverEstadoAssinatura } from './anamneseAssinaturaUiState.js';
+
+import { useAviso } from '../../contexts/useAviso.js';
+
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+
+import { useBuscaNoVencimento } from '../hooks/useBuscaNoVencimento.js';
 
 
 
@@ -88,49 +94,69 @@ export function AnamneseAssinaturaActions({
 
 
 
+  const envioIdPendente = envioAtivo?.id && envioStatus === 'PENDENTE' ? envioAtivo.id : null;
+
+  const onDocumentoRefreshRef = useRef(onDocumentoRefresh);
+
   useEffect(() => {
 
-    const envioId = envioAtivo?.id;
+    onDocumentoRefreshRef.current = onDocumentoRefresh;
 
-    if (!envioId || envioStatus !== 'PENDENTE') return undefined;
+  }, [onDocumentoRefresh]);
+
+  /** Envio que já chegou a um estado final: não consulta de novo até o documento trazer outro envio. */
+  const encerradoRef = useRef(null);
 
 
 
-    const interval = setInterval(async () => {
+  const verificarStatus = useCallback(async () => {
 
-      try {
+    const envioId = envioIdPendente;
 
-        const statusData = await anamneseEnvioApi.status(envioId);
+    if (!envioId || encerradoRef.current === envioId) return;
 
-        if (statusData.status === 'CONCLUIDO') {
+    try {
 
-          clearInterval(interval);
+      const statusData = await anamneseEnvioApi.status(envioId);
 
-          setProcessandoResposta(true);
+      if (encerradoRef.current === envioId) return;
 
-          onDocumentoRefresh?.();
+      if (statusData?.status === 'CONCLUIDO') {
 
-        } else if (statusData.status === 'EXPIRADO' || statusData.status === 'CANCELADO') {
+        encerradoRef.current = envioId;
 
-          clearInterval(interval);
+        setProcessandoResposta(true);
 
-          onDocumentoRefresh?.();
+        onDocumentoRefreshRef.current?.();
 
-        }
+      } else if (statusData?.status === 'EXPIRADO' || statusData?.status === 'CANCELADO') {
 
-      } catch (err) {
+        encerradoRef.current = envioId;
 
-        console.error('Erro no polling da anamnese (documento)', err);
+        onDocumentoRefreshRef.current?.();
 
       }
 
-    }, 3000);
+    } catch (err) {
+
+      console.error('Erro ao consultar status da anamnese (documento)', err);
+
+    }
+
+  }, [envioIdPendente]);
 
 
 
-    return () => clearInterval(interval);
+  useEffect(() => {
 
-  }, [envioAtivo?.id, envioStatus, onDocumentoRefresh]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- o setState em verificarStatus só roda depois do await (assíncrono)
+    verificarStatus();
+
+  }, [verificarStatus]);
+
+  useAviso(PREFIXO_AVISO.ANAMNESE, verificarStatus, { registroId: envioIdPendente });
+
+  useBuscaNoVencimento(envioIdPendente ? envioAtivo?.expiraEm : null, verificarStatus);
 
 
 

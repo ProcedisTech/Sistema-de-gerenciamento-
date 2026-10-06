@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { SolicitarAnamneseModal } from './SolicitarAnamneseModal.jsx';
 import { montarUrlWhatsAppAnamnese } from './solicitarAnamneseEnvio.js';
+import { criarAvisosFalsos } from '../../test/avisosFalsos.jsx';
+import { AVISO } from '../../services/avisos/tiposAviso.js';
 
 vi.mock('../../services/api', () => ({
   anamneseEnvioApi: {
@@ -91,7 +93,7 @@ describe('SolicitarAnamneseModal', () => {
   it('Gerar novo link no branch expirado envia forcarNovo true', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    anamneseEnvioApi.status.mockResolvedValue({ status: 'EXPIRADO' });
+    const canal = criarAvisosFalsos();
 
     render(
       <SolicitarAnamneseModal
@@ -100,9 +102,13 @@ describe('SolicitarAnamneseModal', () => {
         payload={{ pacienteId: 'pac-1', telefonePaciente: '11999999999', pacienteNome: 'Marina' }}
         onClose={() => {}}
       />,
+      { wrapper: canal.Wrapper },
     );
     await screen.findByText('Aguardando paciente');
-    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1));
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'EXPIRADO' });
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'e1');
+    await vi.advanceTimersByTimeAsync(300);
     await screen.findByText('Link expirado');
     anamneseEnvioApi.gerar.mockClear();
     await user.click(screen.getByRole('button', { name: 'Gerar novo link' }));
@@ -188,11 +194,106 @@ describe('SolicitarAnamneseModal', () => {
     expect(screen.queryByText(/Código de verificação/)).not.toBeInTheDocument();
   });
 
+  it('busca o status ao abrir, ignora aviso de outro envio e rebusca com aviso do envio', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const canal = criarAvisosFalsos();
+    render(
+      <SolicitarAnamneseModal
+        open
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' }}
+        payload={{ pacienteId: 'pac-1', telefonePaciente: '11999999999', pacienteNome: 'Marina' }}
+        onClose={() => {}}
+      />,
+      { wrapper: canal.Wrapper },
+    );
+    await screen.findByText('Aguardando paciente');
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledWith('e1'));
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
+
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'outro');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
+
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'e1');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('ENVIO_ALTERADO com registroId nulo faz o modal rebuscar o status', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const canal = criarAvisosFalsos();
+    render(
+      <SolicitarAnamneseModal
+        open
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' }}
+        payload={{ pacienteId: 'pac-1', telefonePaciente: '11999999999', pacienteNome: 'Marina' }}
+        onClose={() => {}}
+      />,
+      { wrapper: canal.Wrapper },
+    );
+    await screen.findByText('Aguardando paciente');
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1));
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'CANCELADO' });
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, null);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+    await screen.findByText('Link expirado');
+    vi.useRealTimers();
+  });
+
+  it('recarregar do canal rebusca o status; sem avisos não há nova consulta', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const canal = criarAvisosFalsos();
+    render(
+      <SolicitarAnamneseModal
+        open
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' }}
+        payload={{ pacienteId: 'pac-1', telefonePaciente: '11999999999', pacienteNome: 'Marina' }}
+        onClose={() => {}}
+      />,
+      { wrapper: canal.Wrapper },
+    );
+    await screen.findByText('Aguardando paciente');
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
+    canal.emitirRecarregar();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('busca o status no vencimento informado pelo status', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const canal = criarAvisosFalsos();
+    anamneseEnvioApi.status.mockResolvedValue({
+      status: 'PENDENTE',
+      expiraEm: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+    render(
+      <SolicitarAnamneseModal
+        open
+        escolha={{ metodoCodigo: 'DISPOSITIVO_PROPRIO_REMOTO', canalCodigo: 'WHATSAPP' }}
+        payload={{ pacienteId: 'pac-1', telefonePaciente: '11999999999', pacienteNome: 'Marina' }}
+        onClose={() => {}}
+      />,
+      { wrapper: canal.Wrapper },
+    );
+    await screen.findByText('Aguardando paciente');
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1));
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'EXPIRADO' });
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 50);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+    await screen.findByText('Link expirado');
+    vi.useRealTimers();
+  });
+
   it('CONCLUIDO com preenchimento cancelada mostra recusa e chama onRecusado (não onConcluido)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const onConcluido = vi.fn();
     const onRecusado = vi.fn();
-    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    const canal = criarAvisosFalsos();
     anamneseApi.getPaciente.mockResolvedValue({ status: 'cancelada' });
 
     render(
@@ -209,9 +310,13 @@ describe('SolicitarAnamneseModal', () => {
         onConcluido={onConcluido}
         onRecusado={onRecusado}
       />,
+      { wrapper: canal.Wrapper },
     );
     await screen.findByText('Aguardando paciente');
-    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1));
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'e1');
+    await vi.advanceTimersByTimeAsync(300);
     await screen.findByText('Paciente recusou');
     expect(screen.queryByText('Anamnese recebida!')).not.toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(1600);
@@ -224,7 +329,7 @@ describe('SolicitarAnamneseModal', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const onConcluido = vi.fn();
     const onRecusado = vi.fn();
-    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    const canal = criarAvisosFalsos();
     anamneseApi.getPaciente.mockResolvedValue({ status: 'Finalizada' });
 
     render(
@@ -241,9 +346,13 @@ describe('SolicitarAnamneseModal', () => {
         onConcluido={onConcluido}
         onRecusado={onRecusado}
       />,
+      { wrapper: canal.Wrapper },
     );
     await screen.findByText('Aguardando paciente');
-    await vi.advanceTimersByTimeAsync(3000);
+    await waitFor(() => expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1));
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'e1');
+    await vi.advanceTimersByTimeAsync(300);
     await screen.findByText('Anamnese recebida!');
     expect(screen.queryByText('Paciente recusou')).not.toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(1600);

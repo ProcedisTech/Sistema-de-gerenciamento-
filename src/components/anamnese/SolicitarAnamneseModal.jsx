@@ -3,6 +3,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { X, Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
 import { anamneseApi, anamneseEnvioApi } from '../../services/api';
 import { montarUrlWhatsAppAnamnese } from './solicitarAnamneseEnvio.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+import { useBuscaNoVencimento } from '../hooks/useBuscaNoVencimento.js';
 
 function resolveStatusCodigo(entry) {
   if (!entry) return null;
@@ -43,7 +46,10 @@ export function SolicitarAnamneseModal({
   const [concluido, setConcluido] = useState(false);
   const [recusado, setRecusado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
-  const pollingRef = useRef(null);
+  /** Envio aguardando a paciente (resposta do gerar); `null` = nada a acompanhar. */
+  const [monitorado, setMonitorado] = useState(null);
+  const [expiraEm, setExpiraEm] = useState(null);
+  const monitoradoRef = useRef(null);
   const gerarSeqRef = useRef(0);
   const wasOpenRef = useRef(false);
   const gerandoRef = useRef(false);
@@ -78,8 +84,16 @@ export function SolicitarAnamneseModal({
       setConcluido(false);
       setRecusado(false);
       setCancelando(false);
+      setMonitorado(null);
+      setExpiraEm(null);
     }
   }
+
+  const pararMonitoramento = useCallback(() => {
+    monitoradoRef.current = null;
+    setMonitorado(null);
+    setExpiraEm(null);
+  }, []);
 
   const handleCancelarEnvio = useCallback(async () => {
     if (cancelando) return;
@@ -90,10 +104,7 @@ export function SolicitarAnamneseModal({
     }
     setCancelando(true);
     setError(null);
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
+    pararMonitoramento();
     try {
       await anamneseEnvioApi.cancelar(envioId);
       onCancelarRef.current?.();
@@ -101,7 +112,7 @@ export function SolicitarAnamneseModal({
       setError(err.message || 'Falha ao cancelar solicitação');
       setCancelando(false);
     }
-  }, [cancelando, sessaoData?.envioId]);
+  }, [cancelando, sessaoData?.envioId, pararMonitoramento]);
 
   const montarPayloadGerar = useCallback((forcarNovo = false) => ({
     pacienteId,
@@ -137,6 +148,30 @@ export function SolicitarAnamneseModal({
     }, 1500);
   }, [pacienteId, preenchimentoAnamneseId]);
 
+  const verificarStatus = useCallback(async () => {
+    const data = monitoradoRef.current;
+    if (!data?.envioId) return;
+    try {
+      const statusData = await anamneseEnvioApi.status(data.envioId);
+      if (monitoradoRef.current !== data) return;
+      if (statusData?.expiraEm) setExpiraEm(statusData.expiraEm);
+      if (statusData?.status === 'CONCLUIDO') {
+        pararMonitoramento();
+        await resolverOutcomeConcluido(data);
+      } else if (statusData?.status === 'EXPIRADO' || statusData?.status === 'CANCELADO') {
+        pararMonitoramento();
+        setExpirado(true);
+        setLoading(false);
+        onEnvioExpiradoRef.current?.();
+      }
+    } catch (err) {
+      console.error('Erro ao consultar status da anamnese', err);
+    }
+  }, [pararMonitoramento, resolverOutcomeConcluido]);
+
+  useAviso(PREFIXO_AVISO.ANAMNESE, verificarStatus, { registroId: monitorado?.envioId ?? null });
+  useBuscaNoVencimento(monitorado ? expiraEm : null, verificarStatus);
+
   const iniciarGeracao = useCallback((forcarNovo = false) => {
     if (gerandoRef.current) return;
     gerandoRef.current = true;
@@ -146,7 +181,7 @@ export function SolicitarAnamneseModal({
     setExpirado(false);
     setConcluido(false);
     setRecusado(false);
-    if (pollingRef.current) clearInterval(pollingRef.current);
+    pararMonitoramento();
 
     const seq = gerarSeqRef.current + 1;
     gerarSeqRef.current = seq;
@@ -159,24 +194,10 @@ export function SolicitarAnamneseModal({
         gerandoRef.current = false;
         onEnvioGeradoRef.current?.(data);
         if (data?.envioId) {
-          pollingRef.current = setInterval(async () => {
-            try {
-              const statusData = await anamneseEnvioApi.status(data.envioId);
-              if (statusData.status === 'CONCLUIDO') {
-                clearInterval(pollingRef.current);
-                pollingRef.current = null;
-                await resolverOutcomeConcluido(data);
-              } else if (statusData.status === 'EXPIRADO' || statusData.status === 'CANCELADO') {
-                clearInterval(pollingRef.current);
-                pollingRef.current = null;
-                setExpirado(true);
-                setLoading(false);
-                onEnvioExpiradoRef.current?.();
-              }
-            } catch (err) {
-              console.error('Erro no polling da anamnese', err);
-            }
-          }, 3000);
+          monitoradoRef.current = data;
+          setMonitorado(data);
+          setExpiraEm(data.expiraEm ?? null);
+          verificarStatus();
         }
       })
       .catch((err) => {
@@ -185,7 +206,7 @@ export function SolicitarAnamneseModal({
         setLoading(false);
         gerandoRef.current = false;
       });
-  }, [montarPayloadGerar, resolverOutcomeConcluido]);
+  }, [montarPayloadGerar, pararMonitoramento, verificarStatus]);
 
   const iniciarGeracaoRef = useRef(iniciarGeracao);
   useEffect(() => {
@@ -196,8 +217,7 @@ export function SolicitarAnamneseModal({
     if (!open) {
       wasOpenRef.current = false;
       gerandoRef.current = false;
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = null;
+      monitoradoRef.current = null;
       return undefined;
     }
 
@@ -206,10 +226,7 @@ export function SolicitarAnamneseModal({
       iniciarGeracaoRef.current(false);
     }
 
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    };
+    return undefined;
   }, [open, pacienteId, canalCodigo, telefonePaciente, preenchimentoAnamneseId]);
 
   if (!open) return null;

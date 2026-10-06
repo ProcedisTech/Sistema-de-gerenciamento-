@@ -1,8 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Loader2, Smartphone, CheckCircle2 } from 'lucide-react';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { authHeadersForFetch } from '../../services/api';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+import { useBuscaNoVencimento } from '../hooks/useBuscaNoVencimento.js';
 
 /**
  * @param {{ metodoCodigo: string, canalCodigo?: string|null }} escolha
@@ -24,7 +27,10 @@ export function AguardandoPacienteModal({
   const [cancelando, setCancelando] = useState(false);
   const [concluido, setConcluido] = useState(false);
   const [recusado, setRecusado] = useState(false);
-  const pollingRef = useRef(null);
+  /** Sessão aguardando o paciente; `null` = nada a acompanhar. */
+  const [sessaoMonitorada, setSessaoMonitorada] = useState(null);
+  const [expiraEm, setExpiraEm] = useState(null);
+  const sessaoMonitoradaRef = useRef(null);
 
   const onAssinaturaConcluidaRef = useRef(onAssinaturaConcluida);
   useEffect(() => {
@@ -38,10 +44,68 @@ export function AguardandoPacienteModal({
 
   const termoAssinaturaId = sessaoExternaPayload?.termoAssinaturaId ?? null;
   const telefonePaciente = sessaoExternaPayload?.telefonePaciente ?? null;
+  const termoAssinaturaIdRef = useRef(termoAssinaturaId);
+  useEffect(() => {
+    termoAssinaturaIdRef.current = termoAssinaturaId;
+  }, [termoAssinaturaId]);
+
+  const pararMonitoramento = useCallback(() => {
+    sessaoMonitoradaRef.current = null;
+    setSessaoMonitorada(null);
+    setExpiraEm(null);
+  }, []);
+
+  const verificarStatus = useCallback(async () => {
+    const sessaoId = sessaoMonitoradaRef.current;
+    if (!sessaoId) return;
+    try {
+      const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/status`), {
+        headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
+      });
+      const data = await res.json();
+      if (sessaoMonitoradaRef.current !== sessaoId) return;
+      if (data?.expiraEm) setExpiraEm(data.expiraEm);
+      if (data?.status === 'CONCLUIDO') {
+        pararMonitoramento();
+        let recusou = false;
+        const termoId = termoAssinaturaIdRef.current;
+        if (termoId) {
+          try {
+            const taRes = await fetch(resolveApiUrl(`/api/v1/termos/assinaturas/${termoId}`), {
+              credentials: 'include',
+              headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
+            });
+            if (taRes.ok) {
+              const ta = await taRes.json();
+              recusou = ta.statusCodigo === 'RECUSADO' || Boolean(ta.recusadoEm);
+            }
+          } catch {
+            // parent still verifica o status jurídico
+          }
+        }
+        setRecusado(recusou);
+        setConcluido(true);
+        setTimeout(() => {
+          onAssinaturaConcluidaRef.current?.();
+        }, 1500);
+      } else if (data?.status === 'EXPIRADO' || data?.status === 'CANCELADO') {
+        pararMonitoramento();
+        setError(`Sessão ${data.status.toLowerCase()}`);
+        setErrorFromCancel(false);
+      }
+    } catch (err) {
+      console.error('Erro ao consultar status da assinatura remota', err);
+    }
+  }, [pararMonitoramento]);
+
+  useAviso(PREFIXO_AVISO.TERMOS, verificarStatus, { registroId: sessaoMonitorada });
+  useBuscaNoVencimento(sessaoMonitorada ? expiraEm : null, verificarStatus);
 
   useEffect(() => {
     if (!open || !termoAssinaturaId) {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      sessaoMonitoradaRef.current = null;
+      setSessaoMonitorada(null);
+      setExpiraEm(null);
       setSessaoData(null);
       setLoading(true);
       setError(null);
@@ -76,7 +140,12 @@ export function AguardandoPacienteModal({
         if (isSubscribed) {
           setSessaoData(data);
           setLoading(false);
-          iniciarPolling(data.sessaoId);
+          if (data?.sessaoId) {
+            sessaoMonitoradaRef.current = data.sessaoId;
+            setSessaoMonitorada(data.sessaoId);
+            setExpiraEm(data.expiraEm ?? null);
+            verificarStatus();
+          }
         }
       } catch (err) {
         if (isSubscribed) {
@@ -87,57 +156,13 @@ export function AguardandoPacienteModal({
       }
     };
 
-    const iniciarPolling = (sessaoId) => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
-      pollingRef.current = setInterval(async () => {
-        try {
-          const res = await fetch(resolveApiUrl(`/api/v1/assinaturas/externa/${sessaoId}/status`), {
-            headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
-          });
-          const data = await res.json();
-          if (data.status === 'CONCLUIDO') {
-            clearInterval(pollingRef.current);
-            let recusou = false;
-            const termoId = termoAssinaturaId;
-            if (termoId) {
-              try {
-                const taRes = await fetch(resolveApiUrl(`/api/v1/termos/assinaturas/${termoId}`), {
-                  credentials: 'include',
-                  headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
-                });
-                if (taRes.ok) {
-                  const ta = await taRes.json();
-                  recusou = ta.statusCodigo === 'RECUSADO' || Boolean(ta.recusadoEm);
-                }
-              } catch {
-                // parent still verifica o status jurídico
-              }
-            }
-            setRecusado(recusou);
-            setConcluido(true);
-            setTimeout(() => {
-              onAssinaturaConcluidaRef.current?.();
-            }, 1500);
-          } else if (data.status === 'EXPIRADO' || data.status === 'CANCELADO') {
-            clearInterval(pollingRef.current);
-            setError(`Sessão ${data.status.toLowerCase()}`);
-            setErrorFromCancel(false);
-          }
-        } catch (err) {
-          console.error('Erro no polling', err);
-        }
-      }, 3000);
-    };
-
     gerarSessao();
 
     return () => {
       isSubscribed = false;
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      sessaoMonitoradaRef.current = null;
     };
-  }, [open, metodoCodigo, canalCodigo, termoAssinaturaId, telefonePaciente]);
+  }, [open, metodoCodigo, canalCodigo, termoAssinaturaId, telefonePaciente, verificarStatus]);
 
   const handleCancelarClick = async () => {
     if (!onCancelar || cancelando) return;

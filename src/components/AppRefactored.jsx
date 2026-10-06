@@ -84,6 +84,7 @@ import CancelarAgendaModal from './agenda/CancelarAgendaModal.jsx';
 import { IniciarAtendimentoToleranciaModal } from './agenda/IniciarAtendimentoToleranciaModal.jsx';
 import { useAgendaPage } from './agenda/useAgendaPage.js';
 import { DisponibilidadeRevisionProvider } from '../contexts/DisponibilidadeRevisionProvider.jsx';
+import { AvisosProvider } from '../contexts/AvisosProvider.jsx';
 import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
@@ -164,7 +165,7 @@ function revokeBlobUrlIfAny(url) {
   }, 1000);
 }
 
-function AppRefactoredInner() {
+function AppRefactoredInner({ onCanalAvisos }) {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setRoleNome, roleNome, contextStatus, recarregarContextoOrg, clearOrgSession } = useOrg();
   const {
     isAdmin: _isAdmin,
@@ -189,6 +190,11 @@ function AppRefactoredInner() {
   /** Incrementado após CompletarPerfil para re-rodar descoberta sem loop profile↔checking. */
   const [orgDiscoveryNonce, setOrgDiscoveryNonce] = React.useState(0);
   const authSessionReady = authState.authReady && authState.isLoggedIn && postLoginGate === 'ready' && contextStatus === 'ready';
+  const canalAvisosAtivo = authSessionReady && !!orgId && contextStatus === 'ready';
+
+  React.useEffect(() => {
+    onCanalAvisos?.({ orgId: orgId || null, ativo: canalAvisosAtivo });
+  }, [onCanalAvisos, orgId, canalAvisosAtivo]);
 
   React.useEffect(() => {
     if (!authState.isLoggedIn) {
@@ -5248,9 +5254,14 @@ function AppRefactoredInner() {
 }
 
 export default function App() {
+  // O provider fica acima do Inner porque hooks do próprio Inner (useAgendaPage) assinam avisos;
+  // o Inner, dono da sessão, informa a clínica e se o canal pode abrir.
+  const [canalAvisos, setCanalAvisos] = React.useState({ orgId: null, ativo: false });
   return (
     <DisponibilidadeRevisionProvider>
-      <AppRefactoredInner />
+      <AvisosProvider orgId={canalAvisos.orgId} ativo={canalAvisos.ativo}>
+        <AppRefactoredInner onCanalAvisos={setCanalAvisos} />
+      </AvisosProvider>
     </DisponibilidadeRevisionProvider>
   );
 }

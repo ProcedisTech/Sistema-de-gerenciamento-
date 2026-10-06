@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { usePedidoPendenteAnamnese } from './usePedidoPendenteAnamnese.js';
+import { criarAvisosFalsos } from '../../test/avisosFalsos.jsx';
+import { AVISO } from '../../services/avisos/tiposAviso.js';
 
 vi.mock('../../services/api', () => ({
   anamneseApi: { getDocumento: vi.fn() },
@@ -19,9 +21,10 @@ const emBranco = {
 const FUTURO = '2099-01-01T00:00:00Z';
 
 const flush = () => act(async () => {});
-const avancar = (ms = 3000) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+const avancar = (ms = 300) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 
 function montar(props = {}) {
+  const canal = criarAvisosFalsos();
   const onRespondido = vi.fn();
   const onEncerrado = vi.fn();
   const initialProps = {
@@ -32,8 +35,8 @@ function montar(props = {}) {
     onEncerrado,
     ...props,
   };
-  const utils = renderHook((p) => usePedidoPendenteAnamnese(p), { initialProps });
-  return { ...utils, onRespondido, onEncerrado, initialProps };
+  const utils = renderHook((p) => usePedidoPendenteAnamnese(p), { initialProps, wrapper: canal.Wrapper });
+  return { ...utils, canal, onRespondido, onEncerrado, initialProps };
 }
 
 describe('usePedidoPendenteAnamnese', () => {
@@ -64,44 +67,69 @@ describe('usePedidoPendenteAnamnese', () => {
     });
   });
 
-  it('documento sem envioAtivo → sem pedido e sem polling', async () => {
+  it('documento sem envioAtivo → sem pedido e sem consulta de status', async () => {
     anamneseApi.getDocumento.mockResolvedValue({ envioAtivo: null });
-    const { result } = montar();
+    const { result, canal } = montar();
     await flush();
     expect(result.current.pedido).toBeNull();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, null);
     await avancar();
     expect(anamneseEnvioApi.status).not.toHaveBeenCalled();
   });
 
-  it('CONCLUIDO → onRespondido e limpa', async () => {
-    const { result, onRespondido, onEncerrado } = montar();
+  it('busca o status ao abrir o pedido e não volta a consultar sem aviso', async () => {
+    montar();
     await flush();
-    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
-    await avancar();
     expect(anamneseEnvioApi.status).toHaveBeenCalledWith('env1');
-    expect(onRespondido).toHaveBeenCalledTimes(1);
-    expect(onEncerrado).not.toHaveBeenCalled();
-    expect(result.current.pedido).toBeNull();
-    await avancar();
+    await avancar(60_000);
     expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
   });
 
+  it('aviso do envio com CONCLUIDO → onRespondido e limpa', async () => {
+    const { result, canal, onRespondido, onEncerrado } = montar();
+    await flush();
+    anamneseEnvioApi.status.mockResolvedValue({ status: 'CONCLUIDO' });
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    await avancar();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+    expect(onRespondido).toHaveBeenCalledTimes(1);
+    expect(onEncerrado).not.toHaveBeenCalled();
+    expect(result.current.pedido).toBeNull();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    await avancar();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['CANCELADO', 'EXPIRADO'])('%s → onEncerrado e limpa', async (status) => {
-    const { result, onRespondido, onEncerrado } = montar();
+    const { result, canal, onRespondido, onEncerrado } = montar();
     await flush();
     anamneseEnvioApi.status.mockResolvedValue({ status });
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, null);
     await avancar();
     expect(onEncerrado).toHaveBeenCalledTimes(1);
     expect(onRespondido).not.toHaveBeenCalled();
     expect(result.current.pedido).toBeNull();
   });
 
-  it('PENDENTE continua consultando', async () => {
-    montar();
+  it('aviso de outro envio não consulta; recarregar consulta', async () => {
+    const { canal } = montar();
     await flush();
-    await avancar();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env-outro');
+    await avancar(1000);
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
+    canal.emitirRecarregar();
     await avancar();
     expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+  });
+
+  it('PENDENTE continua aguardando novos avisos', async () => {
+    const { canal } = montar();
+    await flush();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    await avancar();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    await avancar();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(3);
   });
 
   it('vencido no cliente encerra sem chamar status', async () => {
@@ -110,10 +138,24 @@ describe('usePedidoPendenteAnamnese', () => {
     });
     const { result, onEncerrado } = montar();
     await flush();
-    await avancar();
+    await avancar(0);
     expect(anamneseEnvioApi.status).not.toHaveBeenCalled();
     expect(onEncerrado).toHaveBeenCalledTimes(1);
     expect(result.current.pedido).toBeNull();
+  });
+
+  it('no vencimento encerra sem chamar status de novo', async () => {
+    vi.setSystemTime(new Date('2026-10-04T12:00:00Z'));
+    anamneseApi.getDocumento.mockResolvedValue({
+      envioAtivo: { id: 'env1', status: 'PENDENTE', expiraEm: '2026-10-04T12:10:00Z' },
+    });
+    const { result, onEncerrado } = montar();
+    await flush();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
+    await avancar(10 * 60_000);
+    expect(onEncerrado).toHaveBeenCalledTimes(1);
+    expect(result.current.pedido).toBeNull();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
   });
 
   it('cancelar confirma, chama a API, limpa e recarrega', async () => {
@@ -147,27 +189,30 @@ describe('usePedidoPendenteAnamnese', () => {
     expect(onEncerrado).toHaveBeenCalledTimes(2);
   });
 
-  it('desmontar para o polling', async () => {
-    const { unmount } = montar();
+  it('desmontar para de ouvir avisos', async () => {
+    const { unmount, canal } = montar();
     await flush();
     unmount();
+    expect(canal.inscritos.size).toBe(0);
     await avancar(9000);
-    expect(anamneseEnvioApi.status).not.toHaveBeenCalled();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
   });
 
-  it('trocar de paciente limpa o pedido e para o polling', async () => {
-    const { result, rerender, initialProps } = montar();
+  it('trocar de paciente limpa o pedido e ignora avisos do envio anterior', async () => {
+    const { result, rerender, initialProps, canal } = montar();
     await flush();
     expect(result.current.pedido).not.toBeNull();
     rerender({ ...initialProps, pacienteId: 'pac2', historicoPaciente: [] });
     expect(result.current.pedido).toBeNull();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
     await avancar(9000);
-    expect(anamneseEnvioApi.status).not.toHaveBeenCalled();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
   });
 
   it('ativo=false não chama nada', async () => {
-    const { result } = montar({ ativo: false });
+    const { result, canal } = montar({ ativo: false });
     await flush();
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, null);
     await avancar(9000);
     expect(result.current.pedido).toBeNull();
     expect(anamneseApi.getDocumento).not.toHaveBeenCalled();

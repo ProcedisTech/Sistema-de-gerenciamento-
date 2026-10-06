@@ -274,7 +274,7 @@ export function getPacienteCreateErrorFeedback(err) {
   return { banner, cpfField: '', highlightCpf: false };
 }
 
-async function attemptTokenRefresh() {
+export async function attemptTokenRefresh() {
   try {
     const { data: { session }, error } = await supabase.auth.refreshSession();
     if (error || !session?.access_token) return null;

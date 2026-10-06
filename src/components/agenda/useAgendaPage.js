@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrg } from '../../contexts/OrgContext';
 import { useDisponibilidadeRevision } from '../../contexts/useDisponibilidadeRevision.js';
 import { useToast } from '../../contexts/useToast.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 import { usePapel } from '../../hooks/usePapel';
 import {
   agendasApi,
@@ -579,8 +581,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     };
   }, [appointments, disponibilidades]);
 
+  /** `{ silencioso: true }`: sem loading e, em erro, mantém os dados da tela (recarga disparada por aviso). */
   const runMonthLoad = useCallback(
-    async (targetMonth) => {
+    async (targetMonth, opts) => {
+      const silencioso = opts?.silencioso === true;
       dispMonthCacheRef.current = {};
       if (!authEnabled || !targetMonth) {
         setAppointments([]);
@@ -594,8 +598,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       monthLoadAbortRef.current = controller;
       const gen = ++monthLoadGenRef.current;
 
-      setLoading(true);
-      setError('');
+      if (!silencioso) {
+        setLoading(true);
+        setError('');
+      }
       try {
         const { start, end } = monthRangeIso(targetMonth);
         const rangeOpts = { signal: controller.signal };
@@ -607,7 +613,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         setAppointments(rows);
       } catch (e) {
         if (isAbortError(e)) return;
-        if (gen !== monthLoadGenRef.current) return;
+        if (gen !== monthLoadGenRef.current || silencioso) return;
         setError(getApiErrorToastMessage(e, 'Não foi possível carregar a agenda.'));
         setAppointments([]);
       } finally {
@@ -618,14 +624,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   );
 
   const loadMonth = useCallback(
-    async (overrideMonthDate) => {
+    async (overrideMonthDate, opts) => {
       const targetMonth = overrideMonthDate ?? monthDate;
-      await runMonthLoad(targetMonth);
+      await runMonthLoad(targetMonth, opts);
     },
     [monthDate, runMonthLoad],
   );
 
-  const refreshHojeSessionCount = useCallback(async () => {
+  const refreshHojeSessionCount = useCallback(async (opts) => {
     if (!authEnabled || !todayIso) {
       setHojeSessionCount(0);
       return;
@@ -639,14 +645,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
       setHojeSessionCount(dtos.length);
     } catch (e) {
-      if (isAbortError(e)) return;
+      if (isAbortError(e) || opts?.silencioso === true) return;
       setHojeSessionCount(0);
     }
   }, [authEnabled, todayIso]);
 
-  const refreshHojeIfOffCurrentMonth = useCallback(async () => {
+  const refreshHojeIfOffCurrentMonth = useCallback(async (opts) => {
     if (monthDate && monthContainsIso(monthDate, todayIso)) return;
-    await refreshHojeSessionCount();
+    await refreshHojeSessionCount(opts);
   }, [monthDate, todayIso, refreshHojeSessionCount]);
 
   useEffect(() => {
@@ -1537,7 +1543,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     };
   }, [authEnabled, viewMode, weekStartIso, weekEndIso, canSeeAgendaMulti, canSeeAgendaPropria, roleUserId]);
 
-  const refreshWeekGrid = useCallback(async () => {
+  const refreshWeekGrid = useCallback(async (opts) => {
     if (!authEnabled || viewMode !== 'semana' || !weekStartIso) return;
     try {
       const weekOpts = {};
@@ -1547,17 +1553,24 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const rows = await fetchDashboardAppointmentsForRange(weekStartIso, weekEndIso, weekOpts);
       setWeekGridAppointments(rows);
     } catch {
-      setWeekGridAppointments([]);
+      if (opts?.silencioso !== true) setWeekGridAppointments([]);
     }
   }, [authEnabled, viewMode, weekStartIso, weekEndIso, canSeeAgendaMulti, canSeeAgendaPropria, roleUserId]);
 
-  /** Recarrega lista do mês e grade semanal (no-op na semana se viewMode !== 'semana'). */
-  const refreshDashboard = useCallback(async () => {
+  /**
+   * Recarrega lista do mês e grade semanal (no-op na semana se viewMode !== 'semana').
+   * `{ silencioso: true }`: sem loading e, em erro, mantém os dados atuais na tela.
+   */
+  const refreshDashboard = useCallback(async (opts) => {
+    const silenciosa = opts?.silencioso === true ? { silencioso: true } : undefined;
     dispMonthCacheRef.current = {};
-    await loadMonth();
-    await refreshWeekGrid();
-    await refreshHojeIfOffCurrentMonth();
+    await loadMonth(undefined, silenciosa);
+    await refreshWeekGrid(silenciosa);
+    await refreshHojeIfOffCurrentMonth(silenciosa);
   }, [loadMonth, refreshWeekGrid, refreshHojeIfOffCurrentMonth]);
+
+  const recarregarPorAviso = useCallback(() => refreshDashboard({ silencioso: true }), [refreshDashboard]);
+  useAviso(PREFIXO_AVISO.AGENDA, recarregarPorAviso, { debounceMs: 400 });
 
   const handleCancelar = useCallback(
     async (agendaId, payload, opts = {}) => {

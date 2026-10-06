@@ -3,8 +3,8 @@ import { Bell, BellRing } from 'lucide-react';
 import { notificacoesApi } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 import { formatarMensagemNotificacao, formatarTempoRelativo } from '../../utils/notificacaoFormat.js';
-
-const POLL_INTERVAL_MS = 60_000;
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 
 export default function NotificationBell({
   variant = 'default',
@@ -32,9 +32,9 @@ export default function NotificationBell({
 
   useEffect(() => {
     refreshCount();
-    const id = setInterval(refreshCount, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
   }, [refreshCount, notificacoesRefreshKey]);
+
+  useAviso(PREFIXO_AVISO.NOTIFICACAO, refreshCount);
 
   useEffect(() => {
     if (!open) return undefined;
