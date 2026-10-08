@@ -505,12 +505,18 @@ export function AgendaDashboard({
           String(appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '')
             .toLowerCase() === 'retorno',
         planejamentoItemId: appointment.planejamentoItemId ?? null,
-        lote: items.map(a => ({
-          agendaId: a.id || a.agendaId,
-          procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
-          catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
-          planejamentoItemId: a.planejamentoItemId ?? null,
-        })),
+        lote: items
+          .filter((a) => {
+            const nome = a.tipoProcedimento?.nome || a.procedimentoNome || '';
+            const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
+            return Boolean((a.catalogoProcedimentoSaudeId && String(a.catalogoProcedimentoSaudeId).trim()) || (!isPlaceholder && String(nome).trim()));
+          })
+          .map((a) => ({
+            agendaId: a.id || a.agendaId,
+            procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
+            catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+            planejamentoItemId: a.planejamentoItemId ?? null,
+          })),
       });
       return;
     }

@@ -296,14 +296,26 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     let chave = null;
     if (agId && atendimentosAvulsosMap.has(`ag_${agId}`)) {
       chave = `ag_${agId}`;
-    } else if (pfId && atendimentosAvulsosMap.has(`pf_${pfId}`)) {
-      chave = `pf_${pfId}`;
-    } else if (agId) {
-      chave = `ag_${agId}`;
     } else if (pfId) {
-      chave = `pf_${pfId}`;
-    } else {
-      chave = `reg_${foto.id || foto.fotoId || foto.dataISO}`;
+      if (atendimentosAvulsosMap.has(`pf_${pfId}`)) {
+        chave = `pf_${pfId}`;
+      } else {
+        for (const [k, at] of atendimentosAvulsosMap.entries()) {
+          if (at.procedimentosFeitosIds?.includes(pfId) || at.procedimentoFeitoId === pfId) {
+            chave = k;
+            break;
+          }
+        }
+      }
+    }
+    if (!chave) {
+      if (agId) {
+        chave = `ag_${agId}`;
+      } else if (pfId) {
+        chave = `pf_${pfId}`;
+      } else {
+        chave = `reg_${foto.id || foto.fotoId || foto.dataISO}`;
+      }
     }
 
     if (!atendimentosAvulsosMap.has(chave)) {

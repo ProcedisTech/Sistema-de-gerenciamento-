@@ -23,6 +23,7 @@ import { PontosResumoPanel } from '../mapeamento/PontosResumoPanel.jsx';
 import { VistaChipsBar, VistaAtivaHeader } from '../mapeamento/VistaChipsBar.jsx';
 import { MapeamentoFullscreenOverlay } from '../mapeamento/MapeamentoFullscreenOverlay.jsx';
 import { UnidadeMedidaSelect } from '../mapeamento/UnidadeMedidaSelect.jsx';
+import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 
 function EscolherVistaMapaModal({ open, vistasDisponiveis, onSelect, onClose, hasFoto, countPontosVista }) {
   if (!open) return null;
@@ -103,6 +104,7 @@ export function MapaAplicacaoPanel({
   procedimentoFeitoId,
   catalogoId,
   nomeProcedimento,
+  procedimentosSessao = [],
   planejamentoItemId,
   planejamentoId,
   procedimentosComPontos = [],
@@ -111,10 +113,16 @@ export function MapaAplicacaoPanel({
   onCaptureConsumed,
   onPrepareCapture,
   onEnsureProcedimento,
+  onMudarCorProcedimento,
   disabled = false,
   disabledHint = 'Preencha o nome do procedimento (com item do catálogo) para habilitar o mapa.',
 }) {
   const toast = useToast();
+
+  const handleMudarCorProcedimento = useCallback((procId, novaCor, outroProcId, corAntiga) => {
+    mapaState.atualizarCorProcedimento?.(procId, novaCor, outroProcId, corAntiga);
+    onMudarCorProcedimento?.(procId, novaCor, outroProcId, corAntiga);
+  }, [mapaState, onMudarCorProcedimento]);
   const [galeriaOpen, setGaleriaOpen] = useState(false);
   const [galeriaItems, setGaleriaItems] = useState([]);
   const [galeriaLoading, setGaleriaLoading] = useState(false);
@@ -131,6 +139,63 @@ export function MapaAplicacaoPanel({
 
   const mediaBusy = galeriaLoading || galeriaSelecting || photoActionBusy;
 
+  // Lista normalizada de procedimentos da sessão
+  const listaProcedimentosSessao = useMemo(() => {
+    const isPlaceholder = (nome) => !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
+
+    if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
+      const validos = procedimentosSessao.filter((p) => {
+        const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId;
+        const nome = p.nomeProcedimento || p.procedimentoNome || p.nome;
+        return Boolean((cid && String(cid).trim()) || (nome && String(nome).trim() && !isPlaceholder(nome)));
+      });
+      if (validos.length > 0) {
+        return validos
+          .map((p, idx) => {
+            const rawNome = p.nomeProcedimento || p.procedimentoNome || p.nome;
+            const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id;
+            return {
+              id: String(cid || `idx_${idx}`),
+              nome: rawNome,
+              unidadeMedida: p.unidadeMedida || 'u',
+              corHex: p.corHex || (cid ? corParaProcedimento(cid) : null),
+              index: idx,
+            };
+          })
+          .filter((item) => item.nome && !isPlaceholder(item.nome));
+      }
+    }
+    if (catalogoId && nomeProcedimento && String(nomeProcedimento).trim() && !isPlaceholder(nomeProcedimento)) {
+      return [{
+        id: String(catalogoId),
+        nome: String(nomeProcedimento),
+        unidadeMedida: 'u',
+        corHex: corParaProcedimento(catalogoId),
+        index: 0,
+      }];
+    }
+    return [];
+  }, [procedimentosSessao, catalogoId, nomeProcedimento]);
+
+  const [procedimentoArmadoId, setProcedimentoArmadoId] = useState(() => {
+    return listaProcedimentosSessao[0]?.id || (catalogoId ? String(catalogoId) : null);
+  });
+
+  useEffect(() => {
+    if (listaProcedimentosSessao.length > 0) {
+      const existe = listaProcedimentosSessao.some((p) => p.id === procedimentoArmadoId);
+      if (!existe) {
+        setProcedimentoArmadoId(listaProcedimentosSessao[0].id);
+      }
+    }
+  }, [listaProcedimentosSessao, procedimentoArmadoId]);
+
+  const procedimentoArmado = useMemo(() => {
+    const proc = listaProcedimentosSessao.find((p) => p.id === procedimentoArmadoId);
+    if (proc) return proc;
+    return listaProcedimentosSessao[0] || (catalogoId ? { id: String(catalogoId), nome: String(nomeProcedimento || '') } : null);
+  }, [listaProcedimentosSessao, procedimentoArmadoId, catalogoId, nomeProcedimento]);
+
   const presets = useMemo(() => getPresetsForUnidade(unidadeMedida), [unidadeMedida]);
 
   const handleUnidadeMedidaChange = useCallback((unit) => {
@@ -139,46 +204,90 @@ export function MapaAplicacaoPanel({
     setPasso(getPassoFallback(u, undefined));
   }, []);
 
-  const procedimentoArmado = useMemo(
-    () =>
-      catalogoId
-        ? { id: String(catalogoId), nome: String(nomeProcedimento || '') }
-        : null,
-    [catalogoId, nomeProcedimento],
-  );
-
   const vistasPreenchidas = mapaState.getVistasPreenchidas();
   const vistaAtual = mapaState.vistaAtual;
   const fotoAtual = mapaState.getFotoVista(vistaAtual);
-  const gruposPontos = mapaState.getPontosVista(vistaAtual, catalogoId, nomeProcedimento);
+  const gruposPontos = mapaState.getPontosVista(
+    vistaAtual,
+    procedimentoArmado?.id || catalogoId,
+    procedimentoArmado?.nome || nomeProcedimento,
+    listaProcedimentosSessao,
+  );
   const setFotoVista = mapaState.setFotoVista;
   const setVistaAtual = mapaState.setVistaAtual;
   const shouldHydrateFromServer = mapaState.shouldHydrateFromServer;
   const markHydratedFromServer = mapaState.markHydratedFromServer;
   const hydrateFromApi = mapaState.hydrateFromApi;
   const clearAllDirty = mapaState.clearAllDirty;
+
   // gruposSessao: para o PontosResumoPanel mostrar totais de todas as vistas da sessão
   const gruposSessao = useMemo(() => {
     const pontosPorVista = mapaState.pontosPorVista || {};
-    if (!catalogoId || Object.keys(pontosPorVista).length === 0) return [];
+    if (Object.keys(pontosPorVista).length === 0) return [];
     const todosPontos = Object.values(pontosPorVista).flat();
     if (todosPontos.length === 0) return [];
+
+    if (listaProcedimentosSessao.length > 0) {
+      return listaProcedimentosSessao.map((proc) => {
+        const procPontosPorVista = {};
+        Object.entries(pontosPorVista).forEach(([vista, pts]) => {
+          if (Array.isArray(pts)) {
+            const filtrados = pts.filter((p) => {
+              if (p.catalogoProcedimentoSaudeId || p.catalogoId) {
+                return String(p.catalogoProcedimentoSaudeId || p.catalogoId) === proc.id;
+              }
+              return proc.index === 0;
+            });
+            if (filtrados.length > 0) {
+              procPontosPorVista[vista] = filtrados;
+            }
+          }
+        });
+
+        return {
+          catalogoProcedimentoSaudeId: proc.id,
+          nomeProcedimento: proc.nome,
+          unidadeMedida: proc.unidadeMedida || 'u',
+          pontosPorVista: procPontosPorVista,
+        };
+      });
+    }
+
+    if (!catalogoId) return [];
     return [{
       catalogoProcedimentoSaudeId: String(catalogoId),
       nomeProcedimento: String(nomeProcedimento || ''),
+      unidadeMedida: unidadeMedida || 'u',
       pontosPorVista,
     }];
-  }, [mapaState.pontosPorVista, catalogoId, nomeProcedimento]);
+  }, [mapaState.pontosPorVista, listaProcedimentosSessao, catalogoId, nomeProcedimento, unidadeMedida]);
+
+  const handleAddPontoComProcedimento = useCallback(
+    (vista, pontoData) => {
+      const targetProcId = pontoData?.catalogoProcedimentoSaudeId || pontoData?.catalogoId || procedimentoArmado?.id || catalogoId;
+      const targetProc = (listaProcedimentosSessao || []).find((p) => String(p.id) === String(targetProcId)) || procedimentoArmado;
+      return mapaState.adicionarPonto(vista, {
+        ...pontoData,
+        catalogoProcedimentoSaudeId: targetProc?.id || targetProcId,
+        catalogoId: targetProc?.id || targetProcId,
+        procedimentoIndex: targetProc?.index ?? 0,
+        nomeProcedimento: targetProc?.nome || pontoData?.nomeProcedimento || nomeProcedimento,
+        cor: targetProc?.corHex || pontoData?.cor || (targetProcId ? corParaProcedimento(targetProcId) : null),
+      });
+    },
+    [mapaState, procedimentoArmado, catalogoId, nomeProcedimento, listaProcedimentosSessao],
+  );
 
   useEffect(() => {
-    if (!catalogoId) {
+    const targetCatId = procedimentoArmado?.id || catalogoId;
+    if (!targetCatId) {
       setUnidadeMedida('un');
       setPasso(1);
       return;
     }
     let cancelled = false;
     catalogosApi
-      .get(catalogoId)
+      .get(targetCatId)
       .then((cat) => {
         if (cancelled) return;
         const unit = normalizeUnidadeMedida(cat?.unidadeMedida);
@@ -402,6 +511,42 @@ export function MapaAplicacaoPanel({
           <p className="mt-1 text-[11px] font-medium text-[#94a3b8]">
             Unidade aplicada a todos os pontos deste procedimento.
           </p>
+          {listaProcedimentosSessao.length > 1 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-bold uppercase tracking-wider text-slate-500">
+                Procedimento Marcador:
+              </span>
+              {listaProcedimentosSessao.map((proc) => {
+                const isArmado = proc.id === procedimentoArmado?.id;
+                const cor = proc.corHex || corParaProcedimento(proc.id);
+                return (
+                  <button
+                    key={proc.id}
+                    type="button"
+                    onClick={() => setProcedimentoArmadoId(proc.id)}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                      isArmado
+                        ? 'border-2 text-slate-900 bg-white ring-2 ring-teal-500/20 shadow-md'
+                        : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white hover:text-slate-900'
+                    }`}
+                    style={isArmado ? { borderColor: cor } : {}}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: cor }}
+                      aria-hidden
+                    />
+                    <span>{proc.nome}</span>
+                    {isArmado && (
+                      <span className="ml-1 text-[10px] font-black uppercase text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">
+                        Ativo
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {planejamentoItemId ? (
@@ -448,7 +593,7 @@ export function MapaAplicacaoPanel({
             pacienteId={pacienteId}
             catalogoId={catalogoId}
             isRetorno={procedimentoArmado?.id && false /* Aqui pode ser checado se é retorno, mas a prop isRetorno/pacienteId é suficiente */}
-            onAddPonto={mapaState.adicionarPonto}
+            onAddPonto={handleAddPontoComProcedimento}
             onEditarPonto={(_catId, vista, localId, patch) =>
               mapaState.editarPonto(vista, localId, patch)
             }
@@ -520,8 +665,8 @@ export function MapaAplicacaoPanel({
         foto={fotoAtual}
         procedimentoArmado={procedimentoArmado}
         hideProcedimentoPicker={true}
-        onArmar={() => { }}
-        procedimentosUsados={[]}
+        onArmar={(proc) => setProcedimentoArmadoId(proc?.id)}
+        procedimentosUsados={listaProcedimentosSessao}
         pontosVista={gruposPontos}
         gruposSessao={gruposSessao}
         countPontosVista={mapaState.countPontosVista(vistaAtual)}
@@ -529,7 +674,7 @@ export function MapaAplicacaoPanel({
         onUnidadeMedidaChange={handleUnidadeMedidaChange}
         presets={presets}
         passo={passo}
-        onAddPonto={mapaState.adicionarPonto}
+        onAddPonto={handleAddPontoComProcedimento}
         onEditarPonto={(_catId, vista, localId, patch) =>
           mapaState.editarPonto(vista, localId, patch)
         }
@@ -537,6 +682,7 @@ export function MapaAplicacaoPanel({
         onDesfazerUltimo={() => mapaState.desfazerUltimoPonto(vistaAtual)}
         onClearVista={() => mapaState.limparPontosVista(vistaAtual)}
         onRemoverFotoVista={() => mapaState.removerFotoVista(vistaAtual)}
+        onMudarCorProcedimento={handleMudarCorProcedimento}
         onClose={() => setFullscreenOpen(false)}
       />
     </div>

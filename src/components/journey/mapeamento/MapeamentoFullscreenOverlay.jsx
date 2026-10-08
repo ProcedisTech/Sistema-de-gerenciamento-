@@ -19,6 +19,7 @@ import { MapeamentoFullscreenToolbar } from './MapeamentoFullscreenToolbar.jsx';
 import { PontosResumoPanel } from './PontosResumoPanel.jsx';
 import { useMapeamentoFullscreenKeyboardShortcuts } from './useMapeamentoFullscreenKeyboardShortcuts.js';
 import { useMediaQuery } from '../../../hooks/useMediaQuery.js';
+import { useToast } from '../../../contexts/useToast.js';
 import { getVistaLabel } from '../../../constants/vistasMapeamento.js';
 import { MAPEAMENTO_PALETA_CORES, corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 
@@ -45,7 +46,9 @@ export function MapeamentoFullscreenOverlay({
   presets,
   passo,
   onRemoverFotoVista,
+  onMudarCorProcedimento,
 }) {
+  const toast = useToast();
   const [modo, setModo] = useState('ponto');
   const [tamanhoGlobalPonto, setTamanhoGlobalPonto] = useState(1.0);
   const [mostrarValores, setMostrarValores] = useState(true);
@@ -76,6 +79,12 @@ export function MapeamentoFullscreenOverlay({
       setProcedimentosLocais(procedimentosUsados);
     }
   }, [procedimentosUsados]);
+
+  useEffect(() => {
+    if (procedimentoArmado?.id) {
+      setActiveProcedimentoId(procedimentoArmado.id);
+    }
+  }, [procedimentoArmado?.id]);
 
   const listaProcedimentos = useMemo(() => {
     if (procedimentosLocais.length > 0) return procedimentosLocais;
@@ -109,10 +118,36 @@ export function MapeamentoFullscreenOverlay({
     onArmar?.(proc);
   };
 
+  const matchProcId = (p, targetId) => {
+    if (!targetId || !p) return false;
+    const t = String(targetId).trim();
+    return [p.id, p.catalogoProcedimentoSaudeId, p.catalogoId, p.nomeProcedimentoCatalogoId, p._uid]
+      .filter(Boolean)
+      .some((id) => String(id).trim() === t);
+  };
+
   const handleMudarCorProcedimento = (procId, novaCor) => {
-    setProcedimentosLocais((prev) =>
-      prev.map((p) => (p.id === procId ? { ...p, corHex: novaCor } : p))
+    const alvo = procedimentosLocais.find((p) => matchProcId(p, procId));
+    const corAntigaAlvo = alvo?.corHex;
+    const outroAfetado = procedimentosLocais.find(
+      (p) => !matchProcId(p, procId) && (p.corHex || corParaProcedimento(p.id)).toLowerCase() === novaCor?.toLowerCase()
     );
+
+    setProcedimentosLocais((prev) =>
+      prev.map((p) => {
+        if (matchProcId(p, procId)) return { ...p, corHex: novaCor };
+        if (outroAfetado && matchProcId(p, outroAfetado.id)) return { ...p, corHex: corAntigaAlvo };
+        return p;
+      })
+    );
+
+    onMudarCorProcedimento?.(procId, novaCor, outroAfetado?.id, corAntigaAlvo);
+
+    if (outroAfetado) {
+      toast?.info?.(
+        `Cor já utilizada em ${outroAfetado.nome || 'outro procedimento'}. Cores foram invertidas para manter a distinção.`
+      );
+    }
   };
 
   const getProcedimentoStats = useCallback(
@@ -121,7 +156,8 @@ export function MapeamentoFullscreenOverlay({
       let doseTotal = 0;
       const pontos = Array.isArray(pontosVista) ? pontosVista : [];
       pontos.forEach((pt) => {
-        if (String(pt.catalogoId || pt.procedimentoId || '') === String(procId)) {
+        const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || pt.procedimentoId || '');
+        if (ptId === String(procId)) {
           pontosCount++;
           doseTotal += Number(pt.quantidade || pt.dose || 0);
         }
@@ -468,7 +504,17 @@ export function MapeamentoFullscreenOverlay({
           foto={foto}
           procedimentoArmado={activeProc}
           pontosVista={pontosVista}
-          onAddPonto={onAddPonto}
+          onAddPonto={(vista, pontoData) => {
+            const catId = activeProc?.catalogoProcedimentoSaudeId || activeProc?.catalogoId || activeProc?.id || pontoData.catalogoProcedimentoSaudeId || pontoData.catalogoId;
+            onAddPonto?.(vista, {
+              ...pontoData,
+              catalogoProcedimentoSaudeId: catId,
+              catalogoId: catId,
+              procedimentoIndex: activeProc?.index ?? 0,
+              nomeProcedimento: activeProc?.nome || pontoData.nomeProcedimento,
+              cor: pontoData?.cor || activeCor || activeProc?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
+            });
+          }}
           onEditarPonto={onEditarPonto}
           onRemovePonto={onRemovePonto}
           tamanhoGlobalPonto={tamanhoGlobalPonto}

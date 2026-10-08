@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { corParaProcedimento } from '../../constants/mapeamentoPaletaCores.js';
 
 export const useJourneyState = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -209,11 +210,14 @@ export const useJourneyState = () => {
           setOrientacoesItens([]);
         });
       }
+      const cid = catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null;
       nextArr[activeProcedureIndex] = {
         ...cur,
         nomeProcedimento: nextNome,
-        nomeProcedimentoCatalogoId:
-          catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null,
+        nomeProcedimentoCatalogoId: cid,
+        catalogoProcedimentoSaudeId: cid,
+        catalogoId: cid,
+        corHex: cur.corHex || (cid ? corParaProcedimento(cid) : undefined),
       };
       return nextArr;
     });

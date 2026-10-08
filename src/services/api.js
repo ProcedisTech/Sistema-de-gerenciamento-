@@ -1335,13 +1335,19 @@ export const termosApi = {
   update: (id, data) =>
     request(`/api/v1/termos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/termos/${id}`, { method: 'DELETE' }),
-  resolver: ({ pacienteId, catalogoIds = [] } = {}) => {
+  resolver: ({ pacienteId, catalogoIds = [], planejamentoItemIds = [] } = {}) => {
     const params = new URLSearchParams();
     if (pacienteId) params.set('pacienteId', String(pacienteId));
     (Array.isArray(catalogoIds) ? catalogoIds : [])
       .map((id) => String(id || '').trim())
-      .filter(Boolean)
+      .filter((id) => id && id !== 'undefined' && id !== 'null')
       .forEach((id) => params.append('catalogoProcedimentoSaudeIds', id));
+    if (Array.isArray(planejamentoItemIds) && planejamentoItemIds.length > 0) {
+      params.set(
+        'planejamentoItemIds',
+        planejamentoItemIds.map((id) => (id ? String(id).trim() : 'null')).join(','),
+      );
+    }
     const qs = params.toString();
     return request(`/api/v1/termos/resolucao${qs ? `?${qs}` : ''}`);
   },

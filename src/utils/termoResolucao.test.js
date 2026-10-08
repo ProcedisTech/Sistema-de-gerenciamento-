@@ -13,6 +13,9 @@ import {
   sessaoComPfDoCatalogo,
   temFaltantes,
   titulosFaltantes,
+  detalharTermosFaltantes,
+  procedimentosSemTermoExigido,
+  statusTermoPorProcedimento,
 } from './termoResolucao.js';
 
 describe('termoResolucao — consome o endpoint, não a natureza', () => {
@@ -103,7 +106,7 @@ describe('termoResolucao — consome o endpoint, não a natureza', () => {
     ).toEqual(['cat-pai']);
   });
 
-  it('consentimentosAguardandoExecucao lista crédito vigente e ignora faltantes', () => {
+  it('consentimentosAguardandoExecucao lista crédito vigente com procedimentos mesmo quando existem faltantes', () => {
     expect(
       consentimentosAguardandoExecucao({
         termosExigidos: [
@@ -113,12 +116,18 @@ describe('termoResolucao — consome o endpoint, não a natureza', () => {
             vigente: true,
             assinaturaId: 'a1',
             assinadoEm: '2026-08-19T08:17:00Z',
+            catalogos: [{ id: 'c1', nome: 'Toxina Botulínica' }],
           },
         ],
-        faltantes: [],
+        faltantes: [{ termoId: 't2', titulo: 'Termo Sutura' }],
       })
     ).toEqual([
-      { termoId: 't1', titulo: 'Termo de Botox', assinadoEm: '2026-08-19T08:17:00Z' },
+      {
+        termoId: 't1',
+        titulo: 'Termo de Botox',
+        assinadoEm: '2026-08-19T08:17:00Z',
+        procedimentos: ['Toxina Botulínica'],
+      },
     ]);
     expect(
       consentimentosAguardandoExecucao({
@@ -180,4 +189,100 @@ describe('termoResolucao — PF desta sessão por catálogo (T1)', () => {
     expect(pfIdNestaSessaoParaCatalogo('cat-b', next)).toBe('pf-b');
     expect(next[1].nomeProcedimentoCatalogoId).toBe('cat-b');
   });
+
+  it('linha com id idêntico ao catálogo não é tratada como PF persistido', () => {
+    const rascunho = [{ catalogoProcedimentoSaudeId: 'cat-a', id: 'cat-a' }];
+    expect(pfIdNestaSessaoParaCatalogo('cat-a', rascunho)).toBeNull();
+  });
+
+  it('detalharTermosFaltantes mapeia os procedimentos de cada termo exigido', () => {
+    const resolucao = {
+      termosExigidos: [
+        {
+          termoId: 't1',
+          titulo: 'Termo de Lesão',
+          catalogos: [{ catalogoId: 'cat-lesao', nome: 'Exérese de Lesão Cutânea Benigna' }],
+        },
+        {
+          termoId: 't2',
+          titulo: 'Termo Geral',
+          catalogos: [],
+        },
+      ],
+      faltantes: [
+        { termoId: 't1', titulo: 'Termo de Lesão' },
+        { termoId: 't2', titulo: 'Termo Geral' },
+      ],
+    };
+    const detalhado = detalharTermosFaltantes(resolucao);
+    expect(detalhado).toEqual([
+      {
+        termoId: 't1',
+        titulo: 'Termo de Lesão',
+        procedimentos: ['Exérese de Lesão Cutânea Benigna'],
+      },
+      {
+        termoId: 't2',
+        titulo: 'Termo Geral',
+        procedimentos: [],
+      },
+    ]);
+  });
+
+  it('procedimentosSemTermoExigido retorna procedimentos do campo procedimentosSemVinculo do DTO', () => {
+    const resolucao = {
+      procedimentosSemVinculo: [
+        { catalogoId: 'cat-infiltracao', nome: 'Infiltração Intralesional (Corticoide)' },
+      ],
+    };
+    const semTermo = procedimentosSemTermoExigido(resolucao);
+    expect(semTermo).toEqual([
+      { catalogoId: 'cat-infiltracao', nome: 'Infiltração Intralesional (Corticoide)' },
+    ]);
+  });
+
+  it('statusTermoPorProcedimento identifica corretamente procedimentos pendentes, assinados e dispensados', () => {
+    const resolucao = {
+      termosExigidos: [
+        {
+          termoId: 't-drenagem',
+          titulo: 'DRENAGEM',
+          catalogos: [{ catalogoId: 'cat-drenagem', nome: 'Drenagem de Abscesso' }],
+          vigente: false,
+        },
+        {
+          termoId: 't-botox',
+          titulo: 'BOTOX',
+          catalogos: [{ catalogoId: 'cat-botox', nome: 'Aplicação de Botox' }],
+          assinaturaId: 'ass-123',
+          vigente: true,
+        },
+      ],
+      faltantes: [
+        { termoId: 't-drenagem', titulo: 'DRENAGEM' },
+      ],
+      procedimentosSemVinculo: [
+        { catalogoId: 'cat-infiltracao', nome: 'Infiltração Intralesional (Corticoide)' },
+      ],
+    };
+
+    // Drenagem está em faltantes
+    const statusDrenagem = statusTermoPorProcedimento('cat-drenagem', resolucao);
+    expect(statusDrenagem.status).toBe('pendente');
+    expect(statusDrenagem.titulo).toBe('DRENAGEM');
+
+    // Botox está vigente
+    const statusBotox = statusTermoPorProcedimento('cat-botox', resolucao);
+    expect(statusBotox.status).toBe('assinado');
+
+    // Infiltração está em procedimentosSemVinculo
+    const statusInfiltracao = statusTermoPorProcedimento('cat-infiltracao', resolucao);
+    expect(statusInfiltracao.status).toBe('dispensado');
+    expect(statusInfiltracao.rotulo).toContain('Dispensado');
+
+    // Procedimento sem vínculo cai em dispensado
+    const statusOutro = statusTermoPorProcedimento('cat-qualquer', resolucao);
+    expect(statusOutro.status).toBe('dispensado');
+  });
 });
+

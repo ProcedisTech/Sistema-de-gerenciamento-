@@ -20,17 +20,24 @@ export function ProcedureCameraWidget({
   cameraFacing = 'environment',
   onToggleCameraFacing,
 }) {
+  const [thumbLoadError, setThumbLoadError] = React.useState(false);
+
+  React.useEffect(() => {
+    setThumbLoadError(false);
+  }, [photoThumbUrl]);
+
   if (!visible) return null;
 
   return (
     <>
       <div className="fixed right-4 top-1/2 z-[55] flex -translate-y-1/2 flex-col items-end gap-3 md:right-6">
-        {photoThumbUrl && (
+        {photoThumbUrl && !thumbLoadError && (
           <div className="w-14 h-14 rounded-2xl overflow-hidden border border-app-border bg-white shadow-sm">
             <img
               src={photoThumbUrl}
               alt="Foto do procedimento"
               className="w-full h-full object-cover"
+              onError={() => setThumbLoadError(true)}
             />
           </div>
         )}

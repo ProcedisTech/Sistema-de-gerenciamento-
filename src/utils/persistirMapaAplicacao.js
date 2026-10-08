@@ -3,6 +3,7 @@ import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGale
 import { toLocalISODate } from './dateLimits.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
+import { corParaProcedimento, MAPEAMENTO_PALETA_CORES } from '../constants/mapeamentoPaletaCores.js';
 
 function mapApiErrorMessage(e) {
   const msg = String(e?.message || '');
@@ -80,12 +81,19 @@ export async function persistirMapaAplicacao({
   pacienteId,
   roleUserId,
   procedimentoFeitoId,
+  procedimentoFeitoIds,
   catalogoProcedimentoSaudeId,
   snapshot,
   tipoMapaCodigo,
+  procedimentosSessao = [],
 }) {
   const erros = [];
-  if (!procedimentoFeitoId) {
+  const listaProcedimentoIds = Array.isArray(procedimentoFeitoIds) && procedimentoFeitoIds.length > 0
+    ? procedimentoFeitoIds.map(String)
+    : (procedimentoFeitoId ? [String(procedimentoFeitoId)] : []);
+  const mainPfId = listaProcedimentoIds[0] || procedimentoFeitoId;
+
+  if (!mainPfId) {
     return { ok: false, erros: ['Procedimento ainda não registrado.'] };
   }
   if (!pacienteId) {
@@ -118,7 +126,7 @@ export async function persistirMapaAplicacao({
             roleUserId,
             blob: cleanBlob,
             vistaCodigo,
-            procedimentoFeitoId,
+            procedimentoFeitoId: mainPfId,
             catalogoProcedimentoSaudeId,
           });
           if (fid) {
@@ -135,11 +143,63 @@ export async function persistirMapaAplicacao({
     const pontos = pontosRaw.map((p) => mapLocalPontoToApi(p));
 
     for (const pt of pontos) {
+      let pIdx = pt.procedimentoIndex;
+      if (pIdx == null) {
+        // Tenta associar por procedimentoId / procedimentoFeitoId na lista enviada
+        if (pt.procedimentoFeitoId || pt.procedimentoId) {
+          const targetId = String(pt.procedimentoFeitoId || pt.procedimentoId);
+          const matchedIdx = listaProcedimentoIds.findIndex((id) => String(id) === targetId);
+          if (matchedIdx >= 0) pIdx = matchedIdx;
+        }
+        // Se ainda não achou, tenta pelo catálogo contra a lista de procedimentos
+        if (pIdx == null && (pt.catalogoProcedimentoSaudeId || pt.catalogoId) && Array.isArray(procedimentosSessao)) {
+          const ptCat = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId);
+          const foundProc = procedimentosSessao.find((p) => {
+            const cid = p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id;
+            return cid && String(cid) === ptCat;
+          });
+          if (foundProc) {
+            const procId = String(foundProc.id || foundProc.procedimentoFeitoId);
+            const matchedIdx = listaProcedimentoIds.findIndex((id) => String(id) === procId);
+            if (matchedIdx >= 0) {
+              pIdx = matchedIdx;
+            } else {
+              const directIdx = procedimentosSessao.indexOf(foundProc);
+              if (directIdx >= 0 && directIdx < listaProcedimentoIds.length) {
+                pIdx = directIdx;
+              }
+            }
+          }
+        }
+      }
+
+      // Se a sessão só tem 1 procedimento, associa com 0 por padrão
+      if (pIdx == null && listaProcedimentoIds.length === 1) {
+        pIdx = 0;
+      }
+
+      if (pIdx != null && (pIdx < 0 || pIdx >= listaProcedimentoIds.length)) {
+        erros.push(`Marcação com índice de procedimento fora de faixa: ${pIdx}`);
+        continue;
+      }
+
+      if (pIdx == null && listaProcedimentoIds.length > 1) {
+        erros.push('Marcação sem procedimento associado na sessão com múltiplos procedimentos.');
+        continue;
+      }
+
+      const procDoPonto = Array.isArray(procedimentosSessao) ? procedimentosSessao[pIdx] : null;
+      const catDoPonto = pt.catalogoProcedimentoSaudeId || pt.catalogoId || procDoPonto?.catalogoProcedimentoSaudeId || procDoPonto?.catalogoId || (pIdx === 0 ? catalogoProcedimentoSaudeId : undefined);
+      const corDoPonto = pt.cor || pt.corHex || procDoPonto?.corHex || (catDoPonto ? corParaProcedimento(catDoPonto) : undefined) || MAPEAMENTO_PALETA_CORES[pIdx % MAPEAMENTO_PALETA_CORES.length];
+
       marcacoes.push({
         anguloFotoCodigo: vistaCodigo,
         tipoGeometria: pt.tipoGeometria || 'ponto',
         quantidade: pt.quantidade,
         tamanho: pt.tamanho,
+        procedimentoIndex: pIdx,
+        corHex: corDoPonto || undefined,
+        catalogoProcedimentoSaudeId: catDoPonto || undefined,
         vertices: pt.vertices?.length ? pt.vertices : [{ ordem: 1, posX: pt.posX, posY: pt.posY }]
       });
     }
@@ -149,7 +209,22 @@ export async function persistirMapaAplicacao({
     try {
       const payloadSalvar = {
         origemTipo: 'procedimento',
-        origemId: procedimentoFeitoId,
+        origemId: mainPfId,
+        procedimentos: listaProcedimentoIds.map((id, idx) => {
+          const proc = (Array.isArray(procedimentosSessao)
+            ? (procedimentosSessao.find((p) => String(p.id || p.procedimentoFeitoId) === String(id)) || procedimentosSessao[idx])
+            : null);
+          const catId = proc?.catalogoProcedimentoSaudeId || proc?.catalogoId || proc?.nomeProcedimentoCatalogoId || (idx === 0 ? catalogoProcedimentoSaudeId : null);
+          const cor = proc?.corHex || (catId ? corParaProcedimento(catId) : null) || MAPEAMENTO_PALETA_CORES[idx % MAPEAMENTO_PALETA_CORES.length];
+          return {
+            procedimentoFeitoId: id,
+            procedimentoIndex: idx,
+            ordem: idx + 1,
+            ...(catId ? { catalogoProcedimentoSaudeId: catId } : {}),
+            corHex: cor,
+            ...(proc?.planejamentoItemId ? { planejamentoItemId: proc.planejamentoItemId } : {}),
+          };
+        }),
         fotoGaleriaIdPorVista,
         marcacoes,
       };

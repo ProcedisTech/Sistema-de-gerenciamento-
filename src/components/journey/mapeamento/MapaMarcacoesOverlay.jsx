@@ -53,7 +53,7 @@ export function MapaMarcacoesOverlay({
         {list
           .filter((p) => p.tipoGeometria === 'traco' && p.vertices?.length > 0)
           .map((p) => {
-            const cor = p.cor || corParaProcedimento(p.catalogoId);
+            const cor = p.cor || corParaProcedimento(p.catalogoId || p.catalogoProcedimentoSaudeId);
             const selected = selectedLocalId != null && selectedLocalId === p.localId;
             const points = p.vertices.map((v) =>
               resolvePos(v.posX ?? v.x, v.posY ?? v.y),
@@ -89,7 +89,7 @@ export function MapaMarcacoesOverlay({
       </svg>
 
       {list.map((p) => {
-        const cor = p.cor || corParaProcedimento(p.catalogoId);
+        const cor = p.cor || corParaProcedimento(p.catalogoId || p.catalogoProcedimentoSaudeId);
         const selected = selectedLocalId != null && selectedLocalId === p.localId;
 
         let containerPos;

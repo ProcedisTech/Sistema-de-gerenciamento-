@@ -11,6 +11,7 @@ import {
   useMapaAplicacaoState,
 } from './hooks';
 import { persistirMapaAplicacao } from '../utils/persistirMapaAplicacao.js';
+import { corParaProcedimento } from '../constants/mapeamentoPaletaCores.js';
 import { usePatientsKpi } from './hooks/usePatientsKpi.js';
 
 // Componentes de Autenticação
@@ -63,6 +64,8 @@ import {
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
+import { normalizeListaPlanos, enriquecerPlanosComCatalogo } from '../utils/planejamentoNormalize.js';
+import { useProcedimentosOptions } from '../hooks/useProcedimentosOptions.js';
 import { pickSessaoAtiva, pickSessaoRetornoAtiva } from '../utils/planejamentoSessoes.js';
 import { toLocalISODate } from '../utils/dateLimits.js';
 import { convertToWebP } from '../utils/imageUtils.js';
@@ -88,6 +91,7 @@ import { TermoBloqueioModal } from './termos/TermoBloqueioModal.jsx';
 import { abortarEncerrarPorTermos, bloqueioExecucaoTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, deveCriarProcedimentoNoEncerrar, idsFilaExigida, parseTermosBloqueioError, pfIdNestaSessaoParaCatalogo, sessaoComPfDoCatalogo, temFaltantes, titulosFaltantes } from '../utils/termoResolucao.js';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
+import { criarItemProcedimentoSessao, criarLoteProcedimentosSessao } from '../utils/procedimentoSessaoFactory.js';
 
 // Componentes da Jornada (paciente na aba Pacientes; etapas 1–5)
 import {
@@ -156,6 +160,7 @@ function isTermoAtivoRow(row) {
 
 /** Mapeamento legado initialStep → consultaModule (compat. agenda / call sites antigos). */
 const LEGACY_STEP_TO_MODULE = { 1: 'anamnese', 2: 'avaliacao', 3: 'termos', 4: 'procedimento' };
+const UUID_REGEX_PROC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function revokeBlobUrlIfAny(url) {
   if (url == null || typeof url !== 'string') return;
@@ -368,12 +373,6 @@ function AppRefactoredInner() {
     pacienteNome: '',
     paciente: null,
   });
-
-  const handleTermoAssinaturaSalva = React.useCallback((assinaturaObj) => {
-    if (assinaturaObj?.id && assinaturaObj.statusCodigo === 'ASSINADO') {
-      setAssinaturasRealizadasIds((prev) => [...prev, assinaturaObj.id]);
-    }
-  }, []);
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
   const [clinicaInfo, setClinicaInfo] = useState({
@@ -406,6 +405,7 @@ function AppRefactoredInner() {
 
   // --- Lote de Procedimentos ---
   const [procedimentosLote, setProcedimentosLote] = React.useState([]);
+  const { options: catalogoProcedimentosOptions } = useProcedimentosOptions();
   // O índice do procedimento ativo foi movido para o useJourneyState para manter tudo em sincronia.
 
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
@@ -467,6 +467,7 @@ function AppRefactoredInner() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const anamneseRef = useRef(null);
+  const planosTabRef = useRef(null);
   /** Vista alvo ao confirmar foto da câmera no step 2 (mapeamento). */
   const mapeamentoCaptureVistaRef = useRef(null);
   const [pendingMapeamentoCapture, setPendingMapeamentoCapture] = React.useState(null);
@@ -484,7 +485,6 @@ function AppRefactoredInner() {
   const finishJourneyLockRef = useRef(false);
   const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
   const [isSalvandoProcedimento] = React.useState(false);
-  const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
   const prevJourneyPacienteIdRef = useRef(undefined);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
@@ -967,27 +967,42 @@ function AppRefactoredInner() {
   }, []);
 
   const validarTermosDoCatalogo = React.useCallback(
-    async (catalogoId, nomeProc, { abrirModal = true } = {}) => {
+    async (catalogoIdOrIds, nomeProc, { abrirModal = true, procedimentosSessaoOverride = null } = {}) => {
       if (!exigirFilaTermos) {
         setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
         return true;
       }
-      const cat = catalogoId != null ? String(catalogoId).trim() : '';
-      if (!cat || !pacienteAtual?.id) {
+      const rawIds = Array.isArray(catalogoIdOrIds) ? catalogoIdOrIds : [catalogoIdOrIds];
+      const validIds = rawIds
+        .map((id) => (id != null ? String(id).trim() : ''))
+        .filter((id) => id && id !== 'undefined' && id !== 'null' && UUID_REGEX_PROC.test(id));
+      if (validIds.length === 0 || !pacienteAtual?.id) {
         setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
         return true;
       }
-      if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) {
+      const sessaoAtual = procedimentosSessaoOverride || journeyState.procedimentosSessao || [];
+      const allPfsInSession = validIds.every((cat) => pfIdNestaSessaoParaCatalogo(cat, sessaoAtual));
+      if (allPfsInSession) {
         return true;
       }
       try {
         const t0 = performance.now();
+        const pItemIds = validIds.map((cId) => {
+          const matched = sessaoAtual.find(
+            (p) => String(p.catalogoProcedimentoId || p.catalogoProcedimentoSaudeId || p.catalogoId || p.id || '') === String(cId)
+          );
+          if (matched && !matched.isAvulso && matched.planejamentoItemId) {
+            return String(matched.planejamentoItemId);
+          }
+          return null;
+        });
         const resolucao = await termosApi.resolver({
           pacienteId: pacienteAtual.id,
-          catalogoIds: [cat],
+          catalogoIds: validIds,
+          planejamentoItemIds: pItemIds,
         });
         console.info('[termo-perf] GET resolucao', Math.round(performance.now() - t0), 'ms');
-        setTermosExecucaoBloqueio({ catalogoId: cat, resolucao });
+        setTermosExecucaoBloqueio({ catalogoId: validIds[0], resolucao });
         if (temFaltantes(resolucao)) {
           if (abrirModal) {
             setTermoBloqueio({
@@ -1030,23 +1045,47 @@ function AppRefactoredInner() {
       }
       return validarTermosDoCatalogo(catalogoId, nomeProc);
     },
-    [validarTermosDoCatalogo, journeyState.nomeProcedimento, journeyState.procedimentosSessao],
+    [validarTermosDoCatalogo, journeyState.nomeProcedimento, journeyState.procedimentosSessao]
+  );
+
+  const handleTermoAssinaturaSalva = React.useCallback(
+    (assinaturaObj) => {
+      if (assinaturaObj?.id && assinaturaObj.statusCodigo === 'ASSINADO') {
+        setAssinaturasRealizadasIds((prev) => [...prev, assinaturaObj.id]);
+        const ids =
+          catalogoIdsConsulta.length > 0
+            ? catalogoIdsConsulta
+            : (journeyState.nomeProcedimentoCatalogoId ? [journeyState.nomeProcedimentoCatalogoId] : []);
+        if (ids.length > 0) {
+          void validarTermosDoCatalogo(ids, journeyState.nomeProcedimento, { abrirModal: false });
+        }
+      }
+    },
+    [catalogoIdsConsulta, journeyState.nomeProcedimentoCatalogoId, journeyState.nomeProcedimento, validarTermosDoCatalogo]
   );
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || consultaModule !== 'procedimento') return;
-    const cat = journeyState.nomeProcedimentoCatalogoId;
-    if (!cat) return;
-    if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) return;
-    void validarTermosDoCatalogo(cat, journeyState.nomeProcedimento, { abrirModal: false });
+    const ids =
+      catalogoIdsConsulta.length > 0
+        ? catalogoIdsConsulta
+        : (journeyState.nomeProcedimentoCatalogoId ? [journeyState.nomeProcedimentoCatalogoId] : []);
+    if (ids.length === 0) return;
+    const allPfs = ids.every((cat) => pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao));
+    if (allPfs) return;
+    void validarTermosDoCatalogo(ids, journeyState.nomeProcedimento, { abrirModal: false });
     // Revalida ao voltar da aba Termos; o select já faz o GET na escolha.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só troca de módulo
-  }, [activeView, consultaModule]);
+  }, [activeView, consultaModule, catalogoIdsConsulta]);
 
   const vincularAssinaturasAoProcedimento = React.useCallback(
-    async (pid) => {
+    async (pid, catalogoId = null) => {
+      // Procedimentos com catálogo já têm termos consumidos atomicamente pelo backend via consumirExigidos.
+      // Re-vincular todas as assinaturas da sessão roubaria termos de outros procedimentos do mesmo lote.
+      if (catalogoId) return;
       if (!pid || assinaturasRealizadasIds.length === 0) return;
-      for (const assinaturaId of assinaturasRealizadasIds) {
+      const assinaturaId = assinaturasRealizadasIds[0];
+      if (assinaturaId) {
         try {
           await termoAssinaturaApi.vincularProcedimento(assinaturaId, pid);
         } catch (e) {
@@ -1203,6 +1242,8 @@ function AppRefactoredInner() {
   /** Grava na lista da câmera o JPEG já com desenho (etapa 3), para LGPD/galeria usarem a mesma imagem. */
   const handleAnnotatedCaptureSaved = ({ index, newUrl, blob, procedimentosMapeados }) => {
     cameraState.replaceEvaluationCapturedPhotoAt(index, { url: newUrl, blob });
+    cameraState.setAnamnesePhotoUrl(newUrl);
+    cameraState.setAnamnesePhotoBlob(blob);
     journeyState.setImageSrc(newUrl);
     journeyState.setPaths([]);
     if (Array.isArray(procedimentosMapeados) && procedimentosMapeados.length > 0) {
@@ -1319,8 +1360,71 @@ function AppRefactoredInner() {
     [journeyState.journeyPlanejamentoCtx],
   );
 
+  const recarregarPlanosDoPaciente = React.useCallback(
+    async (pacienteId) => {
+      const pid = pacienteId || pacienteAtual?.id;
+      if (!pid) return;
+      try {
+        const rawPlanos = await planejamentosApi.listarPorPaciente(pid);
+        const planosRaw = normalizeListaPlanos(rawPlanos);
+        const planos = enriquecerPlanosComCatalogo(planosRaw, catalogoProcedimentosOptions);
+        const planosAtivos = planos.filter((p) => {
+          const st = String(p.statusCodigo || '').toLowerCase();
+          return st === 'ativo' || st === 'em_andamento' || st === 'aberto';
+        });
+        if (planosAtivos.length > 0) {
+          const todosItens = [];
+          const itemMap = {};
+          planosAtivos.forEach((plano) => {
+            (plano.itens || []).forEach((it) => {
+              const catId = it.catalogoId || it.catalogoProcedimentoSaudeId;
+              if (catId && it.id) {
+                itemMap[String(catId)] = String(it.id);
+                todosItens.push({
+                  ...it,
+                  planejamentoItemId: it.id,
+                  planoId: plano.id,
+                  planoTitulo: plano.observacao || 'Plano de Tratamento',
+                  catalogoNome: it.catalogoNome || it.nomeProcedimento || it.nome || '',
+                  nomeProcedimento: it.nomeProcedimento || it.catalogoNome || it.nome || '',
+                  nome: it.nome || it.nomeProcedimento || it.catalogoNome || '',
+                });
+              }
+            });
+          });
+          journeyState.setJourneyPlanejamentoCtx((prev) => ({
+            planejamentoId: planosAtivos[0]?.id || null,
+            titulo: planosAtivos[0]?.observacao || 'Plano de Tratamento',
+            itemIdByCatalogo: itemMap,
+            procedimentosComPontos: prev?.procedimentosComPontos || [],
+            itens: todosItens,
+          }));
+        } else {
+          journeyState.setJourneyPlanejamentoCtx(null);
+        }
+      } catch (err) {
+        console.warn('[recarregarPlanosDoPaciente] Erro ao carregar planos do paciente:', err);
+      }
+    },
+    [pacienteAtual?.id, catalogoProcedimentosOptions, journeyState.setJourneyPlanejamentoCtx],
+  );
+
+  React.useEffect(() => {
+    if (activeView === 'consulta' && consultaModule === 'procedimento' && pacienteAtual?.id) {
+      void recarregarPlanosDoPaciente(pacienteAtual.id);
+    }
+  }, [activeView, consultaModule, pacienteAtual?.id, recarregarPlanosDoPaciente]);
+
   const persistirMapaAplicacaoAtual = React.useCallback(
-    async (procedimentoFeitoId, paciente, explicitSnapshot = null, explicitFotos = null, explicitCatalogoId = null) => {
+    async (
+      procedimentoFeitoId,
+      paciente,
+      explicitSnapshot = null,
+      explicitFotos = null,
+      explicitCatalogoId = null,
+      procedimentoFeitoIds = null,
+      explicitProcedimentosSessao = null
+    ) => {
       const pid = String(procedimentoFeitoId || '').trim();
       if (!pid) return { ok: false };
       const snapshot = explicitSnapshot || mapaAplicacaoState.getSnapshotForPersist();
@@ -1333,13 +1437,19 @@ function AppRefactoredInner() {
       if (!hasDirty && !hasContent) return { ok: true, erros: [] };
 
       const catId = explicitCatalogoId || journeyState.nomeProcedimentoCatalogoId;
+      const listaProcs =
+        explicitProcedimentosSessao ||
+        journeyState.procedimentosSessao ||
+        [];
 
       const resultado = await persistirMapaAplicacao({
         pacienteId: paciente.id,
         roleUserId,
         procedimentoFeitoId,
+        procedimentoFeitoIds: Array.isArray(procedimentoFeitoIds) && procedimentoFeitoIds.length > 0 ? procedimentoFeitoIds : [procedimentoFeitoId],
         catalogoProcedimentoSaudeId: catId,
         snapshot,
+        procedimentosSessao: listaProcs,
       });
       if (resultado.ok) {
         mapaAplicacaoState.clearAllDirty();
@@ -1350,6 +1460,7 @@ function AppRefactoredInner() {
     },
     [
       journeyState.nomeProcedimentoCatalogoId,
+      journeyState.procedimentosSessao,
       mapaAplicacaoState,
       roleUserId,
       toast,
@@ -1611,8 +1722,15 @@ function AppRefactoredInner() {
     if (!isSameDayResume) {
       const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
       if (hasLote) {
-        setProcedimentosLote(options.lote);
-        journeyState.setProcedimentosSessao(options.lote);
+        const loteValido = options.lote.filter((p) => {
+          const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
+          const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
+          return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+        });
+        const loteNormalizado = criarLoteProcedimentosSessao(loteValido);
+        setProcedimentosLote(loteNormalizado);
+        journeyState.setProcedimentosSessao(loteNormalizado);
         journeyState.setActiveProcedureIndex(0);
       } else if (!options.fromAgendaSlot) {
         setProcedimentosLote([]);
@@ -1724,6 +1842,9 @@ function AppRefactoredInner() {
         journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
         journeyState.setHouveRetoque(false);
       }
+    }
+    if (patient?.id) {
+      void recarregarPlanosDoPaciente(patient.id);
     }
     const mod = wantsRetorno
       ? (options.initialModule ?? 'hub')
@@ -1888,8 +2009,14 @@ function AppRefactoredInner() {
     const horaRaw = opt.horaInicio;
 
     if (opt.lote && Array.isArray(opt.lote) && opt.lote.length > 0) {
-      setProcedimentosLote(opt.lote);
-      journeyState.setProcedimentosSessao(opt.lote);
+      const loteValido = opt.lote.filter((p) => {
+        const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
+        const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+        const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
+        return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+      });
+      setProcedimentosLote(loteValido);
+      journeyState.setProcedimentosSessao(loteValido);
       journeyState.setActiveProcedureIndex(0);
     } else {
       if (fromSlot && agendaId && dataRaw) {
@@ -1904,16 +2031,25 @@ function AppRefactoredInner() {
             })
             .sort((a, b) => String(a?.horaInicio).localeCompare(String(b?.horaInicio)));
 
-          const lote = agendamentosDoDia.map(a => ({
-            agendaId: a.id || a.agendaId,
-            procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
-            catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
-            planejamentoItemId: a.planejamentoItemId ?? null,
-            isAgendaRetorno:
-              String(a.tipoProcedimentoCodigo ?? a.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() ===
-              'retorno',
-          }));
+          const loteBruto = agendamentosDoDia
+            .filter((a) => {
+              const nome = String(a.tipoProcedimento?.nome || a.procedimentoNome || '').trim();
+              const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+              const cid = a.catalogoProcedimentoSaudeId;
+              return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+            })
+            .map(a => ({
+              agendaId: a.id || a.agendaId,
+              procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
+              catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
+              catalogoId: a.catalogoProcedimentoSaudeId,
+              planejamentoItemId: a.planejamentoItemId ?? null,
+              isAgendaRetorno:
+                String(a.tipoProcedimentoCodigo ?? a.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() ===
+                'retorno',
+            }));
 
+          const lote = criarLoteProcedimentosSessao(loteBruto);
           setProcedimentosLote(lote);
           journeyState.setProcedimentosSessao(lote);
           journeyState.setActiveProcedureIndex(0);
@@ -2381,16 +2517,20 @@ function AppRefactoredInner() {
           String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
-      if (!nomeP || (!catId && !sugestaoProcedimentoEnviada)) {
+      if (!nomeP || !catId) {
         journeyState.setStep4Errors({
-          nomeProcedimento: !nomeP || (!catId && !sugestaoProcedimentoEnviada),
-          catalogoId: !catId && !sugestaoProcedimentoEnviada,
+          nomeProcedimento: !nomeP,
+          catalogoId: !catId,
         });
         toast.error('Selecione o procedimento no catálogo para continuar.');
         return;
       }
       if (catId) {
-        const ok = await validarTermosDoCatalogo(catId, nomeP);
+        const todosCats = (journeyState.procedimentosSessao || [])
+          .map((p) => p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .filter(Boolean);
+        if (catId && !todosCats.includes(catId)) todosCats.push(catId);
+        const ok = await validarTermosDoCatalogo(todosCats.length > 0 ? todosCats : catId, nomeP);
         if (!ok) return;
       }
       journeyState.setStep4Errors({});
@@ -2536,25 +2676,18 @@ function AppRefactoredInner() {
         }));
       }
 
-      // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado
-      journeyState.setProcedimentosSessao([
-        {
-          agendaId,
-          procedimentoNome: nome,
-          nomeProcedimento: nome,
-          catalogoProcedimentoSaudeId: catId,
-          planejamentoItemId: planoItemId,
-          isAgendaRetorno: isRetorno,
-        },
-      ]);
-      setProcedimentosLote([
-        {
-          agendaId,
-          procedimentoNome: nome,
-          catalogoProcedimentoSaudeId: catId,
-          planejamentoItemId: planoItemId,
-        },
-      ]);
+      // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado com fábrica e corHex canônico
+      const itemInicial = criarItemProcedimentoSessao({
+        agendaId,
+        procedimentoNome: nome,
+        nomeProcedimento: nome,
+        catalogoProcedimentoSaudeId: catId,
+        catalogoId: catId,
+        planejamentoItemId: planoItemId,
+        isAgendaRetorno: isRetorno,
+      }, 0);
+      journeyState.setProcedimentosSessao([itemInicial]);
+      setProcedimentosLote([itemInicial]);
 
       if (isRetorno) {
         journeyState.setIsAgendaRetorno(true);
@@ -2599,7 +2732,7 @@ function AppRefactoredInner() {
    * próprios botões de conclusão explícita (Avaliação, Termos, Procedimento).
    * NÃO interfere com o fluxo de cancelar atendimento (resetJourney) nem com o encerramento.
    */
-  const handleBackToHub = React.useCallback(() => {
+  const handleBackToHub = React.useCallback(async () => {
     if (consultaModule === 'anamnese') {
       const hasQueixa = Boolean(journeyState.queixa?.trim());
       const hasExpectativas = Boolean(journeyState.expectativas?.trim());
@@ -2614,8 +2747,20 @@ function AppRefactoredInner() {
         return;
       }
     }
+    if (consultaModule === 'planejamento') {
+      if (planosTabRef.current?.flushPendingObservacoes) {
+        try {
+          await planosTabRef.current.flushPendingObservacoes();
+        } catch (e) {
+          console.warn('Erro ao descarregar pendências do plano:', e);
+        }
+      }
+      if (pacienteAtual?.id) {
+        void recarregarPlanosDoPaciente(pacienteAtual.id);
+      }
+    }
     setConsultaModule('hub');
-  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef]);
+  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef, planosTabRef, pacienteAtual?.id, recarregarPlanosDoPaciente]);
 
   const resetJourney = React.useCallback(() => {
     setPhotoAnnotationScope(null);
@@ -2650,7 +2795,6 @@ function AppRefactoredInner() {
     journeyState.setProcedimentoFeitoOrigemId(null);
     journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
     journeyState.setHouveRetoque(false);
-    setSugestaoProcedimentoEnviada(false);
     journeyState.setAgendaId(null);
     journeyState.setStep2Errors({});
     journeyState.setStep4Errors({});
@@ -2672,6 +2816,9 @@ function AppRefactoredInner() {
     mapaRetornoCaptureVistaRef.current = null;
     setPendingMapaRetornoCapture(null);
     journeyState.setJourneyPlanejamentoCtx(null);
+    journeyState.setProcedimentosSessao([]);
+    setProcedimentosLote([]);
+    journeyState.setActiveProcedureIndex(0);
     mapaAplicacaoState.resetMapa();
     mapaRetornoState.resetMapa();
     cameraState.resetProcedureCapturedPhotos();
@@ -2685,6 +2832,7 @@ function AppRefactoredInner() {
     setPendingMapeamentoCapture,
     setPhotoAnnotationIndex,
     setPhotoAnnotationScope,
+    setProcedimentosLote,
     setQueixaVisivel,
     mapaAplicacaoState,
     mapaRetornoState,
@@ -2753,13 +2901,14 @@ function AppRefactoredInner() {
             ? String(opts.planejamentoItemId).trim()
             : null;
 
-        if (agendaIdValido) {
+        if (agendaIdValido && (catalogoId || opts.isRetoque)) {
           const body = {
             pacienteId: paciente.id,
             agendaId: agendaIdValido,
             roleUserId,
             ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
             ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
           };
           const tIniciar = performance.now();
           const res = await procedimentosApi.iniciar(body);
@@ -2767,7 +2916,7 @@ function AppRefactoredInner() {
           const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
           const idStr = pid != null && pid !== '' ? String(pid) : null;
           if (idStr) {
-            await vincularAssinaturasAoProcedimento(idStr);
+            await vincularAssinaturasAoProcedimento(idStr, catalogoId);
             persistirPfSessao(catalogoId, idStr);
             appendLotePfId(idStr);
           }
@@ -2781,13 +2930,14 @@ function AppRefactoredInner() {
           roleUserId,
           observacao,
           catalogoProcedimentoSaudeId: catalogoId,
+          ...(agendaIdValido ? { agendaId: agendaIdValido } : {}),
           ...(planejamentoItemId ? { planejamentoItemId } : {}),
         });
         console.info('[termo-perf] POST registrarManual', Math.round(performance.now() - tManual), 'ms');
         const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
         const idStr = pid != null && pid !== '' ? String(pid) : null;
         if (idStr) {
-          await vincularAssinaturasAoProcedimento(idStr);
+          await vincularAssinaturasAoProcedimento(idStr, catalogoId);
           persistirPfSessao(catalogoId, idStr);
           appendLotePfId(idStr);
         }
@@ -2840,8 +2990,8 @@ function AppRefactoredInner() {
 
       const rawItemId =
         opts.planejamentoItemId ||
-        (catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
-        journeyState.procedimentosSessao?.[0]?.planejamentoItemId;
+        (!opts.isAvulso && catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
+        (!opts.isAvulso ? journeyState.procedimentosSessao?.[0]?.planejamentoItemId : null);
       const planejamentoItemId = rawItemId
         ? String(rawItemId).replace(/_retorno$/, '').trim()
         : null;
@@ -3301,17 +3451,7 @@ function AppRefactoredInner() {
       const ids = Array.isArray(pidsInput) ? pidsInput : [pidsInput].filter(Boolean);
       if (ids.length === 0) return;
 
-      if (assinaturasRealizadasIds.length > 0 && ids.length > 0) {
-        for (const pid of ids) {
-          for (const assinaturaId of assinaturasRealizadasIds) {
-            try {
-              await termoAssinaturaApi.vincularProcedimento(assinaturaId, pid);
-            } catch (e) {
-              console.warn(`Não foi possível vincular assinatura ${assinaturaId} ao procedimento ${pid}:`, e);
-            }
-          }
-        }
-      }
+      // As assinaturas já são consumidas/vinculadas pelo backend (consumirExigidos) ao registrar cada procedimento
 
       const nomesArray = journeyState.procedimentosSessao?.length > 0
         ? journeyState.procedimentosSessao.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
@@ -3459,14 +3599,41 @@ function AppRefactoredInner() {
       const catPrincipal =
         journeyState.nomeProcedimentoCatalogoId ||
         (listaParaSalvar && listaParaSalvar[0]?.catalogoProcedimentoSaudeId);
+      const itemPrincipal = listaParaSalvar && listaParaSalvar[0];
       const rawPItemIdPrincipal =
-        (listaParaSalvar && listaParaSalvar[0]?.planejamentoItemId) ||
-        (catPrincipal ? resolvePlanejamentoItemId(catPrincipal) : null) ||
+        itemPrincipal?.planejamentoItemId ||
+        (!itemPrincipal?.isAvulso && catPrincipal ? resolvePlanejamentoItemId(catPrincipal) : null) ||
         null;
       const planoItemIdPrincipal = rawPItemIdPrincipal
         ? String(rawPItemIdPrincipal).replace(/_retorno$/, '').trim()
         : null;
       let agendouRetornoFuturo = false;
+
+      // Resolução prévia do agendaId da sessão clínica:
+      // Se avulso (sem slot prévio), cria o slot na agenda ANTES de criar os procedimentos e enviar fotos,
+      // garantindo que todos os procedimentos e fotos do lote fiquem carimbados com o mesmo agendaId.
+      let targetAgendaId = journeyState.agendaId;
+
+      if (!isApenasSair && !targetAgendaId && paciente?.id && roleUserId) {
+        const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+        const createdSlot = await registrarAgendaAvulsa({
+          journeyState,
+          paciente,
+          roleUserId,
+          // Ainda não há PFs; marcador só para manter a dedução do catálogo do slot (deduzirTipoAtendimentoAvulso).
+          novosIdsValidos: criarProcedimento && (listaParaSalvar?.length > 0 || String(journeyState.nomeProcedimento || '').trim()) ? ['pendente'] : [],
+          attendanceStartTimeIso: startTimeIso,
+          planejamentoItemId: planoItemIdPrincipal,
+        }).catch((err) => {
+          console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa antecipada:', err);
+          return null;
+        });
+        if (createdSlot?.id) {
+          targetAgendaId = String(createdSlot.id);
+          journeyState.setAgendaId(targetAgendaId);
+        }
+        journeyState.setAttendanceStartTime(null, sCpf);
+      }
 
       const todosIds = [];
       const payloadLote = { procedimentos: [] };
@@ -3487,17 +3654,21 @@ function AppRefactoredInner() {
               }
             }
           } else {
-            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+            const rawCatId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
+            const catId = rawCatId && UUID_REGEX_PROC.test(String(rawCatId).trim()) ? String(rawCatId).trim() : null;
             const isRetorno = proc.isAgendaRetorno || proc.tipoAtendimento === 'retorno';
-            // Apenas envia ao lote se possuir um catálogo selecionado OU for atendimento de retorno
-            if ((catId || isRetorno) && criarProcedimento) {
-              const rawPItemId = proc.planejamentoItemId || (catId ? resolvePlanejamentoItemId(catId) : null);
+            const nomeLimpo = (proc.nomeProcedimento || proc.procedimentoNome || '').trim();
+            const isGhost = !catId && !isRetorno && (!nomeLimpo || /^Procedimento\s*\d*$/i.test(nomeLimpo));
+            // Apenas envia ao lote se possuir um catálogo selecionado OU for atendimento de retorno OU procedimento manual com nome real
+            if (!isGhost && (catId || isRetorno || nomeLimpo) && criarProcedimento) {
+              const rawPItemId = proc.planejamentoItemId || (!proc.isAvulso && catId ? resolvePlanejamentoItemId(catId) : null);
               const pItemId = rawPItemId ? String(rawPItemId).replace(/_retorno$/, '').trim() : null;
               const body = {
-                nome: (proc.nomeProcedimento || proc.procedimentoNome || '').trim(),
+                nome: nomeLimpo,
                 roleUserId,
                 observacao: proc.observacoesExecucao || null,
-                agendaId: proc.agendaId || journeyState.agendaId,
+                // Com agendaId e catalogoId usa /iniciar; sem catálogo segue por registrarManual vinculando agendaId.
+                agendaId: proc.agendaId || targetAgendaId || journeyState.agendaId || null,
                 catalogoProcedimentoSaudeId: catId,
                 ...(pItemId ? { planejamentoItemId: pItemId } : {}),
               };
@@ -3510,6 +3681,7 @@ function AppRefactoredInner() {
 
         if (payloadLote.procedimentos.length > 0) {
           let temErroNoLote = false;
+          let erroLoteMensagem = '';
           for (let idx = 0; idx < payloadLote.procedimentos.length; idx++) {
             const body = payloadLote.procedimentos[idx];
             const bodyToSave = isApenasSair ? { ...body, agendaId: undefined } : body;
@@ -3524,10 +3696,16 @@ function AppRefactoredInner() {
             } catch (e) {
               console.warn('[encerrarAtendimento] Erro ao criar procedimento do lote', e);
               temErroNoLote = true;
+              const parsed = parseTermosBloqueioError(e);
+              if (parsed) {
+                erroLoteMensagem = `Termos obrigatórios pendentes de assinatura para o procedimento: ${parsed.nomeProcedimento || body.nome || 'selecionado'}.`;
+              } else {
+                erroLoteMensagem = e?.message || erroLoteMensagem;
+              }
             }
           }
           if (temErroNoLote) {
-            throw new Error('Falha ao salvar um ou mais procedimentos do lote.');
+            throw new Error(erroLoteMensagem || 'Falha ao salvar um ou mais procedimentos do lote.');
           }
         }
       } else if (criarProcedimento) {
@@ -3541,31 +3719,6 @@ function AppRefactoredInner() {
 
       const novosIdsValidos = todosIds.filter(Boolean);
       let respostasFinalizar = [];
-
-      // Resolução prévia do agendaId da sessão clínica:
-      // Se avulso (sem slot prévio), cria o slot na agenda ANTES de enviar fotos de avaliação e procedimento,
-      // garantindo que todas as fotos da consulta fiquem carimbadas com o agenda_id correto.
-      let targetAgendaId = journeyState.agendaId;
-
-      if (!isApenasSair && !targetAgendaId && paciente?.id && roleUserId) {
-        const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-        const createdSlot = await registrarAgendaAvulsa({
-          journeyState,
-          paciente,
-          roleUserId,
-          novosIdsValidos,
-          attendanceStartTimeIso: startTimeIso,
-          planejamentoItemId: planoItemIdPrincipal,
-        }).catch((err) => {
-          console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa antecipada:', err);
-          return null;
-        });
-        if (createdSlot?.id) {
-          targetAgendaId = String(createdSlot.id);
-          journeyState.setAgendaId(targetAgendaId);
-        }
-        journeyState.setAttendanceStartTime(null, sCpf);
-      }
 
       if (journeyState.procedimentosSessao?.length > 0 && novosIdsValidos.length > 0) {
         journeyState.setProcedimentosSessao(prev =>
@@ -3588,22 +3741,28 @@ function AppRefactoredInner() {
         setLoteProcedimentosFeitosIds(novosIdsValidos);
         const dataRefSessao = toLocalISODate(new Date());
 
-        await Promise.all(
-          novosIdsValidos.map(async (pid, i) => {
-            const proc = journeyState.procedimentosSessao[i] || {};
+        // 1. Salva mapa unificado uma única vez vinculado a todos os procedimentos da sessão
+        if (activeMapaSnapSync) {
+          const mainCatId = journeyState.nomeProcedimentoCatalogoId || journeyState.procedimentosSessao?.[0]?.catalogoProcedimentoSaudeId;
+          const listaComIdsReais = Array.isArray(listaParaSalvar)
+            ? listaParaSalvar.map((p, idx) => {
+                const cId = p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || (idx === 0 ? mainCatId : null);
+                return {
+                  ...p,
+                  id: todosIds[idx] || p.id,
+                  procedimentoFeitoId: todosIds[idx] || p.procedimentoFeitoId,
+                  catalogoProcedimentoSaudeId: cId,
+                  corHex: p.corHex || (cId ? corParaProcedimento(cId) : null),
+                };
+              })
+            : listaParaSalvar;
+          await persistirMapaAplicacaoAtual(novosIdsValidos[0], paciente, activeMapaSnapSync, null, mainCatId, novosIdsValidos, listaComIdsReais);
+        }
 
-            const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
-            if (snap) {
-              const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-              await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
-            }
-
-            const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
-            if (photos.length > 0) {
-              await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos, targetAgendaId);
-            }
-          })
-        );
+        // 2. Upload das fotos da sessão uma única vez carimbadas com targetAgendaId
+        if (activePhotosSync.length > 0) {
+          await uploadProcedureCapturedPhotos(paciente, novosIdsValidos, dataRefSessao, activePhotosSync, targetAgendaId);
+        }
 
         const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
           journeyProcedureDateIso,
@@ -4199,9 +4358,12 @@ function AppRefactoredInner() {
                           setNomeProcedimento={journeyState.setNomeProcedimento}
                           setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                           setProcedimentoDoCatalogo={journeyState.setProcedimentoDoCatalogo}
+                          procedimentosSessao={journeyState.procedimentosSessao}
+                          setProcedimentosSessao={journeyState.setProcedimentosSessao}
                           onValidarTermosCatalogo={validarTermosDoCatalogo}
                           execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
                           titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
+                          resolucao={termosExecucaoBloqueio.resolucao}
                           consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
                           observacoesExecucao={journeyState.observacoesExecucao}
                           setObservacoesExecucao={journeyState.setObservacoesExecucao}
@@ -4228,6 +4390,7 @@ function AppRefactoredInner() {
                             journeyState.nomeProcedimentoCatalogoId,
                           )}
                           planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
+                          journeyPlanejamentoCtx={journeyState.journeyPlanejamentoCtx}
                           procedimentosComPontos={
                             journeyState.journeyPlanejamentoCtx?.procedimentosComPontos ?? []
                           }
@@ -4244,7 +4407,6 @@ function AppRefactoredInner() {
                             if (!ok) return null;
                             return ensureProcedimentoFeitoForMapa(pacienteAtual);
                           }}
-                          onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                         />
                       )}
 
@@ -4654,12 +4816,14 @@ function AppRefactoredInner() {
                 ) : null}
                 {consultaModule === 'planejamento' && !journeyState.isAgendaRetorno ? (
                   <PlanosTab
+                    ref={planosTabRef}
                     variant="consulta"
                     pacienteId={pacienteAtual?.id ?? null}
                     roleUserId={roleUserId ?? null}
                     pacienteNome={pacienteAtual?.nome ?? ''}
                     paciente={pacienteAtual}
-                    onVoltar={() => setConsultaModule('hub')}
+                    onVoltar={handleBackToHub}
+                    onPlanoModificado={() => recarregarPlanosDoPaciente(pacienteAtual?.id)}
                     onSelectProcedimentoParaConsulta={handleSelectProcedimentoDoPlano}
                     onAgendarItem={(item, onSaved) =>
                       handleAgendarPlanoItem(pacienteAtual, item, onSaved)
@@ -4717,7 +4881,10 @@ function AppRefactoredInner() {
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                     procedimentos={journeyState.procedimentosSessao}
-                    onConcluir={() => setConsultaModule('hub')}
+                    onConcluir={() => {
+                      const temProcedimento = Boolean(journeyState.nomeProcedimento) || (journeyState.procedimentosSessao && journeyState.procedimentosSessao.length > 0);
+                      setConsultaModule(temProcedimento ? 'procedimento' : 'hub');
+                    }}
                   />
                 ) : null}
                 {consultaModule === 'procedimento' && !journeyState.isAgendaRetorno ? (
@@ -4727,7 +4894,10 @@ function AppRefactoredInner() {
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                     setProcedimentoDoCatalogo={journeyState.setProcedimentoDoCatalogo}
+                    catalogoId={journeyState.nomeProcedimentoCatalogoId || journeyState.procedimentosSessao?.[0]?.catalogoProcedimentoSaudeId || null}
                     procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
+                    setProcedimentosLote={journeyState.setProcedimentosSessao}
+                    journeyPlanejamentoCtx={journeyState.journeyPlanejamentoCtx}
                     activeProcedimentoIndex={journeyState.activeProcedureIndex}
                     setActiveProcedimentoIndex={journeyState.setActiveProcedureIndex}
                     updateProcedureByIndex={journeyState.updateProcedureByIndex}
@@ -4752,7 +4922,7 @@ function AppRefactoredInner() {
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
                     catalogoId={journeyState.nomeProcedimentoCatalogoId}
                     planejamentoItemId={resolvePlanejamentoItemId(
-                      journeyState.nomeProcedimentoCatalogoId,
+                        journeyState.nomeProcedimentoCatalogoId,
                     )}
                     planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
                     procedimentosComPontos={
@@ -4765,9 +4935,11 @@ function AppRefactoredInner() {
                     onValidarTermosCatalogo={validarTermosDoCatalogo}
                     execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
                     titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
+                    resolucao={termosExecucaoBloqueio.resolucao}
                     consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
-                    onIrParaTermosGate={() =>
+                    onIrParaTermosGate={(focoId) =>
                       irParaTermosFaltantes({
+                        termoId: typeof focoId === 'string' ? focoId : idsFilaExigida(termosExecucaoBloqueio.resolucao)[0],
                         termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
                         nomeProcedimento: journeyState.nomeProcedimento,
                       })
@@ -4781,8 +4953,6 @@ function AppRefactoredInner() {
                       if (!ok) return null;
                       return ensureProcedimentoFeitoForMapa(pacienteAtual);
                     }}
-                    sugestaoProcedimentoEnviada={sugestaoProcedimentoEnviada}
-                    onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                     procedureDateIso={journeyProcedureDateIso}
                     proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
                     setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}

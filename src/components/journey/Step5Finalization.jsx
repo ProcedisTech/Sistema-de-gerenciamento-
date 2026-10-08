@@ -115,6 +115,9 @@ export function Step5Finalization({
   }, [procedimentosLote, observacoesProcedimento]);
 
   const allFotosProcedimento = useMemo(() => {
+    if (Array.isArray(fotosProcedimento) && fotosProcedimento.length > 0) {
+      return fotosProcedimento;
+    }
     if (procedimentosLote && procedimentosLote.length > 0) {
       const photos = [];
       procedimentosLote.forEach(p => {
@@ -122,7 +125,7 @@ export function Step5Finalization({
       });
       if (photos.length > 0) return photos;
     }
-    return fotosProcedimento || [];
+    return [];
   }, [procedimentosLote, fotosProcedimento]);
 
   useEffect(() => {
@@ -660,10 +663,15 @@ export function Step5Finalization({
                   <div className="text-[12px] font-bold uppercase tracking-widest text-[#94a3b8]">Procedimento{procedimentosLote?.length > 1 ? 's' : ''}</div>
                   <div className="text-[15px] font-semibold text-[#0f172a]">
                     {(procedimentosLote && procedimentosLote.length > 0)
-                      ? procedimentosLote.map((p, idx) => (
-                          <div key={idx}>{p.procedimentoNome || p.nomeProcedimento}</div>
-                        ))
-                      : nomeProcedimento}
+                      ? procedimentosLote
+                          .filter((p) => {
+                            const n = p.procedimentoNome || p.nomeProcedimento || '';
+                            return n && !/^Procedimento\s*\d*$/i.test(String(n).trim());
+                          })
+                          .map((p, idx) => (
+                            <div key={idx}>{p.procedimentoNome || p.nomeProcedimento}</div>
+                          ))
+                      : (!/^Procedimento\s*\d*$/i.test(String(nomeProcedimento || '').trim()) ? nomeProcedimento : '')}
                   </div>
                   {allObservacoes ? (
                     <div className="mt-1 text-[13px] leading-relaxed text-[#475569] whitespace-pre-wrap">{allObservacoes}</div>

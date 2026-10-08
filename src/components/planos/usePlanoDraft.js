@@ -205,17 +205,22 @@ export function usePlanoDraft() {
       enriquecerDraftItemTipo(planoItemToDraftItem(raw), catalogoOptions),
     );
 
-    setDraftByPlanoId((prev) => ({
-      ...prev,
-      [id]: {
-        observacao,
-        itens,
-        baseline: {
-          observacao,
-          itens: cloneItens(itens),
+    setDraftByPlanoId((prev) => {
+      const cur = prev[id];
+      const keepUserObs = Boolean(cur && cur.observacao !== cur.baseline?.observacao);
+      const finalObservacao = keepUserObs ? cur.observacao : observacao;
+      return {
+        ...prev,
+        [id]: {
+          observacao: finalObservacao,
+          itens,
+          baseline: {
+            observacao,
+            itens: cloneItens(itens),
+          },
         },
-      },
-    }));
+      };
+    });
   }, []);
 
   const rollbackRemoved = useCallback((planoId, removedItems) => {

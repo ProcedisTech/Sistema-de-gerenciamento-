@@ -4,11 +4,12 @@ import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
 
 export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
   const [planos, setPlanos] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(enabled && String(pacienteId ?? '').trim()));
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
   const [mutating, setMutating] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts = {}) => {
     const pid = String(pacienteId ?? '').trim();
     if (!enabled || !pid) {
       setPlanos([]);
@@ -16,7 +17,10 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const isSilent = Boolean(opts?.silent);
+    if (!isSilent) {
+      setLoading(true);
+    }
     setError('');
     try {
       const data = await planejamentosApi.listarPorPaciente(pid);
@@ -28,7 +32,10 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
       setError(getApiErrorDetail(e) || e?.message || 'Não foi possível carregar os planos.');
       return [];
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
+      setHasLoaded(true);
     }
   }, [pacienteId, enabled]);
 
@@ -41,7 +48,7 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
     setError('');
     try {
       const result = await fn();
-      await refresh();
+      await refresh({ silent: true });
       return result;
     } catch (e) {
       const msg = getApiErrorDetail(e) || e?.message || 'Operação falhou.';
@@ -162,6 +169,7 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
   return {
     planos,
     loading,
+    hasLoaded,
     error,
     mutating,
     refresh,

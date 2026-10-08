@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   Calendar,
@@ -1076,7 +1076,7 @@ function PlanoHistoricoProfileCard({
   );
 }
 
-export function PlanosTab({
+export const PlanosTab = React.forwardRef(function PlanosTab({
   pacienteId,
   paciente,
   roleUserId,
@@ -1094,7 +1094,8 @@ export function PlanosTab({
   onVoltar,
   procedimentosAvaliados = [],
   onLimparProcedimentosAvaliados,
-}) {
+  onPlanoModificado,
+}, ref) {
   const isConsulta = variant === 'consulta';
   const canCrud = isConsulta;
   const canBaixa = true;
@@ -1109,11 +1110,14 @@ export function PlanosTab({
     mutating,
     refresh,
     criarPlano,
+    adicionarItem,
+    editarItem,
     removerItem,
     alterarStatusPlano,
     darBaixaItem,
     salvarPlano,
     clearError,
+    hasLoaded,
   } = usePlanosPaciente({ pacienteId, roleUserId });
 
   const {
@@ -1121,7 +1125,6 @@ export function PlanosTab({
     hydrateFromPlano,
     initEmptyDraft,
     setObservacao,
-    addItem,
     updateItem,
     removeItem,
     isDirty: _isDirty,
@@ -1413,7 +1416,7 @@ export function PlanosTab({
   const [isAutoSyncing, setIsAutoSyncing] = useState(false);
 
   useEffect(() => {
-    if (!canCrud || loading || catalogoLoading || !pacienteId) return;
+    if (!canCrud || loading || !hasLoaded || catalogoLoading || !pacienteId) return;
     if (!Array.isArray(procedimentosAvaliados) || procedimentosAvaliados.length === 0) return;
     if (autoSyncProcessingRef.current) return;
 
@@ -1422,19 +1425,33 @@ export function PlanosTab({
       setIsAutoSyncing(true);
       try {
         let targetPlanoId = null;
-        const planoAtivo = displayPlanos.find(
+        let planoAtivo = sortedPlanos.find(
           (p) => p.statusCodigo === 'ativo' || p.status === 'ativo' || p.status === 'em_andamento'
         );
 
         if (planoAtivo) {
           targetPlanoId = String(planoAtivo.id);
         } else {
-          const created = await criarPlano('');
-          const novoId = created?.planejamentoId ?? created?.id;
-          if (novoId) {
-            targetPlanoId = String(novoId);
-            initEmptyDraft(targetPlanoId);
-            hydratedPlanIdsRef.current.add(targetPlanoId);
+          try {
+            const created = await criarPlano('');
+            const novoId = created?.planejamentoId ?? created?.id;
+            if (novoId) {
+              targetPlanoId = String(novoId);
+              initEmptyDraft(targetPlanoId);
+              hydratedPlanIdsRef.current.add(targetPlanoId);
+            }
+          } catch (createErr) {
+            if (createErr?.status === 409 || String(createErr?.message || '').includes('PLANO_ATIVO_EXISTENTE')) {
+              const recarregados = await refresh();
+              planoAtivo = (recarregados || []).find(
+                (p) => p.statusCodigo === 'ativo' || p.status === 'ativo' || p.status === 'em_andamento'
+              );
+              if (planoAtivo) {
+                targetPlanoId = String(planoAtivo.id);
+              }
+            } else {
+              throw createErr;
+            }
           }
         }
 
@@ -1484,6 +1501,7 @@ export function PlanosTab({
         if (typeof onLimparProcedimentosAvaliados === 'function') {
           onLimparProcedimentosAvaliados();
         }
+        onPlanoModificado?.();
       } catch (err) {
         console.error('[PlanosTab] Erro na auto-inclusão de procedimentos da avaliação:', err);
       } finally {
@@ -1501,6 +1519,7 @@ export function PlanosTab({
     criarPlano,
     displayPlanos,
     getDraft,
+    hasLoaded,
     initEmptyDraft,
     loading,
     onLimparProcedimentosAvaliados,
@@ -1508,6 +1527,7 @@ export function PlanosTab({
     procedimentosAvaliados,
     refresh,
     roleUserId,
+    sortedPlanos,
     toast,
   ]);
 
@@ -1546,19 +1566,115 @@ export function PlanosTab({
         setSavingPlanoId('');
       }
     },
-    [applyDetalhe, buildPutPayload, catalogoOptions, getRemovedSinceBaseline, refresh, rollbackRemoved, salvarPlano, toast],
+    [applyDetalhe, buildPutPayload, carregarGaleria, carregarProcedimentosFeitos, catalogoOptions, getRemovedSinceBaseline, refresh, rollbackRemoved, salvarPlano, toast],
   );
+
+  const handleAdicionarProcedimento = useCallback(
+    async (planoId, opt) => {
+      let targetPlanoId = planoId;
+      if (!targetPlanoId) {
+        try {
+          const novo = await criarPlano('Plano de Tratamento');
+          targetPlanoId = novo?.id;
+        } catch (err) {
+          const msg = getApiErrorDetail(err) || err?.message || 'Erro ao inicializar plano.';
+          toast.error(msg);
+          return;
+        }
+      }
+      if (!targetPlanoId || !opt?.id) return;
+
+      setActionError('');
+      try {
+        const valor = opt.valorPadrao ?? opt.valorBase ?? 0;
+        await adicionarItem(targetPlanoId, {
+          catalogoProcedimentoSaudeId: String(opt.id),
+          valorOrcado: valor,
+          dataPlanejada: null,
+        });
+        const detalhe = await planejamentosApi.detalhe(targetPlanoId);
+        applyDetalhe(targetPlanoId, detalhe, catalogoOptions);
+        hydratedPlanIdsRef.current.add(targetPlanoId);
+        toast.success(`"${opt.nomeProcedimento}" adicionado ao plano!`);
+        onPlanoModificado?.();
+      } catch (err) {
+        const msg = getApiErrorDetail(err) || err?.message || 'Erro ao adicionar procedimento ao plano.';
+        setActionError(msg);
+        toast.error(msg);
+      }
+    },
+    [adicionarItem, applyDetalhe, catalogoOptions, criarPlano, onPlanoModificado, toast],
+  );
+
+  const [obsStatus, setObsStatus] = useState('salvo'); // 'salvo' | 'salvando' | 'erro'
+  const obsDebounceRef = useRef(null);
+  const pendingObsRef = useRef(null);
+
+  const handleObservacaoChange = useCallback(
+    (planoId, text) => {
+      setObservacao(planoId, text);
+      pendingObsRef.current = { planoId, text };
+      setObsStatus('salvando');
+
+      if (obsDebounceRef.current) clearTimeout(obsDebounceRef.current);
+      obsDebounceRef.current = setTimeout(async () => {
+        try {
+          const body = buildPutPayload(planoId);
+          body.observacao = String(text ?? '').trim();
+          await salvarPlano(planoId, body);
+          setObsStatus('salvo');
+          pendingObsRef.current = null;
+        } catch (err) {
+          console.warn('Erro no auto-save de observações do plano:', err);
+          setObsStatus('erro');
+        }
+      }, 800);
+    },
+    [buildPutPayload, salvarPlano, setObservacao],
+  );
+
+  const flushPendingObservacoes = useCallback(async () => {
+    if (obsDebounceRef.current) {
+      clearTimeout(obsDebounceRef.current);
+      obsDebounceRef.current = null;
+    }
+    if (pendingObsRef.current) {
+      const { planoId, text } = pendingObsRef.current;
+      pendingObsRef.current = null;
+      try {
+        const body = buildPutPayload(planoId);
+        body.observacao = String(text ?? '').trim();
+        await salvarPlano(planoId, body);
+        setObsStatus('salvo');
+      } catch (err) {
+        console.warn('Erro ao descarregar observação pendente:', err);
+      }
+    }
+  }, [buildPutPayload, salvarPlano]);
+
+  useImperativeHandle(ref, () => ({
+    flushPendingObservacoes,
+  }), [flushPendingObservacoes]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingObsRef.current) {
+        flushPendingObservacoes();
+      }
+    };
+  }, [flushPendingObservacoes]);
 
   const handleEncerrar = useCallback(
     async (planoId) => {
       setActionError('');
       try {
         await alterarStatusPlano(planoId, 'encerrado');
+        onPlanoModificado?.();
       } catch (e) {
         setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível encerrar o plano.');
       }
     },
-    [alterarStatusPlano],
+    [alterarStatusPlano, onPlanoModificado],
   );
 
   const openEncerrarModal = useCallback((planoId) => {
@@ -1977,18 +2093,18 @@ export function PlanosTab({
 
     try {
       for (const item of itensParaRemover) {
-        if (isConsulta) {
-          removeItem(planoAtivo.id, itemReactKey(item));
-        } else {
+        if (isRealUuid(item.id)) {
           await removerItem(planoAtivo.id, item.id);
         }
+        removeItem(planoAtivo.id, itemReactKey(item));
       }
       toast.success(`${itensParaRemover.length} procedimentos removidos do plano.`);
       limparSelecao();
+      onPlanoModificado?.();
     } catch (e) {
       setActionError(getApiErrorDetail(e) || e?.message || 'Erro ao remover itens selecionados.');
     }
-  }, [displayPlanos, isConsulta, limparSelecao, removeItem, removerItem, selecionados, toast]);
+  }, [displayPlanos, limparSelecao, onPlanoModificado, removeItem, removerItem, selecionados, toast]);
 
   const handleAgendarItem = useCallback(
     async (item, onSaved, planoId) => {
@@ -2111,13 +2227,25 @@ export function PlanosTab({
   }, [concluirRetornoModal, handleConcluirComRetorno]);
 
   const handleEditItemSave = useCallback(
-    (patch) => {
+    async (patch) => {
       if (!editItemState) return;
-      const { planoId, itemKey: key } = editItemState;
-      updateItem(planoId, key, patch, catalogoOptions);
-      setEditItemState(null);
+      const { planoId, itemKey: key, item } = editItemState;
+      try {
+        const realId = item?.id || (isRealUuid(key) ? key : null);
+        if (realId) {
+          await editarItem(planoId, realId, patch);
+        }
+        updateItem(planoId, key, patch, catalogoOptions);
+        toast.success('Procedimento atualizado.');
+        onPlanoModificado?.();
+      } catch (err) {
+        const msg = getApiErrorDetail(err) || err?.message || 'Erro ao atualizar procedimento.';
+        toast.error(msg);
+      } finally {
+        setEditItemState(null);
+      }
     },
-    [catalogoOptions, editItemState, updateItem],
+    [catalogoOptions, editItemState, editarItem, onPlanoModificado, toast, updateItem],
   );
 
 
@@ -2224,15 +2352,29 @@ export function PlanosTab({
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
                 Observações Clínicas do Plano
               </span>
-              <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
-                <Check className="h-3 w-3" />
-                <span>Salvo</span>
-              </span>
+              {obsStatus === 'salvando' && (
+                <span className="text-[11px] font-medium text-amber-600 flex items-center gap-1 animate-pulse">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Salvando...</span>
+                </span>
+              )}
+              {obsStatus === 'salvo' && (
+                <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  <span>Salvo</span>
+                </span>
+              )}
+              {obsStatus === 'erro' && (
+                <span className="text-[11px] font-medium text-rose-500 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>Erro ao salvar</span>
+                </span>
+              )}
             </div>
             <textarea
               rows={2}
               value={planoDraft?.observacao ?? planoAtivo?.observacao ?? ''}
-              onChange={(e) => setObservacao(planoAtivo.id, e.target.value)}
+              onChange={(e) => handleObservacaoChange(planoAtivo.id, e.target.value)}
               placeholder="Ex: Paciente sensível na região dos lábios, aplicar anestésico tópico 20 min antes…"
               className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#00a88e] focus:bg-white transition-all resize-none"
             />
@@ -2272,6 +2414,7 @@ export function PlanosTab({
                   if (!isRealUuid(itemId)) {
                     removeItem(planoAtivo.id, itemKey);
                     toast.success('Procedimento removido.');
+                    onPlanoModificado?.();
                     return;
                   }
                   await removerItem(planoAtivo.id, itemId);
@@ -2280,6 +2423,7 @@ export function PlanosTab({
                   await removerItem(planoAtivo.id, itemId);
                 }
                 toast.success('Procedimento removido.');
+                onPlanoModificado?.();
               } catch (e) {
                 setActionError(
                   getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.',
@@ -2626,6 +2770,7 @@ export function PlanosTab({
                           setActionError('');
                           try {
                             await removerItem(pid, iid);
+                            onPlanoModificado?.();
                           } catch (e) {
                             setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.');
                           }
@@ -2650,7 +2795,10 @@ export function PlanosTab({
           {typeof onVoltar === 'function' ? (
             <button
               type="button"
-              onClick={onVoltar}
+              onClick={async () => {
+                await flushPendingObservacoes();
+                onVoltar();
+              }}
               className="rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#64748b] transition-colors hover:bg-app-nav-hover"
             >
               Voltar ao hub
@@ -2713,21 +2861,9 @@ export function PlanosTab({
                   type="button"
                   disabled={mutating || !planoAtivoId}
                   onClick={() => {
-                    if (planoAtivoId) {
-                      addItem(
-                        planoAtivoId,
-                        {
-                          catalogoProcedimentoSaudeId: String(opt.id),
-                          catalogoNome: opt.nomeProcedimento,
-                          tipoCodigo: opt.tipoCodigo ?? '',
-                          valorOrcado: opt.valorPadrao ?? opt.valorBase ?? 0,
-                        },
-                        catalogoOptions,
-                      );
-                      toast.success(`"${opt.nomeProcedimento}" adicionado ao plano!`);
-                    }
+                    handleAdicionarProcedimento(planoAtivoId, opt);
                   }}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-teal-50 hover:border-[#00a88e] hover:text-[#00a88e] px-2 py-1 text-[11px] font-medium text-slate-600 transition-all active:scale-95"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-teal-50 hover:border-[#00a88e] hover:text-[#00a88e] px-2 py-1 text-[11px] font-medium text-slate-600 transition-all active:scale-95 disabled:opacity-60"
                 >
                   <Plus className="h-3 w-3" />
                   <span>{opt.nomeProcedimento}</span>
@@ -2754,22 +2890,10 @@ export function PlanosTab({
                       type="button"
                       disabled={mutating || !planoAtivoId}
                       onClick={() => {
-                        if (planoAtivoId) {
-                          addItem(
-                            planoAtivoId,
-                            {
-                              catalogoProcedimentoSaudeId: String(opt.id),
-                              catalogoNome: opt.nomeProcedimento,
-                              tipoCodigo: opt.tipoCodigo ?? '',
-                              valorOrcado: opt.valorPadrao ?? opt.valorBase ?? 0,
-                            },
-                            catalogoOptions,
-                          );
-                          setBuscaProcedimento('');
-                          toast.success(`"${opt.nomeProcedimento}" adicionado ao plano!`);
-                        }
+                        handleAdicionarProcedimento(planoAtivoId, opt);
+                        setBuscaProcedimento('');
                       }}
-                      className="w-full flex items-center justify-between rounded-lg p-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-[#00a88e] transition-colors"
+                      className="w-full flex items-center justify-between rounded-lg p-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-[#00a88e] transition-colors disabled:opacity-60"
                     >
                       <span>{opt.nomeProcedimento}</span>
                       <span className="text-[11px] font-mono text-slate-400">
@@ -2789,7 +2913,7 @@ export function PlanosTab({
         </div>
       ) : null}
 
-      {loading ? (
+      {loading && !hasLoaded ? (
         <div className="flex items-center justify-center gap-2 py-12 text-[#64748b]">
           <Loader2 className="h-5 w-5 animate-spin text-[#00a88e]" />
           <span className="text-[13px] font-medium">Carregando planos…</span>
@@ -2980,4 +3104,4 @@ export function PlanosTab({
       )}
     </div>
   );
-}
+});

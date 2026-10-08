@@ -33,6 +33,7 @@ import { MapeamentoFullscreenToolbar } from './mapeamento/MapeamentoFullscreenTo
 import { useMapeamentoFullscreenKeyboardShortcuts } from './mapeamento/useMapeamentoFullscreenKeyboardShortcuts.js';
 import { PontoMarcadorPopover } from './mapeamento/PontoMarcadorPopover.jsx';
 import { mapasApi, planejamentosApi, catalogosApi } from '../../services/api.js';
+import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 
 const COR_PADRAO_AVALIACAO = '#0ea5e9'; // Ciano/Azul de alto contraste padrão
 const RAIO_BORRACHA_PERCENT = 2.8; // ~2.8% da largura da foto para o diâmetro da borracha
@@ -1484,13 +1485,17 @@ export function AnnotationCanvasAvaliacao({
       // 5. Persiste o mapa relacional no banco se pacienteId estiver presente
       if (pacienteId) {
         try {
+          const fotoAtual = photos && editingIndex != null ? photos[editingIndex] : null;
+          const anguloRaw = fotoAtual?.meta?.anguloFotoCodigo || fotoAtual?.anguloFotoCodigo || 'frontal';
+          const anguloCanonico = anguloRaw === 'frente' ? 'frontal' : anguloRaw;
+
           const marcacoesPayload = pontos.map((p) => {
             const isTraco = p.tipoGeometria === 'traco' || Array.isArray(p.vertices);
             const procIdx = procedimentos.findIndex(
               (pr) => pr.id === (p.catalogoProcedimentoSaudeId || p.procedimentoId)
             );
             return {
-              anguloFotoCodigo: 'frente',
+              anguloFotoCodigo: anguloCanonico,
               tipoGeometria: isTraco ? 'traco' : 'ponto',
               quantidade: Math.max(0.1, Number(p.quantidade) || (activeUnidade === 'ml' ? 0.5 : 1)),
               tamanho: p.tamanho ? Number(p.tamanho) : 1.0,
@@ -1512,11 +1517,13 @@ export function AnnotationCanvasAvaliacao({
             };
           });
 
-          const procedimentosPayload = procedimentos.map((proc) => ({
-            catalogoProcedimentoSaudeId: proc.id,
-            corHex: proc.corHex || null,
-            planejamentoItemId: proc.planejamentoItemId || null,
-          }));
+          const procedimentosPayload = procedimentos
+            .filter((proc) => isRealUuid(proc.id) || isRealUuid(proc.catalogoProcedimentoSaudeId))
+            .map((proc) => ({
+              catalogoProcedimentoSaudeId: isRealUuid(proc.id) ? proc.id : proc.catalogoProcedimentoSaudeId,
+              corHex: proc.corHex || null,
+              planejamentoItemId: isRealUuid(proc.planejamentoItemId) ? proc.planejamentoItemId : null,
+            }));
 
           await mapasApi.salvar({
             pacienteId,

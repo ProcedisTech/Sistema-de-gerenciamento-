@@ -201,6 +201,8 @@ export function JourneyView({
   procedureCapturedPhotos: procedureCapturedPhotosStep4,
   uploadProcedureFiles: uploadProcedureFilesStep4,
   removeProcedurePhoto: removeProcedurePhotoStep4,
+  procedimentosSessao: procedimentosSessaoProp,
+  setProcedimentosSessao: setProcedimentosSessaoProp,
   orientacoes,
   orientacoesItens: orientacoesItensProp,
   setOrientacoesItens: setOrientacoesItensProp,
@@ -221,6 +223,12 @@ export function JourneyView({
 }) {
   const toast = useToast();
   const [_nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoIdLocal] = React.useState(null);
+
+  const [localProcedimentosSessao, setLocalProcedimentosSessao] = React.useState([]);
+  const hasParentProcedimentosSessao =
+    procedimentosSessaoProp !== undefined && typeof setProcedimentosSessaoProp === 'function';
+  const procedimentosSessao = hasParentProcedimentosSessao ? procedimentosSessaoProp : localProcedimentosSessao;
+  const setProcedimentosSessao = hasParentProcedimentosSessao ? setProcedimentosSessaoProp : setLocalProcedimentosSessao;
 
   const [localOrientItens, setLocalOrientItens] = React.useState([]);
   const [localOrientCarregadas, setLocalOrientCarregadas] = React.useState(false);
@@ -374,6 +382,8 @@ export function JourneyView({
           nomeProcedimento={nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
           setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoIdLocal}
+          procedimentosSessao={procedimentosSessao}
+          setProcedimentosSessao={setProcedimentosSessao}
           observacoesExecucao={observacoesExecucao}
           setObservacoesExecucao={setObservacoesExecucao}
           procedureCapturedPhotos={procedureCapturedPhotosStep4 ?? evaluationCapturedPhotos}

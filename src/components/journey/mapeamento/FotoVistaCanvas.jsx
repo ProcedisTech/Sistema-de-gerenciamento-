@@ -108,6 +108,8 @@ export function FotoVistaCanvasCore({
   const containerRef = useRef(null);
   const imgRef = useRef(null);
   const fileInputRef = useRef(null);
+  const internalTransformRef = useRef(null);
+  const effectiveTransformRef = transformWrapperRef || internalTransformRef;
 
   const [pendingClick, setPendingClick] = useState(null);
   const [pontoSelecionado, setPontoSelecionado] = useState(null);
@@ -544,10 +546,10 @@ export function FotoVistaCanvasCore({
             role="presentation"
           >
             <TransformWrapper
-              ref={transformWrapperRef}
+              ref={effectiveTransformRef}
               panning={{ activationKeys: [' '] }}
               doubleClick={{ disabled: true }}
-              wheel={{ step: 0.05, smoothStep: 0.01 }}
+              wheel={{ disabled: Boolean(previewMode || !fillViewport), step: 0.05, smoothStep: 0.01 }}
               minScale={1}
               maxScale={5}
             >
@@ -669,7 +671,7 @@ export function FotoVistaCanvasCore({
                   <button
                     type="button"
                     title="Enquadrar na tela (Resetar Zoom)"
-                    onClick={() => transformWrapperRef?.current?.resetTransform?.()}
+                    onClick={() => effectiveTransformRef?.current?.resetTransform?.()}
                     className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors pointer-events-auto cursor-pointer"
                   >
                     <svg
