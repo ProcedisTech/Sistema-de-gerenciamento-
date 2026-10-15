@@ -1,595 +1,867 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { Settings2, Plus, Edit2, Trash2, Shield, Crown, Loader2, X } from 'lucide-react';
-import { resolveApiUrl } from '../../config/apiEnv';
-import { getApiErrorDetail } from '../../services/api';
-import { useToast } from '../../contexts/useToast.js';
-import { CODIGO_ORDER, MODULO_LABEL_CURTO } from './gestaoUsuariosUtils';
-import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
-import { PermissoesCustomizadasModal } from './PermissoesCustomizadasModal';
+import React, { useEffect, useRef, useState } from "react";
+import { resolveApiUrl } from "../../config/apiEnv";
+import { getApiErrorDetail } from "../../services/api";
+import { useToast } from "../../contexts/useToast.js";
+import {
+  summarizeModules,
+  PROTOTYPE_OPERATIONAL_CODES as OPERACIONAIS,
+  sortPermissionsByHierarchy,
+} from "./equipePrototypeUtils";
+import { PrototypeIcon } from "./PrototypeIcon";
+import "./gestaoPerfilEditor.css";
 
-const isPerfilGlobal = (perfil) => !perfil.organizacaoSaudeDona && !perfil.organizacaoSaudeDonaId;
+const RAIZES = new Set([
+  "AGENDA_VER",
+  "AGENDA_PROPRIA_VER",
+  "PACIENTE_VER",
+  "PRONTUARIO_VER",
+  "CATALOGO_VER",
+  "DOC_MODELO_VER",
+  "ANAMNESE_MODELO_VER",
+  "USUARIO_VER",
+  "NOTIFICACAO_VER",
+  "AUDITORIA_VER",
+]);
+// Permissões operacionais do nível intermediário. Permissões administrativas e
+// destrutivas só entram em Tudo ou pela escolha explícita de funções.
 
-export function GestaoPerfisTab({ perfisAcesso, permissoes, usuarios, onReload, fetchHeaders, perfilParaAbrir, onPerfilParaAbrirConsumido }) {
+const ehGlobal = (perfil) =>
+  !perfil.organizacaoSaudeDona && !perfil.organizacaoSaudeDonaId;
+const etiquetasNivel = {
+  0: "Sem acesso",
+  1: "Só ver",
+  2: "Ver e editar",
+  3: "Tudo",
+};
+
+function nivelModulo(modulo, selecionadas) {
+  const summary = summarizeModules(modulo.permissoes, selecionadas).find(
+    (m) => m.key === modulo.key.toLowerCase(),
+  );
+  return {
+    key: summary.k,
+    text: summary.t,
+    has: summary.has,
+    total: summary.tot,
+  };
+}
+
+export function GestaoPerfisTab({
+  perfisAcesso = [],
+  permissoes = [],
+  usuarios = [],
+  onReload,
+  fetchHeaders,
+  perfilParaAbrir,
+  onPerfilParaAbrirConsumido,
+  criarNovoNonce = 0,
+  canEdit = false,
+  onBack,
+  onSaved,
+}) {
   const toast = useToast();
-  const [showModal, setShowModal] = useState(false);
-  const [wizardStep, setWizardStep] = useState(1);
   const [editingPerfil, setEditingPerfil] = useState(null);
-  const [perfilBaseCriacao, setPerfilBaseCriacao] = useState(null);
-
-  const [formData, setFormData] = useState({ nome: '', descricao: '' });
-  const [saving, setSaving] = useState(false);
-
+  const [formData, setFormData] = useState({ nome: "", descricao: "" });
   const [selectedPermissoes, setSelectedPermissoes] = useState([]);
+  const [baseSelecionada, setBaseSelecionada] = useState("branco");
+  const [abertos, setAbertos] = useState({});
+  const [saving, setSaving] = useState(false);
   const [loadingPermissoes, setLoadingPermissoes] = useState(false);
+  const [erroPermissoes, setErroPermissoes] = useState(false);
+  const [modeloSemPermissoes, setModeloSemPermissoes] = useState(false);
+  const [confirmacaoDesativarRaiz, setConfirmacaoDesativarRaiz] = useState(null);
+  const requestId = useRef(0);
 
-  // Pop-up de escolha (criar novo vs editar existente), só pra perfis já customizados.
-  const [perfilEscolha, setPerfilEscolha] = useState(null);
-  const [carregandoEscolha, setCarregandoEscolha] = useState(false);
+  useEffect(() => {
+    if (!confirmacaoDesativarRaiz) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setConfirmacaoDesativarRaiz(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmacaoDesativarRaiz]);
 
-  // Permissões atuais de cada perfil, só pra montar as barrinhas de cobertura e o
-  // total nos cards da listagem — carregado em paralelo, um perfil por vez.
-  const [permissoesPorPerfil, setPermissoesPorPerfil] = useState({});
+  const modulos = summarizeModules(permissoes, selectedPermissoes)
+    .filter((m) => m.permissions.length)
+    .map((m) => ({
+      key: m.key.toUpperCase(),
+      nome: m.name,
+      icon: m.icon,
+      descricao: m.description,
+      permissoes: sortPermissionsByHierarchy(
+        permissoes.filter(
+          (p) =>
+            String(p.modulo || "")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase() === m.key,
+        ),
+      ),
+      raizes: m.permissions.filter((p) => RAIZES.has(p.codigo)),
+      funcoes: m.permissions,
+    }));
+  const agendaPermissao = permissoes.find(
+    (p) => p.codigo === "AGENDA_APARECER",
+  );
+  const ag = Boolean(
+    agendaPermissao && selectedPermissoes.includes(agendaPermissao.permissaoId),
+  );
+  const membros = editingPerfil
+    ? usuarios.filter(
+        (u) =>
+          String(u.perfilAcessoId) === String(editingPerfil.id) &&
+          u.ativo !== false,
+      )
+    : [];
+  const disponiveis = perfisAcesso.filter(
+    (p) => (p.codigo || "").toUpperCase() !== "DONO",
+  );
+  const recepcaoBase =
+    disponiveis.find((p) => /secretaria[ -]?2/i.test(p.nome || "")) ||
+    disponiveis.find((p) =>
+      /^(SECRETARIA|NIVEL_2)$/.test((p.codigo || "").toUpperCase()),
+    );
+  const profissionalBase = disponiveis.find(
+    (p) => (p.codigo || "").toUpperCase() === "PROFISSIONAL_CLINICO",
+  );
+  const administradorBase = disponiveis.find((p) =>
+    /^(ADMINISTRADOR|NIVEL_5)$/.test((p.codigo || "").toUpperCase()),
+  );
+  const bases = [recepcaoBase, profissionalBase, administradorBase].filter(
+    Boolean,
+  );
 
-  const fecharModal = () => {
-    setShowModal(false);
-    setPerfilBaseCriacao(null);
-    setWizardStep(1);
-  };
-
-  const openNew = () => {
-    setEditingPerfil(null);
-    setPerfilBaseCriacao(null);
-    setFormData({ nome: '', descricao: '' });
-    setSelectedPermissoes([]);
-    setWizardStep(1);
-    setShowModal(true);
-  };
-
-  const openEdit = async (perfil) => {
-    setEditingPerfil(perfil);
-    setPerfilBaseCriacao(null);
-    setFormData({
-      nome: perfil.nome || '',
-      descricao: perfil.descricao || '',
-    });
-    setSelectedPermissoes([]);
-    setWizardStep(1);
-    setShowModal(true);
-
+  const buscarPermissoes = async (perfil) => {
+    const id = ++requestId.current;
+    setLoadingPermissoes(true);
+    setErroPermissoes(false);
+    setModeloSemPermissoes(false);
     try {
-      setLoadingPermissoes(true);
-      const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfil.id}/permissoes`), {
-        headers: await fetchHeaders(),
-        credentials: 'include'
-      });
-      if (res.ok) {
-        setSelectedPermissoes(await res.json());
+      const res = await fetch(
+        resolveApiUrl(`/api/v1/perfis-acesso/${perfil.id}/permissoes`),
+        { headers: await fetchHeaders(), credentials: "include" },
+      );
+      if (!res.ok) throw new Error("permission-read");
+      const ids = await res.json();
+      if (!Array.isArray(ids)) throw new Error("permission-shape");
+      if (id === requestId.current && ehGlobal(perfil) && ids.length === 0) {
+        setModeloSemPermissoes(true);
+        setErroPermissoes(true);
+        return;
       }
+      if (id === requestId.current) setSelectedPermissoes(ids);
     } catch {
-      toast.error('Erro ao buscar permissões do perfil.');
+      if (id === requestId.current) {
+        setErroPermissoes(true);
+        toast.error(
+          "Erro ao buscar permissões do perfil. Tente abrir o perfil novamente.",
+        );
+      }
     } finally {
-      setLoadingPermissoes(false);
-    }
-  };
-
-  const buscarPermissoesAtuais = async (perfilId) => {
-    try {
-      const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
-        headers: await fetchHeaders(),
-        credentials: 'include'
-      });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
-    } catch {
-      toast.error('Erro ao buscar permissões atuais.');
-      return [];
+      if (id === requestId.current) setLoadingPermissoes(false);
     }
   };
 
   useEffect(() => {
-    if (!perfisAcesso?.length) return;
-    let cancelado = false;
-    Promise.all(perfisAcesso.map(async (perfil) => {
-      const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
-      return [perfil.id, permissoesAtuais];
-    })).then((entries) => {
-      if (cancelado) return;
-      setPermissoesPorPerfil(Object.fromEntries(entries));
-    });
-    return () => { cancelado = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfisAcesso]);
-
-  const modulosCatalogo = (permissoes || []).reduce((acc, perm) => {
-    const mod = perm.modulo || 'Geral';
-    if (!acc[mod]) acc[mod] = [];
-    acc[mod].push(perm);
-    return acc;
-  }, {});
-
-  const getResumoPerfil = (perfil) => {
-    const permsDoPerfil = permissoesPorPerfil[perfil.id];
-    const carregado = !!permsDoPerfil;
-    const porModulo = Object.entries(modulosCatalogo).map(([modulo, perms]) => ({
-      modulo,
-      label: MODULO_LABEL_CURTO[(modulo || '').toUpperCase()] || modulo,
-      ativos: carregado ? perms.filter(p => permsDoPerfil.includes(p.permissaoId)).length : 0,
-      total: perms.length,
-    }));
-    const agendaPerm = (permissoes || []).find(p => p.codigo === 'AGENDA_APARECER');
-    const atendeNaAgenda = carregado
-      ? Boolean(agendaPerm && permsDoPerfil.includes(agendaPerm.permissaoId))
-      : ((perfil.codigo || '').toUpperCase() === 'PROFISSIONAL_CLINICO' || (perfil.codigo || '').toUpperCase() === 'DONO');
-    return {
-      carregado,
-      total: carregado ? permsDoPerfil.length : null,
-      porModulo,
-      membros: (usuarios || []).filter(u => String(u.perfilAcessoId) === String(perfil.id)).length,
-      atendeNaAgenda,
-    };
-  };
-
-  // Clique em "Editar"/"Criar perfil a partir deste": Níveis globais vão direto pro fluxo de
-  // criação (não são editáveis diretamente); perfis já customizados mostram a escolha.
-  const handleEditarClick = async (perfil) => {
-    if (isPerfilGlobal(perfil)) {
-      setCarregandoEscolha(true);
-      try {
-        const permissoesAtuais = await buscarPermissoesAtuais(perfil.id);
-        setEditingPerfil(null);
-                setFormData({
-          nome: perfil.nome || '',
-          descricao: perfil.descricao || '',
-        });
-        setSelectedPermissoes(permissoesAtuais);
-        setPerfilBaseCriacao(perfil.nome);
-        setWizardStep(1);
-        setShowModal(true);
-      } finally {
-        setCarregandoEscolha(false);
-      }
+    if (!canEdit || !perfilParaAbrir) return;
+    const copy = String(perfilParaAbrir).startsWith("copy:");
+    const id = copy
+      ? String(perfilParaAbrir).slice(5)
+      : String(perfilParaAbrir);
+    const perfil = perfisAcesso.find((p) => String(p.id) === id);
+    if (!perfil) return;
+    if ((perfil.codigo || "").toUpperCase() === "DONO") {
+      onPerfilParaAbrirConsumido?.();
       return;
     }
-    setPerfilEscolha(perfil);
-  };
-
-  const handleEscolherCriarNovo = async (nomeNovo) => {
-    const perfilOrigem = perfilEscolha;
-    setCarregandoEscolha(true);
-    try {
-      const permissoesAtuais = await buscarPermissoesAtuais(perfilOrigem.id);
-      setPerfilEscolha(null);
-      setEditingPerfil(null);
-          setFormData({
-        nome: nomeNovo,
-        descricao: perfilOrigem.descricao || '',
-      });
-      setSelectedPermissoes(permissoesAtuais);
-      setPerfilBaseCriacao(perfilOrigem.nome);
-      setWizardStep(1);
-      setShowModal(true);
-    } finally {
-      setCarregandoEscolha(false);
-    }
-  };
-
-  const handleEscolherEditarExistente = () => {
-    const perfil = perfilEscolha;
-    setPerfilEscolha(null);
-    openEdit(perfil);
-  };
-
-  useEffect(() => {
-    if (!perfilParaAbrir) return;
-    const perfil = (perfisAcesso || []).find(p => String(p.id) === String(perfilParaAbrir));
-    if (perfil) handleEditarClick(perfil);
+    const criar = copy || ehGlobal(perfil);
+    setEditingPerfil(criar ? null : perfil);
+    setFormData({
+      nome: criar ? `Cópia de ${perfil.nome}` : perfil.nome || "",
+      descricao: perfil.descricao || "",
+    });
+    setBaseSelecionada(criar ? String(perfil.id) : "");
+    setSelectedPermissoes([]);
+    setAbertos({});
+    buscarPermissoes(perfil);
     onPerfilParaAbrirConsumido?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfilParaAbrir]);
+  }, [perfilParaAbrir, canEdit]);
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [perfilToDelete, setPerfilToDelete] = useState(null);
+  useEffect(() => {
+    if (!canEdit || criarNovoNonce <= 0 || perfilParaAbrir) return;
+    ++requestId.current;
+    setEditingPerfil(null);
+    setFormData({ nome: "", descricao: "" });
+    setSelectedPermissoes([]);
+    setBaseSelecionada("branco");
+    setAbertos({});
+    setLoadingPermissoes(false);
+    setErroPermissoes(false);
+    setModeloSemPermissoes(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [criarNovoNonce, canEdit]);
 
-  const confirmDelete = (perfil) => {
-    setPerfilToDelete(perfil);
-    setShowDeleteModal(true);
-  };
-
-  const handleDelete = async () => {
-    if (!perfilToDelete) return;
-    try {
-      const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilToDelete.id}`), {
-        method: 'DELETE',
-        headers: await fetchHeaders(),
-        credentials: 'include'
-      });
-      if (res.ok) {
-        toast.success('Perfil excluído com sucesso.');
-        setShowDeleteModal(false);
-        setPerfilToDelete(null);
-        onReload();
-      } else {
-        const body = await res.json().catch(() => ({}));
-        toast.error(getApiErrorDetail({ body }) || 'Erro ao excluir perfil.');
-      }
-    } catch {
-      toast.error('Falha de rede ao excluir perfil.');
+  const usarBase = (perfil) => {
+    if (!canEdit || saving) return;
+    setBaseSelecionada(perfil ? String(perfil.id) : "branco");
+    if (perfil) buscarPermissoes(perfil);
+    else {
+      ++requestId.current;
+      setSelectedPermissoes([]);
+      setLoadingPermissoes(false);
+      setErroPermissoes(false);
+      setModeloSemPermissoes(false);
     }
   };
+  const aplicarNivel = (modulo, key) => {
+    if (!canEdit || loadingPermissoes || saving) return;
+    const idsModulo = modulo.permissoes.map((p) => p.permissaoId);
+    const selecionadas = [
+      ...modulo.raizes,
+      ...(key === "3"
+        ? modulo.funcoes
+        : key === "2"
+          ? modulo.funcoes.filter(
+              (p) => OPERACIONAIS.has(p.codigo) || RAIZES.has(p.codigo),
+            )
+          : []),
+    ].map((p) => p.permissaoId);
+    setSelectedPermissoes((prev) => [
+      ...new Set([
+        ...prev.filter(
+          (id) =>
+            !idsModulo.includes(id) ||
+            (key !== "0" && id === agendaPermissao?.permissaoId),
+        ),
+        ...(key === "0" ? [] : selecionadas),
+      ]),
+    ]);
+  };
+  const mudarFuncao = (modulo, permissao, checked) => {
+    if (!canEdit || loadingPermissoes || saving) return;
 
-  const handleFormSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.nome.trim()) return toast.error('O nome do perfil é obrigatório.');
-    if (wizardStep === 1) {
-      setWizardStep(2);
+    const isRaiz = RAIZES.has(permissao.codigo);
+
+    if (!checked && isRaiz) {
+      const dependentesAtivas = modulo.funcoes.filter(
+        (p) =>
+          !RAIZES.has(p.codigo) && selectedPermissoes.includes(p.permissaoId),
+      );
+
+      if (dependentesAtivas.length > 0) {
+        setConfirmacaoDesativarRaiz({
+          modulo,
+          permissao,
+          dependentes: dependentesAtivas,
+        });
+        return;
+      }
+    }
+
+    setSelectedPermissoes((prev) =>
+      checked
+        ? [
+            ...new Set([
+              ...prev,
+              permissao.permissaoId,
+              ...modulo.raizes.map((p) => p.permissaoId),
+            ]),
+          ]
+        : prev.filter((id) => id !== permissao.permissaoId),
+    );
+  };
+
+  const confirmarDesativacaoRaiz = () => {
+    if (!confirmacaoDesativarRaiz) return;
+    const { permissao, dependentes } = confirmacaoDesativarRaiz;
+    const idsParaRemover = new Set([
+      permissao.permissaoId,
+      ...dependentes.map((p) => p.permissaoId),
+    ]);
+    setSelectedPermissoes((prev) =>
+      prev.filter((id) => !idsParaRemover.has(id)),
+    );
+    setConfirmacaoDesativarRaiz(null);
+  };
+  const mudarAgenda = (atende) => {
+    if (!canEdit || !agendaPermissao || loadingPermissoes || saving) return;
+    const raizes = modulos.find((m) => m.key === "AGENDA")?.raizes || [];
+    setSelectedPermissoes((prev) =>
+      atende
+        ? [
+            ...new Set([
+              ...prev,
+              agendaPermissao.permissaoId,
+              ...raizes.map((p) => p.permissaoId),
+            ]),
+          ]
+        : prev.filter((id) => id !== agendaPermissao.permissaoId),
+    );
+  };
+
+  const salvarPerfil = async (event) => {
+    event.preventDefault();
+    if (!canEdit || saving || loadingPermissoes || erroPermissoes) return;
+    if (!formData.nome.trim()) {
+      toast.error("O nome do perfil é obrigatório.");
       return;
     }
-    salvarPerfil();
-  };
-
-  const handleToggleModulo = (permissaoIds, marcar) => {
-    setSelectedPermissoes(prev => marcar
-      ? Array.from(new Set([...prev, ...permissaoIds]))
-      : prev.filter(id => !permissaoIds.includes(id)));
-  };
-
-  const salvarPerfil = async () => {
+    if (
+      editingPerfil &&
+      (ehGlobal(editingPerfil) ||
+        (editingPerfil.codigo || "").toUpperCase() === "DONO")
+    )
+      return;
     setSaving(true);
     try {
-      const url = editingPerfil 
-        ? resolveApiUrl(`/api/v1/perfis-acesso/${editingPerfil.id}`)
-        : resolveApiUrl('/api/v1/perfis-acesso');
-        
-      const method = editingPerfil ? 'PUT' : 'POST';
-      
-      const res = await fetch(url, {
-        method,
-        headers: { ...(await fetchHeaders()), 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData)
-      });
-      
-      if (res.ok) {
-        const savedPerfil = await res.json();
-        const perfilId = savedPerfil.id;
-
-        const putRes = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
-          method: 'PUT',
-          headers: { ...(await fetchHeaders()), 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(selectedPermissoes)
-        });
-
-        if (!putRes.ok) {
-           toast.error('Perfil salvo, mas houve erro ao atribuir permissões.');
-        } else {
-           toast.success(`Perfil ${editingPerfil ? 'atualizado' : 'criado'} com sucesso!`);
-        }
-
-        fecharModal();
-        onReload();
-      } else {
+      const res = await fetch(
+        resolveApiUrl(
+          editingPerfil
+            ? `/api/v1/perfis-acesso/${editingPerfil.id}`
+            : "/api/v1/perfis-acesso",
+        ),
+        {
+          method: editingPerfil ? "PUT" : "POST",
+          headers: {
+            ...(await fetchHeaders()),
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(formData),
+        },
+      );
+      if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        toast.error(getApiErrorDetail({ body }) || 'Erro ao salvar perfil.');
+        toast.error(getApiErrorDetail({ body }) || "Erro ao salvar perfil.");
+        return;
+      }
+      const perfilSalvo = await res.json();
+      setEditingPerfil(perfilSalvo);
+      const permissaoRes = await fetch(
+        resolveApiUrl(`/api/v1/perfis-acesso/${perfilSalvo.id}/permissoes`),
+        {
+          method: "PUT",
+          headers: {
+            ...(await fetchHeaders()),
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(selectedPermissoes),
+        },
+      );
+      if (!permissaoRes.ok)
+        toast.error("Perfil salvo, mas houve erro ao atribuir permissões.");
+      else
+        toast.success(
+          `Perfil ${editingPerfil ? "atualizado" : "criado"} com sucesso!`,
+        );
+      await onReload?.();
+      if (permissaoRes.ok) {
+        onSaved?.(perfilSalvo);
+        onBack?.();
       }
     } catch {
-      toast.error('Falha de rede ao salvar perfil.');
+      toast.error("Falha de rede ao salvar perfil.");
     } finally {
       setSaving(false);
     }
   };
-
-  const globais = perfisAcesso.filter(p => !p.organizacaoSaudeDona && !p.organizacaoSaudeDonaId && (p.codigo || '').toUpperCase() !== 'DONO');
-  const customizados = perfisAcesso.filter(p => p.organizacaoSaudeDona || p.organizacaoSaudeDonaId);
+  const saveButton = (
+    <button
+      type="submit"
+      className="btn-p"
+      disabled={!canEdit || saving || loadingPermissoes || erroPermissoes}
+    >
+      <PrototypeIcon name="check" size="s" />
+      {saving ? "Salvando..." : "Salvar perfil"}
+    </button>
+  );
+  const menu = [
+    ["users", "Pacientes", ["PACIENTE_VER"]],
+    ["cal", "Agenda", ["AGENDA_VER", "AGENDA_PROPRIA_VER"]],
+    ["ucog", "Gestão de Equipe", ["USUARIO_VER"]],
+    [
+      "gear",
+      "Configurações",
+      [
+        "CLINICA_EDITAR",
+        "HORARIO_EDITAR",
+        "FERIADO_EDITAR",
+        "CATALOGO_VER",
+        "ANAMNESE_MODELO_VER",
+        "DOC_MODELO_VER",
+        "MSG_TEMPLATE_GERENCIAR",
+      ],
+    ],
+  ];
+  const temCodigo = (codes) =>
+    permissoes.some(
+      (p) =>
+        codes.includes(p.codigo) && selectedPermissoes.includes(p.permissaoId),
+    );
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div>
-          <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-teal-600" />
-            Níveis de Acesso
-          </h4>
-          <p className="text-sm text-slate-500 mt-1">Gerencie os templates de permissão utilizados na sua clínica.</p>
-        </div>
-        <button
-          onClick={openNew}
-          className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-teal-500/30 transition-all hover:-translate-y-0.5 active:scale-95"
-        >
-          <Plus className="h-4 w-4" />
-          Novo Perfil Customizado
+    <form className="prototype-perfil-editor" onSubmit={salvarPerfil}>
+      <div className="crumb">
+        <button type="button" onClick={onBack} disabled={saving}>
+          <PrototypeIcon name="cl" size="s" />
+          Gestão de Equipe
         </button>
+        <span>/</span>
+        <span>Perfis de acesso</span>
       </div>
-
-      <div className="space-y-4">
-        {/* Perfis Customizados */}
-        <div>
-          <h5 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 ml-1">Perfis da Clínica</h5>
-          {customizados.length === 0 ? (
-            <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center">
-              <p className="text-slate-500 text-sm">Nenhum perfil customizado criado. Você está usando apenas os templates globais.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {customizados.map(p => {
-                const resumo = getResumoPerfil(p);
-                return (
-                <div key={p.id} className="flex flex-col bg-white border border-teal-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-2 gap-2">
-                    <h6 className="font-bold text-slate-900 text-base">{p.nome}</h6>
-                    <span className="shrink-0 bg-slate-50 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-100 tabular-nums">
-                      {resumo.carregado ? `${resumo.total}/${permissoes.length}` : '…'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-3 min-h-[2.4em] line-clamp-2">{p.descricao || 'Sem descrição.'}</p>
-
-                  <div className="mb-4 flex flex-wrap gap-1.5 items-center">
-                    <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-xs font-semibold px-2.5 py-1 rounded-md">
-                      {resumo.carregado ? `${resumo.total} funções habilitadas` : 'Carregando...'}
-                    </span>
-                    {resumo.atendeNaAgenda ? (
-                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded border border-emerald-200">
-                        📅 Atende na Agenda
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[11px] font-bold px-2 py-0.5 rounded border border-slate-200">
-                        🚫 Sem Agenda
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-50 pt-3 mt-auto mb-3">
-                    <span className={`text-[11px] ${resumo.membros === 0 ? 'font-semibold text-slate-400' : 'text-slate-500'}`}>
-                      {resumo.membros === 0 ? 'Sem membros' : `${resumo.membros} membro${resumo.membros > 1 ? 's' : ''}`}
-                    </span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button onClick={() => handleEditarClick(p)} className="flex-1 flex justify-center items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 py-2 rounded-lg transition-colors">
-                      <Edit2 className="h-3.5 w-3.5" /> Editar
-                    </button>
-                    <button onClick={() => confirmDelete(p)} className="flex-none flex justify-center items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Perfis Globais */}
-        <div className="pt-4">
-          <h5 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 ml-1">Templates Globais do Sistema</h5>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[...globais].sort((a,b) => {
-              const orderA = CODIGO_ORDER[(a.codigo||'').toUpperCase()] || 99;
-              const orderB = CODIGO_ORDER[(b.codigo||'').toUpperCase()] || 99;
-              return orderA - orderB;
-            }).map(p => {
-              const isDono = (p.codigo || '').toUpperCase() === 'DONO';
-              const resumo = getResumoPerfil(p);
-              return (
-                <div key={p.id} className="flex flex-col bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <div className="flex justify-between items-start mb-2 gap-2">
-                    <h6 className="font-bold text-slate-700 text-base flex items-center gap-1.5">
-                      {isDono ? <Crown className="h-4 w-4 text-amber-500" /> : <Shield className="h-4 w-4 text-slate-400" />}
-                      {p.nome}
-                    </h6>
-                    <span className="shrink-0 bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded tabular-nums">
-                      {resumo.carregado ? `${resumo.total}/${permissoes.length}` : '…'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 line-clamp-2 mb-3 min-h-[2.4em]">{p.descricao || 'Nível de acesso nativo do sistema.'}</p>
-
-                  <div className="mb-4 flex flex-wrap gap-1.5 items-center">
-                    <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-1 rounded-md">
-                      {resumo.carregado ? `${resumo.total} funções habilitadas` : 'Carregando...'}
-                    </span>
-                    {resumo.atendeNaAgenda ? (
-                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded border border-emerald-200">
-                        📅 Atende na Agenda
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 text-[11px] font-bold px-2 py-0.5 rounded border border-slate-200">
-                        🚫 Sem Agenda
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-200/70 pt-3 mt-auto mb-3">
-                    <span className={`text-[11px] ${resumo.membros === 0 ? 'font-semibold text-slate-400' : 'text-slate-500'}`}>
-                      {resumo.membros === 0 ? 'Sem membros' : `${resumo.membros} membro${resumo.membros > 1 ? 's' : ''}`}
-                    </span>
-                  </div>
-
-                  {!isDono && (
+      <div className="ed-bar">
+        <h2 className="trunc">
+          {editingPerfil
+            ? `Editar perfil: ${formData.nome}`
+            : "Novo perfil de acesso"}
+        </h2>
+        <button
+          type="button"
+          className="btn-s"
+          onClick={onBack}
+          disabled={saving}
+        >
+          Cancelar
+        </button>
+        {canEdit && saveButton}
+      </div>
+      <div className="ed">
+        <div style={{ minWidth: 0 }}>
+          <fieldset disabled={!canEdit || saving || loadingPermissoes}>
+            <div className="card">
+              <h3>Nome e descrição</h3>
+              <p className="d">
+                Um nome que a equipe reconheça, como “Recepção” ou “Biomédica”.
+              </p>
+              <div className="fld">
+                <input
+                  className="inp"
+                  required
+                  maxLength={50}
+                  value={formData.nome}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, nome: e.target.value }))
+                  }
+                  placeholder="Ex.: Recepção"
+                  aria-label="Nome do perfil"
+                />
+              </div>
+              <div className="fld" style={{ marginTop: 10 }}>
+                <textarea
+                  className="inp"
+                  maxLength={200}
+                  value={formData.descricao}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      descricao: e.target.value,
+                    }))
+                  }
+                  placeholder="Para que serve este perfil? (opcional)"
+                  aria-label="Descrição"
+                />
+              </div>
+              {!editingPerfil && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="base-title">Começar a partir de</div>
+                  <div className="base">
                     <button
-                      onClick={() => handleEditarClick(p)}
-                      disabled={carregandoEscolha}
-                      className="flex justify-center items-center gap-1.5 text-xs font-semibold text-teal-700 bg-white border border-teal-200 hover:bg-teal-50 py-2 rounded-lg transition-colors disabled:opacity-50"
+                      type="button"
+                      className={baseSelecionada === "branco" ? "on" : ""}
+                      onClick={() => usarBase(null)}
                     >
-                      <Edit2 className="h-3.5 w-3.5" /> Criar perfil a partir deste
+                      Em branco
                     </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {showModal && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-4xl bg-white rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-4 shrink-0">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  {editingPerfil ? 'Editar Perfil' : 'Novo Perfil'}
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Passo {wizardStep} de 2</p>
-                {perfilBaseCriacao && (
-                  <p className="text-xs text-slate-500 mt-0.5">Criando a partir de "{perfilBaseCriacao}" — as permissões já vêm marcadas, ajuste como quiser.</p>
-                )}
-              </div>
-              <button onClick={fecharModal} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Indicador de passos */}
-            <div className="flex items-center gap-3 mb-6 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${wizardStep === 1 ? 'bg-gradient-to-r from-[#00a88e] to-teal-500 text-white' : 'bg-teal-50 text-teal-700 border border-teal-200'}`}>1</span>
-                <span className={`text-xs font-semibold ${wizardStep === 1 ? 'text-slate-900' : 'text-slate-500'}`}>Dados do perfil</span>
-              </div>
-              <div className="h-px flex-1 max-w-16 bg-slate-200 relative overflow-hidden rounded-full">
-                <div className={`absolute inset-0 bg-teal-500 origin-left transition-transform duration-300 ${wizardStep === 2 ? 'scale-x-100' : 'scale-x-0'}`} />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${wizardStep === 2 ? 'bg-gradient-to-r from-[#00a88e] to-teal-500 text-white' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>2</span>
-                <span className={`text-xs font-semibold ${wizardStep === 2 ? 'text-slate-900' : 'text-slate-500'}`}>Permissões</span>
-              </div>
-            </div>
-
-            <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0">
-              {wizardStep === 1 ? (
-                <div className="w-full max-w-md mx-auto space-y-4 py-2 flex-1 min-h-0 overflow-y-auto">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Nome do Perfil</label>
-                    <input
-                      required
-                      maxLength={50}
-                      autoFocus
-                      value={formData.nome}
-                      onChange={e => setFormData({...formData, nome: e.target.value})}
-                      placeholder="Ex: Recepcionista Sênior"
-                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wide text-teal-700 mb-1.5 ml-1">Descrição</label>
-                    <textarea
-                      maxLength={200}
-                      rows={3}
-                      value={formData.descricao}
-                      onChange={e => setFormData({...formData, descricao: e.target.value})}
-                      placeholder="Ex: Acesso às rotinas de recepção e faturamento básico."
-                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 resize-none"
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3.5 text-xs text-teal-900 flex items-start gap-2.5">
-                    <span className="text-base leading-none">💡</span>
-                    <div>
-                      <p className="font-semibold text-slate-800">Atendimento na Agenda</p>
-                      <p className="text-slate-600 mt-0.5">
-                        A permissão para atender e aparecer na agenda (<code className="font-mono font-bold text-teal-800">AGENDA_APARECER</code>) agora é configurada no <strong>Passo 2</strong>, dentro do módulo <strong>Agenda</strong>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col flex-1 min-h-0">
-                  <div className="flex justify-between items-end mb-4 shrink-0">
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">Permissões de Acesso</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">Clique em "Ver" em cada módulo para configurar suas funções — a visualização daquele módulo já é liberada automaticamente.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar pb-4">
-                    <PermissoesPorModuloPanel
-                      permissoes={permissoes}
-                      selecionadas={selectedPermissoes}
-                      loading={loadingPermissoes}
-                      columns={3}
-                      showModuloActions
-                      onToggleModulo={handleToggleModulo}
-                      onChange={(permissaoId, checked) => {
-                        setSelectedPermissoes(prev => checked ? [...prev, permissaoId] : prev.filter(id => id !== permissaoId));
-                      }}
-                    />
+                    {bases.map((perfil) => (
+                      <button
+                        key={perfil.id}
+                        type="button"
+                        className={
+                          baseSelecionada === String(perfil.id) ? "on" : ""
+                        }
+                        onClick={() => usarBase(perfil)}
+                      >
+                        {perfil.nome}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
-
-              <div className="pt-5 mt-4 flex justify-between items-center border-t border-slate-100 shrink-0">
-                <div>
-                  {wizardStep === 2 && (
-                    <button type="button" onClick={() => setWizardStep(1)} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
-                      ← Voltar
-                    </button>
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={fecharModal} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#00a88e] to-teal-500 text-white text-sm font-bold shadow-lg shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all flex items-center gap-2"
+            </div>
+            <div className="card">
+              <h3>Quem tiver este perfil atende pacientes?</h3>
+              <p className="d">
+                Quem atende aparece na agenda e pode ter horários de
+                atendimento.
+              </p>
+              <div
+                className="agsw"
+                role="radiogroup"
+                aria-label="Atendimento na agenda"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={ag}
+                  className={`opt${ag ? " on" : ""}`}
+                  disabled={!agendaPermissao}
+                  onClick={() => mudarAgenda(true)}
+                >
+                  <span className="radio" />
+                  <span>
+                    <b>Sim, atende na agenda</b>
+                    <span>Ex.: dentista, biomédica, esteticista</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!ag}
+                  className={`opt${!ag ? " on" : ""}`}
+                  disabled={!agendaPermissao}
+                  onClick={() => mudarAgenda(false)}
+                >
+                  <span className="radio" />
+                  <span>
+                    <b>Não atende</b>
+                    <span>Ex.: recepção, administração, sócio</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div className="card">
+              <h3>O que este perfil pode fazer</h3>
+              <p className="d">
+                Escolha um nível para cada área. Se precisar de algo no meio do
+                caminho, escolha as funções uma a uma.
+              </p>
+              {loadingPermissoes && (
+                <p role="status">Carregando permissões...</p>
+              )}
+              {erroPermissoes && (
+                <p role="alert">
+                  {modeloSemPermissoes
+                    ? "Este modelo está sem permissões nesta clínica. As funções que você já marcou foram preservadas. Selecione o modelo novamente após restaurar suas permissões."
+                    : "Não foi possível carregar as permissões. Abra o perfil novamente antes de salvar."}
+                </p>
+              )}
+              {modulos.map((modulo) => {
+                const nivel = nivelModulo(modulo, selectedPermissoes);
+                const open = abertos[modulo.key];
+                const temEdicaoOperacional = modulo.funcoes.some(
+                  (p) =>
+                    OPERACIONAIS.has(p.codigo) && !p.codigo.endsWith("_VER"),
+                );
+                const niveis = ["1", "2", "3", "0"];
+                return (
+                  <div key={modulo.key} className="mod">
+                    <div className="mod-h">
+                      <div className="nm">
+                        <span className="ic">
+                          <PrototypeIcon name={modulo.icon} />
+                        </span>
+                        <span style={{ minWidth: 0 }}>
+                          <b>{modulo.nome}</b>
+                          <span className="trunc">{modulo.descricao}</span>
+                        </span>
+                      </div>
+                      <div
+                        className="lv"
+                        role="group"
+                        aria-label={`Nível em ${modulo.nome}`}
+                      >
+                        {niveis.map((key) => {
+                          const isDisabled =
+                            (key === "1" && !modulo.raizes.length) ||
+                            (key === "2" && !temEdicaoOperacional);
+                          return (
+                            <button
+                              type="button"
+                              key={key}
+                              className={nivel.key === key ? "on" : ""}
+                              aria-pressed={nivel.key === key}
+                              disabled={isDisabled}
+                              title={
+                                isDisabled
+                                  ? key === "1"
+                                    ? `O módulo ${modulo.nome} não possui nível somente visualização`
+                                    : `O módulo ${modulo.nome} não possui nível intermediário de edição`
+                                  : undefined
+                              }
+                              onClick={() => aplicarNivel(modulo, key)}
+                            >
+                              {etiquetasNivel[key]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="mod-x">
+                      <span className="cnt">
+                        {nivel.key === "c" ? (
+                          <span className="cus">{nivel.text}</span>
+                        ) : nivel.key === "0" ? (
+                          "Nada liberado"
+                        ) : (
+                          `${nivel.has} de ${nivel.total} funções`
+                        )}
+                      </span>
+                      {modulo.funcoes.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-g expand-functions"
+                          aria-expanded={Boolean(open)}
+                          onClick={() =>
+                            setAbertos((prev) => ({
+                              ...prev,
+                              [modulo.key]: !open,
+                            }))
+                          }
+                        >
+                          {open
+                            ? "Esconder funções"
+                            : "Escolher funções uma a uma"}{" "}
+                          <PrototypeIcon name={open ? "cd" : "cr"} size="s" />
+                        </button>
+                      )}
+                    </div>
+                    {open && (
+                      <div className="perm">
+                        {modulo.funcoes.map((permissao) => {
+                          const checked = selectedPermissoes.includes(
+                            permissao.permissaoId,
+                          );
+                          return (
+                            <label
+                              key={permissao.permissaoId}
+                              className={`perm-item${checked ? " on" : ""}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) =>
+                                  mudarFuncao(modulo, permissao, e.target.checked)
+                                }
+                              />
+                              <span>{permissao.nome}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </fieldset>
+          {canEdit && (
+            <div className="sticky-sum">
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b>
+                  {selectedPermissoes.length} de {permissoes.length} funções
+                </b>{" "}
+                · {ag ? "atende na agenda" : "não atende"}
+              </span>
+              {saveButton}
+            </div>
+          )}
+        </div>
+        <div className="sum-col">
+          <div className="card sum">
+            <h3>Resumo do perfil</h3>
+            <div className="big">
+              {selectedPermissoes.length}{" "}
+              <span>de {permissoes.length} funções</span>
+            </div>
+            <div className="gauge" style={{ margin: "6px 0 10px" }}>
+              <span className="bar">
+                <i
+                  style={{
+                    width: `${permissoes.length ? Math.round((selectedPermissoes.length / permissoes.length) * 100) : 0}%`,
+                  }}
+                />
+              </span>
+            </div>
+            <span className={ag ? "ag-yes" : "ag-no"}>
+              <PrototypeIcon name={ag ? "calok" : "caloff"} size="s" />
+              {ag ? "Atende na agenda" : "Não atende na agenda"}
+            </span>
+            <ul>
+              {modulos.map((modulo) => {
+                const nivel = nivelModulo(modulo, selectedPermissoes);
+                return (
+                  <li key={modulo.key}>
+                    <span>{modulo.nome}</span>
+                    <span className={`l l${nivel.key}`}>{nivel.text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="prev">
+              <div className="menu-prev">
+                <div className="menu-title">O menu desta pessoa</div>
+                {menu.map(([icon, label, codes]) => (
+                  <div
+                    key={label}
+                    className={`mi${temCodigo(codes) ? "" : " off"}`}
                   >
-                    {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {wizardStep === 1 ? 'Continuar →' : (saving ? 'Salvando...' : 'Salvar Alterações')}
-                  </button>
+                    <PrototypeIcon name={icon} size="s" />
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {membros.length > 0 && (
+              <>
+                <div className="who-uses">
+                  <PrototypeIcon name="info" size="s" />
+                  <span>
+                    {membros.length}{" "}
+                    {membros.length > 1 ? "pessoas usam" : "pessoa usa"} este
+                    perfil. As mudanças valem assim que você salvar.
+                  </span>
+                </div>
+                <div className="aff">
+                  {membros.slice(0, 6).map((membro) => (
+                    <span key={membro.id || membro.usuarioId} className="av">
+                      {(membro.nomeCompleto || membro.nome || "?")
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((p) => p[0])
+                        .join("")}
+                    </span>
+                  ))}
+                  <span>
+                    {membros
+                      .slice(0, 2)
+                      .map(
+                        (m) => (m.nomeCompleto || m.nome || "").split(" ")[0],
+                      )
+                      .join(", ")}
+                    {membros.length > 2 ? ` e mais ${membros.length - 2}` : ""}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      {confirmacaoDesativarRaiz && (
+        <div
+          className="eq-overlay"
+          role="presentation"
+          onClick={() => setConfirmacaoDesativarRaiz(null)}
+        >
+          <div
+            className="eq-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dialog-raiz-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 520 }}
+          >
+            <div className="eq-dialog-head" style={{ marginBottom: 16 }}>
+              <div>
+                <h2 id="dialog-raiz-title" style={{ fontSize: 18 }}>
+                  Desativar visualização em {confirmacaoDesativarRaiz.modulo.nome}?
+                </h2>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    color: "var(--app-muted)",
+                    fontSize: 13,
+                  }}
+                >
+                  Ação com impacto em outras funções do módulo
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ib"
+                aria-label="Fechar"
+                onClick={() => setConfirmacaoDesativarRaiz(null)}
+              >
+                <PrototypeIcon name="x" size="s" />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <div
+                style={{
+                  background: "#fffdf5",
+                  border: "1px solid #fef08a",
+                  borderRadius: 12,
+                  padding: 14,
+                  marginBottom: 14,
+                }}
+              >
+                <p
+                  style={{
+                    margin: "0 0 8px",
+                    fontSize: 13,
+                    color: "#78350f",
+                    fontWeight: 600,
+                  }}
+                >
+                  Este perfil possui {confirmacaoDesativarRaiz.dependentes.length} função(ões) ativas que dependem desta visualização:
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {confirmacaoDesativarRaiz.dependentes.map((p) => (
+                    <span
+                      key={p.permissaoId}
+                      style={{
+                        background: "#fff",
+                        border: "1px solid #fde68a",
+                        color: "#92400e",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                      }}
+                    >
+                      ✕ {p.nome}
+                    </span>
+                  ))}
                 </div>
               </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
 
-      {showDeleteModal && perfilToDelete && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center">
-            <div className="h-14 w-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
-              <Trash2 className="h-7 w-7" />
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#475569",
+                  lineHeight: 1.5,
+                  margin: 0,
+                }}
+              >
+                Não é possível realizar ações neste módulo sem permissão para visualizá-lo. Ao confirmar, essas funções também serão desmarcadas automaticamente.
+              </p>
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Excluir Perfil?</h3>
-            <p className="text-sm text-slate-500 mb-6">
-              Tem certeza que deseja excluir o perfil <span className="font-bold text-slate-700">"{perfilToDelete.nome}"</span>?
-              <br/><br/>
-              Usuários que estiverem usando este perfil perderão o acesso customizado e voltarão para as permissões nativas.
-            </p>
-            <div className="flex justify-center w-full gap-3">
-              <button 
-                type="button" 
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setPerfilToDelete(null);
-                }} 
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+
+            <div
+              className="eq-dialog-foot"
+              style={{ marginTop: 16, paddingTop: 16 }}
+            >
+              <button
+                type="button"
+                className="btn-s"
+                onClick={() => setConfirmacaoDesativarRaiz(null)}
               >
-                Cancelar
+                Manter visualização
               </button>
-              <button 
-                type="button" 
-                onClick={handleDelete}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold shadow-lg shadow-red-500/30 hover:bg-red-600 transition-colors"
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={confirmarDesativacaoRaiz}
               >
-                Sim, Excluir
+                Desativar funções dependentes
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
-
-      {perfilEscolha && (
-        <PermissoesCustomizadasModal
-          perfilNome={perfilEscolha.nome}
-          saving={carregandoEscolha}
-          onClose={() => setPerfilEscolha(null)}
-          onCriarNovo={handleEscolherCriarNovo}
-          onEditarExistente={handleEscolherEditarExistente}
-        />
-      )}
-    </div>
+    </form>
   );
 }

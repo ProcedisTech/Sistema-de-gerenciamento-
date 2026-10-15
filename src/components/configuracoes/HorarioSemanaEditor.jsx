@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, Copy, AlertCircle, Clock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Copy, AlertCircle, AlertTriangle, Clock } from 'lucide-react';
 import { Switch } from '../shared/Switch.jsx';
-import { encontrarSobrepostos, hhmm } from './horarioSemanaUtils.js';
+import { adicionarTurnoInteligente, encontrarSobrepostos, hhmm } from './horarioSemanaUtils.js';
 
 const DIAS = [
   { value: 0, label: 'Domingo' },
@@ -29,12 +29,55 @@ function emptyTurno() {
  * @param {{
  *   diasConfig: Array<{ ativo: boolean, turnos: Array<{ horaInicio: string, horaFim: string }> }>,
  *   onChange: (diasConfig: Array) => void,
+ *   gradeClinica?: Array<{ diaSemana: number|string, horaInicio: string, horaFim: string, ativo?: boolean }>,
  * }} props
  */
-export function HorarioSemanaEditor({ diasConfig, onChange }) {
+export function HorarioSemanaEditor({
+  diasConfig,
+  onChange,
+  ordemDias = [0, 1, 2, 3, 4, 5, 6],
+  maxTurnos = Infinity,
+  disabled = false,
+  gradeClinica = null,
+}) {
+  const confirmRef = useRef(null);
   const [confirmCopiarDia, setConfirmCopiarDia] = useState(null);
 
+  const getInfoClinicaDia = (diaIdx) => {
+    if (!gradeClinica || !Array.isArray(gradeClinica) || gradeClinica.length === 0) return null;
+    const turnosClinica = gradeClinica.filter(
+      (g) => Number(g.diaSemana) === diaIdx && g.ativo !== false
+    );
+    if (turnosClinica.length === 0) {
+      return { fechado: true, texto: 'Clínica fechada' };
+    }
+    const texto = turnosClinica
+      .map((tc) => `${hhmm(tc.horaInicio)} - ${hhmm(tc.horaFim)}`)
+      .join(', ');
+    return { fechado: false, texto: `Expediente: ${texto}`, turnos: turnosClinica };
+  };
+
+  const isTurnoForaExpediente = (infoClinica, turno) => {
+    if (!infoClinica || infoClinica.fechado || !infoClinica.turnos?.length) return false;
+    const tIni = hhmm(turno.horaInicio);
+    const tFim = hhmm(turno.horaFim);
+    if (!tIni || !tFim || tFim <= tIni) return false;
+    return !infoClinica.turnos.some((tc) => {
+      const tcIni = hhmm(tc.horaInicio);
+      const tcFim = hhmm(tc.horaFim);
+      return tIni >= tcIni && tFim <= tcFim;
+    });
+  };
+
+  useEffect(() => {
+    if (confirmCopiarDia === null) return;
+    const previous = document.activeElement;
+    confirmRef.current?.focus();
+    return () => { if (previous?.isConnected) previous.focus(); };
+  }, [confirmCopiarDia]);
+
   const updateDia = (diaIdx, patch) => {
+    if (disabled) return;
     const next = diasConfig.map((d, i) => (i === diaIdx ? { ...d, ...patch } : d));
     onChange(next);
   };
@@ -50,7 +93,7 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
 
   const addTurno = (diaIdx) => {
     const dia = diasConfig[diaIdx];
-    updateDia(diaIdx, { turnos: [...dia.turnos, emptyTurno()] });
+    if (dia.turnos.length < maxTurnos) updateDia(diaIdx, { turnos: adicionarTurnoInteligente(dia.turnos) });
   };
 
   const removeTurno = (diaIdx, turnoIdx) => {
@@ -89,28 +132,32 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
           <p className="mt-0.5 text-[12px] text-[#94a3b8]">
             Ligue o botão ao lado de cada dia para definir o horário.
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              const next = diasConfig.map((d, i) =>
-                i >= 1 && i <= 5
-                  ? { ativo: true, turnos: [{ horaInicio: '08:00', horaFim: '18:00' }] }
-                  : { ativo: false, turnos: [] }
-              );
-              onChange(next);
-            }}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/30 bg-[#f0fdf9] px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] transition-colors hover:bg-[#dcfdf4]"
-          >
-            Usar horário comercial padrão (Seg–Sex, 8h–18h)
-          </button>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = diasConfig.map((d, i) =>
+                  i >= 1 && i <= 5
+                    ? { ativo: true, turnos: [{ horaInicio: '08:00', horaFim: '18:00' }] }
+                    : { ativo: false, turnos: [] }
+                );
+                onChange(next);
+              }}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/30 bg-[#f0fdf9] px-3 py-1.5 text-[12px] font-semibold text-[#00a88e] transition-colors hover:bg-[#dcfdf4]"
+            >
+              Usar horário comercial padrão (Seg–Sex, 8h–18h)
+            </button>
+          )}
         </div>
       )}
 
       {/* Lista dos 7 dias */}
-      {DIAS.map(({ value: diaIdx, label }) => {
+      {ordemDias.map((diaIdx) => {
+        const { label } = DIAS[diaIdx];
         const dia = diasConfig[diaIdx];
         const sobrepostos = encontrarSobrepostos(dia.turnos);
         const temSobreposto = sobrepostos.size > 0;
+        const infoClinica = getInfoClinicaDia(diaIdx);
 
         return (
           <div
@@ -120,10 +167,11 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
             }`}
           >
             {/* Cabeçalho do dia */}
-            <div className="flex items-center gap-3 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2.5 px-4 py-3">
               <Switch
                 checked={dia.ativo}
                 onChange={() => toggleDia(diaIdx)}
+                disabled={disabled}
                 ariaLabel={`${label} ${dia.ativo ? 'ativo' : 'inativo'}`}
               />
               <span
@@ -134,9 +182,32 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
                 {label}
               </span>
 
+              {infoClinica && (
+                <span
+                  data-testid={`clinica-status-${diaIdx}`}
+                  className={`rounded px-2 py-0.5 text-[11px] font-medium ${
+                    infoClinica.fechado
+                      ? 'bg-slate-100 text-slate-500'
+                      : 'border border-slate-200 bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  {infoClinica.texto}
+                </span>
+              )}
+
               {!dia.ativo && (
                 <span className="text-[12px] text-[#94a3b8]">
                   Fechado — ligue o botão para definir horários
+                </span>
+              )}
+
+              {dia.ativo && infoClinica?.fechado && (
+                <span
+                  data-testid={`alerta-dia-fechado-${diaIdx}`}
+                  className="flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" aria-hidden />
+                  Horário de exceção (clínica fechada)
                 </span>
               )}
 
@@ -147,7 +218,7 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
                 </span>
               )}
 
-              {dia.ativo && !temSobreposto && (
+              {dia.ativo && !temSobreposto && !disabled && (
                 <button
                   type="button"
                   onClick={() => handleCopiarParaTodos(diaIdx)}
@@ -169,6 +240,7 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
                     turno.horaInicio && turno.horaFim && hhmm(turno.horaFim) <= hhmm(turno.horaInicio)
                   );
                   const sobreposto = sobrepostos.has(turnoIdx);
+                  const turnoFora = isTurnoForaExpediente(infoClinica, turno);
                   const erroTurno = fimInvalido || sobreposto;
 
                   return (
@@ -180,23 +252,27 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
                       )}
                       <div className="flex items-center gap-2">
                         <input
+                          aria-label={`${label}, início do turno ${turnoIdx + 1}`}
                           type="time"
+                          disabled={disabled}
                           value={hhmm(turno.horaInicio)}
                           onChange={(e) => updateTurno(diaIdx, turnoIdx, { horaInicio: e.target.value })}
-                          className={`rounded-md border px-2 py-1.5 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40 ${
+                          className={`rounded-md border px-2 py-1.5 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 ${
                             erroTurno ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'
                           }`}
                         />
                         <span className="text-[12px] text-[#94a3b8]">até</span>
                         <input
+                          aria-label={`${label}, fim do turno ${turnoIdx + 1}`}
                           type="time"
+                          disabled={disabled}
                           value={hhmm(turno.horaFim)}
                           onChange={(e) => updateTurno(diaIdx, turnoIdx, { horaFim: e.target.value })}
-                          className={`rounded-md border px-2 py-1.5 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40 ${
+                          className={`rounded-md border px-2 py-1.5 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 ${
                             erroTurno ? 'border-red-400 bg-red-50' : 'border-[#e2e8f0]'
                           }`}
                         />
-                        {dia.turnos.length >= 2 && (
+                        {dia.turnos.length >= 2 && !disabled && (
                           <button
                             type="button"
                             onClick={() => removeTurno(diaIdx, turnoIdx)}
@@ -217,18 +293,31 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
                           Este turno se sobrepõe a outro turno do dia.
                         </p>
                       )}
+                      {turnoFora && !fimInvalido && !sobreposto && (
+                        <p
+                          data-testid={`alerta-turno-fora-${diaIdx}-${turnoIdx}`}
+                          className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-700"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" aria-hidden />
+                          Fora do expediente da clínica ({infoClinica.texto.replace('Expediente: ', '')})
+                        </p>
+                      )}
                     </div>
                   );
                 })}
 
-                <button
-                  type="button"
-                  onClick={() => addTurno(diaIdx)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#e2e8f0] px-3 py-1.5 text-[12px] font-medium text-[#64748b] transition-colors hover:border-[#00a88e]/40 hover:bg-[#f0fdf9] hover:text-[#00a88e]"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden />
-                  Adicionar turno
-                </button>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => addTurno(diaIdx)}
+                    disabled={dia.turnos.length >= maxTurnos}
+                    title={dia.turnos.length >= maxTurnos ? "Limite de horários atingido" : undefined}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#e2e8f0] px-3 py-1.5 text-[12px] font-medium text-[#64748b] transition-colors hover:border-[#00a88e]/40 hover:bg-[#f0fdf9] hover:text-[#00a88e]"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                    {dia.turnos.length >= maxTurnos ? "Limite de horários atingido" : "Adicionar turno"}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -241,7 +330,20 @@ export function HorarioSemanaEditor({ diasConfig, onChange }) {
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
+          ref={confirmRef}
+          tabIndex={-1}
           aria-labelledby="copiar-modal-title"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setConfirmCopiarDia(null); }
+            if (event.key === 'Tab') {
+              const buttons = [...event.currentTarget.querySelectorAll('button:not(:disabled)')];
+              if (!buttons.length) return;
+              const first = buttons[0], last = buttons[buttons.length - 1];
+              if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) { event.preventDefault(); last.focus(); }
+              else if (!event.shiftKey && (document.activeElement === last || document.activeElement === event.currentTarget)) { event.preventDefault(); first.focus(); }
+              event.stopPropagation();
+            }
+          }}
         >
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"

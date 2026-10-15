@@ -1,28 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  History,
-  Clock,
-  Search,
-  FileText,
-  AlertTriangle,
-  Shield,
-} from 'lucide-react';
-import { auditoriaApi, equipeApi } from '../../services/api';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { PrototypeIcon } from './PrototypeIcon';
+import './auditoria.css';
+import { auditoriaApi, equipeApi, clinicaApi } from '../../services/api';
 import { AuditoriaDetailsModal } from './AuditoriaDetailsModal';
-import { dentroDoPeriodo, formatData, formatarEntidade, getIconForEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
+import { dentroDoPeriodo, formatData, formatarEntidade, ACOES_MAP, auditReportClinic } from './AuditoriaUtils';
 import { formatarInstante } from '../../utils/datasClinica';
 import { useFusoClinica } from '../hooks/useFusoClinica';
-import { ConfigCardStackSkeleton, ConfigTableRowsSkeleton } from '../shared/ConfigPanelSkeletons';
+import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
 import { usePapel } from '../../hooks/usePapel';
 import { useToast } from '../../contexts/useToast.js';
 
 const PERIODOS = [
-  { value: '', label: 'Todos' },
+  { value: '', label: 'Todo o período' },
   { value: '1h', label: 'Última hora' },
   { value: 'hoje', label: 'Hoje' },
   { value: 'semana', label: 'Esta semana' },
   { value: 'mes', label: 'Este mês' },
   { value: 'ano', label: 'Este ano' },
+  { value: '7', label: 'Últimos 7 dias' },
+  { value: '30', label: 'Últimos 30 dias' },
 ];
 
 const ORDENACOES = [
@@ -30,23 +28,29 @@ const ORDENACOES = [
   { value: 'asc', label: 'Mais antigas primeiro' },
 ];
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 5;
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function AuditoriaView() {
+export function AuditoriaView({ roleUserId } = {}) {
   const { canExportPdf } = usePapel();
   const toast = useToast();
   const { fuso } = useFusoClinica();
 
   const [registros, setRegistros] = useState([]);
+  const [relatorioAberto, setRelatorioAberto] = useState(false);
   const [totalNoBanco, setTotalNoBanco] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState('');
+  const [erroEquipe, setErroEquipe] = useState('');
+  const [exportando, setExportando] = useState(false);
   const [equipe, setEquipe] = useState([]);
   const [clinica, setClinica] = useState(null);
+  const [erroClinica, setErroClinica] = useState('');
 
-  const [filtroRoleUserId, setFiltroRoleUserId] = useState('');
+  const [filtroRoleUserId, setFiltroRoleUserId] = useState(roleUserId || '');
   const [filtroPeriodo, setFiltroPeriodo] = useState('');
+  const [filtroAcao, setFiltroAcao] = useState('');
   const [busca, setBusca] = useState('');
   const [filtroSuspeito, setFiltroSuspeito] = useState(false);
   const [ordenacao, setOrdenacao] = useState('desc');
@@ -60,37 +64,45 @@ export function AuditoriaView() {
   }, []);
 
   useEffect(() => {
+    if (roleUserId) setFiltroRoleUserId(roleUserId);
+  }, [roleUserId]);
+
+  useEffect(() => {
     setPagina(1);
-  }, [filtroRoleUserId, filtroPeriodo, ordenacao]);
+  }, [filtroRoleUserId, filtroPeriodo, filtroAcao, busca, filtroSuspeito, ordenacao]);
 
   async function fetchEquipe() {
+    setErroEquipe('');
     try {
       const res = await equipeApi.list();
       setEquipe(res || []);
     } catch (err) {
       console.error('Erro ao buscar equipe:', err);
+      setErroEquipe('Não foi possível carregar a lista da equipe.');
     }
   }
 
   async function fetchClinica() {
+    setErroClinica('');
     try {
-      // Import dinâmico da api para não quebrar dependências caso não exista
-      const { configuracoesClinicaApi } = await import('../../services/api');
-      const res = await configuracoesClinicaApi.buscar();
+      const res = await clinicaApi.buscar();
       setClinica(res);
     } catch (err) {
       console.error('Erro ao buscar clínica:', err);
+      setErroClinica('Não foi possível carregar os dados da clínica para o relatório.');
     }
   }
 
   async function fetchAuditoria() {
     setLoading(true);
+    setErro('');
     try {
       const res = await auditoriaApi.list({ page: 0, size: 200 });
       setRegistros(res?.content || []);
       setTotalNoBanco(res?.totalElements ?? (res?.content || []).length);
     } catch (err) {
       console.error('Erro ao buscar auditoria:', err);
+      setErro('Não foi possível carregar o histórico de auditoria. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -105,8 +117,11 @@ export function AuditoriaView() {
     if (filtroRoleUserId) {
       lista = lista.filter((r) => r.roleUserId === filtroRoleUserId);
     }
+    if (filtroAcao) {
+      lista = lista.filter((r) => r.acao === filtroAcao);
+    }
     if (busca.trim()) {
-      const q = busca.toLowerCase();
+      const q = busca.trim().toLocaleLowerCase('pt-BR');
       lista = lista.filter(r =>
         r.nomeUsuario?.toLowerCase().includes(q) ||
         r.papel?.toLowerCase().includes(q) ||
@@ -115,9 +130,12 @@ export function AuditoriaView() {
         r.permissaoCodigo?.toLowerCase().includes(q) ||
         r.permissaoModulo?.toLowerCase().includes(q) ||
         r.acao?.toLowerCase().includes(q) ||
+        ACOES_MAP[r.acao]?.label?.toLocaleLowerCase('pt-BR').includes(q) ||
         r.entidade?.toLowerCase().includes(q) ||
         r.descricao?.toLowerCase().includes(q) ||
-        r.ipOrigem?.toLowerCase().includes(q)
+        r.ipOrigem?.toLowerCase().includes(q) ||
+        r.userAgent?.toLowerCase().includes(q) ||
+        r.motivoSuspeita?.toLowerCase().includes(q)
       );
     }
     if (filtroSuspeito) {
@@ -127,56 +145,24 @@ export function AuditoriaView() {
       const diff = new Date(b.criadoEm) - new Date(a.criadoEm);
       return ordenacao === 'asc' ? -diff : diff;
     });
-  }, [registros, filtroPeriodo, filtroRoleUserId, busca, filtroSuspeito, ordenacao, fuso]);
+  }, [registros, filtroPeriodo, filtroRoleUserId, filtroAcao, busca, filtroSuspeito, ordenacao, fuso]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const itensDaPagina = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
   const registrosTruncados = totalNoBanco > registros.length;
 
-  const selectCls =
-    'w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10 appearance-none shadow-sm';
-
-  // ── Estado vazio / loading compartilhado ──
-  const emptyState = !loading && itensDaPagina.length === 0 ? (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-20 px-6 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
-        <History className="h-8 w-8 text-slate-400" />
-      </div>
-      <div>
-        <h4 className="text-lg font-bold text-slate-900">Nenhuma ação encontrada</h4>
-        <p className="text-sm font-medium text-slate-500 mt-1 max-w-sm mx-auto">Nenhum registro de auditoria corresponde aos filtros aplicados.</p>
-      </div>
-    </div>
-  ) : null;
-
-  // ── Rodapé de paginação ──
-  const paginacaoFooter = !loading && (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 bg-slate-50/50 px-6 py-4 rounded-b-2xl">
-      <span className="text-sm font-medium text-slate-500">
-        {filtrados.length} registro{filtrados.length !== 1 ? 's' : ''}
-        {filtroPeriodo || filtroRoleUserId ? ' encontrados' : ' no total'}
-      </span>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setPagina((p) => Math.max(1, p - 1))}
-          disabled={pagina === 1}
-          className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-        >
-          ← Anterior
-        </button>
-        <span className="px-2 text-sm font-bold text-slate-600 tabular-nums">
-          {pagina} / {totalPaginas}
-        </span>
-        <button
-          onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
-          disabled={pagina >= totalPaginas}
-          className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-        >
-          Próxima →
-        </button>
-      </div>
-    </div>
-  );
+  const selectCls = 'inp';
+  const buttonCls = 'btn-s';
+  const acoesDisponiveis = [...new Set([...Object.keys(ACOES_MAP), ...registros.map((r) => r.acao).filter(Boolean)])]
+    .sort((a, b) => (ACOES_MAP[a]?.label || a).localeCompare(ACOES_MAP[b]?.label || b, 'pt-BR'));
+  const pessoasDisponiveis = new Map(equipe.map((u) => [u.id, u.nomeCompleto]));
+  registros.forEach((r) => { if (r.roleUserId && !pessoasDisponiveis.has(r.roleUserId)) pessoasDisponiveis.set(r.roleUserId, r.nomeUsuario || 'Nome não registrado'); });
+  const suspeitas = filtrados.filter((r) => (r.suspeito ?? r.isSuspeito) === true).length;
+  const pessoasAtivas = new Set(filtrados.map((r) => r.roleUserId).filter(Boolean)).size;
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const limparFiltros = () => {
+    setBusca(''); setFiltroPeriodo(''); setFiltroRoleUserId(roleUserId || ''); setFiltroAcao(''); setFiltroSuspeito(false); setOrdenacao('desc'); setPagina(1);
+  };
 
 function sanitizeForPdf(text) {
   if (!text) return '';
@@ -204,423 +190,186 @@ function formatDescricaoForPdf(desc) {
 }
 
   const exportarParaPDF = async () => {
+    if (!canExportPdf || exportando || loading || erro || !clinica || erroClinica || filtrados.length === 0) return;
+    setExportando(true);
     try {
       await auditoriaApi.registrarExportacao();
     } catch (err) {
       console.error('Erro ao registrar exportação na auditoria:', err);
       toast.error('Não foi possível registrar a auditoria da exportação. PDF não gerado.');
+      setExportando(false);
       return;
     }
 
-    import('jspdf').then(({ default: jsPDF }) => {
-      import('jspdf-autotable').then(({ default: autoTable }) => {
-        const doc = new jsPDF('landscape');
-
-        doc.setFontSize(18);
-        doc.text('Relatório de Auditoria e Segurança', 14, 22);
-
+    try {
+      const doc = new jsPDF('landscape');
+      const identity = auditReportClinic(clinica);
+      const width = doc.internal.pageSize.getWidth();
+      const height = doc.internal.pageSize.getHeight();
+      const margin = 16;
+      doc.setFontSize(11);
+      const clinicLines = doc.splitTextToSize(sanitizeForPdf(identity.nome), width - 2 * margin - 40);
+      const context = `${filtroSuspeito ? 'Apenas ações suspeitas' : 'Todas as sinalizações'} | ${ordenacao === 'asc' ? 'Mais antigas primeiro' : 'Mais recentes primeiro'}`;
+      const limitLines = registrosTruncados
+        ? doc.splitTextToSize(`Mostrando as ${registros.length} ações mais recentes de ${totalNoBanco} no total.`, width - 2 * margin)
+        : [];
+      const headerBottom = 44 + clinicLines.length * 5 + limitLines.length * 4;
+      const drawHeader = () => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(0, 127, 107);
+        doc.text('HISTÓRICO / AUDITORIA', margin, 16);
+        doc.setFontSize(20);
+        doc.setTextColor(15, 23, 42);
+        doc.text('Registro de atividades', margin, 26);
         doc.setFontSize(11);
-        let linhaAtual = 30;
-        if (clinica && clinica.nomeFantasia) {
-          doc.text(`${sanitizeForPdf(clinica.nomeFantasia)}${clinica.cnpj ? ` - CNPJ: ${sanitizeForPdf(clinica.cnpj)}` : ''}`, 14, linhaAtual);
-          linhaAtual += 6;
-        }
-        doc.text(`Gerado em: ${formatarInstante(Date.now(), fuso, { dateStyle: 'short', timeStyle: 'short' })}`, 14, linhaAtual);
-        linhaAtual += 6;
-        if (registrosTruncados) {
-          doc.setTextColor(180, 60, 0);
-          doc.text(`Mostrando as ${registros.length} ações mais recentes de ${totalNoBanco} no total. Use os filtros de período para reduzir o intervalo.`, 14, linhaAtual);
-          doc.setTextColor(0, 0, 0);
-          linhaAtual += 6;
-        }
-
-        const tableColumn = ["Data e Hora", "Profissional", "Perfil", "Ação (Permissão)", "Módulo", "Descrição", "IP", "Suspeito"];
-        const tableRows = [];
-
-        filtrados.forEach(item => {
-          const acaoMap = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação' };
-          const acaoComPermissao = item.permissaoNome
-            ? `${acaoMap.label} (${sanitizeForPdf(item.permissaoNome)})`
-            : acaoMap.label;
-
-          const perfilTexto = item.perfilAcessoNome
-            ? `${sanitizeForPdf(item.papel)} | ${sanitizeForPdf(item.perfilAcessoNome)}`
-            : (sanitizeForPdf(item.papel) || '-');
-
-          const moduloTexto = item.entidade || item.permissaoModulo || '-';
-          const descTexto = item.descricao || item.permissaoDescricao || '-';
-
-          const rowData = [
-            formatData(item.criadoEm, fuso),
-            sanitizeForPdf(item.nomeUsuario),
-            perfilTexto,
-            sanitizeForPdf(acaoComPermissao),
-            sanitizeForPdf(moduloTexto),
-            formatDescricaoForPdf(descTexto),
-            sanitizeForPdf(item.ipOrigem || 'Desconhecido'),
-            (item.suspeito ?? item.isSuspeito) ? 'SIM' : 'NÃO'
-          ];
-          tableRows.push(rowData);
-        });
-
-        autoTable(doc, {
-          head: [tableColumn],
-          body: tableRows,
-          startY: linhaAtual,
-          margin: { left: 10, right: 10 },
-          styles: { 
-            fontSize: 7.5, 
-            cellPadding: 2, 
-            overflow: 'linebreak',
-            valign: 'top'
-          },
-          headStyles: { 
-            fillColor: [0, 168, 142],
-            textColor: 255,
-            fontStyle: 'bold',
-            valign: 'middle'
-          },
-          alternateRowStyles: {
-            fillColor: [248, 250, 252]
-          },
-          columnStyles: {
-            0: { cellWidth: 25 },
-            1: { cellWidth: 28 },
-            2: { cellWidth: 26 },
-            3: { cellWidth: 35 },
-            4: { cellWidth: 20 },
-            5: { cellWidth: 'auto' },
-            6: { cellWidth: 25 },
-            7: { cellWidth: 16 }
-          }
-        });
-
-        doc.save('relatorio_auditoria.pdf');
+        doc.text(clinicLines, margin, 34);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`CNPJ: ${identity.cnpj}`, margin, 34 + clinicLines.length * 5);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(24);
+        doc.setTextColor(15, 23, 42);
+        doc.text(String(filtrados.length), width - margin, 24, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text('registros', width - margin, 30, { align: 'right' });
+        doc.setDrawColor(0, 168, 142);
+        doc.setLineWidth(.5);
+        const lineY = 39 + clinicLines.length * 5;
+        doc.line(margin, lineY, width - margin, lineY);
+        doc.text(context, margin, lineY + 6);
+        if (limitLines.length) doc.text(limitLines, margin, lineY + 11);
+      };
+      const rows = filtrados.map((item) => {
+        const action = ACOES_MAP[item.acao]?.label || item.acao?.replace(/_/g, ' ') || 'Ação';
+        const suspicious = (item.suspeito ?? item.isSuspeito) === true;
+        return [
+          `${formatData(item.criadoEm, fuso)}\n\n${sanitizeForPdf(item.nomeUsuario || 'Não registrado')}\n${sanitizeForPdf(item.perfilAcessoNome || item.papel || 'Perfil não registrado')}`,
+          `${sanitizeForPdf(action)}\n${sanitizeForPdf(item.permissaoModulo || formatarEntidade(item.entidade))}\n\n${formatDescricaoForPdf(item.descricao || item.permissaoDescricao || '')}`,
+          `${suspicious ? 'Ação suspeita' : 'Sem sinalização'}${suspicious ? '\n' + sanitizeForPdf(item.motivoSuspeita || item.motivo || 'Conferir registro') : ''}\n\nIP: ${sanitizeForPdf(item.ipOrigem || 'Não registrado')}\n${sanitizeForPdf(item.userAgent || 'Dispositivo não registrado')}`,
+        ];
       });
-    });
+      const reportCellLines = new WeakMap();
+      autoTable(doc, {
+        head: [['DATA E RESPONSÁVEL', 'AÇÃO REALIZADA', 'ORIGEM E SINALIZAÇÃO']],
+        body: rows,
+        theme: 'plain',
+        startY: headerBottom + 8,
+        margin: { left: margin, right: margin, top: headerBottom + 8, bottom: 24 },
+        rowPageBreak: 'avoid',
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, overflow: 'linebreak', valign: 'top', textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: { bottom: .2 } },
+        headStyles: { fillColor: [248, 250, 252], textColor: [100, 116, 139], fontStyle: 'bold', fontSize: 8, cellPadding: 4 },
+        columnStyles: { 0: { cellWidth: (width - 2 * margin) * .24 }, 1: { cellWidth: (width - 2 * margin) * .43 }, 2: { cellWidth: (width - 2 * margin) * .33, fontSize: 8 } },
+        willDrawPage: drawHeader,
+        willDrawCell: (data) => {
+          if (data.section !== 'body') return;
+          reportCellLines.set(data.cell, data.cell.text);
+          data.cell.text = [];
+        },
+        didDrawCell: (data) => {
+          if (data.section !== 'body') return;
+          const lines = reportCellLines.get(data.cell) || [];
+          const size = data.cell.styles.fontSize;
+          const lineHeight = size / doc.internal.scaleFactor * doc.getLineHeightFactor();
+          const x = data.cell.x + data.cell.padding('left');
+          let y = data.cell.y + data.cell.padding('top');
+          const nameIndex = data.column.index === 0 ? lines.indexOf('') + 1 : -1;
+          lines.forEach((line, index) => {
+            const moduleLine = data.column.index === 1 && line === rows[data.row.index]?.[1].split('\n')[1];
+            const strong = (data.column.index === 0 && index === nameIndex) || (data.column.index === 1 && index === 0);
+            doc.setFont('helvetica', strong || moduleLine ? 'bold' : 'normal');
+            doc.setFontSize(size);
+            doc.setTextColor(...(moduleLine ? [0, 127, 107] : strong ? [15, 23, 42] : data.cell.styles.textColor));
+            if (moduleLine && line) {
+              doc.setFillColor(226, 247, 242);
+              doc.roundedRect(x - 1, y - .5, Math.min(doc.getTextWidth(line) + 2, data.cell.width - 8), lineHeight + 1, 1, 1, 'F');
+            }
+            if (line) doc.text(line, x, y, { baseline: 'top' });
+            y += lineHeight;
+          });
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 2 && (filtrados[data.row.index]?.suspeito ?? filtrados[data.row.index]?.isSuspeito)) {
+            data.cell.styles.fillColor = [255, 241, 242];
+            data.cell.styles.textColor = [153, 27, 27];
+          }
+        },
+      });
+      const generatedAt = formatarInstante(Date.now(), fuso, { dateStyle: 'short', timeStyle: 'short' });
+      const pages = doc.getNumberOfPages();
+      for (let page = 1; page <= pages; page++) {
+        doc.setPage(page);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Sinalizações de ações suspeitas indicam necessidade de conferência e não confirmam uma irregularidade.', margin, height - 15);
+        doc.text(`Gerado em: ${generatedAt}`, margin, height - 9);
+        doc.text(`Página ${page} de ${pages}`, width - margin, height - 9, { align: 'right' });
+      }
+      doc.save('relatorio_auditoria.pdf');
+    } catch (err) {
+      console.error('Erro ao gerar PDF:', err);
+      toast.error('Não foi possível gerar o PDF. Tente novamente.');
+    } finally {
+      setExportando(false);
+    }
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* ── Botões de Ação ── */}
-      {canExportPdf && (
-        <div className="flex justify-end">
-          <button
-            onClick={exportarParaPDF}
-            disabled={loading || filtrados.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 transition disabled:opacity-50"
-          >
-            <FileText className="w-4 h-4" />
-            Exportar para PDF
-          </button>
-        </div>
-      )}
-
-      {/* ── Aviso de corte por volume ── */}
-      {!loading && registrosTruncados && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          Mostrando as {registros.length} ações mais recentes de {totalNoBanco} no total. Use os filtros de período para reduzir o intervalo.
-        </div>
-      )}
-
-      {/* ── Filtros ── */}
-      <div className="grid grid-cols-1 gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
-
-        {/* Busca */}
-        <div className="flex flex-col gap-2 lg:col-span-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
-            Busca Rápida
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <Search className="h-4 w-4 text-slate-400" />
-            </div>
-            <input
-              type="text"
-              placeholder="Ex: Deletar, IP, Nome..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className={`${selectCls} pl-10`}
-            />
-          </div>
-        </div>
-        {/* Profissional */}
-        <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
-            Profissional
-          </label>
-          <div className="relative">
-            <select
-              value={filtroRoleUserId}
-              onChange={(e) => setFiltroRoleUserId(e.target.value)}
-              className={selectCls}
-            >
-              <option value="">Todos os profissionais</option>
-              {equipe.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.nomeCompleto}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Período */}
-        <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
-            Período
-          </label>
-          <div className="relative">
-            <select
-              value={filtroPeriodo}
-              onChange={(e) => setFiltroPeriodo(e.target.value)}
-              className={selectCls}
-            >
-              {PERIODOS.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Ordenação */}
-        <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">
-            Ordenação
-          </label>
-          <div className="relative">
-            <select
-              value={ordenacao}
-              onChange={(e) => setOrdenacao(e.target.value)}
-              className={selectCls}
-            >
-              {ORDENACOES.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {/* Ações Suspeitas */}
-        <div className="flex flex-col gap-2 justify-end sm:col-span-2 lg:col-span-5 border-t border-slate-100 pt-3 mt-1">
-          <label className="flex items-center gap-2 cursor-pointer w-max">
-            <input
-              type="checkbox"
-              className="hidden"
-              checked={filtroSuspeito}
-              onChange={() => setFiltroSuspeito(!filtroSuspeito)}
-            />
-            <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${filtroSuspeito ? 'bg-red-500' : 'bg-slate-200'}`}>
-              <div className={`w-4 h-4 bg-white rounded-full transition-transform ${filtroSuspeito ? 'translate-x-4' : 'translate-x-0'}`} />
-            </div>
-            <span className="text-sm font-bold text-slate-700 select-none">
-              Mostrar apenas Ações Suspeitas
-            </span>
-          </label>
-        </div>
+    <section className="prototype-equipe prototype-auditoria" aria-label="Histórico de auditoria">
+      {!loading && registrosTruncados && !erro && <div className="hint" role="status"><PrototypeIcon name="info" size="s" /><span>Mostrando as {registros.length} ações mais recentes de {totalNoBanco} no total. Os filtros são aplicados apenas às ações carregadas.</span></div>}
+      <div className="audit-summary">
+        <div className="box"><span><small>Registros encontrados</small><b>{loading || erro ? '—' : filtrados.length}</b></span><PrototypeIcon name="hist" size="l" /></div>
+        <div className={`box${suspeitas > 0 ? " alert" : ""}`}><span><small>Ações suspeitas</small><b>{loading || erro ? '—' : suspeitas}</b></span><PrototypeIcon name="info" size="l" /></div>
+        <div className="box"><span><small>Pessoas com atividade</small><b>{loading || erro ? '—' : pessoasAtivas}</b></span><PrototypeIcon name="users" size="l" /></div>
       </div>
-
-      {/* ── MOBILE: Cards (até md) ── */}
-      <div className="flex flex-col gap-4 lg:hidden">
-        {loading ? (
-          <ConfigCardStackSkeleton count={4} className="h-20" />
-        ) : itensDaPagina.length === 0 ? (
-          emptyState
-        ) : (
-          itensDaPagina.map((item) => {
-            const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
-            return (
-              <div
-                key={item.id}
-                className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-              >
-                {/* linha 1: avatar + nome + badge */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00a88e] to-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
-                      {item.nomeUsuario?.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-base text-slate-900 truncate leading-tight">
-                        {item.nomeUsuario}
-                      </div>
-                      <div className="text-xs font-medium text-slate-400 truncate mt-0.5">
-                        {item.papel}{item.perfilAcessoNome ? ` • ${item.perfilAcessoNome}` : ''}
-                      </div>
-                    </div>
-                  </div>
-                  <span className={`shrink-0 px-2.5 py-1 border rounded-md text-[10px] uppercase tracking-wider font-bold ${BADGE_CORES[acao.cor]}`}>
-                    {acao.label}
-                  </span>
-                </div>
-                {(item.suspeito || item.isSuspeito) && (
-                  <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg border border-red-100 text-[11px] font-bold">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    AÇÃO SUSPEITA DETECTADA
-                  </div>
-                )}
-
-                {/* linha 2: data + entidade + permissao */}
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100/50">
-                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
-                    <Clock className="h-4 w-4 text-slate-400" />
-                    {formatData(item.criadoEm, fuso)}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
-                    <div className="text-slate-400">{getIconForEntidade(item.entidade || item.permissaoModulo)}</div>
-                    {formatarEntidade(item.entidade || item.permissaoModulo)}
-                  </span>
-                  {item.permissaoNome && (
-                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100/70" title={item.permissaoCodigo}>
-                      <Shield className="w-3 h-3 text-teal-600 shrink-0" />
-                      [{item.permissaoModulo || 'RBAC'}] {item.permissaoNome}
-                    </span>
-                  )}
-                </div>
-
-                {/* linha 3: descrição + botão de detalhes */}
-                <div className="mt-3 flex items-center justify-between">
-                  <p className="text-[13px] text-slate-500 leading-relaxed truncate max-w-[70%]" title={item.descricao || item.permissaoDescricao || ''}>
-                    {item.descricao || item.permissaoDescricao || '-'}
-                  </p>
-                  <button
-                    onClick={() => setSelectedRegistro(item)}
-                    className="shrink-0 text-teal-600 hover:text-teal-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-teal-100 bg-teal-50/50 hover:bg-teal-100/50 transition-colors"
-                  >
-                    Ver Detalhes
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-
-        {/* paginação mobile */}
-        {!loading && itensDaPagina.length > 0 && (
-          <div className="flex items-center justify-between pt-2 px-1">
-            <span className="text-xs font-medium text-slate-500">
-              {filtrados.length} registro{filtrados.length !== 1 ? 's' : ''}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                disabled={pagina === 1}
-                className="flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-              >
-                ←
-              </button>
-              <span className="text-xs font-bold text-slate-600 tabular-nums">{pagina} / {totalPaginas}</span>
-              <button
-                onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
-                disabled={pagina >= totalPaginas}
-                className="flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-              >
-                →
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── DESKTOP: Tabela (md+) ── */}
-      <div className="hidden lg:block rounded-2xl border border-slate-100 shadow-sm bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-slate-50/80 border-b border-slate-100">
-              <tr>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Data e Hora</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Profissional</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Ação Realizada</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Módulo / Entidade</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Descrição</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loading ? (
-                <ConfigTableRowsSkeleton rows={8} colSpan={6} />
-              ) : itensDaPagina.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-24 text-center">
-                    <div className="flex flex-col items-center justify-center gap-4 text-slate-500">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 shadow-sm ring-1 ring-slate-900/5">
-                        <History className="h-8 w-8 text-slate-400" />
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-[16px] font-bold text-slate-900">Nenhuma ação encontrada</span>
-                        <span className="text-sm font-medium text-slate-500">Nenhum registro de auditoria corresponde aos filtros aplicados.</span>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                itensDaPagina.map((item) => {
-                  const acao = ACOES_MAP[item.acao] ?? { label: item.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors group">
-                      <td className="px-6 py-4 text-[13px] font-medium text-slate-600">
-                        {formatData(item.criadoEm, fuso)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00a88e] to-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
-                            {item.nomeUsuario?.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-bold text-[14px] text-slate-900 group-hover:text-teal-700 transition-colors">{item.nomeUsuario}</span>
-                            <span className="text-[12px] font-medium text-slate-400">
-                              {item.papel}{item.perfilAcessoNome ? ` • ${item.perfilAcessoNome}` : ''}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${BADGE_CORES[acao.cor]}`}>
-                          {acao.label}
-                        </span>
-                        {item.permissaoNome && (
-                          <div className="mt-1 flex items-center gap-1 text-teal-700 text-[11px] font-semibold" title={item.permissaoCodigo}>
-                            <Shield className="w-3 h-3 text-teal-600 shrink-0" />
-                            <span className="truncate max-w-[170px]">[{item.permissaoModulo || 'RBAC'}] {item.permissaoNome}</span>
-                          </div>
-                        )}
-                        {(item.suspeito || item.isSuspeito) && (
-                          <div className="mt-1 flex items-center gap-1 text-red-600 text-[10px] font-bold">
-                            <AlertTriangle className="w-3 h-3" /> SUSPEITO
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-[13px] font-medium text-slate-600">
-                          <div className="text-slate-400">{getIconForEntidade(item.entidade || item.permissaoModulo)}</div>
-                          {formatarEntidade(item.entidade || item.permissaoModulo)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-[13px] font-medium text-slate-500 max-w-xs truncate" title={item.descricao || item.permissaoDescricao || ''}>
-                        {item.descricao || item.permissaoDescricao || '-'}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => setSelectedRegistro(item)}
-                          className="text-teal-600 hover:text-teal-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-teal-100 bg-teal-50/50 hover:bg-teal-100/50 transition-colors uppercase tracking-wider"
-                        >
-                          Detalhes
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      <div className="box audit-content">
+        <div className="audit-filter-heading"><PrototypeIcon name="search" size="s" /><h3>Filtrar histórico</h3></div>
+        <div className="audit-filters">
+          <label>Buscar registro<input className={selectCls} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pessoa, ação, perfil, módulo ou IP" /></label>
+          <label>Período<select className={selectCls} value={filtroPeriodo} onChange={(e) => setFiltroPeriodo(e.target.value)}>{PERIODOS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
+          <label>Responsável<select className={selectCls} value={filtroRoleUserId} onChange={(e) => setFiltroRoleUserId(e.target.value)}><option value="">Todas as pessoas</option>{[...pessoasDisponiveis].map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}</select></label>
+          <label>Ação<select className={selectCls} value={filtroAcao} onChange={(e) => setFiltroAcao(e.target.value)}><option value="">Todas as ações</option>{acoesDisponiveis.map((acao) => <option key={acao} value={acao}>{ACOES_MAP[acao]?.label || acao.replace(/_/g, ' ')}</option>)}</select></label>
         </div>
-        {paginacaoFooter}
+        {erroClinica && <div className="audit-warning" role="alert">{erroClinica} <button className={buttonCls} onClick={fetchClinica}>Tentar novamente</button></div>}
+        {erroEquipe && <div className="audit-warning" role="alert">{erroEquipe} <button className={buttonCls} onClick={fetchEquipe}>Tentar novamente</button></div>}
+        <div className="audit-security">
+          <label><input type="checkbox" checked={filtroSuspeito} onChange={(e) => setFiltroSuspeito(e.target.checked)} /><PrototypeIcon name="info" size="s" />Mostrar apenas ações suspeitas</label>
+          <select aria-label="Ordenação" className={selectCls} value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)}>{ORDENACOES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+        </div>
+        <div className="audit-count">
+          <span aria-live="polite">{loading ? 'Carregando registros…' : erro ? 'Histórico indisponível' : `${filtrados.length} registros encontrados`}</span>
+          <div className="audit-actions">
+          {canExportPdf && <button className="btn-p" onClick={() => setRelatorioAberto(true)} disabled={loading || !!erro || !clinica || !!erroClinica || exportando || filtrados.length === 0}><PrototypeIcon name="file" size="s" />{exportando ? 'Gerando PDF…' : 'Exportar / PDF'}</button>}
+          <button className={buttonCls} onClick={limparFiltros}>Limpar filtros</button>
+          </div>
+        </div>
+        <div className="box audit-list">
+          {!loading && !erro && itensDaPagina.length > 0 && <div className="audit-list-heading" aria-hidden="true"><span>Data e hora</span><span>Responsável</span><span>Ação realizada</span><span /></div>}
+          {loading ? <div className="audit-state" role="status" aria-label="Carregando histórico"><ConfigCardStackSkeleton count={4} className="h-20" /></div> : erro ? (
+            <div role="alert" className="audit-state">{erro}<br /><button className={buttonCls} onClick={fetchAuditoria}>Tentar novamente</button></div>
+          ) : itensDaPagina.length === 0 ? (
+            <div className="empty"><PrototypeIcon name="hist" size="l" /><b>{registros.length ? 'Nenhum registro encontrado' : 'Nenhum registro de auditoria'}</b><span>{registros.length ? 'Tente outro período ou ajuste os filtros.' : 'As ações realizadas na clínica aparecerão aqui.'}</span></div>
+          ) : itensDaPagina.map((item) => {
+            const label = ACOES_MAP[item.acao]?.label || item.acao?.replace(/_/g, ' ') || 'Ação';
+            const icon = label.startsWith('Convite') ? 'mail' : label.includes('perfil') || label.startsWith('Perfil') ? 'shield' : label.startsWith('Acesso') ? 'lock' : 'pen';
+            return <button key={item.id} onClick={() => setSelectedRegistro(item)} className={`audit-row${(item.suspeito ?? item.isSuspeito) ? ' suspect' : ''}`} aria-label={`Ver detalhes: ${label} de ${item.nomeUsuario || 'usuário não informado'}`}>
+              <time dateTime={item.criadoEm}>{formatarInstante(item.criadoEm, fuso, { day: '2-digit', month: '2-digit', year: 'numeric' })}<small>{formatarInstante(item.criadoEm, fuso, { hour: '2-digit', minute: '2-digit' })}</small></time>
+              <span className="audit-meta"><span className="dot"><PrototypeIcon name={icon} /></span><span><b>{item.nomeUsuario || 'Nome não registrado'}</b><small>{item.perfilAcessoNome || item.papel || 'Perfil não registrado'}</small></span></span>
+              <span className="audit-event"><b>{label}</b><small>{item.descricao || item.permissaoDescricao || formatarEntidade(item.entidade)} · {formatarEntidade(item.entidade || item.permissaoModulo)}</small>{(item.suspeito ?? item.isSuspeito) && <span className="audit-flag"><PrototypeIcon name="info" size="s" />Ação suspeita</span>}</span>
+              <PrototypeIcon name="cr" size="s" />
+            </button>;
+          })}
+        </div>
+        {!loading && !erro && filtrados.length > 0 && <div className="audit-pager"><span>Página {paginaAtual} de {totalPaginas}</span><button className={buttonCls} onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={paginaAtual === 1}><PrototypeIcon name="cl" size="s" />Anterior</button><button className={buttonCls} onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={paginaAtual >= totalPaginas}>Próxima<PrototypeIcon name="cr" size="s" /></button></div>}
+        <p className="invite-note">As sinalizações de ações suspeitas devem ser conferidas e não confirmam uma irregularidade.</p>
       </div>
-
-      <AuditoriaDetailsModal
-        registro={selectedRegistro}
-        onClose={() => setSelectedRegistro(null)}
-      />
-    </div>
+      {relatorioAberto && canExportPdf && <AuditoriaDetailsModal relatorio={{ clinica, rows: filtrados, suspeitas: filtroSuspeito, ordem: ordenacao, exportar: exportarParaPDF, exportando,
+        limite: registrosTruncados ? `Mostrando as ${registros.length} ações mais recentes de ${totalNoBanco} no total.` : '' }} onClose={() => setRelatorioAberto(false)} />}
+      <AuditoriaDetailsModal registro={selectedRegistro} onClose={() => setSelectedRegistro(null)} />
+    </section>
   );
 }

@@ -138,7 +138,7 @@ export function Sidebar({
 
             {!identidadeNoHeader ? (
               <div className="flex justify-center py-3" data-testid="sidebar-rail-avatar">
-                {canSeeConfig ? (
+                {canSeeConfig || typeof onOpenPerfilSettings === 'function' ? (
                   <button
                     type="button"
                     onClick={() => onOpenPerfilSettings?.()}

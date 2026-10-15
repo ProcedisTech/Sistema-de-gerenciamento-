@@ -28,7 +28,8 @@ function readSessionValue(key, fallback) {
 
 function normalizePatientDetailTab(value) {
   const tab = String(value ?? '').trim();
-  if (tab === 'atendimento' || tab === 'timeline' || tab === 'cadastro') return 'planos';
+  if (tab === 'timeline') return 'avulsos';
+  if (tab === 'atendimento' || tab === 'cadastro') return 'planos';
   return tab || 'planos';
 }
 
@@ -145,9 +146,12 @@ export const usePatientState = (opts = {}) => {
   const [patientView, setPatientView] = useState(() =>
     readSessionValue(PATIENT_VIEW_KEY, 'list'),
   );
-  const [patientDetailTab, setPatientDetailTab] = useState(() =>
+  const [patientDetailTab, setPatientDetailTabState] = useState(() =>
     normalizePatientDetailTab(readSessionValue(PATIENT_DETAIL_TAB_KEY, 'planos')),
   );
+  const setPatientDetailTab = useCallback((value) => {
+    setPatientDetailTabState((previous) => normalizePatientDetailTab(typeof value === 'function' ? value(previous) : value));
+  }, []);
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
   const refreshPatients = useCallback(async () => {

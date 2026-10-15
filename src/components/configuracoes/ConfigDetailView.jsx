@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ConfigSidebarFlat } from './ConfigSidebarFlat';
 import { ConfigBreadcrumb } from './ConfigBreadcrumb';
 import { CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
@@ -9,7 +9,7 @@ import { AnamneseConfigPublicaPanel, AnamneseFichasHome } from '../anamnese';
 import { TermosManager } from '../termos/TermosManager';
 import { MetodosAssinaturaPanel } from './MetodosAssinaturaPanel';
 import { DadosClinicaPanel } from './DadosClinicaPanel';
-import { PerfilProfissionalPanel } from './PerfilProfissionalPanel';
+import { MeuPerfilConfigPanel } from './MeuPerfilConfigPanel';
 import { HorarioClinicaPanel } from './HorarioClinicaPanel';
 import { FeriadosPanel } from './FeriadosPanel';
 import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
@@ -56,6 +56,9 @@ export function ConfigDetailView({
   canSeeEquipe,
   onClinicaAtualizada,
   onPerfilAtualizado,
+  onNavigateAgenda,
+  onSelectPatient,
+  onEquipeInvalidate,
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
@@ -130,11 +133,6 @@ export function ConfigDetailView({
   const handleSetConfigSection = (id) => guardedNavigate(() => applySection(id));
   const handleBackToHub = () => guardedNavigate(() => onBackToHub());
 
-  const getPerfilAuthHeaders = useCallback(
-    () => authHeadersForFetch({ needsOrg: false }),
-    [],
-  );
-
   useEffect(() => {
     if (!sectionGuardRef) return undefined;
     sectionGuardRef.current = handleSetConfigSection;
@@ -160,22 +158,26 @@ export function ConfigDetailView({
 
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Breadcrumb */}
-        <div className="mb-4">
-          <ConfigBreadcrumb
-            categoryLabel={categoryDef?.label}
-            detailLabel={effectiveSection === 'fichas' ? fichaDetailLabel : null}
-            onBackToHub={handleBackToHub}
-          />
-        </div>
+        {effectiveSection !== 'perfil' && (
+          <div className="mb-4">
+            <ConfigBreadcrumb
+              categoryLabel={categoryDef?.label}
+              detailLabel={effectiveSection === 'fichas' ? fichaDetailLabel : null}
+              onBackToHub={handleBackToHub}
+            />
+          </div>
+        )}
 
         {/* Layout sidebar + conteúdo */}
         <div className="flex min-h-[min(70dvh,720px)] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#e2e8f0] bg-white md:flex-row">
           {/* Sidebar flat — desktop */}
-          <ConfigSidebarFlat
-            items={visibleItems}
-            activeSection={effectiveSection}
-            onSelect={handleSetConfigSection}
-          />
+          {effectiveSection !== 'perfil' && (
+            <ConfigSidebarFlat
+              items={visibleItems}
+              activeSection={effectiveSection}
+              onSelect={handleSetConfigSection}
+            />
+          )}
 
           {/* Painel com rise — key força re-mount apenas no painel ao trocar seção */}
           <div
@@ -184,6 +186,7 @@ export function ConfigDetailView({
           >
             <PainelAtivo
               configSection={effectiveSection}
+              onBackToHub={handleBackToHub}
               canSeeAnamnese={canSeeAnamnese}
               canSeeProcedimentos={canSeeProcedimentos}
               canSeeTermos={canSeeTermos}
@@ -191,9 +194,11 @@ export function ConfigDetailView({
               canSeeClinica={canSeeClinica}
               canSeeAgendaConfig={canSeeAgendaConfig}
               canSeeEquipe={canSeeEquipe}
-              getPerfilAuthHeaders={getPerfilAuthHeaders}
               onClinicaAtualizada={onClinicaAtualizada}
               onPerfilAtualizado={onPerfilAtualizado}
+              onNavigateAgenda={onNavigateAgenda}
+              onSelectPatient={onSelectPatient}
+              onEquipeInvalidate={onEquipeInvalidate}
               onPacientesCatalogRefresh={onPacientesCatalogRefresh}
               onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
               onDirtyHorariosChange={handleDirtyHorariosChange}
@@ -214,6 +219,7 @@ export function ConfigDetailView({
  */
 function PainelAtivo({
   configSection,
+  onBackToHub,
   canSeeProcedimentos,
   canSeeTermos,
   canSeeAnamnese,
@@ -221,9 +227,11 @@ function PainelAtivo({
   canSeeClinica,
   canSeeAgendaConfig,
   canSeeEquipe,
-  getPerfilAuthHeaders,
   onClinicaAtualizada,
   onPerfilAtualizado,
+  onNavigateAgenda,
+  onSelectPatient,
+  onEquipeInvalidate,
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
@@ -254,9 +262,13 @@ function PainelAtivo({
   }
   if (configSection === 'perfil' && canSeePerfil) {
     return (
-      <PerfilProfissionalPanel
-        getAuthHeaders={getPerfilAuthHeaders}
+      <MeuPerfilConfigPanel
+        onBackToHub={onBackToHub}
+        onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
         onPerfilAtualizado={onPerfilAtualizado}
+        onNavigateAgenda={onNavigateAgenda}
+        onSelectPatient={onSelectPatient}
+        onEquipeInvalidate={onEquipeInvalidate}
       />
     );
   }

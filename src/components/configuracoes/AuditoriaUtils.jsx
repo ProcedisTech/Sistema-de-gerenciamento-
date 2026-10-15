@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatCnpjInput } from '../../utils/cnpj';
 import { User, Calendar, FileText, Activity } from 'lucide-react';
 import { diaDoInstante, formatarInstante, hojeDaClinica, instanteMs } from '../../utils/datasClinica';
 
@@ -159,7 +160,8 @@ export function dentroDoPeriodo(criadoEm, periodo, fuso, agoraMs = Date.now()) {
   const ms = instanteMs(criadoEm);
   if (Number.isNaN(ms)) return false;
   if (periodo === '1h') return ms >= agoraMs - 60 * 60 * 1000;
-  if (periodo === 'semana') return ms >= agoraMs - 7 * 24 * 60 * 60 * 1000;
+  if (periodo === 'semana' || periodo === '7') return ms >= agoraMs - 7 * 24 * 60 * 60 * 1000;
+  if (periodo === '30') return ms >= agoraMs - 30 * 24 * 60 * 60 * 1000;
   const dia = diaDoInstante(criadoEm, fuso);
   const hoje = hojeDaClinica(fuso, agoraMs);
   if (periodo === 'hoje') return dia === hoje;
@@ -176,4 +178,11 @@ export function getIconForEntidade(ent) {
     case 'procedimento': return <Activity className="h-3.5 w-3.5" />;
     default:             return <FileText className="h-3.5 w-3.5" />;
   }
+}
+
+export function auditReportClinic(clinica) {
+  return {
+    nome: clinica?.nomeFantasia || clinica?.nome || clinica?.razaoSocial || 'Nome da clínica não cadastrado',
+    cnpj: clinica?.cnpj ? formatCnpjInput(clinica.cnpj) : 'Não cadastrado',
+  };
 }

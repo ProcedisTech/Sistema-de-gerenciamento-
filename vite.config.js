@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    optimizeDeps: { include: ['jspdf', 'jspdf-autotable'] },
     server: {
       port: frontendPort,
       strictPort: true,

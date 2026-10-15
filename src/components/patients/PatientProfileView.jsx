@@ -1250,8 +1250,9 @@ export function PatientProfileView({
                   ? 'galeria'
                   : 'documentos')));
 
-    if (
-      patientDetailTab === 'timeline' ||
+    if (patientDetailTab === 'timeline') {
+      setPatientDetailTab('avulsos');
+    } else if (
       patientDetailTab === 'cadastro' ||
       patientDetailTab === 'atendimento'
     ) {
