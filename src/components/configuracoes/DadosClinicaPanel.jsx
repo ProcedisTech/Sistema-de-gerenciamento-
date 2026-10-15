@@ -304,6 +304,7 @@ export function DadosClinicaPanel({ getAuthHeaders, onClinicaAtualizada }) {
 
     const patchDto = {
       razaoSocial: rs,
+      nome: nf,
       nomeFantasia: nf,
       cnpj: cnpjDigits,
       inscricaoEstadual: inscricaoEstadual.trim(),
