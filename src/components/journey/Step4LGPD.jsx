@@ -2561,7 +2561,7 @@ export function Step4Procedimento({
                   </div>
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-slate-400">
-                  {c.assinadoEm ? <span>em {formatTimestamp(c.assinadoEm)}</span> : null}
+                  {c.assinadoEm ? <span>em {formatTimestamp(c.assinadoEm, fuso)}</span> : null}
                   <span className="rounded-full border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
                     Assinado
                   </span>

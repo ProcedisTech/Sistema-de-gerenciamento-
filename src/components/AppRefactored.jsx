@@ -3745,6 +3745,7 @@ function AppRefactoredInner() {
           novosIdsValidos: criarProcedimento && (listaParaSalvar?.length > 0 || String(journeyState.nomeProcedimento || '').trim()) ? ['pendente'] : [],
           attendanceStartTimeIso: startTimeIso,
           planejamentoItemId: planoItemIdPrincipal,
+          fuso: fusoClinica,
         }).catch((err) => {
           console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa antecipada:', err);
           return null;

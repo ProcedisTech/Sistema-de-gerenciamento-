@@ -131,7 +131,7 @@ export function ConfigDetailView({
   const handleBackToHub = () => guardedNavigate(() => onBackToHub());
 
   const getPerfilAuthHeaders = useCallback(
-    () => authHeadersForFetch({ needsOrg: false }),
+    () => authHeadersForFetch({ needsOrg: true }),
     [],
   );
 
