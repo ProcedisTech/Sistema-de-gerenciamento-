@@ -9,6 +9,8 @@ import { FotoVistaCanvas, FotoVistaCanvasCore } from '../journey/mapeamento/Foto
 import { MapeamentoFullscreenOverlay } from '../journey/mapeamento/MapeamentoFullscreenOverlay.jsx';
 import { VistaAtivaHeader, VistaChipsBar } from '../journey/mapeamento/VistaChipsBar.jsx';
 import { ZoomableGalleryLightbox } from '../patients/ZoomableGalleryLightbox.jsx';
+import { formatarInstante } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 const SATISFACAO_OPTS = [1, 2, 3, 4, 5];
 const SIMETRIA_OPTS = [
@@ -30,13 +32,9 @@ const FOTO_TIPOS_COLUNA = [
   { codigo: 'DEPOIS', label: 'Depois' },
 ];
 
-function formatDataHora(iso) {
+function formatDataHora(iso, fuso) {
   if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  } catch {
-    return String(iso);
-  }
+  return formatarInstante(iso, fuso, { dateStyle: 'short', timeStyle: 'short' }) || String(iso);
 }
 
 function resolveNomeProcedimento(meta) {
@@ -73,6 +71,7 @@ export function ConsultaRetornoFlow({
   onPrepareMapaCapture = () => {},
 }) {
   const toast = useToast();
+  const { fuso } = useFusoClinica();
   const uploadInputRef = useRef(null);
   const uploadPreRef = useRef(null);
   const uploadPosRef = useRef(null);
@@ -380,7 +379,7 @@ export function ConsultaRetornoFlow({
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <dt className="font-semibold text-[#64748b]">Data</dt>
-                      <dd className="text-[#0f172a]">{formatDataHora(parentMeta?.horaInicio)}</dd>
+                      <dd className="text-[#0f172a]">{formatDataHora(parentMeta?.horaInicio, fuso)}</dd>
                     </div>
                     <div>
                       <dt className="font-semibold text-[#64748b]">Profissional</dt>

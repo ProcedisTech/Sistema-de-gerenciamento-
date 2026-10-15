@@ -41,12 +41,18 @@ import {
 import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
-import { mapBackendPatient, mergePacienteDtoWithEditing } from '../../utils/patientMapping';
+import { mapBackendPatient, mergePacienteDtoWithEditing, proximoAgendamentoEhFuturo } from '../../utils/patientMapping';
 import { formatDateBR } from '../../utils/replaceTermVariables';
 import {
   fetchNextAppointmentIsoForPaciente,
+  formatCartaoDiaPtBr,
+  formatCartaoIfIsoString,
   latestProcedureOccurredInstantIso,
+  patientUltimaVisitaDayFromDto,
 } from '../../utils/patientProfileDerivedDates.js';
+import { formatarInstante, instanteMs, parseDataCalendario } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import {
@@ -119,6 +125,11 @@ import { useAlertasClinicos } from '../../hooks/useAlertasClinicos';
 import { AlertasClinicosPanel, AlertasGroupCards } from './AlertasClinicosPanel.jsx';
 import { buildGroupedChips } from './alertaGrouping.js';
 
+function msOuZero(iso) {
+  const ms = instanteMs(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 function birthdayAlertSidebarCopy(alert) {
   if (!alert) return null;
   if (alert.isToday) return 'Aniversário hoje — celebre com o paciente!';
@@ -175,18 +186,18 @@ function humanizeCode(code) {
  * Responsável legal para a Ficha em PDF: só faz sentido pra paciente menor de idade —
  * usa nomeMae com fallback nomePai (não existe campo próprio "responsável legal" hoje).
  */
-function resolveResponsavelLegalDisplay(p) {
-  const idade = p.idade != null ? Number(p.idade) : Number(calculateAgeFromISODate(p.dataNascimento) || NaN);
+function resolveResponsavelLegalDisplay(p, hojeIso) {
+  const idade = p.idade != null ? Number(p.idade) : Number(calculateAgeFromISODate(p.dataNascimento, hojeIso) || NaN);
   if (!Number.isFinite(idade) || idade >= 18) return '';
   return String(p.nomeMae ?? '').trim() || String(p.nomePai ?? '').trim() || '';
 }
 
 /** Identificação/contato do paciente já como texto pronto para exibição, pra `generateFichaPacientePdf`. */
-function buildPacienteCtxForFicha(p) {
+function buildPacienteCtxForFicha(p, hojeIso) {
   const cpfDigits = String(p.cpf ?? '').replace(/\D/g, '');
   const rgStr = p.rg != null ? String(p.rg) : '';
   const sexoCodigo = sexoForPatientFormSelect(p.sexo);
-  const idadeCalculada = calculateAgeFromISODate(p.dataNascimento);
+  const idadeCalculada = calculateAgeFromISODate(p.dataNascimento, hojeIso);
   const cidadeUf = [p.enderecoCidade, p.enderecoEstado].filter((v) => String(v ?? '').trim()).join('/');
   return {
     nome: p.nome,
@@ -195,7 +206,7 @@ function buildPacienteCtxForFicha(p) {
     nomeSocialDisplay: undefined,
     contatoEmergenciaDisplay: undefined,
     convenioDisplay: undefined,
-    responsavelLegalDisplay: resolveResponsavelLegalDisplay(p) || undefined,
+    responsavelLegalDisplay: resolveResponsavelLegalDisplay(p, hojeIso) || undefined,
     origemIndicacaoDisplay: p.indicacao,
     cpfDisplay: cpfDigits ? maskCPF(cpfDigits) : '',
     rgDisplay: rgStr ? maskRG(rgStr) : '',
@@ -498,6 +509,7 @@ function AnamneseTab({
   roleUserId,
 }) {
   const toast = useToast();
+  const { fuso } = useFusoClinica();
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
   const [loading, setLoading] = useState(true);
@@ -668,16 +680,7 @@ function AnamneseTab({
   const selected = anamneses.find((a) => a.id === selectedId) || anamneses[0];
   const detalhe = detalhes[selected.id] || selected;
   const rotuloPreenchimento = (an) => {
-    const data = an.dataHora
-      ? new Date(an.dataHora).toLocaleString('pt-BR', {
-        timeZone: 'America/Sao_Paulo',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-      : 'sem data';
+    const data = (an.dataHora && formatarInstante(an.dataHora, fuso, 'dataHora')) || 'sem data';
     const estado = an.assinaturaPaciente ? 'Assinada' : 'Aguardando assinatura';
     return `${data} · ${an.anamneseNome || 'Anamnese'} · ${estado}`;
   };
@@ -785,58 +788,27 @@ function ModuloFuturoBadge({ children }) {
   );
 }
 
-/** Data e hora para blocos de assinatura no prontuário (ex.: 16/04/2026, 14:32). */
-function formatDataHoraAssinaturaPtBr(iso) {
+/** Data e hora (instante) para blocos de assinatura no prontuário (ex.: 16/04/2026, 14:32). */
+function formatDataHoraAssinaturaPtBr(iso, fuso) {
   if (!iso) return '—';
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return '—';
-  return t.toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarInstante(iso, fuso, 'dataHora') || '—';
 }
 
-/** Cartões resumo (Última visita / Próximo retorno): só dia em America/Sao_Paulo. */
-function formatCartaoDiaPtBr(iso) {
-  if (!iso) return '-';
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return '-';
-  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+/** Perfil: backend manda instante em ultimaVinda; seeds/lista legada podem ter só ultimaVisita (dd/mm/aaaa). */
+function profileUltimaVindaCard(p, fuso) {
+  return p ? patientUltimaVisitaDayFromDto(p, fuso) : '-';
 }
 
-/** ISO instant em string legada → somente data para o cartão. */
-function formatCartaoIfIsoString(raw) {
-  const leg = String(raw ?? '').trim();
-  if (!leg || leg === '-' || leg === '—') return null;
-  if (!/^\d{4}-\d{2}-\d{2}/.test(leg) && !leg.includes('T')) return null;
-  const t = new Date(leg);
-  if (Number.isNaN(t.getTime())) return null;
-  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-}
-
-/** Perfil: backend manda ISO em ultimaVinda; seeds/lista legada podem ter só ultimaVisita (dd/mm/aaaa). */
-function profileUltimaVindaCard(p) {
-  if (!p) return '-';
-  if (p.ultimaVinda != null && String(p.ultimaVinda).trim() !== '') {
-    return formatCartaoDiaPtBr(p.ultimaVinda);
-  }
-  const leg = String(p.ultimaVisita || '').trim();
-  const isoFmt = formatCartaoIfIsoString(leg);
-  if (isoFmt) return isoFmt;
-  return leg && leg !== '-' && leg !== '—' ? leg : '-';
-}
-
-function profileProximoAgendamentoCard(p) {
+/** proximoAgendamento é calendário da clínica; só conta se ainda não passou. */
+function profileProximoAgendamentoCard(p, fuso, agoraMs) {
   if (!p) return '-';
   if (p.proximoAgendamento != null && String(p.proximoAgendamento).trim() !== '') {
-    return formatCartaoDiaPtBr(p.proximoAgendamento);
+    return proximoAgendamentoEhFuturo(p.proximoAgendamento, fuso, agoraMs)
+      ? formatCartaoDiaPtBr(p.proximoAgendamento, fuso)
+      : '-';
   }
   const leg = String(p.proximoRetorno || '').trim();
-  const isoFmt = formatCartaoIfIsoString(leg);
+  const isoFmt = formatCartaoIfIsoString(leg, fuso);
   if (isoFmt) return isoFmt;
   return leg && leg !== '-' && leg !== '—' ? leg : '-';
 }
@@ -871,6 +843,7 @@ export function PatientProfileView({
   const toast = useToast();
   const { canEditPacientes, papel, canStartAnamnese, canSeeRespostasAnamnese, canSeeProntuario, canCreateNotaPaciente, canSeeGaleria, canSeeDocumentos, canSeeOrcamentos } = usePapel();
   const { orgId } = useOrg();
+  const { fuso, hojeIso, agoraMs } = useAgoraDaClinica();
   const patient = useMemo(() => selectedPatient || {}, [selectedPatient]);
   const alertasClinicos = useAlertasClinicos(selectedPatient?.id, {
     sexoPaciente: patient.sexo,
@@ -883,7 +856,7 @@ export function PatientProfileView({
     () => parsePatientBirthDate(patient.dataNascimento),
     [patient.dataNascimento],
   );
-  const birthAlert = birthParts ? getBirthdayAlertInfo(birthParts) : null;
+  const birthAlert = birthParts ? getBirthdayAlertInfo(birthParts, hojeIso) : null;
   const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
   const [apiNotes, setApiNotes] = useState([]);
   const [apiProcedures, setApiProcedures] = useState([]);
@@ -927,17 +900,17 @@ export function PatientProfileView({
   const alertasCardRef = useRef(null);
 
   const ultimaVisitaCardDisplay = useMemo(() => {
-    const primary = profileUltimaVindaCard(selectedPatient);
+    const primary = profileUltimaVindaCard(selectedPatient, fuso);
     if (primary !== '-') return primary;
     const iso = latestProcedureOccurredInstantIso(apiProcedures);
-    return iso ? formatCartaoDiaPtBr(iso) : '-';
-  }, [selectedPatient, apiProcedures]);
+    return iso ? formatCartaoDiaPtBr(iso, fuso) : '-';
+  }, [selectedPatient, apiProcedures, fuso]);
 
   const proximoRetornoCardDisplay = useMemo(() => {
-    const primary = profileProximoAgendamentoCard(selectedPatient);
+    const primary = profileProximoAgendamentoCard(selectedPatient, fuso, agoraMs);
     if (primary !== '-') return primary;
-    return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso) : '-';
-  }, [selectedPatient, proximoAgendaIso]);
+    return proximoAgendaIso ? formatCartaoDiaPtBr(proximoAgendaIso, fuso) : '-';
+  }, [selectedPatient, proximoAgendaIso, fuso, agoraMs]);
 
   const sortedApiProceduresEarly = useMemo(
     () => sortProcedimentosPorCriadoEmDesc(apiProcedures || []),
@@ -952,12 +925,12 @@ export function PatientProfileView({
   }, [selectedPatient, apiProcedures]);
 
   const ultimaVisitaMeta = useMemo(() => {
-    const dias = formatDiasAtrasPtBr(ultimaVisitaIso);
+    const dias = formatDiasAtrasPtBr(ultimaVisitaIso, fuso, hojeIso);
     const procName =
       sortedApiProceduresEarly[0]?.procedimentoNome || sortedApiProceduresEarly[0]?.nome;
     const parts = [dias, procName].filter(Boolean);
     return parts.length ? parts.join(' · ') : null;
-  }, [ultimaVisitaIso, sortedApiProceduresEarly]);
+  }, [ultimaVisitaIso, sortedApiProceduresEarly, fuso, hojeIso]);
 
   const proximoRetornoKpiDisplay = useMemo(() => {
     if (proximoRetornoCardDisplay === '-' || proximoRetornoCardDisplay === '—') {
@@ -1069,15 +1042,13 @@ export function PatientProfileView({
 
         if (anamneseListResult.status === 'fulfilled') {
           const list = Array.isArray(anamneseListResult.value) ? anamneseListResult.value : [];
-          const maisRecente = [...list].sort((a, b) => new Date(b.dataHora || 0) - new Date(a.dataHora || 0))[0];
+          const maisRecente = [...list].sort((a, b) => msOuZero(b.dataHora) - msOuZero(a.dataHora))[0];
           if (maisRecente) {
             try {
               const detalhe = await anamneseApi.getPaciente(selectedPatient.id, maisRecente.id);
               anamneseEstetica = buildAnamneseEsteticaFromRespostas(detalhe?.respostas);
               if (detalhe?.dataHora) {
-                anamneseEstetica.dataAtualizacaoDisplay = new Date(detalhe.dataHora).toLocaleDateString('pt-BR', {
-                  timeZone: 'America/Sao_Paulo',
-                });
+                anamneseEstetica.dataAtualizacaoDisplay = formatarInstante(detalhe.dataHora, fuso, 'data');
               }
             } catch {
               // Sem anamnese estética disponível — Seção 02 sai só com "—", não bloqueia o PDF.
@@ -1118,9 +1089,7 @@ export function PatientProfileView({
         const linhasComProfundidade = flattenNestedTimelineRoots(arvore);
 
         historicoProcedimentos = linhasComProfundidade.map(({ proc, depth }) => {
-          const dataDisplay = proc.criadoEm
-            ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-            : '';
+          const dataDisplay = proc.criadoEm ? formatarInstante(proc.criadoEm, fuso, 'data') : '';
           if (depth > 0) {
             return {
               dataDisplay,
@@ -1143,7 +1112,7 @@ export function PatientProfileView({
         // não a data do próximo retorno agendado.
         const retornosOrdenados = procedimentosParaFicha
           .filter((p) => p.procedimentoFeitoOrigemId != null && String(p.procedimentoFeitoOrigemId).trim() !== '')
-          .sort((a, b) => new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0));
+          .sort((a, b) => msOuZero(b.criadoEm) - msOuZero(a.criadoEm));
         const ultimoRetorno = retornosOrdenados[0];
         manutencaoDisplay = ultimoRetorno
           ? ultimoRetorno.isRetoque
@@ -1173,9 +1142,7 @@ export function PatientProfileView({
       if (canSeeDocumentos && documentosResult.status === 'fulfilled' && documentosResult.value) {
         const list = Array.isArray(documentosResult.value) ? documentosResult.value : [];
         documentos = list.map((d) => ({
-          dataDisplay: d.dataAssinatura
-            ? new Date(d.dataAssinatura).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-            : '',
+          dataDisplay: d.dataAssinatura ? formatarInstante(d.dataAssinatura, fuso, 'data') : '',
           titulo: d.titulo,
           tipo: 'Termo',
           situacao: d.statusCodigo === 'RECUSADO' || d.recusadoEm ? 'Recusado' : 'Assinado',
@@ -1190,7 +1157,7 @@ export function PatientProfileView({
           const { feitas, total } = calcSessoesPlano(ativo.itens);
           planoAtivo = {
             nomeDisplay: 'Plano de tratamento',
-            dataCriacaoDisplay: formatCreatedAtPtBr(ativo.criadoEm),
+            dataCriacaoDisplay: formatCreatedAtPtBr(ativo.criadoEm, fuso),
             sessoesFeitas: feitas,
             sessoesTotal: total,
             percentualDisplay: total > 0 ? `${Math.round((feitas / total) * 100)}%` : '0%',
@@ -1202,7 +1169,7 @@ export function PatientProfileView({
       let fotos = [];
       if (canSeeGaleria && galeriaResult.status === 'fulfilled' && galeriaResult.value) {
         const itensNorm = normalizePacienteGaleriaResponse(galeriaResult.value);
-        const sessoes = groupGaleriaItemsBySession(itensNorm);
+        const sessoes = groupGaleriaItemsBySession(itensNorm, fuso);
         fotos = (sessoes || []).map((s) => ({
           rotulo: s.nomeProcedimento || `Sessão ${s.sessionNumber ?? ''}`.trim(),
           dataDisplay: s.dataISO ? formatDataSessaoPtBr(s.dataISO) : '',
@@ -1219,15 +1186,16 @@ export function PatientProfileView({
       try {
         const { generateFichaPacientePdf } = await import('../../utils/pdfGenerator.js');
         generateFichaPacientePdf({
+          fuso,
           clinicaCtx: {
             nome: clinicaInfo?.nome,
             endereco: clinicaInfo?.endereco,
             telefone: clinicaInfo?.telefone,
             cnpj: clinicaInfo?.cnpj,
           },
-          pacienteCtx: buildPacienteCtxForFicha(patient),
+          pacienteCtx: buildPacienteCtxForFicha(patient, hojeIso),
           numeroProntuario: patient.cpf ? maskCPF(String(patient.cpf).replace(/\D/g, '')) : '',
-          dataCadastroDisplay: formatCreatedAtPtBr(patient.createdAt),
+          dataCadastroDisplay: formatCreatedAtPtBr(patient.createdAt, fuso),
           statusLabel: (patient.status || 'ativo') !== 'inativo' ? 'Ativo' : 'Inativo',
           estatisticas: {
             ultimaVisitaDisplay: ultimaVisitaCardDisplay,
@@ -1267,6 +1235,8 @@ export function PatientProfileView({
     patient,
     orgId,
     toast,
+    fuso,
+    hojeIso,
   ]);
 
   useEffect(() => {
@@ -1308,7 +1278,7 @@ export function PatientProfileView({
   const mergeServerPatientIntoState = useCallback(
     (dto) => {
       if (!selectedPatient?.id || !dto) return;
-      const mapped = mapBackendPatient(dto);
+      const mapped = mapBackendPatient(dto, { fuso, hojeIso });
       mergePatientById?.(selectedPatient.id, (prev) => ({
         ...mapped,
         fotoPerfilUrl: mapped.fotoPerfilUrl ?? '',
@@ -1326,7 +1296,7 @@ export function PatientProfileView({
         onUpdatePatient?.(selectedPatient.cpf, { fotoPerfilUrl: mapped.fotoPerfilUrl ?? '' });
       }
     },
-    [selectedPatient?.id, selectedPatient?.cpf, mergePatientById, onUpdatePatient],
+    [selectedPatient?.id, selectedPatient?.cpf, mergePatientById, onUpdatePatient, fuso, hojeIso],
   );
 
   const isServerProfilePhotoType = (file) => {
@@ -1559,23 +1529,23 @@ export function PatientProfileView({
 
   const dismissBirthdayModal = useCallback(() => {
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
-    const todayKey = new Date().toISOString().slice(0, 10);
-    try {
-      sessionStorage.setItem(birthdayModalStorageKey(cpf, todayKey), '1');
-    } catch {
-      /* ignore */
+    if (hojeIso) {
+      try {
+        sessionStorage.setItem(birthdayModalStorageKey(cpf, hojeIso), '1');
+      } catch {
+        /* ignore */
+      }
     }
     setBirthdayModalOpen(false);
-  }, [patient.cpf, selectedPatient?.id]);
+  }, [patient.cpf, selectedPatient?.id, hojeIso]);
 
   useEffect(() => {
-    if (!birthAlert?.isToday) {
+    if (!birthAlert?.isToday || !hojeIso) {
       setBirthdayModalOpen(false);
       return;
     }
     const cpf = String(patient.cpf || selectedPatient?.id || 'sem-id').trim();
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const key = birthdayModalStorageKey(cpf, todayKey);
+    const key = birthdayModalStorageKey(cpf, hojeIso);
     try {
       if (sessionStorage.getItem(key) === '1') {
         setBirthdayModalOpen(false);
@@ -1585,7 +1555,7 @@ export function PatientProfileView({
       /* ignore */
     }
     setBirthdayModalOpen(true);
-  }, [birthAlert?.isToday, patient.cpf, selectedPatient?.id]);
+  }, [birthAlert?.isToday, patient.cpf, selectedPatient?.id, hojeIso]);
 
   useEffect(() => {
     const id = selectedPatient?.id;
@@ -1604,7 +1574,7 @@ export function PatientProfileView({
         const dto = dtoResult.status === 'fulfilled' ? dtoResult.value : null;
         if (dto) {
           mergePatientById?.(id, (prev) => {
-            const mapped = mapBackendPatient(dto);
+            const mapped = mapBackendPatient(dto, { fuso, hojeIso });
             return {
               ...mapped,
               fotoPerfilUrl: mapped.fotoPerfilUrl ?? prev.fotoPerfilUrl,
@@ -1651,13 +1621,14 @@ export function PatientProfileView({
     let cancelled = false;
     fetchNextAppointmentIsoForPaciente(id, {
       pacienteNome: selectedPatient?.nome,
+      fuso,
     }).then((iso) => {
       if (!cancelled) setProximoAgendaIso(iso);
     });
     return () => {
       cancelled = true;
     };
-  }, [selectedPatient?.id, selectedPatient?.nome]);
+  }, [selectedPatient?.id, selectedPatient?.nome, fuso]);
 
   useEffect(() => {
     const id = selectedPatient?.id;
@@ -1727,7 +1698,7 @@ export function PatientProfileView({
       id: n.id,
       texto: n.conteudo,
       autor: n.autorNome || 'Equipe',
-      data: n.criadoEm ? new Date(n.criadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '',
+      data: n.criadoEm ? formatarInstante(n.criadoEm, fuso, 'dataHoraSeg') : '',
       _fromApi: true,
     }));
     const local = (selectedPatient?.notas || []).map((n, i) => ({
@@ -1736,7 +1707,7 @@ export function PatientProfileView({
       _fromApi: false,
     }));
     return [...fromApi, ...local];
-  }, [apiNotes, selectedPatient?.notas]);
+  }, [apiNotes, selectedPatient?.notas, fuso]);
 
   const sortedApiProcedures = useMemo(
     () => sortProcedimentosPorCriadoEmDesc(apiProcedures || []),
@@ -1852,7 +1823,7 @@ export function PatientProfileView({
       email: editing.email,
     };
     const validationErrors = validatePacienteFormBasics(v, { skipCpf: true });
-    const cy = new Date().getFullYear();
+    const cy = parseDataCalendario(hojeIso)?.ano;
     const dnDigits = String(editing.dataNascimentoDisplay ?? '').replace(/\D/g, '');
 
     if (Object.keys(validationErrors).length > 0) {
@@ -1862,7 +1833,7 @@ export function PatientProfileView({
         if (dnDigits.length > 0 && dnDigits.length < 8) {
           banner = birthDateValidationUserMessage('incomplete', cy);
         } else if (dnDigits.length === 8 && !editing.dataNascimentoIso) {
-          const r = validateBirthDateDigits8(dnDigits);
+          const r = validateBirthDateDigits8(dnDigits, hojeIso);
           banner = !r.ok ? birthDateValidationUserMessage(r.reason, cy) : banner;
         }
       }
@@ -1915,7 +1886,7 @@ export function PatientProfileView({
       await pacientesApi.update(selectedPatient.id, payload);
       const fresh = await pacientesApi.get(selectedPatient.id);
       mergePatientById?.(selectedPatient.id, (prev) => {
-        const mapped = mapBackendPatient(fresh);
+        const mapped = mapBackendPatient(fresh, { fuso, hojeIso });
         return {
           ...mapped,
           fotoPerfilUrl: mapped.fotoPerfilUrl ?? prev.fotoPerfilUrl,
@@ -1963,11 +1934,10 @@ export function PatientProfileView({
     }
 
     const existingNotes = Array.isArray(selectedPatient?.notas) ? selectedPatient.notas : [];
-    const now = new Date();
     const newNote = {
       texto: text,
       autor: 'Atendimento',
-      data: now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      data: formatarInstante(Date.now(), fuso, 'data'),
     };
     onUpdatePatient?.(selectedPatient.cpf, {
       notas: [newNote, ...existingNotes],
@@ -2188,10 +2158,10 @@ export function PatientProfileView({
                         let iso = '';
                         let age = p.idade;
                         if (digits.length === 8) {
-                          const r = validateBirthDateDigits8(digits);
+                          const r = validateBirthDateDigits8(digits, hojeIso);
                           if (r.ok) {
                             iso = r.iso;
-                            const calculatedAge = calculateAgeFromISODate(r.iso);
+                            const calculatedAge = calculateAgeFromISODate(r.iso, hojeIso);
                             if (calculatedAge !== '') age = calculatedAge;
                           }
                         }
@@ -2379,17 +2349,8 @@ export function PatientProfileView({
                               proc.id != null && proc.id !== ''
                                 ? String(proc.id)
                                 : `perfil-proc-${idx}`;
-                            const criado = proc.criadoEm ? new Date(proc.criadoEm) : null;
-                            const dateLabel = criado
-                              ? criado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-                              : '—';
-                            const timeLabel = criado
-                              ? criado.toLocaleTimeString('pt-BR', {
-                                timeZone: 'America/Sao_Paulo',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                              : '';
+                            const dateLabel = formatarInstante(proc.criadoEm, fuso, 'data') || '—';
+                            const timeLabel = formatarInstante(proc.criadoEm, fuso, 'hora');
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                             const retornoCount = (root.retornos || []).length;
                             const fotosProc = galeriaItemsForProcedure(proc);
@@ -2424,17 +2385,8 @@ export function PatientProfileView({
                                 {isExpanded &&
                                   Array.isArray(root.retornos) &&
                                   root.retornos.map((child, cIdx) => {
-                                    const childCriado = child.criadoEm ? new Date(child.criadoEm) : null;
-                                    const childDateLabel = childCriado
-                                      ? childCriado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-                                      : '—';
-                                    const childTimeLabel = childCriado
-                                      ? childCriado.toLocaleTimeString('pt-BR', {
-                                        timeZone: 'America/Sao_Paulo',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })
-                                      : '';
+                                    const childDateLabel = formatarInstante(child.criadoEm, fuso, 'data') || '—';
+                                    const childTimeLabel = formatarInstante(child.criadoEm, fuso, 'hora');
                                     const childNomeProc = child.procedimentoNome || child.nome || 'Procedimento';
                                     const childFotos = galeriaItemsForProcedure(child);
                                     const childAssinatura = (assinaturas || []).find(
@@ -2577,10 +2529,8 @@ export function PatientProfileView({
                                 ? String(proc.id)
                                 : `proc-${idx}`;
                             const open = Boolean(prontuarioExpanded[rowKey]);
-                            const dataLabel = proc.criadoEm
-                              ? new Date(proc.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) +
-                              ' · ' +
-                              new Date(proc.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                            const dataLabel = proc.criadoEm && formatarInstante(proc.criadoEm, fuso, 'data')
+                              ? `${formatarInstante(proc.criadoEm, fuso, 'data')} · ${formatarInstante(proc.criadoEm, fuso, 'hora')}`
                               : '—';
                             const nomeProc = proc.procedimentoNome || proc.nome || 'Procedimento';
                             const fotosProc = galeriaItemsForProcedure(proc);
@@ -2753,7 +2703,7 @@ export function PatientProfileView({
                                                     metadados: {
                                                       pacienteNome: selectedPatient?.nome,
                                                       profissionalNome: proc?.profissionalNome || '',
-                                                      dataHora: formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac),
+                                                      dataHora: formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac, fuso),
                                                       ipAddress: assinaturaVinculada?.ipAddress,
                                                     },
                                                     fileName: `termo_${selectedPatient?.nome?.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`
@@ -2768,7 +2718,7 @@ export function PatientProfileView({
                                           <p className="mb-2 text-[13px] font-medium text-[#64748b]">
                                             <span className="text-[#0f172a]">&quot;{tituloTermoAssinado}&quot;</span>
                                             {' · '}
-                                            {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac)}
+                                            {formatDataHoraAssinaturaPtBr(emAssinProf || emAssinPac, fuso)}
                                           </p>
                                           {assinaturaVinculada?.ipAddress && (
                                             <p className="mb-4 text-[11px] text-[#64748b] bg-[#f1f5f9] px-2 py-1 rounded w-fit">
@@ -2790,7 +2740,7 @@ export function PatientProfileView({
                                                 <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
                                               )}
                                               <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
-                                                Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf)}
+                                                Assinado em: {formatDataHoraAssinaturaPtBr(emAssinProf, fuso)}
                                               </p>
                                             </div>
                                             <div>
@@ -2812,7 +2762,7 @@ export function PatientProfileView({
                                                 <p className="mt-2 text-[13px] text-[#94a3b8]">—</p>
                                               )}
                                               <p className="mt-1.5 text-[12px] font-medium text-[#64748b]">
-                                                Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac)}
+                                                Assinado em: {formatDataHoraAssinaturaPtBr(emAssinPac, fuso)}
                                               </p>
                                             </div>
                                           </div>

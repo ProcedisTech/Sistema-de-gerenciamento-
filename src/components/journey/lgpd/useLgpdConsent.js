@@ -13,6 +13,7 @@
 import { useCallback, useState } from 'react';
 import { termoAssinaturaApi } from '../../../services/api';
 import { gerarPdfLgpd } from './lgpdPdfGenerator';
+import { useFusoClinica } from '../../hooks/useFusoClinica';
 
 // ── Re-exporta para compatibilidade com testes existentes ────────────────────
 export { gerarPdfLgpd as generateAndDownloadPdf };
@@ -48,6 +49,7 @@ export async function computeSha256(blob) {
 export function useLgpdConsent() {
   const [isExporting,  setIsExporting]  = useState(false);
   const [isPersisting, setIsPersisting] = useState(false);
+  const { fuso } = useFusoClinica();
 
   const exportAndSign = useCallback(async (options) => {
     const {
@@ -68,7 +70,7 @@ export function useLgpdConsent() {
     let pdfBlob;
     let pdfHash = null;
     try {
-      pdfBlob = await gerarPdfLgpd(consentText);
+      pdfBlob = await gerarPdfLgpd(consentText, undefined, fuso);
       pdfHash = await computeSha256(pdfBlob);
     } finally {
       setIsExporting(false);
@@ -105,7 +107,7 @@ export function useLgpdConsent() {
     } finally {
       setIsPersisting(false);
     }
-  }, []);
+  }, [fuso]);
 
   return { isExporting, isPersisting, exportAndSign };
 }

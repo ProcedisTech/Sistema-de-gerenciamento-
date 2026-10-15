@@ -1,14 +1,12 @@
 import { procedureOccurredInstantIso } from '../../utils/patientProfileDerivedDates.js';
+import { instanteMs, parseDataCalendario } from '../../utils/datasClinica.js';
 
-/** DD/MM/AAAA (label pt-BR) → ms UTC local; ignora linhas inválidas. */
+/** DD/MM/AAAA (label pt-BR) → ms do dia de calendário (meia-noite UTC), só para ordenar; inválido → 0. */
 export function ddMmYyyyLabelToMs(s) {
   if (!s || s === '-') return 0;
-  const parts = String(s).trim().split('/');
-  if (parts.length !== 3) return 0;
-  const [d, m, y] = parts.map((n) => parseInt(n, 10));
-  if (!y || !m || !d) return 0;
-  const t = new Date(y, m - 1, d).getTime();
-  return Number.isNaN(t) ? 0 : t;
+  const p = parseDataCalendario(String(s).trim());
+  if (!p) return 0;
+  return Date.UTC(p.ano, p.mes - 1, p.dia);
 }
 
 /**
@@ -19,7 +17,7 @@ export function procedureSortInstantMs(proc) {
   if (!proc || typeof proc !== 'object') return 0;
   const iso = procedureOccurredInstantIso(proc);
   if (iso) {
-    const ms = new Date(iso).getTime();
+    const ms = instanteMs(iso);
     if (!Number.isNaN(ms)) return ms;
   }
   const rawData = proc.data != null ? String(proc.data).trim() : '';

@@ -4,6 +4,7 @@ import { resolveApiUrl } from '../../config/apiEnv';
 import { Shield, Loader2, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { replaceTermVariables } from '../../utils/replaceTermVariables';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
+import { FUSO_PADRAO, formatarInstante } from '../../utils/datasClinica';
 import 'react-quill-new/dist/quill.snow.css';
 
 export function PublicSignatureFlow() {
@@ -256,7 +257,7 @@ export function PublicSignatureFlow() {
     }
     const base64 = canvasRef.current.toDataURL('image/png');
     setAssinaturaDataUrl(base64); // Salva a assinatura na memória para ser impressa depois
-    setAssinaturaDataHora(new Date().toLocaleString('pt-BR')); // Salva a data e hora atual
+    setAssinaturaDataHora(formatarInstante(Date.now(), sessaoData?.fusoHorario ?? FUSO_PADRAO, 'dataHoraSeg'));
     setLoading(true);
 
     try {

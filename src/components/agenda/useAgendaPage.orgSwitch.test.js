@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAgendaPage } from './useAgendaPage';
 
 const state = vi.hoisted(() => ({
-  org: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', roleUserId: '', roleNome: '', apareceNaAgenda: false },
+  org: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', roleUserId: '', roleNome: '', apareceNaAgenda: false, fusoHorario: 'America/Sao_Paulo' },
   equipeList: vi.fn(),
   apiResult: vi.fn().mockResolvedValue([]),
 }));
@@ -13,7 +13,6 @@ vi.mock('../../contexts/useDisponibilidadeRevision.js', () => ({ useDisponibilid
 vi.mock('../../contexts/useToast.js', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('../../hooks/usePapel', () => ({ usePapel: () => ({ isNivel1: false, canSeeAgendaMulti: true, canSeeAgendaPropria: true, canEncaixarForaDisp: false, canDeleteAgenda: false, canAparecerNaAgenda: false }) }));
 vi.mock('../../hooks/useProcedimentosOptions', () => ({ useProcedimentosOptions: () => ({ options: [] }) }));
-vi.mock('../../hooks/useBrasiliaTime.js', () => ({ useBrasiliaTime: () => ({ todayIso: '2026-09-29', currentMinutes: 600 }) }));
 vi.mock('./ConfirmacaoForaDispModal', () => ({ useConfirmacaoForaDisp: () => ({ modal: null, abrirConfirmacao: vi.fn() }) }));
 vi.mock('../../services/api', () => {
   const service = new Proxy({}, { get: () => state.apiResult });
@@ -27,7 +26,7 @@ vi.mock('../../services/api', () => {
 
 describe('agenda ao trocar de clínica', () => {
   beforeEach(() => {
-    state.org = { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', roleUserId: '', roleNome: '', apareceNaAgenda: false };
+    state.org = { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', roleUserId: '', roleNome: '', apareceNaAgenda: false, fusoHorario: 'America/Sao_Paulo' };
     state.equipeList.mockReset();
     state.equipeList
       .mockResolvedValueOnce([{ id: 'profissional-a', nome: 'Profissional A', apareceNaAgenda: true }])

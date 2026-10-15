@@ -116,4 +116,39 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    files: ['src/**/*.{js,jsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Literal[value='America/Sao_Paulo']",
+          message: "Use o fuso da clínica (useFusoClinica / payload.fusoHorario) ou FUSO_PADRAO de utils/datasClinica.",
+        },
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(slice|split)$/][callee.object.type='CallExpression'][callee.object.callee.property.name='toISOString']",
+          message: 'toISOString() é UTC: use hojeDaClinica(fuso) ou diaDoInstante(valor, fuso).',
+        },
+        {
+          selector: "NewExpression[callee.name='Date'] > Literal.arguments[value=/^\\d{4}-\\d{2}-\\d{2}/]",
+          message: "new Date('AAAA-MM-DD') desloca o dia: use as funções de calendário de utils/datasClinica.",
+        },
+        {
+          selector: "NewExpression[callee.name='Date'][arguments.length>=4]",
+          message: 'new Date(a, m, d, h, …) usa o fuso do navegador: use instanteDoHorarioDaClinica(dataIso, hhmm, fuso).',
+        },
+        {
+          selector: "CallExpression[callee.property.name=/^(getHours|getMinutes)$/]",
+          message: 'getHours()/getMinutes() usam o fuso do navegador: use agoraDaClinica(fuso, ms) ou formatarInstante(valor, fuso, "hora").',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/utils/datasClinica.js', '**/*.test.{js,jsx}', 'src/test/**'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
 ])

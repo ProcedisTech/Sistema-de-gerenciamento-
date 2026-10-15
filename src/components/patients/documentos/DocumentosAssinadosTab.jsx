@@ -8,6 +8,7 @@ import { useOrg } from '../../../contexts/OrgContext';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
 import { replaceTermVariables } from '../../../utils/replaceTermVariables';
 import { buildPacienteCtx } from '../../../utils/pacienteCtx';
+import { formatarInstante, instanteMs } from '../../../utils/datasClinica.js';
 import { TermoIntegridadeSelo } from '../../termos/TermoIntegridadeSelo.jsx';
 import 'react-quill-new/dist/quill.snow.css';
 
@@ -16,9 +17,9 @@ function resolverStatusExpiracao(doc) {
   if (typeof doc.vigente === 'boolean' && doc.vigente && !doc.expiradaEm) return null;
   if (!doc.expiradaEm && doc.vigente !== false) return null;
   if (!doc.expiradaEm) return { expirado: true, data: null };
-  const data = new Date(doc.expiradaEm);
-  if (Number.isNaN(data.getTime())) return null;
-  return { expirado: data.getTime() <= Date.now(), data };
+  const data = instanteMs(doc.expiradaEm);
+  if (Number.isNaN(data)) return null;
+  return { expirado: data <= Date.now(), data };
 }
 
 function isRecusado(doc) {
@@ -29,7 +30,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
   const [documentos, setDocumentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { orgId } = useOrg();
+  const { orgId, fusoHorario: fuso } = useOrg();
   const toast = useToast();
   const [expandedDocId, setExpandedDocId] = useState(null);
 
@@ -95,11 +96,11 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
         assinaturaProfissional: doc.assinaturaProfissionalBase64,
         metadados: {
           pacienteNome: paciente?.nomeCompleto || paciente?.nome || 'Paciente',
-          dataHora: doc.dataAssinatura ? new Date(doc.dataAssinatura).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
+          dataHora: formatarInstante(doc.dataAssinatura || Date.now(), fuso, 'dataHoraSeg'),
           recusado: isRecusado(doc),
           statusCodigo: doc.statusCodigo,
           recusadoEm: doc.recusadoEm
-            ? new Date(doc.recusadoEm).toLocaleString('pt-BR')
+            ? formatarInstante(doc.recusadoEm, fuso, 'dataHoraSeg')
             : undefined,
         },
         fileName: `documento_${doc.titulo ? doc.titulo.replace(/\s+/g, '_').toLowerCase() : 'assinado'}_${new Date().getTime()}.pdf`,
@@ -162,11 +163,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
                   </span>
                   <span>
                     Assinado em:{' '}
-                    {new Date(doc.dataAssinatura).toLocaleDateString('pt-BR', {
-                      timeZone: 'America/Sao_Paulo',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                    {formatarInstante(doc.dataAssinatura, fuso, 'dataHora')}
                   </span>
                   {doc.ipOrigem && (
                     <span className="text-slate-400">
@@ -191,7 +188,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
 
                 {!isRecusado(doc) && (() => {
                   const statusExp = resolverStatusExpiracao(doc);
-                  const dataStr = statusExp?.data?.toLocaleDateString('pt-BR');
+                  const dataStr = statusExp?.data != null ? formatarInstante(statusExp.data, fuso, 'data') : undefined;
                   return (
                     <div
                       className={`mt-1.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold border ${
@@ -278,7 +275,7 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
                       <div className="bg-white border border-slate-200 rounded-lg p-3 text-xs text-slate-600 space-y-2">
                         <div className="flex justify-between border-b border-slate-100 pb-2">
                           <span className="text-slate-400">Data/Hora:</span>
-                          <span className="font-medium">{new Date(doc.dataAssinatura).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span>
+                          <span className="font-medium">{formatarInstante(doc.dataAssinatura, fuso, 'dataHoraSeg')}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-100 pb-2">
                           <span className="text-slate-400">Endereço IP:</span>

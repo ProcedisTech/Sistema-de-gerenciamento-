@@ -12,6 +12,10 @@ import {
 } from './hooks';
 import { persistirMapaAplicacao } from '../utils/persistirMapaAplicacao.js';
 import { usePatientsKpi } from './hooks/usePatientsKpi.js';
+import { useContextoOrgMe } from './hooks/useContextoOrgMe.js';
+import { useFusoClinica } from './hooks/useFusoClinica.js';
+import { ContextoClinicaTela } from './system/ContextoClinicaGate.jsx';
+import { estadoGateContexto } from './system/estadoGateContexto.js';
 
 // Componentes de Autenticação
 import { LoginForm } from './auth';
@@ -28,10 +32,9 @@ import { usePapel } from '../hooks/usePapel';
 import { useAlertasClinicos } from '../hooks/useAlertasClinicos';
 import { useSolicitarAnamneseConsulta } from './consulta/useSolicitarAnamneseConsulta.jsx';
 import { AlertasClinicosPanel } from './patients/AlertasClinicosPanel.jsx';
-import { resolverPapel } from '../utils/authPayload';
 import { useOrg } from '../contexts/OrgContext';
 import { useToast } from '../contexts/useToast.js';
-import { getGuaranteedNow, getGuaranteedIso, getGuaranteedHHMM } from '../utils/serverTime.js';
+import { getGuaranteedNow, getGuaranteedIso } from '../utils/serverTime.js';
 import {
   applyGroupActionAndRefresh,
   excludeInactiveForReagendarGroup,
@@ -64,7 +67,7 @@ import {
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
 import { pickSessaoAtiva, pickSessaoRetornoAtiva } from '../utils/planejamentoSessoes.js';
-import { toLocalISODate } from '../utils/dateLimits.js';
+import { hojeDaClinica } from '../utils/datasClinica.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { clearTermosJornadaState } from '../utils/termoJornadaLista.js';
@@ -128,14 +131,7 @@ import {
 import { getPatientInitials } from './utils';
 import { toDateKey } from '../utils/agendaDateUtils';
 import { TIPO_ATENDIMENTO_CONSULTA } from '../utils/agendaTipoProcedimento.js';
-import {
-  MARGEM_TECNICA_MIN,
-  parseSlotLocalDateTime,
-  diffScheduledMinusNowMinutes,
-  formatClockHHMM,
-  formatAntecedenciaText,
-  formatAtrasoText,
-} from '../utils/agendaStartTolerance.js';
+import { parseSlotLocalDateTime, avaliarInicioAgendamento } from '../utils/agendaStartTolerance.js';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import SessionTimeoutWarningModal from './session/SessionTimeoutWarningModal';
 
@@ -170,7 +166,7 @@ function revokeBlobUrlIfAny(url) {
 }
 
 function AppRefactoredInner() {
-  const { roleUserId, setRoleUserId, setOrgId, orgId, setPapel, setRoleNome, roleNome, setPermissoes, setApareceNaAgenda, contextStatus, setContextStatus, clearOrgSession } = useOrg();
+  const { roleUserId, setRoleUserId, setOrgId, orgId, setRoleNome, roleNome, contextStatus, recarregarContextoOrg, clearOrgSession } = useOrg();
   const {
     isAdmin: _isAdmin,
     isProfissional: _isProfissional,
@@ -313,48 +309,19 @@ function AppRefactoredInner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- toast estável; orgDiscoveryNonce re-dispara após CompletarPerfil
   }, [authState.isLoggedIn, authState.authUser?.id, authState.authReady, setOrgId, orgDiscoveryNonce]);
-  // Permissões do Dono são por clínica; nunca reaproveitar o /me de outra organização.
-  React.useEffect(() => {
-    if (!authState.authReady || !authState.isLoggedIn || !orgId) return undefined;
-    let cancelled = false;
-    setContextStatus('loading');
-    (async () => {
-      try {
-        const response = await fetch(resolveApiUrl('/api/auth/me'), {
-          credentials: 'include',
-          headers: await authHeadersForFetch({ needsOrg: true }),
-        });
-        if (cancelled) return;
-        if (!response.ok) throw new Error('Falha ao atualizar permissões da clínica');
-        const me = await response.json();
-        if (cancelled) return;
-        if (me.organizacaoId !== orgId) throw new Error('Contexto de clínica inválido');
-        setRoleUserId(me.roleUserId ?? '');
-        setRoleNome(me.perfilAcessoCodigo ?? me.role ?? '');
-        setPapel(resolverPapel(me.perfilAcessoCodigo ?? me.role ?? ''));
-        setPermissoes(me.permissoes || []);
-        setApareceNaAgenda(me.apareceNaAgenda);
-        setContextStatus('ready');
-      } catch {
-        if (!cancelled) {
-          setPermissoes([]);
-          setApareceNaAgenda(null);
-          setRoleUserId('');
-          setPapel(null);
-          setContextStatus('error');
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [authState.authReady, authState.isLoggedIn, orgId,
-    setRoleUserId, setRoleNome, setPapel, setPermissoes, setApareceNaAgenda, setContextStatus]);
+  // Permissões e fuso são por clínica; nunca reaproveitar o /me de outra organização.
+  useContextoOrgMe({ authReady: authState.authReady, isLoggedIn: authState.isLoggedIn });
+  const { fuso: fusoClinica, pronto: fusoPronto } = useFusoClinica();
 
   const patientState = usePatientState({ authEnabled: authSessionReady });
   const journeyState = useJourneyState();
   const mapaAplicacaoState = useMapaAplicacaoState();
   const mapaRetornoState = useMapaAplicacaoState();
-  /** Data local (YYYY-MM-DD) do início do atendimento — limite mínimo para “próximo retorno”. */
-  const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(() => toLocalISODate());
+  /** Data (YYYY-MM-DD, calendário da clínica) do início do atendimento — limite mínimo para “próximo retorno”. */
+  const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(null);
+  React.useEffect(() => {
+    if (fusoPronto && journeyProcedureDateIso == null) setJourneyProcedureDateIso(hojeDaClinica(fusoClinica));
+  }, [fusoPronto, fusoClinica, journeyProcedureDateIso]);
   /** Sincronizado com Step2: false quando a ficha tem perguntas (bloco queixa oculto). */
   const [queixaVisivel, setQueixaVisivel] = useState(true);
   const [step1Busy, setStep1Busy] = useState(false);
@@ -1101,11 +1068,14 @@ function AppRefactoredInner() {
 
   const step5RetornoBloqueiaFinal = React.useMemo(
     () =>
-      evaluateProximoRetornoStep5(
-        journeyProcedureDateIso,
-        journeyState.proximoRetornoDisplay
-      ).blocksFinish,
-    [journeyProcedureDateIso, journeyState.proximoRetornoDisplay]
+      fusoPronto
+        ? evaluateProximoRetornoStep5(
+          journeyProcedureDateIso,
+          journeyState.proximoRetornoDisplay,
+          hojeDaClinica(fusoClinica)
+        ).blocksFinish
+        : false,
+    [journeyProcedureDateIso, journeyState.proximoRetornoDisplay, fusoClinica, fusoPronto]
   );
 
   const isProcedimentoMode = currentStep === 4 || (activeView === 'consulta' && consultaModule === 'procedimento');
@@ -1340,6 +1310,7 @@ function AppRefactoredInner() {
         procedimentoFeitoId,
         catalogoProcedimentoSaudeId: catId,
         snapshot,
+        fuso: fusoClinica,
       });
       if (resultado.ok) {
         mapaAplicacaoState.clearAllDirty();
@@ -1353,6 +1324,7 @@ function AppRefactoredInner() {
       mapaAplicacaoState,
       roleUserId,
       toast,
+      fusoClinica,
     ],
   );
 
@@ -1595,7 +1567,7 @@ function AppRefactoredInner() {
 
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     const cpfKey = cpf != null ? String(cpf).trim() : '';
-    const todayIso = toLocalISODate();
+    const todayIso = hojeDaClinica(fusoClinica);
     const isSameDayResume =
       !options.forceNewSession &&
       consultaModule !== null &&
@@ -1893,7 +1865,7 @@ function AppRefactoredInner() {
       journeyState.setActiveProcedureIndex(0);
     } else {
       if (fromSlot && agendaId && dataRaw) {
-        const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw);
+        const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw, fusoClinica);
         if (scheduledAt || !scheduledAt) { // Keep indenting/logic simple
           const agendamentosDoDia = agendaSchedule.appointments
             .filter(i => {
@@ -1946,41 +1918,27 @@ function AppRefactoredInner() {
       return;
     }
 
-    const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw);
-    if (!scheduledAt) {
+    const avaliacao = avaliarInicioAgendamento({
+      dataIso: dataRaw,
+      hora: horaRaw,
+      fuso: fusoClinica,
+      agoraMs: getGuaranteedNow().getTime(),
+    });
+    if (avaliacao.acao === 'invalido') {
       toast.error('Horário do agendamento inválido.');
       return;
     }
-
-    const diffMin = diffScheduledMinusNowMinutes(scheduledAt);
-    if (Math.abs(diffMin) <= MARGEM_TECNICA_MIN) {
+    if (avaliacao.acao === 'direto') {
       proceedDirect();
       return;
     }
 
-    const scheduledTimeLabel = formatClockHHMM(scheduledAt);
-    const now = getGuaranteedNow();
-    const nowTimeLabel = formatClockHHMM(now);
-
-    if (diffMin > MARGEM_TECNICA_MIN) {
-      setIniciarTolModal({
-        variant: 'early',
-        patient,
-        options: opt,
-        scheduledTimeLabel,
-        nowTimeLabel,
-        antecedenciaTexto: formatAntecedenciaText(diffMin),
-      });
-      return;
-    }
-
+    const { acao, ...textos } = avaliacao;
     setIniciarTolModal({
-      variant: 'late',
+      variant: acao,
       patient,
       options: opt,
-      scheduledTimeLabel,
-      nowTimeLabel,
-      atrasoTexto: formatAtrasoText(-diffMin),
+      ...textos,
     });
   };
 
@@ -2409,7 +2367,8 @@ function AppRefactoredInner() {
 
       const { blocksFinish } = evaluateProximoRetornoStep5(
         journeyProcedureDateIso,
-        journeyState.proximoRetornoDisplay
+        journeyState.proximoRetornoDisplay,
+        hojeDaClinica(fusoClinica)
       );
       if (blocksFinish) {
         toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
@@ -2660,7 +2619,7 @@ function AppRefactoredInner() {
     setAssinaturasRealizadasIds([]);
     patientState.setSelectedPatientCpf(null);
     patientState.setPatientView('list');
-    setJourneyProcedureDateIso(toLocalISODate());
+    setJourneyProcedureDateIso(hojeDaClinica(fusoClinica));
     setQueixaVisivel(true);
     mapeamentoCaptureVistaRef.current = null;
     setPendingMapeamentoCapture(null);
@@ -2685,6 +2644,7 @@ function AppRefactoredInner() {
     setQueixaVisivel,
     mapaAplicacaoState,
     mapaRetornoState,
+    fusoClinica,
   ]);
 
   const finalizarAtendimentoNavegacao = React.useCallback(
@@ -2901,6 +2861,7 @@ function AppRefactoredInner() {
           roleUserId,
           novosIdsValidos: [],
           attendanceStartTimeIso: startTimeIso,
+          fuso: fusoClinica,
         }).catch((err) => {
           console.warn('[iniciarProcedimentoRetorno] Erro ao registrar agenda avulsa:', err);
           return null;
@@ -2940,6 +2901,7 @@ function AppRefactoredInner() {
       resolvePlanejamentoItemId,
       roleUserId,
       selectedPatientCpf,
+      fusoClinica,
     ],
   );
 
@@ -3075,6 +3037,7 @@ function AppRefactoredInner() {
               catalogoProcedimentoSaudeId: catalogoId,
               snapshot,
               tipoMapaCodigo: 'retorno',
+              fuso: fusoClinica,
             });
           } catch (mapErr) {
             console.error('Erro ao salvar mapa de retoque:', mapErr);
@@ -3096,13 +3059,13 @@ function AppRefactoredInner() {
       await uploadEvaluationCapturedPhotos({
         paciente,
         procIdOpt: pid,
-        dataRefSessao: toLocalISODate(new Date()),
+        dataRefSessao: hojeDaClinica(fusoClinica),
         tipoFotoCodigo: 'DEPOIS',
       });
       await uploadProcedureCapturedPhotos(
         paciente,
         [pid],
-        toLocalISODate(new Date()),
+        hojeDaClinica(fusoClinica),
       );
       const dtoFinalizar = await procedimentosApi.finalizar(pid);
       if (loteConcluiuPlano([dtoFinalizar])) {
@@ -3154,6 +3117,7 @@ function AppRefactoredInner() {
     askPlanoConcluidoClinica,
     abrirAgendaRetornoClinica,
     resetJourney,
+    fusoClinica,
   ]);
 
   const ensurePfInFlightRef = useRef(null);
@@ -3557,7 +3521,7 @@ function AppRefactoredInner() {
 
       if (novosIdsValidos.length > 0) {
         setLoteProcedimentosFeitosIds(novosIdsValidos);
-        const dataRefSessao = toLocalISODate(new Date());
+        const dataRefSessao = hojeDaClinica(fusoClinica);
 
         await Promise.all(
           novosIdsValidos.map(async (pid, i) => {
@@ -3580,7 +3544,8 @@ function AppRefactoredInner() {
 
         const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
           journeyProcedureDateIso,
-          journeyState.proximoRetornoDisplay
+          journeyState.proximoRetornoDisplay,
+          hojeDaClinica(fusoClinica)
         );
 
         if (!isApenasSair && returnIsoPre && paciente && roleUserId) {
@@ -3608,7 +3573,7 @@ function AppRefactoredInner() {
       }
 
       if (cameraState.evaluationCapturedPhotos?.length > 0) {
-        const dataRefSessao = toLocalISODate(new Date());
+        const dataRefSessao = hojeDaClinica(fusoClinica);
         try {
           await uploadEvaluationCapturedPhotos({ paciente, procIdOpt: novosIdsValidos[0], dataRefSessao });
         } catch (e) {
@@ -3633,30 +3598,12 @@ function AppRefactoredInner() {
             novosIdsValidos,
             attendanceStartTimeIso: startTimeIso,
             planejamentoItemId: planoItemIdPrincipal,
+            fuso: fusoClinica,
           }).catch((err) => {
             console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
           });
           journeyState.setAttendanceStartTime(null, sCpf);
         } else {
-          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-          let actualEndHh = getGuaranteedHHMM();
-          let actualStartHh = null;
-          if (startTimeIso) {
-            try {
-              const startDt = new Date(startTimeIso);
-              actualStartHh = `${String(startDt.getHours()).padStart(2, '0')}:${String(startDt.getMinutes()).padStart(2, '0')}`;
-            } catch {
-              // ignore parse error
-            }
-          }
-          if (actualStartHh && actualEndHh <= actualStartHh) {
-            if (actualStartHh === '23:59') actualStartHh = '23:58';
-            const [h, m] = actualStartHh.split(':').map(Number);
-            const total = h * 60 + m + 1;
-            const newH = Math.floor((total % 1440) / 60);
-            const newM = total % 60;
-            actualEndHh = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
-          }
           // Preserva horaInicio e horaFim previstos no banco para nao alterar a reserva do agendamento
           const updatePayload = {};
 
@@ -3685,7 +3632,8 @@ function AppRefactoredInner() {
 
         const { validIso: returnIsoPost } = evaluateProximoRetornoStep5(
           journeyProcedureDateIso,
-          journeyState.proximoRetornoDisplay
+          journeyState.proximoRetornoDisplay,
+          hojeDaClinica(fusoClinica)
         );
 
         await Promise.all([
@@ -3748,6 +3696,7 @@ function AppRefactoredInner() {
     askPlanoConcluidoClinica,
     abrirAgendaRetornoClinica,
     resetJourney,
+    fusoClinica,
   ]);
 
   const finishJourney = async () => {
@@ -3925,6 +3874,26 @@ function AppRefactoredInner() {
         setOrgId={setOrgId}
         onComplete={() => {
           setPostLoginGate('ready');
+        }}
+      />
+    );
+  }
+
+  // Sem o /me da clínica (permissões + fuso) nenhuma tela autenticada monta: nada decide "hoje" sem fuso.
+  const estadoGate = isLoggedIn && authReady && postLoginGate === 'ready'
+    ? estadoGateContexto({ orgId, contextStatus })
+    : null;
+  if (estadoGate) {
+    return (
+      <ContextoClinicaTela
+        estado={estadoGate}
+        onTentarDeNovo={() => {
+          if (estadoGate === 'semClinica') {
+            setPostLoginGate('checking');
+            setOrgDiscoveryNonce((n) => n + 1);
+          } else {
+            recarregarContextoOrg();
+          }
         }}
       />
     );

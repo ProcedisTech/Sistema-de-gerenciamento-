@@ -12,6 +12,8 @@ import { persistirPlanejamento } from '../../../utils/persistirPlanejamento.js';
 
 import { useMapeamentoFacialState } from '../../hooks/useMapeamentoFacialState.js';
 
+import { useFusoClinica } from '../../hooks/useFusoClinica.js';
+
 import { VistaChipsBar, VistaAtivaHeader } from './VistaChipsBar.jsx';
 
 import { FotoVistaCanvas, GaleriaVistaPickerModal } from './FotoVistaCanvas.jsx';
@@ -51,6 +53,8 @@ export function MapeamentoFacialPanel({
 }) {
 
   const toast = useToast();
+
+  const { fuso } = useFusoClinica();
 
   const state = useMapeamentoFacialState();
 
@@ -375,6 +379,8 @@ export function MapeamentoFacialPanel({
         procedimentosComPontos: state.getProcedimentosComPontos(),
 
         fotosPorVista: state.fotosPorVista,
+
+        fuso,
 
       });
 

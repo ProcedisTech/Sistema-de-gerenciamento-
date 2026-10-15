@@ -1,10 +1,10 @@
-import { buildCalendarCells, formatMonthYearLabel, toLocalDateIso } from './agendaDateUtils.js';
+import { buildCalendarCells, formatMonthYearLabel } from './agendaDateUtils.js';
 import {
   AGENDA_SLOT_STEP_MIN,
-  getBrasiliaNow,
   intervalsOverlap,
   minutesToHhmm,
   parseHhmmToMinutes,
+  resolveAgoraClinica,
   segmentsForDayIso,
 } from './agendaAvailability.js';
 import {
@@ -102,7 +102,7 @@ function formatDayHeaderTitle(iso) {
 }
 
 /**
- * @param {object} params
+ * @param {object} params `todayIso` = hoje no calendário da clínica (ou `fuso` para calcular)
  * @returns {{ monthLabel: string, weekLabels: string[], cells: Array }}
  */
 export function buildMonthHeatmap({
@@ -110,13 +110,14 @@ export function buildMonthHeatmap({
   disponibilidade,
   dtos,
   todayIso,
+  fuso,
   excludeAgendaId,
   profissionalRoleUserId,
   selectedIso,
   duracaoPretendida,
 }) {
-  const baseCells = buildCalendarCells(monthDate);
-  const today = String(todayIso || toLocalDateIso()).slice(0, 10);
+  const today = resolveAgoraClinica({ fuso, todayIso }).todayIso;
+  const baseCells = buildCalendarCells(monthDate, today || null);
   const segOpts = { profissionalRoleUserId, excludeAgendaId };
   const fitDur =
     duracaoPretendida != null && Number(duracaoPretendida) > 0
@@ -179,9 +180,9 @@ export function buildMonthHeatmap({
  * @param {object} params
  * @returns {{ monthLabel: string, weekLabels: string[], cells: Array }}
  */
-export function buildNeutralMonthHeatmap({ monthDate, todayIso, selectedIso }) {
-  const today = String(todayIso || toLocalDateIso()).slice(0, 10);
-  const cells = buildCalendarCells(monthDate).map((cell) => {
+export function buildNeutralMonthHeatmap({ monthDate, todayIso, fuso, selectedIso }) {
+  const today = resolveAgoraClinica({ fuso, todayIso }).todayIso;
+  const cells = buildCalendarCells(monthDate, today || null).map((cell) => {
     const isPast = cell.iso < today;
     return {
       ...cell,
@@ -203,6 +204,8 @@ export function buildNeutralMonthHeatmap({ monthDate, todayIso, selectedIso }) {
 }
 
 /**
+ * "Horário já passou" usa o relógio da clínica: `todayIso` + `currentMinutes` (ou `fuso` para calcular).
+ * `currentBrasiliaMinutes` é aceito como nome antigo de `currentMinutes`.
  * @returns {{ headerTitle: string, expedienteLabel: string, dayStartMin: number, dayEndMin: number, isFallback: boolean, windows: Array, slots: Array }}
  */
 export function buildDaySlotList({
@@ -218,7 +221,9 @@ export function buildDaySlotList({
   selectedRangeFimSlot,
   stepMin = AGENDA_SLOT_STEP_MIN,
   todayIso: customTodayIso,
-  currentBrasiliaMinutes: customCurrentMin,
+  currentMinutes,
+  currentBrasiliaMinutes,
+  fuso,
 }) {
   if (!iso) {
     return {
@@ -259,9 +264,13 @@ export function buildDaySlotList({
   const segOpts = { profissionalRoleUserId, excludeAgendaId };
   const segments = segmentsForDayIso(dtos, iso, segOpts);
 
-  const brasiliaNow = getBrasiliaNow();
-  const todayIso = customTodayIso || brasiliaNow.todayIso;
-  const currentBrasiliaMinutes = customCurrentMin != null ? customCurrentMin : brasiliaNow.currentMinutes;
+  const agora = resolveAgoraClinica({
+    fuso,
+    todayIso: customTodayIso,
+    nowMinutes: currentMinutes ?? currentBrasiliaMinutes,
+  });
+  const todayIso = agora.todayIso;
+  const nowMin = agora.nowMinutes;
 
   const selectedHm = String(selectedFormHora || '').slice(0, 5);
   const selectedMin =
@@ -289,7 +298,8 @@ export function buildDaySlotList({
     let observacao = '';
     let agendaId;
 
-    const isPast = iso < todayIso || (iso === todayIso && t < currentBrasiliaMinutes);
+    const isPast =
+      Boolean(todayIso) && (iso < todayIso || (iso === todayIso && nowMin != null && t < nowMin));
 
     if (isPast) {
       state = 'passado';

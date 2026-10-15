@@ -1,10 +1,12 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { BTN, BTN_PRIMARY, SAVEBAR } from './editorDocumentoTokens.js';
+import { formatarInstante } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
-function formatTime(date) {
+function formatTime(date, fuso) {
   if (!date) return '';
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return formatarInstante(date, fuso, { hour: '2-digit', minute: '2-digit' });
 }
 
 export function AnamneseDocSaveBar({
@@ -15,6 +17,7 @@ export function AnamneseDocSaveBar({
   onSave,
   onPreview,
 }) {
+  const { fuso } = useFusoClinica();
   return (
     <div className={SAVEBAR}>
       <span
@@ -30,7 +33,7 @@ export function AnamneseDocSaveBar({
         ) : dirty ? (
           <>● Alterações não salvas</>
         ) : lastSavedAt ? (
-          <>Salvo às {formatTime(lastSavedAt)}</>
+          <>Salvo às {formatTime(lastSavedAt, fuso)}</>
         ) : (
           <>Salvo</>
         )}

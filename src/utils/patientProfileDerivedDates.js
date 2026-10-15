@@ -1,40 +1,33 @@
 import { toDateKey } from './agendaDateUtils.js';
 import { fetchDashboardAppointmentsForRange } from './agendaDashboardMapping.js';
+import {
+  agoraDaClinica,
+  diaDoInstante,
+  ehInstante,
+  formatarDataCalendario,
+  hojeDaClinica,
+  instanteMs,
+  normalizarDataCalendario,
+  somarDias,
+} from './datasClinica.js';
 
-const TZ_BR = 'America/Sao_Paulo';
-
-/** YYYY-MM-DD do calendário em São Paulo (alinhado à agenda). */
-export function todayIsoInSaoPaulo(date = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ_BR,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+/**
+ * YYYY-MM-DD de hoje no calendário da clínica (alinhado à agenda).
+ * @param {string} fuso IANA da clínica
+ * @param {number} [agoraMs]
+ */
+export function todayIsoInClinica(fuso, agoraMs = Date.now()) {
+  return hojeDaClinica(fuso, agoraMs);
 }
 
-/** `"YYYY-MM-DD HH:mm"` comparável lexicograficamente (hora em São Paulo). */
-export function nowComparableDateTimeSaoPaulo(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ_BR,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-  const map = {};
-  for (const p of parts) {
-    if (p.type !== 'literal') map[p.type] = p.value;
-  }
-  const pad = (v) => String(v ?? '').padStart(2, '0');
-  const y = map.year;
-  const mo = pad(map.month);
-  const d = pad(map.day);
-  const h = pad(map.hour);
-  const mi = pad(map.minute);
-  return `${y}-${mo}-${d} ${h}:${mi}`;
+/**
+ * `"YYYY-MM-DD HH:mm"` comparável lexicograficamente (relógio da clínica).
+ * @param {string} fuso IANA da clínica
+ * @param {number} [agoraMs]
+ */
+export function nowComparableDateTimeClinica(fuso, agoraMs = Date.now()) {
+  const a = agoraDaClinica(fuso, agoraMs);
+  return `${a.dataIso} ${a.hhmm}`;
 }
 
 export function normalizeRowHhmm(hmRaw) {
@@ -53,27 +46,15 @@ export function dashboardRowComparableDateTime(row) {
 
 export function addCalendarDaysIsoYmd(startIso, deltaDays) {
   const key = toDateKey(startIso);
-  const [y, m, d] = key.split('-').map(Number);
-  if (!y || !m || !d) return key;
-  const ms = Date.UTC(y, m - 1, d + deltaDays);
-  const dt = new Date(ms);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+  return somarDias(key, deltaDays) || key;
 }
 
-/**
- * Converte linha do dashboard em instante UTC (interpretação horário local do navegador).
- * Alinha-se ao uso de `Date` na agenda ao editar slots no mesmo fuso da clínica.
- */
-export function dashboardRowToUtcApproxIso(row) {
-  const date = toDateKey(row?.data);
+/** Linha do dashboard → data+hora de calendário da clínica `"YYYY-MM-DDTHH:mm"` (sem fuso). */
+export function dashboardRowToCalendarDateTime(row) {
+  const date = normalizarDataCalendario(toDateKey(row?.data));
+  if (!date) return null;
   const hm = normalizeRowHhmm(row?.horaInicio ?? '09:00');
-  const [y, mo, d] = date.split('-').map(Number);
-  const [h, mi] = hm.split(':').map((x) => Number(x));
-  if (!y || !mo || !d) return null;
-  const local = new Date(y, mo - 1, d, Number.isFinite(h) ? h : 0, Number.isFinite(mi) ? mi : 0, 0, 0);
-  if (Number.isNaN(local.getTime())) return null;
-  return local.toISOString();
+  return `${date}T${hm}`;
 }
 
 /** Primeiro instant em ISO extraído do procedimento feito (Spring / aliases). */
@@ -98,8 +79,7 @@ export function procedureOccurredInstantIso(proc) {
     if (v == null || v === '') continue;
     const s = String(v).trim();
     if (!s) continue;
-    const t = new Date(s).getTime();
-    if (!Number.isNaN(t)) return s;
+    if (!Number.isNaN(instanteMs(s))) return s;
   }
   return null;
 }
@@ -114,7 +94,7 @@ export function latestProcedureOccurredInstantIso(procedures) {
     if (!iso) continue;
     const nome = String(proc?.statusNome || proc?.status || '').toLowerCase();
     if (nome.includes('cancel')) continue;
-    const ms = new Date(iso).getTime();
+    const ms = instanteMs(iso);
     if (ms > bestMs) {
       bestMs = ms;
       best = iso;
@@ -123,35 +103,48 @@ export function latestProcedureOccurredInstantIso(procedures) {
   return best;
 }
 
-/** Cartões resumo (Última visita / Próximo retorno): só dia em America/Sao_Paulo. */
-export function formatCartaoDiaPtBr(iso) {
-  if (!iso) return '-';
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return '-';
-  return t.toLocaleDateString('pt-BR', { timeZone: TZ_BR });
+/**
+ * "YYYY-MM-DD" de um valor de data: instante (com "Z"/offset) → dia no fuso da clínica;
+ * calendário ("YYYY-MM-DD[THH:mm]" sem fuso) → o próprio dia. '' se não reconhecido.
+ */
+export function diaDoValorData(valor, fuso) {
+  if (valor == null || valor === '') return '';
+  const s = String(valor).trim();
+  if (ehInstante(s)) return diaDoInstante(s, fuso);
+  return normalizarDataCalendario(s);
 }
 
-/** ISO instant em string legada → somente data para o cartão. */
-export function formatCartaoIfIsoString(raw) {
+/**
+ * Cartões resumo (Última visita / Próximo retorno): só o dia (dd/mm/aaaa).
+ * @param {string} valor instante (ultimaVinda) ou data+hora de calendário (proximoAgendamento)
+ * @param {string} fuso IANA da clínica
+ */
+export function formatCartaoDiaPtBr(valor, fuso) {
+  const dia = diaDoValorData(valor, fuso);
+  return dia ? formatarDataCalendario(dia) : '-';
+}
+
+/** Data ISO (instante ou calendário) em string legada → somente data para o cartão. */
+export function formatCartaoIfIsoString(raw, fuso) {
   const leg = String(raw ?? '').trim();
   if (!leg || leg === '-' || leg === '—') return null;
-  if (!/^\d{4}-\d{2}-\d{2}/.test(leg) && !leg.includes('T')) return null;
-  const t = new Date(leg);
-  if (Number.isNaN(t.getTime())) return null;
-  return t.toLocaleDateString('pt-BR', { timeZone: TZ_BR });
+  const dia = diaDoValorData(leg, fuso);
+  return dia ? formatarDataCalendario(dia) : null;
 }
 
 /**
  * Data do último atendimento a partir do DTO (lista/perfil): ultimaVinda (ISO) → ultimaVisita (dd/mm ou ISO legado).
  * Retorna '-' quando ausente.
+ * @param {object} p paciente mapeado
+ * @param {string} fuso IANA da clínica
  */
-export function patientUltimaVisitaDayFromDto(p) {
+export function patientUltimaVisitaDayFromDto(p, fuso) {
   if (!p) return '-';
   if (p.ultimaVinda != null && String(p.ultimaVinda).trim() !== '') {
-    return formatCartaoDiaPtBr(p.ultimaVinda);
+    return formatCartaoDiaPtBr(p.ultimaVinda, fuso);
   }
   const leg = String(p.ultimaVisita || '').trim();
-  const isoFmt = formatCartaoIfIsoString(leg);
+  const isoFmt = formatCartaoIfIsoString(leg, fuso);
   if (isoFmt) return isoFmt;
   return leg && leg !== '-' && leg !== '—' ? leg : '-';
 }
@@ -216,17 +209,19 @@ function rowLooksCanceled(row) {
 }
 
 /**
- * Próximo compromisso futuro do paciente no intervalo [hoje BR, +366 dias],
+ * Próximo compromisso futuro do paciente no intervalo [hoje da clínica, +366 dias],
  * usando o mesmo pipeline da agenda (`fetchDashboardAppointmentsForRange`).
  *
  * @param {string} pacienteId UUID do paciente
- * @param {{ pacienteNome?: string }} [opts] — se o backend não enviar `pacienteId` no compromisso, tenta casar pelo nome (homônimos podem colidir).
+ * @param {{ pacienteNome?: string, fuso?: string }} [opts] — `fuso` da clínica (IANA); se o backend não enviar
+ *   `pacienteId` no compromisso, tenta casar pelo nome (homônimos podem colidir).
+ * @returns {Promise<string | null>} data+hora de calendário da clínica `"YYYY-MM-DDTHH:mm"`
  */
 export async function fetchNextAppointmentIsoForPaciente(pacienteId, opts = {}) {
   const pid = pacienteId != null ? String(pacienteId).trim() : '';
   if (!pid) return null;
   const nomeRef = nomeCarteiraNorm(opts.pacienteNome ?? opts.nome ?? '');
-  const today = todayIsoInSaoPaulo();
+  const today = todayIsoInClinica(opts.fuso);
   const end = addCalendarDaysIsoYmd(today, 366);
   let rows = [];
   try {
@@ -235,14 +230,14 @@ export async function fetchNextAppointmentIsoForPaciente(pacienteId, opts = {}) 
     return null;
   }
   if (!Array.isArray(rows)) return null;
-  const nowCmp = nowComparableDateTimeSaoPaulo();
+  const nowCmp = nowComparableDateTimeClinica(opts.fuso);
   for (const row of rows) {
     if (!row || row.tipo === 'bloqueio') continue;
     if (rowLooksCanceled(row)) continue;
     if (!rowMatchesPaciente(row, pid, nomeRef)) continue;
     const cmp = dashboardRowComparableDateTime(row);
     if (cmp < nowCmp) continue;
-    return dashboardRowToUtcApproxIso(row);
+    return dashboardRowToCalendarDateTime(row);
   }
   return null;
 }

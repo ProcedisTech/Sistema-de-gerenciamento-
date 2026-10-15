@@ -1,5 +1,6 @@
 import React from 'react';
 import { User, Calendar, FileText, Activity } from 'lucide-react';
+import { diaDoInstante, formatarInstante, hojeDaClinica, instanteMs } from '../../utils/datasClinica';
 
 export const ACOES_MAP = {
   // Códigos Canônicos RBAC
@@ -138,15 +139,33 @@ export function formatarEntidade(ent) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function formatData(iso) {
+export function formatData(iso, fuso) {
   if (!iso) return '-';
-  return new Date(iso).toLocaleString('pt-BR', {
+  return formatarInstante(iso, fuso, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/**
+ * true se o instante `criadoEm` cai no período escolhido. "Hoje", "este mês" e "este ano"
+ * são contados no calendário da clínica; "última hora" e "semana" são janelas móveis.
+ */
+export function dentroDoPeriodo(criadoEm, periodo, fuso, agoraMs = Date.now()) {
+  if (!periodo) return true;
+  const ms = instanteMs(criadoEm);
+  if (Number.isNaN(ms)) return false;
+  if (periodo === '1h') return ms >= agoraMs - 60 * 60 * 1000;
+  if (periodo === 'semana') return ms >= agoraMs - 7 * 24 * 60 * 60 * 1000;
+  const dia = diaDoInstante(criadoEm, fuso);
+  const hoje = hojeDaClinica(fuso, agoraMs);
+  if (periodo === 'hoje') return dia === hoje;
+  if (periodo === 'mes') return dia >= `${hoje.slice(0, 7)}-01`;
+  if (periodo === 'ano') return dia >= `${hoje.slice(0, 4)}-01-01`;
+  return true;
 }
 
 export function getIconForEntidade(ent) {

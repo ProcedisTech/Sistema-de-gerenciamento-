@@ -1,4 +1,5 @@
 import { deriveAgendaSlotStatus } from './agendaMapping.js';
+import { agoraDaClinica, somarDias } from './datasClinica.js';
 import {
   dayBoundsFromWindows,
   getDayWindowsForIso,
@@ -189,12 +190,6 @@ export function findNextFreeSlotStart(fromMin, durationMin, occupied, dayStartMi
   return null;
 }
 
-function parseIsoLocalDate(iso) {
-  const s = String(iso || '').slice(0, 10);
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
 function listIsosInMonth(monthDate) {
   const y = monthDate.getFullYear();
   const m = monthDate.getMonth();
@@ -207,38 +202,24 @@ function listIsosInMonth(monthDate) {
   return isos;
 }
 
-export function getBrasiliaNow() {
-  const d = new Date();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(d);
-  const getPart = (type) => parts.find((p) => p.type === type)?.value || '';
-  const y = getPart('year');
-  const m = getPart('month');
-  const day = getPart('day');
-  const hr = Number(getPart('hour') || 0);
-  const min = Number(getPart('minute') || 0);
-
-  const todayIso = `${y}-${m}-${day}`;
-  const currentMinutes = hr * 60 + min;
-  const currentHhmm = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-  return { todayIso, currentMinutes, currentHhmm };
-}
-
-function nowMinutesLocal() {
-  return getBrasiliaNow().currentMinutes;
+/**
+ * Hoje e minuto do dia na clínica. Sem `fuso` e sem valores explícitos → hoje/minutos null
+ * (nada é considerado "já passou").
+ * @param {{ fuso?: string | null, todayIso?: string | null, nowMinutes?: number | null }} [opts]
+ * @returns {{ todayIso: string, nowMinutes: number | null }}
+ */
+export function resolveAgoraClinica({ fuso, todayIso, nowMinutes } = {}) {
+  if (todayIso) {
+    return { todayIso: String(todayIso).slice(0, 10), nowMinutes: Number.isFinite(nowMinutes) ? nowMinutes : null };
+  }
+  if (!fuso) return { todayIso: '', nowMinutes: null };
+  const agora = agoraDaClinica(fuso);
+  return { todayIso: agora.dataIso, nowMinutes: agora.minutos };
 }
 
 /**
  * Primeiro slot livre a partir de startIso/startHora, varrendo dias dos meses em monthDates.
+ * `todayIso`/`nowMinutes` são o relógio da clínica (ou `fuso` para calcular).
  * @returns {{ iso: string, hhmm: string } | null}
  */
 export function findNextFreeSlotAcrossDays({
@@ -248,6 +229,8 @@ export function findNextFreeSlotAcrossDays({
   dtos,
   disponibilidade,
   todayIso,
+  nowMinutes,
+  fuso,
   excludeAgendaId,
   profissionalRoleUserId,
   monthDates = [],
@@ -255,7 +238,8 @@ export function findNextFreeSlotAcrossDays({
 }) {
   const dur = Number(duracaoMin) || 45;
   const step = Math.max(5, Number(stepMin) || AGENDA_SLOT_STEP_MIN);
-  const today = String(todayIso || '').slice(0, 10);
+  const agora = resolveAgoraClinica({ fuso, todayIso, nowMinutes });
+  const today = agora.todayIso;
   const anchor = String(startIso || today).slice(0, 10);
 
   const allIsos = [];
@@ -284,8 +268,8 @@ export function findNextFreeSlotAcrossDays({
     );
 
     let fromMin = dayStartMin;
-    if (iso === today) {
-      fromMin = Math.max(fromMin, nowMinutesLocal());
+    if (iso === today && agora.nowMinutes != null) {
+      fromMin = Math.max(fromMin, agora.nowMinutes);
     }
     if (iso === anchor && startHora) {
       fromMin = Math.max(fromMin, parseHhmmToMinutes(String(startHora).slice(0, 5)));
@@ -303,8 +287,5 @@ export function findNextFreeSlotAcrossDays({
 }
 
 export function addDaysToIso(iso, delta) {
-  const date = parseIsoLocalDate(iso);
-  date.setDate(date.getDate() + delta);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return somarDias(String(iso || '').slice(0, 10), delta);
 }

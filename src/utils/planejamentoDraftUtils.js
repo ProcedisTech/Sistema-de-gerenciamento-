@@ -5,6 +5,12 @@ import {
   pickSessaoRetornoAtiva,
   pickSessaoRetornoRealizada,
 } from './planejamentoSessoes.js';
+import {
+  compararCalendario,
+  diferencaDias,
+  formatarDataCalendario,
+  normalizarDataCalendario,
+} from './datasClinica.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,24 +25,18 @@ export function createTempId() {
   return `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Data de calendário por extenso curto (ex.: "1 de out. de 2026"). */
 export function formatDataLongaPt(iso) {
   if (!iso) return '—';
-  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString('pt-BR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'America/Sao_Paulo',
-  });
+  return (
+    formatarDataCalendario(iso, { day: 'numeric', month: 'short', year: 'numeric' }) || String(iso)
+  );
 }
 
-/** Data curta DD/MM/AAAA (ex.: linha "Agendado em …"). */
+/** Data de calendário curta DD/MM/AAAA (ex.: linha "Agendado em …"). */
 export function formatDataPt(iso) {
   if (!iso) return '—';
-  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return formatarDataCalendario(iso, 'curta') || String(iso);
 }
 
 /** Normaliza mapa { catalogoProcedimentoSaudeId → planejamentoItemId } para lookup no POST. */
@@ -116,40 +116,23 @@ export function valorBrlDisplayFromNumber(val) {
   return maskValorBrlInput(String(Math.round(n * 100)));
 }
 
-export function parseIsoDateOnly(iso) {
-  if (!iso) return null;
-  const s = String(iso).slice(0, 10);
-  const d = new Date(`${s}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 export function sortItensPorData(itens) {
   const list = Array.isArray(itens) ? [...itens] : [];
-  return list.sort((a, b) => {
-    const da = parseIsoDateOnly(a?.dataPlanejada);
-    const db = parseIsoDateOnly(b?.dataPlanejada);
-    if (!da && !db) return 0;
-    if (!da) return 1;
-    if (!db) return -1;
-    return da.getTime() - db.getTime();
-  });
+  return list.sort((a, b) => compararCalendario(a?.dataPlanejada, b?.dataPlanejada));
 }
 
 export function calcIntervaloDias(isoA, isoB) {
-  const da = parseIsoDateOnly(isoA);
-  const db = parseIsoDateOnly(isoB);
-  if (!da || !db) return null;
-  const ms = db.getTime() - da.getTime();
-  return Math.round(ms / (1000 * 60 * 60 * 24));
+  const dias = diferencaDias(isoA, isoB);
+  return Number.isNaN(dias) ? null : dias;
 }
 
 export function calcResumoProtocolo(itens) {
   const list = Array.isArray(itens) ? itens : [];
   const total = list.length;
   const datas = list
-    .map((i) => parseIsoDateOnly(i?.dataPlanejada))
+    .map((i) => normalizarDataCalendario(i?.dataPlanejada))
     .filter(Boolean)
-    .sort((a, b) => a.getTime() - b.getTime());
+    .sort();
   const valorTotal = list.reduce((acc, i) => {
     const v = Number(i?.valorOrcado);
     return Number.isFinite(v) ? acc + v : acc;
@@ -157,8 +140,8 @@ export function calcResumoProtocolo(itens) {
   return {
     total,
     periodo: {
-      inicio: datas[0] ? datas[0].toISOString().slice(0, 10) : null,
-      fim: datas.length ? datas[datas.length - 1].toISOString().slice(0, 10) : null,
+      inicio: datas[0] ?? null,
+      fim: datas.length ? datas[datas.length - 1] : null,
     },
     valorTotal: list.some((i) => i?.valorOrcado != null && String(i.valorOrcado).trim() !== '')
       ? valorTotal

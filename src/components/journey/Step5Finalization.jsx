@@ -24,8 +24,10 @@ import {
   normalizeWaPhoneDigits,
   getPresetOrientacoesByProcedimento,
 } from '../../utils/orientacoesJourney.js';
-import { toLocalISODate, maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
+import { maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
 import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
+import { formatarInstante } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import {
   sanitizeBirthDateDigits,
   formatBirthDigitsBR,
@@ -48,16 +50,17 @@ function isoToBR(iso) {
   return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
-function formatTs(ts) {
+const FORMATO_TS = {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+};
+
+function formatTs(ts, fuso) {
   if (!ts) return '—';
-  return new Date(ts).toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarInstante(ts, fuso, FORMATO_TS);
 }
 
 export function Step5Finalization({
@@ -95,7 +98,7 @@ export function Step5Finalization({
   procedimentosLote = [],
 }) {
   const toast = useToast();
-  const todayIso = useMemo(() => toLocalISODate(), []);
+  const { fuso, hojeIso: todayIso } = useAgoraDaClinica();
   const minReturnIso = useMemo(
     () => maxIsoDate(procedureDateIso || todayIso, todayIso),
     [procedureDateIso, todayIso],
@@ -277,7 +280,8 @@ export function Step5Finalization({
 
   const { fieldMessage: returnDateFieldMessage } = evaluateProximoRetornoStep5(
     procedureDateIso,
-    proximoRetornoDisplay
+    proximoRetornoDisplay,
+    todayIso
   );
   const returnDateInputInvalid = Boolean(returnDateFieldMessage);
 
@@ -356,14 +360,7 @@ export function Step5Finalization({
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
       doc.text(
-        `Gerado em ${new Date().toLocaleString('pt-BR', {
-          timeZone: 'America/Sao_Paulo',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })}`,
+        `Gerado em ${formatarInstante(Date.now(), fuso, FORMATO_TS)}`,
         pageW - margin,
         16,
         { align: 'right' },
@@ -444,7 +441,7 @@ export function Step5Finalization({
         if (profAssinaturaTimestamp) {
           doc.setFontSize(7);
           doc.setFont('helvetica', 'normal');
-          doc.text(formatTs(profAssinaturaTimestamp), margin + 3, y + sigH + 7);
+          doc.text(formatTs(profAssinaturaTimestamp, fuso), margin + 3, y + sigH + 7);
         }
 
         const px = margin + sigW + 6;
@@ -464,7 +461,7 @@ export function Step5Finalization({
         if (patAssinaturaTimestamp) {
           doc.setFontSize(7);
           doc.setFont('helvetica', 'normal');
-          doc.text(formatTs(patAssinaturaTimestamp), px + 3, y + sigH + 7);
+          doc.text(formatTs(patAssinaturaTimestamp, fuso), px + 3, y + sigH + 7);
         }
         y += sigH + 14;
         drawLine();
@@ -615,7 +612,7 @@ export function Step5Finalization({
               <div className="text-[11px] font-bold uppercase tracking-wide text-[#94a3b8]">
                 Procedi — Sistema de Gestão Clínica
               </div>
-              <div className="mt-0.5 text-[11px] text-[#94a3b8]">Gerado em {formatTs(Date.now())}</div>
+              <div className="mt-0.5 text-[11px] text-[#94a3b8]">Gerado em {formatTs(Date.now(), fuso)}</div>
             </div>
           </div>
 
@@ -832,7 +829,7 @@ export function Step5Finalization({
                             style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
                           />
                         </div>
-                        <div className="mt-0.5 text-[10px] text-[#94a3b8]">{formatTs(profAssinaturaTimestamp)}</div>
+                        <div className="mt-0.5 text-[10px] text-[#94a3b8]">{formatTs(profAssinaturaTimestamp, fuso)}</div>
                       </div>
                     ) : null}
                     {termoAssinaturaDataUrl ? (
@@ -845,7 +842,7 @@ export function Step5Finalization({
                             style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
                           />
                         </div>
-                        <div className="mt-0.5 text-[10px] text-[#94a3b8]">{formatTs(patAssinaturaTimestamp)}</div>
+                        <div className="mt-0.5 text-[10px] text-[#94a3b8]">{formatTs(patAssinaturaTimestamp, fuso)}</div>
                       </div>
                     ) : null}
                   </div>

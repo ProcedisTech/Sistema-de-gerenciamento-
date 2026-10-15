@@ -57,7 +57,16 @@ import { normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js
 import { mapBackendPatient } from '../../utils/patientMapping.js';
 import { calculateAgeFromISODate } from '../utils/formatters.js';
 import { titulosFaltantes, procedimentoBloqueadoPorTermos } from '../../utils/termoResolucao.js';
-import { toLocalDateIso } from '../../utils/agendaDateUtils.js';
+import {
+  compararCalendario,
+  ehInstante,
+  formatarDataCalendario,
+  formatarInstante,
+  hojeDaClinica,
+  normalizarDataCalendario,
+  somarDias,
+} from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 function formatValorBrl(val) {
   if (val == null || val === '') return '—';
@@ -66,11 +75,11 @@ function formatValorBrl(val) {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function formatDataPt(iso) {
-  if (!iso) return '—';
-  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+/** Data de calendário ("AAAA-MM-DD") ou instante (com "Z"; exibido no fuso da clínica). */
+function formatDataPt(valor, fuso) {
+  if (!valor) return '—';
+  if (ehInstante(valor)) return formatarInstante(valor, fuso, 'data') || String(valor);
+  return formatarDataCalendario(valor, 'curta') || String(valor);
 }
 
 function formatarTempoCadeira(minutos) {
@@ -84,19 +93,15 @@ function formatarTempoCadeira(minutos) {
   return `${m}min`;
 }
 
-function formatDataHumana(dataIso) {
+/** @param {string} dataIso data de calendário  @param {string} hojeIso hoje no fuso da clínica */
+function formatDataHumana(dataIso, hojeIso) {
   if (!dataIso) return '';
-  const d = new Date(String(dataIso).slice(0, 10) + 'T12:00:00');
-  const hojeStr = toLocalDateIso();
-  const dataStr = String(dataIso).slice(0, 10);
+  const dataStr = normalizarDataCalendario(dataIso);
 
-  if (dataStr === hojeStr) return 'Hoje';
+  if (hojeIso && dataStr === hojeIso) return 'Hoje';
+  if (hojeIso && dataStr === somarDias(hojeIso, 1)) return 'Amanhã';
 
-  const amanha = new Date();
-  amanha.setDate(amanha.getDate() + 1);
-  if (dataStr === toLocalDateIso(amanha)) return 'Amanhã';
-
-  return d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' });
+  return formatarDataCalendario(dataStr, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function itemReactKey(item) {
@@ -302,6 +307,7 @@ function renderItensComIntervalo({
   onToggleSelecao,
   catalogoOptions = [],
   procedimentosFeitos = [],
+  hojeIso = null,
 }) {
   const catalogoMap = new Map();
   catalogoOptions.forEach((c) => {
@@ -352,7 +358,7 @@ function renderItensComIntervalo({
   });
 
   const visitasAgrupadas = Array.from(gruposPorData.values()).sort(
-    (a, b) => new Date(a.data).getTime() - new Date(b.data).getTime(),
+    (a, b) => compararCalendario(a.data, b.data),
   );
 
   const duracaoSemData = poolSemData.reduce((acc, it) => {
@@ -444,7 +450,7 @@ function renderItensComIntervalo({
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-900 text-[13px]">
-                          Visita {idx + 1} · {formatDataHumana(visita.data)}
+                          Visita {idx + 1} · {formatDataHumana(visita.data, hojeIso)}
                         </span>
                         {visita.dataHoraInicio && (
                           <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded">
@@ -569,6 +575,7 @@ function PlanoCard({
   catalogoOptions = [],
   procedimentosFeitos = [],
 }) {
+  const { fuso, hojeIso } = useAgoraDaClinica();
   const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
   const isAtivo = plano.statusCodigo === 'ativo';
   const itens = isConsultaDraft ? (draftItens ?? []) : plano.itens;
@@ -595,7 +602,7 @@ function PlanoCard({
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
             <Calendar className={`w-3.5 h-3.5 ${isAtivo ? 'text-[#00a88e]' : 'text-slate-400'}`} />
             <span>
-              {plano.criadoEm ? `Iniciado em ${formatDataPt(plano.criadoEm)}` : 'Plano de Tratamento'}
+              {plano.criadoEm ? `Iniciado em ${formatDataPt(plano.criadoEm, fuso)}` : 'Plano de Tratamento'}
             </span>
             <span
               className={`px-1.5 py-0.5 rounded font-bold text-[9px] ${isAtivo ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-600'
@@ -683,6 +690,7 @@ function PlanoCard({
                 onToggleSelecao,
                 catalogoOptions,
                 procedimentosFeitos,
+                hojeIso,
               })}
             </div>
           ) : (
@@ -843,6 +851,7 @@ function PlanoAtivoProfileCard({
   onEncerrar,
   onConcluir,
 }) {
+  const { fuso } = useAgoraDaClinica();
   const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
   const isAtivo = plano.statusCodigo === 'ativo';
   const itens = Array.isArray(plano.itens) ? plano.itens : [];
@@ -862,7 +871,7 @@ function PlanoAtivoProfileCard({
           </div>
           {plano.criadoEm ? (
             <p className="mt-2 text-[12px] font-medium text-ink-500">
-              Criado em {formatDataPt(plano.criadoEm)}
+              Criado em {formatDataPt(plano.criadoEm, fuso)}
             </p>
           ) : null}
         </div>
@@ -987,6 +996,7 @@ function PlanoHistoricoProfileCard({
   onIniciarAtendimentoItem,
   onDarBaixa,
 }) {
+  const { fuso } = useAgoraDaClinica();
   const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
   const itens = Array.isArray(plano.itens) ? plano.itens : [];
   const { total } = calcSessoesPlano(itens);
@@ -1018,7 +1028,7 @@ function PlanoHistoricoProfileCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold text-ink-900">{titulo}</p>
           <p className="mt-0.5 text-[11px] font-medium text-ink-500">
-            {formatDataPt(dataReferenciaHistorico(plano))} · {total} sessões ·{' '}
+            {formatDataPt(dataReferenciaHistorico(plano), fuso)} · {total} sessões ·{' '}
             {formatValorBrl(plano.valorTotal)}
           </p>
         </div>
@@ -1095,6 +1105,7 @@ export function PlanosTab({
   procedimentosAvaliados = [],
   onLimparProcedimentosAvaliados,
 }) {
+  const { fuso } = useAgoraDaClinica();
   const isConsulta = variant === 'consulta';
   const canCrud = isConsulta;
   const canBaixa = true;
@@ -1204,7 +1215,7 @@ export function PlanosTab({
       if (!pid) return;
       try {
         const p = await pacientesApi.get(pid);
-        if (!cancel) setPacienteData(mapBackendPatient ? mapBackendPatient(p) : p);
+        if (!cancel) setPacienteData(mapBackendPatient(p, { fuso, hojeIso: hojeDaClinica(fuso) }));
       } catch (err) {
         console.warn('Erro ao carregar dados cadastrais do paciente:', err);
       }
@@ -1213,7 +1224,7 @@ export function PlanosTab({
     return () => {
       cancel = true;
     };
-  }, [pacienteId]);
+  }, [pacienteId, fuso]);
 
 
 
@@ -1298,8 +1309,8 @@ export function PlanosTab({
   );
 
   const { fotosPorPlanoId, fotosPorPlanejamentoItemId } = useMemo(() => {
-    return resolverFotosEPlanos(sortedPlanos, galeriaFotos, listaProcedimentosFeitos);
-  }, [sortedPlanos, galeriaFotos, listaProcedimentosFeitos]);
+    return resolverFotosEPlanos(sortedPlanos, galeriaFotos, listaProcedimentosFeitos, fuso);
+  }, [sortedPlanos, galeriaFotos, listaProcedimentosFeitos, fuso]);
 
   const displayPlanos = useMemo(
     () =>
@@ -1939,9 +1950,7 @@ export function PlanosTab({
       const planoAtivo = displayPlanos[0];
       if (!planoAtivo || selecionados.size === 0) return;
 
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + diasOffset);
-      const dataIso = toLocalDateIso(targetDate);
+      const dataIso = somarDias(hojeDaClinica(fuso), diasOffset);
 
       const itensParaAgendar = (planoAtivo.itens || []).filter((it) =>
         selecionados.has(String(it.id || it.tempId)),
@@ -1957,13 +1966,13 @@ export function PlanosTab({
           );
         }
         await handleSalvarPlano(planoAtivo.id);
-        toast.success(`${itensParaAgendar.length} procedimentos agendados para ${targetDate.toLocaleDateString('pt-BR')}!`);
+        toast.success(`${itensParaAgendar.length} procedimentos agendados para ${formatarDataCalendario(dataIso, 'curta')}!`);
         limparSelecao();
       } catch (e) {
         setActionError(getApiErrorDetail(e) || e?.message || 'Erro ao agendar em lote.');
       }
     },
-    [catalogoOptions, displayPlanos, handleSalvarPlano, limparSelecao, selecionados, toast, updateItem],
+    [catalogoOptions, displayPlanos, fuso, handleSalvarPlano, limparSelecao, selecionados, toast, updateItem],
   );
 
   // Handler de Remoção em Lote
@@ -2150,7 +2159,6 @@ export function PlanosTab({
     };
 
     // Itens agendados futuros para o card de próxima visita
-    const _hojeStr = new Date().toISOString().slice(0, 10);
     const itensComData = itensPlano.filter(
       (it) => it.dataPlanejada && it.statusCodigo !== 'concluido',
     );
@@ -2190,15 +2198,15 @@ export function PlanosTab({
       paciente?.createdAt ||
       paciente?.criadoEm;
     const dataCadastroFormatada = rawDataCadastro
-      ? new Date(rawDataCadastro).toLocaleDateString('pt-BR', {
+      ? formatarInstante(rawDataCadastro, fuso, {
         month: 'short',
         year: 'numeric',
-      })
+      }) || null
       : null;
 
     const rawDataNasc = pacienteData?.dataNascimento || paciente?.dataNascimento;
     const rawIdade = pacienteData?.idade ?? paciente?.idade;
-    const idadeCalculada = rawDataNasc ? calculateAgeFromISODate(rawDataNasc) : '';
+    const idadeCalculada = rawDataNasc ? calculateAgeFromISODate(rawDataNasc, hojeDaClinica(fuso)) : '';
     const idadeFinal =
       rawIdade != null && rawIdade !== ''
         ? rawIdade
@@ -2336,7 +2344,7 @@ export function PlanosTab({
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-[#00a88e]" />
                   <span className="text-xs font-bold text-slate-800">
-                    {new Date(String(proximoItem.dataPlanejada).slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', {
+                    {formatarDataCalendario(proximoItem.dataPlanejada, {
                       weekday: 'short',
                       day: 'numeric',
                       month: 'long',
@@ -2432,7 +2440,7 @@ export function PlanosTab({
                     </span>
                     <span className="text-[11px] text-slate-400 font-mono shrink-0">
                       {proc.dataRealizacao
-                        ? new Date(proc.dataRealizacao).toLocaleDateString('pt-BR')
+                        ? formatDataPt(proc.dataRealizacao, fuso)
                         : 'Realizado'}
                     </span>
                   </div>
@@ -2520,7 +2528,7 @@ export function PlanosTab({
                       <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
                         <Calendar className={`w-3 h-3 ${isAtivo ? 'text-[#00a88e]' : 'text-slate-400'}`} />
                         <span>
-                          {plano.criadoEm ? `Iniciado em ${formatDataPt(plano.criadoEm)}` : 'Plano de Tratamento'}
+                          {plano.criadoEm ? `Iniciado em ${formatDataPt(plano.criadoEm, fuso)}` : 'Plano de Tratamento'}
                         </span>
                         <span className={`px-1 py-0.2 rounded font-bold text-[9px] ${isAtivo ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-600'}`}>
                           #{String(plano.id).slice(0, 6).toUpperCase()}

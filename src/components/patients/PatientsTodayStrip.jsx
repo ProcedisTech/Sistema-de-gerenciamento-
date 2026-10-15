@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Cake, CalendarDays } from 'lucide-react';
 import { getPatientNextBirthdayInfo } from '../../utils/patientBirthdayList.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 function primeiroNome(nome) {
   if (!nome) return '';
@@ -20,13 +21,15 @@ export function PatientsTodayStrip({ kpi, loading = false, onSelectPatient }) {
   const proximo = agendamentos[0] ?? null;
   const restantes = agendamentos.length > 1 ? agendamentos.length - 1 : 0;
 
+  const { hojeIso } = useAgoraDaClinica();
+
   const aniversariantesHoje = useMemo(() => {
     const list = kpi?.aniversariantesList ?? [];
     return list.filter((p) => {
-      const info = getPatientNextBirthdayInfo(p);
+      const info = getPatientNextBirthdayInfo(p, hojeIso);
       return info?.isToday;
     });
-  }, [kpi?.aniversariantesList]);
+  }, [kpi?.aniversariantesList, hojeIso]);
 
   if (loading) {
     return (

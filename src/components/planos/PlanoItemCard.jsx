@@ -17,7 +17,14 @@ import {
   formatDataPt,
   formatValorBrl,
 } from '../../utils/planejamentoDraftUtils.js';
-import { toLocalDateIso } from '../../utils/agendaDateUtils.js';
+import {
+  diaDoInstante,
+  ehInstante,
+  hojeDaClinica,
+  normalizarDataCalendario,
+  somarDias,
+} from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import {
   canReagendarItem,
   getPlanoItemStatusPresentation,
@@ -52,6 +59,7 @@ export function PlanoItemCard({
   visitaData: _visitaData,
   visitaHora: _visitaHora,
 }) {
+  const { fuso } = useFusoClinica();
   const [showDataMenu, setShowDataMenu] = useState(false);
   const dataMenuRef = useRef(null);
   const [showRetornoMenu, setShowRetornoMenu] = useState(false);
@@ -88,9 +96,7 @@ export function PlanoItemCard({
 
   const handleEscolherOffset = (diasOffset) => {
     setShowDataMenu(false);
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + diasOffset);
-    const dataIso = toLocalDateIso(targetDate);
+    const dataIso = somarDias(hojeDaClinica(fuso), diasOffset);
     const resolvedId = item.planejamentoItemId || item.id;
     onAgendarItem?.(
       {
@@ -119,30 +125,19 @@ export function PlanoItemCard({
       item.dataPlanejada ||
       item.data;
 
-    let baseDate = new Date();
+    const hojeIso = hojeDaClinica(fuso);
+    let baseIso = '';
     if (procDataStr && typeof procDataStr === 'string') {
-      const parsed = new Date(procDataStr.slice(0, 10) + 'T12:00:00');
-      if (!isNaN(parsed.getTime())) {
-        baseDate = parsed;
-      }
+      baseIso = ehInstante(procDataStr)
+        ? diaDoInstante(procDataStr, fuso)
+        : normalizarDataCalendario(procDataStr);
     }
-
-    const targetDate = new Date(baseDate);
-    targetDate.setDate(targetDate.getDate() + diasOffset);
 
     // Se por acaso a data alvo calculada ficar no passado, usa hoje + diasOffset
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const targetCheck = new Date(targetDate);
-    targetCheck.setHours(0, 0, 0, 0);
-
-    let finalDate = targetDate;
-    if (targetCheck < hoje) {
-      finalDate = new Date();
-      finalDate.setDate(finalDate.getDate() + diasOffset);
+    let dataIso = somarDias(baseIso || hojeIso, diasOffset);
+    if (dataIso < hojeIso) {
+      dataIso = somarDias(hojeIso, diasOffset);
     }
-
-    const dataIso = toLocalDateIso(finalDate);
     const resolvedId = item.planejamentoItemId || item.id;
 
     onAgendarRetornoItem?.(

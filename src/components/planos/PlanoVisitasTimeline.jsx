@@ -16,7 +16,8 @@ import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 import { GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { GALERIA_CATEGORIA_BADGE_CLASS } from '../patients/galeria/galeriaUiConstants.js';
 import { formatValorBrl } from '../../utils/planejamentoDraftUtils.js';
-import { toLocalDateIso } from '../../utils/agendaDateUtils.js';
+import { formatarDataCalendario, normalizarDataCalendario, somarDias } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { PlanoFotoLightbox } from './PlanoFotoLightbox.jsx';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
 import { isItemFinalizado } from '../../utils/planejamentoStatusUi.js';
@@ -32,19 +33,15 @@ function formatarTempoCadeira(minutos) {
   return `${m}min`;
 }
 
-function formatDataHumana(dataIso) {
+/** @param {string} dataIso data de calendário  @param {string} hojeIso hoje no fuso da clínica */
+function formatDataHumana(dataIso, hojeIso) {
   if (!dataIso) return '';
-  const d = new Date(String(dataIso).slice(0, 10) + 'T12:00:00');
-  const hojeStr = toLocalDateIso();
-  const dataStr = String(dataIso).slice(0, 10);
-  
-  if (dataStr === hojeStr) return 'Hoje';
-  
-  const amanha = new Date();
-  amanha.setDate(amanha.getDate() + 1);
-  if (dataStr === toLocalDateIso(amanha)) return 'Amanhã';
+  const dataStr = normalizarDataCalendario(dataIso);
 
-  return d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (hojeIso && dataStr === hojeIso) return 'Hoje';
+  if (hojeIso && dataStr === somarDias(hojeIso, 1)) return 'Amanhã';
+
+  return formatarDataCalendario(dataStr, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function PlanoVisitaGaleria({
@@ -253,6 +250,7 @@ export function PlanoVisitasTimeline({
   termosFaltantes = [],
   procedimentosFeitos = [],
 }) {
+  const { hojeIso } = useAgoraDaClinica();
   const [lightboxData, setLightboxData] = useState(null); // { foto, fotos }
 
   const itens = useMemo(() => Array.isArray(plano?.itens) ? plano.itens : [], [plano]);
@@ -487,7 +485,7 @@ export function PlanoVisitasTimeline({
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-900 text-[13px]">
-                          Visita {idx + 1} · {visita.isRetornoVisita ? 'Retorno Clínico · ' : ''}{formatDataHumana(visita.data)}
+                          Visita {idx + 1} · {visita.isRetornoVisita ? 'Retorno Clínico · ' : ''}{formatDataHumana(visita.data, hojeIso)}
                         </span>
                         {visita.dataHoraInicio && (
                           <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded">

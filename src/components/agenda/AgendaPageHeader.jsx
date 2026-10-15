@@ -1,4 +1,5 @@
 import { formatGreetingLine, formatSubtitleForDay } from '../../utils/agendaDayInsights.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function AgendaPageHeader({
   userDisplayName = '',
@@ -8,8 +9,9 @@ export function AgendaPageHeader({
   nextAppointment = null,
   onScrollToNext,
 }) {
+  const { minutos } = useAgoraDaClinica();
   const isToday = selectedDay === todayIso;
-  const greeting = formatGreetingLine(userDisplayName);
+  const greeting = formatGreetingLine(userDisplayName, minutos);
   const subtitle = formatSubtitleForDay({
     selectedDay,
     todayIso,

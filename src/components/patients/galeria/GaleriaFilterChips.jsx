@@ -3,12 +3,10 @@ import { Filter } from 'lucide-react';
 import { PatientFilterChip } from '../PatientFilterChip.jsx';
 import { GALERIA_CATEGORIA_LABELS } from '../../../utils/pacienteGaleria.js';
 import { ORDEM_CATEGORIAS } from './galeriaUiConstants.js';
+import { formatarDataCalendario } from '../../../utils/datasClinica.js';
 
 function formatMesChipLabel(m) {
-  return new Date(`${m}-01T12:00:00`).toLocaleDateString('pt-BR', {
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatarDataCalendario(`${m}-01`, { month: 'long', year: 'numeric' }) || m;
 }
 
 export function GaleriaFilterChips({

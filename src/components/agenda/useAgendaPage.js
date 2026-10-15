@@ -25,6 +25,9 @@ import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
 import { formatAgendamentoApiError, isAgendaSlotOverlapError } from '../../utils/agendaErrors';
 import {
+  buildCalendarCells,
+  formatMonthYearLabel,
+  isoDeDataCalendario,
   monthContainsIso,
   monthKey,
   monthRangeIso,
@@ -32,6 +35,7 @@ import {
   toDateKey,
   weekContainsIso,
 } from '../../utils/agendaDateUtils';
+import { diaDaSemana, hojeDaClinica, parseDataCalendario, somarDias } from '../../utils/datasClinica.js';
 import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
 import {
   fetchKpiDrilldownRows,
@@ -70,7 +74,7 @@ import {
   dayBoundsFromWindows,
   getDayWindowsForIso,
 } from '../../utils/disponibilidadeDayWindows.js';
-import { useBrasiliaTime } from '../../hooks/useBrasiliaTime.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
 import { addMinutesToTime } from '../../utils/agendaMapping';
@@ -129,17 +133,10 @@ export function snapAgendaDuracaoMin(value) {
   return Math.min(DUR_MAX, Math.max(DUR_MIN, snapped));
 }
 
-function pad2(value) {
-  return String(value).padStart(2, '0');
-}
-
-export function toLocalDateIso(date = new Date()) {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-function capitalize(value) {
-  if (!value) return '';
-  return value.charAt(0).toUpperCase() + value.slice(1);
+/** Primeiro dia do mês de uma data de calendário "AAAA-MM-DD", como Date de campos locais (grade). */
+function primeiroDoMes(iso) {
+  const p = parseDataCalendario(iso);
+  return p ? new Date(p.ano, p.mes - 1, 1) : null;
 }
 
 function normalizeEquipeList(raw) {
@@ -177,7 +174,7 @@ function normalizePatientOption(patient) {
 
 function defaultBloqueioForm(selectedDay) {
   return {
-    data: selectedDay || toLocalDateIso(),
+    data: selectedDay || '',
     horaInicio: '09:00',
     horaFim: '10:00',
     duracaoMin: 60,
@@ -247,7 +244,7 @@ function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
     telefone: '',
     procedimentoNome: '',
     catalogoProcedimentoSaudeIds: proc.id ? [String(proc.id)] : [],
-    data: selectedDay || toLocalDateIso(),
+    data: selectedDay || '',
     horaInicio: '',
     horaFimSlot: '',
     duracaoMin: 30,
@@ -268,24 +265,6 @@ function defaultForm(selectedDay, _patientOptions, firstProcedimentoOption) {
     retornoHoraPai: null,
     retornoStatusPai: null,
   };
-}
-
-function buildCalendarCells(monthDate) {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const start = new Date(year, month, 1 - firstOfMonth.getDay());
-
-  return Array.from({ length: 42 }).map((_, index) => {
-    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
-    const iso = toLocalDateIso(date);
-    return {
-      iso,
-      day: date.getDate(),
-      inCurrentMonth: date.getMonth() === month,
-      isToday: iso === toLocalDateIso(),
-    };
-  });
 }
 
 function groupByDate(rows) {
@@ -309,23 +288,15 @@ export function formatLongDate(iso, options = {}) {
   }).format(date);
 }
 
-function parseIsoLocal(iso) {
-  const k = toDateKey(iso) || String(iso || '');
-  const [y, m, d] = k.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** Domingo da semana que contém a data `iso` (YYYY-MM-DD). */
+/** Domingo da semana que contém a data `iso` (YYYY-MM-DD); '' se inválida. */
 export function startOfWeekSundayIso(iso) {
-  const date = parseIsoLocal(iso);
-  date.setDate(date.getDate() - date.getDay());
-  return toLocalDateIso(date);
+  const k = toDateKey(iso);
+  const dow = diaDaSemana(k);
+  return Number.isNaN(dow) ? '' : somarDias(k, -dow);
 }
 
 export function addDaysIso(iso, delta) {
-  const date = parseIsoLocal(iso);
-  date.setDate(date.getDate() + delta);
-  return toLocalDateIso(date);
+  return somarDias(toDateKey(iso), delta);
 }
 
 const MONTH_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -348,12 +319,19 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const { bumpRevision } = useDisponibilidadeRevision();
   const { isNivel1, canSeeAgendaMulti, canSeeAgendaPropria, canEncaixarForaDisp, canDeleteAgenda, canAparecerNaAgenda } = usePapel();
   const { success: toastSuccess, error: toastError } = useToast();
-  const { todayIso, currentMinutes: currentBrasiliaMinutes } = useBrasiliaTime();
-  const [monthDate, setMonthDate] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const [selectedDay, setSelectedDay] = useState(todayIso);
+  const { hojeIso: todayIso, minutos: nowMinutes, fuso: fusoClinica } = useAgoraDaClinica();
+  // Estados que partem de "hoje" nascem null: o hook monta antes do gate do shell (fuso ainda não carregado).
+  const [monthDate, setMonthDate] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [weekStartIso, setWeekStartIso] = useState(null);
+  const [dispMonthDate, setDispMonthDate] = useState(null);
+  if (todayIso && monthDate == null) {
+    // Ajuste durante o render (não em effect): nenhum filho chega a receber null depois do relógio pronto.
+    setMonthDate(primeiroDoMes(todayIso));
+    setSelectedDay((prev) => prev ?? todayIso);
+    setWeekStartIso((prev) => prev ?? startOfWeekSundayIso(todayIso));
+    setDispMonthDate((prev) => prev ?? primeiroDoMes(todayIso));
+  }
   const [viewMode, setViewMode] = useState('grid');
   const [statusFilters, setStatusFilters] = useState(() => new Set(ALL_STATUS_FILTERS));
   const [appointments, setAppointments] = useState([]);
@@ -370,7 +348,6 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [slotDuracaoMin, setSlotDuracaoMinState] = useState(30);
   const [daySheetOpen, setDaySheetOpen] = useState(false);
   const [hojeSessionCount, setHojeSessionCount] = useState(0);
-  const [weekStartIso, setWeekStartIso] = useState(() => startOfWeekSundayIso(toLocalDateIso()));
   const [weekGridAppointments, setWeekGridAppointments] = useState([]);
   const [disponibilidades, setDisponibilidades] = useState({});
   const [clinicaHorarios, setClinicaHorarios] = useState([]);
@@ -473,10 +450,6 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     };
   }, [authEnabled, orgIdStr]);
 
-  const [dispMonthDate, setDispMonthDate] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
   const [dispCalendarioDia, setDispCalendarioDia] = useState('');
   const [dispMonthDtos, setDispMonthDtos] = useState([]);
   const [dispMonthLoading, setDispMonthLoading] = useState(false);
@@ -559,11 +532,11 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     await refreshEquipe();
   }, [authEnabled, refreshEquipe]);
 
-  const currentYm = useMemo(() => monthKey(monthDate), [monthDate]);
+  const currentYm = useMemo(() => (monthDate ? monthKey(monthDate) : ''), [monthDate]);
 
   const loadKpiDrilldownRows = useCallback(
     async ({ period, status, profissionalRoleUserId }) => {
-      if (!authEnabled) return [];
+      if (!authEnabled || !todayIso || !monthDate) return [];
       return fetchKpiDrilldownRows({
         period,
         status,
@@ -609,7 +582,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const runMonthLoad = useCallback(
     async (targetMonth) => {
       dispMonthCacheRef.current = {};
-      if (!authEnabled) {
+      if (!authEnabled || !targetMonth) {
         setAppointments([]);
         setLoading(false);
         setError('');
@@ -653,7 +626,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   );
 
   const refreshHojeSessionCount = useCallback(async () => {
-    if (!authEnabled) {
+    if (!authEnabled || !todayIso) {
       setHojeSessionCount(0);
       return;
     }
@@ -661,7 +634,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     const controller = new AbortController();
     hojeLoadAbortRef.current = controller;
     try {
-      const hoje = toLocalDateIso();
+      const hoje = todayIso;
       const rawSlots = await agendasApi.byRange(hoje, hoje, { signal: controller.signal });
       const dtos = normalizeApiList(rawSlots).filter(isKpiCountableAgendaDto);
       setHojeSessionCount(dtos.length);
@@ -669,10 +642,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       if (isAbortError(e)) return;
       setHojeSessionCount(0);
     }
-  }, [authEnabled]);
+  }, [authEnabled, todayIso]);
 
   const refreshHojeIfOffCurrentMonth = useCallback(async () => {
-    if (monthContainsIso(monthDate, todayIso)) return;
+    if (monthDate && monthContainsIso(monthDate, todayIso)) return;
     await refreshHojeSessionCount();
   }, [monthDate, todayIso, refreshHojeSessionCount]);
 
@@ -701,7 +674,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, [authEnabled, monthDate, runMonthLoad]);
 
   const dispCacheKey = useCallback((roleId, md) => {
-    return `${String(roleId || '').trim()}:${monthKey(md)}:${canSeeAgendaMulti ? 'multi' : 'propria'}`;
+    return `${String(roleId || '').trim()}:${md ? monthKey(md) : ''}:${canSeeAgendaMulti ? 'multi' : 'propria'}`;
   }, [canSeeAgendaMulti]);
 
   const buscarAgendaParaDisponibilidade = useCallback(
@@ -717,7 +690,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const ensureDispMonthLoaded = useCallback(
     async (monthDateTarget) => {
       const role = String(roleUserIdAgenda || '').trim();
-      if (!role || !authEnabled) {
+      if (!role || !authEnabled || !monthDateTarget) {
         setDispMonthDtos([]);
         return [];
       }
@@ -806,9 +779,9 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   useEffect(() => {
     if (!modalMode) return undefined;
     const iso = toDateKey(form.data) || todayIso;
+    if (!iso) return undefined;
     setDispCalendarioDia(iso);
-    const [y, m] = iso.split('-').map(Number);
-    setDispMonthDate(new Date(y, m - 1, 1));
+    setDispMonthDate((prev) => primeiroDoMes(iso) ?? prev);
     return undefined;
     // Só ao abrir/fechar modal — não seguir form.data (coluna esquerda).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- form.data intencionalmente omitido
@@ -831,9 +804,9 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   useEffect(() => {
     if (!bloqueioModalOpen) return undefined;
     const iso = toDateKey(bloqueioForm.data) || todayIso;
+    if (!iso) return undefined;
     setDispCalendarioDia(iso);
-    const [y, m] = iso.split('-').map(Number);
-    setDispMonthDate(new Date(y, m - 1, 1));
+    setDispMonthDate((prev) => primeiroDoMes(iso) ?? prev);
     return undefined;
     // Só ao abrir/fechar modal de bloqueio — não seguir bloqueioForm.data a cada clique.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bloqueioForm.data intencionalmente omitido
@@ -864,8 +837,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     const formDay = toDateKey(form.data);
     const cacheKey = dispCacheKey(role, dispMonthDate);
     const cached = dispMonthCacheRef.current[cacheKey];
-    const ym = monthKey(dispMonthDate);
-    if (cached?.dtos && formDay.startsWith(ym)) {
+    const ym = dispMonthDate ? monthKey(dispMonthDate) : '';
+    if (cached?.dtos && ym && formDay.startsWith(ym)) {
       const dayDtos = cached.dtos.filter(
         (d) => d?.dataAgendamento && String(d.dataAgendamento).slice(0, 10) === formDay
       );
@@ -1205,14 +1178,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           anamneseApi.listPaciente(id).catch(() => []),
         ]);
         if (cancelled) return;
-        const base = mapBackendPatient(dto);
+        const base = mapBackendPatient(dto, { fuso: fusoClinica, hojeIso: hojeDaClinica(fusoClinica) });
         const procedures = Array.isArray(procs) ? procs : [];
         const anamneseList = Array.isArray(anamList) ? anamList : [];
         setPacienteContext({
           ...base,
           procedures,
           anamneseList,
-          anamneseDesatualizada: resolveAnamneseDesatualizada(base, anamneseList),
+          anamneseDesatualizada: resolveAnamneseDesatualizada(base, anamneseList, fusoClinica),
         });
       } catch {
         if (!cancelled) setPacienteContext(null);
@@ -1223,7 +1196,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     return () => {
       cancelled = true;
     };
-  }, [modalMode, form.pacienteId]);
+  }, [modalMode, form.pacienteId, fusoClinica]);
 
   const dispProfissionalDisponibilidade = useMemo(() => {
     const role = String(roleUserIdAgenda || '').trim();
@@ -1247,7 +1220,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, [form.catalogoProcedimentoSaudeIds, procedimentoOptions]);
 
   const dispHeatmap = useMemo(() => {
-    if (!modalMode) return null;
+    if (!modalMode || !dispMonthDate) return null;
     const role = String(roleUserIdAgenda || '').trim();
     if (!role) return null;
     return buildMonthHeatmap({
@@ -1274,7 +1247,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   ]);
 
   const dispNeutralHeatmap = useMemo(() => {
-    if (!modalMode) return null;
+    if (!modalMode || !dispMonthDate) return null;
     const role = String(roleUserIdAgenda || '').trim();
     if (role) return null;
     if (Array.isArray(clinicaHorarios) && clinicaHorarios.length > 0) {
@@ -1305,7 +1278,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const dispCalendarioHeatmap = dispHeatmap ?? dispNeutralHeatmap;
 
   const bloqueioCalendarioHeatmap = useMemo(() => {
-    if (!bloqueioModalOpen) return null;
+    if (!bloqueioModalOpen || !dispMonthDate) return null;
     const role = String(roleUserIdAgenda || '').trim();
     if (!role) return null;
     return buildMonthHeatmap({
@@ -1369,7 +1342,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       selectedFormHora: form.horaInicio,
       selectedRangeFimSlot: form.horaFimSlot,
       todayIso,
-      currentBrasiliaMinutes,
+      currentMinutes: nowMinutes,
     });
   }, [
     modalMode,
@@ -1382,7 +1355,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     editingAppointment?.agendaId,
     roleUserIdAgenda,
     todayIso,
-    currentBrasiliaMinutes,
+    nowMinutes,
   ]);
 
   const clearRangeSelection = useCallback(() => {
@@ -1454,16 +1427,16 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, []);
 
   const goDispPrevMonth = useCallback(() => {
-    setDispMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setDispMonthDate((prev) => (prev ? new Date(prev.getFullYear(), prev.getMonth() - 1, 1) : prev));
   }, []);
 
   const goDispNextMonth = useCallback(() => {
-    setDispMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setDispMonthDate((prev) => (prev ? new Date(prev.getFullYear(), prev.getMonth() + 1, 1) : prev));
   }, []);
 
   const handleProximoHorarioLivre = useCallback(async () => {
     const role = String(roleUserIdAgenda || '').trim();
-    if (!role) return;
+    if (!role || !dispMonthDate || !todayIso) return;
 
     let monthCursor = dispMonthDate;
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -1485,6 +1458,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         dtos,
         disponibilidade: disp,
         todayIso,
+        nowMinutes,
         excludeAgendaId: editingAppointment?.agendaId,
         profissionalRoleUserId: role,
         monthDates: [monthCursor],
@@ -1492,13 +1466,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
       if (result) {
         setDispCalendarioDia(result.iso);
-        setDispMonthDate(
-          new Date(
-            Number(result.iso.slice(0, 4)),
-            Number(result.iso.slice(5, 7)) - 1,
-            1
-          )
-        );
+        setDispMonthDate((prev) => primeiroDoMes(result.iso) ?? prev);
         setForm((prev) => ({
           ...prev,
           data: result.iso,
@@ -1521,6 +1489,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     form.horaFimSlot,
     form.duracaoMin,
     todayIso,
+    nowMinutes,
     editingAppointment?.agendaId,
     roleUserIdAgenda,
     ensureDispMonthLoaded,
@@ -1532,10 +1501,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     [slotsOcupados]
   );
 
-  const weekEndIso = useMemo(() => addDaysIso(weekStartIso, 6), [weekStartIso]);
+  const weekEndIso = useMemo(() => (weekStartIso ? addDaysIso(weekStartIso, 6) : ''), [weekStartIso]);
 
   const weekDayIsos = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDaysIso(weekStartIso, i)),
+    () => (weekStartIso ? Array.from({ length: 7 }, (_, i) => addDaysIso(weekStartIso, i)) : []),
     [weekStartIso]
   );
 
@@ -1549,6 +1518,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       if (!authEnabled) setWeekGridAppointments([]);
       return;
     }
+    if (!weekStartIso) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1568,7 +1538,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, [authEnabled, viewMode, weekStartIso, weekEndIso, canSeeAgendaMulti, canSeeAgendaPropria, roleUserId]);
 
   const refreshWeekGrid = useCallback(async () => {
-    if (!authEnabled || viewMode !== 'semana') return;
+    if (!authEnabled || viewMode !== 'semana' || !weekStartIso) return;
     try {
       const weekOpts = {};
       if (!canSeeAgendaMulti && canSeeAgendaPropria && roleUserId) {
@@ -1956,11 +1926,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const res = await agendasApi.bloquearPeriodo(body);
       const q = Number(res?.quantidadeCancelada) || 0;
 
-      const nextMonthDate = new Date(
-        Number(data.slice(0, 4)),
-        Number(data.slice(5, 7)) - 1,
-        1,
-      );
+      const nextMonthDate = primeiroDoMes(data);
       setSelectedDay(data);
       if (resolveMonthRefreshAction(monthDate, nextMonthDate) === 'loadMonth') {
         await loadMonth(nextMonthDate);
@@ -2145,21 +2111,19 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   );
 
   const syncWeekFromSelection = useCallback(() => {
-    setWeekStartIso(startOfWeekSundayIso(selectedDay));
+    const inicio = startOfWeekSundayIso(selectedDay);
+    if (inicio) setWeekStartIso(inicio);
   }, [selectedDay]);
 
   const goWeekPrev = useCallback(() => {
-    setWeekStartIso((prev) => addDaysIso(prev, -7));
+    setWeekStartIso((prev) => (prev ? addDaysIso(prev, -7) : prev));
   }, []);
 
   const goWeekNext = useCallback(() => {
-    setWeekStartIso((prev) => addDaysIso(prev, 7));
+    setWeekStartIso((prev) => (prev ? addDaysIso(prev, 7) : prev));
   }, []);
 
-  const monthLabel = useMemo(() => {
-    const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(monthDate);
-    return capitalize(label);
-  }, [monthDate]);
+  const monthLabel = useMemo(() => (monthDate ? formatMonthYearLabel(monthDate) : ''), [monthDate]);
 
   const filteredAppointments = useMemo(
     () => filterAppointmentsByStatusFilters(appointments, statusFilters),
@@ -2204,6 +2168,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const appointmentsByDateRaw = useMemo(() => groupByDate(appointments), [appointments]);
 
   const monthVisibleCount = useMemo(() => {
+    if (!monthDate) return 0;
     const { start, end } = monthRangeIso(monthDate);
     return filterKpiCountableAppointments(filteredAppointments).filter((row) => {
       const d = toDateKey(row.data);
@@ -2212,7 +2177,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, [filteredAppointments, monthDate]);
 
   const statsHojeCount = useMemo(() => {
-    if (monthContainsIso(monthDate, todayIso)) {
+    if (monthDate && todayIso && monthContainsIso(monthDate, todayIso)) {
       return countHojeFromAppointments(appointments, todayIso);
     }
     return hojeSessionCount;
@@ -2235,7 +2200,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       .map((date) => ({ date, items: grouped[date] }));
   }, [filteredAppointments]);
 
-  const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
+  const calendarCells = useMemo(
+    () => (monthDate ? buildCalendarCells(monthDate, todayIso) : []),
+    [monthDate, todayIso],
+  );
 
   const setRoleUserIdAgendaPublic = useCallback((id) => {
     setRoleUserIdAgenda(String(id ?? '').trim());
@@ -2555,7 +2523,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     } else if (
       form.data === todayIso &&
       form.horaInicio &&
-      parseHhmmToMinutes(form.horaInicio) < currentBrasiliaMinutes - 5
+      nowMinutes != null &&
+      parseHhmmToMinutes(form.horaInicio) < nowMinutes - 5
     ) {
       nextErrors.horaInicio = 'Este horário já passou. Selecione um horário futuro.';
     }
@@ -2571,7 +2540,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [form, todayIso, modalMode, roleUserIdAgenda, retornosVinculadosReagendar, currentBrasiliaMinutes]);
+  }, [form, todayIso, modalMode, roleUserIdAgenda, retornosVinculadosReagendar, nowMinutes]);
 
   const saveAppointment = useCallback(async ({ onConflictResult } = {}) => {
     if (isNivel1) return false;
@@ -2793,7 +2762,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         }
       }
 
-      const nextMonthDate = new Date(Number(form.data.slice(0, 4)), Number(form.data.slice(5, 7)) - 1, 1);
+      const nextMonthDate = primeiroDoMes(form.data);
       const savedRole = String(roleUserIdAgenda || '').trim();
       if (savedRole) {
         delete dispMonthCacheRef.current[dispCacheKey(savedRole, nextMonthDate)];
@@ -2882,34 +2851,35 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const closeDaySheet = useCallback(() => setDaySheetOpen(false), []);
 
   const moveSelectedDay = useCallback((days) => {
-    const [year, month, day] = selectedDay.split('-').map(Number);
-    const next = new Date(year, month - 1, day + days);
-    const iso = toLocalDateIso(next);
+    const iso = somarDias(toDateKey(selectedDay), days);
+    if (!iso) return;
     setSelectedDay(iso);
-    setMonthDate(new Date(next.getFullYear(), next.getMonth(), 1));
+    setMonthDate(primeiroDoMes(iso));
   }, [selectedDay]);
 
   const goPrevMonth = useCallback(() => {
     setMonthDate((prev) => {
+      if (!prev) return prev;
       const next = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
-      setSelectedDay(toLocalDateIso(next));
+      setSelectedDay(isoDeDataCalendario(next));
       return next;
     });
   }, []);
 
   const goNextMonth = useCallback(() => {
     setMonthDate((prev) => {
+      if (!prev) return prev;
       const next = new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
-      setSelectedDay(toLocalDateIso(next));
+      setSelectedDay(isoDeDataCalendario(next));
       return next;
     });
   }, []);
 
   const goToToday = useCallback(() => {
-    const now = new Date();
-    setMonthDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    setSelectedDay(toLocalDateIso(now));
-  }, []);
+    if (!todayIso) return;
+    setMonthDate(primeiroDoMes(todayIso));
+    setSelectedDay(todayIso);
+  }, [todayIso]);
 
   return {
     isNivel1,
@@ -2919,6 +2889,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     monthVisibleCount,
     monthDate,
     todayIso,
+    nowMinutes,
     calendarCells,
     currentYm,
     daySheetOpen,

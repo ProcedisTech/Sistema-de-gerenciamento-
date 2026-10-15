@@ -1,17 +1,18 @@
 import React from 'react';
+import { formatarInstante } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
-function formatarDataHora(valor) {
+function formatarDataHora(valor, fuso) {
   if (!valor) return null;
-  const d = new Date(valor);
-  if (!Number.isFinite(d.getTime())) return null;
-  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return formatarInstante(valor, fuso, 'dataHoraSeg') || null;
 }
 
 /** Pedido de anamnese em branco aguardando o paciente. Visual do bloco "Aguardando resposta" de AnamneseAssinaturaActions. */
 export function SolicitacaoPendenteFaixa({ pedido, onVerQr, onCancelar }) {
+  const { fuso } = useFusoClinica();
   if (!pedido) return null;
-  const enviada = formatarDataHora(pedido.enviadoEm);
-  const expira = formatarDataHora(pedido.expiraEm);
+  const enviada = formatarDataHora(pedido.enviadoEm, fuso);
+  const expira = formatarDataHora(pedido.expiraEm, fuso);
   return (
     <div className="mb-4 flex flex-col items-end gap-1" data-testid="solicitacao-pendente-faixa">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 py-1.5 text-[11px] font-bold tracking-wide text-[#1d4ed8]">
