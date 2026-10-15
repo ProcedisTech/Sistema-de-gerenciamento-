@@ -1,5 +1,5 @@
 import React from 'react';
-import { MousePointer2, MoveDiagonal, Eraser } from 'lucide-react';
+import { CircleDot, MoveDiagonal, Eraser } from 'lucide-react';
 
 export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
   return (
@@ -13,7 +13,7 @@ export function MapaToolbarModo({ modo, setModo, tamanho, setTamanho }) {
               : 'text-[#64748b] hover:text-[#334155] border border-transparent'
             }`}
         >
-          <MousePointer2 className="h-3.5 w-3.5" />
+          <CircleDot className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Ponto</span>
         </button>
         <button

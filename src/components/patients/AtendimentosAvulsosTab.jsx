@@ -43,7 +43,8 @@ export function AtendimentosAvulsosTab({
     );
   }
 
-  if (!atendimentosAvulsos || atendimentosAvulsos.length === 0) {
+  const totalRegistros = (atendimentosAvulsos?.length || 0) + (fotosAvulsas?.length || 0);
+  if (totalRegistros === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-2xs space-y-3">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 border border-purple-100 shadow-2xs">
@@ -66,7 +67,9 @@ export function AtendimentosAvulsosTab({
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-slate-900">Atendimentos Avulsos</h3>
             <span className="px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold">
-              {atendimentosAvulsos.length} {atendimentosAvulsos.length === 1 ? 'atendimento' : 'atendimentos'}
+              {atendimentosAvulsos.length > 0
+                ? `${atendimentosAvulsos.length} ${atendimentosAvulsos.length === 1 ? 'atendimento' : 'atendimentos'}`
+                : `${fotosAvulsas.length} ${fotosAvulsas.length === 1 ? 'registro' : 'registros'}`}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">

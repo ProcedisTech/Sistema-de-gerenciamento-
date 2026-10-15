@@ -20,6 +20,7 @@ import {
   XCircle,
   Sparkles,
   Info,
+  Loader2,
 } from 'lucide-react';
 import {
   authHeadersForFetch,
@@ -55,6 +56,9 @@ import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
 import { criarItemProcedimentoSessao } from '../../utils/procedimentoSessaoFactory.js';
+import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
+import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
+import { GaleriaArquivoImage } from '../patients/GaleriaArquivoImage.jsx';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
 
@@ -1082,8 +1086,8 @@ export function Step3Termos({
               <div
                 key={index}
                 className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border px-4 py-3 ${recusado
-                    ? 'border-red-200 bg-red-50'
-                    : 'border-emerald-200 bg-emerald-50'
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-emerald-200 bg-emerald-50'
                   }`}
               >
                 <div className="flex items-center gap-3">
@@ -1140,8 +1144,8 @@ export function Step3Termos({
                       });
                     }}
                     className={`rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold border transition-colors ${recusado
-                        ? 'text-red-700 border-red-200 hover:bg-red-100'
-                        : 'text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      ? 'text-red-700 border-red-200 hover:bg-red-100'
+                      : 'text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                       }`}
                   >
                     Ver PDF
@@ -1176,10 +1180,10 @@ export function Step3Termos({
               type="button"
               onClick={() => setTermoMenuOpen((o) => !o)}
               className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 transition-all duration-150 ${termoMenuOpen
-                  ? 'border-[#00a88e] bg-[#f0fdfa] ring-2 ring-[#00a88e]/20'
-                  : termoSelecionado
-                    ? 'border-[#00a88e] bg-[#f0fdfa]'
-                    : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/40 hover:bg-[#f8fafc]'
+                ? 'border-[#00a88e] bg-[#f0fdfa] ring-2 ring-[#00a88e]/20'
+                : termoSelecionado
+                  ? 'border-[#00a88e] bg-[#f0fdfa]'
+                  : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/40 hover:bg-[#f8fafc]'
                 }`}
             >
               <div
@@ -1934,6 +1938,25 @@ export function Step4Procedimento({
     return [];
   }, [procedimentosSessao, catalogoId, nomeProcedimento, procedimentoSearchOptions]);
 
+  const procsIdsKey = useMemo(() => {
+    return (procedimentosSelecionados || [])
+      .map((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || ''))
+      .filter((id) => id && id !== 'undefined' && id !== 'null')
+      .sort()
+      .join(',');
+  }, [procedimentosSelecionados]);
+
+  useEffect(() => {
+    if (!procsIdsKey || resolucao !== null || typeof onValidarTermosCatalogo !== 'function') return;
+    const ids = procsIdsKey.split(',').filter(Boolean);
+    if (ids.length === 0) return;
+    const nomes = (procedimentosSelecionados || []).map((p) => p.nomeProcedimento || p.nome || '').filter(Boolean).join(' + ');
+    void onValidarTermosCatalogo(ids, nomes, {
+      abrirModal: false,
+      procedimentosSessaoOverride: procedimentosSessao,
+    });
+  }, [procsIdsKey, resolucao, onValidarTermosCatalogo, procedimentosSelecionados, procedimentosSessao]);
+
   const itensPlanoPendentes = useMemo(() => {
     const rawItens = journeyPlanejamentoCtx?.itens || journeyPlanejamentoCtx?.planejamentoItens || [];
     if (!Array.isArray(rawItens) || rawItens.length === 0) return [];
@@ -2209,8 +2232,8 @@ export function Step4Procedimento({
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState(GALERIA_CATEGORIA.ANTES);
-  /** Lightbox somente leitura para fotos da avaliação (referência). */
-  const [referencePreviewUrl, setReferencePreviewUrl] = React.useState(null);
+  /** Lightbox para fotos da avaliação (referência). */
+  const [referenceLightboxData, setReferenceLightboxData] = React.useState(null);
 
   const [laneMenuOpen, setLaneMenuOpen] = React.useState(false);
   const intendedCategoryRef = React.useRef(null);
@@ -2236,15 +2259,6 @@ export function Step4Procedimento({
 
     setLaneMenuOpen(false);
   };
-
-  React.useEffect(() => {
-    if (!referencePreviewUrl) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setReferencePreviewUrl(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [referencePreviewUrl]);
 
   React.useEffect(() => {
     if (!laneMenuOpen) return undefined;
@@ -2319,117 +2333,11 @@ export function Step4Procedimento({
         </div>
       </div>
 
-      {(execucaoBloqueadaPorTermos && itensFaltantes.length > 0) ||
-        consentimentosAguardando.length > 0 ||
-        itensSemTermoExigido.length > 0 ? (
-        <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-[#00a88e]" />
-              <h4 className="text-[13px] font-bold text-slate-800">
-                Termos de Consentimento da Sessão
-              </h4>
-            </div>
-            <div className="flex items-center gap-2">
-              {execucaoBloqueadaPorTermos && itensFaltantes.length > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700">
-                  <X className="h-3 w-3 text-rose-500" />
-                  {itensFaltantes.length} {itensFaltantes.length > 1 ? 'pendentes' : 'pendente'}
-                </span>
-              ) : null}
-              {consentimentosAguardando.length > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-                  <Check className="h-3 w-3 text-emerald-600" />
-                  {consentimentosAguardando.length} {consentimentosAguardando.length > 1 ? 'assinados' : 'assinado'}
-                </span>
-              ) : null}
-              {itensSemTermoExigido.length > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
-                  <Info className="h-3 w-3 text-blue-500" />
-                  {itensSemTermoExigido.length} {itensSemTermoExigido.length > 1 ? 'dispensados' : 'dispensado'}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="divide-y divide-slate-100 pt-1">
-            {execucaoBloqueadaPorTermos && itensFaltantes.length > 0
-              ? itensFaltantes.map((item) => (
-                <div key={item.termoId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
-                      <X className="h-3.5 w-3.5 stroke-[2.5]" />
-                    </div>
-                    <div className="min-w-0 text-[13px]">
-                      <span className="font-semibold text-slate-900">
-                        {item.procedimentos.length > 0 ? item.procedimentos.join(', ') : 'Procedimento'}:
-                      </span>{' '}
-                      <span className="text-slate-600">{item.titulo}</span>
-                    </div>
-                  </div>
-                  {typeof onIrParaTermosGate === 'function' ? (
-                    <button
-                      type="button"
-                      onClick={() => onIrParaTermosGate(item.termoId)}
-                      className="ml-auto shrink-0 text-[12px] font-bold text-[#00a88e] hover:text-[#008f79] hover:underline"
-                    >
-                      Assinar agora →
-                    </button>
-                  ) : null}
-                </div>
-              ))
-              : null}
-
-            {consentimentosAguardando.map((c) => (
-              <div key={c.termoId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                    <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                  </div>
-                  <div className="min-w-0 text-[13px]">
-                    <span className="font-semibold text-slate-900">
-                      {c.procedimentos && c.procedimentos.length > 0
-                        ? c.procedimentos.join(', ')
-                        : 'Procedimento'}:
-                    </span>{' '}
-                    <span className="text-slate-600">{c.titulo}</span>
-                  </div>
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-slate-400">
-                  {c.assinadoEm ? <span>em {formatTimestamp(c.assinadoEm)}</span> : null}
-                  <span className="rounded-full border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
-                    Assinado
-                  </span>
-                </div>
-              </div>
-            ))}
-
-            {itensSemTermoExigido.map((item, idx) => (
-              <div key={item.catalogoId || item.id || `sem_termo_${idx}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <Info className="h-3.5 w-3.5 stroke-[2.5]" />
-                  </div>
-                  <div className="min-w-0 text-[13px]">
-                    <span className="font-semibold text-slate-900">{item.nome || 'Procedimento'}:</span>{' '}
-                    <span className="text-slate-600">Não requer termo de consentimento</span>
-                  </div>
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px]">
-                  <span className="rounded-full border border-blue-200/60 bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
-                    Dispensado
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
+      {/* ── 1. PROCEDIMENTOS & DESCRIÇÃO (VEM PRIMEIRO) ── */}
       <div
-        className={`mb-6 space-y-5 rounded-2xl border bg-white p-4 sm:p-6 ${step4Errors.nomeProcedimento || step4Errors.catalogoId
-            ? 'border-red-300'
-            : 'border-[#00a88e]/25'
+        className={`mb-6 space-y-4 rounded-2xl border bg-white p-4 sm:p-6 ${step4Errors.nomeProcedimento || step4Errors.catalogoId
+          ? 'border-red-300'
+          : 'border-[#00a88e]/25'
           }`}
       >
         <div className="space-y-3">
@@ -2516,40 +2424,209 @@ export function Step4Procedimento({
                 setTimeout(() => setObsaveStatus(''), 2500);
               }}
               placeholder="Ex: Aplicação de 20U de toxina botulínica na glabela, 10U nas linhas frontais. Produto: Dysport lote #XXXX. Paciente tolerou bem..."
-              rows={5}
-              className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px]"
+              rows={2}
+              className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-3.5 py-2 text-[14px] outline-none focus:border-[#00a88e] sm:text-[13px]"
             />
           </div>
         </div>
       </div>
 
+      {/* ── 2. TERMOS DE CONSENTIMENTO DA SESSÃO (LOGO ABAIXO) ── */}
+      {procedimentosSelecionados.length > 0 ? (
+        <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-[#00a88e]" />
+              <h4 className="text-[13px] font-bold text-slate-800">
+                Termos de Consentimento da Sessão
+              </h4>
+            </div>
+            <div className="flex items-center gap-2">
+              {resolucao === null ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                  <Loader2 className="h-3 w-3 animate-spin text-[#00a88e]" />
+                  Verificando termos...
+                </span>
+              ) : (
+                <>
+                  {execucaoBloqueadaPorTermos && itensFaltantes.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700">
+                      <X className="h-3 w-3 text-rose-500" />
+                      {itensFaltantes.length} {itensFaltantes.length > 1 ? 'pendentes' : 'pendente'}
+                    </span>
+                  ) : null}
+                  {consentimentosAguardando.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      <Check className="h-3 w-3 text-emerald-600" />
+                      {consentimentosAguardando.length} {consentimentosAguardando.length > 1 ? 'assinados' : 'assinado'}
+                    </span>
+                  ) : null}
+                  {itensSemTermoExigido.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+                      <Info className="h-3 w-3 text-blue-500" />
+                      {itensSemTermoExigido.length} {itensSemTermoExigido.length > 1 ? 'dispensados' : 'dispensado'}
+                    </span>
+                  ) : null}
+                  {!execucaoBloqueadaPorTermos && itensFaltantes.length === 0 && consentimentosAguardando.length === 0 && itensSemTermoExigido.length === 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      <Check className="h-3 w-3 text-emerald-600" />
+                      Em conformidade
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100 pt-1">
+            {resolucao === null ? (
+              <div className="py-3 text-[12px] text-slate-500 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" />
+                <span>Consultando conformidade dos termos de consentimento para os procedimentos selecionados...</span>
+              </div>
+            ) : null}
+
+            {execucaoBloqueadaPorTermos && itensFaltantes.length > 0
+              ? itensFaltantes.map((item) => (
+                <div key={item.termoId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+                      <X className="h-3.5 w-3.5 stroke-[2.5]" />
+                    </div>
+                    <div className="min-w-0 text-[13px]">
+                      <span className="font-semibold text-slate-900">
+                        {item.procedimentos.length > 0 ? item.procedimentos.join(', ') : 'Procedimento'}:
+                      </span>{' '}
+                      <span className="text-slate-600">{item.titulo}</span>
+                    </div>
+                  </div>
+                  {typeof onIrParaTermosGate === 'function' ? (
+                    <button
+                      type="button"
+                      onClick={() => onIrParaTermosGate(item.termoId)}
+                      className="ml-auto shrink-0 text-[12px] font-bold text-[#00a88e] hover:text-[#008f79] hover:underline cursor-pointer"
+                    >
+                      Assinar agora →
+                    </button>
+                  ) : null}
+                </div>
+              ))
+              : null}
+
+            {consentimentosAguardando.map((c) => (
+              <div key={c.termoId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                    <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                  </div>
+                  <div className="min-w-0 text-[13px]">
+                    <span className="font-semibold text-slate-900">
+                      {c.procedimentos && c.procedimentos.length > 0
+                        ? c.procedimentos.join(', ')
+                        : 'Procedimento'}:
+                    </span>{' '}
+                    <span className="text-slate-600">{c.titulo}</span>
+                  </div>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-slate-400">
+                  {c.assinadoEm ? <span>em {formatTimestamp(c.assinadoEm)}</span> : null}
+                  <span className="rounded-full border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                    Assinado
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {itensSemTermoExigido.map((item, idx) => (
+              <div key={item.catalogoId || item.id || `sem_termo_${idx}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <Info className="h-3.5 w-3.5 stroke-[2.5]" />
+                  </div>
+                  <div className="min-w-0 text-[13px]">
+                    <span className="font-semibold text-slate-900">{item.nome || 'Procedimento'}:</span>{' '}
+                    <span className="text-slate-600">Não requer termo de consentimento</span>
+                  </div>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px]">
+                  <span className="rounded-full border border-blue-200/60 bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
+                    Dispensado
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {fotosAvaliacao.length > 0 && (
         <div className="mb-4">
-          <div className="mb-2 flex items-center gap-2">
-            <Eye className="h-4 w-4 text-[#64748b]" strokeWidth={2} />
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">
-              Avaliação — apenas referência
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-[#64748b]" strokeWidth={2} />
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">
+                Avaliação — apenas referência
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Clique para ampliar e ver planejamento
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-2 opacity-70">
-            {fotosAvaliacao.slice(0, 3).map((foto, idx) => (
-              <button
-                key={foto.url ? `${foto.url}_${idx}` : idx}
-                type="button"
-                onClick={() => foto.url && setReferencePreviewUrl(foto.url)}
-                title="Ampliar (somente visualização)"
-                className="group relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-xl border-2 border-dashed border-[#e2e8f0] p-0 text-left outline-none transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-2"
-              >
-                <img src={foto.url} alt="" className="h-full w-full object-cover" />
-                <div className="pointer-events-none absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/5" />
-                <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/50 px-1 text-[9px] font-bold text-white">
-                  Ref.{idx + 1}
-                </span>
-                <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/45 px-1.5 py-0.5 text-[8px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:text-[9px]">
-                  Ver
-                </span>
-              </button>
-            ))}
+          <div className="grid grid-cols-3 gap-2">
+            {fotosAvaliacao.slice(0, 3).map((foto, idx) => {
+              const temPontos = Array.isArray(foto?.pontos) && foto.pontos.length > 0;
+              const mapaOverlay =
+                foto?.mapaOverlay ||
+                (temPontos
+                  ? {
+                      pontos: foto.pontos,
+                      procedimentos: foto.procedimentosMapeados || foto.procedimentos || [],
+                    }
+                  : null);
+              const totalPontos = foto?.pontos?.length || foto?.mapaOverlay?.pontos?.length || 0;
+
+              return (
+                <button
+                  key={foto.id || foto.fotoId || foto.url || idx}
+                  type="button"
+                  onClick={() => setReferenceLightboxData({ foto, fotos: fotosAvaliacao })}
+                  title="Ampliar avaliação (com zoom e marcações)"
+                  className="group relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0 text-left outline-none transition-all hover:border-[#00a88e] hover:shadow-xs focus-visible:ring-2 focus-visible:ring-[#00a88e]"
+                >
+                  {mapaOverlay ? (
+                    <GaleriaMapaThumb
+                      url={foto.cleanUrl || foto.url}
+                      mapaOverlay={mapaOverlay}
+                      pacienteId={_pacienteIdForProcedures}
+                      fotoId={foto.fotoId || foto.id || foto.serverId}
+                      alt={`Avaliação Ref.${idx + 1}`}
+                      density="preview"
+                      className="h-full w-full"
+                    />
+                  ) : (
+                    <GaleriaArquivoImage
+                      url={foto.cleanUrl || foto.url}
+                      pacienteId={_pacienteIdForProcedures}
+                      fotoId={foto.fotoId || foto.id || foto.serverId}
+                      alt={`Avaliação Ref.${idx + 1}`}
+                      className="h-full w-full"
+                    />
+                  )}
+                  <div className="pointer-events-none absolute inset-0 bg-black/5 transition-colors group-hover:bg-black/0" />
+                  <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs backdrop-blur-xs">
+                    Ref.{idx + 1}
+                  </span>
+                  {totalPontos > 0 && (
+                    <span className="pointer-events-none absolute top-1.5 left-1.5 rounded-md bg-emerald-600/90 px-1.5 py-0.5 text-[9px] font-semibold text-white shadow-xs">
+                      {totalPontos} pt{totalPontos === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  <span className="pointer-events-none absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:text-[9px]">
+                    Ver Mapa
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2652,8 +2729,7 @@ export function Step4Procedimento({
             onPrepareCapture={onPrepareMapaCapture}
             onEnsureProcedimento={onEnsureProcedimento}
             disabled={
-              (!String(nomeProcedimento || '').trim() && (!Array.isArray(procedimentosSessao) || procedimentosSessao.length === 0)) ||
-              (!catalogoId && (!Array.isArray(procedimentosSessao) || procedimentosSessao.length === 0)) ||
+              procedimentosSelecionados.length === 0 ||
               execucaoBloqueadaPorTermos
             }
             disabledHint={
@@ -2679,31 +2755,14 @@ export function Step4Procedimento({
         </div>
       )}
 
-      {referencePreviewUrl ? (
-        <div
-          className="fixed inset-0 z-[145] flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setReferencePreviewUrl(null)}
-          role="presentation"
-        >
-          <img
-            src={referencePreviewUrl}
-            alt=""
-            className="max-h-[90dvh] max-w-full rounded-xl object-contain shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            type="button"
-            onClick={() => setReferencePreviewUrl(null)}
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-lg font-bold text-white transition-colors hover:bg-white/30"
-            aria-label="Fechar"
-          >
-            ×
-          </button>
-          <p className="pointer-events-none absolute bottom-6 left-0 right-0 text-center text-[12px] font-medium text-white/80">
-            Referência da avaliação — somente visualização
-          </p>
-        </div>
-      ) : null}
+      {referenceLightboxData && (
+        <PlanoFotoLightbox
+          foto={referenceLightboxData.foto}
+          fotos={referenceLightboxData.fotos}
+          pacienteId={_pacienteIdForProcedures}
+          onClose={() => setReferenceLightboxData(null)}
+        />
+      )}
 
       {laneMenuOpen && (
         <div

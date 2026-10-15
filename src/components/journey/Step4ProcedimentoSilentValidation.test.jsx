@@ -15,7 +15,11 @@ vi.mock('../../hooks/useProcedimentosOptions', () => ({
 }));
 
 vi.mock('./mapa-aplicacao/MapaAplicacaoPanel.jsx', () => ({
-  MapaAplicacaoPanel: () => <div>mapa-aplicacao-panel</div>,
+  MapaAplicacaoPanel: (props) => (
+    <div data-testid="mapa-panel" data-disabled={String(props.disabled)} data-hint={props.disabledHint}>
+      mapa-aplicacao-panel
+    </div>
+  ),
 }));
 
 vi.mock('./PhotoCarouselLane.jsx', () => ({
@@ -88,5 +92,105 @@ describe('Step4Procedimento — validação silenciosa de termos no autocomplete
         expect.objectContaining({ abrirModal: false })
       );
     });
+  });
+
+  it('bloqueia o MapaAplicacaoPanel (disabled=true) quando nenhum procedimento foi selecionado', () => {
+    render(
+      <Step4Procedimento
+        procedimentosSessao={[]}
+        mapaState={{}}
+      />
+    );
+
+    const mapaPanel = screen.getByTestId('mapa-panel');
+    expect(mapaPanel.getAttribute('data-disabled')).toBe('true');
+    expect(mapaPanel.getAttribute('data-hint')).toContain('Selecione um procedimento do catálogo');
+  });
+
+  it('desbloqueia o MapaAplicacaoPanel (disabled=false) quando há procedimento válido selecionado', () => {
+    render(
+      <Step4Procedimento
+        procedimentosSessao={[
+          {
+            catalogoProcedimentoSaudeId: 'cat-1',
+            catalogoId: 'cat-1',
+            nomeProcedimento: 'Biópsia de Pele',
+          },
+        ]}
+        mapaState={{}}
+      />
+    );
+
+    const mapaPanel = screen.getByTestId('mapa-panel');
+    expect(mapaPanel.getAttribute('data-disabled')).toBe('false');
+  });
+
+  it('exibe o card de Termos de Consentimento com status de checagem quando ha procedimentos selecionados e resolucao e nula', () => {
+    const onValidarMock = vi.fn().mockResolvedValue(true);
+    render(
+      <Step4Procedimento
+        procedimentosSessao={[
+          {
+            catalogoProcedimentoSaudeId: 'cat-1',
+            catalogoId: 'cat-1',
+            nomeProcedimento: 'Biópsia de Pele',
+          },
+        ]}
+        resolucao={null}
+        onValidarTermosCatalogo={onValidarMock}
+      />
+    );
+
+    expect(screen.getByText('Termos de Consentimento da Sessão')).toBeInTheDocument();
+    expect(screen.getByText(/Verificando termos.../i)).toBeInTheDocument();
+  });
+
+  it('exibe o card de Termos de Consentimento com badges de assinado e dispensado quando resolvido', () => {
+    render(
+      <Step4Procedimento
+        procedimentosSessao={[
+          {
+            catalogoProcedimentoSaudeId: 'cat-1',
+            catalogoId: 'cat-1',
+            nomeProcedimento: 'Biópsia de Pele',
+          },
+        ]}
+        resolucao={{
+          termosExigidos: [
+            {
+              termoId: 't-1',
+              titulo: 'Termo Ponto',
+              vigente: true,
+              assinaturaId: 'ass-1',
+              catalogos: [{ catalogoId: 'cat-2', nome: 'Retirada de Pontos' }],
+            },
+          ],
+          faltantes: [],
+          procedimentosSemVinculo: [{ catalogoId: 'cat-1', nome: 'Biópsia de Pele' }],
+        }}
+        consentimentosAguardandoExecucao={[
+          {
+            termoId: 't-1',
+            titulo: 'Termo Ponto',
+            procedimentos: ['Retirada de Pontos'],
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Termos de Consentimento da Sessão')).toBeInTheDocument();
+    expect(screen.getByText(/1 assinado/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 dispensado/i)).toBeInTheDocument();
+  });
+
+  it('nao exibe o card de Termos de Consentimento quando nenhum procedimento esta selecionado', () => {
+    render(
+      <Step4Procedimento
+        procedimentosSessao={[]}
+        resolucao={null}
+      />
+    );
+
+    expect(screen.queryByText('Termos de Consentimento da Sessão')).not.toBeInTheDocument();
   });
 });

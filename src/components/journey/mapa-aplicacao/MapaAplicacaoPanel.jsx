@@ -196,6 +196,16 @@ export function MapaAplicacaoPanel({
     return listaProcedimentosSessao[0] || (catalogoId ? { id: String(catalogoId), nome: String(nomeProcedimento || '') } : null);
   }, [listaProcedimentosSessao, procedimentoArmadoId, catalogoId, nomeProcedimento]);
 
+  const hasProcedimentoValido = useMemo(() => {
+    if (listaProcedimentosSessao.length > 0) return true;
+    if (catalogoId && nomeProcedimento && String(nomeProcedimento).trim() && !(/^Procedimento\s*\d*$/i.test(String(nomeProcedimento).trim()))) {
+      return true;
+    }
+    return false;
+  }, [listaProcedimentosSessao, catalogoId, nomeProcedimento]);
+
+  const isPanelDisabled = disabled || !hasProcedimentoValido;
+
   const presets = useMemo(() => getPresetsForUnidade(unidadeMedida), [unidadeMedida]);
 
   const handleUnidadeMedidaChange = useCallback((unit) => {
@@ -303,7 +313,7 @@ export function MapaAplicacaoPanel({
     return () => {
       cancelled = true;
     };
-  }, [catalogoId]);
+  }, [catalogoId, procedimentoArmado?.id]);
 
   useEffect(() => {
     if (!pendingCapture?.blob || !pendingCapture?.vista) return;
@@ -383,7 +393,10 @@ export function MapaAplicacaoPanel({
   }, [procedimentoFeitoId, pacienteId]);
 
   const ensureReady = useCallback(async () => {
-    if (disabled) return false;
+    if (isPanelDisabled || !hasProcedimentoValido) {
+      toast.warning('Selecione um procedimento do catálogo para habilitar o mapa de aplicação.');
+      return false;
+    }
     try {
       await onEnsureProcedimento?.();
       return true;
@@ -391,7 +404,7 @@ export function MapaAplicacaoPanel({
       toast.error(e?.message || 'Não foi possível registrar o procedimento.');
       return false;
     }
-  }, [disabled, onEnsureProcedimento, toast]);
+  }, [isPanelDisabled, hasProcedimentoValido, onEnsureProcedimento, toast]);
 
   const loadGaleria = useCallback(async () => {
     if (!pacienteId) {
@@ -479,12 +492,27 @@ export function MapaAplicacaoPanel({
     setVistaModalOpen(false);
   };
 
-  if (disabled) {
+  if (isPanelDisabled) {
     return (
       <div className="mb-6 rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-6 text-center">
         <MapPin className="mx-auto h-8 w-8 text-[#94a3b8]" strokeWidth={1.5} />
         <h4 className="mt-3 text-[15px] font-bold text-app-ink">Mapa de aplicação</h4>
         <p className="mt-1 text-[13px] font-medium text-[#64748b]">{disabledHint}</p>
+        {!hasProcedimentoValido && (
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.querySelector('input[placeholder*="Buscar procedimento"], [data-testid="procedimento-search"]');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.focus();
+              }
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-teal-700 shadow-2xs hover:bg-teal-50 transition-colors cursor-pointer"
+          >
+            <span>Selecionar Procedimento</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -628,6 +656,7 @@ export function MapaAplicacaoPanel({
             onRequestFullscreen={() => setFullscreenOpen(true)}
             previewMode={true}
             maxHeightClass="max-h-[82dvh]"
+            canUpload={hasProcedimentoValido && !isPanelDisabled}
           />
         </div>
         <PontosResumoPanel

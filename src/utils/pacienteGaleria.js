@@ -25,11 +25,12 @@ export const GALERIA_CATEGORIA_LABELS = {
 const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o|modelo|mapa)\]\s*(.*)$/i;
 
 /**
- * Lê categoria e texto livre da legenda enviada/recuperada da API.
+ * Lê categoria, flag de avulso e texto livre da legenda enviada/recuperada da API.
  */
 export function parseGaleriaLegenda(legenda) {
   const s = typeof legenda === 'string' ? legenda.trim() : '';
-  if (!s) return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: null };
+  if (!s) return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: null, isAvulso: false };
+  const isAvulso = /\[avulso\]/i.test(s);
   const m = s.match(LEGENDA_TAG_RE);
   if (m) {
     const catRaw = m[1]
@@ -42,26 +43,38 @@ export function parseGaleriaLegenda(legenda) {
         : catRaw === 'modelo'
           ? GALERIA_CATEGORIA.MODELO
           : catRaw;
+    const descLimpa = m[2].replace(/\[avulso\]/gi, '').trim() || null;
     return {
       categoria: catNorm,
-      descricao: m[2].trim() || null,
+      descricao: descLimpa,
+      isAvulso,
     };
   }
   if (/mapeamento|avalia(ç|c)(ã|a)o/i.test(s)) {
-    return { categoria: GALERIA_CATEGORIA.PLANEJAMENTO, descricao: s };
+    return {
+      categoria: GALERIA_CATEGORIA.PLANEJAMENTO,
+      descricao: s.replace(/\[avulso\]/gi, '').trim() || null,
+      isAvulso,
+    };
   }
-  return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: s };
+  return {
+    categoria: GALERIA_CATEGORIA.OUTRO,
+    descricao: s.replace(/\[avulso\]/gi, '').trim() || null,
+    isAvulso,
+  };
 }
 
 /**
  * Monta legenda para upload (categoria obrigatória + descrição opcional, ex. nome do procedimento).
+ * Permite marcar flag isAvulso gerando tag clínica padronizada [categoria] [avulso] descrição.
  */
-export function formatGaleriaLegendaForUpload(categoria, descricaoLivre = '') {
+export function formatGaleriaLegendaForUpload(categoria, descricaoLivre = '', { isAvulso = false } = {}) {
   const allowed = new Set(Object.values(GALERIA_CATEGORIA));
   let cat = String(categoria || '').toLowerCase().trim();
   if (!allowed.has(cat)) cat = GALERIA_CATEGORIA.ANTES;
-  const d = String(descricaoLivre || '').trim();
-  return d ? `[${cat}] ${d}` : `[${cat}]`;
+  const d = String(descricaoLivre || '').replace(/\[avulso\]/gi, '').trim();
+  const avulsoTag = isAvulso ? ' [avulso]' : '';
+  return d ? `[${cat}]${avulsoTag} ${d}` : `[${cat}]${avulsoTag}`;
 }
 
 export function itemDataReferenciaISO(item) {
@@ -250,11 +263,21 @@ export function normalizePacienteGaleriaItem(raw) {
       ? String(tipoFotoCodigoRaw).trim().toUpperCase()
       : null;
 
+  const agendaId =
+    raw.agendaId ?? raw.agenda_id ?? raw.agenda?.id ?? null;
+  const planejamentoItemId =
+    raw.planejamentoItemId ?? raw.planejamento_item_id ?? null;
+  const planejamentoId =
+    raw.planejamentoId ?? raw.planejamento_id ?? null;
+
   const mapaOverlayRaw = raw.mapaOverlay ?? raw.mapa_overlay ?? null;
   let mapaOverlay = null;
   if (mapaOverlayRaw && typeof mapaOverlayRaw === 'object') {
     const marcacoes = Array.isArray(mapaOverlayRaw.marcacoes)
       ? mapaOverlayRaw.marcacoes
+      : [];
+    const procedimentos = Array.isArray(mapaOverlayRaw.procedimentos)
+      ? mapaOverlayRaw.procedimentos
       : [];
     mapaOverlay = {
       mapaId:
@@ -263,9 +286,28 @@ export function normalizePacienteGaleriaItem(raw) {
         mapaOverlayRaw.anguloFotoCodigo != null
           ? String(mapaOverlayRaw.anguloFotoCodigo)
           : null,
+      planejamentoItemId:
+        mapaOverlayRaw.planejamentoItemId != null
+          ? String(mapaOverlayRaw.planejamentoItemId).trim()
+          : (planejamentoItemId ? String(planejamentoItemId).trim() : null),
+      planejamentoId:
+        mapaOverlayRaw.planejamentoId != null
+          ? String(mapaOverlayRaw.planejamentoId).trim()
+          : (planejamentoId ? String(planejamentoId).trim() : null),
+      procedimentos,
       marcacoes,
     };
   }
+
+  const effectivePlanejamentoItemId =
+    planejamentoItemId != null && String(planejamentoItemId).trim() !== ''
+      ? String(planejamentoItemId).trim()
+      : mapaOverlay?.planejamentoItemId || null;
+
+  const effectivePlanejamentoId =
+    planejamentoId != null && String(planejamentoId).trim() !== ''
+      ? String(planejamentoId).trim()
+      : mapaOverlay?.planejamentoId || null;
 
   return {
     id: String(id),
@@ -291,6 +333,9 @@ export function normalizePacienteGaleriaItem(raw) {
       procedimentoFeitoCardId != null && String(procedimentoFeitoCardId).trim() !== ''
         ? String(procedimentoFeitoCardId)
         : null,
+    agendaId: agendaId != null && String(agendaId).trim() !== '' ? String(agendaId).trim() : null,
+    planejamentoItemId: effectivePlanejamentoItemId,
+    planejamentoId: effectivePlanejamentoId,
     mapaOverlay,
   };
 }

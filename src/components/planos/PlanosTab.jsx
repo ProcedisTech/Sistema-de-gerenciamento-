@@ -21,6 +21,7 @@ import {
   ChevronRight,
   User,
   Layers,
+  Sparkles,
 } from 'lucide-react';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
@@ -58,6 +59,8 @@ import { mapBackendPatient } from '../../utils/patientMapping.js';
 import { calculateAgeFromISODate } from '../utils/formatters.js';
 import { titulosFaltantes, procedimentoBloqueadoPorTermos } from '../../utils/termoResolucao.js';
 import { toLocalDateIso } from '../../utils/agendaDateUtils.js';
+
+const EMPTY_ARRAY = Object.freeze([]);
 
 function formatValorBrl(val) {
   if (val == null || val === '') return '—';
@@ -1081,8 +1084,8 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   paciente,
   roleUserId,
   pacienteNome,
-  procedimentosFeitos = [],
-  galeriaFotosInicial = [],
+  procedimentosFeitos = EMPTY_ARRAY,
+  galeriaFotosInicial = EMPTY_ARRAY,
   onAgendarItem,
   onAgendarRetornoItem,
   onReagendarItem,
@@ -1092,9 +1095,10 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   onPlanoConcluido,
   variant = 'profile',
   onVoltar,
-  procedimentosAvaliados = [],
+  procedimentosAvaliados = EMPTY_ARRAY,
   onLimparProcedimentosAvaliados,
   onPlanoModificado,
+  destinoAvaliacao = null,
 }, ref) {
   const isConsulta = variant === 'consulta';
   const canCrud = isConsulta;
@@ -1243,7 +1247,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   }, [carregarGaleria]);
 
   const [internalProcedimentosFeitos, setInternalProcedimentosFeitos] = useState(
-    Array.isArray(procedimentosFeitos) ? procedimentosFeitos : []
+    Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0 ? procedimentosFeitos : EMPTY_ARRAY
   );
 
   const carregarProcedimentosFeitos = useCallback(async () => {
@@ -1259,13 +1263,19 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     }
   }, [pacienteId]);
 
+  // Se o componente pai fornecer procedimentosFeitos com itens (ex: Perfil do Paciente), sincroniza diretamente
   useEffect(() => {
     if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
       setInternalProcedimentosFeitos(procedimentosFeitos);
-    } else {
+    }
+  }, [procedimentosFeitos]);
+
+  // Se não houver lista externa de procedimentos, busca do backend uma única vez por pacienteId
+  useEffect(() => {
+    if (!Array.isArray(procedimentosFeitos) || procedimentosFeitos.length === 0) {
       carregarProcedimentosFeitos();
     }
-  }, [procedimentosFeitos, carregarProcedimentosFeitos]);
+  }, [pacienteId, carregarProcedimentosFeitos]);
 
   const listaProcedimentosFeitos = useMemo(() => {
     if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
@@ -1411,20 +1421,21 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     }
   }, [clearError, criarPlano, initEmptyDraft, isConsulta, toast]);
 
-  // ── AUTO-SINCRONIZADOR IDEMPOTENTE: AVALIAÇÃO FACIAL -> PLANO DE TRATAMENTO ──
+  // ── SINCRONIZADOR DE AVALIAÇÃO CLÍNICA -> PLANO DE TRATAMENTO ──
   const autoSyncProcessingRef = useRef(false);
+  const autoSyncAttemptedRef = useRef(false);
   const [isAutoSyncing, setIsAutoSyncing] = useState(false);
 
-  useEffect(() => {
+  const sincronizarProcedimentosNoPlano = useCallback(async (customPlanoId = null) => {
     if (!canCrud || loading || !hasLoaded || catalogoLoading || !pacienteId) return;
     if (!Array.isArray(procedimentosAvaliados) || procedimentosAvaliados.length === 0) return;
     if (autoSyncProcessingRef.current) return;
 
-    const executarAutoSincronizacao = async () => {
-      autoSyncProcessingRef.current = true;
-      setIsAutoSyncing(true);
-      try {
-        let targetPlanoId = null;
+    autoSyncProcessingRef.current = true;
+    setIsAutoSyncing(true);
+    try {
+      let targetPlanoId = customPlanoId ? String(customPlanoId) : null;
+      if (!targetPlanoId) {
         let planoAtivo = sortedPlanos.find(
           (p) => p.statusCodigo === 'ativo' || p.status === 'ativo' || p.status === 'em_andamento'
         );
@@ -1454,63 +1465,61 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
             }
           }
         }
+      }
 
-        if (!targetPlanoId) return;
+      if (!targetPlanoId) return;
 
-        const targetPlano = displayPlanos.find((p) => String(p.id) === targetPlanoId);
-        const draftAtivo = getDraft(targetPlanoId);
-        const itensAtuais = draftAtivo?.itens || targetPlano?.itens || [];
-        const existingCatIds = new Set(
-          itensAtuais.map((i) => String(i.catalogoProcedimentoSaudeId || i.catalogoId || ''))
-        );
+      const targetPlano = displayPlanos.find((p) => String(p.id) === targetPlanoId);
+      const draftAtivo = getDraft(targetPlanoId);
+      const itensAtuais = draftAtivo?.itens || targetPlano?.itens || [];
+      const existingCatIds = new Set(
+        itensAtuais.map((i) => String(i.catalogoProcedimentoSaudeId || i.catalogoId || ''))
+      );
 
-        const itensParaInserir = procedimentosAvaliados.filter(
-          (p) => isRealUuid(p.catalogoProcedimentoSaudeId) && !existingCatIds.has(String(p.catalogoProcedimentoSaudeId))
-        );
+      const itensParaInserir = procedimentosAvaliados.filter(
+        (p) => isRealUuid(p.catalogoProcedimentoSaudeId) && !existingCatIds.has(String(p.catalogoProcedimentoSaudeId))
+      );
 
-        if (itensParaInserir.length === 0) {
-          if (typeof onLimparProcedimentosAvaliados === 'function') {
-            onLimparProcedimentosAvaliados();
-          }
-          return;
-        }
-
-        for (const proc of itensParaInserir) {
-          const opt = catalogoOptions.find((c) => String(c.id) === String(proc.catalogoProcedimentoSaudeId));
-          const valor = opt?.valorPadrao ?? opt?.valorBase ?? 0;
-          await planejamentosApi.adicionarItem(targetPlanoId, {
-            catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
-            tipo: 'manual',
-            valorOrcado: valor,
-            dataPlanejada: null,
-            roleUserId: roleUserId || null,
-            statusProcedimentoId: null,
-          });
-        }
-
-        const detalhe = await planejamentosApi.detalhe(targetPlanoId);
-        applyDetalhe(targetPlanoId, detalhe, catalogoOptions);
-        hydratedPlanIdsRef.current.add(targetPlanoId);
-        setExpandidos((prev) => ({ ...prev, [targetPlanoId]: true }));
-        await refresh();
-
-        toast.success(
-          `${itensParaInserir.length} procedimento${itensParaInserir.length > 1 ? 's' : ''} da avaliação facial incluído${itensParaInserir.length > 1 ? 's' : ''} no plano.`
-        );
-
+      if (itensParaInserir.length === 0) {
         if (typeof onLimparProcedimentosAvaliados === 'function') {
           onLimparProcedimentosAvaliados();
         }
-        onPlanoModificado?.();
-      } catch (err) {
-        console.error('[PlanosTab] Erro na auto-inclusão de procedimentos da avaliação:', err);
-      } finally {
-        autoSyncProcessingRef.current = false;
-        setIsAutoSyncing(false);
+        return;
       }
-    };
 
-    executarAutoSincronizacao();
+      for (const proc of itensParaInserir) {
+        const opt = catalogoOptions.find((c) => String(c.id) === String(proc.catalogoProcedimentoSaudeId));
+        const valor = opt?.valorPadrao ?? opt?.valorBase ?? 0;
+        await planejamentosApi.adicionarItem(targetPlanoId, {
+          catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
+          tipo: 'manual',
+          valorOrcado: valor,
+          dataPlanejada: null,
+          roleUserId: roleUserId || null,
+          statusProcedimentoId: null,
+        });
+      }
+
+      const detalhe = await planejamentosApi.detalhe(targetPlanoId);
+      applyDetalhe(targetPlanoId, detalhe, catalogoOptions);
+      hydratedPlanIdsRef.current.add(targetPlanoId);
+      setExpandidos((prev) => ({ ...prev, [targetPlanoId]: true }));
+      await refresh();
+
+      toast.success(
+        `${itensParaInserir.length} procedimento${itensParaInserir.length > 1 ? 's' : ''} da avaliação facial incluído${itensParaInserir.length > 1 ? 's' : ''} no plano.`
+      );
+
+      if (typeof onLimparProcedimentosAvaliados === 'function') {
+        onLimparProcedimentosAvaliados();
+      }
+      onPlanoModificado?.();
+    } catch (err) {
+      console.error('[PlanosTab] Erro na inclusão de procedimentos da avaliação:', err);
+    } finally {
+      autoSyncProcessingRef.current = false;
+      setIsAutoSyncing(false);
+    }
   }, [
     applyDetalhe,
     canCrud,
@@ -1523,6 +1532,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     initEmptyDraft,
     loading,
     onLimparProcedimentosAvaliados,
+    onPlanoModificado,
     pacienteId,
     procedimentosAvaliados,
     refresh,
@@ -1530,6 +1540,26 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     sortedPlanos,
     toast,
   ]);
+
+  // Disparo automático apenas se o profissional explicitamente escolheu destino 'plano'
+  useEffect(() => {
+    if (
+      destinoAvaliacao === 'plano' &&
+      Array.isArray(procedimentosAvaliados) &&
+      procedimentosAvaliados.length > 0 &&
+      !autoSyncAttemptedRef.current
+    ) {
+      autoSyncAttemptedRef.current = true;
+      sincronizarProcedimentosNoPlano();
+    }
+  }, [destinoAvaliacao, procedimentosAvaliados, sincronizarProcedimentosNoPlano]);
+
+  // Reseta a tentativa de auto-sync quando a lista de avaliados for limpa
+  useEffect(() => {
+    if (!Array.isArray(procedimentosAvaliados) || procedimentosAvaliados.length === 0) {
+      autoSyncAttemptedRef.current = false;
+    }
+  }, [procedimentosAvaliados]);
 
   const handleSalvarPlano = useCallback(
     async (planoId) => {
@@ -2912,6 +2942,53 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
           {displayError}
         </div>
       ) : null}
+
+      {/* BANNER CONTEXTUAL: PROCEDIMENTOS DA AVALIAÇÃO FACIAL */}
+      {Array.isArray(procedimentosAvaliados) && procedimentosAvaliados.length > 0 && destinoAvaliacao !== 'plano' && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50/90 via-emerald-50/50 to-white p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00a88e] text-white shadow-xs">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-800">
+                Procedimentos sugeridos na Avaliação Facial
+              </h4>
+              <p className="mt-0.5 text-xs text-slate-600">
+                Encontramos <strong className="text-teal-700">{procedimentosAvaliados.length} procedimento{procedimentosAvaliados.length > 1 ? 's' : ''}</strong> mapeado{procedimentosAvaliados.length > 1 ? 's' : ''} na última avaliação facial. Deseja importá-los para o Plano de Tratamento?
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              disabled={isAutoSyncing}
+              onClick={() => sincronizarProcedimentosNoPlano()}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#00a88e] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#008f7a] active:scale-95 transition-all disabled:opacity-60"
+            >
+              {isAutoSyncing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Importando...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Puxar Procedimentos</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={isAutoSyncing}
+              onClick={() => onLimparProcedimentosAvaliados?.()}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Dispensar
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading && !hasLoaded ? (
         <div className="flex items-center justify-center gap-2 py-12 text-[#64748b]">

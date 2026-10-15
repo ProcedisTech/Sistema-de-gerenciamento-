@@ -739,6 +739,7 @@ export const pacientesGaleriaApi = {
       legenda,
       tipoFotoCodigo,
       agendaId,
+      mapaId,
     } = options;
     if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
       fd.append('roleUserId', String(roleUserId));
@@ -754,6 +755,9 @@ export const pacientesGaleriaApi = {
     }
     if (agendaId != null && String(agendaId).trim()) {
       fd.append('agendaId', String(agendaId).trim());
+    }
+    if (mapaId != null && String(mapaId).trim()) {
+      fd.append('mapaId', String(mapaId).trim());
     }
     if (legenda != null && String(legenda).trim()) {
       fd.append('legenda', String(legenda).trim());

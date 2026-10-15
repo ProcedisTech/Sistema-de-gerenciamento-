@@ -6,7 +6,7 @@ import {
   Check,
   X,
   Loader2,
-  MousePointer2,
+  CircleDot,
   MoveDiagonal,
   Eraser,
   Eye,
@@ -16,9 +16,13 @@ import {
   ChevronDown,
   Minus,
   Trash2,
+  Layers,
+  Calendar,
+  Sparkles,
 } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { useCanvasZoom } from '../../hooks/useCanvasZoom.js';
+import { marcacoesApiToOverlayPontos } from './mapeamento/mapaMarcacoesOverlayUtils.js';
 import {
   MAPEAMENTO_PALETA_CORES,
   corParaProcedimento,
@@ -32,8 +36,10 @@ import { createPortal } from 'react-dom';
 import { MapeamentoFullscreenToolbar } from './mapeamento/MapeamentoFullscreenToolbar.jsx';
 import { useMapeamentoFullscreenKeyboardShortcuts } from './mapeamento/useMapeamentoFullscreenKeyboardShortcuts.js';
 import { PontoMarcadorPopover } from './mapeamento/PontoMarcadorPopover.jsx';
+import { AssistiveTouchToolbar } from './mapeamento/AssistiveTouchToolbar.jsx';
 import { mapasApi, planejamentosApi, catalogosApi } from '../../services/api.js';
 import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
+import { garantirProcedimentosNoPlano } from '../../utils/sincronizarProcedimentosPlanoAgenda.js';
 
 const COR_PADRAO_AVALIACAO = '#0ea5e9'; // Ciano/Azul de alto contraste padrão
 const RAIO_BORRACHA_PERCENT = 2.8; // ~2.8% da largura da foto para o diâmetro da borracha
@@ -110,6 +116,9 @@ export function AnnotationCanvasAvaliacao({
   persistAnnotatedPhotoToGallery,
   onClose,
   pacienteId,
+  roleUserId = null,
+  procedimentosIniciais = [],
+  planoContexto = null,
 }) {
   const toast = useToast();
 
@@ -118,18 +127,42 @@ export function AnnotationCanvasAvaliacao({
   const [modo, setModo] = useState('traco');
 
   // Estado dos múltiplos procedimentos selecionados para este mapa
-  const [procedimentos, setProcedimentos] = useState([]);
-  const [activeProcedimentoId, setActiveProcedimentoId] = useState(null);
+  const [procedimentos, setProcedimentos] = useState(() => {
+    if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) {
+      const validos = procedimentosIniciais
+        .filter((proc) => {
+          const nome = String(proc?.catalogoNome || proc?.nome || '').trim();
+          return nome && nome.toLowerCase() !== 'procedimento';
+        })
+        .map((proc, idx) => ({
+          id: proc.id || proc.catalogoProcedimentoSaudeId || `proc_${idx}`,
+          catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId || proc.id,
+          nome: proc.catalogoNome || proc.nome,
+          unidadeMedida: proc.unidadeMedida || proc.unidade || 'un',
+          corHex: proc.corHex || proc.cor || corParaProcedimento(proc.catalogoProcedimentoSaudeId || proc.id),
+          planejamentoItemId: proc.planejamentoItemId || null,
+        }));
+      if (validos.length > 0) return validos;
+    }
+    return [];
+  });
+  const [activeProcedimentoId, setActiveProcedimentoId] = useState(() => {
+    if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) {
+      const primeiroValido = procedimentosIniciais.find((proc) => {
+        const nome = String(proc?.catalogoNome || proc?.nome || '').trim();
+        return nome && nome.toLowerCase() !== 'procedimento';
+      });
+      if (primeiroValido) {
+        return primeiroValido.id || primeiroValido.catalogoProcedimentoSaudeId;
+      }
+    }
+    return null;
+  });
   const [corLivre, setCorLivre] = useState(COR_PADRAO_AVALIACAO);
 
   // Procedimentos oriundos do Plano de Tratamento Ativo do paciente (Bandeja de Chips Rápidos)
   const [procedimentosDoPlano, setProcedimentosDoPlano] = useState([]);
   const [carregandoPlano, setCarregandoPlano] = useState(false);
-
-  // Ilha Flutuante de Ferramentas
-  const [islandDockedBottom, setIslandDockedBottom] = useState(false);
-  const [isIslandMinimized, setIsIslandMinimized] = useState(false);
-  const [islandColorPickerOpen, setIslandColorPickerOpen] = useState(false);
 
   // Controles de Configuração da Barra Lateral Oficial
   const [configMarcacao, setConfigMarcacao] = useState({
@@ -177,8 +210,9 @@ export function AnnotationCanvasAvaliacao({
   const isToolPanning = useRef(false);
   const lastToolPanRef = useRef({ x: 0, y: 0 });
 
-  // Estado de salvamento
+  // Estado de salvamento e confirmação de destino (Plano vs Avulso)
   const [isSaving, setIsSaving] = useState(false);
+  const [modalDestinoOpen, setModalDestinoOpen] = useState(false);
 
   // Motor de Zoom e Pan em Canvas Nativo 2D
   const {
@@ -201,7 +235,7 @@ export function AnnotationCanvasAvaliacao({
   } = useCanvasZoom(canvasRef);
 
   const activePhoto = photos[editingIndex];
-  const displayUrl = activePhoto?.url || activePhoto?.displayUrl || imageSrc;
+  const displayUrl = activePhoto?.cleanUrl || activePhoto?.url || activePhoto?.displayUrl || imageSrc;
 
   // Procedimento ativo atual
   const activeProc = useMemo(() => {
@@ -234,12 +268,18 @@ export function AnnotationCanvasAvaliacao({
     };
   }, [displayUrl]);
 
-  // Limpa marcações e reseta visualização ao trocar de foto
+  // Restaura marcações existentes (da memória ou hidratadas diretamente do banco via mapaOverlay), ou limpa e reseta visualização
   useEffect(() => {
-    setPontos([]);
+    let existingPontos = Array.isArray(activePhoto?.pontos) ? activePhoto.pontos : [];
+    if (existingPontos.length === 0 && activePhoto?.mapaOverlay) {
+      const rawMarcacoes = activePhoto.mapaOverlay.marcacoes || activePhoto.mapaOverlay.pontos || [];
+      const procs = activePhoto.mapaOverlay.procedimentos || activePhoto.mapaOverlay.procedimentosMapeados || [];
+      existingPontos = marcacoesApiToOverlayPontos(rawMarcacoes, procs);
+    }
+    setPontos(existingPontos);
     setHistory([]);
     resetView();
-  }, [editingIndex, displayUrl, resetView]);
+  }, [editingIndex, displayUrl, resetView, activePhoto]);
 
   // Carrega procedimentos do Plano de Tratamento Ativo do paciente para a Bandeja de Chips
   useEffect(() => {
@@ -259,7 +299,7 @@ export function AnnotationCanvasAvaliacao({
         if (!isMounted) return;
 
         const planos = Array.isArray(planosRes) ? planosRes : planosRes?.content || [];
-        const planoAtivo = planos.find(
+        const planoAtivo = planoContexto || planos.find(
           (p) =>
             p.statusCodigo === 'ativo' ||
             p.status === 'ativo' ||
@@ -313,7 +353,32 @@ export function AnnotationCanvasAvaliacao({
           }
         });
 
-        setProcedimentosDoPlano(Array.from(itensMap.values()));
+        const itensPlano = Array.from(itensMap.values());
+        setProcedimentosDoPlano(itensPlano);
+
+        if (itensPlano.length > 0) {
+          setProcedimentos((prev) => {
+            const hasRealProcs = (prev || []).some(
+              (p) => p?.nome && p.nome.trim().toLowerCase() !== 'procedimento'
+            );
+            if (hasRealProcs && (pontos || []).length > 0) return prev;
+            return itensPlano.map((it) => ({
+              id: it.id,
+              catalogoProcedimentoSaudeId: it.id,
+              nome: it.nome,
+              unidadeMedida: it.unidadeMedida || 'un',
+              corHex: corParaProcedimento(it.id),
+              planejamentoItemId: it.planejamentoItemId || null,
+            }));
+          });
+          setActiveProcedimentoId((prev) => {
+            if (prev && itensPlano.some((it) => it.id === prev)) return prev;
+            return itensPlano[0].id;
+          });
+          if (itensPlano[0]?.unidadeMedida?.toLowerCase() === 'ml') {
+            setConfigMarcacao((prev) => ({ ...prev, dosePadrao: 0.5 }));
+          }
+        }
       })
       .catch((err) => {
         console.warn('[AnnotationCanvasAvaliacao] Falha ao carregar procedimentos do plano:', err);
@@ -326,7 +391,7 @@ export function AnnotationCanvasAvaliacao({
     return () => {
       isMounted = false;
     };
-  }, [pacienteId]);
+  }, [pacienteId, planoContexto]);
 
   // Higienização de integridade cromática: assegura que NENHUM par de procedimentos divida a mesma cor
   useEffect(() => {
@@ -424,16 +489,12 @@ export function AnnotationCanvasAvaliacao({
       setModalDosePonto(null);
       return;
     }
-    if (islandColorPickerOpen) {
-      setIslandColorPickerOpen(false);
-      return;
-    }
     if (configPopoverOpen) {
       setConfigPopoverOpen(false);
       return;
     }
     onClose?.();
-  }, [procParaRemover, pontoSelecionado, modalDosePonto, islandColorPickerOpen, configPopoverOpen, onClose]);
+  }, [procParaRemover, pontoSelecionado, modalDosePonto, configPopoverOpen, onClose]);
 
   useMapeamentoFullscreenKeyboardShortcuts({
     enabled: true,
@@ -832,10 +893,10 @@ export function AnnotationCanvasAvaliacao({
     const h = canvas.height;
     const im = baseImageRef.current;
 
-    // Limpa a tela inteira com o fundo Mesa de Luz Clínica (Slate Profundo anti-ofuscamento)
+    // Limpa a tela inteira com o fundo Cinza Externo da Galeria (Slate-300: #cbd5e1)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#0b0f19';
+    ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(0, 0, w, h);
 
     if (!im?.complete || !im.naturalWidth || !im.naturalHeight) return;
@@ -849,8 +910,14 @@ export function AnnotationCanvasAvaliacao({
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    // 1. Desenha a foto base em alta nitidez
+    // 1. Desenha a foto base em alta nitidez com sombra destacada sobre o cinza da galeria
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.24)';
+    ctx.shadowBlur = 20 / scale;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4 / scale;
     ctx.drawImage(im, dx, dy, drawW, drawH);
+    ctx.restore();
 
     // 2. Traços livres gravados
     const strokeWidthOnScreen = (3.5 * (tamanhoMarcador ?? 1.0)) / scale;
@@ -971,17 +1038,70 @@ export function AnnotationCanvasAvaliacao({
       }
     }
 
-    // 5. Cursor visual da borracha (círculo com borda rose)
+    // 5. Cursor visual da borracha (ícone de borracha estilizado com anel sutil de alcance)
     if (modo === 'borracha' && eraserCursorRef.current) {
       const { cx, cy } = eraserCursorRef.current;
       const eraserRadius = (RAIO_BORRACHA_PERCENT / 100) * drawW;
+
+      // 5.1 Anel sutil pontilhado de referência de alcance da borracha
+      ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, eraserRadius, 0, 2 * Math.PI);
-      ctx.strokeStyle = '#f43f5e';
-      ctx.lineWidth = 1.5 / scale;
-      ctx.fillStyle = 'rgba(244, 63, 94, 0.18)';
-      ctx.fill();
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.45)';
+      ctx.lineWidth = 1 / scale;
+      ctx.setLineDash([3 / scale, 3 / scale]);
       ctx.stroke();
+      ctx.restore();
+
+      // 5.2 Desenho vetorial da Borracha estilizada (ícone de borracha chanfrada)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-Math.PI / 4);
+
+      const ew = Math.max(18 / scale, 22 / scale);
+      const eh = Math.max(12 / scale, 14 / scale);
+      const rCorner = 2 / scale;
+
+      // Corpo base da borracha (branco com borda rose)
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(-ew / 2, -eh / 2, ew, eh, rCorner);
+      } else {
+        ctx.rect(-ew / 2, -eh / 2, ew, eh);
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 4 / scale;
+      ctx.shadowOffsetY = 1 / scale;
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = '#e11d48';
+      ctx.lineWidth = 1.6 / scale;
+      ctx.stroke();
+
+      // Ponta chanfrada / capa rosa da borracha
+      const capWidth = ew * 0.45;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(-ew / 2, -eh / 2, capWidth, eh, [rCorner, 0, 0, rCorner]);
+      } else {
+        ctx.rect(-ew / 2, -eh / 2, capWidth, eh);
+      }
+      ctx.fillStyle = '#f43f5e';
+      ctx.fill();
+      ctx.strokeStyle = '#be123c';
+      ctx.lineWidth = 1.2 / scale;
+      ctx.stroke();
+
+      // Linha de divisão do chanfro
+      ctx.beginPath();
+      ctx.moveTo(-ew / 2 + capWidth, -eh / 2);
+      ctx.lineTo(-ew / 2 + capWidth, eh / 2);
+      ctx.strokeStyle = '#be123c';
+      ctx.lineWidth = 1.5 / scale;
+      ctx.stroke();
+
+      ctx.restore();
     }
 
     ctx.restore();
@@ -1324,152 +1444,29 @@ export function AnnotationCanvasAvaliacao({
     }
   };
 
-  // ── SALVAMENTO OFFSCREEN EM RESOLUÇÃO TOTAL (100% NATIVA) ──
-  const handleSalvar = async () => {
-    const im = baseImageRef.current;
-    if (!im?.complete || !im.naturalWidth || !im.naturalHeight) {
-      toast.error('A imagem ainda não foi carregada.');
-      return;
+  // ── SALVAMENTO DE AVALIAÇÃO (FOTO LIMPA + MAPA RELACIONAL VETORIAL) ──
+  const handleIniciarSalvar = () => {
+    if (procedimentos.length > 0 && pontos.length > 0) {
+      setModalDestinoOpen(true);
+    } else {
+      executarSalvar('avulso');
     }
+  };
 
+  const executarSalvar = async (destino = 'plano') => {
     setIsSaving(true);
     try {
-      const nw = im.naturalWidth;
-      const nh = im.naturalHeight;
-
-      // 1. Cria canvas offscreen na resolução real máxima da foto original
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = nw;
-      offCanvas.height = nh;
-      const offCtx = offCanvas.getContext('2d');
-      if (!offCtx) throw new Error('Falha ao inicializar contexto 2D');
-
-      // 2. Desenha a foto original sem nenhum letterbox ou corte
-      offCtx.drawImage(im, 0, 0, nw, nh);
-
-      // Calcula layout da tela para espelhar exatamente a proporção visual que o usuário vê (WYSIWYG 1:1)
-      const canvas = canvasRef.current;
-      const cw = canvas?.width || window.innerWidth || 1200;
-      const ch = canvas?.height || window.innerHeight || 800;
-      const { drawW } = getLetterboxLayout(cw, ch, nw, nh);
-      const screenPhotoWidth = drawW > 0 ? drawW : (nw > 0 ? Math.min(nw, 800) : 600);
-      const scaleFactor = screenPhotoWidth > 0 ? (nw / screenPhotoWidth) : 1;
-
-      // 3. Renderiza os traços livres gravados sobre a imagem nativa
-      for (const item of pontos) {
-        const itemTamanho = item.tamanho ?? tamanhoMarcador ?? 1.0;
-        if (item.tipoGeometria === 'traco' && Array.isArray(item.vertices) && item.vertices.length >= 2) {
-          offCtx.beginPath();
-          offCtx.strokeStyle = item.cor || COR_PADRAO_AVALIACAO;
-          offCtx.lineWidth = Math.max(2, 3.5 * itemTamanho * scaleFactor);
-          offCtx.lineCap = 'round';
-          offCtx.lineJoin = 'round';
-
-          item.vertices.forEach((v, idx) => {
-            const px = ((v.posX ?? v.x) / 100) * nw;
-            const py = ((v.posY ?? v.y) / 100) * nh;
-            if (idx === 0) offCtx.moveTo(px, py);
-            else offCtx.lineTo(px, py);
-          });
-          offCtx.stroke();
-
-          // Desenha pin terminal e dose gravada para traços na imagem offscreen se mostrarDoses estiver ativo
-          if (mostrarDoses && item.quantidade != null) {
-            const lastV = item.vertices[item.vertices.length - 1];
-            const px = ((lastV.posX ?? lastV.x) / 100) * nw;
-            const py = ((lastV.posY ?? lastV.y) / 100) * nh;
-            const r = Math.max(3, 5.5 * itemTamanho * scaleFactor);
-            const cor = item.cor || COR_PADRAO_AVALIACAO;
-
-            offCtx.beginPath();
-            offCtx.arc(px, py, r, 0, 2 * Math.PI);
-            offCtx.fillStyle = cor;
-            offCtx.fill();
-            offCtx.lineWidth = Math.max(1.5, 1.5 * scaleFactor);
-            offCtx.strokeStyle = '#ffffff';
-            offCtx.stroke();
-
-            const textoDose = formatQuantidadeEtiqueta(item.quantidade, '');
-            const fontSize = Math.max(10, 11 * scaleFactor);
-            offCtx.font = `bold ${fontSize}px sans-serif`;
-            offCtx.textAlign = 'center';
-            offCtx.textBaseline = 'middle';
-            const m = offCtx.measureText(textoDose);
-            const wBadge = Math.max(16 * scaleFactor, m.width + 8 * scaleFactor);
-            const hBadge = 15 * scaleFactor;
-            const yBadge = py - (14 * scaleFactor);
-
-            offCtx.beginPath();
-            if (typeof offCtx.roundRect === 'function') {
-              offCtx.roundRect(px - wBadge / 2, yBadge - hBadge / 2, wBadge, hBadge, hBadge / 2);
-            } else {
-              offCtx.rect(px - wBadge / 2, yBadge - hBadge / 2, wBadge, hBadge);
-            }
-            offCtx.fillStyle = cor;
-            offCtx.fill();
-            offCtx.lineWidth = Math.max(1, 1.5 * scaleFactor);
-            offCtx.strokeStyle = '#ffffff';
-            offCtx.stroke();
-
-            offCtx.fillStyle = '#ffffff';
-            offCtx.fillText(textoDose, px, yBadge + 0.5 * scaleFactor);
-          }
-        } else if (item.tipoGeometria === 'ponto' && item.posX != null) {
-          const px = (item.posX / 100) * nw;
-          const py = (item.posY / 100) * nh;
-          const r = Math.max(4, 7 * itemTamanho * scaleFactor);
-          const cor = item.cor || COR_PADRAO_AVALIACAO;
-
-          offCtx.beginPath();
-          offCtx.arc(px, py, r, 0, 2 * Math.PI);
-          offCtx.fillStyle = cor;
-          offCtx.fill();
-          offCtx.lineWidth = Math.max(2, 2 * scaleFactor);
-          offCtx.strokeStyle = '#ffffff';
-          offCtx.stroke();
-
-          // Desenha dose gravada na imagem offscreen se mostrarDoses estiver ativo
-          if (mostrarDoses && item.quantidade != null) {
-            const textoDose = formatQuantidadeEtiqueta(item.quantidade, '');
-            const fontSize = Math.max(10, 11 * scaleFactor);
-            offCtx.font = `bold ${fontSize}px sans-serif`;
-            offCtx.textAlign = 'center';
-            offCtx.textBaseline = 'middle';
-            const m = offCtx.measureText(textoDose);
-            const wBadge = Math.max(16 * scaleFactor, m.width + 8 * scaleFactor);
-            const hBadge = 15 * scaleFactor;
-            const yBadge = py - (14 * scaleFactor);
-
-            offCtx.beginPath();
-            if (typeof offCtx.roundRect === 'function') {
-              offCtx.roundRect(px - wBadge / 2, yBadge - hBadge / 2, wBadge, hBadge, hBadge / 2);
-            } else {
-              offCtx.rect(px - wBadge / 2, yBadge - hBadge / 2, wBadge, hBadge);
-            }
-            offCtx.fillStyle = cor;
-            offCtx.fill();
-            offCtx.lineWidth = Math.max(1, 1.5 * scaleFactor);
-            offCtx.strokeStyle = '#ffffff';
-            offCtx.stroke();
-
-            offCtx.fillStyle = '#ffffff';
-            offCtx.fillText(textoDose, px, yBadge + 0.5 * scaleFactor);
-          }
-        }
-      }
-
-      // 4. Exporta como Blob JPEG de alta fidelidade
-      const blob = await new Promise((resolve) => {
-        offCanvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92);
-      });
-
-      if (!blob) throw new Error('Não foi possível gerar a imagem anotada');
-
-      const newUrl = URL.createObjectURL(blob);
       const targetIdx = typeof editingIndex === 'number' ? editingIndex : 0;
+      const fotoAtual =
+        (Array.isArray(photos) && targetIdx != null ? photos[targetIdx] : null) ||
+        (typeof imageSrc === 'object' ? imageSrc : null);
+
+      const cleanBlobOriginal = fotoAtual?.cleanBlob || fotoAtual?.blob || null;
+      const cleanUrlOriginal =
+        fotoAtual?.cleanUrl || fotoAtual?.url || (typeof imageSrc === 'string' ? imageSrc : null);
 
       // Monta o resumo consolidado de procedimentos mapeados para o Plano de Tratamento
-      const resumoProcedimentos = procedimentos.map((proc) => {
+      let resumoProcedimentos = procedimentos.map((proc) => {
         const stats = getProcedimentoStats(proc.id);
         return {
           catalogoProcedimentoSaudeId: proc.id,
@@ -1482,10 +1479,14 @@ export function AnnotationCanvasAvaliacao({
         };
       });
 
-      // 5. Persiste o mapa relacional no banco se pacienteId estiver presente
+      // Persiste o mapa relacional no banco se pacienteId estiver presente
+      let mapaRelacionalId = null;
+      let targetPlanejamentoId = destino === 'plano' ? (planoContexto?.id || null) : null;
+      let targetPlanejamentoItemId = null;
+      const isAvulso = destino === 'avulso';
+
       if (pacienteId) {
         try {
-          const fotoAtual = photos && editingIndex != null ? photos[editingIndex] : null;
           const anguloRaw = fotoAtual?.meta?.anguloFotoCodigo || fotoAtual?.anguloFotoCodigo || 'frontal';
           const anguloCanonico = anguloRaw === 'frente' ? 'frontal' : anguloRaw;
 
@@ -1517,43 +1518,141 @@ export function AnnotationCanvasAvaliacao({
             };
           });
 
+          // Se o destino for 'plano', garante a existência do plano e cria os itens ANTES de salvar o mapa
+          let itensPlanoMap = {};
+
+          if (destino === 'plano') {
+            const catIds = procedimentos
+              .map((p) => (isRealUuid(p.id) ? p.id : p.catalogoProcedimentoSaudeId))
+              .filter(isRealUuid);
+            if (catIds.length > 0 && isRealUuid(pacienteId)) {
+              try {
+                itensPlanoMap = await garantirProcedimentosNoPlano({
+                  pacienteId,
+                  catalogoProcedimentoSaudeIds: catIds,
+                  roleUserId,
+                });
+              } catch (errGarantir) {
+                console.warn('[AnnotationCanvasAvaliacao] Falha ao garantir procedimentos no plano:', errGarantir);
+              }
+            }
+
+            // Resolução de targetPlanejamentoItemId e targetPlanejamentoId
+            if (itensPlanoMap?.planoId) {
+              targetPlanejamentoId = itensPlanoMap.planoId;
+            }
+            if (!targetPlanejamentoId && planoContexto?.id) {
+              targetPlanejamentoId = planoContexto.id;
+            }
+            if (Object.keys(itensPlanoMap).length > 0) {
+              targetPlanejamentoItemId = Object.values(itensPlanoMap)[0] || null;
+            }
+            if (!targetPlanejamentoItemId && procedimentos.some((p) => isRealUuid(p.planejamentoItemId))) {
+              targetPlanejamentoItemId = procedimentos.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId;
+            }
+            if (!targetPlanejamentoItemId && Array.isArray(procedimentosDoPlano) && procedimentosDoPlano.length > 0) {
+              targetPlanejamentoItemId = procedimentosDoPlano.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId || null;
+            }
+            if (!targetPlanejamentoItemId && Array.isArray(planoContexto?.itens) && planoContexto.itens.length > 0) {
+              targetPlanejamentoItemId = planoContexto.itens[0]?.id || planoContexto.itens[0]?.planejamentoItemId || null;
+            }
+          }
+
           const procedimentosPayload = procedimentos
             .filter((proc) => isRealUuid(proc.id) || isRealUuid(proc.catalogoProcedimentoSaudeId))
-            .map((proc) => ({
-              catalogoProcedimentoSaudeId: isRealUuid(proc.id) ? proc.id : proc.catalogoProcedimentoSaudeId,
-              corHex: proc.corHex || null,
-              planejamentoItemId: isRealUuid(proc.planejamentoItemId) ? proc.planejamentoItemId : null,
-            }));
+            .map((proc) => {
+              const catId = isRealUuid(proc.id) ? proc.id : proc.catalogoProcedimentoSaudeId;
+              const piId = itensPlanoMap[catId] || (isRealUuid(proc.planejamentoItemId) ? proc.planejamentoItemId : null) || targetPlanejamentoItemId;
+              return {
+                catalogoProcedimentoSaudeId: catId,
+                corHex: proc.corHex || null,
+                planejamentoItemId: piId,
+              };
+            });
 
-          await mapasApi.salvar({
+          const mapaPayload = {
             pacienteId,
             tipoMapaCodigo: 'avaliacao',
             procedimentos: procedimentosPayload,
             marcacoes: marcacoesPayload,
-          });
+          };
+
+          if (destino === 'plano' && targetPlanejamentoItemId) {
+            mapaPayload.origemTipo = 'planejamento';
+            mapaPayload.origemId = targetPlanejamentoItemId;
+            mapaPayload.planejamentoItemId = targetPlanejamentoItemId;
+          }
+
+          const savedMapa = await mapasApi.salvar(mapaPayload);
+          mapaRelacionalId = savedMapa?.id || savedMapa?.mapaId || null;
+
+          if (Object.keys(itensPlanoMap).length > 0) {
+            resumoProcedimentos = resumoProcedimentos.map((r) => ({
+              ...r,
+              planejamentoItemId: itensPlanoMap[r.catalogoProcedimentoSaudeId] || r.planejamentoItemId || null,
+            }));
+          }
         } catch (errMapa) {
           console.warn('[AnnotationCanvasAvaliacao] Falha ao salvar mapa relacional:', errMapa);
+          if (errMapa?.status === 401 || errMapa?.response?.status === 401) {
+            toast.error('Sessão expirada. Faça login novamente para salvar as alterações.');
+            return;
+          }
         }
       }
 
-      // Entrega o contrato downstream com os procedimentos mapeados
+      // Entrega o contrato downstream com os procedimentos mapeados e destino explícito
       onAnnotatedCaptureSaved?.({
         index: targetIdx,
-        newUrl,
-        blob,
+        newUrl: cleanUrlOriginal,
+        blob: cleanBlobOriginal,
+        cleanBlob: cleanBlobOriginal,
+        cleanUrl: cleanUrlOriginal,
         procedimentosMapeados: resumoProcedimentos,
         pontos,
+        isAnnotated: true,
+        destinoAvaliacao: destino,
+        isAvulso,
+        mapaId: mapaRelacionalId,
+        planejamentoId: targetPlanejamentoId,
+        planejamentoItemId: targetPlanejamentoItemId,
       });
 
       if (typeof persistAnnotatedPhotoToGallery === 'function') {
         try {
-          await persistAnnotatedPhotoToGallery(blob);
+          let blobParaUpload = cleanBlobOriginal;
+          if (!blobParaUpload && cleanUrlOriginal) {
+            try {
+              const resp = await fetch(cleanUrlOriginal);
+              blobParaUpload = await resp.blob();
+            } catch (errBlob) {
+              console.warn('[AnnotationCanvasAvaliacao] Falha ao converter cleanUrlOriginal para blob:', errBlob);
+            }
+          }
+          if (blobParaUpload) {
+            await persistAnnotatedPhotoToGallery(blobParaUpload, {
+              index: targetIdx,
+              mapaId: mapaRelacionalId,
+              isAvulso,
+              destinoAvaliacao: destino,
+              planejamentoId: targetPlanejamentoId,
+              planejamentoItemId: targetPlanejamentoItemId,
+            });
+          }
         } catch (e) {
           console.warn('[AnnotationCanvasAvaliacao] Falha ao enviar para galeria:', e);
         }
       }
 
-      toast.success('Foto anotada e procedimentos mapeados com sucesso!');
+      if (destino === 'plano') {
+        toast.success(
+          resumoProcedimentos.length > 0
+            ? `Plano de Tratamento atualizado! ${resumoProcedimentos.length} procedimento${resumoProcedimentos.length === 1 ? '' : 's'} no plano.`
+            : 'Plano de Tratamento atualizado com sucesso!'
+        );
+      } else {
+        toast.success('Avaliação salva na consulta avulsa com sucesso!');
+      }
       onClose?.();
     } catch (err) {
       console.error('[AnnotationCanvasAvaliacao] Erro ao salvar:', err);
@@ -1569,7 +1668,7 @@ export function AnnotationCanvasAvaliacao({
         ? 'cursor-grabbing'
         : 'cursor-grab'
       : modo === 'borracha'
-        ? 'cursor-crosshair'
+        ? 'cursor-none'
         : hoveredPontoId
           ? 'cursor-pointer'
           : 'cursor-crosshair';
@@ -1615,13 +1714,13 @@ export function AnnotationCanvasAvaliacao({
         onDesfazerUltimo={handleUndo}
         configPopoverOpen={configPopoverOpen}
         onConfigPopoverOpenChange={setConfigPopoverOpen}
-        onSaveAction={handleSalvar}
-        tituloAcaoPrimaria="Salvar Foto"
+        onSaveAction={handleIniciarSalvar}
+        tituloAcaoPrimaria="Salvar Avaliação"
         isSaving={isSaving}
       />
 
-      {/* ── PAINEL PRINCIPAL COM CANVAS E CONTROLES FLUTUANTES (Mesa de Luz Clínica Slate Profundo) ── */}
-      <div className="relative flex-1 flex flex-col overflow-hidden bg-[#0b0f19]" ref={containerRef}>
+      {/* ── PAINEL PRINCIPAL COM CANVAS E CONTROLES FLUTUANTES (Cinza Externo da Galeria: bg-slate-300) ── */}
+      <div className="relative flex-1 flex flex-col overflow-hidden bg-slate-300" ref={containerRef}>
         {/* Barra Superior Discreta Flutuante — Branco Gelo Clínico */}
         <div className="absolute top-3.5 left-4 right-4 z-40 pointer-events-none flex items-center justify-between">
           <div className="pointer-events-auto flex items-center gap-2 rounded-xl bg-white/95 px-3 py-1.5 backdrop-blur-xl border border-slate-200/90 shadow-md text-slate-800">
@@ -1649,228 +1748,46 @@ export function AnnotationCanvasAvaliacao({
           <div className="pointer-events-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={handleSalvar}
+              onClick={handleIniciarSalvar}
               disabled={isSaving}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-xl shadow-teal-500/25 disabled:opacity-60 transition-all scale-100 active:scale-95 cursor-pointer"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 stroke-[2.5]" />}
               <span>Salvar Foto</span>
             </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              title="Fechar tela cheia (Esc)"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/95 hover:bg-white text-slate-700 hover:text-slate-950 border border-slate-300 text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+            >
+              <X className="h-4 w-4 stroke-[2.5] text-slate-600" />
+              <span className="hidden sm:inline">Fechar</span>
+            </button>
           </div>
         </div>
 
-        {/* ILHA FLUTUANTE DE FERRAMENTAS — BRANCO GELO CLÍNICO (z-[60] GARANTIDO) */}
-        <div
-          className={`absolute z-[60] pointer-events-auto transition-all duration-200 ${
-            islandDockedBottom
-              ? 'bottom-5 left-1/2 -translate-x-1/2'
-              : 'top-3.5 left-1/2 -translate-x-1/2'
-          }`}
-        >
-          {isIslandMinimized ? (
-            <button
-              type="button"
-              onClick={() => setIsIslandMinimized(false)}
-              className="flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white/95 px-3.5 py-2 shadow-xl backdrop-blur-xl text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer animate-in fade-in zoom-in-95 duration-100"
-              title="Expandir barra de ferramentas flutuante"
-            >
-              <MoveDiagonal className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Ferramentas</span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                {modo}
-              </span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white/95 px-2.5 py-1.5 shadow-xl backdrop-blur-xl">
-              {/* Tríade de Ferramentas */}
-              <button
-                type="button"
-                onClick={() => setModo('traco')}
-                title="Traço Contínuo (T)"
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                  modo === 'traco'
-                    ? 'border border-emerald-500/40 bg-emerald-50 text-emerald-700 shadow-2xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <MoveDiagonal className="h-3.5 w-3.5" />
-                <span>Traço</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setModo('ponto')}
-                title="Ponto Direto (P)"
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                  modo === 'ponto'
-                    ? 'border border-emerald-500/40 bg-emerald-50 text-emerald-700 shadow-2xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <MousePointer2 className="h-3.5 w-3.5" />
-                <span>Ponto</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setModo('borracha')}
-                title="Borracha (B)"
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                  modo === 'borracha'
-                    ? 'border border-red-500/40 bg-red-50 text-red-600 shadow-2xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <Eraser className="h-3.5 w-3.5" />
-                <span>Borracha</span>
-              </button>
-
-              <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-              {/* Alternar Doses (Olho) */}
-              <button
-                type="button"
-                onClick={() => setMostrarDoses((prev) => !prev)}
-                title={mostrarDoses ? 'Ocultar Doses (D)' : 'Mostrar Doses (D)'}
-                className={`flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  mostrarDoses
-                    ? 'text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100/70'
-                    : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
-                }`}
-              >
-                {mostrarDoses ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline text-[11px] font-bold">Doses</span>
-              </button>
-
-              {/* Desfazer */}
-              <button
-                type="button"
-                onClick={handleUndo}
-                disabled={pontos.length === 0}
-                title="Desfazer (Ctrl+Z)"
-                className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-35 disabled:cursor-not-allowed transition-all cursor-pointer"
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-              </button>
-
-              <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-              {/* Chip de Cor Ativa com Popover Rápido */}
-              <div className="relative">
-                <button
-                  type="button"
-                  aria-label={`Cor ativa: ${activeCor}. Clique para mudar.`}
-                  title={`Cor ativa: ${activeCor}`}
-                  onClick={() => setIslandColorPickerOpen((prev) => !prev)}
-                  className="flex items-center gap-1 rounded-xl p-1.5 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <span
-                    className="h-4 w-4 rounded-full border border-black/20 shadow-2xs"
-                    style={{ backgroundColor: activeCor }}
-                  />
-                </button>
-
-                {islandColorPickerOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[70]"
-                      onClick={() => setIslandColorPickerOpen(false)}
-                    />
-                    <div
-                      className={`absolute left-1/2 -translate-x-1/2 ${
-                        islandDockedBottom ? 'bottom-full mb-2' : 'top-full mt-2'
-                      } z-[80] w-52 rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100`}
-                    >
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">
-                        Trocar Cor Ativa
-                      </p>
-                      <div className="grid grid-cols-6 gap-1.5">
-                        {MAPEAMENTO_PALETA_CORES.map((c) => {
-                          const procOwner = procedimentos.find(
-                            (p) => (p.corHex || corParaProcedimento(p.id)).toLowerCase() === c.toLowerCase()
-                          );
-                          const isEmUso = Boolean(procOwner);
-                          const isAtiva = activeCor.toLowerCase() === c.toLowerCase();
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              title={isEmUso ? `Em uso por: ${procOwner.nome}` : 'Cor livre'}
-                              onClick={() => {
-                                if (activeProc) {
-                                  handleMudarCorProcedimento(activeProc.id, c);
-                                } else {
-                                  setCorLivre(c);
-                                }
-                                setIslandColorPickerOpen(false);
-                              }}
-                              className={`flex h-5 w-5 items-center justify-center rounded-full border transition-transform hover:scale-120 cursor-pointer ${
-                                isAtiva ? 'ring-2 ring-emerald-500 ring-offset-1 scale-105' : 'border-black/10'
-                              }`}
-                              style={{ backgroundColor: c }}
-                            >
-                              {isEmUso ? (
-                                <span className="h-1 w-1 rounded-full bg-white shadow-2xs" />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-              {/* Botão Enquadrar na Tela */}
-              <button
-                type="button"
-                onClick={fitToScreen}
-                title="Enquadrar na tela (0 ou R)"
-                className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-all cursor-pointer shadow-2xs"
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-                </svg>
-                <span>Enquadrar</span>
-              </button>
-
-              <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-              {/* Alternar Posição (Dock Inferior / Superior) */}
-              <button
-                type="button"
-                onClick={() => setIslandDockedBottom((prev) => !prev)}
-                title={islandDockedBottom ? 'Mover barra para o Topo' : 'Mover barra para a Base (Dock)'}
-                className="flex items-center gap-1 rounded-xl px-2 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-[11px] font-semibold transition-colors cursor-pointer"
-              >
-                {islandDockedBottom ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                <span>{islandDockedBottom ? 'Topo' : 'Dock'}</span>
-              </button>
-
-              {/* Minimizar Ilha */}
-              <button
-                type="button"
-                onClick={() => setIsIslandMinimized(true)}
-                title="Minimizar barra de ferramentas"
-                className="p-1 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
+        {/* BOLINHA FLUTUANTE ASSISTIVETOUCH ERGONÔMICA (z-[70]) */}
+        <AssistiveTouchToolbar
+          modo={modo}
+          setModo={setModo}
+          mostrarDoses={mostrarDoses}
+          setMostrarDoses={setMostrarDoses}
+          onUndo={handleUndo}
+          canUndo={pontos.length > 0}
+          activeCor={activeCor}
+          activeProc={activeProc}
+          procedimentos={procedimentos}
+          onMudarCor={(novaCor) => {
+            if (activeProc) {
+              handleMudarCorProcedimento(activeProc.id, novaCor);
+            } else {
+              setCorLivre(novaCor);
+            }
+          }}
+          containerRef={containerRef}
+        />
 
         {/* Canvas da Foto */}
         <canvas
@@ -2027,6 +1944,93 @@ export function AnnotationCanvasAvaliacao({
                 className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-600/20 transition-colors cursor-pointer"
               >
                 Sim, Remover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Clínico de Destino da Avaliação (Plano de Tratamento vs Consulta Avulsa) */}
+      {modalDestinoOpen && (
+        <div
+          className="fixed inset-0 z-[170] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-100"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-[#00a88e] mb-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 border border-teal-100">
+                <Sparkles className="h-5 w-5 text-[#00a88e]" />
+              </div>
+              <div>
+                <h4 className="text-[16px] font-bold text-slate-900 leading-tight">
+                  Destino da Avaliação Clínica
+                </h4>
+                <p className="text-[12px] text-slate-500">
+                  Defina como estes procedimentos devem ser organizados
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-slate-600 leading-relaxed mb-4">
+              Você mapeou{' '}
+              <strong className="text-slate-900 font-semibold">
+                {procedimentos.length} procedimento{procedimentos.length > 1 ? 's' : ''}
+              </strong>{' '}
+              nesta avaliação. Deseja transformar essas anotações em um planejamento do paciente?
+            </p>
+
+            <div className="space-y-2.5 mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalDestinoOpen(false);
+                  executarSalvar('plano');
+                }}
+                className="w-full flex items-start gap-3 p-3.5 rounded-xl border-2 border-teal-200 bg-teal-50/50 hover:bg-teal-50 hover:border-[#00a88e] text-left transition-all cursor-pointer group"
+              >
+                <div className="p-2 rounded-lg bg-white border border-teal-200 text-[#00a88e] group-hover:scale-105 transition-transform">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="block text-xs font-bold text-slate-900 group-hover:text-[#00a88e]">
+                    Sim, gerar Plano de Tratamento
+                  </span>
+                  <span className="block text-[11px] text-slate-500 mt-0.5">
+                    Cria ou atualiza o protocolo de tratamento do paciente com os procedimentos e o mapa clínico vinculados.
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setModalDestinoOpen(false);
+                  executarSalvar('avulso');
+                }}
+                className="w-full flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-left transition-all cursor-pointer group"
+              >
+                <div className="p-2 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 group-hover:scale-105 transition-transform">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="block text-xs font-bold text-slate-800">
+                    Não, manter nesta Consulta Avulsa
+                  </span>
+                  <span className="block text-[11px] text-slate-500 mt-0.5">
+                    Preserva as marcações e fotos no prontuário e histórico clínico da consulta, sem gerar plano formal.
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalDestinoOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                Voltar à Edição
               </button>
             </div>
           </div>

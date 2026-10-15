@@ -34,6 +34,7 @@ export const useJourneyState = () => {
   /** { planejamentoId, itemIdByCatalogo, procedimentosComPontos? } */
   const [journeyPlanejamentoCtx, setJourneyPlanejamentoCtx] = useState(null);
   const [procedimentosAvaliados, setProcedimentosAvaliados] = useState([]);
+  const [destinoAvaliacao, setDestinoAvaliacao] = useState(null); // 'plano' | 'avulso' | null
 
   // ============ ETAPA 2: AVALIAÇÃO ============
   /** Observações clínicas e expectativas registradas durante a avaliação (antes do upload de fotos). */
@@ -274,6 +275,8 @@ export const useJourneyState = () => {
     setJourneyPlanejamentoCtx,
     procedimentosAvaliados,
     setProcedimentosAvaliados,
+    destinoAvaliacao,
+    setDestinoAvaliacao,
     observacoes,
     setObservacoes,
     imageSrc,

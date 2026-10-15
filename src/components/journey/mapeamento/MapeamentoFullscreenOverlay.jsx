@@ -5,7 +5,7 @@ import {
   Menu,
   Minimize2,
   MoveDiagonal,
-  MousePointer2,
+  CircleDot,
   Eraser,
   Eye,
   EyeOff,
@@ -22,6 +22,7 @@ import { useMediaQuery } from '../../../hooks/useMediaQuery.js';
 import { useToast } from '../../../contexts/useToast.js';
 import { getVistaLabel } from '../../../constants/vistasMapeamento.js';
 import { MAPEAMENTO_PALETA_CORES, corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
+import { AssistiveTouchToolbar } from './AssistiveTouchToolbar.jsx';
 
 export function MapeamentoFullscreenOverlay({
   open,
@@ -55,9 +56,7 @@ export function MapeamentoFullscreenOverlay({
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [configPopoverOpen, setConfigPopoverOpen] = useState(false);
-  const [islandDockedBottom, setIslandDockedBottom] = useState(false);
-  const [isIslandMinimized, setIsIslandMinimized] = useState(false);
-  const [islandColorPickerOpen, setIslandColorPickerOpen] = useState(false);
+  const mainContainerRef = useRef(null);
   const [configMarcacao, setConfigMarcacao] = useState({
     dosePadrao: 1,
     profundidade: '',
@@ -198,7 +197,7 @@ export function MapeamentoFullscreenOverlay({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[140] flex min-w-0 flex-row overflow-hidden bg-[#0b0f19] text-slate-800 select-none">
+    <div className="fixed inset-0 z-[140] flex min-w-0 flex-row overflow-hidden bg-slate-300 text-slate-800 select-none">
       <MapeamentoFullscreenToolbar
         vistaAtual={vistaAtual}
         toolbarWidthPx={toolbarWidthPx}
@@ -237,8 +236,8 @@ export function MapeamentoFullscreenOverlay({
         tituloAcaoPrimaria="Concluir Mapeamento"
       />
 
-      {/* ── ÁREA DA FOTO E ILHA FLUTUANTE DE FERRAMENTAS (Mesa de Luz Clínica Slate Profundo) ── */}
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col p-0 overflow-hidden bg-[#0b0f19]">
+      {/* ── ÁREA DA FOTO E ILHA FLUTUANTE DE FERRAMENTAS (Mesa de Luz Clínica Claro) ── */}
+      <main ref={mainContainerRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col p-0 overflow-hidden bg-slate-300">
         {!isMdUp && !sidebarOpen ? (
           <button
             type="button"
@@ -276,226 +275,35 @@ export function MapeamentoFullscreenOverlay({
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/95 hover:bg-slate-100 text-slate-700 text-xs font-bold shadow-md border border-slate-200/90 backdrop-blur-xl transition-all scale-100 active:scale-95 cursor-pointer"
+              title="Fechar tela cheia (Esc)"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/95 hover:bg-white text-slate-700 hover:text-slate-950 text-xs font-bold shadow-md border border-slate-300 backdrop-blur-xl transition-all scale-100 active:scale-95 cursor-pointer"
             >
-              <Minimize2 className="h-4 w-4" />
-              <span>Concluir</span>
+              <X className="h-4 w-4 stroke-[2.5] text-slate-600" />
+              <span>Fechar</span>
             </button>
           </div>
         </div>
 
-        {/* ILHA FLUTUANTE DE FERRAMENTAS — BRANCO GELO CLÍNICO (z-[60] GARANTIDO) */}
-        <div
-          className={`absolute z-[60] pointer-events-auto transition-all duration-200 ${
-            islandDockedBottom
-              ? 'bottom-5 left-1/2 -translate-x-1/2'
-              : 'top-3.5 left-1/2 -translate-x-1/2'
-          }`}
-        >
-          {isIslandMinimized ? (
-            <button
-              type="button"
-              onClick={() => setIsIslandMinimized(false)}
-              className="flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white/95 px-3.5 py-2 shadow-xl backdrop-blur-xl text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer animate-in fade-in zoom-in-95 duration-100"
-              title="Expandir barra de ferramentas flutuante"
-            >
-              <MoveDiagonal className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Ferramentas</span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                {modo}
-              </span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white/95 px-2.5 py-1.5 shadow-xl backdrop-blur-xl">
-            {/* Tríade de Ferramentas */}
-            <button
-              type="button"
-              onClick={() => setModo('traco')}
-              title="Traço Contínuo (T)"
-              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                modo === 'traco'
-                  ? 'border border-emerald-500/40 bg-emerald-50 text-emerald-700 shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <MoveDiagonal className="h-3.5 w-3.5" />
-              <span>Traço</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setModo('ponto')}
-              title="Ponto Direto (P)"
-              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                modo === 'ponto'
-                  ? 'border border-emerald-500/40 bg-emerald-50 text-emerald-700 shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <MousePointer2 className="h-3.5 w-3.5" />
-              <span>Ponto</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setModo('borracha')}
-              title="Borracha (B)"
-              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                modo === 'borracha'
-                  ? 'border border-red-500/40 bg-red-50 text-red-600 shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Eraser className="h-3.5 w-3.5" />
-              <span>Borracha</span>
-            </button>
-
-            <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-            {/* Alternar Doses (Olho) */}
-            <button
-              type="button"
-              onClick={() => setMostrarValores((prev) => !prev)}
-              title={mostrarValores ? 'Ocultar Doses (D)' : 'Mostrar Doses (D)'}
-              className={`flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                mostrarValores
-                  ? 'text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100/70'
-                  : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
-              }`}
-            >
-              {mostrarValores ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline text-[11px] font-bold">Doses</span>
-            </button>
-
-            {/* Desfazer */}
-            <button
-              type="button"
-              onClick={() => onDesfazerUltimo?.()}
-              disabled={countPontosVista === 0}
-              title="Desfazer (Ctrl+Z)"
-              className="flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-35 disabled:cursor-not-allowed transition-all cursor-pointer"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-            </button>
-
-            <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-            {/* Chip de Cor Ativa com Popover Rápido */}
-            <div className="relative">
-              <button
-                type="button"
-                aria-label={`Cor ativa: ${activeCor}. Clique para mudar.`}
-                title={`Cor ativa: ${activeCor}`}
-                onClick={() => setIslandColorPickerOpen((prev) => !prev)}
-                className="flex items-center gap-1 rounded-xl p-1.5 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <span
-                  className="h-4 w-4 rounded-full border border-black/20 shadow-2xs"
-                  style={{ backgroundColor: activeCor }}
-                />
-              </button>
-
-              {islandColorPickerOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-[70]"
-                    onClick={() => setIslandColorPickerOpen(false)}
-                  />
-                    <div
-                      className={`absolute left-1/2 -translate-x-1/2 ${
-                        islandDockedBottom ? 'bottom-full mb-2' : 'top-full mt-2'
-                      } z-[80] w-52 rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100`}
-                    >
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">
-                        Trocar Cor Ativa
-                      </p>
-                      <div className="grid grid-cols-6 gap-1.5">
-                        {MAPEAMENTO_PALETA_CORES.map((c) => {
-                          const procOwner = listaProcedimentos.find(
-                            (p) => (p.corHex || corParaProcedimento(p.id)).toLowerCase() === c.toLowerCase()
-                          );
-                          const isEmUso = Boolean(procOwner);
-                          const isAtiva = activeCor.toLowerCase() === c.toLowerCase();
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              title={isEmUso ? `Em uso por: ${procOwner.nome}` : 'Cor livre'}
-                              onClick={() => {
-                                if (activeProc) {
-                                  handleMudarCorProcedimento(activeProc.id, c);
-                                } else {
-                                  setCorLivre(c);
-                                }
-                                setIslandColorPickerOpen(false);
-                              }}
-                              className={`flex h-5 w-5 items-center justify-center rounded-full border transition-transform hover:scale-120 cursor-pointer ${
-                                isAtiva ? 'ring-2 ring-emerald-500 ring-offset-1 scale-105' : 'border-black/10'
-                              }`}
-                              style={{ backgroundColor: c }}
-                            >
-                              {isEmUso ? (
-                                <span className="h-1 w-1 rounded-full bg-white shadow-2xs" />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                </>
-              )}
-            </div>
-
-            <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-            {/* Botão Enquadrar na Tela */}
-            <button
-              type="button"
-              onClick={handleResetView}
-              title="Enquadrar na tela (0 ou R)"
-              className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-all cursor-pointer shadow-2xs"
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-              </svg>
-              <span>Enquadrar</span>
-            </button>
-
-            <div className="h-4 w-px bg-slate-200 mx-0.5" />
-
-            {/* Alternar Posição (Dock Inferior / Superior) */}
-            <button
-              type="button"
-              onClick={() => setIslandDockedBottom((prev) => !prev)}
-              title={islandDockedBottom ? 'Mover barra para o Topo' : 'Mover barra para a Base (Dock)'}
-              className="flex items-center gap-1 rounded-xl px-2 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-[11px] font-semibold transition-colors cursor-pointer"
-            >
-              {islandDockedBottom ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              <span>{islandDockedBottom ? 'Topo' : 'Dock'}</span>
-            </button>
-
-            {/* Minimizar Ilha */}
-            <button
-              type="button"
-              onClick={() => setIsIslandMinimized(true)}
-              title="Minimizar barra de ferramentas"
-              className="p-1 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
+        {/* BOLINHA FLUTUANTE ASSISTIVETOUCH ERGONÔMICA (z-[70]) */}
+        <AssistiveTouchToolbar
+          modo={modo}
+          setModo={setModo}
+          mostrarDoses={mostrarValores}
+          setMostrarDoses={setMostrarValores}
+          onUndo={onDesfazerUltimo}
+          canUndo={countPontosVista > 0}
+          activeCor={activeCor}
+          activeProc={activeProc}
+          procedimentos={listaProcedimentos}
+          onMudarCor={(novaCor) => {
+            if (activeProc) {
+              handleMudarCorProcedimento(activeProc.id, novaCor);
+            } else {
+              setCorLivre(novaCor);
+            }
+          }}
+          containerRef={mainContainerRef}
+        />
 
         {/* Canvas da Foto Nativo */}
         <FotoVistaCanvasCore

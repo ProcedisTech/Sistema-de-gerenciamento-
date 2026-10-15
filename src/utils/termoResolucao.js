@@ -189,7 +189,7 @@ export function catalogoIdsDoAtendimento({
   add(catalogoOrigemId);
   if (Array.isArray(procedimentosSessao)) {
     for (const p of procedimentosSessao) {
-      add(p?.nomeProcedimentoCatalogoId || p?.catalogoProcedimentoSaudeId);
+      add(p?.nomeProcedimentoCatalogoId || p?.catalogoProcedimentoSaudeId || p?.catalogoId);
     }
   }
   return ids;

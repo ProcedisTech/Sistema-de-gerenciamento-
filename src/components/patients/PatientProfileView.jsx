@@ -98,6 +98,7 @@ import {
 } from './GaleriaArquivoImage.jsx';
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { GaleriaMapaThumb } from './galeria/GaleriaMapaThumb.jsx';
+import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
@@ -335,8 +336,8 @@ function ProntuarioSessionPhotos({ fotosProc, onPreviewPhoto, selectedPatientId 
                       setSelectedStage(tab.id);
                     }}
                     className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${active
-                        ? 'bg-[#00a88e] text-white shadow-2xs'
-                        : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                      ? 'bg-[#00a88e] text-white shadow-2xs'
+                      : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
                       }`}
                   >
                     <span>{tab.label}</span>
@@ -1273,12 +1274,12 @@ export function PatientProfileView({
     const defaultTab = canSeeOrcamentos
       ? 'planos'
       : (canSeeProntuario
-          ? 'prontuario'
-          : ((canStartAnamnese || canSeeRespostasAnamnese)
-              ? 'anamnese'
-              : (canSeeGaleria
-                  ? 'galeria'
-                  : 'documentos')));
+        ? 'prontuario'
+        : ((canStartAnamnese || canSeeRespostasAnamnese)
+          ? 'anamnese'
+          : (canSeeGaleria
+            ? 'galeria'
+            : 'documentos')));
 
     if (
       patientDetailTab === 'timeline' ||
@@ -2539,8 +2540,8 @@ export function PatientProfileView({
                                 setProntuarioVisibleCount(PRONTUARIO_PAGE_SIZE);
                               }}
                               className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${active
-                                  ? 'bg-[#00a88e] text-white shadow-2xs'
-                                  : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                                ? 'bg-[#00a88e] text-white shadow-2xs'
+                                : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
                                 }`}
                             >
                               <span>{f.label}</span>
@@ -2613,8 +2614,8 @@ export function PatientProfileView({
                               <ProcedureTimelineEntry key={rowKey} depth={depth}>
                                 <div
                                   className={`overflow-hidden rounded-xl border transition-all ${depth > 0
-                                      ? 'border-sky-200/80 border-l-4 border-l-sky-500 bg-[#f0f9ff]/40 shadow-2xs hover:shadow-xs'
-                                      : 'border-[#e2e8f0] border-l-4 border-l-[#00a88e] bg-white shadow-xs hover:shadow-sm'
+                                    ? 'border-sky-200/80 border-l-4 border-l-sky-500 bg-[#f0f9ff]/40 shadow-2xs hover:shadow-xs'
+                                    : 'border-[#e2e8f0] border-l-4 border-l-[#00a88e] bg-white shadow-xs hover:shadow-sm'
                                     }`}
                                 >
                                   <button
@@ -2697,8 +2698,8 @@ export function PatientProfileView({
                                           toggleProntuarioRetornos(proc.id);
                                         }}
                                         className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${expandedProntuarioRetornosMap[proc.id]
-                                            ? 'border-2 border-sky-400 bg-sky-100 text-sky-950 shadow-xs'
-                                            : 'border-2 border-sky-300/90 bg-sky-50/90 text-sky-950 shadow-2xs hover:border-sky-400 hover:bg-sky-100'
+                                          ? 'border-2 border-sky-400 bg-sky-100 text-sky-950 shadow-xs'
+                                          : 'border-2 border-sky-300/90 bg-sky-50/90 text-sky-950 shadow-2xs hover:border-sky-400 hover:bg-sky-100'
                                           }`}
                                       >
                                         <span className="flex items-center gap-1.5">
@@ -3471,33 +3472,32 @@ export function PatientProfileView({
       )}
 
       {galleryPreview && (
-        <div
-          className="fixed inset-0 z-[220] bg-black/70 flex items-center justify-center p-4"
-          onClick={() => setGalleryPreview(null)}
-          role="presentation"
-        >
-          <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setGalleryPreview(null)}
-              className="absolute -top-10 right-0 text-white font-bold"
-            >
-              Fechar
-            </button>
-            {Boolean(galleryPreview.mapaOverlay?.marcacoes?.length) ||
-              galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ? (
-              <div className="aspect-square w-[min(90vw,85vh)] overflow-hidden rounded-xl border border-white/30 bg-slate-900">
-                <GaleriaMapaThumb
-                  url={galleryPreview.url}
-                  mapaOverlay={galleryPreview.mapaOverlay}
-                  alt={galleryPreview.caption || 'Preview da foto'}
-                  className="h-full w-full"
-                  density="full"
-                  pacienteId={selectedPatient?.id}
-                  fotoId={galleryPreview.serverId}
-                />
-              </div>
-            ) : (
+        Boolean(galleryPreview.mapaOverlay?.marcacoes?.length) ||
+        galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ||
+        galleryPreview.categoria === GALERIA_CATEGORIA.AVALIACAO ||
+        galleryPreview.categoria === 'avaliacao' ||
+        galleryPreview.tipoFotoCodigo === 'avaliacao' ||
+        Boolean(galleryPreview.pontos?.length) ? (
+          <PlanoFotoLightbox
+            foto={galleryPreview}
+            fotos={galleryPreview.fotos || [galleryPreview]}
+            pacienteId={selectedPatient?.id}
+            onClose={() => setGalleryPreview(null)}
+          />
+        ) : (
+          <div
+            className="fixed inset-0 z-[220] bg-black/70 flex items-center justify-center p-4"
+            onClick={() => setGalleryPreview(null)}
+            role="presentation"
+          >
+            <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setGalleryPreview(null)}
+                className="absolute -top-10 right-0 text-white font-bold"
+              >
+                Fechar
+              </button>
               <ZoomableGalleryLightbox
                 url={galleryPreview.url}
                 alt={galleryPreview.caption || 'Preview da foto'}
@@ -3505,9 +3505,9 @@ export function PatientProfileView({
                 pacienteId={selectedPatient?.id}
                 fotoId={galleryPreview.serverId}
               />
-            )}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       <RelatoAcompanhamentoModal

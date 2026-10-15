@@ -104,6 +104,7 @@ export function FotoVistaCanvasCore({
   onModoChange,
   configMarcacao,
   mostrarValores: externalMostrarValores,
+  canUpload = true,
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -398,13 +399,10 @@ export function FotoVistaCanvasCore({
 
 
   const handleFileChange = (e) => {
-
     const file = e.target.files?.[0];
-
     e.target.value = '';
-
+    if (!canUpload) return;
     if (file) onRequestUpload?.(file);
-
   };
 
 
@@ -464,58 +462,39 @@ export function FotoVistaCanvasCore({
 
               {typeof onOpenGaleria === 'function' ? (
                 <button
-
                   type="button"
-
-                  disabled={mediaBusy}
-
+                  disabled={mediaBusy || !canUpload}
+                  title={!canUpload ? 'Selecione um procedimento do catálogo para habilitar' : undefined}
                   onClick={() => onOpenGaleria()}
-
-                  className="inline-flex items-center gap-2 rounded-xl border border-app-accent/40 bg-white px-4 py-2.5 text-[13px] font-semibold text-[#00a88e] shadow-sm hover:bg-app-nav-active disabled:cursor-not-allowed disabled:opacity-60"
-
+                  className="inline-flex items-center gap-2 rounded-xl border border-app-accent/40 bg-white px-4 py-2.5 text-[13px] font-semibold text-[#00a88e] shadow-sm hover:bg-app-nav-active disabled:cursor-not-allowed disabled:opacity-50"
                 >
-
                   {mediaBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-
                   Galeria
-
                 </button>
               ) : null}
 
               <button
-
                 type="button"
-
-                disabled={mediaBusy}
-
+                disabled={mediaBusy || !canUpload}
+                title={!canUpload ? 'Selecione um procedimento do catálogo para habilitar' : undefined}
                 onClick={() => onRequestCapture?.()}
-
-                className="inline-flex items-center gap-2 rounded-xl bg-app-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
-
+                className="inline-flex items-center gap-2 rounded-xl bg-app-accent px-4 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-50"
               >
-
                 <Camera className="h-4 w-4" />
-
                 Capturar
-
               </button>
 
               <button
-
                 type="button"
-
-                disabled={mediaBusy}
-
-                onClick={() => fileInputRef.current?.click()}
-
-                className="inline-flex items-center gap-2 rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#475569] shadow-sm hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
-
+                disabled={mediaBusy || !canUpload}
+                title={!canUpload ? 'Selecione um procedimento do catálogo para habilitar' : undefined}
+                onClick={() => {
+                  if (canUpload) fileInputRef.current?.click();
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#475569] shadow-sm hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
               >
-
                 <Upload className="h-4 w-4" />
-
                 Upload
-
               </button>
 
               <input
@@ -542,7 +521,7 @@ export function FotoVistaCanvasCore({
         <>
 
           <div
-            className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-[#0b0f19] overflow-hidden"
+            className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-slate-300 overflow-hidden"
             role="presentation"
           >
             <TransformWrapper
@@ -694,39 +673,27 @@ export function FotoVistaCanvasCore({
                 <div className="flex flex-wrap gap-2">
 
                   <button
-
                     type="button"
-
-                    disabled={mediaBusy}
-
+                    disabled={mediaBusy || !canUpload}
+                    title={!canUpload ? 'Selecione um procedimento do catálogo para habilitar' : undefined}
                     onClick={() => onOpenGaleria?.()}
-
-                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
-
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-
                     {mediaBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-
                     Trocar foto
-
                   </button>
 
                   <button
-
                     type="button"
-
-                    disabled={mediaBusy}
-
-                    onClick={() => fileInputRef.current?.click()}
-
-                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60"
-
+                    disabled={mediaBusy || !canUpload}
+                    title={!canUpload ? 'Selecione um procedimento do catálogo para habilitar' : undefined}
+                    onClick={() => {
+                      if (canUpload) fileInputRef.current?.click();
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#64748b] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-
                     <Upload className="h-3.5 w-3.5" />
-
                     Upload
-
                   </button>
 
                   <input

@@ -284,5 +284,18 @@ describe('termoResolucao — PF desta sessão por catálogo (T1)', () => {
     const statusOutro = statusTermoPorProcedimento('cat-qualquer', resolucao);
     expect(statusOutro.status).toBe('dispensado');
   });
+
+  it('catalogoIdsDoAtendimento extrai catalogoId, catalogoProcedimentoSaudeId e nomeProcedimentoCatalogoId', () => {
+    const ids = catalogoIdsDoAtendimento({
+      nomeProcedimentoCatalogoId: 'cat-1',
+      procedimentosSessao: [
+        { catalogoProcedimentoSaudeId: 'cat-2' },
+        { catalogoId: 'cat-3' },
+        { nomeProcedimentoCatalogoId: 'cat-4' },
+      ],
+      catalogoOrigemId: 'cat-5',
+    });
+    expect(ids).toEqual(['cat-1', 'cat-5', 'cat-2', 'cat-3', 'cat-4']);
+  });
 });
 

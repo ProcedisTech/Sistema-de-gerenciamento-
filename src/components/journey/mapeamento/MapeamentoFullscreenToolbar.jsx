@@ -5,7 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ImageOff,
-  MousePointer2,
+  CircleDot,
   MoveDiagonal,
   Eraser,
   Eye,
@@ -37,7 +37,7 @@ const DEFAULT_TOOLBAR_WIDTH_PX = 240;
 const COLLAPSED_WIDTH_PX = 48;
 
 const FERRAMENTAS = [
-  { id: 'ponto', label: 'Ponto', shortcut: 'P', Icon: MousePointer2 },
+  { id: 'ponto', label: 'Ponto', shortcut: 'P', Icon: CircleDot },
   { id: 'traco', label: 'Traço', shortcut: 'T', Icon: MoveDiagonal },
   { id: 'borracha', label: 'Borracha', shortcut: 'B', Icon: Eraser },
 ];
@@ -220,6 +220,7 @@ export function MapeamentoFullscreenToolbar({
   onOpenResumo: _onOpenResumo,
   onSaveAction,
   tituloAcaoPrimaria,
+  subtituloAcaoPrimaria,
   isSaving = false,
   configPopoverOpen: _configPopoverOpen = false,
   onConfigPopoverOpenChange: _onConfigPopoverOpenChange,
@@ -242,6 +243,13 @@ export function MapeamentoFullscreenToolbar({
     const q = catalogSearchQuery.toLowerCase().trim();
     return catalogoOptions.filter((opt) => opt.nome.toLowerCase().includes(q)).slice(0, 30);
   }, [catalogoOptions, catalogSearchQuery]);
+
+  // Procedimentos do Plano Ativo que ainda NÃO foram adicionados aos procedimentos ativos do mapa
+  const procedimentosPlanoNaoAdicionados = useMemo(() => {
+    if (!Array.isArray(procedimentosDoPlano) || procedimentosDoPlano.length === 0) return [];
+    const idsAtivos = new Set((procedimentos || []).map((p) => String(p.id || '').trim()));
+    return procedimentosDoPlano.filter((p) => !idsAtivos.has(String(p.id || '').trim()));
+  }, [procedimentosDoPlano, procedimentos]);
 
   const handleSelectCatalogItem = (opt) => {
     setCatalogSearchQuery('');
@@ -354,17 +362,17 @@ export function MapeamentoFullscreenToolbar({
               <div className="relative mx-0.5" ref={searchContainerRef}>
                 <div className="flex items-center justify-between px-0.5 mb-1.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Adicionar Procedimento
+                    + Adicionar ao Plano
                   </span>
                   <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 uppercase tracking-wider">
-                    Busca Direta
+                    Catálogo
                   </span>
                 </div>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Buscar procedimento no catálogo..."
+                    placeholder="Buscar procedimento para o plano..."
                     value={catalogSearchQuery}
                     onChange={(e) => {
                       setCatalogSearchQuery(e.target.value);
@@ -439,26 +447,22 @@ export function MapeamentoFullscreenToolbar({
             )
           ) : null}
 
-          {/* BANDEJA DE CHIPS RÁPIDOS DO PLANO DE TRATAMENTO ATIVO */}
-          {!collapsed && Array.isArray(procedimentosDoPlano) && procedimentosDoPlano.length > 0 && (
-            <div className="rounded-xl border border-teal-200/80 bg-gradient-to-br from-teal-50/70 to-cyan-50/50 p-2.5 shadow-2xs">
+          {/* BANDEJA DE CHIPS RÁPIDOS DO PLANO DE TRATAMENTO ATIVO (APENAS NÃO ADICIONADOS) */}
+          {!collapsed && procedimentosPlanoNaoAdicionados.length > 0 && (
+            <div className="rounded-xl border border-teal-200/80 bg-gradient-to-br from-teal-50/70 to-cyan-50/50 p-2.5 shadow-2xs animate-in fade-in duration-200">
               <div className="mb-2 flex items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ClipboardList className="h-3.5 w-3.5 text-teal-600 shrink-0" />
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-800 truncate">
-                    Plano do Paciente
+                    Itens do Plano a Adicionar
                   </span>
                 </div>
                 <span className="shrink-0 rounded-full border border-teal-200/90 bg-teal-100/90 px-2 py-0.5 text-[10px] font-bold text-teal-800 shadow-2xs whitespace-nowrap">
-                  {procedimentosDoPlano.length} no plano
+                  +{procedimentosPlanoNaoAdicionados.length} pendente{procedimentosPlanoNaoAdicionados.length > 1 ? 's' : ''}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {procedimentosDoPlano.map((procPlano) => {
-                  const procAdicionado = procedimentos.find((p) => p.id === procPlano.id);
-                  const jaAdicionado = Boolean(procAdicionado);
-                  const isFocado = jaAdicionado && activeProcedimentoId === procPlano.id;
-                  const cor = procAdicionado?.corHex || corParaProcedimento(procPlano.id);
+                {procedimentosPlanoNaoAdicionados.map((procPlano) => {
                   const nomeExibicao =
                     procPlano.nome ||
                     catalogoOptions.find((o) => o.id === procPlano.id)?.nome ||
@@ -468,41 +472,12 @@ export function MapeamentoFullscreenToolbar({
                     <button
                       key={procPlano.id}
                       type="button"
-                      onClick={() => {
-                        if (!jaAdicionado) {
-                          onAdicionarProcedimento?.(procPlano);
-                        } else {
-                          onSelectProcedimento?.(procAdicionado || procPlano);
-                        }
-                      }}
-                      title={
-                        jaAdicionado
-                          ? `${nomeExibicao} já adicionado ao mapa (clique para focar o pincel)`
-                          : `Adicionar ${nomeExibicao} ao mapa e armar pincel`
-                      }
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
-                        jaAdicionado
-                          ? isFocado
-                            ? 'border border-emerald-500 bg-emerald-50 text-emerald-800 shadow-2xs ring-1 ring-emerald-500/40'
-                            : 'border border-slate-300 bg-slate-50 text-slate-700 shadow-2xs hover:bg-slate-100 hover:border-slate-400'
-                          : 'border border-teal-200 bg-white text-teal-800 shadow-2xs hover:bg-teal-50 hover:border-teal-400 hover:shadow-xs'
-                      }`}
+                      onClick={() => onAdicionarProcedimento?.(procPlano)}
+                      title={`Adicionar ${nomeExibicao} ao mapa e armar pincel`}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold border border-teal-200 bg-white text-teal-800 shadow-2xs hover:bg-teal-50 hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer"
                     >
-                      {jaAdicionado ? (
-                        <>
-                          <span
-                            className="h-2 w-2 rounded-full shrink-0"
-                            style={{ backgroundColor: cor }}
-                          />
-                          <Check className="h-3 w-3 text-emerald-600 shrink-0" />
-                          <span className="truncate max-w-[150px]">{nomeExibicao}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-3 w-3 text-teal-600 font-extrabold shrink-0" />
-                          <span className="truncate max-w-[150px]">{nomeExibicao}</span>
-                        </>
-                      )}
+                      <Plus className="h-3 w-3 text-teal-600 font-extrabold shrink-0" />
+                      <span className="truncate max-w-[150px]">{nomeExibicao}</span>
                       {procPlano.isRetorno && (
                         <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black uppercase text-amber-800 tracking-wider">
                           Retorno
@@ -515,11 +490,11 @@ export function MapeamentoFullscreenToolbar({
             </div>
           )}
 
-          {/* PROCEDIMENTOS ATIVOS */}
+          {/* PROCEDIMENTOS DO PLANO */}
           {!collapsed && (
-            <div className="flex items-center justify-between px-0.5 mt-1 mb-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Procedimentos Ativos
+            <div className="flex items-center justify-between px-0.5 mt-1 mb-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                Procedimentos do Plano
               </span>
               <span className="text-[10px] font-bold text-slate-400">
                 {procedimentos.length} no mapa
@@ -643,7 +618,10 @@ export function MapeamentoFullscreenToolbar({
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <p className={`truncate text-[12px] font-bold leading-tight ${isSelected ? 'text-app-accent-deep' : 'text-slate-700'}`}>
+                            <p
+                              className={`truncate text-[12px] font-bold leading-tight ${isSelected ? 'text-app-accent-deep' : 'text-slate-700'}`}
+                              title={proc.nome}
+                            >
                               {proc.nome}
                             </p>
                             <p className="mt-0.5 text-[10px] text-slate-500 font-medium">
@@ -1015,16 +993,29 @@ export function MapeamentoFullscreenToolbar({
               type="button"
               onClick={onSaveAction || onClose}
               disabled={isSaving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 hover:bg-teal-400 py-2.5 px-3 text-xs font-bold text-slate-950 shadow-md shadow-teal-500/20 active:scale-98 disabled:opacity-50 transition-all cursor-pointer"
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 py-2.5 px-3 text-slate-950 shadow-md shadow-teal-500/20 active:scale-98 disabled:opacity-50 transition-all cursor-pointer"
             >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 stroke-[2.5]" />}
-              <span>{tituloAcaoPrimaria || 'Concluir Avaliação'}</span>
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              ) : (
+                <Check className="h-4 w-4 stroke-[2.5] shrink-0" />
+              )}
+              <div className="flex flex-col items-start min-w-0 text-left leading-tight">
+                <span className="text-xs font-bold text-slate-950 truncate">
+                  {tituloAcaoPrimaria || 'Salvar Plano de Tratamento'}
+                </span>
+                {subtituloAcaoPrimaria && (
+                  <span className="text-[10px] font-semibold text-teal-950/80 truncate">
+                    {subtituloAcaoPrimaria}
+                  </span>
+                )}
+              </div>
             </button>
           ) : (
             <button
               type="button"
               onClick={onSaveAction || onClose}
-              title={tituloAcaoPrimaria || 'Concluir'}
+              title={tituloAcaoPrimaria || 'Salvar Plano de Tratamento'}
               className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-slate-950 shadow-sm"
             >
               <Check className="h-5 w-5 stroke-[2.5]" />
@@ -1089,10 +1080,12 @@ export function MapeamentoFullscreenToolbar({
               stopBubble(e);
               onClose?.();
             }}
-            title="Sair (Esc)"
-            className="flex items-center justify-center gap-2 py-1 text-[11px] font-medium text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+            title="Fechar tela cheia (Esc)"
+            className={`flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 hover:text-slate-900 py-2 text-xs font-semibold text-slate-600 transition-all cursor-pointer shadow-2xs ${
+              collapsed ? 'w-10 h-10 p-0 mx-auto' : 'w-full px-3'
+            }`}
           >
-            <Minimize2 className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5 text-slate-500 stroke-[2.5]" />
             {!collapsed ? <span>Fechar tela cheia</span> : null}
           </button>
         </div>

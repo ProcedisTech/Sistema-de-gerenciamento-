@@ -68,6 +68,8 @@ function PlanoVisitaGaleria({
 
       const fotosDoItem = fotosPorPlanejamentoItemId[lookupKey] || [];
       fotosDoItem.forEach((f) => {
+        const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
+        if (fData && fData !== visita.data) return;
         const key = String(f.id || f.fotoId || f.url);
         if (!map.has(key)) map.set(key, f);
       });
@@ -115,6 +117,29 @@ function PlanoVisitaGaleria({
       else grupos.outro.push(f);
     });
 
+    // Deduplicação inteligente de fotos de avaliação:
+    // Se houver múltiplas fotos apontando para o mesmo mapaId ou rascunhos acumulados na mesma sessão/data,
+    // preserva a versão mais recente de cada ângulo (ex: frontal e perfil separados).
+    let fotosAvaliacao = grupos.avaliacao;
+    if (fotosAvaliacao.length > 1) {
+      const mapaSeen = new Map();
+      const semMapa = [];
+      fotosAvaliacao.forEach((f) => {
+        const mapaId = f.mapaOverlay?.id || f.mapaOverlay?.mapaId || f.mapaId;
+        const angulo = f.anguloFotoCodigo || f.angulo || f.mapaOverlay?.anguloCodigo || 'frontal';
+        if (mapaId) {
+          mapaSeen.set(`${mapaId}_${angulo}`, f);
+        } else {
+          semMapa.push(f);
+        }
+      });
+      if (mapaSeen.size > 0) {
+        fotosAvaliacao = Array.from(mapaSeen.values());
+      } else if (semMapa.length > 1) {
+        fotosAvaliacao = [semMapa[semMapa.length - 1]];
+      }
+    }
+
     const ordem = [
       { key: 'antes', label: 'Antes' },
       { key: 'mapa', label: 'Mapa de Aplicação' },
@@ -127,7 +152,7 @@ function PlanoVisitaGaleria({
       .map(({ key, label }) => ({
         key,
         label,
-        fotos: grupos[key] || [],
+        fotos: key === 'avaliacao' ? fotosAvaliacao : (grupos[key] || []),
       }))
       .filter((c) => c.fotos.length > 0);
   }, [fotos]);
@@ -186,7 +211,7 @@ function PlanoVisitaGaleria({
                       key={f.id || f.fotoId || f.url}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSelectFoto(f, fotos);
+                        onSelectFoto(f, catFotos);
                       }}
                       className="group relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shadow-2xs hover:border-[#00a88e] hover:shadow-md hover:scale-[1.03] transition-all cursor-pointer select-none"
                       title={f.descricaoLegenda || f.nomeProcedimento || 'Clique para ampliar com zoom'}
@@ -292,10 +317,12 @@ export function PlanoVisitasTimeline({
     const gruposPorData = new Map();
 
     itens.forEach((item) => {
+      const isRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
       const dataIso =
         item.sessaoAtiva?.dataAgendamento ||
         item.sessaoRealizada?.dataAgendamento ||
-        item.dataPlanejada;
+        item.dataPlanejada ||
+        (isRealizado ? (item.dataRealizacao || item.realizadoEm || item.dataAtendimento || toLocalDateIso()) : null);
       const dataKey = dataIso ? String(dataIso).slice(0, 10) : null;
 
       if (!dataKey) {
@@ -308,6 +335,7 @@ export function PlanoVisitasTimeline({
               item.sessaoAtiva?.horaInicio ||
               item.sessaoRealizada?.horaInicio ||
               item.horaInicio ||
+              item.horaRealizacao ||
               null,
             itens: [],
           });
@@ -393,12 +421,28 @@ export function PlanoVisitasTimeline({
     return poolSemData.reduce((acc, i) => acc + (Number(i.valorOrcado) || 0), 0);
   }, [poolSemData]);
 
-  // Fotos de Avaliação e Aplicação
+  // Fotos e Mapas consolidados do Plano (com deduplicação inteligente por mapa e ângulo)
   const fotosAvaliacao = useMemo(() => {
-    return fotosDoPlano.filter((f) => {
-      const cat = (f.categoria || '').toLowerCase();
-      return cat === 'avaliacao' || cat === 'antes' || cat === 'mapa' || cat === 'planejamento' || cat === 'modelo';
+    const mapaSeen = new Map();
+    const semMapa = [];
+
+    (fotosDoPlano || []).forEach((f) => {
+      const mapaId = f.mapaOverlay?.id || f.mapaOverlay?.mapaId || f.mapaId;
+      const angulo = f.anguloFotoCodigo || f.angulo || f.mapaOverlay?.anguloCodigo || 'frontal';
+      if (mapaId) {
+        mapaSeen.set(`${mapaId}_${angulo}`, f);
+      } else {
+        semMapa.push(f);
+      }
     });
+
+    const unicasSemMapa = new Map();
+    semMapa.forEach((f) => {
+      const key = String(f.id || f.fotoId || f.url);
+      if (!unicasSemMapa.has(key)) unicasSemMapa.set(key, f);
+    });
+
+    return [...mapaSeen.values(), ...unicasSemMapa.values()];
   }, [fotosDoPlano]);
 
   return (
@@ -623,10 +667,10 @@ export function PlanoVisitasTimeline({
             </div>
             <div>
               <span className="text-xs font-bold text-slate-800">
-                {fotosAvaliacao.length} {fotosAvaliacao.length === 1 ? 'Foto / Mapa de Avaliação' : 'Fotos / Mapas de Avaliação'}
+                {fotosAvaliacao.length} {fotosAvaliacao.length === 1 ? 'Foto / Mapa deste Plano' : 'Fotos / Mapas deste Plano'}
               </span>
               <span className="block text-[10px] text-slate-500 font-medium">
-                Registros diagnósticos vinculados a este plano
+                Registros fotográficos e mapas vinculados a este plano
               </span>
             </div>
           </div>
@@ -638,13 +682,25 @@ export function PlanoVisitasTimeline({
                 className="h-7 w-7 rounded-md overflow-hidden border border-teal-200 cursor-pointer hover:border-[#00a88e] hover:scale-105 transition-transform"
                 title={f.descricaoLegenda || 'Ver foto'}
               >
-                <GaleriaArquivoImage
-                  url={f.url}
-                  pacienteId={pacienteId}
-                  fotoId={f.fotoId || f.id}
-                  alt="Thumb"
-                  imgClassName="w-full h-full object-cover"
-                />
+                {Boolean(f.mapaOverlay?.marcacoes?.length) || Boolean(f.pontos?.length) ? (
+                  <GaleriaMapaThumb
+                    url={f.url}
+                    mapaOverlay={f.mapaOverlay || (f.pontos ? { pontos: f.pontos } : null)}
+                    pacienteId={pacienteId}
+                    fotoId={f.fotoId || f.id}
+                    alt="Thumb"
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
+                  />
+                ) : (
+                  <GaleriaArquivoImage
+                    url={f.url}
+                    pacienteId={pacienteId}
+                    fotoId={f.fotoId || f.id}
+                    alt="Thumb"
+                    imgClassName="w-full h-full object-cover"
+                  />
+                )}
               </div>
             ))}
             <button

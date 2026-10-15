@@ -1,9 +1,18 @@
 import { corParaProcedimento, MAPEAMENTO_PALETA_CORES } from '../../../constants/mapeamentoPaletaCores.js';
 
 /** Converte marcacoes do DTO da API (mapaOverlay / MapaResponse) em lista plana para o overlay. */
-export function marcacoesApiToOverlayPontos(marcacoes) {
+export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
   if (!Array.isArray(marcacoes)) return [];
   const procIdToIndex = new Map();
+  const procMap = new Map();
+  if (Array.isArray(procedimentos)) {
+    for (const p of procedimentos) {
+      if (p?.id != null) {
+        procMap.set(String(p.id), p);
+      }
+    }
+  }
+
   return marcacoes.map((m, idx) => {
     const vertices = Array.isArray(m.vertices)
       ? m.vertices.map((v) => ({
@@ -14,27 +23,41 @@ export function marcacoesApiToOverlayPontos(marcacoes) {
       : [];
     const first = vertices[0];
     const catId = m.catalogoId || m.catalogoProcedimentoSaudeId || null;
-    let cor = m.corHex || m.cor || (catId ? corParaProcedimento(catId) : null);
-    if (!cor && m.mapaProcedimentoId) {
-      const pid = String(m.mapaProcedimentoId);
-      if (!procIdToIndex.has(pid)) {
-        procIdToIndex.set(pid, procIdToIndex.size);
+    const mapaProcId = m.mapaProcedimentoId != null ? String(m.mapaProcedimentoId) : null;
+    const proc = mapaProcId ? procMap.get(mapaProcId) : null;
+
+    let cor = m.corHex || m.cor || proc?.corHex || (catId ? corParaProcedimento(catId) : null);
+    if (!cor && mapaProcId) {
+      if (!procIdToIndex.has(mapaProcId)) {
+        procIdToIndex.set(mapaProcId, procIdToIndex.size);
       }
-      cor = MAPEAMENTO_PALETA_CORES[procIdToIndex.get(pid) % MAPEAMENTO_PALETA_CORES.length];
+      cor = MAPEAMENTO_PALETA_CORES[procIdToIndex.get(mapaProcId) % MAPEAMENTO_PALETA_CORES.length];
     }
     const finalCor = cor || MAPEAMENTO_PALETA_CORES[0];
+    const nomeProcedimento = m.nomeProcedimento || proc?.catalogoNome || proc?.nome || '';
+
+    const resolvedPosX =
+      first?.posX ??
+      (m.posX != null ? Number(m.posX) : (m.x != null ? Number(m.x) : null));
+    const resolvedPosY =
+      first?.posY ??
+      (m.posY != null ? Number(m.posY) : (m.y != null ? Number(m.y) : null));
+
     return {
-      localId: m.id != null ? String(m.id) : `api_${idx}`,
+      localId: m.localId != null ? String(m.localId) : (m.id != null ? String(m.id) : `api_${idx}`),
       id: m.id != null ? String(m.id) : `api_${idx}`,
-      tipoGeometria: m.tipoGeometria || 'ponto',
+      tipoGeometria: m.tipoGeometria || (vertices.length > 1 ? 'traco' : 'ponto'),
       quantidade: m.quantidade,
       tamanho: m.tamanho,
       cor: finalCor,
       vertices,
-      posX: first?.posX,
-      posY: first?.posY,
+      posX: resolvedPosX,
+      posY: resolvedPosY,
       catalogoId: catId,
-      nomeProcedimento: m.nomeProcedimento || '',
+      mapaProcedimentoId: mapaProcId,
+      nomeProcedimento,
+      ordemPonto: m.ordemPonto || idx + 1,
+      unidadeMedida: proc?.unidade || m.unidadeMedida || 'u',
     };
   });
 }

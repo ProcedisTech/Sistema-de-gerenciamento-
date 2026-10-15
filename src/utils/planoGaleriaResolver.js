@@ -19,6 +19,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   const fotos = (Array.isArray(fotosBrutas) ? fotosBrutas : []).map((f) => {
     const legInfo = parseGaleriaLegenda(f.legenda || f.descricaoLegenda);
     let cat = f.categoria || legInfo.categoria;
+    const isAvulso = Boolean(f.isAvulso || legInfo.isAvulso || /\[avulso\]/i.test(f.legenda || ''));
     if (!cat || cat === 'outro') {
       const code = String(f.tipoFotoCodigo || f.tipo_foto_codigo || '').toUpperCase();
       if (code === 'ANTES') cat = 'antes';
@@ -37,6 +38,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       agendaId: f.agendaId ? String(f.agendaId).trim() : null,
       registradoEm: f.registradoEm || f.createdAt || null,
       categoria: cat,
+      isAvulso,
       descricaoLegenda: f.descricaoLegenda || legInfo.descricao,
       dataISO: itemDataReferenciaISO(f) || (f.createdAt ? String(f.createdAt).slice(0, 10) : 'sem-data'),
     };
@@ -130,7 +132,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   (procedimentosFeitos || []).forEach((proc) => {
     const pfId = String(proc.id || proc.procedimentoFeitoId || '').trim();
     const pItemId = proc.planejamentoItemId ? String(proc.planejamentoItemId).trim() : null;
-    const agId = proc.agendaId ? String(proc.agendaId).trim() : null;
+    const agId = proc.agendaId || proc.agenda?.id ? String(proc.agendaId || proc.agenda?.id).trim() : null;
 
     if (!pfId) return;
 
@@ -150,6 +152,13 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         itemId: targetItemId,
         isRetorno,
       });
+      if (agId && !agendaIdToPlanoItemMap.has(agId)) {
+        agendaIdToPlanoItemMap.set(agId, {
+          planoId: match.planoId,
+          itemId: targetItemId,
+          isRetorno,
+        });
+      }
       return;
     }
 
@@ -185,6 +194,17 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   const fotosAvulsas = [];
 
   fotos.forEach((foto) => {
+    // 0. BLINDAGEM ESTREITA: Se for explicitamente avulsa, NUNCA vincula a nenhum plano!
+    if (foto.isAvulso) {
+      fotosAvulsas.push({
+        ...foto,
+        matchedItemId: null,
+        matchedPlanoId: null,
+        isRetorno: false,
+      });
+      return;
+    }
+
     let matchedPlanoId = null;
     let matchedItemId = null;
     let isRetornoFoto = false;
@@ -213,6 +233,102 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         );
         matchedItemId = fotoIsRetorno ? `${cleanPItemId}_retorno` : cleanPItemId;
         isRetornoFoto = fotoIsRetorno;
+      }
+    }
+
+    // 3. Match de contingência por agendaId (ex.: foto de avaliação diagnóstica sem procedimentoFeitoId)
+    // Vincula ao plano no nível do plano, mantendo matchedItemId null para não virar foto de execução
+    if (!matchedPlanoId && foto.agendaId) {
+      const fAgId = String(foto.agendaId).trim();
+      if (agendaIdToPlanoItemMap.has(fAgId)) {
+        const match = agendaIdToPlanoItemMap.get(fAgId);
+        matchedPlanoId = match.planoId;
+      } else {
+        // Se a agenda não foi pré-mapeada, verifica se algum procedimento realizado do plano compartilha esta mesma agenda
+        const pfMesmaAgenda = (procedimentosFeitos || []).find((pf) => {
+          const agId = pf.agendaId || pf.agenda?.id;
+          return agId && String(agId).trim() === fAgId;
+        });
+        if (pfMesmaAgenda) {
+          const pfId = String(pfMesmaAgenda.id || pfMesmaAgenda.procedimentoFeitoId || '').trim();
+          if (procedimentoFeitoToPlanoItemMap.has(pfId)) {
+            matchedPlanoId = procedimentoFeitoToPlanoItemMap.get(pfId).planoId;
+          }
+        }
+      }
+    }
+
+    // 4. Match direto por planejamentoId ou por mapaOverlay vinculados ao plano
+    if (!matchedPlanoId && (foto.planejamentoId || foto.mapaOverlay?.planejamentoId)) {
+      const pIdStr = String(foto.planejamentoId || foto.mapaOverlay?.planejamentoId).trim();
+      if (planos.some((p) => String(p.id) === pIdStr)) {
+        matchedPlanoId = pIdStr;
+      }
+    }
+
+    if (!matchedPlanoId && foto.mapaOverlay?.planejamentoItemId) {
+      const rawPItemId = String(foto.mapaOverlay.planejamentoItemId).replace(/_retorno$/, '').trim();
+      if (itemToPlanoMap.has(rawPItemId)) {
+        matchedPlanoId = itemToPlanoMap.get(rawPItemId).planoId;
+      }
+    }
+
+    if (!matchedPlanoId && foto.mapaOverlay?.procedimentos && Array.isArray(foto.mapaOverlay.procedimentos)) {
+      for (const proc of foto.mapaOverlay.procedimentos) {
+        const pItemId = proc.planejamentoItemId ? String(proc.planejamentoItemId).replace(/_retorno$/, '').trim() : null;
+        if (pItemId && itemToPlanoMap.has(pItemId)) {
+          matchedPlanoId = itemToPlanoMap.get(pItemId).planoId;
+          break;
+        }
+      }
+    }
+
+    // 5. Fallback clínico para fotos/mapas de avaliação com procedimentos correspondentes a um plano do paciente
+    // ATENÇÃO: Regras de inferência 5 e 6 NUNCA tocam em planos concluídos/cancelados (documentos clínicos selados).
+    if (!matchedPlanoId && (foto.categoria === 'avaliacao' || String(foto.tipoFotoCodigo || '').toUpperCase() === 'AVALIACAO')) {
+      const planosAtivos = (planos || []).filter((p) => {
+        const st = String(p.statusCodigo || p.status || '').toLowerCase().trim();
+        return !st || (st !== 'concluido' && st !== 'cancelado');
+      });
+
+      if (Array.isArray(foto.mapaOverlay?.procedimentos) && foto.mapaOverlay.procedimentos.length > 0) {
+        for (const plano of planosAtivos) {
+          const itens = plano.itens || [];
+          const temMatch = foto.mapaOverlay.procedimentos.some((mp) => {
+            const catId = mp.catalogoProcedimentoSaudeId ? String(mp.catalogoProcedimentoSaudeId).trim() : null;
+            return catId && itens.some((it) => String(it.catalogoProcedimentoSaudeId || it.catalogoId).trim() === catId);
+          });
+          if (temMatch) {
+            matchedPlanoId = String(plano.id).trim();
+            break;
+          }
+        }
+      }
+      // 6. Heurística de sessão clínica / data para fotos de avaliação do plano (apenas planos ativos)
+      if (!matchedPlanoId && foto.dataISO && foto.dataISO !== 'sem-data') {
+        const planosComAtividadeNaData = planosAtivos.filter((plano) => {
+          const pId = String(plano.id).trim();
+          const temProcNaData = (procedimentosFeitos || []).some((pf) => {
+            const match = procedimentoFeitoToPlanoItemMap.get(String(pf.id || pf.procedimentoFeitoId || '').trim());
+            if (!match || match.planoId !== pId) return false;
+            const pfData = pf.dataReferencia || (pf.criadoEm ? String(pf.criadoEm).slice(0, 10) : null);
+            return pfData === foto.dataISO;
+          });
+          if (temProcNaData) return true;
+          return (plano.itens || []).some((it) => {
+            const datasItem = [
+              it.sessaoAtiva?.dataAgendamento,
+              it.sessaoRealizada?.dataAgendamento,
+              it.sessaoRetornoAtiva?.dataAgendamento,
+              it.sessaoRetornoRealizada?.dataAgendamento,
+              ...(Array.isArray(it.sessoes) ? it.sessoes.map((s) => s.dataAgendamento) : []),
+            ].filter(Boolean).map((d) => String(d).slice(0, 10));
+            return datasItem.includes(foto.dataISO);
+          });
+        });
+        if (planosComAtividadeNaData.length === 1) {
+          matchedPlanoId = String(planosComAtividadeNaData[0].id).trim();
+        }
       }
     }
 
@@ -261,6 +377,14 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         if (!existente.procedimentosFeitosIds.includes(pfId)) {
           existente.procedimentosFeitosIds.push(pfId);
           existente.nomesProcedimentos.push(nomeAtual);
+          if (!Array.isArray(existente.procedimentosItens)) {
+            existente.procedimentosItens = [];
+          }
+          existente.procedimentosItens.push({
+            id: pfId,
+            nome: nomeAtual,
+            corHex: proc.corHex || proc.cor || null,
+          });
           existente.nomeProcedimento = existente.nomesProcedimentos.join(' + ');
         }
         if (!existente.procedimentoFeitoId) {
@@ -274,6 +398,13 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
           procedimentoFeitoId: pfId,
           procedimentosFeitosIds: [pfId],
           nomesProcedimentos: [nomeAtual],
+          procedimentosItens: [
+            {
+              id: pfId,
+              nome: nomeAtual,
+              corHex: proc.corHex || proc.cor || null,
+            },
+          ],
           nomeProcedimento: nomeAtual,
           profissionalNome: proc.profissionalNome || '—',
           statusNome: proc.statusNome || 'FINALIZADO',

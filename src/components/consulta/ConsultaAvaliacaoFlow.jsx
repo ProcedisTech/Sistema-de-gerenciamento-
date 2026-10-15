@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Camera, Eye, ImageIcon, Trash2 } from 'lucide-react';
+import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 
 /** Fluxo modular: queixa/expectativas → fotos livres → desenho → concluir. */
 export function ConsultaAvaliacaoFlow({
@@ -93,7 +94,18 @@ export function ConsultaAvaliacaoFlow({
         {photos.map((ph, idx) => (
           <div key={ph.url ? `${ph.url}_${idx}` : idx} className="min-w-0">
             <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
-              <img src={ph.url} alt="" className="h-full w-full object-cover" />
+              {Boolean(ph.pontos?.length) || Boolean(ph.mapaOverlay?.marcacoes?.length) ? (
+                <GaleriaMapaThumb
+                  url={ph.url}
+                  mapaOverlay={ph.mapaOverlay || { pontos: ph.pontos, procedimentosMapeados: ph.procedimentosMapeados }}
+                  density="thumb"
+                  className="h-full w-full"
+                  imgClassName="h-full w-full object-contain"
+                  alt="Foto com anotações da avaliação"
+                />
+              ) : (
+                <img src={ph.url} alt="" className="h-full w-full object-cover" />
+              )}
               {typeof onAnnotatePhoto === 'function' ? (
                 <button
                   type="button"
