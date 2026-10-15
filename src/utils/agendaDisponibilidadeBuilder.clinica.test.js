@@ -26,7 +26,7 @@ describe('buildDaySlotList — clínica (sem profissional)', () => {
       duracaoMin: 30,
       profissionalRoleUserId: '',
       todayIso: '2026-09-01',
-      currentBrasiliaMinutes: 0,
+      currentMinutes: 0,
     });
     expect(model.isFallback).toBe(false);
     expect(model.dayStartMin).toBe(7 * 60);
@@ -44,7 +44,7 @@ describe('buildDaySlotList — clínica (sem profissional)', () => {
       duracaoMin: 30,
       profissionalRoleUserId: '',
       todayIso: '2026-09-01',
-      currentBrasiliaMinutes: 0,
+      currentMinutes: 0,
     });
     expect(model.isFallback).toBe(false);
     expect(model.windows).toEqual([]);
@@ -60,7 +60,7 @@ describe('buildDaySlotList — clínica (sem profissional)', () => {
       duracaoMin: 30,
       profissionalRoleUserId: '',
       todayIso: '2026-09-01',
-      currentBrasiliaMinutes: 0,
+      currentMinutes: 0,
     });
     expect(model.isFallback).toBe(false);
     expect(model.dayStartMin).toBe(COMMERCIAL_WEEKDAY_WINDOW.startMin);
@@ -76,7 +76,7 @@ describe('buildDaySlotList — clínica (sem profissional)', () => {
       duracaoMin: 30,
       profissionalRoleUserId: '',
       todayIso: '2026-09-01',
-      currentBrasiliaMinutes: 0,
+      currentMinutes: 0,
     });
     expect(model.dayStartMin).toBe(COMMERCIAL_WEEKDAY_WINDOW.startMin);
     expect(model.dayEndMin).toBe(COMMERCIAL_WEEKDAY_WINDOW.endMin);
@@ -91,7 +91,7 @@ describe('buildDaySlotList — clínica (sem profissional)', () => {
       duracaoMin: 30,
       profissionalRoleUserId: 'prof-1',
       todayIso: '2026-09-01',
-      currentBrasiliaMinutes: 0,
+      currentMinutes: 0,
     });
     expect(model.isFallback).toBe(false);
     expect(model.dayStartMin).toBe(9 * 60);
@@ -107,7 +107,7 @@ describe('buildDaySlotList — clínica (sem profissional)', () => {
       duracaoMin: 30,
       profissionalRoleUserId: 'prof-1',
       todayIso: '2026-09-01',
-      currentBrasiliaMinutes: 0,
+      currentMinutes: 0,
     });
     expect(model.isFallback).toBe(true);
     expect(model.dayStartMin).toBe(COMMERCIAL_WEEKDAY_WINDOW.startMin);

@@ -35,35 +35,11 @@ export function getGuaranteedNow() {
 }
 
 /**
- * Retorna a hora atual garantida no formato "HH:mm" (24h).
- * @returns {string}
- */
-export function getGuaranteedHHMM() {
-  const d = getGuaranteedNow();
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
-}
-
-/**
  * Retorna o timestamp ISO contendo o desvio embutido.
  * @returns {string}
  */
 export function getGuaranteedIso() {
   return getGuaranteedNow().toISOString();
-}
-
-/**
- * Retorna a data no formato "YYYY-MM-DD" no fuso horário local ajustado.
- * @param {Date} [dt]
- * @returns {string}
- */
-export function toGuaranteedLocalDateIso(dt = getGuaranteedNow()) {
-  const d = dt instanceof Date ? dt : new Date(dt);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 /**

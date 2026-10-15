@@ -11,9 +11,11 @@ import { PermissoesPorModuloPanel } from './PermissoesPorModuloPanel';
 import { PermissoesResumoToggle } from './PermissoesResumoToggle';
 import { ConfirmarNavegacaoModal } from './ConfirmarNavegacaoModal';
 import { EstadoCivilSelect } from '../patients/EstadoCivilSelect.jsx';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesList, onClose, onSuccess, fetchHeaders, onEditarPerfilNaAba }) {
   const toast = useToast();
+  const { hojeIso } = useAgoraDaClinica(60000);
   const [form, setForm] = useState({
     nome: '', email: '', senha: '', cpf: '', roleId: '', perfilAcessoId: '',
     dataNascimento: '', estadoCivilId: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', especialidades: []
@@ -310,7 +312,7 @@ export function InviteModal({ roles, perfisAcesso, permissoes, especialidadesLis
                   <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-teal-700 ml-1">Data de Nascimento <span className="font-normal text-slate-400 normal-case">(Opcional)</span></label>
                   <input
                     type="date"
-                    max={new Date().toISOString().split("T")[0]}
+                    max={hojeIso ?? undefined}
                     min="1900-01-01"
                     value={form.dataNascimento}
                     onChange={e => {

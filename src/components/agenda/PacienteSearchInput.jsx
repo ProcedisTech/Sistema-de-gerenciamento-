@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { pacientesApi } from '../../services/api';
 import { mapBackendPatient } from '../../utils/patientMapping';
+import { hojeDaClinica } from '../../utils/datasClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { PacienteSearchDropdownItem } from './PacienteSearchDropdownItem.jsx';
 
 const SEARCH_DEBOUNCE_MS = 320;
@@ -11,8 +13,9 @@ const LIST_SIZE = 10;
 const INPUT_CLASS =
   'w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 text-[13px] font-medium text-gray-900 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20';
 
-function mapPatients(rows) {
-  const mapped = Array.isArray(rows) ? rows.map(mapBackendPatient).filter(Boolean) : [];
+function mapPatients(rows, fuso) {
+  const opts = { fuso, hojeIso: hojeDaClinica(fuso) };
+  const mapped = Array.isArray(rows) ? rows.map((r) => mapBackendPatient(r, opts)).filter(Boolean) : [];
   return mapped.slice(0, LIST_SIZE);
 }
 
@@ -35,6 +38,7 @@ export function PacienteSearchInput({
   locked = false,
   displayNome = '',
 }) {
+  const { fuso } = useFusoClinica();
   const [query, setQuery] = useState('');
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -53,13 +57,13 @@ export function PacienteSearchInput({
       const pageData = await pacientesApi.list({ page: 0, size: LIST_SIZE, sort: 'visita_desc' });
       if (cancelledRef.current) return;
       const rows = pageData?.content ?? [];
-      setPatients(sortPatientsForDropdown(mapPatients(rows)));
+      setPatients(sortPatientsForDropdown(mapPatients(rows, fuso)));
     } catch {
       if (!cancelledRef.current) setPatients([]);
     } finally {
       if (!cancelledRef.current) setLoading(false);
     }
-  }, []);
+  }, [fuso]);
 
   useEffect(() => {
     if (locked) return undefined;
@@ -85,7 +89,7 @@ export function PacienteSearchInput({
         .then((pageData) => {
           if (cancelledRef.current) return;
           const rows = pageData?.content ?? [];
-          setPatients(sortPatientsForDropdown(mapPatients(rows)));
+          setPatients(sortPatientsForDropdown(mapPatients(rows, fuso)));
         })
         .catch(() => {
           if (!cancelledRef.current) setPatients([]);
@@ -99,7 +103,7 @@ export function PacienteSearchInput({
       cancelledRef.current = true;
       window.clearTimeout(t);
     };
-  }, [locked, query, open, loadDefaultList]);
+  }, [locked, query, open, loadDefaultList, fuso]);
 
   useEffect(() => {
     if (locked) return undefined;

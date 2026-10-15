@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useToast } from '../../contexts/useToast.js';
 import { authHeadersForFetch } from '../../services/api.js';
 import { normalizeSexoForApi } from '../../utils/patientMapping.js';
+import { hojeDaClinica, idadeEm } from '../../utils/datasClinica.js';
+import { useFusoClinica } from './useFusoClinica.js';
 
 export function useJourneyController({
   state,
@@ -9,6 +11,7 @@ export function useJourneyController({
   helpers,
 }) {
   const toast = useToast();
+  const { fuso } = useFusoClinica();
   const {
     currentStep,
     queixa,
@@ -114,15 +117,8 @@ export function useJourneyController({
     const novaData = e.target.value;
     setDataNascimento(novaData);
     if (novaData) {
-      const [ano, mes, dia] = novaData.split('-');
-      const dataNasc = new Date(ano, mes - 1, dia);
-      const hoje = new Date();
-      let idadeCalculada = hoje.getFullYear() - dataNasc.getFullYear();
-      const m = hoje.getMonth() - dataNasc.getMonth();
-      if (m < 0 || (m === 0 && hoje.getDate() < dataNasc.getDate())) {
-        idadeCalculada--;
-      }
-      setIdade(idadeCalculada);
+      const idadeCalculada = idadeEm(novaData, hojeDaClinica(fuso));
+      setIdade(idadeCalculada ?? '');
     } else {
       setIdade('');
     }

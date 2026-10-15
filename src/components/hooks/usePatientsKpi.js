@@ -7,7 +7,8 @@ import {
   isAgendaVisibleOnDashboard,
 } from '../../utils/agendaDashboardMapping';
 import { isKpiCountableAgendaDto } from '../../utils/agendaKpiDrilldown';
-import { toLocalDateIso } from '../../utils/agendaDateUtils';
+import { hojeDaClinica } from '../../utils/datasClinica.js';
+import { useFusoClinica } from './useFusoClinica.js';
 import { sortAgendamentosHojePulse } from '../../utils/sortAgendamentosHojePulse.js';
 import { sortSemPlanoByUltimaVinda } from '../../utils/sortSemPlanoByUltimaVinda.js';
 
@@ -28,6 +29,7 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
   const [semPlanoList, setSemPlanoList] = useState([]);
   const [totalSemPlano, setTotalSemPlano] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { fuso } = useFusoClinica();
 
   const fetchAll = useCallback(async () => {
     if (!authEnabled) {
@@ -45,7 +47,9 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
     }
 
     setLoading(true);
-    const hoje = toLocalDateIso();
+    const hoje = hojeDaClinica(fuso);
+    const mapOpts = { fuso, hojeIso: hoje };
+    const mapPaciente = (dto) => mapBackendPatient(dto, mapOpts);
 
     const safe = async (fn) => {
       try {
@@ -85,12 +89,12 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
     setTotalAniversariantes(pageAniversariantesMes?.totalElements ?? null);
 
     const proximosAniversarios = Array.isArray(pageProximosAniversarios?.content)
-      ? pageProximosAniversarios.content.map(mapBackendPatient).filter(Boolean)
+      ? pageProximosAniversarios.content.map(mapPaciente).filter(Boolean)
       : [];
     setAniversariantesList(proximosAniversarios);
 
     const semPlano = Array.isArray(pageSemPlanoLista?.content)
-      ? sortSemPlanoByUltimaVinda(pageSemPlanoLista.content.map(mapBackendPatient).filter(Boolean)).slice(0, 5)
+      ? sortSemPlanoByUltimaVinda(pageSemPlanoLista.content.map(mapPaciente).filter(Boolean)).slice(0, 5)
       : [];
     setSemPlanoList(semPlano);
     setTotalSemPlano(pageSemPlanoTotal?.totalElements ?? null);
@@ -103,10 +107,10 @@ export function usePatientsKpi({ authEnabled = false, bump = 0 } = {}) {
       // Painel "Agendamentos de hoje" (Pacientes) não deve mostrar cancelados —
       // diferente da grade da Agenda, que os exibe riscados como referência.
       .filter((row) => row.status !== 'cancelado');
-    setAgendamentosHoje(sortAgendamentosHojePulse(agendaDtos));
+    setAgendamentosHoje(sortAgendamentosHojePulse(agendaDtos, fuso));
 
     setLoading(false);
-  }, [authEnabled]);
+  }, [authEnabled, fuso]);
 
   useEffect(() => {
     fetchAll();

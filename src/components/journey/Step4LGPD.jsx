@@ -59,13 +59,14 @@ import { criarItemProcedimentoSessao } from '../../utils/procedimentoSessaoFacto
 import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
 import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 import { GaleriaArquivoImage } from '../patients/GaleriaArquivoImage.jsx';
+import { formatarInstante } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
 
-function formatTimestamp(ts) {
+function formatTimestamp(ts, fuso) {
   if (!ts) return '';
-  return new Date(ts).toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
+  return formatarInstante(ts, fuso, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -370,6 +371,7 @@ export function Step3Termos({
   const [metodoEscolhido, setMetodoEscolhido] = useState(null);
 
   const { orgId } = useOrg();
+  const { fuso } = useFusoClinica();
   const [permiteTablet, setPermiteTablet] = useState(true);
   const [permiteQrCode, setPermiteQrCode] = useState(true);
   const [permiteLink, setPermiteLink] = useState(true);
@@ -1066,7 +1068,7 @@ export function Step3Termos({
             {consentimentosAguardando.map((c) => (
               <p key={c.termoId} className="text-[13px] font-medium text-emerald-800">
                 Termo já assinado — {c.titulo}
-                {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm)}` : ''}
+                {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm, fuso)}` : ''}
               </p>
             ))}
           </div>
@@ -1080,7 +1082,7 @@ export function Step3Termos({
             const recusado =
               t.resultadoCompleto?.statusCodigo === 'RECUSADO' || Boolean(t.resultadoCompleto?.recusadoEm);
             const recusaData = t.resultadoCompleto?.recusadoEm
-              ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+              ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
               : null;
             return (
               <div
@@ -1130,14 +1132,14 @@ export function Step3Termos({
                             pacienteNome: pacienteCtx?.nome || t.resultadoCompleto?.pacienteNome,
                             profissionalNome: profissionalCtx?.nome || t.resultadoCompleto?.profissionalNome,
                             dataHora: t.resultadoCompleto?.recusadoEm
-                              ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+                              ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
                               : t.resultadoCompleto?.profissionalAssinouEm
-                                ? new Date(t.resultadoCompleto.profissionalAssinouEm).toLocaleString('pt-BR')
+                                ? formatarInstante(t.resultadoCompleto.profissionalAssinouEm, fuso, 'dataHoraSeg')
                                 : undefined,
                             ipAddress: t.resultadoCompleto?.ipAddress,
                             statusCodigo: t.resultadoCompleto?.statusCodigo,
                             recusadoEm: t.resultadoCompleto?.recusadoEm
-                              ? new Date(t.resultadoCompleto.recusadoEm).toLocaleString('pt-BR')
+                              ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
                               : undefined,
                           }
                         });
@@ -1385,7 +1387,7 @@ export function Step3Termos({
                         />
                         <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
                           <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-                          <span>Assinado em {formatTimestamp(profAssinaturaTimestamp)}</span>
+                          <span>Assinado em {formatTimestamp(profAssinaturaTimestamp, fuso)}</span>
                         </div>
                         <button
                           type="button"
@@ -1450,7 +1452,7 @@ export function Step3Termos({
                                   metadados: {
                                     pacienteNome: pacienteCtx?.nome,
                                     profissionalNome: profissionalCtx?.nome,
-                                    dataHora: new Date().toLocaleString('pt-BR'),
+                                    dataHora: formatarInstante(Date.now(), fuso, 'dataHoraSeg'),
                                   },
                                   fileName: `termo_assinado_${new Date().getTime()}.pdf`
                                 });
@@ -1496,7 +1498,7 @@ export function Step3Termos({
                         />
                         <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
                           <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-                          <span>Assinado em {formatTimestamp(patAssinaturaTimestamp)}</span>
+                          <span>Assinado em {formatTimestamp(patAssinaturaTimestamp, fuso)}</span>
                         </div>
                         <button
                           type="button"
@@ -1857,6 +1859,7 @@ export function Step4Procedimento({
   onProcedureOpenCamera,
   onClearMapaCaptureIntent,
 }) {
+  const { fuso } = useFusoClinica();
   const gravarProcedimentoCatalogo = React.useCallback((nome, id) => {
     if (typeof setProcedimentoDoCatalogo === 'function') {
       setProcedimentoDoCatalogo(nome, id);
@@ -2332,6 +2335,35 @@ export function Step4Procedimento({
           <p className="text-[14px] font-medium text-[#64748b]">Registro do que foi realizado e imagens</p>
         </div>
       </div>
+
+      {execucaoBloqueadaPorTermos ? (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-[13px] font-semibold text-amber-900">
+            Procedimento bloqueado até a assinatura de:{' '}
+            {titulosTermosFaltantes.length > 0 ? titulosTermosFaltantes.join(', ') : 'termos obrigatórios'}
+          </p>
+          {typeof onIrParaTermosGate === 'function' ? (
+            <button
+              type="button"
+              onClick={onIrParaTermosGate}
+              className="mt-2 text-[13px] font-bold text-[#00a88e] hover:underline"
+            >
+              Ir para Termos
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!execucaoBloqueadaPorTermos && consentimentosAguardando.length > 0 ? (
+        <div className="mb-6 space-y-1 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          {consentimentosAguardando.map((c) => (
+            <p key={c.termoId} className="text-[13px] font-semibold text-emerald-900">
+              Termo já assinado — {c.titulo}
+              {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm, fuso)}` : ''}
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       {/* ── 1. PROCEDIMENTOS & DESCRIÇÃO (VEM PRIMEIRO) ── */}
       <div

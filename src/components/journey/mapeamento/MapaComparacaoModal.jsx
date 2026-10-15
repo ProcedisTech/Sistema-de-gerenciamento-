@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Loader2 } from 'lucide-react';
 import { mapasApi } from '../../../services/api.js';
+import { formatarInstante } from '../../../utils/datasClinica.js';
+import { useFusoClinica } from '../../hooks/useFusoClinica.js';
 
 export function MapaComparacaoModal({ open, onClose, pacienteId, catalogoId, onSelectMapa }) {
+  const { fuso } = useFusoClinica();
   const [historico, setHistorico] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -70,7 +73,7 @@ export function MapaComparacaoModal({ open, onClose, pacienteId, catalogoId, onS
                   <div>
                     <div className="flex items-center gap-1.5 text-app-ink font-semibold text-[14px]">
                       <Calendar className="h-4 w-4 text-[#64748b]" />
-                      {new Date(item.dataRegistro).toLocaleDateString('pt-BR')}
+                      {formatarInstante(item.dataRegistro, fuso, 'data')}
                     </div>
                     <div className="text-[12px] text-[#64748b] mt-1">
                       Profissional: <span className="font-medium text-app-ink">{item.nomeProfissional}</span>

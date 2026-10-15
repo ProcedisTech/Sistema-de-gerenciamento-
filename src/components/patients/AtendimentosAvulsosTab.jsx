@@ -3,6 +3,7 @@ import { Sparkles, Loader2 } from 'lucide-react';
 import { usePlanosPaciente } from '../planos/usePlanosPaciente.js';
 import { resolverFotosEPlanos } from '../../utils/planoGaleriaResolver.js';
 import { PastaAtendimentosAvulsos } from '../planos/PastaAtendimentosAvulsos.jsx';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 export function AtendimentosAvulsosTab({
   pacienteId,
@@ -11,10 +12,11 @@ export function AtendimentosAvulsosTab({
   galeriaFotosInicial = [],
 }) {
   const { planos, loading, error, refresh } = usePlanosPaciente({ pacienteId, roleUserId });
+  const { fuso } = useFusoClinica();
 
   const { atendimentosAvulsos, fotosAvulsas } = useMemo(() => {
-    return resolverFotosEPlanos(planos, galeriaFotosInicial, procedimentosFeitos);
-  }, [planos, galeriaFotosInicial, procedimentosFeitos]);
+    return resolverFotosEPlanos(planos, galeriaFotosInicial, procedimentosFeitos, fuso);
+  }, [planos, galeriaFotosInicial, procedimentosFeitos, fuso]);
 
   if (loading) {
     return (

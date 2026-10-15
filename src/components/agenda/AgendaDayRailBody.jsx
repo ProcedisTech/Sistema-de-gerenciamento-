@@ -36,7 +36,7 @@ export function AgendaDayRailBody({
   selectedDay,
   todayIso,
   appointments,
-  now,
+  nowMinutes,
   highlightedId,
   showProfissional,
   isNivel1,
@@ -63,7 +63,7 @@ export function AgendaDayRailBody({
   );
 
   const nextUpEntry = isToday
-    ? getNextAppointmentEntry(entries, { now, todayIso: selectedDay })
+    ? getNextAppointmentEntry(entries, { nowMinutes, todayIso: selectedDay })
     : null;
   const nextUpIds = useMemo(
     () => new Set(getEntryAppointmentIds(nextUpEntry)),
@@ -97,7 +97,7 @@ export function AgendaDayRailBody({
         <AgendaEntryCard
           entry={nextUpEntry}
           variant="nextUp"
-          now={now}
+          nowMinutes={nowMinutes}
           showProfissional={showProfissional}
           isNivel1={isNivel1}
           compact={compact}
@@ -131,7 +131,7 @@ export function AgendaDayRailBody({
         PERIOD_ORDER.map((period) => {
           const periodEntries = grouped[period];
           if (periodEntries.length === 0) return null;
-          const suffix = getPeriodSuffix(period, { selectedDay, todayIso, now });
+          const suffix = getPeriodSuffix(period, { selectedDay, todayIso, nowMinutes });
 
           return (
             <section key={period} className="mb-3 last:mb-0">

@@ -1,6 +1,6 @@
 import { pacientesGaleriaApi, mapasApi } from '../services/api.js';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from './pacienteGaleria.js';
-import { toLocalISODate } from './dateLimits.js';
+import { hojeDaClinica } from './datasClinica.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
 import { corParaProcedimento, MAPEAMENTO_PALETA_CORES } from '../constants/mapeamentoPaletaCores.js';
@@ -40,6 +40,7 @@ async function uploadModeloFoto({
   vistaCodigo,
   procedimentoFeitoId,
   catalogoProcedimentoSaudeId,
+  fuso,
 }) {
   const file =
     blob instanceof File
@@ -47,7 +48,7 @@ async function uploadModeloFoto({
       : new File([blob], `modelo_${vistaCodigo}_${Date.now()}.jpg`, {
         type: blob?.type || 'image/jpeg',
       });
-  const dataRef = toLocalISODate(new Date());
+  const dataRef = hojeDaClinica(fuso);
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(
@@ -86,6 +87,7 @@ export async function persistirMapaAplicacao({
   snapshot,
   tipoMapaCodigo,
   procedimentosSessao = [],
+  fuso,
 }) {
   const erros = [];
   const listaProcedimentoIds = Array.isArray(procedimentoFeitoIds) && procedimentoFeitoIds.length > 0
@@ -128,6 +130,7 @@ export async function persistirMapaAplicacao({
             vistaCodigo,
             procedimentoFeitoId: mainPfId,
             catalogoProcedimentoSaudeId,
+            fuso,
           });
           if (fid) {
             fotoGaleriaId = String(fid);

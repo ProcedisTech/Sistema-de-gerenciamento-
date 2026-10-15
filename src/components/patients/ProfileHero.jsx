@@ -24,6 +24,7 @@ import {
   phoneDigitsForWa,
 } from './profileDisplayUtils.js';
 import { maskCPF } from '../utils/formatters';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 function ContactChip({ href, onClick, children, className = '', placeholder = false }) {
   const base =
@@ -80,7 +81,8 @@ export function ProfileHero({
   onNavigateNext,
 }) {
   const cpfFormatted = patient.cpf ? maskCPF(String(patient.cpf).replace(/\D/g, '')) : '—';
-  const cadastroEm = formatCreatedAtPtBr(patient.createdAt);
+  const { fuso } = useFusoClinica();
+  const cadastroEm = formatCreatedAtPtBr(patient.createdAt, fuso);
   const cityUf = formatCityUf(patient);
   const birthLabel = formatBirthDatePtBr(patient.dataNascimento);
   const telefone = String(patient.telefone ?? '').trim();

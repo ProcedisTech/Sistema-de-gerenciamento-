@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState, useEf
 import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
 import { invalidateAuthMeCache } from '../utils/authMeProbe';
 import { DEFAULT_ORG_ID, ALT_ORG_ID, sanitizeOrgId } from '../config/apiEnv';
+import { FUSO_PADRAO } from '../utils/datasClinica';
 
 const LS_ORG = 'procedi_org_id';
 const LS_SLUG = 'procedi_org_slug';
@@ -52,6 +53,10 @@ export function OrgProvider({ children }) {
   /** Flag de elegibilidade para aparecer na agenda como profissional vinda do perfil de acesso (/me). */
   const [apareceNaAgenda, setApareceNaAgendaState] = useState(null);
   const [contextStatus, setContextStatus] = useState('idle');
+  /** Fuso IANA da clínica ativa, vindo do /me com X-Org-Id (null até o /me responder). */
+  const [fusoHorario, setFusoHorarioState] = useState(null);
+  /** Incrementa para recarregar o /me da mesma clínica (ex.: depois de salvar a UF). */
+  const [contextoNonce, setContextoNonce] = useState(0);
 
   useEffect(() => {
     apiSetOrgId(orgId);
@@ -76,6 +81,7 @@ export function OrgProvider({ children }) {
     setRoleNomeState('');
     setPermissoesState([]);
     setApareceNaAgendaState(null);
+    setFusoHorarioState(null);
     setContextStatus(next ? 'loading' : 'idle');
     if (!next) {
       // falsy / placeholder: limpa org (nunca reinjeta seed)
@@ -135,6 +141,16 @@ export function OrgProvider({ children }) {
     setApareceNaAgendaState(typeof val === 'boolean' ? val : null);
   }, []);
 
+  const setFusoHorario = useCallback((fuso) => {
+    setFusoHorarioState(typeof fuso === 'string' && fuso.trim() ? fuso.trim() : null);
+  }, []);
+
+  /** Mesma clínica, dados novos: invalida o cache do /me e refaz o /me com X-Org-Id. */
+  const recarregarContextoOrg = useCallback(() => {
+    invalidateAuthMeCache();
+    setContextoNonce((n) => n + 1);
+  }, []);
+
   /** Limpa org/papel/role do localStorage e do estado no logout. */
   const clearOrgSession = useCallback(() => {
     orgIdRef.current = '';
@@ -153,6 +169,7 @@ export function OrgProvider({ children }) {
     setRoleNomeState('');
     setPermissoesState([]);
     setApareceNaAgendaState(null);
+    setFusoHorarioState(null);
     setContextStatus('idle');
     apiSetOrgId('');
     invalidateAuthMeCache();
@@ -177,9 +194,13 @@ export function OrgProvider({ children }) {
       setApareceNaAgenda,
       contextStatus,
       setContextStatus,
+      fusoHorario,
+      setFusoHorario,
+      contextoNonce,
+      recarregarContextoOrg,
       clearOrgSession,
     }),
-    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, contextStatus, clearOrgSession]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, contextStatus, fusoHorario, setFusoHorario, contextoNonce, recarregarContextoOrg, clearOrgSession]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -206,6 +227,11 @@ export function useOrg() {
       setApareceNaAgenda: () => {},
       contextStatus: 'idle',
       setContextStatus: () => {},
+      // Sem OrgProvider (render isolado): não há /me; usa o fuso padrão.
+      fusoHorario: FUSO_PADRAO,
+      setFusoHorario: () => {},
+      contextoNonce: 0,
+      recarregarContextoOrg: () => {},
       clearOrgSession: () => {},
     };
   }

@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { instanteMs } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function PlanoProtocoloResumo({ itens = [], plano }) {
   const { concluidos, agendados, semData } = useMemo(() => {
@@ -24,11 +26,14 @@ export function PlanoProtocoloResumo({ itens = [], plano }) {
   const pctSemData = total > 0 ? (semData / total) * 100 : 0;
 
   const criadoEm = plano?.criadoEm;
+  const { agoraMs } = useAgoraDaClinica(60000);
   const diasAberto = useMemo(() => {
-    if (!criadoEm) return null;
-    const diff = Math.round((new Date() - new Date(criadoEm)) / 86400000);
+    if (!criadoEm || agoraMs == null) return null;
+    const criadoMs = instanteMs(criadoEm);
+    if (Number.isNaN(criadoMs)) return null;
+    const diff = Math.round((agoraMs - criadoMs) / 86400000);
     return Math.max(0, diff);
-  }, [criadoEm]);
+  }, [criadoEm, agoraMs]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">

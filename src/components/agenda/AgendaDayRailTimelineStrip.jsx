@@ -16,7 +16,7 @@ function AgendaDayRailTimelineStripInner({
   appointments,
   selectedDay,
   todayIso,
-  now,
+  nowMinutes,
   onBlockClick,
   compact = false,
   dense = false,
@@ -38,7 +38,7 @@ function AgendaDayRailTimelineStripInner({
 
   const span = Math.max(1, axis.endMin - axis.startMin);
   const blocks = getTimelineBlocks(appointments, axis);
-  const nowLeft = getNowLineLeftPercent(now, selectedDay, todayIso, axis);
+  const nowLeft = getNowLineLeftPercent(nowMinutes, selectedDay, todayIso, axis);
   const useDense = dense && !compact;
   const labelSizeClass = compact || useDense ? 'text-[9px]' : 'text-[10px]';
   const blockSizeClass = compact || useDense ? 'text-[9px]' : 'text-[9.5px]';

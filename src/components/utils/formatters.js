@@ -1,6 +1,14 @@
 // Funções de formatação de dados
 
 import { resolveApiUrl } from '../../config/apiEnv.js';
+import {
+  FUSO_PADRAO,
+  aniversarioNoAno,
+  hojeDaClinica,
+  idadeEm,
+  isoDeParts,
+  parseDataCalendario,
+} from '../../utils/datasClinica.js';
 
 export const maskCPF = (value) => {
   return value
@@ -74,20 +82,20 @@ export const normalizeTelefone = (tel) => {
   return (tel || '').replace(/\D/g, '');
 };
 
-export const calculateAgeFromISODate = (iso) => {
+/** Hoje da clínica para chamadores que ainda não passam `hojeIso` (cai no fuso padrão). */
+function hojeIsoOuPadrao(hojeIso) {
+  return parseDataCalendario(hojeIso) ? hojeIso : hojeDaClinica(FUSO_PADRAO);
+}
+
+/**
+ * Idade completa em `hojeIso` (calendário da clínica); '' se a data for inválida.
+ * @param {string} iso "AAAA-MM-DD"
+ * @param {string} [hojeIso] hoje no calendário da clínica (useAgoraDaClinica().hojeIso)
+ */
+export const calculateAgeFromISODate = (iso, hojeIso) => {
   if (!iso) return '';
-  const parts = iso.split('-');
-  if (parts.length !== 3) return '';
-  const [year, month, day] = parts;
-  const dataNasc = new Date(Number(year), Number(month) - 1, Number(day));
-  if (Number.isNaN(dataNasc.getTime())) return '';
-  const hoje = new Date();
-  let idadeCalculada = hoje.getFullYear() - dataNasc.getFullYear();
-  const m = hoje.getMonth() - dataNasc.getMonth();
-  if (m < 0 || (m === 0 && hoje.getDate() < dataNasc.getDate())) {
-    idadeCalculada--;
-  }
-  return idadeCalculada;
+  const idade = idadeEm(iso, hojeIsoOuPadrao(hojeIso));
+  return idade == null ? '' : idade;
 };
 
 export const getPatientInitials = (name) => {
@@ -125,23 +133,24 @@ export function sanitizeBirthDateDigits(raw) {
  * @typedef {'incomplete' | 'invalid_calendar' | 'year_range' | 'future' | 'max_age'} BirthDateInvalidReason
  */
 
-/** @param {Date} dt data local válida no calendário @param {number} y ano (componente) */
-function birthDateRulesCheck(dt, y) {
-  const t = new Date();
-  const cy = t.getFullYear();
-  if (y < MIN_BIRTH_YEAR || y > cy) {
+/**
+ * @param {string} iso "AAAA-MM-DD" válida no calendário
+ * @param {string} [hojeIso] hoje no calendário da clínica
+ */
+function birthDateRulesCheck(iso, hojeIso) {
+  const hoje = hojeIsoOuPadrao(hojeIso);
+  const h = parseDataCalendario(hoje);
+  const y = parseDataCalendario(iso).ano;
+  if (y < MIN_BIRTH_YEAR || y > h.ano) {
     return { ok: false, reason: /** @type {const} */ ('year_range') };
   }
-  const endToday = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59, 999);
-  if (dt > endToday) {
+  if (iso > hoje) {
     return { ok: false, reason: /** @type {const} */ ('future') };
   }
-  const minByAge = new Date(t.getFullYear() - MAX_BIRTH_AGE_YEARS, t.getMonth(), t.getDate());
-  minByAge.setHours(0, 0, 0, 0);
-  const minByYear = new Date(MIN_BIRTH_YEAR, 0, 1);
-  minByYear.setHours(0, 0, 0, 0);
-  const minDate = minByAge.getTime() > minByYear.getTime() ? minByAge : minByYear;
-  if (dt < minDate) {
+  const minByAge = aniversarioNoAno(h.mes, h.dia, h.ano - MAX_BIRTH_AGE_YEARS);
+  const minByYear = isoDeParts(MIN_BIRTH_YEAR, 1, 1);
+  const minDate = minByAge > minByYear ? minByAge : minByYear;
+  if (iso < minDate) {
     return { ok: false, reason: /** @type {const} */ ('max_age') };
   }
   return { ok: true };
@@ -149,29 +158,16 @@ function birthDateRulesCheck(dt, y) {
 
 /**
  * Valida exatamente 8 dígitos DDMMYYYY. Não corrige entrada.
+ * @param {string} digits
+ * @param {string} [hojeIso] hoje no calendário da clínica
  * @returns {{ ok: true, iso: string } | { ok: false, reason: BirthDateInvalidReason }}
  */
-export function validateBirthDateDigits8(digits) {
-  if (digits.length !== 8) {
-    return { ok: false, reason: 'incomplete' };
-  }
-  const d = Number(digits.slice(0, 2));
-  const m = Number(digits.slice(2, 4));
-  const y = Number(digits.slice(4, 8));
-  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) {
-    return { ok: false, reason: 'invalid_calendar' };
-  }
-  if (m < 1 || m > 12 || d < 1 || d > 31) {
-    return { ok: false, reason: 'invalid_calendar' };
-  }
-  const dt = new Date(y, m - 1, d);
-  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
-    return { ok: false, reason: 'invalid_calendar' };
-  }
-  const rules = birthDateRulesCheck(dt, y);
+export function validateBirthDateDigits8(digits, hojeIso) {
+  const cal = validateCalendarDateDigits8(digits);
+  if (!cal.ok) return cal;
+  const rules = birthDateRulesCheck(cal.iso, hojeIso);
   if (!rules.ok) return rules;
-  const iso = birthDigitsToISO(digits);
-  return { ok: true, iso: iso || '' };
+  return cal;
 }
 
 /**
@@ -188,11 +184,7 @@ export function validateCalendarDateDigits8(digits) {
   if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) {
     return { ok: false, reason: 'invalid_calendar' };
   }
-  if (m < 1 || m > 12 || d < 1 || d > 31) {
-    return { ok: false, reason: 'invalid_calendar' };
-  }
-  const dt = new Date(y, m - 1, d);
-  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
+  if (!parseDataCalendario(isoDeParts(y, m, d))) {
     return { ok: false, reason: 'invalid_calendar' };
   }
   const iso = birthDigitsToISO(digits);
@@ -212,7 +204,7 @@ export function calendarDateValidationUserMessage(reason) {
 }
 
 /** Mensagem em português para exibição abaixo do campo ou no submit. */
-export function birthDateValidationUserMessage(reason, currentYear = new Date().getFullYear()) {
+export function birthDateValidationUserMessage(reason, currentYear = parseDataCalendario(hojeIsoOuPadrao()).ano) {
   switch (reason) {
     case 'incomplete':
       return 'Informe a data completa no formato DD/MM/AAAA.';
@@ -244,18 +236,15 @@ export function birthDigitsToISO(digits) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** Data real, não futura, não anterior a 01/01/MIN_BIRTH_YEAR nem ao limite de idade máxima. */
-export function isPlausibleBirthISODate(iso) {
-  if (!iso) return false;
-  const parts = iso.split('-');
-  if (parts.length !== 3) return false;
-  const y = Number(parts[0]);
-  const m = Number(parts[1]);
-  const d = Number(parts[2]);
-  if (!y || !m || !d) return false;
-  const dt = new Date(y, m - 1, d);
-  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return false;
-  return birthDateRulesCheck(dt, y).ok;
+/**
+ * Data real, não futura, não anterior a 01/01/MIN_BIRTH_YEAR nem ao limite de idade máxima.
+ * @param {string} iso "AAAA-MM-DD"
+ * @param {string} [hojeIso] hoje no calendário da clínica
+ */
+export function isPlausibleBirthISODate(iso, hojeIso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return false;
+  if (!parseDataCalendario(iso)) return false;
+  return birthDateRulesCheck(iso, hojeIso).ok;
 }
 
 export const api = (path) => resolveApiUrl(path);

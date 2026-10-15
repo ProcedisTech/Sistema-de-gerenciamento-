@@ -18,6 +18,8 @@ vi.mock('../../services/api', () => ({
     cancelar: vi.fn(),
     status: vi.fn(),
   },
+  getOrgId: () => null,
+  setOrgId: vi.fn(),
 }));
 
 vi.mock('../../hooks/usePerfilClinico', () => ({

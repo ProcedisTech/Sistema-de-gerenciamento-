@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import { auditoriaApi, equipeApi } from '../../services/api';
 import { AuditoriaDetailsModal } from './AuditoriaDetailsModal';
-import { formatData, formatarEntidade, getIconForEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
+import { dentroDoPeriodo, formatData, formatarEntidade, getIconForEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
+import { formatarInstante } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 import { ConfigCardStackSkeleton, ConfigTableRowsSkeleton } from '../shared/ConfigPanelSkeletons';
 import { usePapel } from '../../hooks/usePapel';
 import { useToast } from '../../contexts/useToast.js';
@@ -30,21 +32,12 @@ const ORDENACOES = [
 
 const PAGE_SIZE = 15;
 
-function calcularDataLimite(periodo) {
-  const agora = new Date();
-  if (periodo === '1h') return new Date(agora - 60 * 60 * 1000);
-  if (periodo === 'hoje') return new Date(agora.setHours(0, 0, 0, 0));
-  if (periodo === 'semana') return new Date(agora - 7 * 24 * 60 * 60 * 1000);
-  if (periodo === 'mes') return new Date(agora.getFullYear(), agora.getMonth(), 1);
-  if (periodo === 'ano') return new Date(agora.getFullYear(), 0, 1);
-  return null;
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function AuditoriaView() {
   const { canExportPdf } = usePapel();
   const toast = useToast();
+  const { fuso } = useFusoClinica();
 
   const [registros, setRegistros] = useState([]);
   const [totalNoBanco, setTotalNoBanco] = useState(0);
@@ -106,8 +99,8 @@ export function AuditoriaView() {
   const filtrados = useMemo(() => {
     let lista = registros;
     if (filtroPeriodo) {
-      const limite = calcularDataLimite(filtroPeriodo);
-      if (limite) lista = lista.filter((r) => new Date(r.criadoEm) >= limite);
+      const agoraMs = Date.now();
+      lista = lista.filter((r) => dentroDoPeriodo(r.criadoEm, filtroPeriodo, fuso, agoraMs));
     }
     if (filtroRoleUserId) {
       lista = lista.filter((r) => r.roleUserId === filtroRoleUserId);
@@ -134,7 +127,7 @@ export function AuditoriaView() {
       const diff = new Date(b.criadoEm) - new Date(a.criadoEm);
       return ordenacao === 'asc' ? -diff : diff;
     });
-  }, [registros, filtroPeriodo, filtroRoleUserId, busca, filtroSuspeito, ordenacao]);
+  }, [registros, filtroPeriodo, filtroRoleUserId, busca, filtroSuspeito, ordenacao, fuso]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const itensDaPagina = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
@@ -232,7 +225,7 @@ function formatDescricaoForPdf(desc) {
           doc.text(`${sanitizeForPdf(clinica.nomeFantasia)}${clinica.cnpj ? ` - CNPJ: ${sanitizeForPdf(clinica.cnpj)}` : ''}`, 14, linhaAtual);
           linhaAtual += 6;
         }
-        doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`, 14, linhaAtual);
+        doc.text(`Gerado em: ${formatarInstante(Date.now(), fuso, { dateStyle: 'short', timeStyle: 'short' })}`, 14, linhaAtual);
         linhaAtual += 6;
         if (registrosTruncados) {
           doc.setTextColor(180, 60, 0);
@@ -258,7 +251,7 @@ function formatDescricaoForPdf(desc) {
           const descTexto = item.descricao || item.permissaoDescricao || '-';
 
           const rowData = [
-            formatData(item.criadoEm),
+            formatData(item.criadoEm, fuso),
             sanitizeForPdf(item.nomeUsuario),
             perfilTexto,
             sanitizeForPdf(acaoComPermissao),
@@ -471,7 +464,7 @@ function formatDescricaoForPdf(desc) {
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100/50">
                   <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
                     <Clock className="h-4 w-4 text-slate-400" />
-                    {formatData(item.criadoEm)}
+                    {formatData(item.criadoEm, fuso)}
                   </span>
                   <span className="flex items-center gap-1.5 text-[13px] font-medium text-slate-600">
                     <div className="text-slate-400">{getIconForEntidade(item.entidade || item.permissaoModulo)}</div>
@@ -566,7 +559,7 @@ function formatDescricaoForPdf(desc) {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 transition-colors group">
                       <td className="px-6 py-4 text-[13px] font-medium text-slate-600">
-                        {formatData(item.criadoEm)}
+                        {formatData(item.criadoEm, fuso)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">

@@ -75,8 +75,8 @@ export function hasProximoAgendamento(patient) {
 }
 
 /** Paciente já teve ao menos uma consulta (ultimaVinda ISO ou ultimaVisita legado). */
-export function hasUltimaVisita(patient) {
-  const day = patientUltimaVisitaDayFromDto(patient);
+export function hasUltimaVisita(patient, fuso) {
+  const day = patientUltimaVisitaDayFromDto(patient, fuso);
   return day !== '-' && day !== '—' && day !== '';
 }
 
@@ -84,8 +84,8 @@ export function hasUltimaVisita(patient) {
  * Paciente atendido ao menos uma vez, sem próxima consulta agendada.
  * @param {{ excluirPlanoAtivo?: boolean }} [opts] — sidebar exclui quem já tem plano ativo.
  */
-export function isSemRetornoMarcado(patient, { excluirPlanoAtivo = false } = {}) {
-  if (!hasUltimaVisita(patient) || hasProximoAgendamento(patient)) return false;
+export function isSemRetornoMarcado(patient, fuso, { excluirPlanoAtivo = false } = {}) {
+  if (!hasUltimaVisita(patient, fuso) || hasProximoAgendamento(patient)) return false;
   if (excluirPlanoAtivo && patient?.statusPlanoCodigo === 'plano_ativo') return false;
   return true;
 }
@@ -98,10 +98,10 @@ export function isSemRetornoMarcado(patient, { excluirPlanoAtivo = false } = {})
  * não há retorno agendado (!hasProximoAgendamento). Pacientes recém-cadastrados sem
  * consulta não recebem este badge.
  */
-export function getPatientCardStatuses(patient) {
+export function getPatientCardStatuses(patient, fuso) {
   const statuses = [];
   if (patient.anamneseDesatualizada) statuses.push('anamnese_vencida');
-  if (isSemRetornoMarcado(patient)) statuses.push('sem_retorno_marcado');
+  if (isSemRetornoMarcado(patient, fuso)) statuses.push('sem_retorno_marcado');
   if (patient.statusPlanoCodigo === 'sem_plano') {
     statuses.push('sem_plano');
   } else if (patient.statusPlanoCodigo != null) {

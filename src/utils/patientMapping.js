@@ -1,6 +1,14 @@
 import { calculateAgeFromISODate } from '../components/utils/formatters';
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { maskCep, normalizeCepForApi } from './cepUtils.js';
+import {
+  agoraCalendarioDaClinica,
+  diaDoInstante,
+  ehInstante,
+  formatarDataCalendario,
+  hojeDaClinica,
+  parseDataHoraCalendario,
+} from './datasClinica.js';
 
 /** Códigos de sexo aceitos na API (Spring): M, F, N (prefiro não dizer / não declarado). */
 export function normalizeSexoForApi(raw) {
@@ -51,39 +59,46 @@ function pickDateTimeIso(dto, camelKey, snakeKey) {
   return s || null;
 }
 
-/** True se a string parece ISO instant (evita tratar dd/mm legado como Instant em proximoRetorno). */
-function looksIsoLikeInstantString(s) {
-  const t = String(s ?? '').trim();
-  if (!t) return false;
-  return /^\d{4}-\d{2}-\d{2}/.test(t) || t.includes('T') || /Z$/i.test(t);
-}
-
 /**
- * Primeiro valor entre vários pares camel/snake que `new Date` parseia sem NaN.
- * Usado para ultima visita / próximo agendamento com aliases do DTO Spring.
+ * Primeiro valor entre vários pares camel/snake que seja instante (ISO com "Z"/offset).
+ * Usado para a última visita com aliases do DTO Spring.
  */
-function pickFirstParsableInstant(dto, pairs) {
+function pickFirstInstant(dto, pairs) {
   if (!dto || typeof dto !== 'object' || !Array.isArray(pairs)) return null;
   for (const [camelKey, snakeKey] of pairs) {
     const s = pickDateTimeIso(dto, camelKey, snakeKey);
-    if (!s) continue;
-    const time = new Date(s).getTime();
-    if (!Number.isNaN(time)) return s;
+    if (s && ehInstante(s)) return s;
   }
   return null;
 }
 
-/** Data apenas dd/mm/aaaa (America/Sao_Paulo) para lista/seeds que usam ultimaVisita. */
-function toPtBrDateOnly(isoOrStr) {
-  if (!isoOrStr) return '';
-  const t = new Date(isoOrStr);
-  if (Number.isNaN(t.getTime())) return '';
-  return t.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+/** Data+hora de calendário da clínica normalizada para `"YYYY-MM-DDTHH:mm"` (ordenável por string). */
+function toCalendarDateTime(raw) {
+  const p = parseDataHoraCalendario(raw);
+  return p ? `${p.dataIso}T${p.hhmm}` : null;
 }
 
-/** Shape usada nas telas (lista, jornada, perfil). */
-export function mapBackendPatient(dto) {
+/**
+ * True se o próximo agendamento (calendário da clínica) ainda não passou.
+ * @param {string | null} proximoAgendamento `"YYYY-MM-DDTHH:mm"`
+ * @param {string} fuso IANA da clínica
+ * @param {number} [agoraMs]
+ */
+export function proximoAgendamentoEhFuturo(proximoAgendamento, fuso, agoraMs = Date.now()) {
+  const cal = toCalendarDateTime(proximoAgendamento);
+  if (!cal) return false;
+  return cal >= agoraCalendarioDaClinica(fuso, agoraMs);
+}
+
+/**
+ * Shape usada nas telas (lista, jornada, perfil).
+ * @param {object} dto PacienteDTO
+ * @param {{ fuso?: string, hojeIso?: string }} [opts] fuso da clínica (exibir `ultimaVinda`) e hoje da clínica (idade).
+ *   Chamadores via `.map(mapBackendPatient)` recebem o índice aqui: valores não-objeto são ignorados.
+ */
+export function mapBackendPatient(dto, opts) {
   if (!dto) return null;
+  const { fuso, hojeIso } = opts && typeof opts === 'object' ? opts : {};
   /** Contrato atual: fotoPerfilUrl (path /api/v1/.../foto-perfil?v=… ou URL absoluta). Aliases só para legado. */
   const rawFoto =
     (typeof dto.fotoPerfilUrl === 'string' && dto.fotoPerfilUrl.trim()) ||
@@ -93,7 +108,8 @@ export function mapBackendPatient(dto) {
 
   const cepDigits = normalizeCepForApi(dtoPick(dto, 'cep', 'cep'));
 
-  const ultimaVinda = pickFirstParsableInstant(dto, [
+  /** Instante (ISO com "Z"): exibido pelo dia no fuso da clínica. */
+  const ultimaVinda = pickFirstInstant(dto, [
     ['ultimaVinda', 'ultima_vinda'],
     ['ultimaVisita', 'ultima_visita'],
     ['dataUltimaVisita', 'data_ultima_visita'],
@@ -102,24 +118,15 @@ export function mapBackendPatient(dto) {
     ['ultimoAtendimentoEm', 'ultimo_atendimento_em'],
   ]);
 
-  let proximoAgendamento = pickFirstParsableInstant(dto, [
-    ['proximoAgendamento', 'proximo_agendamento'],
-  ]);
-  if (proximoAgendamento == null) {
-    const rawProx = dto.proximoRetorno ?? dto.proximo_retorno;
-    if (rawProx != null && rawProx !== '') {
-      const s = String(rawProx).trim();
-      if (s && looksIsoLikeInstantString(s)) {
-        const time = new Date(s).getTime();
-        if (!Number.isNaN(time)) proximoAgendamento = s;
-      }
-    }
-  }
+  /** Calendário da clínica ("YYYY-MM-DDTHH:mm:ss" sem fuso) → `"YYYY-MM-DDTHH:mm"`. */
+  const proximoAgendamento =
+    toCalendarDateTime(pickDateTimeIso(dto, 'proximoAgendamento', 'proximo_agendamento')) ??
+    toCalendarDateTime(pickDateTimeIso(dto, 'proximoRetorno', 'proximo_retorno'));
 
-  /** Texto legado (ex. dd/mm): pickFirst ignora quando `new Date` não parseia — precisa camel e snake. */
+  /** Texto legado (ex. dd/mm) quando não há data ISO — precisa camel e snake. */
   const ultimaVisitaLegacy =
     ultimaVinda != null
-      ? toPtBrDateOnly(ultimaVinda)
+      ? formatarDataCalendario(diaDoInstante(ultimaVinda, fuso))
       : String(
           dtoPick(dto, 'ultimaVisita', 'ultima_visita') ||
             dtoPick(dto, 'ultimaVisitaFormatada', 'ultima_visita_formatada') ||
@@ -127,14 +134,14 @@ export function mapBackendPatient(dto) {
         ).trim();
   const proximoRetornoLegacy =
     proximoAgendamento != null
-      ? toPtBrDateOnly(proximoAgendamento)
+      ? formatarDataCalendario(proximoAgendamento)
       : String(dto.proximoRetorno || '').trim();
 
   return {
     id: dto.id,
     nome: dto.nomeCompleto || '',
     dataNascimento: dto.dataNascimento || '',
-    idade: calculateAgeFromISODate(dto.dataNascimento),
+    idade: calculateAgeFromISODate(dto.dataNascimento, hojeIso ?? (fuso ? hojeDaClinica(fuso) : undefined)),
     sexo: (dto.sexo || '').toLowerCase(),
     estadoCivil: dto.estadoCivilNome || '',
     estadoCivilId: dto.estadoCivilId || '',

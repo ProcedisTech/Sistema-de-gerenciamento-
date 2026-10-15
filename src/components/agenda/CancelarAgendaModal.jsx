@@ -8,11 +8,11 @@ import { X, AlertTriangle } from 'lucide-react';
 import { motivosCancelamentoApi, getApiErrorToastMessage } from '../../services/api.js';
 import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
 import { usePapel } from '../../hooks/usePapel.js';
+import { formatarDataCalendario } from '../../utils/datasClinica.js';
 
 function formatDataPt(iso) {
   if (!iso) return '';
-  const [y, m, d] = String(iso).split('T')[0].split('-');
-  return d && m && y ? `${d}/${m}/${y}` : String(iso);
+  return formatarDataCalendario(iso, 'curta') || String(iso);
 }
 
 export default function CancelarAgendaModal({

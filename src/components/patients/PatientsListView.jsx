@@ -57,6 +57,10 @@ import {
   nestProcedimentosTimeline,
 } from './procedureTimelineUtils.js';
 import { lastProcedureDateForCard, lastProcedureLabel } from '../../utils/patientLastProcedure.js';
+import { getBirthdayBadgeLabel } from '../../utils/birthday.js';
+import { formatarDataCalendario, formatarInstante } from '../../utils/datasClinica.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
 import { useToast } from '../../contexts/useToast.js';
@@ -107,10 +111,11 @@ function buildAgendaSlotOptions(slot) {
 const PATIENT_CARD_MAX_STATUS_BADGES = 3;
 
 function PatientListCard({ patient, selected, onSelect, getPatientInitials }) {
+  const { fuso } = useFusoClinica();
   const clinical = hasClinicalAlert(patient);
   const lastProc = lastProcedureLabel(patient);
-  const lastProcDate = lastProcedureDateForCard(patient);
-  const cardStatuses = getPatientCardStatuses(patient);
+  const lastProcDate = lastProcedureDateForCard(patient, fuso);
+  const cardStatuses = getPatientCardStatuses(patient, fuso);
   const visibleStatuses = cardStatuses.slice(0, PATIENT_CARD_MAX_STATUS_BADGES);
   const hiddenStatusCount = Math.max(0, cardStatuses.length - visibleStatuses.length);
 
@@ -498,7 +503,7 @@ function NotasDrawerBlock({ patient }) {
   );
 }
 
-function PatientPreviewPanel({
+export function PatientPreviewPanel({
   selectedPatient,
   detailTitleId,
   closeDetail,
@@ -517,6 +522,7 @@ function PatientPreviewPanel({
   onSlotCancelar,
 }) {
   const { isNivel1, canSeeProntuario, canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { fuso, hojeIso } = useAgoraDaClinica();
 
   const [expandedRetornosMap, setExpandedRetornosMap] = useState({});
 
@@ -565,9 +571,12 @@ function PatientPreviewPanel({
   const idadeLabel =
     selectedPatient?.idade != null ? `${selectedPatient.idade} anos` : null;
 
-  const dataNascFormatted = selectedPatient?.dataNascimento
-    ? new Date(selectedPatient.dataNascimento).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
-    : null;
+  const dataNascFormatted = formatarDataCalendario(selectedPatient?.dataNascimento) || null;
+
+  const birthdayBadgeLabel =
+    selectedPatient?.ehAniversariante === true
+      ? getBirthdayBadgeLabel(selectedPatient.dataNascimento, hojeIso)
+      : null;
 
   return (
     <div
@@ -595,10 +604,10 @@ function PatientPreviewPanel({
             <h3 id={detailTitleId} className="text-[17px] font-bold capitalize leading-snug text-[#0f172a] break-words">
               {selectedPatient.nome}
             </h3>
-            {selectedPatient.ehAniversariante && (
+            {birthdayBadgeLabel && (
               <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-pink-700 shadow-2xs">
                 <Cake className="h-3 w-3" />
-                Aniversariante hoje!
+                {birthdayBadgeLabel}
               </span>
             )}
           </div>
@@ -712,18 +721,14 @@ function PatientPreviewPanel({
                   root.id != null && root.id !== ''
                     ? `drawer-proc-${root.id}`
                     : `drawer-proc-idx-${idx}`;
-                const criado = root.criadoEm ? new Date(root.criadoEm) : null;
+                const criado = Boolean(root.criadoEm);
                 const dateLabel = criado
-                  ? criado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                  ? formatarInstante(root.criadoEm, fuso, 'data')
                   : root.data != null
                     ? String(root.data).trim() || '-'
                     : '-';
                 const timeLabel = criado
-                  ? criado.toLocaleTimeString('pt-BR', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      timeZone: 'America/Sao_Paulo',
-                    })
+                  ? formatarInstante(root.criadoEm, fuso, 'hora')
                   : root.hora != null
                     ? String(root.hora).trim()
                     : '';
@@ -762,18 +767,14 @@ function PatientPreviewPanel({
                           child.id != null && child.id !== ''
                             ? `drawer-retorno-${child.id}`
                             : `drawer-retorno-${root.id}-${childIdx}`;
-                        const childCriado = child.criadoEm ? new Date(child.criadoEm) : null;
+                        const childCriado = Boolean(child.criadoEm);
                         const childDate = childCriado
-                          ? childCriado.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+                          ? formatarInstante(child.criadoEm, fuso, 'data')
                           : child.data != null
                             ? String(child.data).trim() || '-'
                             : '-';
                         const childHora = childCriado
-                          ? childCriado.toLocaleTimeString('pt-BR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              timeZone: 'America/Sao_Paulo',
-                            })
+                          ? formatarInstante(child.criadoEm, fuso, 'hora')
                           : child.hora != null
                             ? String(child.hora).trim()
                             : '';

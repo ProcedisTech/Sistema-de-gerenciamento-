@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, Plus, Loader2, Filter, Package } from 'lucide-react';
 import { estoqueApi } from '../../services/api';
 import { MovimentacaoFormModal } from './MovimentacaoFormModal';
+import { formatarInstante } from '../../utils/datasClinica';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
 const TIPO_META = {
   entrada_compra:    { label: 'Compra',           sign: '+', cls: 'bg-[#dcfce7] text-[#16a34a] border-[#22c55e]/20' },
@@ -22,15 +24,15 @@ const TIPO_OPTIONS = [
   { value: 'saida_perda', label: 'Perda / Descarte' },
 ];
 
-function formatDate(isoStr) {
+function formatarDataMovimentacao(isoStr, fuso) {
   if (!isoStr) return '—';
-  try {
-    const d = new Date(isoStr);
-    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  } catch { return isoStr; }
+  const data = formatarInstante(isoStr, fuso, 'data');
+  if (!data) return isoStr;
+  return `${data} ${formatarInstante(isoStr, fuso, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 export function MovimentacoesManager() {
+  const { fuso } = useFusoClinica();
   const [movs, setMovs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -176,7 +178,7 @@ export function MovimentacoesManager() {
                     {m.responsavelNome && <span>Por: {m.responsavelNome}</span>}
                     {m.observacao && <span className="text-[#94a3b8]">— {m.observacao}</span>}
                   </div>
-                  <div className="text-[11px] text-[#94a3b8] mt-0.5">{formatDate(m.criadoEm)}</div>
+                  <div className="text-[11px] text-[#94a3b8] mt-0.5">{formatarDataMovimentacao(m.criadoEm, fuso)}</div>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <span className={`text-[16px] font-extrabold ${isEntrada ? 'text-[#16a34a]' : 'text-red-600'}`}>

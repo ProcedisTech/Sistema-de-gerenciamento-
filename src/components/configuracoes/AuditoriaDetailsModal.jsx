@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, User, Clock, MapPin, Activity, FileText, AlertTriangle, Shield } from 'lucide-react';
 import { formatData, formatarEntidade, ACOES_MAP, BADGE_CORES } from './AuditoriaUtils';
+import { useFusoClinica } from '../hooks/useFusoClinica';
 
 function tryParseJSON(jsonString) {
   try {
@@ -155,6 +156,7 @@ function getCleanDescricao(desc) {
 }
 
 export function AuditoriaDetailsModal({ registro, onClose }) {
+  const { fuso } = useFusoClinica();
   if (!registro) return null;
 
   const acao = ACOES_MAP[registro.acao] ?? { label: registro.acao?.replace(/_/g, ' ') || 'Ação', cor: 'blue' };
@@ -244,7 +246,7 @@ export function AuditoriaDetailsModal({ registro, onClose }) {
                 <Clock className="h-4 w-4 text-slate-400" />
                 <h3 className="text-sm font-bold text-slate-700">Data e Hora</h3>
               </div>
-              <div className="font-semibold text-slate-900">{formatData(registro.criadoEm)}</div>
+              <div className="font-semibold text-slate-900">{formatData(registro.criadoEm, fuso)}</div>
             </div>
 
             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

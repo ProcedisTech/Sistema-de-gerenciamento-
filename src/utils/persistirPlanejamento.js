@@ -4,7 +4,7 @@ import {
   formatGaleriaLegendaForUpload,
   GALERIA_CATEGORIA,
 } from './pacienteGaleria.js';
-import { toLocalISODate } from './dateLimits.js';
+import { hojeDaClinica } from './datasClinica.js';
 
 function toApiPonto(p, fotoGaleriaId) {
   const row = {
@@ -24,14 +24,14 @@ function toApiPonto(p, fotoGaleriaId) {
   return row;
 }
 
-async function uploadCaptureFoto(pacienteId, roleUserId, blob, vistaCodigo) {
+async function uploadCaptureFoto(pacienteId, roleUserId, blob, vistaCodigo, fuso) {
   const file =
     blob instanceof File
       ? blob
       : new File([blob], `mapeamento_${vistaCodigo}_${Date.now()}.jpg`, {
           type: blob?.type || 'image/jpeg',
         });
-  const dataRef = toLocalISODate(new Date());
+  const dataRef = hojeDaClinica(fuso);
   const opts = {
     dataReferencia: dataRef,
     legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.PLANEJAMENTO, vistaCodigo),
@@ -74,6 +74,7 @@ export async function persistirPlanejamento({
   observacao,
   procedimentosComPontos,
   fotosPorVista = {},
+  fuso,
 }) {
   const errosParciais = [];
   let planejamentoId = null;
@@ -130,7 +131,7 @@ export async function persistirPlanejamento({
     }
     if (foto.source === 'capture' && foto.blob) {
       try {
-        const fid = await uploadCaptureFoto(pacienteId, roleUserId, foto.blob, vista);
+        const fid = await uploadCaptureFoto(pacienteId, roleUserId, foto.blob, vista, fuso);
         if (fid) fotoGaleriaIdPorVista[vista] = String(fid);
       } catch (e) {
         errosParciais.push(`Upload foto vista ${vista}: ${e?.message || 'erro'}`);

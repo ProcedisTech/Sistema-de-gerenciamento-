@@ -1,30 +1,22 @@
 import { getGuaranteedNow } from './serverTime.js';
+import { agoraDaClinica, instanteDoHorarioDaClinica } from './datasClinica.js';
 
 /** Margem técnica ±min para iniciar sem modal (mesmo dia). */
 export const MARGEM_TECNICA_MIN = 10;
 
-function pad2(n) {
-  return String(n).padStart(2, '0');
-}
-
 /**
- * Instante local a partir de data YYYY-MM-DD + hora HH:MM ou HH:MM:SS.
+ * Instante do horário de calendário do agendamento (data YYYY-MM-DD + hora HH:MM[:SS]) no fuso da clínica.
  * @param {string} dataIso
  * @param {string} horaInicio
+ * @param {string} fuso IANA da clínica
  * @returns {Date | null}
  */
-export function parseSlotLocalDateTime(dataIso, horaInicio) {
+export function parseSlotLocalDateTime(dataIso, horaInicio, fuso) {
   const dk = String(dataIso || '').trim().slice(0, 10);
-  const hmRaw = String(horaInicio || '').trim();
-  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(hmRaw);
-  if (!dk || dk.length !== 10 || !/^\d{4}-\d{2}-\d{2}$/.test(dk) || !m) return null;
-  const [_, hhStr, mmStr] = m;
-  const hour = Number(hhStr);
-  const minute = Number(mmStr);
-  const [y, mo, d] = dk.split('-').map(Number);
-  if (![y, mo, d].every((x) => Number.isFinite(x))) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-  return new Date(y, mo - 1, d, hour, minute, 0, 0);
+  const hm = String(horaInicio || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dk) || !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(hm)) return null;
+  const ms = instanteDoHorarioDaClinica(dk, hm, fuso);
+  return Number.isNaN(ms) ? null : new Date(ms);
 }
 
 /**
@@ -34,16 +26,6 @@ export function parseSlotLocalDateTime(dataIso, horaInicio) {
  */
 export function diffScheduledMinusNowMinutes(scheduledAt, now = getGuaranteedNow()) {
   return (scheduledAt.getTime() - now.getTime()) / 60000;
-}
-
-/** HH:MM para exibição (relógio local do Date). */
-export function formatClockHHMM(date) {
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-}
-
-/** Hora atual local HH:MM para query ao backend. */
-export function formatNowHHMM(now = getGuaranteedNow()) {
-  return formatClockHHMM(now);
 }
 
 /** Ex.: "25 min de antecedência" (scheduled ahead of now). */
@@ -60,4 +42,38 @@ export function formatAtrasoText(latenessMinutesPositive) {
   if (h <= 0) return `${m} min de atraso`;
   if (m <= 0) return `${h}h de atraso`;
   return `${h}h${m}min de atraso`;
+}
+
+/**
+ * Decide se o início do atendimento de um agendamento de hoje vai direto ou pede o modal de tolerância.
+ * "Previsto" é o HH:mm do próprio agendamento; "Agora" é o relógio da clínica.
+ * @param {{ dataIso: string, hora: string, fuso: string, agoraMs?: number }} params
+ * @returns {{ acao: 'direto' | 'early' | 'late' | 'invalido', scheduledTimeLabel?: string, nowTimeLabel?: string, antecedenciaTexto?: string, atrasoTexto?: string }}
+ */
+export function avaliarInicioAgendamento({ dataIso, hora, fuso, agoraMs = getGuaranteedNow().getTime() }) {
+  const scheduledAt = parseSlotLocalDateTime(dataIso, hora, fuso);
+  if (!scheduledAt) return { acao: 'invalido' };
+
+  const diffMin = diffScheduledMinusNowMinutes(scheduledAt, new Date(agoraMs));
+  if (Math.abs(diffMin) <= MARGEM_TECNICA_MIN) return { acao: 'direto' };
+
+  const [hh, mm] = String(hora).trim().split(':');
+  const scheduledTimeLabel = `${hh.padStart(2, '0')}:${mm}`;
+  const nowTimeLabel = agoraDaClinica(fuso, agoraMs).hhmm;
+
+  if (diffMin > MARGEM_TECNICA_MIN) {
+    return {
+      acao: 'early',
+      scheduledTimeLabel,
+      nowTimeLabel,
+      antecedenciaTexto: formatAntecedenciaText(diffMin),
+    };
+  }
+
+  return {
+    acao: 'late',
+    scheduledTimeLabel,
+    nowTimeLabel,
+    atrasoTexto: formatAtrasoText(-diffMin),
+  };
 }

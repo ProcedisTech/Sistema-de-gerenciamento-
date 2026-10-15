@@ -16,6 +16,7 @@ import {
 import { AnamneseDocumentoView } from '../../components/anamnese/AnamneseDocumentoAssinadoView.jsx';
 import { aplicarMudancaResposta, collectPerguntaIdsVisiveis, perguntaFilhaVisivel } from '../../components/anamnese/anamneseCondicional.js';
 import { searchCatalogoPublico } from '../../components/anamnese/anamneseCatalogoSearch.js';
+import { FUSO_PADRAO, formatarDataCalendario, formatarInstante } from '../../utils/datasClinica';
 
 // Simple CPF formatter: 000.000.000-00
 const formatCPF = (val) => {
@@ -64,6 +65,7 @@ export const AnamnesePage = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [estado, setEstado] = useState('ENTRADA_CPF'); // ENTRADA_CPF | VALIDA | SEM_SOLICITACAO | FORMULARIO | ASSINATURA | SUCESSO
   const [lookupData, setLookupData] = useState(null);
+  const fusoPublico = lookupData?.fusoHorario ?? FUSO_PADRAO;
   const [hydrationToken, setHydrationToken] = useState(null);
   const [hydrationStatus, setHydrationStatus] = useState('none'); // none | ok | failed
   
@@ -368,6 +370,7 @@ export const AnamnesePage = () => {
             <AnamneseDocumentoView
               documento={lookupData.documento}
               variante="pacienteConfirmacao"
+              fuso={fusoPublico}
             />
           )}
 
@@ -474,6 +477,7 @@ export const AnamnesePage = () => {
   };
 
   const renderAssinatura = () => {
+    const agoraMs = Date.now();
     const pacienteCtx = {
       nome: lookupData?.pacienteNome || 'paciente',
       cpf: cpf
@@ -487,7 +491,7 @@ export const AnamnesePage = () => {
 4. Autorizo o uso das informações desta ficha pela equipe de profissionais de saúde responsáveis pelo meu atendimento.
 5. Compreendo que a omissão ou falsidade de qualquer informação pode comprometer a segurança dos procedimentos e tratamentos a mim prestados.
 
-Data do preenchimento: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`;
+Data do preenchimento: ${formatarInstante(agoraMs, fusoPublico, 'data')} às ${formatarInstante(agoraMs, fusoPublico, { hour: '2-digit', minute: '2-digit' })}`;
 
     let conteudoExibicao = termoConteudo;
     if (pacienteCtx?.nome) conteudoExibicao = conteudoExibicao.replace(/\[NOME DO PACIENTE\]/gi, pacienteCtx.nome);
@@ -661,7 +665,7 @@ Data do preenchimento: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'Ame
             <h2 className="text-xl font-bold text-emerald-800 mb-2">Anamnese em dia!</h2>
             <p className="text-emerald-700 text-sm">
               Olá, {lookupData.pacienteNome}.<br/>
-              Sua ficha está válida até <strong className="font-semibold">{new Date(lookupData.validadeAte).toLocaleDateString('pt-BR')}</strong>.<br/>
+              Sua ficha está válida até <strong className="font-semibold">{formatarDataCalendario(lookupData.validadeAte, 'curta')}</strong>.<br/>
               Não é necessário preencher novamente.
             </p>
           </div>

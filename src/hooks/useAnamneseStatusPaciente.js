@@ -4,6 +4,7 @@ import {
   resolveAnamneseDesatualizada,
   resolveAnamnesePendente,
 } from '../utils/patientAnamneseAlerts.js';
+import { useFusoClinica } from '../components/hooks/useFusoClinica.js';
 
 /**
  * Status do card Anamnese no hub: GET da ficha do paciente (mesmo padrão de termos/planos).
@@ -12,6 +13,7 @@ import {
 export function useAnamneseStatusPaciente(paciente, { enabled = true } = {}) {
   const pacienteId = paciente?.id != null ? String(paciente.id).trim() : '';
   const canFetch = Boolean(enabled && pacienteId);
+  const { fuso } = useFusoClinica();
   const [fetchedList, setFetchedList] = useState([]);
   const [fetchLoading, setFetchLoading] = useState(false);
 
@@ -45,7 +47,7 @@ export function useAnamneseStatusPaciente(paciente, { enabled = true } = {}) {
     : resolveAnamnesePendente(paciente, list);
   const desatualizada = isLoading
     ? paciente?.anamneseDesatualizada === true
-    : resolveAnamneseDesatualizada(paciente, list);
+    : resolveAnamneseDesatualizada(paciente, list, fuso);
 
   return { list, isLoading, pendente, desatualizada };
 }

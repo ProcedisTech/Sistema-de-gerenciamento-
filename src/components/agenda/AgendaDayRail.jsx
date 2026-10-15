@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTickInterval } from './hooks/useTickInterval.js';
+import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { AgendaDayRailBody } from './AgendaDayRailBody.jsx';
 import { AgendaDayRailHero } from './AgendaDayRailHero.jsx';
 import { AgendaDayRailTimelineStrip } from './AgendaDayRailTimelineStrip.jsx';
@@ -32,7 +32,7 @@ export function AgendaDayRail({
   submittingRemoverBloqueioId,
   clinicaHorarios,
 }) {
-  const now = useTickInterval(60_000);
+  const { minutos: nowMinutes } = useAgoraDaClinica(60_000);
   const [highlight, setHighlight] = useState({ day: null, id: null });
   const highlightTimerRef = useRef(null);
 
@@ -80,7 +80,7 @@ export function AgendaDayRail({
         appointments={appointments}
         selectedDay={selectedDay}
         todayIso={todayIso}
-        now={now}
+        nowMinutes={nowMinutes}
         onBlockClick={highlightCard}
         compact={compact}
         dense={dense}
@@ -93,7 +93,7 @@ export function AgendaDayRail({
         selectedDay={selectedDay}
         todayIso={todayIso}
         appointments={appointments}
-        now={now}
+        nowMinutes={nowMinutes}
         highlightedId={highlightedId}
         showProfissional={showProfissional}
         isNivel1={isNivel1}
