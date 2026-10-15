@@ -1527,6 +1527,39 @@ function AppRefactoredInner() {
     };
   }, [authSessionReady, orgId]);
 
+  const recarregarClinicaInfo = React.useCallback(async () => {
+    try {
+      const clinicaRes = await fetch(resolveApiUrl('/api/v1/clinica'), {
+        credentials: 'include',
+        headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
+      });
+      if (clinicaRes.ok) {
+        const c = await clinicaRes.json().catch(() => ({}));
+        const nomeClinica = c?.nome || c?.nomeFantasia || c?.nome_fantasia || '';
+        const logoRaw = c?.logoUrl ?? c?.logo_url;
+        const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
+
+        let endCompleto = String(c?.enderecoLogradouro ?? c?.endereco ?? c?.logradouro ?? '').trim();
+        if (c?.enderecoNumero) endCompleto += `, ${c.enderecoNumero}`;
+        if (c?.enderecoCidade) endCompleto += ` - ${c.enderecoCidade}`;
+        if (c?.enderecoEstado) endCompleto += `/${c.enderecoEstado}`;
+
+        setClinicaInfo((prev) => ({
+          ...prev,
+          ...(nomeClinica ? { nome: String(nomeClinica).trim() } : {}),
+          ...(logoUrl ? { logoUrl } : {}),
+          endereco: endCompleto,
+          telefone: String(c?.telefone ?? c?.celular ?? '').trim(),
+          cnpj: String(c?.cnpj ?? '').trim(),
+          slug: String(c?.slug ?? '').trim(),
+          anamnesePadraoId: c?.anamnesePadraoId ?? null,
+        }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   React.useEffect(() => {
     if (!isLoggedIn) {
       setPerfilInfo({ nomeCompleto: '', apelido: '', fotoUrl: '' });
@@ -5058,9 +5091,14 @@ function AppRefactoredInner() {
                       canSeeEquipe={canSeeConfigEquipe}
                       configSection={configSection}
                       setConfigSection={setConfigSection}
-                      onClinicaAtualizada={(nome, logoUrl) =>
-                        setClinicaInfo({ nome, logoUrl: logoUrl ?? '' })
-                      }
+                      onClinicaAtualizada={(nome, logoUrl) => {
+                        setClinicaInfo((prev) => ({
+                          ...prev,
+                          ...(nome ? { nome } : {}),
+                          ...(logoUrl != null ? { logoUrl } : {}),
+                        }));
+                        void recarregarClinicaInfo();
+                      }}
                       onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
                       onNavigateAgenda={() => setActiveView('agenda')}
                       onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
