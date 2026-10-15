@@ -19,6 +19,21 @@ function primaryButtonClass(heightClass) {
 }
 
 /**
+ * Selo "Em andamento": mesmas classes do selo de status do card (AgendaAppointmentCardRich)
+ * com as cores do status "confirmado" (getStatusBadgePresentation em agendaRailHelpers.js).
+ */
+export function ConsultaEmAndamentoChip({ className = '' }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide bg-status-ok-bg text-vivid-teal-700 ${className}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-status-ok" aria-hidden />
+      Em andamento
+    </span>
+  );
+}
+
+/**
  * Botões do rail. Em compromisso multi-procedimento, o pai deve passar callbacks que
  * recebem o entry/group (ex.: onConfirmar={() => onConfirmar(group)}), não confiar
  * no prop `appointment` sozinho.
@@ -32,6 +47,7 @@ export function AgendaRailCardActions({
   primaryHeightClass = 'h-8',
   primaryIconClass = 'h-3.5 w-3.5',
   onPrimaryClick,
+  onVoltarConsulta,
   onConfirmar,
   onIniciarAtendimento,
   onWhatsApp,
@@ -43,6 +59,10 @@ export function AgendaRailCardActions({
   const primaryLabel = getRailPrimaryLabel(primary);
 
   function handlePrimary() {
+    if (primary === 'voltar' && typeof onVoltarConsulta === 'function') {
+      onVoltarConsulta(actions.atendimentoId);
+      return;
+    }
     if (typeof onPrimaryClick === 'function') {
       onPrimaryClick(appointment);
       return;
@@ -53,6 +73,7 @@ export function AgendaRailCardActions({
 
   return (
     <div className={className}>
+      {actions.emAndamento ? <ConsultaEmAndamentoChip className="self-start" /> : null}
       {primary ? (
         <button type="button" onClick={handlePrimary} className={primaryButtonClass(primaryHeightClass)}>
           {primary === 'confirmar' ? (

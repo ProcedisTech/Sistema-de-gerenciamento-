@@ -47,15 +47,16 @@ export function ConsultaProcedimentoFlow({
   onSugestaoEnviada = () => {},
   onProcedureOpenCamera,
   onClearMapaCaptureIntent,
+  /** F5: `(foto) => url` da reserva (/arquivo); repassada ao Step4Procedimento. */
+  urlArquivoReserva = null,
   // Step5
   procedureDateIso,
-  proximoRetornoDisplay,
-  setProximoRetornoDisplay,
-  orientacoes,
-  orientacoesItens,
-  setOrientacoesItens,
-  orientacoesCarregadas,
-  setOrientacoesCarregadas,
+  /** Orientações por item: `{ itemId, nome, orient: lista | null, legado }`, um por linha de procedimento. */
+  itensOrientacoes = [],
+  /** Grava a lista inteira do item `indice` (o núcleo manda o PATCH). */
+  setOrientacoesDoItem = () => {},
+  /** Índices dos itens sem orientação marcada (bloqueiam o encerrar). */
+  itensSemOrientacaoMarcada = [],
   step5Errors,
   setStep5Errors,
   pacienteNome,
@@ -74,10 +75,15 @@ export function ConsultaProcedimentoFlow({
   encerrarAtendimento,
   isSalvandoProcedimento = false,
   isFinishing = false,
-  step5RetornoBloqueiaFinal = false,
   toast,
 }) {
   const [phase, setPhase] = useState('registro');
+
+  const indicesSemMarcada = Array.isArray(itensSemOrientacaoMarcada) ? itensSemOrientacaoMarcada : [];
+  const orientacoesOk = indicesSemMarcada.length === 0;
+  const nomesSemMarcada = indicesSemMarcada
+    .map((i) => String(itensOrientacoes?.[i]?.nome || '').trim() || `Procedimento ${i + 1}`)
+    .join(', ');
 
   const oldIndexRef = React.useRef(activeProcedimentoIndex);
 
@@ -139,13 +145,9 @@ export function ConsultaProcedimentoFlow({
 
   const handleFinalizar = async () => {
     try {
-      if (!orientacoes) {
-        setStep5Errors({ orientacoes: !orientacoes });
-        toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
-        return;
-      }
-      if (step5RetornoBloqueiaFinal) {
-        toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
+      if (!orientacoesOk) {
+        setStep5Errors({ orientacoes: true });
+        toast.error(`Marque ao menos uma orientação em: ${nomesSemMarcada}`);
         return;
       }
       setStep5Errors({});
@@ -222,6 +224,8 @@ export function ConsultaProcedimentoFlow({
           onSugestaoEnviada={onSugestaoEnviada}
           onProcedureOpenCamera={execucaoBloqueadaPorTermos ? undefined : onProcedureOpenCamera}
           onClearMapaCaptureIntent={onClearMapaCaptureIntent}
+          urlArquivoReserva={urlArquivoReserva}
+          itemId={procedimentosLote?.[activeProcedimentoIndex]?.itemId || null}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button
@@ -247,13 +251,9 @@ export function ConsultaProcedimentoFlow({
         key={String(nomeProcedimento || '')}
         procedimentosLote={procedimentosLote}
         procedureDateIso={procedureDateIso}
-        proximoRetornoDisplay={proximoRetornoDisplay}
-        setProximoRetornoDisplay={setProximoRetornoDisplay}
-        orientacoes={orientacoes}
-        orientacoesItens={orientacoesItens}
-        setOrientacoesItens={setOrientacoesItens}
-        orientacoesCarregadas={orientacoesCarregadas}
-        setOrientacoesCarregadas={setOrientacoesCarregadas}
+        itensOrientacoes={itensOrientacoes}
+        setOrientacoesDoItem={setOrientacoesDoItem}
+        itensSemOrientacaoMarcada={indicesSemMarcada}
         step5Errors={step5Errors}
         setStep5Errors={setStep5Errors}
         pacienteNome={pacienteNome}
@@ -275,26 +275,24 @@ export function ConsultaProcedimentoFlow({
         nomeUsuario={nomeUsuario ?? ''}
         onAnnotateEvaluationPhoto={onAnnotateEvaluationPhoto}
         onAnnotateProcedurePhoto={onAnnotateProcedurePhoto}
-        hideProximoRetorno
       />
       <div className="mt-8 flex justify-end border-t border-app-border pt-8">
         <button
           type="button"
           onClick={handleFinalizar}
-          disabled={isFinishing || !orientacoes || step5RetornoBloqueiaFinal}
+          disabled={isFinishing || !orientacoesOk}
+          title={orientacoesOk ? undefined : `Marque ao menos uma orientação em: ${nomesSemMarcada}`}
           className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-            orientacoes && !step5RetornoBloqueiaFinal && !isFinishing
+            orientacoesOk && !isFinishing
               ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
               : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
           }`}
         >
           {isFinishing
             ? 'Salvando...'
-            : !orientacoes
+            : !orientacoesOk
               ? 'Confirme as orientações para finalizar'
-              : step5RetornoBloqueiaFinal
-                ? 'Corrija a data de retorno'
-                : 'Finalizar Atendimento ✓'}
+              : 'Finalizar Atendimento ✓'}
         </button>
       </div>
     </>

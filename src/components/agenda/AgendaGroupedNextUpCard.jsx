@@ -1,9 +1,10 @@
-import { getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
+import { useMemo } from 'react';
+import { getConsultaEmAndamento, getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
 import { getAppointmentStatusBucket } from '../../utils/agendaDayInsights.js';
 import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { GroupedDurationBlock } from './GroupedRailTimeColumn.jsx';
-import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 
 function statusDotClass(appointment) {
@@ -24,6 +25,7 @@ export function AgendaGroupedNextUpCard({
   isNivel1,
   compact = false,
   onCheckIn,
+  onVoltarConsulta,
   onWhatsApp,
   onEnviarAnamnese,
   onReagendar,
@@ -32,12 +34,21 @@ export function AgendaGroupedNextUpCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
-  const { canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  const andamento = useMemo(
+    () => getConsultaEmAndamento(group?.appointments || [], roleUserId),
+    [group?.appointments, roleUserId],
+  );
   if (!primary) return null;
 
   const countdown = formatCountdown(group.horaInicio || primary.horaInicio, nowMinutes);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese, canCancelar);
+  const actions = getGroupedRailCardActions(
+    appointments.map((a) => a.status),
+    canStartAnamnese,
+    canCancelar,
+    andamento,
+  );
 
   return (
     <article
@@ -103,11 +114,16 @@ export function AgendaGroupedNextUpCard({
             primaryHeightClass="h-9"
             primaryIconClass="h-4 w-4"
             onPrimaryClick={() => onCheckIn?.(group)}
+            onVoltarConsulta={onVoltarConsulta}
             onWhatsApp={() => onWhatsApp?.(group)}
             onEnviarAnamnese={() => onEnviarAnamnese?.(group)}
             onReagendar={() => onReagendar?.(group)}
             onCancelar={canCancelar ? () => onCancelar?.(group) : null}
           />
+        </div>
+      ) : andamento.emAndamento ? (
+        <div className="col-span-2 border-t border-ink-150 pt-3">
+          <ConsultaEmAndamentoChip />
         </div>
       ) : null}
     </article>

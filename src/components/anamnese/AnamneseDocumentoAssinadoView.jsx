@@ -146,6 +146,9 @@ export function AnamneseDocumentoView({
   onEnvioAtivoChange,
   /** Fuso IANA para exibir instantes; páginas públicas passam `payload.fusoHorario`. */
   fuso: fusoProp = null,
+  /** F4: queixa e expectativas da consulta (ficheiros da avaliação); o bloco só aparece quando há texto. */
+  queixa = '',
+  expectativas = '',
 }) {
   const { fuso: fusoClinica } = useFusoClinica();
   const fuso = fusoProp ?? fusoClinica;
@@ -450,6 +453,27 @@ export function AnamneseDocumentoView({
       </div>
 
       <div className="space-y-5 px-5 py-5 sm:px-6">
+        {String(queixa ?? '').trim() || String(expectativas ?? '').trim() ? (
+          <section aria-label="Queixa e Expectativas" data-testid="doc-queixa-expectativas">
+            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Queixa e Expectativas
+            </h4>
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[13px] text-[#0f172a]">
+              {String(queixa ?? '').trim() ? (
+                <p>
+                  <span className="font-bold text-[#00a88e]">Queixa: </span>
+                  <span className="whitespace-pre-wrap">{String(queixa).trim()}</span>
+                </p>
+              ) : null}
+              {String(expectativas ?? '').trim() ? (
+                <p>
+                  <span className="font-bold text-[#00a88e]">Expectativas: </span>
+                  <span className="whitespace-pre-wrap">{String(expectativas).trim()}</span>
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
         {secoes.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-[#94a3b8]">Nenhuma pergunta neste filtro.</p>
         ) : (

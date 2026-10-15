@@ -59,6 +59,23 @@ export function pfIdNestaSessaoParaCatalogo(catalogoId, procedimentosSessao) {
   return null;
 }
 
+/**
+ * F3: faltantes de UM item. Parte dos faltantes da resolução do catálogo do item (piso do servidor) e tira os
+ * termos que já constam em `termosDaConsulta` com statusAssinatura ASSINADO (releitura da consulta). Sem a
+ * resolução (rede falhou) -> [] (não bloqueia). Sem termos da consulta (`[]`, p.ex. sem HUB_TERMOS_VER) a resolução
+ * do servidor vale como está.
+ */
+export function faltantesDoItem(resolucaoDoCatalogo, termosDaConsulta) {
+  if (!resolucaoDoCatalogo || !Array.isArray(resolucaoDoCatalogo.faltantes)) return [];
+  const assinados = new Set(
+    (Array.isArray(termosDaConsulta) ? termosDaConsulta : [])
+      .filter((t) => t && t.termoId != null && String(t.statusAssinatura || '').toUpperCase() === 'ASSINADO')
+      .map((t) => String(t.termoId)),
+  );
+  if (assinados.size === 0) return resolucaoDoCatalogo.faltantes.slice();
+  return resolucaoDoCatalogo.faltantes.filter((f) => !(f && f.termoId != null && assinados.has(String(f.termoId))));
+}
+
 /** Faltantes só bloqueiam se ainda não existe PF deste catálogo na sessão. */
 export function bloqueioExecucaoTermos({ resolucao, pfIdNestaSessao } = {}) {
   const pf = pfIdNestaSessao != null ? String(pfIdNestaSessao).trim() : '';
@@ -104,11 +121,6 @@ export function abortarEncerrarPorTermos({
   pularGateTermos = false,
 } = {}) {
   return Boolean(bloqueadoPorTermos) && !isApenasSair && !pularGateTermos;
-}
-
-/** Não cria PF nem consome consentimento quando o termo ainda falta. */
-export function deveCriarProcedimentoNoEncerrar(bloqueadoPorTermos) {
-  return !bloqueadoPorTermos;
 }
 
 export function titulosFaltantes(resolucao) {

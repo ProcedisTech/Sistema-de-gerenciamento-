@@ -41,6 +41,7 @@ import { usePedidoPendenteAnamnese } from './usePedidoPendenteAnamnese.js';
 import { SolicitacaoPendenteFaixa } from './SolicitacaoPendenteFaixa.jsx';
 import { formatarInstante, instanteMs } from '../../utils/datasClinica';
 import { useFusoClinica } from '../hooks/useFusoClinica';
+import { useToast } from '../../contexts/useToast.js';
 
 /** Mesmo padrão de `PatientProfileView` / payload gravado em `createPaciente`. */
 function parseQueixaExpectativasObs(observacoes) {
@@ -117,10 +118,14 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
   onConcluirAnamnese,
   isConcluirAnamneseBusy = false,
   onAutoSaveAnamnese = null,
+  onCampoAvaliacaoBlur = () => {},
+  esperarFilaAvaliacao = null,
   onSolicitarAoPaciente = null,
   onSolicitacaoRespondida = null,
 }, ref) {
   const { fuso } = useFusoClinica();
+  const toast = useToast();
+  const [esperandoFilaConcluir, setEsperandoFilaConcluir] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saving' | 'saved'
   const [fichas, setFichas] = useState([]);
   const draftValido = savedAnamneseState?.pacienteId === pacienteId;
@@ -911,6 +916,8 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
           pacienteId={pacienteId}
           preenchimentoId={vigente.id}
           pacienteTelefone={pacienteTelefone}
+          queixa={queixa}
+          expectativas={expectativas}
           anamneseId={ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente) || fichaSelecionadaId || null}
           onModificar={async () => {
             const fichaId = ultimaAnamnese?.fichaId || resolveFichaTemplateIdFromEntry(vigente);
@@ -1358,6 +1365,10 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 setQueixa(e.target.value);
                 setStep2Errors((prev) => ({ ...prev, queixa: false }));
               }}
+              data-campo-consulta={consultaMode ? 'avaliacao:queixa' : undefined}
+              onBlur={() => {
+                if (consultaMode) onCampoAvaliacaoBlur?.('queixa');
+              }}
               rows={3}
               readOnly={formularioReadOnly}
               className={`w-full rounded-lg border border-slate-200 px-3 py-2.5 text-[14px] text-slate-700 outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/15 transition-colors ${
@@ -1406,7 +1417,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                   setQueixa(e.target.value);
                   setStep2Errors((prev) => ({ ...prev, queixa: false }));
                 }}
+                data-campo-consulta={consultaMode ? 'avaliacao:queixa' : undefined}
                 onBlur={async () => {
+                  if (consultaMode) {
+                    onCampoAvaliacaoBlur?.('queixa');
+                    return;
+                  }
                   if (!queixa?.trim() || typeof onAutoSaveAnamnese !== 'function') return;
                   setSaveStatus('saving');
                   await onAutoSaveAnamnese();
@@ -1437,7 +1453,12 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
                 setExpectativas(e.target.value);
                 setStep2Errors((prev) => ({ ...prev, expectativas: false }));
               }}
+              data-campo-consulta={consultaMode ? 'avaliacao:expectativas' : undefined}
               onBlur={async () => {
+                if (consultaMode) {
+                  onCampoAvaliacaoBlur?.('expectativas');
+                  return;
+                }
                 if (!expectativas?.trim() || typeof onAutoSaveAnamnese !== 'function') return;
                 setSaveStatus('saving');
                 await onAutoSaveAnamnese();
@@ -1484,8 +1505,23 @@ export const Step2Anamnese = forwardRef(function Step2Anamnese({
         <div className="mt-8 flex justify-end border-t border-app-border pt-6">
           <button
             type="button"
-            onClick={() => onConcluirAnamnese?.()}
-            disabled={isConcluirAnamneseBusy}
+            onClick={async () => {
+              // A fila de gravação da avaliação esvazia antes de concluir (o AppRefactored cuida do id do preenchimento).
+              if (typeof esperarFilaAvaliacao === 'function') {
+                setEsperandoFilaConcluir(true);
+                try {
+                  const r = await esperarFilaAvaliacao();
+                  if (r?.ok === false) {
+                    toast.warning('Aguarde: ainda enviando a avaliação…');
+                    return;
+                  }
+                } finally {
+                  setEsperandoFilaConcluir(false);
+                }
+              }
+              onConcluirAnamnese?.();
+            }}
+            disabled={isConcluirAnamneseBusy || esperandoFilaConcluir}
             className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-app-accent px-6 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isConcluirAnamneseBusy ? 'Salvando…' : 'Concluir Anamnese'}

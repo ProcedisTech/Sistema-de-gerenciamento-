@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AvisosProvider } from './AvisosProvider.jsx';
+import { AvisosContext } from './avisosContext.js';
 import { useAviso } from './useAviso.js';
 import { criarLeitorAvisos } from '../services/avisos/canalAvisos.js';
 import {
@@ -28,7 +29,8 @@ function fabricaLeitor(servidor, extras = {}) {
       url: '/api/v1/eventos/stream',
       fetchImpl: servidor.fetchImpl,
       obterHeaders,
-      renovarToken: vi.fn().mockResolvedValue(null),
+      // B-42 FD: a renovação devolve o resultado classificado; 'definitiva' = recusada pelo servidor.
+      renovarToken: vi.fn().mockResolvedValue({ tipo: 'definitiva' }),
       aleatorio: () => 0.5,
       ...extras,
     });
@@ -55,13 +57,22 @@ function Tela({ banco, onBusca, onMontar }) {
   return <div data-testid="valor">{String(valor)}</div>;
 }
 
+/** Ouvinte cru do contexto: guarda toda mensagem despachada (sem o filtro do useAviso). */
+function Ouvinte({ onMensagem }) {
+  const ctx = useContext(AvisosContext);
+  useEffect(() => ctx.assinar(onMensagem), [ctx, onMensagem]);
+  return null;
+}
+
 function montar({ servidor, orgId = 'org-1', ativo = true, banco = { valor: 'v1' }, criarLeitor } = {}) {
   const onBusca = vi.fn();
   const onMontar = vi.fn();
+  const onMensagem = vi.fn();
   const fabrica = criarLeitor ?? fabricaLeitor(servidor);
   const arvore = (props) => (
     <AvisosProvider orgId={props.orgId} ativo={props.ativo} criarLeitor={fabrica}>
       <Tela banco={banco} onBusca={onBusca} onMontar={onMontar} />
+      <Ouvinte onMensagem={onMensagem} />
     </AvisosProvider>
   );
   const utils = render(arvore({ orgId, ativo }));
@@ -70,6 +81,7 @@ function montar({ servidor, orgId = 'org-1', ativo = true, banco = { valor: 'v1'
     banco,
     onBusca,
     onMontar,
+    onMensagem,
     atualizar: (props) => utils.rerender(arvore({ orgId, ativo, ...props })),
   };
 }
@@ -85,7 +97,7 @@ describe('AvisosProvider', () => {
     vi.useRealTimers();
   });
 
-  it('primeiro conectado do leitor emite um recarregar; reconexões do mesmo leitor não', async () => {
+  it('todo conectado do leitor emite um recarregar (o primeiro e as reconexões)', async () => {
     const servidor = criarServidorFalso();
     const { onBusca } = montar({ servidor });
     await passar();
@@ -98,7 +110,39 @@ describe('AvisosProvider', () => {
     await passar(1000);
     servidor.ultima().enviar(sse.conectado('1'));
     await passar();
-    expect(onBusca).toHaveBeenCalledTimes(2);
+    expect(onBusca).toHaveBeenCalledTimes(3);
+  });
+
+  it('despacha {tipo:"conectado", primeiro} a cada conexão, separado do recarregar', async () => {
+    const servidor = criarServidorFalso();
+    const { onMensagem } = montar({ servidor });
+    await passar();
+    servidor.ultima().enviar(sse.conectado('1'));
+    await passar();
+    servidor.ultima().fechar();
+    await passar(1000);
+    servidor.ultima().enviar(sse.conectado('1'));
+    await passar();
+    const conectados = onMensagem.mock.calls.map(([m]) => m).filter((m) => m.tipo === 'conectado');
+    expect(conectados).toEqual([
+      { tipo: 'conectado', primeiro: true },
+      { tipo: 'conectado', primeiro: false },
+    ]);
+    const recarregares = onMensagem.mock.calls.map(([m]) => m).filter((m) => m.tipo === 'recarregar');
+    expect(recarregares).toHaveLength(2);
+  });
+
+  it('repassa {tipo:"pendencia-liberada", atendimentoId} aos inscritos e o useAviso não dispara por ela', async () => {
+    const servidor = criarServidorFalso();
+    const { onMensagem, onBusca } = montar({ servidor });
+    await passar();
+    servidor.ultima().enviar(sse.conectado('1'));
+    await passar();
+    const buscas = onBusca.mock.calls.length;
+    servidor.ultima().enviar('event: pendencia-liberada\ndata: {"atendimentoId":"at-1"}\n\n');
+    await passar();
+    expect(onMensagem).toHaveBeenCalledWith({ tipo: 'pendencia-liberada', atendimentoId: 'at-1' });
+    expect(onBusca).toHaveBeenCalledTimes(buscas);
   });
 
   it('aviso confirmado entre a busca inicial e o primeiro conectado aparece na tela', async () => {
@@ -236,7 +280,7 @@ describe('AvisosProvider', () => {
 
   it.each([
     ['403', { status: 403 }],
-    ['renovação falha', { status: 401 }],
+    ['renovação recusada (definitiva)', { status: 401 }],
   ])('bloqueado (%s) não liga o degradado', async (_nome, resposta) => {
     const servidor = criarServidorFalso({ responder: () => resposta });
     const { onBusca } = montar({ servidor });
@@ -244,6 +288,18 @@ describe('AvisosProvider', () => {
     await passar(5 * 60_000);
     expect(onBusca).toHaveBeenCalledTimes(1);
     expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('renovação sem rede (401 + falha de rede) liga o degradado e continua tentando, nunca bloqueia', async () => {
+    const servidor = criarServidorFalso({ responder: () => ({ status: 401 }) });
+    const renovarToken = vi.fn().mockResolvedValue({ tipo: 'rede' });
+    const { onBusca } = montar({ servidor, criarLeitor: fabricaLeitor(servidor, { renovarToken }) });
+    await passar();
+    expect(onBusca).toHaveBeenCalledTimes(1);
+    await passar(30_010);
+    expect(onBusca).toHaveBeenCalledTimes(2);
+    expect(servidor.fetchImpl.mock.calls.length).toBeGreaterThan(1);
+    expect(renovarToken.mock.calls.length).toBe(servidor.fetchImpl.mock.calls.length);
   });
 
   it('aviso não altera procedi_last_activity', async () => {

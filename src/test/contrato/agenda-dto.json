@@ -27,5 +27,10 @@
   "tipoProcedimentoId": "44444444-4444-4444-4444-444444444444",
   "catalogoProcedimentoSaudeId": "55555555-5555-5555-5555-555555555555",
   "planejamentoItemId": null,
-  "procedimentoFeitoOrigemId": null
+  "procedimentoFeitoOrigemId": null,
+  "atendimentoId": "66666666-6666-6666-6666-666666666666",
+  "atendimentoStatusCodigo": "aberto",
+  "atendimentoAnfitriaoRoleUserId": "22222222-2222-2222-2222-222222222222",
+  "atendimentoIniciadoEm": "2026-10-05T17:32:00Z",
+  "atendimentoEncerradoEm": null
 }

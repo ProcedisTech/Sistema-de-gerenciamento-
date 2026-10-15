@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { Clock3, UserRound } from 'lucide-react';
-import { getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
+import { getConsultaEmAndamento, getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
 import { getAppointmentStatusBucket } from '../../utils/agendaDayInsights.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { getGroupedStatusBadgePresentation } from '../../utils/agendaRailHelpers.js';
 import { usePapel } from '../../hooks/usePapel.js';
+import { ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
 
 const BTN_ACTION =
   'inline-flex max-w-[min(100%,14rem)] shrink-0 justify-center whitespace-normal text-center leading-tight';
@@ -35,8 +37,9 @@ function showPrimaryActionButton(statuses) {
   return statuses.some((s) => !['realizado', 'reagendado'].includes(s));
 }
 
-function panelActionLabel(statuses, canStartAnamnese = true) {
-  const actions = getGroupedRailCardActions(statuses, canStartAnamnese);
+function panelActionLabel(statuses, canStartAnamnese = true, andamento) {
+  const actions = getGroupedRailCardActions(statuses, canStartAnamnese, true, andamento);
+  if (actions.primary === 'voltar') return 'Voltar à consulta';
   if (actions.primary === 'confirmar') return 'Confirmar';
   if (actions.primary === 'iniciar') return 'Iniciar';
   return 'Reagendar';
@@ -67,6 +70,7 @@ function hashGradient(name) {
 export function AgendaGroupedSummaryCard({
   group,
   onPrimary,
+  onVoltarConsulta,
   renderSlotActions,
   isNivel1 = false,
   advanceOffer,
@@ -74,12 +78,16 @@ export function AgendaGroupedSummaryCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
-  const { canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  const andamento = useMemo(
+    () => getConsultaEmAndamento(group?.appointments || [], roleUserId),
+    [group?.appointments, roleUserId],
+  );
   if (!primary) return null;
 
   const statuses = appointments.map((a) => a.status);
   const badge = getGroupedStatusBadgePresentation(appointments);
-  const actions = getGroupedRailCardActions(statuses, canStartAnamnese, canDeleteAgenda);
+  const actions = getGroupedRailCardActions(statuses, canStartAnamnese, canDeleteAgenda, andamento);
   const styles = STATUS_STYLES[actions.primary === 'confirmar' ? 'pendente' : 'confirmado'] || STATUS_STYLES.pendente;
   const grad = hashGradient(group.pacienteNome);
   const avatarStyle = { background: `linear-gradient(135deg, ${grad.from}, ${grad.to})` };
@@ -140,6 +148,7 @@ export function AgendaGroupedSummaryCard({
         </div>
 
         <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
+          {andamento.emAndamento ? <ConsultaEmAndamentoChip className="self-center" /> : null}
           {isNivel1 ? (
             <div className="flex w-full items-center justify-center rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-center text-[11px] font-bold text-rose-600">
               Nível 1: Apenas visualização
@@ -149,10 +158,14 @@ export function AgendaGroupedSummaryCard({
               {showPrimaryActionButton(statuses) && actions.primary ? (
                 <button
                   type="button"
-                  onClick={() => onPrimary?.(group)}
+                  onClick={() =>
+                    actions.primary === 'voltar' && typeof onVoltarConsulta === 'function'
+                      ? onVoltarConsulta(actions.atendimentoId)
+                      : onPrimary?.(group)
+                  }
                   className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
                 >
-                  {panelActionLabel(statuses, canStartAnamnese)}
+                  {panelActionLabel(statuses, canStartAnamnese, andamento)}
                 </button>
               ) : null}
             </>

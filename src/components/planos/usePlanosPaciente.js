@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { planejamentosApi, getApiErrorDetail } from '../../services/api.js';
 import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
 
-export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
+export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true, chaveRebusca = 0 }) {
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +34,7 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true }) {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, chaveRebusca]);
 
   const runMutation = useCallback(async (fn) => {
     setMutating(true);

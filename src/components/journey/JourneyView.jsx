@@ -1,7 +1,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
-import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { buildPacienteCtx } from '../../utils/pacienteCtx';
@@ -167,7 +166,6 @@ export function JourneyView({
   onSelectCapturedPhoto,
   onDeleteCapturedPhoto,
   onAnnotatedCaptureSaved,
-  persistAnnotatedPhotoToGallery,
   EVALUATION_PHOTO_MAX,
   termoLido,
   setTermoLido,
@@ -201,14 +199,11 @@ export function JourneyView({
   procedureCapturedPhotos: procedureCapturedPhotosStep4,
   uploadProcedureFiles: uploadProcedureFilesStep4,
   removeProcedurePhoto: removeProcedurePhotoStep4,
-  orientacoes,
-  orientacoesItens: orientacoesItensProp,
-  setOrientacoesItens: setOrientacoesItensProp,
-  orientacoesCarregadas: orientacoesCarregadasProp,
-  setOrientacoesCarregadas: setOrientacoesCarregadasProp,
+  /** Orientações por item (ver Step5Finalization); sem as props, a jornada guarda um item local. */
+  itensOrientacoes: itensOrientacoesProp,
+  setOrientacoesDoItem: setOrientacoesDoItemProp,
+  itensSemOrientacaoMarcada: itensSemOrientacaoMarcadaProp,
   procedureDateIso: procedureDateIsoProp,
-  proximoRetornoDisplay: proximoRetornoDisplayProp,
-  setProximoRetornoDisplay: setProximoRetornoDisplayProp,
   step5Errors,
   setStep5Errors,
   prevStep,
@@ -224,39 +219,35 @@ export function JourneyView({
   const procedureDateIso = procedureDateIsoProp === undefined ? hojeIso : procedureDateIsoProp;
   const [_nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoIdLocal] = React.useState(null);
 
-  const [localOrientItens, setLocalOrientItens] = React.useState([]);
-  const [localOrientCarregadas, setLocalOrientCarregadas] = React.useState(false);
-  const hasParentOrientItens =
-    orientacoesItensProp !== undefined && typeof setOrientacoesItensProp === 'function';
-  const orientacoesItens = hasParentOrientItens ? orientacoesItensProp : localOrientItens;
-  const setOrientacoesItens = hasParentOrientItens ? setOrientacoesItensProp : setLocalOrientItens;
-  const orientacoesCarregadas = orientacoesCarregadasProp ?? localOrientCarregadas;
-  const setOrientacoesCarregadas = setOrientacoesCarregadasProp ?? setLocalOrientCarregadas;
-  const orientacoesOk = hasParentOrientItens
-    ? Boolean(orientacoes)
-    : localOrientItens.some((i) => i && i.checado);
-
-  const [localProximoRetornoDisplay, setLocalProximoRetornoDisplay] = React.useState('');
-  const proximoRetornoDisplay =
-    proximoRetornoDisplayProp !== undefined
-      ? proximoRetornoDisplayProp
-      : localProximoRetornoDisplay;
-  const setProximoRetornoDisplay =
-    setProximoRetornoDisplayProp ?? setLocalProximoRetornoDisplay;
-
-  const step5RetornoBloqueiaFinal = React.useMemo(
+  // Sem o pai: um item local (nome do procedimento), `orient: null` até o Step5 carregar o modelo.
+  const [localOrient, setLocalOrient] = React.useState(null);
+  const hasParentOrient =
+    Array.isArray(itensOrientacoesProp) && typeof setOrientacoesDoItemProp === 'function';
+  const itensOrientacoes = React.useMemo(
     () =>
-      evaluateProximoRetornoStep5(procedureDateIso, proximoRetornoDisplay, hojeIso).blocksFinish,
-    [procedureDateIso, proximoRetornoDisplay, hojeIso]
+      hasParentOrient
+        ? itensOrientacoesProp
+        : [{ itemId: null, nome: String(nomeProcedimento || ''), orient: localOrient, legado: false }],
+    [hasParentOrient, itensOrientacoesProp, nomeProcedimento, localOrient],
   );
+  const setOrientacoesDoItem = React.useCallback(
+    (indice, lista) => {
+      if (hasParentOrient) setOrientacoesDoItemProp(indice, lista);
+      else if (indice === 0) setLocalOrient(Array.isArray(lista) ? lista : []);
+    },
+    [hasParentOrient, setOrientacoesDoItemProp],
+  );
+  const itensSemOrientacaoMarcada = React.useMemo(() => {
+    if (hasParentOrient) {
+      return Array.isArray(itensSemOrientacaoMarcadaProp) ? itensSemOrientacaoMarcadaProp : [];
+    }
+    return (localOrient || []).some((i) => i && i.checado) ? [] : [0];
+  }, [hasParentOrient, itensSemOrientacaoMarcadaProp, localOrient]);
+  const orientacoesOk = itensSemOrientacaoMarcada.length === 0;
 
   const onFinishJourney = () => {
     if (!orientacoesOk) {
       toast.error('Marque ao menos uma orientação pós-procedimento para finalizar.');
-      return;
-    }
-    if (step5RetornoBloqueiaFinal) {
-      toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
       return;
     }
     handleFinishJourney();
@@ -342,7 +333,6 @@ export function JourneyView({
           onSelectCapturedPhoto={onSelectCapturedPhoto}
           onDeleteCapturedPhoto={onDeleteCapturedPhoto}
           onAnnotatedCaptureSaved={onAnnotatedCaptureSaved}
-          persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
           evaluationPhotoMax={EVALUATION_PHOTO_MAX}
           observacoes={observacoes}
           setObservacoes={setObservacoes}
@@ -394,13 +384,9 @@ export function JourneyView({
         <Step5Finalization
           key={String(nomeProcedimento || '')}
           procedureDateIso={procedureDateIso}
-          proximoRetornoDisplay={proximoRetornoDisplay}
-          setProximoRetornoDisplay={setProximoRetornoDisplay}
-          orientacoes={orientacoesOk}
-          orientacoesItens={orientacoesItens}
-          setOrientacoesItens={setOrientacoesItens}
-          orientacoesCarregadas={orientacoesCarregadas}
-          setOrientacoesCarregadas={setOrientacoesCarregadas}
+          itensOrientacoes={itensOrientacoes}
+          setOrientacoesDoItem={setOrientacoesDoItem}
+          itensSemOrientacaoMarcada={itensSemOrientacaoMarcada}
           step5Errors={step5Errors}
           setStep5Errors={setStep5Errors}
           pacienteNome={pacienteAtual?.nome ?? ''}
@@ -454,9 +440,9 @@ export function JourneyView({
                 <button
                   type="button"
                   onClick={onFinishJourney}
-                  disabled={!orientacoesOk || isFinishing || step5RetornoBloqueiaFinal}
+                  disabled={!orientacoesOk || isFinishing}
                   className={`flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${
-                    orientacoesOk && !isFinishing && !step5RetornoBloqueiaFinal
+                    orientacoesOk && !isFinishing
                       ? 'animate-pulse bg-[#00a88e] text-white hover:bg-[#00967f]'
                       : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
                   }`}
@@ -465,9 +451,7 @@ export function JourneyView({
                     ? 'Salvando...'
                     : !orientacoesOk
                       ? 'Marque ao menos uma orientação'
-                      : step5RetornoBloqueiaFinal
-                        ? 'Corrija a data de retorno'
-                        : 'Finalizar Atendimento'}
+                      : 'Finalizar Atendimento'}
                   <CheckCircle className="h-4 w-4" strokeWidth={3} />
                 </button>
               )}

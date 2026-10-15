@@ -4,7 +4,6 @@ import {
   bloqueioExecucaoTermos,
   catalogoIdsDoAtendimento,
   consentimentosAguardandoExecucao,
-  deveCriarProcedimentoNoEncerrar,
   idsFilaExigida,
   isAssinaturaResolvida,
   parseTermosBloqueioError,
@@ -133,11 +132,6 @@ describe('termoResolucao — consome o endpoint, não a natureza', () => {
     expect(abortarEncerrarPorTermos({ bloqueadoPorTermos: true, isApenasSair: true })).toBe(false);
     expect(abortarEncerrarPorTermos({ bloqueadoPorTermos: true, pularGateTermos: true })).toBe(false);
     expect(abortarEncerrarPorTermos({ bloqueadoPorTermos: false })).toBe(false);
-  });
-
-  it('deveCriarProcedimentoNoEncerrar é falso quando o termo falta', () => {
-    expect(deveCriarProcedimentoNoEncerrar(true)).toBe(false);
-    expect(deveCriarProcedimentoNoEncerrar(false)).toBe(true);
   });
 });
 

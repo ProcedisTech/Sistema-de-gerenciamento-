@@ -55,8 +55,9 @@ import {
   agendasApi,
   anamneseApi,
   catalogosApi,
+  getApiErrorDetail,
   getApiErrorToastMessage,
-  orientacoesApi,
+  pacientesApi,
   pacientesGaleriaApi,
   perfilApi,
   planejamentosApi,
@@ -69,9 +70,8 @@ import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/plan
 import { pickSessaoAtiva, pickSessaoRetornoAtiva } from '../utils/planejamentoSessoes.js';
 import { hojeDaClinica } from '../utils/datasClinica.js';
 import { convertToWebP } from '../utils/imageUtils.js';
-import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { clearTermosJornadaState } from '../utils/termoJornadaLista.js';
-import { registrarAgendaAvulsa, enriquecerAgendaAgendada, registrarRetornoFuturo } from '../utils/registrarAgendaAvulsa.js';
+import { registrarAgendaAvulsa } from '../utils/registrarAgendaAvulsa.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
@@ -89,7 +89,7 @@ import { ConfirmacaoPublicaPage } from './agenda/ConfirmacaoPublicaPage';
 import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
 import { TermoBloqueioModal } from './termos/TermoBloqueioModal.jsx';
-import { abortarEncerrarPorTermos, bloqueioExecucaoTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, deveCriarProcedimentoNoEncerrar, idsFilaExigida, parseTermosBloqueioError, pfIdNestaSessaoParaCatalogo, sessaoComPfDoCatalogo, temFaltantes, titulosFaltantes } from '../utils/termoResolucao.js';
+import { abortarEncerrarPorTermos, bloqueioExecucaoTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, faltantesDoItem, idsFilaExigida, parseTermosBloqueioError, pfIdNestaSessaoParaCatalogo, sessaoComPfDoCatalogo, titulosFaltantes } from '../utils/termoResolucao.js';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 
@@ -131,8 +131,36 @@ import {
 import { getPatientInitials } from './utils';
 import { toDateKey } from '../utils/agendaDateUtils';
 import { TIPO_ATENDIMENTO_CONSULTA } from '../utils/agendaTipoProcedimento.js';
-import { parseSlotLocalDateTime, avaliarInicioAgendamento } from '../utils/agendaStartTolerance.js';
+import { avaliarInicioAgendamento } from '../utils/agendaStartTolerance.js';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
+import {
+  CODIGO_ENVIO_PENDENTE,
+  CODIGO_ESPERA_CANCELADA,
+  useAtendimentoServidor,
+} from './hooks/useAtendimentoServidor.js';
+import { AlteracoesNaoEntraram } from './consulta/AlteracoesNaoEntraram.jsx';
+import { useTermosConsulta } from './hooks/useTermosConsulta.js';
+import { useEnvioFotosConsulta } from './hooks/useEnvioFotosConsulta.js';
+import { useMapaRascunhoAutosave } from './hooks/useMapaRascunhoAutosave.js';
+import {
+  consultaFechada,
+  inicioAoEntrarNaConsulta,
+  itensOrientacoesDaSessao,
+  itensSemOrientacaoMarcada as linhasSemOrientacaoMarcada,
+  mapearItensDaSessao,
+  marcarNomesDeTela,
+  opcoesParaEntrar,
+  orientacoesPorItemParaPadrao,
+  textoDaConsultaAbandonada,
+  textoDasFotosNaoEnviadas,
+  textoDoApenasSair,
+  textoRetornoSemEncerrar,
+} from './consulta/consultaServidor.js';
+import { urlDeReservaDaFoto } from './consulta/mergeFotosPorId.js';
+import { cardDoAtalho, loteDasLinhas } from '../utils/loteAgendasDoPaciente.js';
+import { nowComparableDateTimeClinica } from '../utils/patientProfileDerivedDates.js';
+import { mapBackendPatient } from '../utils/patientMapping.js';
+import { AtalhoConsulta } from './layout/AtalhoConsulta.jsx';
 import SessionTimeoutWarningModal from './session/SessionTimeoutWarningModal';
 
 function normalizeTermosList(raw) {
@@ -165,6 +193,25 @@ function revokeBlobUrlIfAny(url) {
   }, 1000);
 }
 
+/**
+ * Nomes das perguntas depois do encerrar ("Salvar como padrão?" e "Catálogo") e o "já vinculado ao catálogo", pela
+ * regra de hoje: todos os itens da sessão (inclusive o item só com nome); sem itens, o procedimento da jornada.
+ */
+function perguntasDaSessao({ procedimentosSessao, nomeProcedimento, nomeProcedimentoCatalogoId }) {
+  const sessao = Array.isArray(procedimentosSessao) ? procedimentosSessao : [];
+  const nomesArray = sessao.length > 0
+    ? sessao.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
+    : [String(nomeProcedimento || '').trim()].filter(Boolean);
+  return {
+    nomesUnicos: [...new Set(nomesArray)],
+    jaVinculadoAoCatalogo: (snapshotNome) =>
+      sessao.some(
+        p => (p.procedimentoNome === snapshotNome || p.nomeProcedimento === snapshotNome) &&
+             (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
+      ) || (nomeProcedimento === snapshotNome && nomeProcedimentoCatalogoId),
+  };
+}
+
 function AppRefactoredInner({ onCanalAvisos }) {
   const { roleUserId, setRoleUserId, setOrgId, orgId, setRoleNome, roleNome, contextStatus, recarregarContextoOrg, clearOrgSession } = useOrg();
   const {
@@ -181,6 +228,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     canSeeConfigAgenda,
     canSeeConfigEquipe,
     canDeleteAgenda,
+    canStartAtendimento,
   } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
@@ -363,10 +411,25 @@ function AppRefactoredInner({ onCanalAvisos }) {
     nomeProcedimento: '',
     faltantes: [],
   });
-  const [termosExecucaoBloqueio, setTermosExecucaoBloqueio] = React.useState({
-    catalogoId: null,
-    resolucao: null,
-  });
+  /**
+   * F3: cache da resolução do servidor por catálogo (catalogoId -> resolução). A faixa "Procedimento bloqueado até a
+   * assinatura" é derivada por item: resolução do catálogo do item ativo menos os termos já assinados na consulta
+   * (termosDaConsulta, releitura). Nada global.
+   */
+  const [resolucaoTermosPorCatalogo, setResolucaoTermosPorCatalogo] = React.useState({});
+  /** Preenchido depois do hook da consulta (termosDaConsulta); lido só em callbacks. */
+  const termosDaConsultaRef = React.useRef([]);
+  /** Id da consulta no servidor (atribuído após useAtendimentoServidor); a resolução de termos o envia. */
+  const atendimentoIdConsultaRef = React.useRef(null);
+  const catalogoAtivoTermosRef = React.useRef(null);
+  const registrarResolucaoTermos = React.useCallback((catalogoId, resolucao) => {
+    const cat = String(catalogoId ?? catalogoAtivoTermosRef.current ?? '').trim();
+    if (!cat) return;
+    setResolucaoTermosPorCatalogo((prev) => ({ ...prev, [cat]: resolucao }));
+  }, []);
+  const limparResolucoesTermos = React.useCallback(() => {
+    setResolucaoTermosPorCatalogo((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+  }, []);
   const [termoFocoId, setTermoFocoId] = React.useState(null);
   const [catalogoOrigemRetornoId, setCatalogoOrigemRetornoId] = React.useState(null);
   const [retornoAvulsoPickerOpen, setRetornoAvulsoPickerOpen] = React.useState(false);
@@ -454,13 +517,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const pacienteAtualRef = useRef(null);
   /** Evita duplo clique em “Finalizar”. */
   const finishJourneyLockRef = useRef(false);
+  /**
+   * B-42 rodada 4: retorno já finalizado cujo encerrar da consulta falhou ({ atendimentoId, pid, dtoFinalizar }).
+   * Nasce só depois do `finalizar`; o próximo "Concluir Retorno" na mesma consulta só encerra. Limpa no resetJourney.
+   */
+  const retornoFinalizadoRef = useRef(null);
   const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
   const [isSalvandoProcedimento] = React.useState(false);
   const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
   const prevJourneyPacienteIdRef = useRef(undefined);
-  /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
-  const pendingAnnotatedGalleryBlobsRef = useRef([]);
   const finishJourneyModalResolveRef = useRef(null);
   const [finishJourneyModal, setFinishJourneyModal] = React.useState(null);
 
@@ -917,10 +983,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.nomeProcedimentoCatalogoId,
     journeyState.procedimentosSessao,
   );
-  const execucaoBloqueadaPorTermos = bloqueioExecucaoTermos({
-    resolucao: termosExecucaoBloqueio.resolucao,
-    pfIdNestaSessao: pfIdCatalogoAtivo,
-  });
 
   const persistirPfSessao = React.useCallback((catalogoId, pfId) => {
     const cat = catalogoId != null ? String(catalogoId).trim() : '';
@@ -941,12 +1003,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const validarTermosDoCatalogo = React.useCallback(
     async (catalogoId, nomeProc, { abrirModal = true } = {}) => {
       if (!exigirFilaTermos) {
-        setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
+        limparResolucoesTermos();
         return true;
       }
       const cat = catalogoId != null ? String(catalogoId).trim() : '';
       if (!cat || !pacienteAtual?.id) {
-        setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
         return true;
       }
       if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) {
@@ -957,15 +1018,18 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const resolucao = await termosApi.resolver({
           pacienteId: pacienteAtual.id,
           catalogoIds: [cat],
+          atendimentoId: atendimentoIdConsultaRef.current || undefined,
         });
         console.info('[termo-perf] GET resolucao', Math.round(performance.now() - t0), 'ms');
-        setTermosExecucaoBloqueio({ catalogoId: cat, resolucao });
-        if (temFaltantes(resolucao)) {
+        registrarResolucaoTermos(cat, resolucao);
+        // F3: o que já está assinado na consulta (releitura) não bloqueia, mesmo com a resolução ainda velha.
+        const faltantesDoServidor = faltantesDoItem(resolucao, termosDaConsultaRef.current);
+        if (faltantesDoServidor.length > 0) {
           if (abrirModal) {
             setTermoBloqueio({
               open: true,
               nomeProcedimento: nomeProc || journeyState.nomeProcedimento || 'procedimento',
-              faltantes: resolucao.faltantes || [],
+              faltantes: faltantesDoServidor,
             });
           }
           return false;
@@ -976,11 +1040,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
       return true;
     },
-    [exigirFilaTermos, pacienteAtual?.id, journeyState.nomeProcedimento, journeyState.procedimentosSessao],
+    [exigirFilaTermos, pacienteAtual?.id, journeyState.nomeProcedimento, journeyState.procedimentosSessao, limparResolucoesTermos, registrarResolucaoTermos],
   );
 
-  const termosExecucaoBloqueioRef = React.useRef(termosExecucaoBloqueio);
-  termosExecucaoBloqueioRef.current = termosExecucaoBloqueio;
+  const resolucaoTermosPorCatalogoRef = React.useRef(resolucaoTermosPorCatalogo);
+  resolucaoTermosPorCatalogoRef.current = resolucaoTermosPorCatalogo;
 
   const garantirTermosAntesDeIniciar = React.useCallback(
     async (catalogoId, nomeProc) => {
@@ -988,13 +1052,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
       if (cat && pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) {
         return true;
       }
-      const cached = termosExecucaoBloqueioRef.current;
-      if (cat && cached.catalogoId && String(cached.catalogoId) === cat && cached.resolucao) {
-        if (temFaltantes(cached.resolucao)) {
+      const cached = cat ? resolucaoTermosPorCatalogoRef.current[cat] : null;
+      if (cached) {
+        const faltantes = faltantesDoItem(cached, termosDaConsultaRef.current);
+        if (faltantes.length > 0) {
           setTermoBloqueio({
             open: true,
             nomeProcedimento: nomeProc || journeyState.nomeProcedimento || 'procedimento',
-            faltantes: cached.resolucao.faltantes || [],
+            faltantes,
           });
           return false;
         }
@@ -1054,34 +1119,31 @@ function AppRefactoredInner({ onCanalAvisos }) {
     };
   }, [journeyState.procedimentoFeitoOrigemId, pacienteAtual?.id]);
 
-  const irParaTermosFaltantes = React.useCallback(
-    ({ termoId, termoIds, nomeProcedimento }) => {
-      const ids = Array.isArray(termoIds) ? termoIds.map(String).filter(Boolean) : [];
-      if (ids.length) journeyState.setTermosPendentesIds(ids);
-      setTermoFocoId(termoId || ids[0] || null);
-      setTermoBloqueio((prev) => ({
-        ...prev,
-        open: false,
-        nomeProcedimento: nomeProcedimento || prev.nomeProcedimento,
-      }));
-      if (activeView === 'consulta') setConsultaModule('termos');
-    },
-    [activeView, journeyState]
-  );
-
   // moved to line 683 below cameraState
 
-  const step5RetornoBloqueiaFinal = React.useMemo(
-    () =>
-      fusoPronto
-        ? evaluateProximoRetornoStep5(
-          journeyProcedureDateIso,
-          journeyState.proximoRetornoDisplay,
-          hojeDaClinica(fusoClinica)
-        ).blocksFinish
-        : false,
-    [journeyProcedureDateIso, journeyState.proximoRetornoDisplay, fusoClinica, fusoPronto]
+  // F5b: orientações por item. Cada linha de `procedimentosSessao` tem `orient` (nula = a tela carrega o modelo),
+  // `itemId` e `legado`; a tela recebe um bloco por linha e devolve a lista inteira da linha.
+  const itensOrientacoes = React.useMemo(
+    () => itensOrientacoesDaSessao(journeyState.procedimentosSessao),
+    [journeyState.procedimentosSessao],
   );
+  const { updateProcedureByIndex: atualizarLinhaDaSessao } = journeyState;
+  const setOrientacoesDoItem = React.useCallback(
+    (indice, lista) => atualizarLinhaDaSessao(indice, { orient: Array.isArray(lista) ? lista : [] }),
+    [atualizarLinhaDaSessao],
+  );
+  /**
+   * Decisão 7: índices (em `procedimentosSessao`) das linhas que precisam de ao menos 1 orientação marcada
+   * (catálogo ou retorno, não legado) e não têm. A tela (ConsultaProcedimentoFlow/Step5Finalization) mostra a mensagem
+   * por índice; o nome vem de `itensOrientacoes[indice].nome`.
+   */
+  const itensSemOrientacaoMarcada = React.useMemo(
+    () =>
+      linhasSemOrientacaoMarcada(journeyState.procedimentosSessao, { retorno: journeyState.isAgendaRetorno })
+        .map((x) => x.indice),
+    [journeyState.procedimentosSessao, journeyState.isAgendaRetorno],
+  );
+  const orientacoesOk = itensSemOrientacaoMarcada.length === 0;
 
   const isProcedimentoMode = currentStep === 4 || (activeView === 'consulta' && consultaModule === 'procedimento');
 
@@ -1129,7 +1191,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     setProcedimentosLote([]);
     setLoteProcedimentosFeitosIds([]);
     journeyState.setAgendaId(null);
-    journeyState.setAttendanceStartTime(null, selectedPatientCpf);
+    journeyState.setAttendanceStartTime(null);
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
@@ -1140,7 +1202,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     // Clear refs and state to prevent cross-patient corruption
     anamnesePreenchimentoIdRef.current = null;
     autoSaveAnamnesePromiseRef.current = null;
-    pendingAnnotatedGalleryBlobsRef.current = [];
     journeyState.setTermoSelecionadoId(null);
     setAssinaturasRealizadasIds([]);
     journeyState.setJourneyPlanejamentoCtx(null);
@@ -1160,10 +1221,252 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setTermoAssinado(false);
     journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setProfissionalAssinaturaDataUrl('');
-    journeyState.setOrientacoesItens([]);
-    journeyState.setOrientacoesCarregadas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pacienteAtual?.id]);
+
+  const aoConsultaCanceladaRef = useRef(null);
+  const handleConsultaCanceladaPorOutra = React.useCallback((info) => aoConsultaCanceladaRef.current?.(info), []);
+  const aoConsultaEncerradaRef = useRef(null);
+  const handleConsultaEncerradaEmOutroAparelho = React.useCallback(
+    (info) => aoConsultaEncerradaRef.current?.(info),
+    [],
+  );
+  const aoConsultaAbandonadaRef = useRef(null);
+  const handleConsultaAbandonada = React.useCallback((info) => aoConsultaAbandonadaRef.current?.(info), []);
+  /** Textos da avaliação (queixa, expectativas, observações): vão ao servidor no blur e voltam por aviso/F5. */
+  const {
+    queixa: queixaAvaliacao,
+    expectativas: expectativasAvaliacao,
+    observacoesAvaliacao,
+    setQueixa: setQueixaAvaliacao,
+    setExpectativas: setExpectativasAvaliacao,
+    setObservacoesAvaliacao,
+  } = journeyState;
+  const valoresAvaliacao = React.useMemo(
+    () => ({ queixa: queixaAvaliacao, expectativas: expectativasAvaliacao, observacoesAvaliacao }),
+    [queixaAvaliacao, expectativasAvaliacao, observacoesAvaliacao],
+  );
+  const aplicarAvaliacao = React.useCallback(
+    (valoresNovos) => {
+      if (!valoresNovos) return;
+      if (valoresNovos.queixa !== undefined) setQueixaAvaliacao(valoresNovos.queixa ?? '');
+      if (valoresNovos.expectativas !== undefined) setExpectativasAvaliacao(valoresNovos.expectativas ?? '');
+      if (valoresNovos.observacoesAvaliacao !== undefined) {
+        setObservacoesAvaliacao(valoresNovos.observacoesAvaliacao ?? '');
+      }
+    },
+    [setQueixaAvaliacao, setExpectativasAvaliacao, setObservacoesAvaliacao],
+  );
+  const opcaoAvaliacao = React.useMemo(
+    () => ({ valores: valoresAvaliacao, aplicar: aplicarAvaliacao }),
+    [valoresAvaliacao, aplicarAvaliacao],
+  );
+  const consultaServidor = useAtendimentoServidor({
+    habilitado: canStartAtendimento && authSessionReady,
+    orgId: orgId || null,
+    userId: authState.authUser?.id ?? null,
+    emConsulta: activeView === 'consulta' && consultaModule != null,
+    pacienteId: pacienteAtual?.id ?? null,
+    procedimentosSessao: journeyState.procedimentosSessao,
+    aparelho: journeyState,
+    onCanceladaPorOutra: handleConsultaCanceladaPorOutra,
+    onEncerradaEmOutroAparelho: handleConsultaEncerradaEmOutroAparelho,
+    onAbandonada: handleConsultaAbandonada,
+    avaliacao: opcaoAvaliacao,
+    avisar: (tipo, mensagem) => toast[tipo]?.(mensagem),
+  });
+  const {
+    trocarModulo: trocarModuloNoServidor,
+    guardarAntesDeSair: guardarConsultaAntesDeSair,
+    confirmarEnvios: confirmarEnviosDaConsulta,
+    // F7: o encerrar espera o aparelho que ainda tem envios pendentes (409 ENVIO_PENDENTE_OUTRA_ABA).
+    encerrarAguardandoOutraAba: encerrarConsultaNoServidor,
+    cancelarEsperaOutraAba: cancelarEsperaEncerrar,
+    alteracoesNaoEntraram,
+    descartarAlteracoesNaoEntraram,
+    copiarAlteracoesNaoEntraram,
+    substituirPeloPlano: substituirPeloPlanoNoServidor,
+  } = consultaServidor;
+  /** Y9: só a escolha da pessoa grava o módulo; entradas e saídas automáticas usam setConsultaModule. */
+  const trocarModuloPeloUsuario = React.useCallback(
+    (modulo) => {
+      setConsultaModule(modulo);
+      trocarModuloNoServidor(modulo);
+    },
+    [trocarModuloNoServidor],
+  );
+
+  const {
+    termosDaConsulta,
+    salvarTermosConsulta,
+    enviarAssinaturaPelaFila,
+    esperarFilaAvaliacao,
+  } = consultaServidor;
+  termosDaConsultaRef.current = termosDaConsulta;
+  atendimentoIdConsultaRef.current = consultaServidor.atual?.id ?? null;
+  catalogoAtivoTermosRef.current = journeyState.nomeProcedimentoCatalogoId
+    ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+    : null;
+  /** F3: o bloqueio do item ativo = resolução do catálogo dele menos o que já está assinado na consulta. */
+  const termosExecucaoBloqueio = React.useMemo(() => {
+    const cat = journeyState.nomeProcedimentoCatalogoId
+      ? String(journeyState.nomeProcedimentoCatalogoId).trim()
+      : null;
+    const base = cat ? resolucaoTermosPorCatalogo[cat] : null;
+    if (!base) return { catalogoId: cat, resolucao: null };
+    return { catalogoId: cat, resolucao: { ...base, faltantes: faltantesDoItem(base, termosDaConsulta) } };
+  }, [resolucaoTermosPorCatalogo, termosDaConsulta, journeyState.nomeProcedimentoCatalogoId]);
+  const execucaoBloqueadaPorTermos = bloqueioExecucaoTermos({
+    resolucao: termosExecucaoBloqueio.resolucao,
+    pfIdNestaSessao: pfIdCatalogoAtivo,
+  });
+  /**
+   * F3: a ordem da sessão segue a `ordem` do servidor (mesclarSessao). Se a mescla reordenou as linhas sem a pessoa
+   * trocar de aba, o índice ativo acompanha o item (itemId), não a posição.
+   */
+  const itemAtivoRef = React.useRef({ itemId: null, indice: journeyState.activeProcedureIndex });
+  React.useEffect(() => {
+    const sessao = journeyState.procedimentosSessao;
+    const indice = journeyState.activeProcedureIndex;
+    const anterior = itemAtivoRef.current;
+    const itemIdAtual = Array.isArray(sessao) ? sessao[indice]?.itemId ?? null : null;
+    if (anterior.indice === indice && anterior.itemId && itemIdAtual !== anterior.itemId && Array.isArray(sessao)) {
+      const novo = sessao.findIndex((l) => l?.itemId === anterior.itemId);
+      if (novo >= 0 && novo !== indice) {
+        journeyState.setActiveProcedureIndex(novo);
+        itemAtivoRef.current = { itemId: anterior.itemId, indice: novo };
+        return;
+      }
+    }
+    itemAtivoRef.current = { itemId: itemIdAtual, indice };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só a sessão e o índice
+  }, [journeyState.procedimentosSessao, journeyState.activeProcedureIndex]);
+
+  /** Termos da consulta: restaura do servidor sem eco e grava só o que difere. */
+  const { gravarEstadoTermos } = useTermosConsulta({
+    termosDaConsulta,
+    salvarTermosConsulta,
+    journeyState,
+  });
+
+  const consultaAtualServidor = consultaServidor.atual;
+  const consultaDasFotos =
+    activeView === 'consulta' &&
+    consultaModule != null &&
+    consultaAtualServidor &&
+    pacienteAtual?.id != null &&
+    String(consultaAtualServidor.pacienteId) === String(pacienteAtual.id)
+      ? consultaAtualServidor
+      : null;
+  /** Etapa 3: o encerrar vai pela rota única, com a consulta da tela no servidor; sem ela, nada é gravado. */
+  const consultaEncerraNoServidor = Boolean(consultaDasFotos?.id);
+  const { onCampoAvaliacaoBlur, preenchimentoAnamneseId: preenchimentoAnamneseDaConsulta } = consultaServidor;
+  /** Com consulta na tela, o preenchimento da anamnese é o do servidor (criado no blur dos textos). */
+  React.useEffect(() => {
+    if (consultaEncerraNoServidor && preenchimentoAnamneseDaConsulta) {
+      anamnesePreenchimentoIdRef.current = String(preenchimentoAnamneseDaConsulta);
+    }
+  }, [consultaEncerraNoServidor, preenchimentoAnamneseDaConsulta]);
+  /**
+   * Espera a fila de envio da avaliação (PATCH dos textos) antes de concluir. Com consulta ativa,
+   * se o servidor devolveu o preenchimento e o ref está vazio, preenche o ref antes de decidir PUT/POST.
+   * Retorna false (com aviso) enquanto a fila ainda não terminou.
+   */
+  const aguardarFilaDaAvaliacao = React.useCallback(async () => {
+    if (!consultaEncerraNoServidor || typeof esperarFilaAvaliacao !== 'function') return true;
+    const r = await esperarFilaAvaliacao();
+    if (r?.ok === false) {
+      toast.error('Aguarde: ainda enviando a avaliação…');
+      return false;
+    }
+    if (r?.preenchimentoAnamneseId && !anamnesePreenchimentoIdRef.current) {
+      anamnesePreenchimentoIdRef.current = String(r.preenchimentoAnamneseId);
+    }
+    return true;
+  }, [consultaEncerraNoServidor, esperarFilaAvaliacao, toast]);
+  const itemDoProcedimentoAtivo = React.useMemo(
+    () =>
+      mapearItensDaSessao(journeyState.procedimentosSessao, consultaAtualServidor?.itens)[
+        journeyState.activeProcedureIndex ?? 0
+      ] ?? null,
+    [journeyState.procedimentosSessao, consultaAtualServidor?.itens, journeyState.activeProcedureIndex],
+  );
+  const avisarErroFoto = React.useCallback((mensagem) => toast.error(mensagem), [toast]);
+  const envioFotos = useEnvioFotosConsulta({
+    consulta: consultaDasFotos,
+    roleUserId: roleUserId || null,
+    fotosAvaliacao: cameraState.evaluationCapturedPhotos,
+    fotosProcedimento: cameraState.procedureCapturedPhotos,
+    procedimentosSessao: journeyState.procedimentosSessao,
+    itemDoProcedimentoAtivo,
+    aparelho: {
+      setEvaluationCapturedPhotos: cameraState.setEvaluationCapturedPhotos,
+      setProcedureCapturedPhotos: cameraState.setProcedureCapturedPhotos,
+      setProcedimentosSessao: journeyState.setProcedimentosSessao,
+    },
+    avisarErro: avisarErroFoto,
+  });
+  const { fotoRemovida, fotoAnotada, aguardarPendentes: aguardarFotosPendentes } = envioFotos;
+  const { aguardarMapa: aguardarMapaRascunho } = useMapaRascunhoAutosave({
+    consulta: consultaDasFotos,
+    itemId: itemDoProcedimentoAtivo,
+    mapaState: mapaAplicacaoState,
+    roleUserId: roleUserId || null,
+    avisarErro: avisarErroFoto,
+  });
+  const removerFotoAvaliacao = React.useCallback(
+    (idx) => {
+      fotoRemovida(cameraState.evaluationCapturedPhotos[idx]);
+      cameraState.removeEvaluationPhoto(idx);
+    },
+    [fotoRemovida, cameraState],
+  );
+  const removerFotoProcedimento = React.useCallback(
+    (idx) => {
+      fotoRemovida(cameraState.procedureCapturedPhotos[idx]);
+      cameraState.removeProcedurePhoto(idx);
+    },
+    [fotoRemovida, cameraState],
+  );
+  /**
+   * F1: o editor chama `await onAnnotatedCaptureSaved({ index, blob, newUrl })`. A foto na lista só é trocada depois
+   * de o servidor aceitar o arquivo (`{ estado: 'salva', arquivoAtualizadoEm }`) ou de a anotação ficar pendente
+   * (`{ estado: 'pendente' }`); se o PUT falhar, a Promise rejeita e nada muda na lista (o editor avisa).
+   */
+  const salvarFotoProcedimentoAnotada = React.useCallback(
+    async ({ index, newUrl, blob }) => {
+      const r = await fotoAnotada(cameraState.procedureCapturedPhotos[index], blob, 'procedimento');
+      cameraState.replaceProcedureCapturedPhotoAt(index, {
+        url: newUrl,
+        blob,
+        meta: r?.arquivoAtualizadoEm ? { arquivoAtualizadoEm: r.arquivoAtualizadoEm } : undefined,
+      });
+      journeyState.setImageSrc(newUrl);
+      journeyState.setPaths([]);
+      return r;
+    },
+    [fotoAnotada, cameraState, journeyState],
+  );
+  /** F1: URL de reserva do arquivo no servidor para o editor carregar a foto (`?v=` pela versão que a foto conhece). */
+  const urlArquivoReservaDaFoto = React.useCallback(
+    (photo) => urlDeReservaDaFoto(pacienteAtual?.id, photo?.meta?.fotoId, photo?.meta?.arquivoAtualizadoEm),
+    [pacienteAtual?.id],
+  );
+
+  const irParaTermosFaltantes = React.useCallback(
+    ({ termoId, termoIds, nomeProcedimento }) => {
+      const ids = Array.isArray(termoIds) ? termoIds.map(String).filter(Boolean) : [];
+      if (ids.length) journeyState.setTermosPendentesIds(ids);
+      setTermoFocoId(termoId || ids[0] || null);
+      setTermoBloqueio((prev) => ({
+        ...prev,
+        open: false,
+        nomeProcedimento: nomeProcedimento || prev.nomeProcedimento,
+      }));
+      if (activeView === 'consulta') trocarModuloPeloUsuario('termos');
+    },
+    [activeView, journeyState, trocarModuloPeloUsuario]
+  );
 
   const handleSelectCapturedPhoto = (idx) => {
     const photo = cameraState.evaluationCapturedPhotos[idx];
@@ -1175,11 +1478,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
   };
 
-  /** Grava na lista da câmera o JPEG já com desenho (etapa 3), para LGPD/galeria usarem a mesma imagem. */
-  const handleAnnotatedCaptureSaved = ({ index, newUrl, blob }) => {
-    cameraState.replaceEvaluationCapturedPhotoAt(index, { url: newUrl, blob });
+  /**
+   * Grava na lista da câmera o JPEG já com desenho (etapa 3), para LGPD/galeria usarem a mesma imagem.
+   * F1: mesmo contrato de `salvarFotoProcedimentoAnotada` (troca na lista só depois do servidor; rejeita se falhar).
+   */
+  const handleAnnotatedCaptureSaved = async ({ index, newUrl, blob }) => {
+    const r = await fotoAnotada(cameraState.evaluationCapturedPhotos[index], blob, 'avaliacao');
+    cameraState.replaceEvaluationCapturedPhotoAt(index, {
+      url: newUrl,
+      blob,
+      meta: r?.arquivoAtualizadoEm ? { arquivoAtualizadoEm: r.arquivoAtualizadoEm } : undefined,
+    });
     journeyState.setImageSrc(newUrl);
     journeyState.setPaths([]);
+    return r;
   };
 
   const handleConfirmProcedurePhoto = () => {
@@ -1272,45 +1584,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
       return ctx?.itemIdByCatalogo?.[cat] ?? null;
     },
     [journeyState.journeyPlanejamentoCtx],
-  );
-
-  const persistirMapaAplicacaoAtual = React.useCallback(
-    async (procedimentoFeitoId, paciente, explicitSnapshot = null, explicitFotos = null, explicitCatalogoId = null) => {
-      const pid = String(procedimentoFeitoId || '').trim();
-      if (!pid) return { ok: false };
-      const snapshot = explicitSnapshot || mapaAplicacaoState.getSnapshotForPersist();
-      const fotosPorVista = explicitFotos || snapshot.fotosPorVista || {};
-      const hasDirty =
-        Array.isArray(snapshot.dirtyVistas) && snapshot.dirtyVistas.length > 0;
-      const hasContent =
-        Object.keys(fotosPorVista || {}).length > 0 ||
-        Object.values(snapshot.pontosPorVista || {}).some((l) => Array.isArray(l) && l.length > 0);
-      if (!hasDirty && !hasContent) return { ok: true, erros: [] };
-
-      const catId = explicitCatalogoId || journeyState.nomeProcedimentoCatalogoId;
-
-      const resultado = await persistirMapaAplicacao({
-        pacienteId: paciente.id,
-        roleUserId,
-        procedimentoFeitoId,
-        catalogoProcedimentoSaudeId: catId,
-        snapshot,
-        fuso: fusoClinica,
-      });
-      if (resultado.ok) {
-        mapaAplicacaoState.clearAllDirty();
-      } else if (resultado.erros?.length) {
-        toast.warning(`Mapa de aplicação: ${resultado.erros.join(' · ')}`);
-      }
-      return resultado;
-    },
-    [
-      journeyState.nomeProcedimentoCatalogoId,
-      mapaAplicacaoState,
-      roleUserId,
-      toast,
-      fusoClinica,
-    ],
   );
 
   /** Editor fullscreen compartilhado (procedimento / resumo etapa 5). */
@@ -1547,9 +1820,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     );
   };
 
-  const handleStartAttendance = (patient, options = {}) => {
-    if (!patient) return;
-
+  const entrarNaConsulta = (patient, options = {}) => {
     const cpf = patient.cpf != null && String(patient.cpf).trim() !== '' ? patient.cpf : null;
     const cpfKey = cpf != null ? String(cpf).trim() : '';
     const todayIso = hojeDaClinica(fusoClinica);
@@ -1582,7 +1853,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       journeyState.setNomeProcedimentoCatalogoId(null);
       journeyState.setObservacoesExecucao('');
       clearTermosJornadaState(journeyState);
-      setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
+      limparResolucoesTermos();
 
       /* Evita ERR_FILE_NOT_FOUND em blob: após reset — canvas ainda apontava para URLs revogadas. */
       revokeBlobUrlIfAny(journeyState.evaluationAnnotatedPhotoUrl);
@@ -1650,9 +1921,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
           ? String(options.catalogoProcedimentoSaudeId).trim()
           : (options.lote?.[0]?.catalogoProcedimentoSaudeId ? String(options.lote[0].catalogoProcedimentoSaudeId).trim() : null);
       journeyState.setNomeProcedimentoCatalogoId(catAgenda);
-      journeyState.setNomeProcedimento(nomeAgenda);
+      // B-42 F3: linha de agenda sem catálogo leva a marca de nome só de tela; o nome da agenda não a tira.
+      journeyState.setProcedimentosSessao(marcarNomesDeTela);
+      journeyState.setNomeProcedimento(nomeAgenda, { manterMarca: true });
       journeyState.setAgendaId(options.agendaId ?? null);
-      journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
+      journeyState.setAttendanceStartTime(inicioAoEntrarNaConsulta({
+        retomadaNoMesmoDia: false,
+        retorno: wantsRetorno,
+        consultaDoServidor: options.consultaDoServidor,
+        agoraIso: getGuaranteedIso(),
+      }));
       journeyState.setTipoAtendimento(wantsRetorno ? 'retorno' : 'consulta');
       journeyState.setProcedimentoFeitoOrigemId(
         options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -1670,10 +1948,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
           : null;
       if (options.agendaId != null) journeyState.setAgendaId(options.agendaId ?? null);
       if (catAgenda) journeyState.setNomeProcedimentoCatalogoId(catAgenda);
-      if (nomeAgenda) journeyState.setNomeProcedimento(nomeAgenda);
+      journeyState.setProcedimentosSessao(marcarNomesDeTela);
+      if (nomeAgenda) journeyState.setNomeProcedimento(nomeAgenda, { manterMarca: true });
       hidratarJourneyPlanejamentoCtx(options, { merge: true });
       if (wantsRetorno) {
-        journeyState.setAttendanceStartTime(getGuaranteedIso(), cpfKey);
+        journeyState.setAttendanceStartTime(inicioAoEntrarNaConsulta({
+          retomadaNoMesmoDia: true,
+          retorno: true,
+          consultaDoServidor: options.consultaDoServidor,
+          agoraIso: getGuaranteedIso(),
+        }));
         journeyState.setTipoAtendimento('retorno');
         journeyState.setProcedimentoFeitoOrigemId(
           options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
@@ -1689,6 +1973,61 @@ function AppRefactoredInner({ onCanalAvisos }) {
     setActiveView('consulta');
     setPatientView('list');
     setAlertasClinicosRefreshKey((n) => n + 1);
+  };
+
+  /**
+   * C1: abre (ou retoma) a consulta no servidor antes de mudar a tela; se o servidor recusar, nada muda.
+   * `options.consultaDoServidor` (barra do topo e "Voltar à consulta") entra numa consulta que já existe, sem gravar.
+   * `options.loteDaAgenda` só vale depois que o servidor aceitou.
+   */
+  const handleStartAttendance = async (patient, options = {}) => {
+    if (!patient) return;
+    if (options.consultaDoServidor) {
+      consultaServidor.adotar(options.consultaDoServidor);
+      entrarNaConsulta(patient, options);
+      return;
+    }
+    const wantsRetorno =
+      options.isAgendaRetorno === true ||
+      String(options.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
+    const lote = Array.isArray(options.loteDaAgenda) ? options.loteDaAgenda
+      : Array.isArray(options.lote) ? options.lote : [];
+    const agendaIds = [...new Set([...lote.map((l) => l?.agendaId), options.agendaId].filter(Boolean).map(String))];
+    const catalogo = options.catalogoProcedimentoSaudeId != null && String(options.catalogoProcedimentoSaudeId).trim() !== ''
+      ? String(options.catalogoProcedimentoSaudeId).trim()
+      : null;
+    const modulo = wantsRetorno
+      ? (options.initialModule ?? 'hub')
+      : (options.initialModule ?? LEGACY_STEP_TO_MODULE[options.initialStep] ?? 'hub');
+    let dto;
+    try {
+      dto = await consultaServidor.abrir({
+        pacienteId: patient.id,
+        agendaIds,
+        agendaClicadaId: options.agendaId ?? null,
+        catalogoProcedimentoSaudeId: options.agendaId ? null : catalogo,
+        nomeLivre: options.agendaId || catalogo ? null : (String(options.procedimentoNome || '').trim() || null),
+        tipoProcedimentoCodigo: wantsRetorno ? 'retorno' : null,
+        procedimentoFeitoOrigemId: options.procedimentoFeitoOrigemId ?? null,
+        modulo,
+      });
+    } catch (err) {
+      toast.error(getApiErrorToastMessage(err, 'Não foi possível iniciar o atendimento.'));
+      return;
+    }
+    const { loteDaAgenda, ...resto } = options;
+    if (Array.isArray(loteDaAgenda)) {
+      setProcedimentosLote(loteDaAgenda);
+      journeyState.setProcedimentosSessao(loteDaAgenda);
+      journeyState.setActiveProcedureIndex(0);
+    }
+    entrarNaConsulta(patient, { ...resto, consultaDoServidor: dto });
+    const anterior = dto.consultaAnteriorFechada;
+    if (anterior) {
+      toast.info(
+        `A consulta anterior de ${anterior.profissionalNome || 'outra profissional'} com ${anterior.pacienteNome || patient.nome || 'o paciente'} foi fechada. Tudo o que foi registrado continua salvo.`,
+      );
+    }
   };
 
   const handleIniciarRetornoAvulso = React.useCallback(() => {
@@ -1738,6 +2077,114 @@ function AppRefactoredInner({ onCanalAvisos }) {
     refreshPatientsAndPagedList,
   ]);
 
+  const emConsultaNaTela = activeView === 'consulta' && consultaModule != null;
+  // F7: saiu da consulta com o encerrar esperando outro aparelho: cancela a espera (idempotente com o do hook).
+  React.useEffect(() => {
+    if (!emConsultaNaTela) cancelarEsperaEncerrar();
+  }, [emConsultaNaTela, cancelarEsperaEncerrar]);
+  React.useEffect(() => {
+    aoConsultaCanceladaRef.current = ({ pacienteNome, profissionalNome }) => {
+      if (emConsultaNaTela) onSairConsulta();
+      toast.info(
+        `Sua consulta com ${pacienteNome || 'o paciente'} foi fechada porque ${profissionalNome || 'outra profissional'} iniciou um atendimento. Tudo o que foi registrado continua salvo.`,
+      );
+    };
+  }, [emConsultaNaTela, onSairConsulta, toast]);
+  // Abandonada (12 h sem atividade) com a tela na consulta: volta ao perfil, avisa quantas alterações deste aparelho
+  // não chegaram e só então as apaga. Fora da tela nada muda (o que estiver guardado fica).
+  React.useEffect(() => {
+    aoConsultaAbandonadaRef.current = ({ pendentes, descartarPendentes }) => {
+      if (!emConsultaNaTela) return;
+      onSairConsulta();
+      toast.warning(textoDaConsultaAbandonada(pendentes));
+      descartarPendentes();
+    };
+  }, [emConsultaNaTela, onSairConsulta, toast]);
+
+  /**
+   * Entra numa consulta que já existe no servidor (atalho e "Voltar à consulta"): detalhe, paciente e a mesma entrada
+   * de sempre. Abandonada conta como fechada: recarrega a barra e não entra ("Iniciar" retoma a própria abandonada).
+   */
+  const entrarNaConsultaDoServidor = async (resumo) => {
+    const dto = await consultaServidor.detalhe(resumo.id);
+    if (!dto?.id || consultaFechada(dto)) {
+      consultaServidor.recarregarMinhas();
+      toast.error('Não foi possível abrir a consulta. Ela pode ter sido encerrada.');
+      return false;
+    }
+    const cpf = String(dto.pacienteCpf || '').trim();
+    let paciente = patients.find((p) => String(p?.id || '') === String(dto.pacienteId))
+      ?? (cpf ? patients.find((p) => String(p?.cpf || '').trim() === cpf) : null);
+    if (!paciente) {
+      const p = await pacientesApi.get(dto.pacienteId);
+      paciente = mapBackendPatient(p, { fuso: fusoClinica, hojeIso: hojeDaClinica(fusoClinica) });
+      if (!paciente) {
+        toast.error('Paciente da consulta não foi encontrado.');
+        return false;
+      }
+      const chave = String(paciente.cpf || '').trim();
+      setPatients((prev) => (prev.some((x) => String(x?.cpf || '').trim() === chave) ? prev : [...prev, paciente]));
+    }
+    await handleStartAttendance(paciente, opcoesParaEntrar(dto));
+    return true;
+  };
+
+  const entrarNaConsultaDoServidorRef = useRef(entrarNaConsultaDoServidor);
+  React.useEffect(() => {
+    entrarNaConsultaDoServidorRef.current = entrarNaConsultaDoServidor;
+  });
+  const { minhas: minhasConsultas, minhasCarregadas } = consultaServidor;
+
+  /** Devolve a Promise (o atalho trava até ela fechar); `false` ou exceção vira aviso e a Promise ainda assim fecha. */
+  const handleAtalhoEntrar = async (resumo) => {
+    try {
+      return await entrarNaConsultaDoServidor(resumo);
+    } catch (err) {
+      toast.error(getApiErrorToastMessage(err, 'Não foi possível abrir a consulta.'));
+      return false;
+    }
+  };
+
+  /** "Voltar à consulta" (quem abriu): entra na consulta que já existe, sem chamar o abrir nem religar agendas. */
+  const handleVoltarConsulta = React.useCallback((atendimentoId) => {
+    if (!atendimentoId) return;
+    entrarNaConsultaDoServidorRef.current({ id: atendimentoId }).catch((err) => {
+      toast.error(getApiErrorToastMessage(err, 'Não foi possível abrir a consulta.'));
+    });
+  }, [toast]);
+
+  /**
+   * B-42 F2: entre os cards de hoje do paciente com agenda ativa e não iniciada: o em andamento, senão o passado
+   * mais recente, senão o próximo; o lote leva só as linhas desse card. Nenhum → `{}` (sem agenda).
+   */
+  const handleAtalhoEscolherPaciente = (paciente) => {
+    const card = cardDoAtalho(
+      kpiState.entradasHoje,
+      paciente?.id,
+      nowComparableDateTimeClinica(fusoClinica, getGuaranteedNow().getTime()),
+    );
+    const primeira = card?.primeira ?? null;
+    if (!primeira) {
+      handleAgendaStartAttendance(paciente, {});
+      return;
+    }
+    const lote = loteDasLinhas(card.linhas);
+    handleAgendaStartAttendance(paciente, {
+      procedimentoNome: primeira.procedimentoNome,
+      agendaId: primeira.agendaId || primeira.id,
+      catalogoProcedimentoSaudeId: primeira.catalogoProcedimentoSaudeId || '',
+      data: primeira.data,
+      horaInicio: primeira.horaInicio,
+      fromAgendaSlot: true,
+      tipoProcedimentoCodigo: primeira.tipoProcedimentoCodigo ?? primeira.rawSlot?.tipoProcedimentoCodigo ?? '',
+      procedimentoFeitoOrigemId: primeira.procedimentoFeitoOrigemId ?? primeira.rawSlot?.procedimentoFeitoOrigemId ?? null,
+      isAgendaRetorno:
+        String(primeira.tipoProcedimentoCodigo ?? primeira.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() === 'retorno',
+      planejamentoItemId: primeira.planejamentoItemId ?? null,
+      lote,
+    });
+  };
+
   const requestEncerrarConsulta = React.useCallback(() => {
     setEncerrarConsultaOpen(true);
   }, []);
@@ -1749,6 +2196,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const autoSaveAnamneseSilently = React.useCallback(async () => {
     // Lê pacienteAtual e roleUserId via closure, mas le o REF em runtime (não via closure)
     // para garantir que sempre vemos o ID mais recente, mesmo em closures capturadas anteriormente.
+    // Com consulta na tela, queixa/expectativas vão ao servidor no blur (onCampoAvaliacaoBlur) e o
+    // preenchimento nasce lá; aqui não há POST/PATCH.
+    if (consultaEncerraNoServidor) return;
     const pacienteId = pacienteAtual?.id;
     const uid = roleUserId;
     if (!pacienteId || !uid) return;
@@ -1816,7 +2266,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
         autoSaveAnamnesePromiseRef.current = null;
       }
     }
-  }, [journeyState.queixa, journeyState.expectativas, journeyState.step2AnamneseDraft, pacienteAtual?.id, roleUserId]);
+  }, [
+    consultaEncerraNoServidor,
+    journeyState.queixa,
+    journeyState.expectativas,
+    journeyState.step2AnamneseDraft,
+    pacienteAtual?.id,
+    roleUserId,
+  ]);
 
   const autoSaveProcedimentoSilently = React.useCallback(async (observacoes) => {
     const obs = String(observacoes || '').trim();
@@ -1838,49 +2295,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   const handleAgendaStartAttendance = (patient, options = {}) => {
     if (!patient) return;
-    const opt = options || {};
-    const agendaId = opt.agendaId;
-    const fromSlot = opt.fromAgendaSlot === true;
-    const dataRaw = opt.data;
-    const horaRaw = opt.horaInicio;
+    const agendaId = options?.agendaId;
+    const fromSlot = options?.fromAgendaSlot === true;
+    const dataRaw = options?.data;
+    const horaRaw = options?.horaInicio;
 
-    if (opt.lote && Array.isArray(opt.lote) && opt.lote.length > 0) {
-      setProcedimentosLote(opt.lote);
-      journeyState.setProcedimentosSessao(opt.lote);
-      journeyState.setActiveProcedureIndex(0);
-    } else {
-      if (fromSlot && agendaId && dataRaw) {
-        const scheduledAt = parseSlotLocalDateTime(dataRaw, horaRaw, fusoClinica);
-        if (scheduledAt || !scheduledAt) { // Keep indenting/logic simple
-          const agendamentosDoDia = agendaSchedule.appointments
-            .filter(i => {
-              const sameId = String(i?.paciente?.id || '') === String(patient.id || '') || String(i?.pacienteId || '') === String(patient.id || '');
-              const sameName = String(i?.pacienteNome || '').trim().toLowerCase() === String(patient?.nome || patient?.nomeCompleto || '').trim().toLowerCase();
-              const isSamePatient = (patient.id && sameId) || sameName;
-              return isSamePatient && toDateKey(i?.data) === toDateKey(dataRaw);
-            })
-            .sort((a, b) => String(a?.horaInicio).localeCompare(String(b?.horaInicio)));
-
-          const lote = agendamentosDoDia.map(a => ({
-            agendaId: a.id || a.agendaId,
-            procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
-            catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
-            planejamentoItemId: a.planejamentoItemId ?? null,
-            isAgendaRetorno:
-              String(a.tipoProcedimentoCodigo ?? a.rawSlot?.tipoProcedimentoCodigo ?? '').toLowerCase() ===
-              'retorno',
-          }));
-
-          setProcedimentosLote(lote);
-          journeyState.setProcedimentosSessao(lote);
-          journeyState.setActiveProcedureIndex(0);
-        }
-      } else {
-        setProcedimentosLote([]);
-        journeyState.setProcedimentosSessao([]);
-        journeyState.setActiveProcedureIndex(0);
-      }
+    // C1: o lote só é aplicado depois que o servidor aceitar o abrir (handleStartAttendance).
+    let loteDaAgenda = [];
+    if (Array.isArray(options?.lote) && options.lote.length > 0) {
+      loteDaAgenda = options.lote;
+    } else if (fromSlot && agendaId && dataRaw) {
+      // B-42 F2: sem lote do card, só a agenda clicada (nunca o dia inteiro do paciente).
+      loteDaAgenda = loteDasLinhas([options]);
     }
+    const opt = { ...(options || {}), loteDaAgenda };
 
     const proceedDirect = () => {
       handleStartAttendance(patient, opt);
@@ -2104,7 +2532,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       termoAssinado: Boolean(journeyState.termoAssinado),
       termoAssinaturaDataUrl: journeyState.termoAssinaturaDataUrl || '',
       profissionalAssinaturaDataUrl: journeyState.profissionalAssinaturaDataUrl || '',
-      orientacoes: Boolean(journeyState.orientacoes),
+      orientacoes: orientacoesOk,
     };
 
     setPatients((prev) => {
@@ -2134,6 +2562,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       toast.error('Selecione um paciente na aba Pacientes antes de continuar a jornada.');
       return false;
     }
+    if (!(await aguardarFilaDaAvaliacao())) return false;
     upsertPatientLocal({ ensureSelected: true });
 
     if (anamneseRef.current?.isPerfilDirty?.()) {
@@ -2261,6 +2690,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     setAlertasClinicosRefreshKey((n) => n + 1);
     return true;
   }, [
+    aguardarFilaDaAvaliacao,
     journeyState,
     pacienteAtual,
     patients,
@@ -2294,17 +2724,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
           const resolucao = await termosApi.resolver({
             pacienteId: pacienteAtual.id,
             catalogoIds: aindaSemPf,
+            atendimentoId: atendimentoIdConsultaRef.current || undefined,
           });
-          if (temFaltantes(resolucao)) {
+          const faltantesAindaSemPf = faltantesDoItem(resolucao, termosDaConsultaRef.current);
+          if (faltantesAindaSemPf.length > 0) {
             setTermoBloqueio({
               open: true,
               nomeProcedimento: journeyState.nomeProcedimento || 'procedimento',
-              faltantes: resolucao.faltantes,
+              faltantes: faltantesAindaSemPf,
             });
-            setTermosExecucaoBloqueio({
-              catalogoId: aindaSemPf[0] || null,
-              resolucao,
-            });
+            registrarResolucaoTermos(aindaSemPf[0] || null, resolucao);
             return;
           }
         } catch {
@@ -2341,22 +2770,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
     }
 
     if (currentStep === 5) {
-      const { orientacoes } = journeyState;
-      if (!orientacoes) {
-        journeyState.setStep5Errors({
-          orientacoes: !orientacoes,
-        });
-        toast.error('Marque ao menos uma orientação pós-procedimento para continuar.');
-        return;
-      }
-
-      const { blocksFinish } = evaluateProximoRetornoStep5(
-        journeyProcedureDateIso,
-        journeyState.proximoRetornoDisplay,
-        hojeDaClinica(fusoClinica)
-      );
-      if (blocksFinish) {
-        toast.error('Corrija a data do próximo retorno ou deixe o campo vazio.');
+      if (!orientacoesOk) {
+        journeyState.setStep5Errors({ orientacoes: true });
+        toast.error('Marque ao menos uma orientação pós-procedimento em cada procedimento para continuar.');
         return;
       }
 
@@ -2430,11 +2846,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
           cameraState.setEvaluationCapturedPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
         }
         if (succeeded < attempted) {
-          toast.error(
-            succeeded === 0
-              ? 'Não foi possível enviar as fotos de avaliação. Elas continuam salvas para nova tentativa.'
-              : `${attempted - succeeded} foto(s) de avaliação não puderam ser enviadas e continuam salvas para nova tentativa.`
-          );
+          // A foto que não subiu não fica guardada (o resetJourney descarta): a pessoa precisa enviar de novo.
+          toast.error(textoDasFotosNaoEnviadas(attempted - succeeded, 'resultado'));
         }
       } else if (fotosAvaliacao.length > 0 && paciente?.id && !ridOk) {
         console.warn(
@@ -2448,13 +2861,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const handleConcluirAvaliacao = React.useCallback(async () => {
     // Apenas retorna ao hub para manter as fotos no estado e visíveis na UI.
     // O salvamento real de evaluationCapturedPhotos ocorre apenas em encerrarAtendimento.
-    setConsultaModule('hub');
-  }, []);
+    if (!(await aguardarFilaDaAvaliacao())) return;
+    trocarModuloPeloUsuario('hub');
+  }, [trocarModuloPeloUsuario, aguardarFilaDaAvaliacao]);
 
   const handleSelectProcedimentoDoPlano = React.useCallback(
-    (item, plano) => {
+    async (item, plano) => {
       if (!item) return;
-      const isRetorno = Boolean(
+      const pedeRetorno = Boolean(
         item.isRetorno ||
         item.tipoProcedimentoCodigo === 'retorno' ||
         item.tipo === 'retorno'
@@ -2465,6 +2879,27 @@ function AppRefactoredInner({ onCanalAvisos }) {
       const planoItemId = rawPlanoItemId ? String(rawPlanoItemId).replace(/_retorno$/, '').trim() : null;
       const agendaId = item.sessaoAtiva?.agendaId || null;
       const planoId = plano?.id || item.planejamentoId || null;
+      const origemDoItem = item.procedimentoFeitoOrigemId || item.origemId || null;
+
+      // NDg + P15: no servidor a sessão inteira vira o item do plano (PUT /itens/plano); a tela só muda depois
+      // da resposta, e tipo/origem do retorno vêm dela.
+      let dto = null;
+      if (planoItemId) {
+        try {
+          dto = await substituirPeloPlanoNoServidor({
+            planejamentoItemId: planoItemId,
+            agendaId,
+            nomeLivre: null,
+            tipoProcedimentoCodigo: pedeRetorno ? 'retorno' : null,
+            procedimentoFeitoOrigemId: pedeRetorno && origemDoItem ? String(origemDoItem) : null,
+          });
+        } catch (err) {
+          toast.error(getApiErrorToastMessage(err, 'Não foi possível trocar o procedimento da consulta.'));
+          return;
+        }
+      }
+      const isRetorno = dto ? String(dto.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno' : pedeRetorno;
+      const origemRetornoId = dto ? dto.procedimentoFeitoOrigemId : origemDoItem;
 
       if (catId) journeyState.setNomeProcedimentoCatalogoId(catId);
       if (nome) journeyState.setNomeProcedimento(nome);
@@ -2498,19 +2933,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
       ]);
 
       if (isRetorno) {
-        journeyState.setIsAgendaRetorno(true);
         journeyState.setTipoAtendimento('retorno');
-        if (item.procedimentoFeitoOrigemId || item.origemId) {
-          journeyState.setProcedimentoFeitoOrigemId(String(item.procedimentoFeitoOrigemId || item.origemId));
-        }
+        if (origemRetornoId) journeyState.setProcedimentoFeitoOrigemId(String(origemRetornoId));
         toast.success(`Retorno Clínico de "${nome}" selecionado para o atendimento.`);
-        setConsultaModule('retorno');
+        trocarModuloPeloUsuario('retorno');
       } else {
         toast.success(`Procedimento "${nome}" selecionado para o atendimento.`);
-        setConsultaModule('hub');
+        trocarModuloPeloUsuario('hub');
       }
     },
-    [journeyState, toast],
+    [journeyState, toast, substituirPeloPlanoNoServidor, trocarModuloPeloUsuario],
   );
 
   const handleConcluirAnamnese = React.useCallback(async () => {
@@ -2542,8 +2974,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
    */
   const handleBackToHub = React.useCallback(() => {
     if (consultaModule === 'anamnese') {
-      const hasQueixa = Boolean(journeyState.queixa?.trim());
-      const hasExpectativas = Boolean(journeyState.expectativas?.trim());
+      // F4: com a consulta no servidor, "não salvo" é o que difere do servidor (ou está na fila), não "tem texto".
+      // Sem consulta no servidor, vale o critério antigo (tem texto).
+      const temConsultaNoServidor = Boolean(consultaServidor.atual) && typeof consultaServidor.avaliacaoTemNaoSalvo === 'function';
+      const hasQueixa = temConsultaNoServidor
+        ? consultaServidor.avaliacaoTemNaoSalvo()
+        : Boolean(journeyState.queixa?.trim());
+      const hasExpectativas = temConsultaNoServidor ? false : Boolean(journeyState.expectativas?.trim());
       const refDirty = typeof anamneseRef?.current?.isDirty === 'function'
         ? anamneseRef.current.isDirty()
         : false;
@@ -2555,8 +2992,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
         return;
       }
     }
-    setConsultaModule('hub');
-  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef]);
+    trocarModuloPeloUsuario('hub');
+  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef, trocarModuloPeloUsuario, consultaServidor]);
 
   const resetJourney = React.useCallback(() => {
     setPhotoAnnotationScope(null);
@@ -2564,7 +3001,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     setCurrentStep(1);
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
-    journeyState.setObservacoes('');
+    journeyState.setObservacoesAvaliacao('');
     journeyState.setStep2AnamneseDraft({
       pacienteId: null,
       fichaSelecionadaId: '',
@@ -2581,9 +3018,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setTermoAssinado(false);
     journeyState.setTermoAssinaturaDataUrl('');
     journeyState.setProfissionalAssinaturaDataUrl('');
-    journeyState.setOrientacoesItens([]);
-    journeyState.setOrientacoesCarregadas(false);
-    journeyState.setProximoRetornoDisplay('');
     journeyState.setObservacoesExecucao('');
     journeyState.setNomeProcedimento('');
     journeyState.setNomeProcedimentoCatalogoId(null);
@@ -2597,9 +3031,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setStep4Errors({});
     journeyState.setStep5Errors({});
     anamnesePreenchimentoIdRef.current = null;
-    pendingAnnotatedGalleryBlobsRef.current = [];
+    retornoFinalizadoRef.current = null;
     clearTermosJornadaState(journeyState);
-    setTermosExecucaoBloqueio({ catalogoId: null, resolucao: null });
+    limparResolucoesTermos();
     setLoteProcedimentosFeitosIds([]);
     setAssinaturasRealizadasIds([]);
     patientState.setSelectedPatientCpf(null);
@@ -2618,6 +3052,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     cameraState.resetProcedureCapturedPhotos();
     cameraState.resetEvaluationPhotos();
   }, [
+    limparResolucoesTermos,
     cameraState,
     journeyState,
     patientState,
@@ -2633,7 +3068,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
   ]);
 
   const finalizarAtendimentoNavegacao = React.useCallback(
-    async (sCpf, { successMessage = 'Jornada finalizada com sucesso.', refreshFalhaNaoBloqueia = false } = {}) => {
+    async (
+      sCpf,
+      { successMessage = 'Jornada finalizada com sucesso.', refreshFalhaNaoBloqueia = false, toastTipo = 'success' } = {},
+    ) => {
       try {
         await agendaSchedule.refreshDashboard();
       } catch (e) {
@@ -2643,7 +3081,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
         console.warn('refreshDashboard falhou após concluir retorno (seguindo com a saída):', e);
       }
       refreshPatientsAndPagedList();
-      toast.success(successMessage);
+      if (toastTipo === 'info') toast.info(successMessage);
+      else toast.success(successMessage);
       setActiveView('pacientes');
       resetJourney();
       if (sCpf) {
@@ -2663,6 +3102,27 @@ function AppRefactoredInner({ onCanalAvisos }) {
       toast,
     ]
   );
+
+  /**
+   * ND18: consulta encerrada em outro aparelho (aviso ou rebusca com `encerrado`) sai como o encerrar de hoje,
+   * sem as perguntas e sem o modal de plano concluído, mas com o aviso INFO "Consulta encerrada em outro aparelho"
+   * (F6a): a aba que NÃO encerrou não diz "Jornada finalizada com sucesso.". A aba que encerrou (`encerradasAquiRef`
+   * do hook) nunca chega aqui e segue pelo caminho próprio do encerrar, com o toast de sucesso.
+   */
+  React.useEffect(() => {
+    aoConsultaEncerradaRef.current = ({ pacienteCpf }) => {
+      if (!emConsultaNaTela || finishJourneyLockRef.current) return;
+      const sCpf = String(pacienteCpf || selectedPatientCpf || pacienteAtual?.cpf || '').trim();
+      setConsultaModule(null);
+      finalizarAtendimentoNavegacao(sCpf, {
+        refreshFalhaNaoBloqueia: true,
+        successMessage: 'Consulta encerrada em outro aparelho',
+        toastTipo: 'info',
+      }).catch((e) => {
+        console.warn('[consulta] Falha ao sair da consulta encerrada em outro aparelho:', e);
+      });
+    };
+  }, [emConsultaNaTela, finalizarAtendimentoNavegacao, pacienteAtual?.cpf, selectedPatientCpf]);
 
   const UUID_REGEX_PROC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -2742,19 +3202,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
             nomeProcedimento: parsed.nomeProcedimento || opts.nome || 'procedimento',
             faltantes: parsed.faltantes,
           });
-          setTermosExecucaoBloqueio((prev) => ({
-            catalogoId:
-              prev.catalogoId ||
-              (opts.catalogoProcedimentoSaudeId != null
-                ? String(opts.catalogoProcedimentoSaudeId).trim()
-                : null),
-            resolucao: { faltantes: parsed.faltantes || [] },
-          }));
+          registrarResolucaoTermos(
+            opts.catalogoProcedimentoSaudeId != null ? String(opts.catalogoProcedimentoSaudeId).trim() : null,
+            { faltantes: parsed.faltantes || [] },
+          );
         }
         throw e;
       }
     },
-    [roleUserId, vincularAssinaturasAoProcedimento, persistirPfSessao, appendLotePfId],
+    [roleUserId, vincularAssinaturasAoProcedimento, persistirPfSessao, appendLotePfId, registrarResolucaoTermos],
   );
 
   const getOrCreateProcedimentoFeitoId = React.useCallback(
@@ -2817,17 +3273,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
             nomeProcedimento: parsed.nomeProcedimento || 'procedimento',
             faltantes: parsed.faltantes,
           });
-          setTermosExecucaoBloqueio((prev) => ({
-            catalogoId: prev.catalogoId,
-            resolucao: { faltantes: parsed.faltantes || [] },
-          }));
+          registrarResolucaoTermos(null, { faltantes: parsed.faltantes || [] });
           throw e;
         }
         console.warn('iniciar procedimento falhou:', e);
       }
       return null;
     },
-    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds, vincularAssinaturasAoProcedimento, persistirPfSessao, appendLotePfId],
+    [journeyState, resolvePlanejamentoItemId, roleUserId, loteProcedimentosFeitosIds, vincularAssinaturasAoProcedimento, persistirPfSessao, appendLotePfId, registrarResolucaoTermos],
   );
 
   const iniciarProcedimentoRetorno = React.useCallback(
@@ -2838,8 +3291,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       let currentAgendaId = journeyState.agendaId;
 
       if (!currentAgendaId) {
-        const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || paciente?.cpf || '').trim();
-        const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
+        const startTimeIso = journeyState.getAttendanceStartTime(consultaAtualServidor?.iniciadoEm);
         const createdSlot = await registrarAgendaAvulsa({
           journeyState,
           paciente,
@@ -2882,10 +3334,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
       getOrCreateProcedimentoFeitoId,
       journeyState,
       loteProcedimentosFeitosIds,
-      pacienteAtual?.cpf,
+      consultaAtualServidor?.iniciadoEm,
       resolvePlanejamentoItemId,
       roleUserId,
-      selectedPatientCpf,
       fusoClinica,
     ],
   );
@@ -2958,11 +3409,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
           cameraState.setProcedureCapturedPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
         }
         if (succeeded < attempted) {
-          toast.error(
-            succeeded === 0
-              ? 'Não foi possível enviar as fotos do procedimento. Elas continuam salvas para nova tentativa.'
-              : `${attempted - succeeded} foto(s) do procedimento não puderam ser enviadas e continuam salvas para nova tentativa.`
-          );
+          // A foto que não subiu não fica guardada (o resetJourney descarta): a pessoa precisa enviar de novo.
+          toast.error(textoDasFotosNaoEnviadas(attempted - succeeded, 'procedimento'));
         }
       } else if (fotosProcedimento.length > 0 && paciente?.id && !ridOk) {
         console.warn(
@@ -2985,73 +3433,108 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
       /* Capturado antes do resetJourney (que zera selectedPatientCpf). */
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      const pid = await iniciarProcedimentoRetorno(paciente, {
-        isRetoque: journeyState.houveRetoque,
-      });
-      if (!pid) {
-        toast.error('Não foi possível iniciar o retorno.');
-        return;
-      }
+      // B-42 rodada 4: o retorno desta consulta já foi finalizado e só o encerrar falhou: este clique só encerra
+      // (nada é criado, enviado nem finalizado de novo). Outra consulta acompanhada, ou nenhuma, não usa a ref.
+      const atendimentoAcompanhadoId = consultaDasFotos?.id ?? null;
+      const jaFinalizado =
+        atendimentoAcompanhadoId != null && retornoFinalizadoRef.current?.atendimentoId === atendimentoAcompanhadoId
+          ? retornoFinalizadoRef.current
+          : null;
+      let dtoFinalizar;
+      if (jaFinalizado) {
+        dtoFinalizar = jaFinalizado.dtoFinalizar;
+      } else {
+        // Item 1 (B-42): com alteração da consulta que ainda não chegou ao servidor, o Retorno não segue (nada é
+        // criado, enviado ou finalizado) e fica na tela; a fila continua tentando.
+        try {
+          await confirmarEnviosDaConsulta();
+        } catch (e) {
+          if (e?.codigo !== CODIGO_ENVIO_PENDENTE) throw e;
+          toast.error(e.message);
+          return;
+        }
+        const pid = await iniciarProcedimentoRetorno(paciente, {
+          isRetoque: journeyState.houveRetoque,
+        });
+        if (!pid) {
+          toast.error('Não foi possível iniciar o retorno.');
+          return;
+        }
 
-      if (journeyState.houveRetoque) {
-        const snapshot = mapaRetornoState.getSnapshotForPersist();
-        const hasMarkings = Object.values(snapshot.pontosPorVista || {}).some(
-          (lista) => Array.isArray(lista) && lista.length > 0,
-        );
-        if (hasMarkings) {
-          let catalogoId = null;
-          const origemId = journeyState.procedimentoFeitoOrigemId;
-          if (origemId) {
-            try {
-              const procListRaw = await procedimentosApi.byPaciente(paciente.id);
-              const procList = Array.isArray(procListRaw)
-                ? procListRaw
-                : procListRaw?.content ?? [];
-              const pai = procList.find((p) => String(p.id) === String(origemId));
-              catalogoId = pai?.catalogoProcedimentoSaudeId ?? null;
-            } catch (e) {
-              console.warn('Falha ao resolver catálogo do procedimento pai:', e);
+        if (journeyState.houveRetoque) {
+          const snapshot = mapaRetornoState.getSnapshotForPersist();
+          const hasMarkings = Object.values(snapshot.pontosPorVista || {}).some(
+            (lista) => Array.isArray(lista) && lista.length > 0,
+          );
+          if (hasMarkings) {
+            let catalogoId = null;
+            const origemId = journeyState.procedimentoFeitoOrigemId;
+            if (origemId) {
+              try {
+                const procListRaw = await procedimentosApi.byPaciente(paciente.id);
+                const procList = Array.isArray(procListRaw)
+                  ? procListRaw
+                  : procListRaw?.content ?? [];
+                const pai = procList.find((p) => String(p.id) === String(origemId));
+                catalogoId = pai?.catalogoProcedimentoSaudeId ?? null;
+              } catch (e) {
+                console.warn('Falha ao resolver catálogo do procedimento pai:', e);
+              }
             }
+            let resultado;
+            try {
+              resultado = await persistirMapaAplicacao({
+                pacienteId: paciente.id,
+                roleUserId,
+                procedimentoFeitoId: pid,
+                catalogoProcedimentoSaudeId: catalogoId,
+                snapshot,
+                fuso: fusoClinica,
+              });
+            } catch (mapErr) {
+              console.error('Erro ao salvar mapa de retoque:', mapErr);
+              toast.error('Não foi possível salvar o mapa de retoque. Tente concluir novamente.');
+              return;
+            }
+            if (!resultado?.ok) {
+              toast.error('Não foi possível salvar o mapa de retoque. Tente concluir novamente.');
+              return;
+            }
+            mapaRetornoState.clearAllDirty();
           }
-          let resultado;
-          try {
-            resultado = await persistirMapaAplicacao({
-              pacienteId: paciente.id,
-              roleUserId,
-              procedimentoFeitoId: pid,
-              catalogoProcedimentoSaudeId: catalogoId,
-              snapshot,
-              fuso: fusoClinica,
-            });
-          } catch (mapErr) {
-            console.error('Erro ao salvar mapa de retoque:', mapErr);
-            toast.error('Não foi possível salvar o mapa de retoque. Tente concluir novamente.');
-            return;
-          }
-          if (!resultado?.ok) {
-            toast.error('Não foi possível salvar o mapa de retoque. Tente concluir novamente.');
-            return;
-          }
-          mapaRetornoState.clearAllDirty();
+        }
+
+        journeyState.setObservacoesExecucao(
+          formatRetornoAvaliacaoTexto(journeyState.retornoAvaliacao),
+        );
+        await uploadEvaluationCapturedPhotos({
+          paciente,
+          procIdOpt: pid,
+          dataRefSessao: hojeDaClinica(fusoClinica),
+          tipoFotoCodigo: 'DEPOIS',
+        });
+        await uploadProcedureCapturedPhotos(
+          paciente,
+          [pid],
+          hojeDaClinica(fusoClinica),
+        );
+        dtoFinalizar = await procedimentosApi.finalizar(pid);
+        retornoFinalizadoRef.current = { atendimentoId: atendimentoAcompanhadoId, pid, dtoFinalizar };
+      }
+      if (consultaEncerraNoServidor) {
+        // Y13: o retorno já foi gravado como hoje; a consulta só fecha. A falha aqui não desfaz o retorno.
+        try {
+          await encerrarConsultaNoServidor({ modo: 'SOMENTE_FECHAR' });
+        } catch (e) {
+          // B-42 rodada 4: o retorno ficou gravado, mas a consulta não fechou. Sem "sucesso" e sem sair: a tela fica
+          // e o próximo clique só encerra (retornoFinalizadoRef).
+          // F7: espera cancelada (saiu da consulta): silencioso, sem toast e sem navegar.
+          if (e?.codigo === CODIGO_ESPERA_CANCELADA) return;
+          console.error('Erro ao concluir retorno:', e);
+          toast.error(textoRetornoSemEncerrar(e, getApiErrorDetail(e)));
+          return;
         }
       }
-
-      journeyState.setObservacoesExecucao(
-        formatRetornoAvaliacaoTexto(journeyState.retornoAvaliacao),
-      );
-      pendingAnnotatedGalleryBlobsRef.current = [];
-      await uploadEvaluationCapturedPhotos({
-        paciente,
-        procIdOpt: pid,
-        dataRefSessao: hojeDaClinica(fusoClinica),
-        tipoFotoCodigo: 'DEPOIS',
-      });
-      await uploadProcedureCapturedPhotos(
-        paciente,
-        [pid],
-        hojeDaClinica(fusoClinica),
-      );
-      const dtoFinalizar = await procedimentosApi.finalizar(pid);
       if (loteConcluiuPlano([dtoFinalizar])) {
         const escolha = await askPlanoConcluidoClinica(paciente);
         if (escolha === 'aceitar') {
@@ -3074,10 +3557,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
           nomeProcedimento: parsed.nomeProcedimento || 'procedimento',
           faltantes: parsed.faltantes,
         });
-        setTermosExecucaoBloqueio((prev) => ({
-          catalogoId: prev.catalogoId,
-          resolucao: { faltantes: parsed.faltantes || [] },
-        }));
+        registrarResolucaoTermos(null, { faltantes: parsed.faltantes || [] });
         return;
       }
       console.error('Erro ao concluir retorno:', error);
@@ -3087,6 +3567,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       setIsSalvandoRetorno(false);
     }
   }, [
+    registrarResolucaoTermos,
     finalizarAtendimentoNavegacao,
     iniciarProcedimentoRetorno,
     mapaRetornoState,
@@ -3102,6 +3583,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
     abrirAgendaRetornoClinica,
     resetJourney,
     fusoClinica,
+    consultaEncerraNoServidor,
+    consultaDasFotos?.id,
+    confirmarEnviosDaConsulta,
+    encerrarConsultaNoServidor,
   ]);
 
   const ensurePfInFlightRef = useRef(null);
@@ -3178,109 +3663,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
     ],
   );
 
-  const registrarProcedimentoManual = React.useCallback(
-    async (paciente, isApenasSair = false) => {
-      const snapshotCatalogoId =
-        journeyState.nomeProcedimentoCatalogoId != null &&
-          String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
-          ? String(journeyState.nomeProcedimentoCatalogoId).trim()
-          : null;
-      let procedimentoFeitoIdParaVinculo = snapshotCatalogoId
-        ? pfIdNestaSessaoParaCatalogo(snapshotCatalogoId, journeyState.procedimentosSessao)
-        : null;
-
-      if (journeyState.nomeProcedimento.trim() && paciente?.id && roleUserId) {
-        if (procedimentoFeitoIdParaVinculo) {
-          if (journeyState.observacoesExecucao) {
-            try {
-              await procedimentosApi.atualizarObservacao(procedimentoFeitoIdParaVinculo, journeyState.observacoesExecucao);
-            } catch (e) {
-              console.warn('[registrarProcedimentoManual] erro ao atualizar obs do proc', procedimentoFeitoIdParaVinculo, e);
-            }
-          }
-          return procedimentoFeitoIdParaVinculo;
-        }
-
-        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const agendaIdValido =
-          !isApenasSair && journeyState.agendaId && UUID_REGEX.test(journeyState.agendaId)
-            ? journeyState.agendaId
-            : null;
-        const planejamentoItemId = resolvePlanejamentoItemId(snapshotCatalogoId);
-        const pid = await criarProcedimentoFeitoVinculado(paciente, {
-          nome: journeyState.nomeProcedimento.trim(),
-          roleUserId,
-          observacao: String(journeyState.observacoesExecucao || '').trim() || null,
-          agendaId: agendaIdValido,
-          catalogoProcedimentoSaudeId: snapshotCatalogoId,
-          ...(planejamentoItemId ? { planejamentoItemId } : {}),
-        });
-        if (pid) {
-          procedimentoFeitoIdParaVinculo = String(pid);
-          persistirPfSessao(snapshotCatalogoId, pid);
-          appendLotePfId(pid);
-        }
-      }
-      return procedimentoFeitoIdParaVinculo;
-    },
-    [
-      criarProcedimentoFeitoVinculado,
-      journeyState.agendaId,
-      journeyState.nomeProcedimento,
-      journeyState.nomeProcedimentoCatalogoId,
-      journeyState.observacoesExecucao,
-      journeyState.procedimentosSessao,
-      resolvePlanejamentoItemId,
-      roleUserId,
-      persistirPfSessao,
-      appendLotePfId,
-    ]
-  );
-
-
-
-  const persistirEncerramentoConsulta = React.useCallback(
-    async (pidsInput) => {
-      const ids = Array.isArray(pidsInput) ? pidsInput : [pidsInput].filter(Boolean);
-      if (ids.length === 0) return;
-
-      if (assinaturasRealizadasIds.length > 0 && ids.length > 0) {
-        for (const pid of ids) {
-          for (const assinaturaId of assinaturasRealizadasIds) {
-            try {
-              await termoAssinaturaApi.vincularProcedimento(assinaturaId, pid);
-            } catch (e) {
-              console.warn(`Não foi possível vincular assinatura ${assinaturaId} ao procedimento ${pid}:`, e);
-            }
-          }
-        }
-      }
-
-      const nomesArray = journeyState.procedimentosSessao?.length > 0
-        ? journeyState.procedimentosSessao.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
-        : [String(journeyState.nomeProcedimento || '').trim()].filter(Boolean);
-      const nomesUnicos = [...new Set(nomesArray)];
-
-      const snapshotItens = Array.isArray(journeyState.orientacoesItens)
-        ? journeyState.orientacoesItens.map((i) => ({ ...i }))
-        : [];
-
-      const orientacoesPayload = snapshotItens
-        .map((i, idx) => ({
-          descricao: String(i.descricao || '').trim(),
-          checado: Boolean(i.checado),
-          ordem: Number.isFinite(Number(i.ordem)) ? Number(i.ordem) : idx,
-        }))
-        .filter((x) => x.descricao);
-
-      if (ids.length > 0 && orientacoesPayload.length > 0) {
-        for (const pid of ids) {
-          await orientacoesApi.salvar(pid, orientacoesPayload);
-        }
-      }
-
-      const nomesParaTemplate = [];
-      for (const snapshotNome of nomesUnicos) {
+  /**
+   * Perguntas depois do encerrar ("Salvar como padrão?" e "Catálogo"), com as condições de hoje. Usada pelo encerrar
+   * no servidor (nomes de `perguntasDaSessao`; orientações por item, decisão 6).
+   * "Salvar como padrão?" é UMA pergunta por item com orientações definidas (`orientacoesPorItem`), comparando a lista
+   * do item com o modelo do nome dele. NÃO DETERMINADO: a decisão 6 pede a chave `catalogoProcedimentoSaudeId`, mas
+   * o modelo do perfil (`/perfil/orientacoes-template`) é por `procedimentoNome`; a chave usada é o nome do item.
+   */
+  const perguntarPadraoECatalogo = React.useCallback(
+    async ({ nomesUnicos, orientacoesPorItem = [], jaVinculadoAoCatalogo }) => {
+      for (const { nome: snapshotNome, orientacoes: orientacoesPayload } of orientacoesPorItem) {
         let tplSig = '';
         try {
           const tplRaw = await perfilApi.getOrientacoesTemplate(snapshotNome);
@@ -3294,24 +3686,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
           }
         }
         const curSig = orientacoesTemplateSignature(orientacoesPayload);
-        if (orientacoesPayload.length > 0 && (tplSig === '' || tplSig !== curSig)) {
-          nomesParaTemplate.push(snapshotNome);
-        }
-      }
+        if (orientacoesPayload.length === 0 || (tplSig !== '' && tplSig === curSig)) continue;
 
-      if (nomesParaTemplate.length > 0) {
-        const nomesStr = nomesParaTemplate.map(n => `"${n}"`).join(' e ');
         const saveTpl = await askFinishJourneyConfirm({
           title: 'Salvar como padrão?',
-          message: `Salvar estas orientações como padrão para ${nomesStr}?`,
+          message: `Salvar estas orientações como padrão para "${snapshotNome}"?`,
         });
         if (saveTpl) {
-          for (const snapshotNome of nomesParaTemplate) {
-            try {
-              await perfilApi.salvarOrientacoesTemplate(snapshotNome, orientacoesPayload);
-            } catch {
-              toast.error(`Não foi possível salvar o template de orientações para ${snapshotNome}.`);
-            }
+          try {
+            await perfilApi.salvarOrientacoesTemplate(snapshotNome, orientacoesPayload);
+          } catch {
+            toast.error(`Não foi possível salvar o template de orientações para ${snapshotNome}.`);
           }
         }
       }
@@ -3331,11 +3716,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         if (!snapshotNome || ['procedimento', 'retorno'].includes(snapshotNome.toLowerCase())) {
           continue;
         }
-        const jaVinculadoAoCatalogo = (journeyState.procedimentosSessao || []).some(
-          p => (p.procedimentoNome === snapshotNome || p.nomeProcedimento === snapshotNome) &&
-               (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
-        ) || (journeyState.nomeProcedimento === snapshotNome && journeyState.nomeProcedimentoCatalogoId);
-        if (jaVinculadoAoCatalogo) {
+        if (jaVinculadoAoCatalogo(snapshotNome)) {
           continue;
         }
         const hit = catalogNames.includes(snapshotNome.toLowerCase());
@@ -3356,21 +3737,111 @@ function AppRefactoredInner({ onCanalAvisos }) {
         }
       }
     },
-    [
-      assinaturasRealizadasIds,
-      askFinishJourneyConfirm,
-      journeyState.nomeProcedimento,
-      journeyState.nomeProcedimentoCatalogoId,
-      journeyState.orientacoesItens,
-      toast,
-    ]
+    [askFinishJourneyConfirm, toast]
   );
 
-  const encerrarAtendimento = React.useCallback(async (isApenasSair = false, opts = {}) => {
+  const { setAttendanceStartTime } = journeyState;
+  /**
+   * Etapa 3: encerra a consulta numa transação no servidor (POST /atendimentos/{id}/encerrar) e, no sucesso, faz o
+   * que o encerrar de hoje faz depois de gravar: as perguntas (nomes de todos os itens da consulta, P5; orientações
+   * devolvidas), o modal de plano concluído e a saída. Consulta sem procedimento devolvido não pergunta nada.
+   */
+  const encerrarPeloServidor = React.useCallback(
+    async ({ pularGateTermos }) => {
+      const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
+      const paciente = resolvePacienteAtendimento();
+      let resultado;
+      try {
+        resultado = await encerrarConsultaNoServidor({
+          modo: 'COMPLETO',
+          pularGateTermos: Boolean(pularGateTermos),
+          // FF1 b: o id do item ativo é resolvido pelo hook depois de esvaziar a fila (o item pode nascer nela).
+          indiceItemAtivo: journeyState.activeProcedureIndex ?? 0,
+          // F5b: as orientações já estão em cada item (PATCH); o corpo do encerrar não as leva.
+        });
+      } catch (e) {
+        const parsed = parseTermosBloqueioError(e);
+        if (parsed) {
+          setTermoBloqueio({
+            open: true,
+            nomeProcedimento: parsed.nomeProcedimento || 'procedimento',
+            faltantes: parsed.faltantes,
+          });
+          registrarResolucaoTermos(null, { faltantes: parsed.faltantes || [] });
+        }
+        throw e;
+      }
+
+      const procedimentos = Array.isArray(resultado?.procedimentos) ? resultado.procedimentos : [];
+      // F1: o servidor decide por item; o que ficou sem registro (sem termo assinado) é avisado, nunca silencioso.
+      const itensSemRegistro = Array.isArray(resultado?.itensSemRegistro) ? resultado.itensSemRegistro : [];
+      if (itensSemRegistro.length > 0) {
+        const nomes = itensSemRegistro
+          .map((it) => String(it?.procedimentoNome || '').trim())
+          .filter(Boolean)
+          .join(', ');
+        toast.warning(
+          `${itensSemRegistro.length} procedimento(s) não registrado(s): sem termo assinado${nomes ? ` (${nomes})` : ''}.`,
+        );
+      } else if (procedimentos.length === 0) {
+        toast.warning('Nenhum procedimento foi registrado nesta consulta.');
+      }
+      if (procedimentos.length > 0) {
+        // P5: com ao menos 1 procedimento devolvido, os nomes vêm de todos os itens da consulta (como hoje).
+        const { nomesUnicos, jaVinculadoAoCatalogo } = perguntasDaSessao({
+          procedimentosSessao: journeyState.procedimentosSessao,
+          nomeProcedimento: journeyState.nomeProcedimento,
+          nomeProcedimentoCatalogoId: journeyState.nomeProcedimentoCatalogoId,
+        });
+        // Decisão 6: por item, com a lista que o servidor gravou no procedimento desse item.
+        const orientacoesPorItem = orientacoesPorItemParaPadrao(journeyState.procedimentosSessao, procedimentos);
+        await perguntarPadraoECatalogo({ nomesUnicos, orientacoesPorItem, jaVinculadoAoCatalogo });
+      }
+      setAttendanceStartTime(null);
+
+      if (loteConcluiuPlano(procedimentos)) {
+        const escolha = await askPlanoConcluidoClinica(paciente);
+        if (escolha === 'aceitar') {
+          setConsultaModule(null);
+          abrirAgendaRetornoClinica(paciente);
+          resetJourney();
+          return;
+        }
+      }
+
+      setConsultaModule(null);
+      await finalizarAtendimentoNavegacao(sCpf);
+    },
+    [
+    registrarResolucaoTermos,
+      abrirAgendaRetornoClinica,
+      askPlanoConcluidoClinica,
+      encerrarConsultaNoServidor,
+      finalizarAtendimentoNavegacao,
+      journeyState.activeProcedureIndex,
+      journeyState.nomeProcedimento,
+      journeyState.nomeProcedimentoCatalogoId,
+      journeyState.procedimentosSessao,
+      pacienteAtual?.cpf,
+      perguntarPadraoECatalogo,
+      resetJourney,
+      resolvePacienteAtendimento,
+      selectedPatientCpf,
+      setAttendanceStartTime,
+      toast,
+    ],
+  );
+
+  const encerrarAtendimento = React.useCallback(async (opts = {}) => {
     if (finishJourneyLockRef.current) return;
     finishJourneyLockRef.current = true;
     setIsFinishing(true);
     try {
+      // Etapa 3: o encerrar é só pelo servidor. Sem a consulta no servidor, nada é gravado.
+      if (!consultaEncerraNoServidor) {
+        toast.error('Consulta não encontrada no servidor. Recarregue a página.');
+        return;
+      }
       const pularGateTermos = Boolean(opts.pularGateTermos);
       const pfDoCatalogoAtivo = pfIdNestaSessaoParaCatalogo(
         journeyState.nomeProcedimentoCatalogoId,
@@ -3380,7 +3851,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         resolucao: termosExecucaoBloqueio.resolucao,
         pfIdNestaSessao: pfDoCatalogoAtivo,
       });
-      if (abortarEncerrarPorTermos({ bloqueadoPorTermos, isApenasSair, pularGateTermos })) {
+      if (abortarEncerrarPorTermos({ bloqueadoPorTermos, pularGateTermos })) {
         setTermoBloqueio({
           open: true,
           nomeProcedimento: journeyState.nomeProcedimento || 'procedimento',
@@ -3389,298 +3860,35 @@ function AppRefactoredInner({ onCanalAvisos }) {
         toast.error('Assine os termos obrigatórios antes de finalizar o procedimento.');
         return;
       }
-      const criarProcedimento = deveCriarProcedimentoNoEncerrar(bloqueadoPorTermos);
+      await Promise.all([aguardarFotosPendentes(), aguardarMapaRascunho()]);
 
-      const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      const paciente = resolvePacienteAtendimento();
-
-      const listaParaSalvar = journeyState.procedimentosSessao && journeyState.procedimentosSessao.length > 0
-        ? journeyState.procedimentosSessao
-        : procedimentosLote;
-
-      const catPrincipal =
-        journeyState.nomeProcedimentoCatalogoId ||
-        (listaParaSalvar && listaParaSalvar[0]?.catalogoProcedimentoSaudeId);
-      const rawPItemIdPrincipal =
-        (listaParaSalvar && listaParaSalvar[0]?.planejamentoItemId) ||
-        (catPrincipal ? resolvePlanejamentoItemId(catPrincipal) : null) ||
-        null;
-      const planoItemIdPrincipal = rawPItemIdPrincipal
-        ? String(rawPItemIdPrincipal).replace(/_retorno$/, '').trim()
-        : null;
-      let agendouRetornoFuturo = false;
-
-      const todosIds = [];
-      const payloadLote = { procedimentos: [] };
-      const indexParaCriar = [];
-
-      if (listaParaSalvar && listaParaSalvar.length > 0) {
-        for (let i = 0; i < listaParaSalvar.length; i++) {
-          const proc = listaParaSalvar[i];
-          const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-          const existingId = pfIdNestaSessaoParaCatalogo(catId, listaParaSalvar);
-          if (existingId) {
-            todosIds.push(String(existingId));
-            if (proc.observacoesExecucao) {
-              try {
-                await procedimentosApi.atualizarObservacao(existingId, proc.observacoesExecucao);
-              } catch (e) {
-                console.warn('[encerrarAtendimento] erro ao atualizar obs do proc', existingId, e);
-              }
-            }
-          } else {
-            const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-            const isRetorno = proc.isAgendaRetorno || proc.tipoAtendimento === 'retorno';
-            // Apenas envia ao lote se possuir um catálogo selecionado OU for atendimento de retorno
-            if ((catId || isRetorno) && criarProcedimento) {
-              const rawPItemId = proc.planejamentoItemId || (catId ? resolvePlanejamentoItemId(catId) : null);
-              const pItemId = rawPItemId ? String(rawPItemId).replace(/_retorno$/, '').trim() : null;
-              const body = {
-                nome: (proc.nomeProcedimento || proc.procedimentoNome || '').trim(),
-                roleUserId,
-                observacao: proc.observacoesExecucao || null,
-                agendaId: proc.agendaId || journeyState.agendaId,
-                catalogoProcedimentoSaudeId: catId,
-                ...(pItemId ? { planejamentoItemId: pItemId } : {}),
-              };
-              payloadLote.procedimentos.push(body);
-              indexParaCriar.push(i);
-              todosIds.push(null);
-            }
-          }
-        }
-
-        if (payloadLote.procedimentos.length > 0) {
-          let temErroNoLote = false;
-          for (let idx = 0; idx < payloadLote.procedimentos.length; idx++) {
-            const body = payloadLote.procedimentos[idx];
-            const bodyToSave = isApenasSair ? { ...body, agendaId: undefined } : body;
-            try {
-              const pid = await criarProcedimentoFeitoVinculado(paciente, bodyToSave);
-              if (pid) {
-                const origIdx = indexParaCriar[idx];
-                todosIds[origIdx] = String(pid);
-              } else {
-                temErroNoLote = true;
-              }
-            } catch (e) {
-              console.warn('[encerrarAtendimento] Erro ao criar procedimento do lote', e);
-              temErroNoLote = true;
-            }
-          }
-          if (temErroNoLote) {
-            throw new Error('Falha ao salvar um ou mais procedimentos do lote.');
-          }
-        }
-      } else if (criarProcedimento) {
-        const procedimentoFeitoIdParaVinculo = await registrarProcedimentoManual(paciente, isApenasSair);
-        if (procedimentoFeitoIdParaVinculo) {
-          todosIds.push(procedimentoFeitoIdParaVinculo);
-        } else if (journeyState.nomeProcedimento && journeyState.nomeProcedimento.trim()) {
-          throw new Error('Falha ao registrar procedimento manual. Verifique sua conexão.');
-        }
-      }
-
-      const novosIdsValidos = todosIds.filter(Boolean);
-      let respostasFinalizar = [];
-
-      if (journeyState.procedimentosSessao?.length > 0 && novosIdsValidos.length > 0) {
-        journeyState.setProcedimentosSessao(prev =>
-          prev.map((p, i) => ({ ...p, id: todosIds[i] || p.id }))
-        );
-      }
-
-      // Captura síncrona ANTES do updateProcedureByIndex (que é assíncrono no React)
-      // proc.fotosSnapshot lido logo após seria undefined pois o state ainda não teria atualizado
-      const activeIndex = journeyState.activeProcedureIndex;
-      const activePhotosSync = cameraState.procedureCapturedPhotos || [];
-      const activeMapaSnapSync = mapaAplicacaoState.getSnapshotForPersist();
-
-      // Salva o snapshot final da aba atual no state (para persistência futura)
-      journeyState.updateProcedureByIndex(activeIndex, {
-        mapaSnapshot: activeMapaSnapSync,
-        fotosSnapshot: activePhotosSync
-      });
-
-
-      if (novosIdsValidos.length > 0) {
-        setLoteProcedimentosFeitosIds(novosIdsValidos);
-        const dataRefSessao = hojeDaClinica(fusoClinica);
-
-        await Promise.all(
-          novosIdsValidos.map(async (pid, i) => {
-            const proc = journeyState.procedimentosSessao[i] || {};
-
-            // Para o índice ativo, usa os valores capturados sincronamente acima
-            // Para outros índices do lote, lê do fotosSnapshot/mapaSnapshot do state
-            const snap = (i === activeIndex ? activeMapaSnapSync : null) || proc.mapaSnapshot || null;
-            if (snap) {
-              const catId = proc.nomeProcedimentoCatalogoId || proc.catalogoProcedimentoSaudeId;
-              await persistirMapaAplicacaoAtual(pid, paciente, snap, null, catId);
-            }
-
-            const photos = i === activeIndex ? activePhotosSync : (proc.fotosSnapshot || []);
-            if (photos.length > 0) {
-              await uploadProcedureCapturedPhotos(paciente, [pid], dataRefSessao, photos);
-            }
-          })
-        );
-
-        const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
-          journeyProcedureDateIso,
-          journeyState.proximoRetornoDisplay,
-          hojeDaClinica(fusoClinica)
-        );
-
-        if (!isApenasSair && returnIsoPre && paciente && roleUserId) {
-          await registrarRetornoFuturo({
-            paciente,
-            roleUserId,
-            dataRetornoIso: returnIsoPre,
-            procedimentoOrigemId: novosIdsValidos[0] || null,
-            planejamentoItemId: planoItemIdPrincipal,
-          }).catch((err) => {
-            console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
-          });
-          agendouRetornoFuturo = true;
-        }
-
-        let respostasDoLote = [];
-        if (!isApenasSair) {
-          const finalizarPromises = novosIdsValidos.map(id => procedimentosApi.finalizar(id).catch(e => {
-            console.warn('Erro ao finalizar proc', id, e);
-            return null;
-          }));
-          respostasDoLote = await Promise.all(finalizarPromises);
-        }
-        respostasFinalizar = respostasDoLote;
-      }
-
-      if (cameraState.evaluationCapturedPhotos?.length > 0) {
-        const dataRefSessao = hojeDaClinica(fusoClinica);
-        try {
-          await uploadEvaluationCapturedPhotos({ paciente, procIdOpt: novosIdsValidos[0], dataRefSessao });
-        } catch (e) {
-          console.warn('[encerrarAtendimento] erro ao enviar fotos avaliacao:', e);
-        }
-      }
-
-      if (isApenasSair) {
-        toast.success('Rascunho salvo com sucesso.');
-        setConsultaModule(null);
-        onSairConsulta();
-      } else {
-        // Sincronização Retroativa ou Enriquecida da Agenda (aguarda conclusão antes da navegação)
-        let targetAgendaId = journeyState.agendaId;
-
-        if (!targetAgendaId) {
-          const startTimeIso = journeyState.getAttendanceStartTime(sCpf);
-          await registrarAgendaAvulsa({
-            journeyState,
-            paciente,
-            roleUserId,
-            novosIdsValidos,
-            attendanceStartTimeIso: startTimeIso,
-            planejamentoItemId: planoItemIdPrincipal,
-            fuso: fusoClinica,
-          }).catch((err) => {
-            console.warn('[encerrarAtendimento] Erro ao registrar agenda avulsa:', err);
-          });
-          journeyState.setAttendanceStartTime(null, sCpf);
-        } else {
-          // Preserva horaInicio e horaFim previstos no banco para nao alterar a reserva do agendamento
-          const updatePayload = {};
-
-          const agendaIdsToUpdate = new Set();
-          if (targetAgendaId) agendaIdsToUpdate.add(String(targetAgendaId));
-          (journeyState.procedimentosSessao || []).forEach((p) => {
-            if (p?.agendaId) agendaIdsToUpdate.add(String(p.agendaId));
-          });
-
-          for (const aId of agendaIdsToUpdate) {
-            await agendasApi.atualizarStatus(aId, 'realizado', updatePayload).catch((err) => {
-              console.warn('[encerrarAtendimento] Erro ao atualizar status da agenda:', err);
-            });
-            if (novosIdsValidos.length > 0) {
-              await enriquecerAgendaAgendada({
-                agendaId: aId,
-                procedimentosSessao: journeyState.procedimentosSessao,
-                novosIdsValidos,
-              }).catch((err) => {
-                console.warn('[encerrarAtendimento] Erro ao enriquecer observação da agenda:', err);
-              });
-            }
-          }
-          journeyState.setAttendanceStartTime(null, sCpf);
-        }
-
-        const { validIso: returnIsoPost } = evaluateProximoRetornoStep5(
-          journeyProcedureDateIso,
-          journeyState.proximoRetornoDisplay,
-          hojeDaClinica(fusoClinica)
-        );
-
-        await Promise.all([
-          persistirEncerramentoConsulta(novosIdsValidos),
-          !agendouRetornoFuturo && returnIsoPost && paciente && roleUserId
-            ? registrarRetornoFuturo({
-              paciente,
-              roleUserId,
-              dataRetornoIso: returnIsoPost,
-              procedimentoOrigemId: novosIdsValidos[0] || null,
-              planejamentoItemId: planoItemIdPrincipal,
-            }).catch((err) => {
-              console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
-            })
-            : Promise.resolve(),
-        ]);
-
-        if (loteConcluiuPlano(respostasFinalizar)) {
-          const escolha = await askPlanoConcluidoClinica(paciente);
-          if (escolha === 'aceitar') {
-            setConsultaModule(null);
-            abrirAgendaRetornoClinica(paciente);
-            resetJourney();
-            return;
-          }
-        }
-
-        setConsultaModule(null);
-        await finalizarAtendimentoNavegacao(sCpf);
-      }
+      await encerrarPeloServidor({ pularGateTermos });
     } catch (error) {
+      // F7: espera cancelada (saiu da consulta/trocou de paciente): silencioso, sem toast; segue como falha.
+      if (error?.codigo === CODIGO_ESPERA_CANCELADA) throw error;
       console.error('Erro ao encerrar atendimento:', error);
-      toast.error(error.message || 'Erro ao encerrar atendimento.');
+      // Envio pendente: a mensagem exata (o getApiErrorToastMessage poderia trocá-la por "Sem conexão...").
+      toast.error(
+        error?.codigo === CODIGO_ENVIO_PENDENTE
+          ? error.message
+          : getApiErrorToastMessage(error, 'Erro ao encerrar atendimento.'),
+      );
       throw error;
     } finally {
       finishJourneyLockRef.current = false;
       setIsFinishing(false);
     }
   }, [
-    journeyState,
-    procedimentosLote,
-    roleUserId,
-    resolvePlanejamentoItemId,
-    criarProcedimentoFeitoVinculado,
-    registrarProcedimentoManual,
-    resolvePacienteAtendimento,
-    persistirMapaAplicacaoAtual,
-    mapaAplicacaoState,
-    cameraState,
-    uploadProcedureCapturedPhotos,
-    uploadEvaluationCapturedPhotos,
-    finalizarAtendimentoNavegacao,
-    pacienteAtual?.cpf,
-    persistirEncerramentoConsulta,
-    selectedPatientCpf,
+    aguardarFotosPendentes,
+    aguardarMapaRascunho,
+    consultaEncerraNoServidor,
+    encerrarPeloServidor,
+    journeyState.nomeProcedimento,
+    journeyState.nomeProcedimentoCatalogoId,
+    journeyState.procedimentosSessao,
     setIsFinishing,
-    onSairConsulta,
+    termosExecucaoBloqueio.resolucao,
     toast,
-    termosExecucaoBloqueio,
-    askPlanoConcluidoClinica,
-    abrirAgendaRetornoClinica,
-    resetJourney,
-    fusoClinica,
   ]);
 
   const finishJourney = async () => {
@@ -3689,6 +3897,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
   };
 
   const confirmEncerrarConsulta = React.useCallback(async (decision) => {
+    // F1: o erro do 'finalizar' nunca é engolido; o encerrarAtendimento já avisa (sem toast duplicado aqui).
+    let erroJaAvisado = false;
     try {
       setFinishingMode(decision);
 
@@ -3703,50 +3913,56 @@ function AppRefactoredInner({ onCanalAvisos }) {
         }
       }
 
-      // Só chama o save se ainda não existe um registro persistido.
-      // Se o onBlur já criou (ref preenchido), apenas faz PATCH (dentro de autoSaveAnamneseSilently).
-      // Se não tem nem ID nem promise pendente, cria o registro agora.
-      await autoSaveAnamneseSilently();
+      // Sem consulta no servidor: se o onBlur já criou (ref preenchido), faz PATCH; senão cria agora.
+      // Com consulta: os textos já foram no blur e o encerrar do servidor esvazia a fila; não grava aqui.
+      if (!consultaEncerraNoServidor) {
+        await autoSaveAnamneseSilently();
+      }
 
       if (decision === 'finalizar') {
-        await encerrarAtendimento(false, { pularGateTermos: true });
+        try {
+          await encerrarAtendimento({ pularGateTermos: true });
+        } catch (err) {
+          erroJaAvisado = true;
+          throw err;
+        }
       } else {
-        await encerrarAtendimento(true);
+        // "Apenas Sair": espera as fotos, o mapa e a fila; a consulta continua aberta no servidor (sem rota de
+        // consulta). Não cria procedimento nem mexe em agenda.
+        const [fotosNaoEnviadas] = await Promise.all([aguardarFotosPendentes(), aguardarMapaRascunho()]);
+        const { esvaziou: filaEsvaziou, tiposPendentes } = await guardarConsultaAntesDeSair();
+        toast.success(textoDoApenasSair({ filaEsvaziou, tiposPendentes, fotosNaoEnviadas }));
+        setConsultaModule(null);
+        onSairConsulta();
       }
       setEncerrarConsultaOpen(false);
     } catch (e) {
       console.error('Erro ao encerrar consulta a partir do hub:', e);
+      if (e?.codigo === CODIGO_ESPERA_CANCELADA) {
+        // F7: espera cancelada (saiu da consulta): silencioso.
+      } else if (decision !== 'finalizar') {
+        toast.error(getApiErrorToastMessage(e, 'Não foi possível salvar o rascunho.'));
+      } else if (!erroJaAvisado) {
+        toast.error(getApiErrorToastMessage(e, 'Erro ao encerrar atendimento.'));
+      }
     } finally {
       setFinishingMode(null);
     }
   }, [
     autoSaveAnamneseSilently,
+    consultaEncerraNoServidor,
     journeyState.observacoesExecucao,
     onSairConsulta,
     encerrarAtendimento,
+    guardarConsultaAntesDeSair,
+    aguardarFotosPendentes,
+    aguardarMapaRascunho,
+    toast,
   ]);
 
   const handleUploadDocumentFiles = () => {
     // Stub: evita ReferenceError no botão de documentos do widget; implementar envio quando houver API.
   };
-
-  const persistAnnotatedPhotoToGallery = React.useCallback(
-    async (blob) => {
-      if (!blob || !(blob instanceof Blob)) return { ok: false, skipped: true };
-      const pid = pacienteAtual?.id;
-      if (!pid) return { ok: false, skipped: true, reason: 'no_server_id' };
-      const rid = roleUserId;
-      if (!rid || !/^[0-9a-f-]{36}$/i.test(String(rid))) {
-        toast.warning(
-          'Selecione o profissional na barra de contexto para enviar a foto desenhada à galeria no servidor.'
-        );
-        return { ok: false, skipped: true };
-      }
-      pendingAnnotatedGalleryBlobsRef.current.push(blob);
-      return { ok: true };
-    },
-    [pacienteAtual?.id, roleUserId, toast]
-  );
 
   // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
   const isJornadaView = activeView === 'jornada';
@@ -3953,6 +4169,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
             : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
           }`}
       >
+        {/* F7: aviso de alterações que não entraram; no topo do shell, em qualquer tela (consulta, pacientes, perfil). */}
+        {alteracoesNaoEntraram ? (
+          <div className="w-full shrink-0 px-3 pt-2 sm:px-6">
+            <AlteracoesNaoEntraram
+              quantidade={alteracoesNaoEntraram.quantidade}
+              itens={alteracoesNaoEntraram.itens}
+              onCopiar={copiarAlteracoesNaoEntraram}
+              onDescartar={descartarAlteracoesNaoEntraram}
+            />
+          </div>
+        ) : null}
         {isJornadaView && (
           <header
             className={`border-b border-app-border shadow-app-card ${isJornadaView
@@ -4022,8 +4249,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           pacienteId={pacienteAtual?.id ?? null}
                           roleUserId={roleUserId ?? null}
                           sidebarInsetPx={sidebarRailWidthPx}
-                          observacoes={journeyState.observacoes}
-                          setObservacoes={journeyState.setObservacoes}
+                          observacoes={journeyState.observacoesAvaliacao}
+                          setObservacoes={journeyState.setObservacoesAvaliacao}
                           pendingCapture={pendingMapeamentoCapture}
                           onCaptureConsumed={() => setPendingMapeamentoCapture(null)}
                           onPrepareCapture={handlePrepareMapeamentoCapture}
@@ -4083,6 +4310,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
                       {currentStep === 3 && (
                         <Step3Termos
+                          atendimentoId={consultaServidor.atual?.id ?? null}
                           termoLido={journeyState.termoLido}
                           setTermoLido={journeyState.setTermoLido}
                           termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
@@ -4150,12 +4378,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
                             execucaoBloqueadaPorTermos ? undefined : cameraState.openPhotoModal
                           }
                           onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
-                          onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
+                          onProcedureRemovePhoto={removerFotoProcedimento}
                           step4Errors={journeyState.step4Errors}
                           setStep4Errors={journeyState.setStep4Errors}
                           fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
                           onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                           onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
+                          urlArquivoReserva={urlArquivoReservaDaFoto}
                           mapaState={mapaAplicacaoState}
                           roleUserId={roleUserId}
                           procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
@@ -4189,13 +4418,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           key={String(journeyState.nomeProcedimento || '')}
                           procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
                           procedureDateIso={journeyProcedureDateIso}
-                          proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
-                          setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
-                          orientacoes={journeyState.orientacoes}
-                          orientacoesItens={journeyState.orientacoesItens}
-                          setOrientacoesItens={journeyState.setOrientacoesItens}
-                          orientacoesCarregadas={journeyState.orientacoesCarregadas}
-                          setOrientacoesCarregadas={journeyState.setOrientacoesCarregadas}
+                          itensOrientacoes={itensOrientacoes}
+                          setOrientacoesDoItem={setOrientacoesDoItem}
+                          itensSemOrientacaoMarcada={itensSemOrientacaoMarcada}
                           step5Errors={journeyState.step5Errors}
                           setStep5Errors={journeyState.setStep5Errors}
                           pacienteNome={pacienteAtual?.nomeCompleto ?? pacienteAtual?.nome ?? ''}
@@ -4294,16 +4519,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                   }}
                   onAnnotatedCaptureSaved={
                     photoAnnotationScope === 'procedure'
-                      ? ({ index, newUrl, blob }) => {
-                        cameraState.replaceProcedureCapturedPhotoAt(index, { url: newUrl, blob });
-                        journeyState.setImageSrc(newUrl);
-                        journeyState.setPaths([]);
-                      }
+                      ? salvarFotoProcedimentoAnotada
                       : handleAnnotatedCaptureSaved
                   }
-                  persistAnnotatedPhotoToGallery={
-                    photoAnnotationScope === 'evaluation' ? persistAnnotatedPhotoToGallery : undefined
-                  }
+                  urlArquivoReserva={urlArquivoReservaDaFoto}
                   onClose={closeJourneyPhotoAnnotation}
                 />
               ) : null}
@@ -4347,13 +4566,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         <button
                           type="button"
                           onClick={handleNextStep}
-                          disabled={
-                            isFinishing ||
-                            !journeyState.orientacoes ||
-                            step5RetornoBloqueiaFinal
-                          }
-                          className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${journeyState.orientacoes &&
-                            !step5RetornoBloqueiaFinal &&
+                          disabled={isFinishing || !orientacoesOk}
+                          className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-transparent px-6 text-[14px] font-semibold shadow-sm outline-none transition-all ${orientacoesOk &&
                             !isFinishing
                             ? 'animate-pulse bg-[#22c55e] text-white hover:bg-[#16a34a]'
                             : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
@@ -4361,11 +4575,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         >
                           {isFinishing
                             ? 'Salvando...'
-                            : !journeyState.orientacoes
+                            : !orientacoesOk
                               ? 'Confirme as orientações para finalizar'
-                              : step5RetornoBloqueiaFinal
-                                ? 'Corrija a data de retorno'
-                                : 'Finalizar Atendimento ✓'}
+                              : 'Finalizar Atendimento ✓'}
                         </button>
                       )}
                     </div>
@@ -4396,15 +4608,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 disabled={
                   isFinishing ||
                   (currentStep === 1 && step1Busy) ||
-                  (currentStep === 5 &&
-                    (!journeyState.orientacoes || step5RetornoBloqueiaFinal))
+                  (currentStep === 5 && !orientacoesOk)
                 }
                 className={`flex min-h-[44px] max-w-[160px] flex-1 items-center justify-center gap-1 rounded-xl border border-transparent px-3 text-[14px] font-semibold text-white ${currentStep < 5
                   ? isFinishing || (currentStep === 1 && step1Busy)
                     ? 'cursor-not-allowed bg-[#00a88e]/50'
                     : 'bg-[#00a88e] active:bg-[#00967f]'
-                  : journeyState.orientacoes &&
-                    !step5RetornoBloqueiaFinal &&
+                  : orientacoesOk &&
                     !isFinishing
                     ? 'animate-pulse bg-[#22c55e] active:bg-[#16a34a]'
                     : 'cursor-not-allowed bg-[#f1f5f9] text-[#64748b]'
@@ -4420,10 +4630,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
                   )
                 ) : isFinishing ? (
                   'Salvando...'
-                ) : !journeyState.orientacoes ? (
+                ) : !orientacoesOk ? (
                   'Finalizar'
-                ) : step5RetornoBloqueiaFinal ? (
-                  'Data inválida'
                 ) : (
                   'Finalizar ✓'
                 )}
@@ -4455,7 +4663,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                   <ConsultaHub
                     paciente={pacienteAtual}
                     isRetorno={journeyState.isAgendaRetorno}
-                    onSelectModule={setConsultaModule}
+                    onSelectModule={trocarModuloPeloUsuario}
                     onIniciarRetornoAvulso={handleIniciarRetornoAvulso}
                     onEncerrarConsulta={requestEncerrarConsulta}
                     getPatientInitials={getPatientInitials}
@@ -4463,16 +4671,21 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     exigirFilaVinculo={exigirFilaTermos}
                     nomeProcedimento={journeyState.nomeProcedimento}
                     atoJaIniciado={Boolean(pfIdCatalogoAtivo)}
+                    termosDaConsulta={termosDaConsulta}
+                    atendimentoId={consultaServidor.atual?.id ?? null}
                     onTermosBloqueio={({ nomeProcedimento, faltantes }) => {
+                      // F3: a resolução do hub pode estar velha; o que a releitura da consulta já tem ASSINADO não bloqueia.
+                      const restantes = faltantesDoItem({ faltantes: faltantes || [] }, termosDaConsulta);
+                      if (restantes.length === 0) {
+                        trocarModuloPeloUsuario('procedimento');
+                        return;
+                      }
                       setTermoBloqueio({
                         open: true,
                         nomeProcedimento: nomeProcedimento || 'procedimento',
-                        faltantes: faltantes || [],
+                        faltantes: restantes,
                       });
-                      setTermosExecucaoBloqueio({
-                        catalogoId: catalogoIdsConsulta[0] || null,
-                        resolucao: { faltantes: faltantes || [] },
-                      });
+                      registrarResolucaoTermos(catalogoIdsConsulta[0] || null, { faltantes: faltantes || [] });
                     }}
                   />
                 ) : null}
@@ -4499,10 +4712,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos ?? []}
                     evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
-                    onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
+                    onEvaluationRemovePhoto={removerFotoAvaliacao}
                     procedureCapturedPhotos={cameraState.procedureCapturedPhotos ?? []}
                     onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
-                    onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
+                    onProcedureRemovePhoto={removerFotoProcedimento}
                     onProcedureOpenCamera={(cat) => {
                       if (cat) cameraState.setProcedureFotoCategoria(cat);
                       cameraState.openPhotoModal();
@@ -4547,6 +4760,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       perfilClinicoDraft={journeyState.step2PerfilClinicoDraft ?? null}
                       onPerfilClinicoDraftChange={journeyState.setStep2PerfilClinicoDraft ?? (() => { })}
                       consultaMode
+                      esperarFilaAvaliacao={esperarFilaAvaliacao}
+                      onCampoAvaliacaoBlur={onCampoAvaliacaoBlur}
                       onConcluirAnamnese={handleConcluirAnamnese}
                       isConcluirAnamneseBusy={step1Busy}
                       onSolicitarAoPaciente={abrirSolicitacao}
@@ -4560,11 +4775,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     setQueixa={journeyState.setQueixa}
                     expectativas={journeyState.expectativas}
                     setExpectativas={journeyState.setExpectativas}
+                    observacoesAvaliacao={journeyState.observacoesAvaliacao}
+                    setObservacoesAvaliacao={journeyState.setObservacoesAvaliacao}
+                    onCampoAvaliacaoBlur={onCampoAvaliacaoBlur}
+                    esperarFilaAvaliacao={esperarFilaAvaliacao}
                     evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos ?? []}
                     evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
                     onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
-                    onEvaluationRemovePhoto={cameraState.removeEvaluationPhoto}
+                    onEvaluationRemovePhoto={removerFotoAvaliacao}
                     onAnnotatePhoto={openEvaluationPhotoAnnotationForConsulta}
+                    urlArquivoReserva={urlArquivoReservaDaFoto}
                     onConcluirAvaliacao={handleConcluirAvaliacao}
                   />
                 ) : null}
@@ -4575,7 +4795,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     roleUserId={roleUserId ?? null}
                     pacienteNome={pacienteAtual?.nome ?? ''}
                     paciente={pacienteAtual}
-                    onVoltar={() => setConsultaModule('hub')}
+                    onVoltar={() => trocarModuloPeloUsuario('hub')}
                     onSelectProcedimentoParaConsulta={handleSelectProcedimentoDoPlano}
                     onAgendarItem={(item, onSaved) =>
                       handleAgendarPlanoItem(pacienteAtual, item, onSaved)
@@ -4591,6 +4811,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 ) : null}
                 {consultaModule === 'termos' ? (
                   <Step3Termos
+                    atendimentoId={consultaServidor.atual?.id ?? null}
+                    termosDaConsulta={termosDaConsulta}
+                    gravarEstadoTermos={gravarEstadoTermos}
+                    enviarAssinaturaPelaFila={enviarAssinaturaPelaFila}
                     termoLido={journeyState.termoLido}
                     setTermoLido={journeyState.setTermoLido}
                     termoAssinaturaDataUrl={journeyState.termoAssinaturaDataUrl}
@@ -4631,7 +4855,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                     procedimentos={journeyState.procedimentosSessao}
-                    onConcluir={() => setConsultaModule('hub')}
+                    onConcluir={() => trocarModuloPeloUsuario('hub')}
                   />
                 ) : null}
                 {consultaModule === 'procedimento' && !journeyState.isAgendaRetorno ? (
@@ -4655,12 +4879,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       execucaoBloqueadaPorTermos ? undefined : cameraState.openPhotoModal
                     }
                     onClearMapaCaptureIntent={() => { mapaAplicacaoCaptureVistaRef.current = null; }}
-                    onProcedureRemovePhoto={cameraState.removeProcedurePhoto}
+                    onProcedureRemovePhoto={removerFotoProcedimento}
                     step4Errors={journeyState.step4Errors}
                     setStep4Errors={journeyState.setStep4Errors}
                     fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
                     onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                     onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
+                          urlArquivoReserva={urlArquivoReservaDaFoto}
                     mapaState={mapaAplicacaoState}
                     roleUserId={roleUserId}
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
@@ -4693,18 +4918,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         journeyState.nomeProcedimento
                       );
                       if (!ok) return null;
+                      // Na consulta o mapa é rascunho do item; o procedimento só nasce no encerrar.
+                      if (!journeyState.isAgendaRetorno) return null;
                       return ensureProcedimentoFeitoForMapa(pacienteAtual);
                     }}
                     sugestaoProcedimentoEnviada={sugestaoProcedimentoEnviada}
                     onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                     procedureDateIso={journeyProcedureDateIso}
-                    proximoRetornoDisplay={journeyState.proximoRetornoDisplay}
-                    setProximoRetornoDisplay={journeyState.setProximoRetornoDisplay}
-                    orientacoes={journeyState.orientacoes}
-                    orientacoesItens={journeyState.orientacoesItens}
-                    setOrientacoesItens={journeyState.setOrientacoesItens}
-                    orientacoesCarregadas={journeyState.orientacoesCarregadas}
-                    setOrientacoesCarregadas={journeyState.setOrientacoesCarregadas}
+                    itensOrientacoes={itensOrientacoes}
+                    setOrientacoesDoItem={setOrientacoesDoItem}
+                    itensSemOrientacaoMarcada={itensSemOrientacaoMarcada}
                     step5Errors={journeyState.step5Errors}
                     setStep5Errors={journeyState.setStep5Errors}
                     pacienteNome={pacienteAtual?.nome ?? ''}
@@ -4729,7 +4952,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     encerrarAtendimento={encerrarAtendimento}
                     isSalvandoProcedimento={isSalvandoProcedimento}
                     isFinishing={isFinishing}
-                    step5RetornoBloqueiaFinal={step5RetornoBloqueiaFinal}
                     toast={toast}
                   />
                 ) : null}
@@ -4787,7 +5009,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       disabled={unsavedWarningSaving}
                       onClick={() => {
                         setUnsavedWarningOpen(false);
-                        setConsultaModule('hub');
+                        trocarModuloPeloUsuario('hub');
                       }}
                       className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[14px] font-semibold text-[#64748b] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                     >
@@ -4896,16 +5118,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 }}
                 onAnnotatedCaptureSaved={
                   photoAnnotationScope === 'procedure'
-                    ? ({ index, newUrl, blob }) => {
-                      cameraState.replaceProcedureCapturedPhotoAt(index, { url: newUrl, blob });
-                      journeyState.setImageSrc(newUrl);
-                      journeyState.setPaths([]);
-                    }
+                    ? salvarFotoProcedimentoAnotada
                     : handleAnnotatedCaptureSaved
                 }
-                persistAnnotatedPhotoToGallery={
-                  photoAnnotationScope === 'evaluation' ? persistAnnotatedPhotoToGallery : undefined
-                }
+                urlArquivoReserva={urlArquivoReservaDaFoto}
                 onClose={closeJourneyPhotoAnnotation}
               />
             ) : null}
@@ -4930,6 +5146,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
               perfilFotoUrl={perfilInfo.fotoUrl}
               onOpenClinicaSettings={onOpenClinicaSettings}
               onOpenPerfilSettings={onOpenPerfilSettings}
+              atalhoConsulta={
+                canStartAtendimento && minhasCarregadas ? (
+                  <AtalhoConsulta
+                    minhas={minhasConsultas}
+                    onEntrar={handleAtalhoEntrar}
+                    onEscolherPaciente={handleAtalhoEscolherPaciente}
+                  />
+                ) : null
+              }
             />
             <div
               className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
@@ -4969,6 +5194,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       getPatientInitials={getPatientInitials}
                       onCreatePatient={handleCreatePatientFromPatients}
                       onStartAttendance={handleAgendaStartAttendance}
+                      onVoltarConsulta={handleVoltarConsulta}
                       onAgendarPaciente={(p) => agendaSchedule.openCreateModalForPatient(p)}
                       onAgendarPlanoItem={handleAgendarPlanoItem}
                       onAgendarRetornoPlanoItem={handleAgendarRetornoPlanoItem}
@@ -5072,6 +5298,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         clinicaSlug={clinicaInfo.slug}
                         profissionalNome={perfilInfo.nomeCompleto || roleNome}
                         onStartAttendance={handleAgendaStartAttendance}
+                        onVoltarConsulta={handleVoltarConsulta}
                         onSlotCancelar={canDeleteAgenda ? (target) => {
                           const row = scheduleRowFromTarget(target) || (target?.agendaId ? { agenda: target } : null);
                           if (row) setScheduleCancelRow(row);

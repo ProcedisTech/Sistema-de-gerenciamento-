@@ -1,21 +1,39 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Camera, Eye, ImageIcon, Trash2 } from 'lucide-react';
+import { useToast } from '../../contexts/useToast.js';
+import { FotoCardImagem } from './FotoCardImagem.jsx';
+import { chaveFotoLegenda } from '../journey/chaveFotoLegenda.js';
 
-/** Fluxo modular: queixa/expectativas → fotos livres → desenho → concluir. */
+const noop = () => {};
+
+/**
+ * Fluxo modular: queixa/expectativas/observações → fotos livres → desenho → concluir.
+ * Texto: `set*` a cada tecla; `onCampoAvaliacaoBlur(campo)` ao sair do campo
+ * (campo ∈ 'queixa' | 'expectativas' | 'observacoesAvaliacao'); quem salva é o núcleo.
+ * `data-campo-consulta` = chave da fila (protege o campo em foco contra o remoto).
+ */
 export function ConsultaAvaliacaoFlow({
-  queixa,
-  setQueixa,
-  expectativas,
-  setExpectativas,
+  queixa = '',
+  setQueixa = noop,
+  expectativas = '',
+  setExpectativas = noop,
+  observacoesAvaliacao = '',
+  setObservacoesAvaliacao = noop,
+  onCampoAvaliacaoBlur = noop,
+  esperarFilaAvaliacao = null,
   evaluationCapturedPhotos = [],
   evaluationPhotoMax = 30,
   onEvaluationUploadFiles,
   onEvaluationRemovePhoto,
   onAnnotatePhoto,
+  /** F5: (photo) => path /arquivo da foto no servidor; o card nunca põe URL /api/ crua no <img>. */
+  urlArquivoReserva = null,
   onConcluirAvaliacao,
   isConcluirBusy = false,
 }) {
   const uploadInputRef = useRef(null);
+  const toast = useToast();
+  const [esperandoFila, setEsperandoFila] = useState(false);
   const photos = evaluationCapturedPhotos || [];
 
   const handleImageUpload = (e) => {
@@ -53,6 +71,8 @@ export function ConsultaAvaliacaoFlow({
             id="consulta-avaliacao-queixa"
             value={queixa ?? ''}
             onChange={(e) => setQueixa?.(e.target.value)}
+            onBlur={() => onCampoAvaliacaoBlur?.('queixa')}
+            data-campo-consulta="avaliacao:queixa"
             rows={3}
             className="w-full rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3 text-[16px] font-medium outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px]"
             placeholder="Descreva o motivo da consulta..."
@@ -66,9 +86,26 @@ export function ConsultaAvaliacaoFlow({
             id="consulta-avaliacao-expectativas"
             value={expectativas ?? ''}
             onChange={(e) => setExpectativas?.(e.target.value)}
+            onBlur={() => onCampoAvaliacaoBlur?.('expectativas')}
+            data-campo-consulta="avaliacao:expectativas"
             rows={3}
             className="w-full rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3 text-[16px] font-medium outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px]"
             placeholder="O que o paciente espera alcançar..."
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="ml-1 text-[13px] font-bold text-[#00a88e]" htmlFor="consulta-avaliacao-observacoes">
+            Observações da avaliação
+          </label>
+          <textarea
+            id="consulta-avaliacao-observacoes"
+            value={observacoesAvaliacao ?? ''}
+            onChange={(e) => setObservacoesAvaliacao?.(e.target.value)}
+            onBlur={() => onCampoAvaliacaoBlur?.('observacoesAvaliacao')}
+            data-campo-consulta="avaliacao:observacoes"
+            rows={3}
+            className="w-full rounded-xl border-[2px] border-[#e2e8f0] bg-[#f8fbfb] p-3 text-[16px] font-medium outline-none focus:border-[#00a88e] focus:ring-2 focus:ring-[#00a88e]/25 sm:text-[14px]"
+            placeholder="Anotações do profissional sobre a avaliação..."
           />
         </div>
       </div>
@@ -91,9 +128,9 @@ export function ConsultaAvaliacaoFlow({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {photos.map((ph, idx) => (
-          <div key={ph.url ? `${ph.url}_${idx}` : idx} className="min-w-0">
+          <div key={chaveFotoLegenda(ph, photos, idx) || idx} className="min-w-0">
             <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
-              <img src={ph.url} alt="" className="h-full w-full object-cover" />
+              <FotoCardImagem photo={ph} urlArquivoReserva={urlArquivoReserva} />
               {typeof onAnnotatePhoto === 'function' ? (
                 <button
                   type="button"
@@ -136,8 +173,23 @@ export function ConsultaAvaliacaoFlow({
       <div className="mt-8 flex justify-end border-t border-app-border pt-6">
         <button
           type="button"
-          onClick={() => onConcluirAvaliacao?.()}
-          disabled={isConcluirBusy}
+          onClick={async () => {
+            // A fila de gravação da avaliação esvazia antes de concluir (o AppRefactored cuida do id do preenchimento).
+            if (typeof esperarFilaAvaliacao === 'function') {
+              setEsperandoFila(true);
+              try {
+                const r = await esperarFilaAvaliacao();
+                if (r?.ok === false) {
+                  toast.warning('Aguarde: ainda enviando a avaliação…');
+                  return;
+                }
+              } finally {
+                setEsperandoFila(false);
+              }
+            }
+            onConcluirAvaliacao?.();
+          }}
+          disabled={isConcluirBusy || esperandoFila}
           className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-app-accent px-6 py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isConcluirBusy ? 'Salvando…' : 'Concluir Avaliação'}

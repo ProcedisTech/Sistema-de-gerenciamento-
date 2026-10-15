@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { criarLeitorAvisos, STATUS_LEITOR, TEMPOS_PADRAO } from './canalAvisos.js';
+import {
+  __definirIdDaAbaParaTestes,
+  criarLeitorAvisos,
+  idDaAba,
+  STATUS_LEITOR,
+  TEMPOS_PADRAO,
+} from './canalAvisos.js';
 import {
   criarServidorFalso,
   definirVisibilidade,
@@ -16,18 +22,19 @@ vi.mock('../api', () => ({
 const passar = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
 
 function montar(servidor, extras = {}) {
-  const eventos = { conectado: [], aviso: [], recarregar: [], substituida: 0, status: [] };
+  const eventos = { conectado: [], aviso: [], recarregar: [], pendenciaLiberada: [], substituida: 0, status: [] };
   const obterHeaders = vi.fn(async ({ token }) => ({ Authorization: `Bearer ${token ?? 'tok-1'}`, 'X-Org-Id': 'org-1' }));
   const leitor = criarLeitorAvisos({
     orgId: 'org-1',
     url: '/api/v1/eventos/stream',
     fetchImpl: servidor.fetchImpl,
     obterHeaders,
-    renovarToken: vi.fn().mockResolvedValue('tok-2'),
+    renovarToken: vi.fn().mockResolvedValue({ tipo: 'ok', token: 'tok-2' }),
     aleatorio: () => 0.5,
     onConectado: (i) => eventos.conectado.push(i),
     onAviso: (a) => eventos.aviso.push(a),
     onRecarregar: (r) => eventos.recarregar.push(r),
+    onPendenciaLiberada: (p) => eventos.pendenciaLiberada.push(p),
     onSubstituida: () => {
       eventos.substituida += 1;
     },
@@ -45,6 +52,92 @@ describe('criarLeitorAvisos', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    __definirIdDaAbaParaTestes(null);
+  });
+
+  describe('idDaAba', () => {
+    it('é um UUID gerado uma vez por carga e não vai para o sessionStorage/localStorage', () => {
+      __definirIdDaAbaParaTestes(null);
+      const a = idDaAba();
+      expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      expect(idDaAba()).toBe(a);
+      expect(Object.keys(sessionStorage)).toHaveLength(0);
+      expect(Object.keys(localStorage)).toHaveLength(0);
+    });
+
+    it('sem crypto.randomUUID usa o fallback e ainda gera um UUID v4', () => {
+      __definirIdDaAbaParaTestes(null);
+      const original = globalThis.crypto.randomUUID;
+      Object.defineProperty(globalThis.crypto, 'randomUUID', { configurable: true, value: undefined });
+      try {
+        expect(idDaAba()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      } finally {
+        Object.defineProperty(globalThis.crypto, 'randomUUID', { configurable: true, value: original });
+      }
+    });
+
+    it('__definirIdDaAbaParaTestes fixa o id', () => {
+      __definirIdDaAbaParaTestes('aba-fixa');
+      expect(idDaAba()).toBe('aba-fixa');
+    });
+  });
+
+  it('manda X-Aba-Id em todo fetch do stream, estável entre reconexões', async () => {
+    __definirIdDaAbaParaTestes(null);
+    const servidor = criarServidorFalso();
+    const { leitor } = montar(servidor);
+    leitor.iniciar();
+    await passar();
+    const esperado = idDaAba();
+    expect(servidor.ultima().headers['X-Aba-Id']).toBe(esperado);
+    servidor.ultima().enviar(sse.conectado('1'));
+    await passar();
+    servidor.ultima().fechar();
+    await passar(TEMPOS_PADRAO.backoffMs[0]);
+    expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(servidor.ultima().headers['X-Aba-Id']).toBe(esperado);
+    // outro leitor da mesma aba (ex.: troca de clínica) usa o mesmo id
+    const segundo = montar(servidor).leitor;
+    segundo.iniciar();
+    await passar();
+    expect(servidor.ultima().headers['X-Aba-Id']).toBe(esperado);
+    segundo.parar();
+    leitor.parar();
+  });
+
+  it('obterIdDaAba injetado substitui o id padrão', async () => {
+    const servidor = criarServidorFalso();
+    const { leitor } = montar(servidor, { obterIdDaAba: () => 'aba-injetada' });
+    leitor.iniciar();
+    await passar();
+    expect(servidor.ultima().headers['X-Aba-Id']).toBe('aba-injetada');
+    leitor.parar();
+  });
+
+  it('pendencia-liberada chega ao handler sem mexer em ultimoId nem bloquear avisos', async () => {
+    const servidor = criarServidorFalso();
+    const { leitor, eventos } = montar(servidor);
+    leitor.iniciar();
+    await passar();
+    const c = servidor.ultima();
+    c.enviar(sse.conectado('5'));
+    c.enviar('event: pendencia-liberada\ndata: {"atendimentoId":"at-1"}\n\n');
+    c.enviar('event: pendencia-liberada\ndata: {"v":1,"atendimentoId":"at-1"}\n\n');
+    c.enviar('event: pendencia-liberada\nid: 99\ndata: {"atendimentoId":"at-2"}\n\n');
+    c.enviar(sse.aviso('6', 'AGENDA.CRIADO', 'a'));
+    await passar();
+    expect(eventos.pendenciaLiberada).toEqual([
+      { atendimentoId: 'at-1' },
+      { atendimentoId: 'at-1' },
+      { atendimentoId: 'at-2' },
+    ]);
+    expect(leitor.ultimoId).toBe('6');
+    expect(eventos.aviso.map((a) => a.id)).toEqual(['6']);
+    // versão desconhecida é ignorada
+    c.enviar('event: pendencia-liberada\ndata: {"v":99,"atendimentoId":"at-3"}\n\n');
+    await passar();
+    expect(eventos.pendenciaLiberada).toHaveLength(3);
+    leitor.parar();
   });
 
   it('abre com Bearer, X-Org-Id, Accept SSE, credentials omit e sem token na URL', async () => {
@@ -227,20 +320,23 @@ describe('criarLeitorAvisos', () => {
   it('401 renova o token uma vez e reconecta com o token novo', async () => {
     const servidor = criarServidorFalso();
     servidor.responder({ status: 401 });
-    const renovarToken = vi.fn().mockResolvedValue('tok-2');
+    const renovarToken = vi.fn().mockResolvedValue({ tipo: 'ok', token: 'tok-2' });
     const { leitor, obterHeaders } = montar(servidor, { renovarToken });
     leitor.iniciar();
     await passar();
     expect(renovarToken).toHaveBeenCalledTimes(1);
+    expect(renovarToken).toHaveBeenCalledWith('tok-1');
     expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
     expect(obterHeaders).toHaveBeenLastCalledWith({ orgId: 'org-1', token: 'tok-2' });
     expect(servidor.ultima().headers.Authorization).toBe('Bearer tok-2');
     leitor.parar();
   });
 
-  it('401 seguido de renovação falha vai para bloqueado sem laço', async () => {
+  // B-42 FD: antes "renovação falha" (null) → bloqueado. Agora só a falha DEFINITIVA bloqueia (a saída da aba vem
+  // do auth:expired que a renovação dispara); falha de rede tem o teste abaixo.
+  it('401 seguido de renovação recusada (definitiva) vai para bloqueado sem laço', async () => {
     const servidor = criarServidorFalso({ responder: () => ({ status: 401 }) });
-    const renovarToken = vi.fn().mockResolvedValue(null);
+    const renovarToken = vi.fn().mockResolvedValue({ tipo: 'definitiva' });
     const { leitor } = montar(servidor, { renovarToken });
     leitor.iniciar();
     await passar();
@@ -253,13 +349,61 @@ describe('criarLeitorAvisos', () => {
 
   it('401 de novo após renovar também bloqueia (sem segunda renovação)', async () => {
     const servidor = criarServidorFalso({ responder: () => ({ status: 401 }) });
-    const renovarToken = vi.fn().mockResolvedValue('tok-2');
+    const renovarToken = vi.fn().mockResolvedValue({ tipo: 'ok', token: 'tok-2' });
     const { leitor } = montar(servidor, { renovarToken });
     leitor.iniciar();
     await passar(120_000);
     expect(renovarToken).toHaveBeenCalledTimes(1);
     expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
     expect(leitor.status).toBe(STATUS_LEITOR.BLOQUEADO);
+    leitor.parar();
+  });
+
+  it('401 com renovação sem rede → falha de conexão (erro + backoff, nunca bloqueado) e reconecta quando a rede volta', async () => {
+    const servidor = criarServidorFalso();
+    servidor.responder({ status: 401 });
+    servidor.responder({ status: 401 });
+    const renovarToken = vi
+      .fn()
+      .mockResolvedValueOnce({ tipo: 'rede' })
+      .mockResolvedValueOnce({ tipo: 'rede' })
+      .mockResolvedValueOnce({ tipo: 'ok', token: 'tok-2' });
+    const { leitor, eventos } = montar(servidor, { renovarToken });
+    leitor.iniciar();
+    await passar();
+    expect(renovarToken).toHaveBeenCalledTimes(1);
+    expect(leitor.status).toBe(STATUS_LEITOR.ERRO);
+    expect(eventos.status).not.toContain(STATUS_LEITOR.BLOQUEADO);
+
+    // backoff (1 s): tenta de novo e renova de novo (a renovação anterior não valeu)
+    await passar(1000);
+    expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(renovarToken).toHaveBeenCalledTimes(2);
+    expect(leitor.status).toBe(STATUS_LEITOR.ERRO);
+
+    // a rede volta: 'online' reconecta na hora; 401 → renova (ok) → conecta com o token novo
+    servidor.responder({ status: 401 });
+    window.dispatchEvent(new Event('online'));
+    await passar();
+    expect(renovarToken).toHaveBeenCalledTimes(3);
+    expect(servidor.ultima().headers.Authorization).toBe('Bearer tok-2');
+    servidor.ultima().enviar(sse.conectado('1'));
+    await passar();
+    expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+    expect(eventos.status).not.toContain(STATUS_LEITOR.BLOQUEADO);
+    leitor.parar();
+  });
+
+  it('renovação que rejeita é tratada como falha de rede (nunca bloqueado)', async () => {
+    const servidor = criarServidorFalso();
+    servidor.responder({ status: 401 });
+    const renovarToken = vi.fn().mockRejectedValueOnce(new Error('lock'));
+    const { leitor } = montar(servidor, { renovarToken });
+    leitor.iniciar();
+    await passar();
+    expect(leitor.status).toBe(STATUS_LEITOR.ERRO);
+    await passar(1000);
+    expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
     leitor.parar();
   });
 

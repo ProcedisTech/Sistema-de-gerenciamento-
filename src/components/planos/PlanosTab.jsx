@@ -67,6 +67,8 @@ import {
 } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
+const LISTA_VAZIA = Object.freeze([]);
+
 function formatValorBrl(val) {
   if (val == null || val === '') return '—';
   const n = Number(val);
@@ -1090,8 +1092,8 @@ export function PlanosTab({
   paciente,
   roleUserId,
   pacienteNome,
-  procedimentosFeitos = [],
-  galeriaFotosInicial = [],
+  procedimentosFeitos = LISTA_VAZIA,
+  galeriaFotosInicial = LISTA_VAZIA,
   onAgendarItem,
   onAgendarRetornoItem,
   onReagendarItem,
@@ -1251,11 +1253,15 @@ export function PlanosTab({
     Array.isArray(procedimentosFeitos) ? procedimentosFeitos : []
   );
 
+  const pacienteFeitosPedidoRef = useRef('');
+
   const carregarProcedimentosFeitos = useCallback(async () => {
     const pid = String(pacienteId ?? '').trim();
+    pacienteFeitosPedidoRef.current = pid;
     if (!pid) return;
     try {
       const res = await procedimentosApi.byPaciente(pid);
+      if (pacienteFeitosPedidoRef.current !== pid) return;
       if (Array.isArray(res)) {
         setInternalProcedimentosFeitos(res);
       }
@@ -1268,6 +1274,7 @@ export function PlanosTab({
     if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
       setInternalProcedimentosFeitos(procedimentosFeitos);
     } else {
+      setInternalProcedimentosFeitos(LISTA_VAZIA);
       carregarProcedimentosFeitos();
     }
   }, [procedimentosFeitos, carregarProcedimentosFeitos]);
@@ -1600,7 +1607,9 @@ export function PlanosTab({
       let targetItem = item;
       let targetPlano = _plano || displayPlanos.find((p) => String(p.id) === String(item?.planejamentoId)) || displayPlanos[0];
       const pid = targetPlano?.id;
-      const itemId = targetItem?.id || targetItem?.planejamentoItemId;
+      // O item de retorno da linha do tempo tem id `${planejamentoItemId}_retorno`; trocá-lo pelo item do detalhe
+      // perderia isRetorno e a origem.
+      const itemId = String(targetItem?.id || targetItem?.planejamentoItemId || '').replace(/_retorno$/, '');
 
       if (pid && (targetPlano?.statusCodigo === 'rascunho' || !isRealUuid(itemId))) {
         try {
@@ -2192,7 +2201,7 @@ export function PlanosTab({
             selecionados={selecionados}
             onToggleSelecao={toggleSelecao}
             termosFaltantes={termosFaltantes}
-            procedimentosFeitos={procedimentosFeitos}
+            procedimentosFeitos={listaProcedimentosFeitos}
           />
         </div>
 

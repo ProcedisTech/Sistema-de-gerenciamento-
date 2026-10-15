@@ -273,14 +273,33 @@ export function useMapaAplicacaoState() {
     [vistaAtual, markDirty],
   );
 
-  const hydrateFromApi = useCallback((response) => {
+  /**
+   * `preservarVistas` (rascunho da consulta, C4): vistas com mudança local ainda não salva ficam como estão, com a
+   * marca de suja; as outras recebem o que veio do servidor.
+   */
+  const hydrateFromApi = useCallback((response, { preservarVistas } = {}) => {
     if (!hasMapaHydrateContent(response)) {
       return { applied: false, data: null };
     }
     const data = hydrateMapaFromGet(response);
-    setPontosPorVista(data.pontosPorVista || {});
-    setFotoGaleriaIdPorVista(data.fotoGaleriaIdPorVista || {});
-    setDirtyVistas(new Set());
+    const preservar = new Set(preservarVistas || []);
+    if (preservar.size === 0) {
+      setPontosPorVista(data.pontosPorVista || {});
+      setFotoGaleriaIdPorVista(data.fotoGaleriaIdPorVista || {});
+      setDirtyVistas(new Set());
+      return { applied: true, data };
+    }
+    const mesclar = (atual, doServidor) => {
+      const next = { ...(doServidor || {}) };
+      for (const v of preservar) {
+        if (v in atual) next[v] = atual[v];
+        else delete next[v];
+      }
+      return next;
+    };
+    setPontosPorVista((prev) => mesclar(prev, data.pontosPorVista));
+    setFotoGaleriaIdPorVista((prev) => mesclar(prev, data.fotoGaleriaIdPorVista));
+    setDirtyVistas((prev) => new Set([...prev].filter((v) => preservar.has(v))));
     return { applied: true, data };
   }, []);
 

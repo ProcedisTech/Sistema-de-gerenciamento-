@@ -46,6 +46,7 @@ import {
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
+import { chaveFotoLegenda } from './chaveFotoLegenda.js';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
 import { useOrg } from '../../contexts/OrgContext.jsx';
@@ -56,6 +57,15 @@ import { useFusoClinica } from '../hooks/useFusoClinica';
 
 
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
+
+/**
+ * `enviarAssinaturaPelaFila` devolve o envelope { ok, assinatura, naFila, status, erro, naoEntrou }.
+ * Tolera o formato cru (a própria assinatura, legado/mocks) embrulhando-o como sucesso.
+ */
+function desembrulharAssinatura(r) {
+  if (r != null && typeof r === 'object' && 'ok' in r && 'naFila' in r) return r;
+  return { ok: true, assinatura: r, naFila: false, status: null };
+}
 
 function formatTimestamp(ts, fuso) {
   if (!ts) return '';
@@ -318,6 +328,10 @@ export function Step3Termos({
   exigirFilaVinculo = true,
   termoFocoId = null,
   onAbrirMetodosAssinatura,
+  atendimentoId = null,
+  termosDaConsulta,
+  gravarEstadoTermos,
+  enviarAssinaturaPelaFila,
 }) {
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
@@ -384,9 +398,48 @@ export function Step3Termos({
       .catch(e => console.warn('Falha ao carregar configurações de assinatura:', e));
   }, [orgId]);
 
+  const termosDaConsultaRef = useRef(termosDaConsulta);
+  const carregarAssinadosLegadoRef = useRef(null);
+  termosDaConsultaRef.current = termosDaConsulta;
+  const termosDisponiveisRef = useRef(termosDisponiveis);
+  termosDisponiveisRef.current = termosDisponiveis;
+
+  /**
+   * F3: título do termo por id. Ordem: `titulo` do termo na consulta (servidor) -> termo do catálogo carregado ->
+   * `extra` (ex.: termoTitulo do registro legado). O fallback genérico só entra por último, em quem chama.
+   */
+  const tituloDoTermoId = useCallback((termoId, extra = null) => {
+    const id = termoId != null ? String(termoId) : '';
+    if (id) {
+      const daConsulta = (Array.isArray(termosDaConsultaRef.current) ? termosDaConsultaRef.current : []).find(
+        (t) => String(t?.termoId) === id,
+      );
+      const t1 = typeof daConsulta?.titulo === 'string' ? daConsulta.titulo.trim() : '';
+      if (t1) return t1;
+      const doCatalogo = termosDisponiveisRef.current.find((t) => String(t?.id) === id);
+      const t2 = typeof doCatalogo?.titulo === 'string' ? doCatalogo.titulo.trim() : '';
+      if (t2) return t2;
+    }
+    const t3 = typeof extra === 'string' ? extra.trim() : '';
+    return t3 || null;
+  }, []);
+
+  const fechadoNoServidor = useCallback((termoId) => {
+    if (termoId == null || !Array.isArray(termosDaConsultaRef.current)) return false;
+    return termosDaConsultaRef.current.some(
+      (t) =>
+        String(t?.termoId) === String(termoId) &&
+        (t.statusAssinatura === 'ASSINADO' || t.statusAssinatura === 'RECUSADO'),
+    );
+  }, []);
+
   const handlePrepararSessaoExterna = async (escolha) => {
     setModalEscolhaOpen(false);
     let assinaturaId = backendAssinaturaId;
+    if (!assinaturaId && fechadoNoServidor(termoSelecionadoId)) {
+      toast.info('Este termo já consta como assinado nesta consulta.');
+      return;
+    }
     if (!assinaturaId) {
       try {
         const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
@@ -415,6 +468,7 @@ export function Step3Termos({
           conteudoSnapshot,
           userAgent: navigator.userAgent,
           ipAddress,
+          ...(atendimentoId ? { atendimentoId } : {}),
         });
         
         assinaturaId = resultado.id;
@@ -444,6 +498,7 @@ export function Step3Termos({
     }
     onAssinaturaSalva?.(resultado);
     const titulo =
+      tituloDoTermoId(termoSelecionadoId ?? resultado?.termoId) ??
       termoSelecionado?.titulo ??
       termoSelecionado?.title ??
       (typeof termoTitulo === 'string' && termoTitulo.trim() ? termoTitulo.trim() : 'Termo de Consentimento');
@@ -494,6 +549,7 @@ export function Step3Termos({
     termoTitulo,
     termosAssinados,
     toast,
+    tituloDoTermoId,
   ]);
 
   useEffect(() => {
@@ -509,6 +565,15 @@ export function Step3Termos({
     }
 
     const salvar = async () => {
+      if (fechadoNoServidor(termoSelecionadoId)) {
+        setAssinaturaPersistida(true);
+        toast.info('Este termo já consta como assinado nesta consulta.');
+        setProfissionalAssinaturaDataUrl('');
+        setTermoAssinaturaDataUrl('');
+        setTermoSelecionadoId(null);
+        setTermoSelecionado(null);
+        return;
+      }
       try {
         setAssinaturaPersistida(true);
         const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
@@ -524,7 +589,7 @@ export function Step3Termos({
           console.warn('Não foi possível capturar o IP', e);
         }
 
-        const resultado = await termoAssinaturaApi.criar({
+        const corpoAssinatura = {
           termoId: termoSelecionadoId,
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
@@ -545,10 +610,43 @@ export function Step3Termos({
           conteudoSnapshot,
           userAgent: navigator.userAgent,
           ipAddress,
-        });
+          ...(atendimentoId ? { atendimentoId } : {}),
+        };
+
+        let resultado;
+        if (typeof enviarAssinaturaPelaFila === 'function') {
+          // Com hub: pela fila (sobe sozinha, sobrevive ao F5). Devolve { ok, assinatura, naFila }.
+          const r = desembrulharAssinatura(await enviarAssinaturaPelaFila(corpoAssinatura));
+          if (r.naFila) {
+            // Sem internet: guardada na fila; não reenvia em laço (assinaturaPersistida segue verdadeiro).
+            toast.info('Assinatura guardada; será enviada quando a internet voltar.');
+            return;
+          } else if (r.ok && r.assinatura?.id) {
+            resultado = r.assinatura;
+          } else if (r.ok) {
+            // Sucesso sem id: não registra como assinada; relê a lista da consulta.
+            if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegadoRef.current?.();
+            return;
+          } else if (r.naoEntrou) {
+            toast.warning('A consulta já foi encerrada; a assinatura não entrou.');
+            return;
+          } else {
+            const erro = new Error('Não foi possível salvar a assinatura.');
+            erro.status = r.status ?? r.erro?.status;
+            throw erro;
+          }
+        } else {
+          resultado = await termoAssinaturaApi.criar(corpoAssinatura);
+        }
 
         registrarTermoNaJornada(resultado);
       } catch (e) {
+        if (e?.status === 409) {
+          // Já existe para esta consulta (corrida de duas abas): relê sem erro, sem reenviar.
+          if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegadoRef.current?.();
+          toast.info('Este termo já foi registrado nesta consulta.');
+          return;
+        }
         setAssinaturaPersistida(false);
         toast.error('Erro ao salvar assinatura: ' + (e?.message || 'Tente novamente'));
       }
@@ -569,10 +667,115 @@ export function Step3Termos({
     pacienteRecusou,
     registrarTermoNaJornada,
     toast,
+    atendimentoId,
+    fechadoNoServidor,
+    enviarAssinaturaPelaFila,
+    setProfissionalAssinaturaDataUrl,
+    setTermoAssinaturaDataUrl,
   ]);
 
   const termosAssinadosRef = useRef(termosAssinados);
   termosAssinadosRef.current = termosAssinados;
+
+  // Com o hub, a lista de termos da consulta chega pela prop `termosDaConsulta` (o hook reage ao aviso)
+  // e SUBSTITUI a lista de assinados a cada mudança. Sem hub (fluxo antigo), lê do servidor uma vez.
+  const temHub = Array.isArray(termosDaConsulta);
+  useEffect(() => {
+    if (!Array.isArray(termosDaConsulta)) return;
+    const fechados = termosDaConsulta.filter(
+      (t) =>
+        t?.termoId &&
+        t.termoAssinaturaId &&
+        (t.statusAssinatura === 'ASSINADO' || t.statusAssinatura === 'RECUSADO'),
+    );
+    setTermosAssinados((prev) => {
+      const lista = Array.isArray(prev) ? prev : [];
+      const locaisEmEnvio = lista.filter((t) => !t?.backendAssinaturaId);
+      const comId = lista.filter((t) => t?.backendAssinaturaId);
+      const porId = new Map(comId.map((t) => [String(t.backendAssinaturaId), t]));
+      const doServidor = fechados.map(
+        (a) =>
+          porId.get(String(a.termoAssinaturaId)) ?? {
+            termoId: String(a.termoId),
+            termoTitulo: tituloDoTermoId(a.termoId, a.termoTitulo) || DEFAULT_TERMO_TITULO,
+            backendAssinaturaId: a.termoAssinaturaId,
+            resultadoCompleto: {
+              id: a.termoAssinaturaId,
+              termoId: a.termoId,
+              statusCodigo: a.statusAssinatura,
+              atendimentoId,
+            },
+          },
+      );
+      const igual =
+        doServidor.length === comId.length &&
+        doServidor.every((t, i) => String(t.backendAssinaturaId) === String(comId[i].backendAssinaturaId));
+      return igual ? prev : [...doServidor, ...locaisEmEnvio];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termosDaConsulta]);
+
+  const assinadosCarregadosRef = useRef(null);
+  const carregarAssinadosLegado = useCallback(() => {
+    if (!atendimentoId || !pacienteId) return () => {};
+    let cancelled = false;
+    termoAssinaturaApi.listarPorPaciente(pacienteId)
+      .then((lista) => {
+        if (cancelled) return;
+        assinadosCarregadosRef.current = atendimentoId;
+        const daConsulta = (Array.isArray(lista) ? lista : []).filter(
+          (a) =>
+            a?.termoId &&
+            String(a.atendimentoId || '') === String(atendimentoId) &&
+            (a.statusCodigo === 'ASSINADO' || a.statusCodigo === 'RECUSADO'),
+        );
+        if (daConsulta.length === 0) return;
+        setTermosAssinados((prev) => {
+          const ja = new Set((prev || []).map((t) => String(t?.termoId)));
+          const novos = daConsulta
+            .filter((a) => !ja.has(String(a.termoId)))
+            .map((a) => ({
+              termoId: String(a.termoId),
+              termoTitulo: tituloDoTermoId(a.termoId, a.termoTitulo) || DEFAULT_TERMO_TITULO,
+              backendAssinaturaId: a.id,
+              resultadoCompleto: a,
+            }));
+          return novos.length > 0 ? [...(prev || []), ...novos] : prev;
+        });
+      })
+      .catch((e) => console.warn('[termos] Falha ao carregar os assinados da consulta:', e?.message || e));
+    return () => {
+      cancelled = true;
+    };
+  }, [atendimentoId, pacienteId, setTermosAssinados, tituloDoTermoId]);
+  carregarAssinadosLegadoRef.current = carregarAssinadosLegado;
+
+  useEffect(() => {
+    if (temHub) return undefined;
+    if (!atendimentoId || !pacienteId || assinadosCarregadosRef.current === atendimentoId) return undefined;
+    return carregarAssinadosLegado();
+  }, [temHub, atendimentoId, pacienteId, carregarAssinadosLegado]);
+
+  // PENDENTE da consulta: o termo escolhido reaproveita a assinatura existente (concluir-presencial).
+  useEffect(() => {
+    if (!Array.isArray(termosDaConsulta) || !termoSelecionadoId || backendAssinaturaId) return;
+    const pendente = termosDaConsulta.find(
+      (t) =>
+        String(t?.termoId) === String(termoSelecionadoId) &&
+        t.statusAssinatura === 'PENDENTE' &&
+        t.termoAssinaturaId,
+    );
+    if (pendente) setBackendAssinaturaId(pendente.termoAssinaturaId);
+  }, [termosDaConsulta, termoSelecionadoId, backendAssinaturaId]);
+
+  // Grava o estado dos termos no servidor uma vez por ação (escolher termo / mudar pendentes).
+  const [gravarTick, setGravarTick] = useState(0);
+  const termosLidosAbertosRef = useRef(new Set());
+  const gravarEstadoTermosRef = useRef(gravarEstadoTermos);
+  gravarEstadoTermosRef.current = gravarEstadoTermos;
+  useEffect(() => {
+    if (gravarTick > 0) gravarEstadoTermosRef.current?.();
+  }, [gravarTick]);
 
   const catalogoKey = (catalogoIds || []).map(String).join(',');
 
@@ -583,7 +786,7 @@ export function Step3Termos({
       try {
         const listPromise = termosApi.list();
         const resolucaoPromise = pacienteId
-          ? termosApi.resolver({ pacienteId, catalogoIds })
+          ? termosApi.resolver({ pacienteId, catalogoIds, atendimentoId })
           : Promise.resolve(null);
         const [raw, resolucaoRaw] = await Promise.all([listPromise, resolucaoPromise]);
         if (cancelled) return;
@@ -622,7 +825,7 @@ export function Step3Termos({
     return () => {
       cancelled = true;
     };
-  }, [pacienteId, catalogoKey, exigirFilaVinculo, setTermosPendentesIds]);
+  }, [pacienteId, catalogoKey, atendimentoId, exigirFilaVinculo, setTermosPendentesIds]);
 
   useEffect(() => {
     if (!termoMenuOpen) return undefined;
@@ -659,7 +862,10 @@ export function Step3Termos({
     typeof termoConteudo === 'string' && termoConteudo.trim() ? termoConteudo.trim() : '';
 
   const tituloExibicao =
-    termoSelecionado?.titulo ?? termoSelecionado?.title ?? tituloFallbackProp;
+    tituloDoTermoId(termoSelecionadoId) ??
+    termoSelecionado?.titulo ??
+    termoSelecionado?.title ??
+    tituloFallbackProp;
   
   let conteudoExibicao =
     termoSelecionado?.conteudo ?? termoSelecionado?.content ?? conteudoFallbackProp;
@@ -722,6 +928,7 @@ export function Step3Termos({
         return [...prev, id];
       }
     });
+    setGravarTick((n) => n + 1);
   }, [setTermosPendentesIds, termoSelecionadoId, idsAssinadosJornada]);
 
   const abrirTermoParaAssinatura = useCallback(
@@ -739,12 +946,24 @@ export function Step3Termos({
       setPatAssinaturaTimestamp(null);
       setAssinaturaPersistida(false);
       setBackendAssinaturaId(null);
+      // "Lido" automático ao abrir o termo para ler: 1 marcação/gravação por termo.
+      const idStr = String(id);
+      const jaLidoNoServidor =
+        Array.isArray(termosDaConsulta) &&
+        termosDaConsulta.some((t) => String(t?.termoId) === idStr && (t.lido === true || t.lidoEm));
+      if (jaLidoNoServidor || termosLidosAbertosRef.current.has(idStr)) {
+        // nada a marcar nem gravar de novo
+      } else {
+        termosLidosAbertosRef.current.add(idStr);
+        if (typeof setTermoLido === 'function') setTermoLido(true);
+        setGravarTick((n) => n + 1);
+      }
       
       if (typeof setStep4Errors === 'function') {
         setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
       }
     },
-    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis, idsAssinadosJornada]
+    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis, idsAssinadosJornada, termosDaConsulta]
   );
 
   useEffect(() => {
@@ -874,6 +1093,17 @@ export function Step3Termos({
         return;
       }
 
+      if (fechadoNoServidor(termoSelecionadoId)) {
+        toast.info('Este termo já consta como assinado nesta consulta.');
+        setPatSigningOpen(false);
+        setPatSigningSaving(false);
+        setProfissionalAssinaturaDataUrl('');
+        setTermoAssinaturaDataUrl('');
+        setTermoSelecionadoId(null);
+        setTermoSelecionado(null);
+        return;
+      }
+
       setAssinaturaPersistida(true);
       const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
       let ipAddress = null;
@@ -887,7 +1117,7 @@ export function Step3Termos({
         // ignore
       }
 
-      const resultado = await termoAssinaturaApi.criar({
+      const corpoAssinatura = {
         termoId: termoSelecionadoId,
         pacienteId,
         procedimentoFeitoId: procedimentoFeitoId ?? null,
@@ -904,9 +1134,54 @@ export function Step3Termos({
         conteudoSnapshot,
         userAgent: navigator.userAgent,
         ipAddress,
-      });
-      finalizeSuccess(resultado);
+        ...(atendimentoId ? { atendimentoId } : {}),
+      };
+      // 201 (nova) e 200 (já existia, idempotente) são sucesso; pela fila, tenta de novo sozinha sem internet.
+      if (typeof enviarAssinaturaPelaFila !== 'function') {
+        finalizeSuccess(await termoAssinaturaApi.criar(corpoAssinatura));
+        return;
+      }
+      const r = desembrulharAssinatura(await enviarAssinaturaPelaFila(corpoAssinatura));
+      if (r.naFila) {
+        // Sem internet: a fila reenvia sozinha; nada marcado como assinado na jornada.
+        toast.info('Assinatura guardada; será enviada quando a internet voltar.');
+        setPatSigningOpen(false);
+        setPatSigningError(null);
+        setPatSigningSaving(false);
+        return;
+      }
+      if (r.ok) {
+        if (r.assinatura?.id) {
+          finalizeSuccess(r.assinatura);
+        } else {
+          // Sucesso sem id: não registra como assinada; relê.
+          if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegado();
+          setPatSigningOpen(false);
+          setPatSigningError(null);
+          setPatSigningSaving(false);
+        }
+        return;
+      }
+      if (r.naoEntrou) {
+        toast.warning('A consulta já foi encerrada; a assinatura não entrou.');
+        setPatSigningOpen(false);
+        setPatSigningError(null);
+        setPatSigningSaving(false);
+        return;
+      }
+      const erro = new Error('Erro ao salvar assinatura: ' + (r.erro?.message || 'Tente novamente'));
+      erro.status = r.status ?? r.erro?.status;
+      throw erro;
     } catch (e) {
+      if (e?.status === 409) {
+        // Já existe para esta consulta: relê sem erro (hub: o aviso entrega a lista nova pela prop).
+        if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegado();
+        toast.info('Este termo já foi registrado nesta consulta.');
+        setPatSigningOpen(false);
+        setPatSigningError(null);
+        setPatSigningSaving(false);
+        return;
+      }
       setAssinaturaPersistida(false);
       setPatSigningError(e?.message || 'Erro ao salvar assinatura');
       setPatSigningRetryable(true);
@@ -1830,6 +2105,10 @@ export function Step4Procedimento({
   onAutoSaveProcedimento = null,
   onProcedureOpenCamera,
   onClearMapaCaptureIntent,
+  /** Id do item da consulta (servidor); só com ele a observação ganha `data-campo-consulta`. */
+  itemId = null,
+  /** F5: (photo) => path /arquivo da foto no servidor (`?v=` pela versão que a foto conhece); repassado às faixas. */
+  urlArquivoReserva = null,
 }) {
   const { fuso } = useFusoClinica();
   const gravarProcedimentoCatalogo = (nome, id) => {
@@ -1861,7 +2140,7 @@ export function Step4Procedimento({
           (p) => String(p.id).trim() === String(catalogoId).trim(),
         )
       : [];
-  /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
+  /** Legenda por foto; chave = `meta.fotoId` (estável quando a url muda), senão `ph.url`. Índice não é estável. */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState(GALERIA_CATEGORIA.ANTES);
   /** Lightbox somente leitura para fotos da avaliação (referência). */
@@ -1915,7 +2194,24 @@ export function Step4Procedimento({
   }, [laneMenuOpen]);
 
   React.useEffect(() => {
-    const urls = new Set((procedureCapturedPhotos || []).map((p) => p.url).filter(Boolean));
+    // F5: mesma chave do PhotoCarouselLane (calculada por faixa de categoria, com o índice original).
+    const todas = procedureCapturedPhotos || [];
+    const faixas = { antes: [], depois: [], mapa: [], outros: [] };
+    todas.forEach((photo, originalIndex) => {
+      const cat = photo.meta?.categoria;
+      const faixa = cat === GALERIA_CATEGORIA.ANTES ? 'antes'
+        : cat === GALERIA_CATEGORIA.DEPOIS ? 'depois'
+          : cat === GALERIA_CATEGORIA.MAPA ? 'mapa' : 'outros';
+      faixas[faixa].push({ photo, originalIndex });
+    });
+    const urls = new Set();
+    Object.values(faixas).forEach((faixa) => {
+      const lista = faixa.map((it) => it.photo);
+      faixa.forEach(({ photo, originalIndex }) => {
+        const k = chaveFotoLegenda(photo, lista, originalIndex);
+        if (k) urls.add(k);
+      });
+    });
     setLegendas((prev) => {
       const next = { ...prev };
       let changed = false;
@@ -2118,6 +2414,7 @@ export function Step4Procedimento({
             )}
             <textarea
               value={observacoesExecucao}
+              data-campo-consulta={itemId ? `item:${itemId}:obs` : undefined}
               onChange={(e) => setObservacoesExecucao(e.target.value)}
               onBlur={async () => {
                 if (!observacoesExecucao?.trim() || typeof onAutoSaveProcedimento !== 'function') return;
@@ -2197,6 +2494,7 @@ export function Step4Procedimento({
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
         onAnnotate={onProcedureAnnotatePhoto}
+        urlArquivoReserva={urlArquivoReserva}
         showUpload={!execucaoBloqueadaPorTermos}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.antes}' adicionada.`}
       />
@@ -2210,6 +2508,7 @@ export function Step4Procedimento({
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
         onAnnotate={onProcedureAnnotatePhoto}
+        urlArquivoReserva={urlArquivoReserva}
         showUpload={!execucaoBloqueadaPorTermos}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.depois}' adicionada.`}
       />
@@ -2223,6 +2522,7 @@ export function Step4Procedimento({
           setLegendas={setLegendas}
           onRemove={onProcedureRemovePhoto}
           onAnnotate={onProcedureAnnotatePhoto}
+          urlArquivoReserva={urlArquivoReserva}
           showUpload={false}
           emptyHint="Sem fotos mapa (Legado)"
         />
@@ -2238,6 +2538,7 @@ export function Step4Procedimento({
           onUpload={handleLaneUploadClick}
           onRemove={onProcedureRemovePhoto}
           onAnnotate={onProcedureAnnotatePhoto}
+          urlArquivoReserva={urlArquivoReserva}
           showUpload={!execucaoBloqueadaPorTermos}
           emptyHint="Nenhuma foto diversa adicionada."
         />

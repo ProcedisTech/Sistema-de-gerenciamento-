@@ -10,6 +10,11 @@ import {
 } from '../../utils/patientProfileDerivedDates.js';
 import { hojeDaClinica, instanteMs, parseDataCalendario, proximoAniversario } from '../../utils/datasClinica.js';
 import { useFusoClinica } from './useFusoClinica.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+
+/** Espera do aviso PACIENTE: avisos juntos dentro dela viram uma rebusca só. */
+const DEBOUNCE_AVISO_PACIENTE_MS = 400;
 
 const ACTIVE_PATIENT_CPF_KEY = 'selectedPatientCpf';
 const ACTIVE_PATIENT_CPF_LEGACY_KEY = 'activePatientCpf';
@@ -120,6 +125,10 @@ export const usePatientState = (opts = {}) => {
   const [patientListPage, setPatientListPage] = useState(0);
   const [patientListLoading, setPatientListLoading] = useState(false);
   const [patientListBump, setPatientListBump] = useState(0);
+  /** Bump da rebusca por aviso PACIENTE (separado do `patientListBump`, que liga o loading da lista, do KPI e do perfil). */
+  const [patientListAvisoBump, setPatientListAvisoBump] = useState(0);
+  /** `true` quando a próxima busca da lista vem de um aviso: sem loading e, em erro, mantém a tela. */
+  const rebuscaSilenciosaRef = useRef(false);
   const [patientListMeta, setPatientListMeta] = useState({
     first: true,
     last: true,
@@ -170,6 +179,17 @@ export const usePatientState = (opts = {}) => {
     setPatientListBump((x) => x + 1);
   }, []);
 
+  /**
+   * Aviso PACIENTE (criado/editado em outra aba ou aparelho): rebusca a página atual da lista, com os mesmos
+   * filtros, ordenação e busca de texto, sem ligar o loading e sem limpar a tela. Não usa `bumpPatientList`.
+   */
+  const rebuscarListaPorAviso = useCallback(() => {
+    if (!authEnabled) return;
+    rebuscaSilenciosaRef.current = true;
+    setPatientListAvisoBump((x) => x + 1);
+  }, [authEnabled]);
+  useAviso(PREFIXO_AVISO.PACIENTE, rebuscarListaPorAviso, { debounceMs: DEBOUNCE_AVISO_PACIENTE_MS });
+
   const mergePatientById = useCallback((id, updater) => {
     if (!id) return;
     const idStr = String(id);
@@ -215,11 +235,14 @@ export const usePatientState = (opts = {}) => {
         totalElements: 0,
       });
       setPatientListLoading(false);
+      rebuscaSilenciosaRef.current = false;
       return undefined;
     }
 
     let cancelled = false;
-    setPatientListLoading(true);
+    const silencioso = rebuscaSilenciosaRef.current;
+    rebuscaSilenciosaRef.current = false;
+    if (!silencioso) setPatientListLoading(true);
 
     const qTrim = patientSearchQuery.trim();
     const qApi = queryForPacientesSearch(patientSearchQuery);
@@ -228,6 +251,11 @@ export const usePatientState = (opts = {}) => {
 
     const failList = (err) => {
       if (cancelled) return;
+      if (silencioso) {
+        // rebusca por aviso que falhou: a página que já está na tela continua
+        console.warn('[usePatientState] Falha ao rebuscar a lista de pacientes (aviso):', err?.message);
+        return;
+      }
       setPatientListItems([]);
       setPatientListMeta({
         first: true,
@@ -295,6 +323,8 @@ export const usePatientState = (opts = {}) => {
         const totalPages = Math.max(1, Math.ceil(total / PATIENT_LIST_PAGE_SIZE));
         const pageIdx = Math.min(patientListPage, Math.max(0, totalPages - 1));
         if (pageIdx !== patientListPage) {
+          // a busca seguinte (página ajustada) herda o modo silencioso da rebusca por aviso
+          if (silencioso) rebuscaSilenciosaRef.current = true;
           setPatientListPage(pageIdx);
           return;
         }
@@ -323,6 +353,7 @@ export const usePatientState = (opts = {}) => {
     patientSearchQuery,
     patientListSortBy,
     patientListBump,
+    patientListAvisoBump,
     mergePatientById,
     statusPlanoFilter,
     anamneseDesatualizadaFilter,

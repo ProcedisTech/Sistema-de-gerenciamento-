@@ -1,9 +1,23 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useFusoClinica } from './useFusoClinica';
-import { diaDoInstante, hojeDaClinica } from '../../utils/datasClinica';
+import { useState, useCallback, useEffect } from 'react';
+
+/** Formato antigo do horário de início no sessionStorage (com o CPF do paciente na chave): só para remover. */
+const PREFIXO_HORARIO_ANTIGO = 'procedis_start_time_';
+
+/** Remove as chaves antigas do horário de início (o CPF não fica no storage). */
+function removerHorariosAntigos() {
+  try {
+    const antigas = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(PREFIXO_HORARIO_ANTIGO)) antigas.push(k);
+    }
+    antigas.forEach((k) => sessionStorage.removeItem(k));
+  } catch {
+    // ignore
+  }
+}
 
 export const useJourneyState = () => {
-  const { fuso, pronto: fusoPronto } = useFusoClinica();
   const [currentStep, setCurrentStep] = useState(1);
   const [isFinishing, setIsFinishing] = useState(false);
   const [journeyId, setJourneyId] = useState(null);
@@ -37,8 +51,11 @@ export const useJourneyState = () => {
   const [journeyPlanejamentoCtx, setJourneyPlanejamentoCtx] = useState(null);
 
   // ============ ETAPA 2: AVALIAÇÃO ============
-  /** Observações clínicas e expectativas registradas durante a avaliação (antes do upload de fotos). */
-  const [observacoes, setObservacoes] = useState('');
+  /**
+   * Observações clínicas da avaliação (antes do upload de fotos). Vai ao servidor como `observacoesAvaliacao`
+   * (PATCH /atendimentos/{id}/avaliacao-texto). `observacoes`/`setObservacoes` seguem no retorno como alias.
+   */
+  const [observacoesAvaliacao, setObservacoesAvaliacao] = useState('');
   const [imageSrc, setImageSrc] = useState(null);
   const [activeTool, setActiveTool] = useState('draw');
   const [activeColor, setActiveColor] = useState('#ef4444');
@@ -98,50 +115,21 @@ export const useJourneyState = () => {
   const [procedimentoFeitoOrigemId, setProcedimentoFeitoOrigemId] = useState(null);
   const [attendanceStartTimeState, setAttendanceStartTimeState] = useState(null);
 
-  /** Salva o horário de início no state e no sessionStorage escopado pelo CPF do paciente (com trava de mesmo dia). */
-  const setAttendanceStartTime = useCallback((timeIso, patientCpf) => {
-    setAttendanceStartTimeState(timeIso);
-    if (!timeIso) {
-      if (patientCpf) {
-        try {
-          sessionStorage.removeItem(`procedis_start_time_${patientCpf}`);
-        } catch {
-          // ignore
-        }
-      }
-      return;
-    }
-    if (patientCpf) {
-      try {
-        const date = fusoPronto ? diaDoInstante(timeIso, fuso) : '';
-        const payload = JSON.stringify({ time: timeIso, date });
-        sessionStorage.setItem(`procedis_start_time_${patientCpf}`, payload);
-      } catch {
-        // ignore
-      }
-    }
-  }, [fuso, fusoPronto]);
+  // Na primeira leitura, as chaves antigas do horário de início (com CPF) saem do sessionStorage.
+  useEffect(() => {
+    removerHorariosAntigos();
+  }, []);
 
-  /** Recupera o horário de início do state ou do sessionStorage se for do mesmo dia. */
-  const getAttendanceStartTime = useCallback((patientCpf) => {
-    if (attendanceStartTimeState) return attendanceStartTimeState;
-    if (!patientCpf) return null;
-    // Sem o fuso da clínica não dá para decidir "mesmo dia": adia sem descartar nem restaurar.
-    if (!fusoPronto) return null;
-    try {
-      const raw = sessionStorage.getItem(`procedis_start_time_${patientCpf}`);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const diaInicio = parsed?.time ? diaDoInstante(parsed.time, fuso) : '';
-      if (diaInicio && diaInicio === hojeDaClinica(fuso)) {
-        return parsed.time;
-      }
-      sessionStorage.removeItem(`procedis_start_time_${patientCpf}`);
-    } catch {
-      // ignore
-    }
-    return null;
-  }, [attendanceStartTimeState, fuso, fusoPronto]);
+  /** Horário de início só em memória (o storage não guarda nada com o CPF; depois do F5 vale o do servidor). */
+  const setAttendanceStartTime = useCallback((timeIso) => {
+    setAttendanceStartTimeState(timeIso || null);
+  }, []);
+
+  /** O horário de início em memória ou, sem ele, o `iniciadoEm` da consulta no servidor. */
+  const getAttendanceStartTime = useCallback(
+    (iniciadoEmDoServidor) => attendanceStartTimeState || iniciadoEmDoServidor || null,
+    [attendanceStartTimeState],
+  );
 
   const [retornoAvaliacao, setRetornoAvaliacao] = useState({
     satisfacao: null,
@@ -167,36 +155,28 @@ export const useJourneyState = () => {
   const [termosPendentesIds, setTermosPendentesIds] = useState([]);
 
   // ============ ETAPA 5: FINALIZAÇÃO ============
-  /** Itens editáveis de orientação pós-procedimento. */
-  const [orientacoesItens, setOrientacoesItens] = useState([]);
-  /** Evita refetch do template após primeira carga no Step 5 (reset ao reiniciar jornada). */
-  const [orientacoesCarregadas, setOrientacoesCarregadas] = useState(false);
-  /** Derivado: true se pelo menos um item estiver marcado (validação “continuar/finalizar”). */
-  const orientacoes = useMemo(
-    () => Array.isArray(orientacoesItens) && orientacoesItens.some((i) => i && i.checado),
-    [orientacoesItens],
-  );
-  /** Texto mascarado DD/MM/AAAA do próximo retorno (opcional). */
-  const [proximoRetornoDisplay, setProximoRetornoDisplay] = useState('');
+  // F5b: as orientações vivem em cada linha de `procedimentosSessao` (`orient`, `itemId`, `legado`); não há mais
+  // lista única nem "próximo retorno" aqui.
 
-  /** Ao mudar o nome (trim), permite novo fetch de template no Step 5 e evita lista desalinhada. */
-  const setNomeProcedimento = useCallback((value) => {
+  /**
+   * B-42 F3: quando a pessoa troca o nome que a tela mostra por outro (não vazio), a linha perde a marca
+   * `nomeSoDeTela` e o nome passa a ir para o servidor. `{ manterMarca: true }` (entrada na consulta) não mexe nela.
+   */
+  const setNomeProcedimento = useCallback((value, opcoes = {}) => {
     setProcedimentosSessao((prev) => {
       const nextArr = [...prev];
       const cur = nextArr[activeProcedureIndex] || {};
       const prevVal = cur.nomeProcedimento || '';
       const nextVal = typeof value === 'function' ? value(prevVal) : value;
-      const prevTrim = String(prevVal ?? '').trim();
       const nextTrim = String(nextVal ?? '').trim();
 
-      if (prevTrim !== nextTrim) {
-        queueMicrotask(() => {
-          setOrientacoesCarregadas(false);
-          setOrientacoesItens([]);
-        });
-      }
-      
-      nextArr[activeProcedureIndex] = { ...cur, nomeProcedimento: nextVal };
+      const naTela = String(cur.nomeProcedimento || cur.procedimentoNome || '').trim();
+      const trocouONome = !opcoes?.manterMarca && nextTrim !== '' && nextTrim !== naTela;
+      nextArr[activeProcedureIndex] = {
+        ...cur,
+        nomeProcedimento: nextVal,
+        ...(trocouONome ? { nomeSoDeTela: false } : {}),
+      };
       return nextArr;
     });
   }, [activeProcedureIndex]);
@@ -206,19 +186,16 @@ export const useJourneyState = () => {
       const nextArr = [...prev];
       const cur = nextArr[activeProcedureIndex] || {};
       const nextNome = nome != null ? String(nome) : '';
-      const prevTrim = String(cur.nomeProcedimento || '').trim();
       const nextTrim = nextNome.trim();
-      if (prevTrim !== nextTrim) {
-        queueMicrotask(() => {
-          setOrientacoesCarregadas(false);
-          setOrientacoesItens([]);
-        });
-      }
+      const catalogo = catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null;
+      const naTela = String(cur.nomeProcedimento || cur.procedimentoNome || '').trim();
+      // B-42 F3: escolher do catálogo (ou outro nome) é a pessoa mudando o procedimento: a linha perde a marca.
+      const trocou = catalogo != null || (nextTrim !== '' && nextTrim !== naTela);
       nextArr[activeProcedureIndex] = {
         ...cur,
         nomeProcedimento: nextNome,
-        nomeProcedimentoCatalogoId:
-          catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null,
+        nomeProcedimentoCatalogoId: catalogo,
+        ...(trocou ? { nomeSoDeTela: false } : {}),
       };
       return nextArr;
     });
@@ -273,8 +250,11 @@ export const useJourneyState = () => {
     salvarRespostaAnamnese,
     journeyPlanejamentoCtx,
     setJourneyPlanejamentoCtx,
-    observacoes,
-    setObservacoes,
+    observacoesAvaliacao,
+    setObservacoesAvaliacao,
+    /** Alias de `observacoesAvaliacao`/`setObservacoesAvaliacao` (nome antigo; mantido por compatibilidade). */
+    observacoes: observacoesAvaliacao,
+    setObservacoes: setObservacoesAvaliacao,
     imageSrc,
     setImageSrc,
     activeTool,
@@ -334,13 +314,6 @@ export const useJourneyState = () => {
     setTermosAssinados,
     termosPendentesIds,
     setTermosPendentesIds,
-    orientacoes,
-    orientacoesItens,
-    setOrientacoesItens,
-    orientacoesCarregadas,
-    setOrientacoesCarregadas,
-    proximoRetornoDisplay,
-    setProximoRetornoDisplay,
     EVALUATION_PHOTO_MAX,
     evaluationCapturedPhotos,
     setEvaluationCapturedPhotos,

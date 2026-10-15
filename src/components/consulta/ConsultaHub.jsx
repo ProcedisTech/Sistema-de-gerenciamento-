@@ -3,10 +3,12 @@ import { BookOpen, ClipboardList, Eye, FileText, Lock, RotateCcw, Syringe } from
 import { getPatientInitials as defaultGetPatientInitials } from '../utils';
 import { useTermosPendentes } from '../../hooks/useTermosPendentes';
 import { useAnamneseStatusPaciente } from '../../hooks/useAnamneseStatusPaciente';
-import { temFaltantes, consentimentosAguardandoExecucao } from '../../utils/termoResolucao';
+import { temFaltantes, consentimentosAguardandoExecucao, faltantesDoItem } from '../../utils/termoResolucao';
 import { usePlanosPaciente } from '../planos/usePlanosPaciente.js';
 import { calcSessoesPlano } from '../../utils/planejamentoProfileMetrics.js';
 import { usePapel } from '../../hooks/usePapel.js';
+import { useChaveDeAviso } from '../../hooks/useChaveDeAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
@@ -102,17 +104,31 @@ export function ConsultaHub({
   nomeProcedimento,
   atoJaIniciado = false,
   onTermosBloqueio,
+  /** `termos[]` da consulta (releitura do servidor); sem ele a resolução vale como veio. */
+  termosDaConsulta = [],
+  /** Id da consulta atual: a resolução só aceita assinatura feita nesta consulta. */
+  atendimentoId = null,
 }) {
   const initialsFn = getPatientInitials ?? defaultGetPatientInitials;
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
   const cards = buildModuleCards(isRetorno);
+  const chaveTermos = useChaveDeAviso(PREFIXO_AVISO.TERMOS);
+  const chavePlanos = useChaveDeAviso(PREFIXO_AVISO.ATENDIMENTO);
+  const chaveAnamnese = useChaveDeAviso(PREFIXO_AVISO.ANAMNESE);
   const termosPendentes = useTermosPendentes(paciente?.id, {
     catalogoIds,
     exigirFilaVinculo,
+    chaveRebusca: chaveTermos,
+    atendimentoId,
   });
-  const { planos } = usePlanosPaciente({ pacienteId: paciente?.id, enabled: Boolean(paciente?.id) && !isRetorno });
+  const { planos } = usePlanosPaciente({
+    pacienteId: paciente?.id,
+    enabled: Boolean(paciente?.id) && !isRetorno,
+    chaveRebusca: chavePlanos,
+  });
   const anamneseStatus = useAnamneseStatusPaciente(paciente, {
     enabled: Boolean(paciente?.id) && !isRetorno,
+    chaveRebusca: chaveAnamnese,
   });
   const papel = usePapel();
   const isCardAllowed = (cardId) => {
@@ -143,7 +159,17 @@ export function ConsultaHub({
     if (!total) return null;
     return { feitas, total };
   })();
-  const semVinculo = termosPendentes.resolucao?.procedimentosSemVinculo || [];
+  // F3: a resolução do servidor pode estar velha (assinatura em outra aba); o que a consulta já tem ASSINADO não bloqueia.
+  const resolucaoEfetiva = React.useMemo(() => {
+    const base = termosPendentes.resolucao;
+    if (!base || !Array.isArray(base.faltantes)) return base;
+    return { ...base, faltantes: faltantesDoItem(base, termosDaConsulta) };
+  }, [termosPendentes.resolucao, termosDaConsulta]);
+  const termosPendentesEfetivos = React.useMemo(
+    () => ({ ...termosPendentes, resolucao: resolucaoEfetiva }),
+    [termosPendentes, resolucaoEfetiva],
+  );
+  const semVinculo = resolucaoEfetiva?.procedimentosSemVinculo || [];
 
   const handleSelectModule = (id) => {
     if (!isCardAllowed(id)) {
@@ -153,11 +179,11 @@ export function ConsultaHub({
       id === 'procedimento' &&
       exigirFilaVinculo &&
       !atoJaIniciado &&
-      temFaltantes(termosPendentes.resolucao)
+      temFaltantes(resolucaoEfetiva)
     ) {
       onTermosBloqueio?.({
         nomeProcedimento: nomeProcedimento || 'procedimento',
-        faltantes: termosPendentes.resolucao.faltantes,
+        faltantes: resolucaoEfetiva.faltantes,
       });
       return;
     }
@@ -202,10 +228,10 @@ export function ConsultaHub({
         {cards.map((card) => {
           const ModuleIcon = card.icon;
           const allowed = isCardAllowed(card.id);
-          const pendingDot = getCardPendingDot(card.id, paciente, termosPendentes, progressoPlano, anamneseStatus);
+          const pendingDot = getCardPendingDot(card.id, paciente, termosPendentesEfetivos, progressoPlano, anamneseStatus);
           const consentDot =
             pendingDot == null
-              ? getCardConsentDot(card.id, termosPendentes, (catalogoIds || []).length > 0)
+              ? getCardConsentDot(card.id, termosPendentesEfetivos, (catalogoIds || []).length > 0)
               : null;
           const statusDot = pendingDot || consentDot;
           return (
@@ -259,7 +285,7 @@ export function ConsultaHub({
           );
         })}
       </div>
-      {termosPendentes.resolucao?.clinicaSemTermosAtivos ? (
+      {resolucaoEfetiva?.clinicaSemTermosAtivos ? (
         <p className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[13px] font-medium text-[#92400e]">
           Nenhum termo cadastrado. Configure em Configurações → Clínica → Termos.
         </p>

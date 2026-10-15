@@ -1,5 +1,6 @@
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { diaDoInstante, formatarDataCalendario, instanteMs, normalizarDataCalendario } from './datasClinica.js';
+import { getApiErrorDetail, MENSAGEM_SESSAO_EXPIRADA } from '../services/api.js';
 
 /** Chaves persistidas no prefixo da legenda: `[antes] …` (sem mudança no backend). */
 export const GALERIA_CATEGORIA = {
@@ -300,18 +301,63 @@ export function normalizePacienteGaleriaItem(raw) {
   };
 }
 
-/** Mensagens amigáveis para upload/lista/delete da galeria (401 em JSON dispara auth:expired na api.js). */
+/**
+ * Prefixo `[HTTP n]` que o api.js põe na `message` (buildApiErrorMessage e o download presigned).
+ * A galeria nunca mostra esse prefixo.
+ */
+const PREFIXO_HTTP_RE = /^\s*\[HTTP[^\]]*\]\s*/i;
+
+/** Só o código ou a frase padrão do status (statusText do HTTP/1.1, `error` do Spring): não serve como texto. */
+const FRASES_PADRAO_HTTP = new Set([
+  'bad request',
+  'unauthorized',
+  'forbidden',
+  'not found',
+  'method not allowed',
+  'request timeout',
+  'conflict',
+  'payload too large',
+  'request entity too large',
+  'content too large',
+  'unprocessable entity',
+  'unprocessable content',
+  'too many requests',
+  'internal server error',
+  'bad gateway',
+  'service unavailable',
+  'gateway timeout',
+]);
+
+function soCodigoOuVazio(texto) {
+  const t = texto.trim();
+  return !t || /^\d{3}$/.test(t) || FRASES_PADRAO_HTTP.has(t.toLowerCase());
+}
+
+/**
+ * Texto do erro sem prefixo: primeiro o corpo do backend (getApiErrorDetail, que já junta as mensagens
+ * de validação `errors[]`); sem corpo, a `message` sem o `[HTTP n]`. Vazio ou só código → ''.
+ */
+function textoDoErro(err) {
+  const doCorpo = getApiErrorDetail(err);
+  if (!soCodigoOuVazio(doCorpo)) return doCorpo.trim();
+  const msg = typeof err?.message === 'string' ? err.message.replace(PREFIXO_HTTP_RE, '') : '';
+  return soCodigoOuVazio(msg) ? '' : msg.trim();
+}
+
+/**
+ * Mensagens amigáveis para upload/lista/delete da galeria. Nenhuma saída leva o prefixo `[HTTP n]`.
+ * 401 com `sessaoExpirada` (renovação do acesso recusada, api.js): mensagem do backend; sem ela, o texto
+ * de sessão expirada do api.js. Outro 401 cai no fim: mensagem do backend ou "Erro ao usar a galeria.".
+ * (Importar do api.js não cria ciclo: o api.js não importa este arquivo.)
+ */
 export function formatPacienteGaleriaError(err) {
   const status = err?.status;
-  const base = typeof err?.message === 'string' ? err.message.trim() : '';
+  const base = textoDoErro(err);
   if (status === 413) return 'Arquivo acima do limite permitido pelo servidor.';
   if (status === 400) return base || 'Arquivo ou dados inválidos (tipo, tamanho, legenda ou vínculos).';
   if (status === 404) return base || 'Foto ou paciente não encontrado.';
-  if (status === 401) {
-    return (
-      base ||
-      'Não autorizado (401). Faça login de novo; confira se a organização no app bate com a do banco e se o usuário (ex.: seed-admin) tem permissão nas rotas da galeria e do arquivo no Spring. Isso não é causado por paciente novo.'
-    );
+  if (status === 401 && err?.sessaoExpirada === true) {
+    return base || MENSAGEM_SESSAO_EXPIRADA;
   }
   if (status === 403) {
     return base || 'Sem permissão nesta organização para esta operação na galeria.';

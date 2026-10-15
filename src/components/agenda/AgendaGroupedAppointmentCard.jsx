@@ -1,4 +1,5 @@
-import { getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
+import { useMemo } from 'react';
+import { getConsultaEmAndamento, getGroupedRailCardActions } from '../../utils/agendaCardActions.js';
 import { getAppointmentStatusBucket } from '../../utils/agendaDayInsights.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import {
@@ -8,7 +9,7 @@ import {
 } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { GroupedRailTimeColumn } from './GroupedRailTimeColumn.jsx';
-import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 
 const BTN_FOCUS =
@@ -35,6 +36,7 @@ export function AgendaGroupedAppointmentCard({
   onAdvanceClick,
   onConfirmar,
   onIniciarAtendimento,
+  onVoltarConsulta,
   onWhatsApp,
   onReagendar,
   onCancelar,
@@ -43,13 +45,22 @@ export function AgendaGroupedAppointmentCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
-  const { canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  const andamento = useMemo(
+    () => getConsultaEmAndamento(group?.appointments || [], roleUserId),
+    [group?.appointments, roleUserId],
+  );
   if (!primary) return null;
 
   const badge = getGroupedStatusBadgePresentation(appointments);
   const stripe = getGroupedRailStripeClass(appointments);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const actions = getGroupedRailCardActions(appointments.map((a) => a.status), canStartAnamnese, canCancelar);
+  const actions = getGroupedRailCardActions(
+    appointments.map((a) => a.status),
+    canStartAnamnese,
+    canCancelar,
+    andamento,
+  );
   const idsLabel = appointments
     .map((a) => formatAgendaShortId(a.agendaId || a.id))
     .join(' ');
@@ -106,11 +117,16 @@ export function AgendaGroupedAppointmentCard({
             compact={compact}
             onConfirmar={() => onConfirmar?.(group)}
             onIniciarAtendimento={() => onIniciarAtendimento?.(group)}
+            onVoltarConsulta={onVoltarConsulta}
             onWhatsApp={() => onWhatsApp?.(group)}
             onReagendar={() => onReagendar?.(group)}
             onCancelar={canCancelar ? () => onCancelar?.(group) : null}
             onEnviarAnamnese={() => onEnviarAnamnese?.(group)}
           />
+        ) : andamento.emAndamento ? (
+          <div className="mt-2">
+            <ConsultaEmAndamentoChip />
+          </div>
         ) : null}
 
         {isValidAdvanceOffer(primary, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (

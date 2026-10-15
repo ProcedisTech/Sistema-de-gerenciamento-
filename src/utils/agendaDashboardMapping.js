@@ -108,6 +108,14 @@ export function mapAgendaDtoToDashboardRow(dto) {
     criadoEm: dto.criadoEm || null,
     atualizadoEm: dto.atualizadoEm || null,
     dataAgendamento: dto.dataAgendamento || null,
+    atendimentoId: dto.atendimentoId != null ? String(dto.atendimentoId) : null,
+    atendimentoStatusCodigo:
+      dto.atendimentoStatusCodigo != null ? String(dto.atendimentoStatusCodigo).toLowerCase() : null,
+    atendimentoAnfitriaoRoleUserId:
+      dto.atendimentoAnfitriaoRoleUserId != null ? String(dto.atendimentoAnfitriaoRoleUserId) : null,
+    // horário real da consulta ligada (instantes UTC); null sem consulta
+    atendimentoIniciadoEm: dto.atendimentoIniciadoEm || null,
+    atendimentoEncerradoEm: dto.atendimentoEncerradoEm || null,
     rawSlot: dto,
     rawAgendamento: null,
   };

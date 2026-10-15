@@ -16,6 +16,14 @@ const abaVisivel = () => typeof document === 'undefined' || document.visibilityS
 /**
  * Um leitor do canal de avisos por aba. Troca de clínica fecha e reabre o leitor sem remontar os filhos.
  * Modo degradado (único timer de rede): sem canal por 30 s com a aba visível, emite `recarregar` a cada 30 s.
+ *
+ * Mensagens despachadas aos inscritos (`assinar`):
+ * - `{ tipo: 'aviso', aviso }` — aviso do livro;
+ * - `{ tipo: 'recarregar' }` — a cada `conectado` do leitor (todo, não só o primeiro), a cada `recarregar` do
+ *   servidor e no modo degradado;
+ * - `{ tipo: 'conectado', primeiro }` — a cada conexão do leitor (para redeclarar pendência etc.);
+ * - `{ tipo: 'pendencia-liberada', atendimentoId }` — mensagem de controle efêmera do servidor.
+ * `useAviso` só repassa `aviso`/`recarregar`; os outros tipos são para quem assina direto o contexto.
  */
 export function AvisosProvider({
   orgId,
@@ -44,11 +52,15 @@ export function AvisosProvider({
     if (!ativo || !orgId) return undefined;
     const leitor = criarLeitor({
       orgId,
+      // Toda conexão relê (a aba pode ter perdido avisos sem Last-Event-ID válido) e avisa quem assina.
       onConectado: ({ primeiro }) => {
-        if (primeiro) recarregarTodos();
+        recarregarTodos();
+        despachar({ tipo: 'conectado', primeiro: primeiro === true });
       },
       onAviso: (aviso) => despachar({ tipo: 'aviso', aviso }),
       onRecarregar: recarregarTodos,
+      onPendenciaLiberada: ({ atendimentoId }) =>
+        despachar({ tipo: 'pendencia-liberada', atendimentoId: atendimentoId ?? null }),
       onStatus: setStatusLeitor,
     });
     leitor.iniciar();

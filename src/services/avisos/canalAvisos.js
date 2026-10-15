@@ -3,10 +3,15 @@
  *
  * - Token só no header `Authorization` (nunca na URL); `X-Org-Id` = clínica do leitor.
  * - Status `conectado` só depois de `event: conectado` (resposta 200 sem bytes conta como desconectada).
- * - 401: renova o token uma vez; renovação falha ou 403 -> `bloqueado` (não reconecta).
+ * - 401: renova o token uma vez. Renovação recusada (falha definitiva) ou 403 -> `bloqueado` (não reconecta; a
+ *   saída da aba vem do `auth:expired` que a renovação dispara). Renovação sem rede -> falha de conexão
+ *   (backoff, `erro`/modo degradado) e renova de novo na próxima tentativa; nunca `bloqueado` por rede.
  * - 503: espera `Retry-After`. Rede/404/5xx: backoff com jitter. `online` reconecta na hora.
  * - `substituida`: só reconecta quando a aba ganhar foco ou voltar a ficar visível.
  * - Aba oculta por mais de `ocultaMs` fecha o stream; ao ficar visível, reconecta com `Last-Event-ID`.
+ * - `X-Aba-Id`: id da aba (`idDaAba()`, gerado uma vez por carga da página, só em memória) em todo fetch do stream.
+ * - `pendencia-liberada`: mensagem de controle efêmera (sem id); repassada a `onPendenciaLiberada` sem tocar
+ *   em `ultimoId`/ids vistos.
  * - Nunca registra em log o conteúdo dos avisos.
  */
 import { createParser } from 'eventsource-parser';
@@ -36,6 +41,37 @@ export const STATUS_LEITOR = Object.freeze({
   PARADO: 'parado',
 });
 
+function gerarIdDaAba() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // Fallback (ambientes sem randomUUID): uuid v4 por Math.random, só para identificar a aba.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.floor(Math.random() * 16);
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/** @type {string | null} */
+let idDaAbaAtual = null;
+
+/**
+ * Id desta aba: UUID gerado uma vez por carga da página e guardado só em memória (sessionStorage seria copiado
+ * por "duplicar aba"). Vai em `X-Aba-Id` no stream e no encerrar.
+ * @returns {string}
+ */
+export function idDaAba() {
+  if (!idDaAbaAtual) idDaAbaAtual = gerarIdDaAba();
+  return idDaAbaAtual;
+}
+
+/**
+ * Só para testes: fixa o id da aba (ou `null` para gerar um novo na próxima chamada de `idDaAba()`).
+ * @param {string | null} id
+ */
+export function __definirIdDaAbaParaTestes(id) {
+  idDaAbaAtual = id ?? null;
+}
+
 async function headersPadrao({ orgId, token }) {
   const t = token ?? (await getFreshToken());
   const h = await authHeadersForFetch({ needsOrg: true, token: t });
@@ -62,15 +98,17 @@ function parseRetryAfterMs(valor, padraoMs) {
  *   orgId?: string,
  *   fetchImpl?: typeof fetch,
  *   obterHeaders?: (opts: { orgId?: string, token?: string | null }) => Promise<Record<string, string>>,
- *   renovarToken?: () => Promise<string | null>,
+ *   renovarToken?: (tokenUsado?: string | null) => Promise<{ tipo: 'ok', token: string } | { tipo: 'definitiva' } | { tipo: 'rede' }>,
  *   url?: string,
  *   tempos?: Partial<typeof TEMPOS_PADRAO>,
  *   aleatorio?: () => number,
  *   onConectado?: (info: { primeiro: boolean, id: string | null }) => void,
  *   onAviso?: (aviso: { id: string | null, tipo: string, registroId: string | null, atendimentoId: string | null, porMim: boolean }) => void,
  *   onRecarregar?: (info: { id: string | null }) => void,
+ *   onPendenciaLiberada?: (info: { atendimentoId: string | null }) => void,
  *   onSubstituida?: () => void,
  *   onStatus?: (status: string) => void,
+ *   obterIdDaAba?: () => string,
  * }} opts
  */
 export function criarLeitorAvisos({
@@ -84,8 +122,10 @@ export function criarLeitorAvisos({
   onConectado,
   onAviso,
   onRecarregar,
+  onPendenciaLiberada,
   onSubstituida,
   onStatus,
+  obterIdDaAba = idDaAba,
 } = {}) {
   const tempos = { ...TEMPOS_PADRAO, ...temposParciais };
 
@@ -170,7 +210,14 @@ export function criarLeitorAvisos({
     } catch {
       return;
     }
-    if (!dados || dados.v !== VERSAO_PROTOCOLO) return;
+    if (!dados) return;
+    if (ev.event === 'pendencia-liberada') {
+      // Mensagem de controle efêmera: sem id, não entra em idsVistos nem em ultimoId. Aceita `v` ausente.
+      if (dados.v != null && dados.v !== VERSAO_PROTOCOLO) return;
+      onPendenciaLiberada?.({ atendimentoId: dados.atendimentoId ?? null });
+      return;
+    }
+    if (dados.v !== VERSAO_PROTOCOLO) return;
     const id = ev.id || null;
 
     switch (ev.event) {
@@ -265,6 +312,7 @@ export function criarLeitorAvisos({
     }
     if (ctrl !== atual) return;
     headers.Accept = 'text/event-stream';
+    headers['X-Aba-Id'] = obterIdDaAba();
     if (ultimoId) headers['Last-Event-ID'] = ultimoId;
 
     let res;
@@ -289,14 +337,23 @@ export function criarLeitorAvisos({
         return;
       }
       jaRenovou = true;
-      const novo = await renovarToken().catch(() => null);
+      const tokenUsado = String(headers.Authorization || '').replace(/^Bearer\s+/i, '') || null;
+      const renovacao = await Promise.resolve()
+        .then(() => renovarToken(tokenUsado))
+        .catch(() => ({ tipo: 'rede' }));
       if (ctrl !== atual) return;
-      if (!novo) {
+      if (renovacao?.tipo === 'ok' && renovacao.token) {
+        tokenRenovado = renovacao.token;
+        conectar();
+        return;
+      }
+      if (renovacao?.tipo === 'definitiva') {
         bloquear();
         return;
       }
-      tokenRenovado = novo;
-      conectar();
+      // Falha de rede na renovação: falha de conexão comum; a próxima tentativa renova de novo.
+      jaRenovou = false;
+      falhar();
       return;
     }
     if (res.status === 403) {

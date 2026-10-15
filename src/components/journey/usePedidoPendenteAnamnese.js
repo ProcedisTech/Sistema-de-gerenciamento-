@@ -14,6 +14,7 @@ import {
  * Pedido de anamnese em branco pendente do paciente (consulta).
  * Fonte: ficha em branco da lista + `envioAtivo` do documento dela; enquanto houver pedido,
  * consulta o status do envio ao abrir, a cada aviso ANAMNESE do envio e no vencimento.
+ * Sem pedido conhecido, qualquer aviso ANAMNESE do paciente faz uma nova leitura do envio ativo.
  */
 export function usePedidoPendenteAnamnese({
   ativo,
@@ -41,6 +42,8 @@ export function usePedidoPendenteAnamnese({
     [ativo, historicoPaciente],
   );
   const candidataId = candidata?.id ?? null;
+  /** Sobe a cada aviso ANAMNESE sem envio conhecido: relê o envio ativo da ficha em branco. */
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     if (!ativo || !pacienteId || !candidataId) return undefined;
@@ -58,7 +61,7 @@ export function usePedidoPendenteAnamnese({
     };
     // `candidata` muda de identidade a cada recarga da lista; só o id dispara nova leitura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ativo, pacienteId, candidataId]);
+  }, [ativo, pacienteId, candidataId, recarga]);
 
   const pedidoLista = candidataId && resolvido.fichaId === candidataId ? resolvido.pedido : null;
   const pedido = ativo ? (pedidoLista ?? pedidoSolicitacao) : null;
@@ -104,7 +107,16 @@ export function usePedidoPendenteAnamnese({
     verificarStatus();
   }, [verificarStatus]);
 
-  useAviso(PREFIXO_AVISO.ANAMNESE, verificarStatus, { registroId: envioId });
+  /** Sem envio conhecido (ex.: pedido feito em outro aparelho), qualquer aviso ANAMNESE relê o pedido ativo. */
+  const aoAvisoAnamnese = useCallback(() => {
+    if (envioId) {
+      verificarStatus();
+    } else if (ativo && pacienteId) {
+      setRecarga((n) => n + 1);
+    }
+  }, [envioId, verificarStatus, ativo, pacienteId]);
+
+  useAviso(PREFIXO_AVISO.ANAMNESE, aoAvisoAnamnese, { registroId: envioId });
   useBuscaNoVencimento(envioId ? pedido?.expiraEm : null, verificarStatus);
 
   const registrar = useCallback((data) => {

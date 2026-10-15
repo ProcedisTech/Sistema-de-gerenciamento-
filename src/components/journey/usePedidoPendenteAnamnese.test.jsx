@@ -209,6 +209,32 @@ describe('usePedidoPendenteAnamnese', () => {
     expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(1);
   });
 
+  it('sem envio conhecido, um aviso ANAMNESE (de qualquer registro) relê o pedido uma vez', async () => {
+    anamneseApi.getDocumento.mockResolvedValueOnce({ envioAtivo: null });
+    const { result, canal } = montar();
+    await flush();
+    expect(result.current.pedido).toBeNull();
+    expect(anamneseApi.getDocumento).toHaveBeenCalledTimes(1);
+    // Pedido feito em outro aparelho: o aviso chega com o id do envio que esta tela ainda não conhece.
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    await avancar();
+    expect(anamneseApi.getDocumento).toHaveBeenCalledTimes(2);
+    expect(anamneseApi.getDocumento).toHaveBeenLastCalledWith('pac1', 'pre-branco');
+    expect(result.current.pedido).toMatchObject({ envioId: 'env1', preenchimentoId: 'pre-branco' });
+    expect(anamneseEnvioApi.status).toHaveBeenCalledWith('env1');
+  });
+
+  it('com envio conhecido, o aviso consulta o status e não relê o documento', async () => {
+    const { canal } = montar();
+    await flush();
+    expect(anamneseApi.getDocumento).toHaveBeenCalledTimes(1);
+    canal.emitirAviso(AVISO.ANAMNESE.ENVIO_ALTERADO, 'env1');
+    await avancar();
+    expect(anamneseEnvioApi.status).toHaveBeenCalledTimes(2);
+    expect(anamneseApi.getDocumento).toHaveBeenCalledTimes(1);
+  });
+
   it('ativo=false não chama nada', async () => {
     const { result, canal } = montar({ ativo: false });
     await flush();
