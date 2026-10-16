@@ -128,11 +128,29 @@ export function useMapaAplicacaoState() {
   );
 
   const adicionarPonto = useCallback(
-    (vistaCodigo, { posX, posY, quantidade, regiaoFacial, tamanho, tipoGeometria = 'ponto', vertices = [] }) => {
+    (
+      vistaCodigo,
+      {
+        posX,
+        posY,
+        quantidade,
+        regiaoFacial,
+        tamanho,
+        tipoGeometria = 'ponto',
+        vertices = [],
+        catalogoProcedimentoSaudeId = null,
+        catalogoId = null,
+        procedimentoIndex = null,
+        nomeProcedimento = '',
+        cor = null,
+      },
+    ) => {
       const vista = String(vistaCodigo || vistaAtual || '').trim();
       if (!vista) return false;
       const qty = Number(quantidade);
       if (!Number.isFinite(qty) || qty <= 0) return false;
+
+      const catId = catalogoProcedimentoSaudeId || catalogoId || null;
 
       setPontosPorVista((prev) => {
         const lista = Array.isArray(prev[vista]) ? [...prev[vista]] : [];
@@ -146,6 +164,11 @@ export function useMapaAplicacaoState() {
           tipoGeometria,
           vertices: Array.isArray(vertices) ? vertices : [],
           regiaoFacial: regiaoFacial != null ? String(regiaoFacial) : undefined,
+          catalogoProcedimentoSaudeId: catId,
+          catalogoId: catId,
+          procedimentoIndex: procedimentoIndex != null ? Number(procedimentoIndex) : undefined,
+          nomeProcedimento: nomeProcedimento || undefined,
+          cor: cor || undefined,
           ordem,
         });
         return { ...prev, [vista]: lista };
@@ -179,7 +202,8 @@ export function useMapaAplicacaoState() {
 
       const hasQty = patch.quantidade != null;
       const hasTamanho = patch.tamanho != null;
-      if (!hasQty && !hasTamanho) return;
+      const hasCor = patch.cor != null;
+      if (!hasQty && !hasTamanho && !hasCor) return;
 
       let qty;
       if (hasQty) {
@@ -192,6 +216,8 @@ export function useMapaAplicacaoState() {
         tamanhoNorm = normalizeTamanho(patch.tamanho);
       }
 
+      const corVal = hasCor ? (String(patch.cor).trim() || undefined) : undefined;
+
       setPontosPorVista((prev) => {
         if (!prev[vista]?.length) return prev;
         const lista = prev[vista].map((p) => {
@@ -199,6 +225,7 @@ export function useMapaAplicacaoState() {
           const next = { ...p };
           if (hasQty) next.quantidade = qty;
           if (hasTamanho) next.tamanho = tamanhoNorm;
+          if (hasCor) next.cor = corVal;
           return next;
         });
         return { ...prev, [vista]: lista };
@@ -206,6 +233,63 @@ export function useMapaAplicacaoState() {
       markDirty(vista);
     },
     [vistaAtual, markDirty],
+  );
+
+  const atualizarCorProcedimento = useCallback(
+    (targetProcId, novaCor, outroProcId, corAntiga) => {
+      if (!targetProcId || !novaCor) return;
+      const tId = String(targetProcId).trim();
+      const oId = outroProcId ? String(outroProcId).trim() : null;
+
+      const matchesTarget = (p) => {
+        const cat = String(p.catalogoProcedimentoSaudeId || p.catalogoId || '').trim();
+        if (cat && cat === tId) return true;
+        if (tId.startsWith('idx_')) {
+          const idxNum = Number(tId.replace('idx_', ''));
+          if (p.procedimentoIndex === idxNum) return true;
+        }
+        return false;
+      };
+
+      const matchesOutro = (p) => {
+        if (!oId) return false;
+        const cat = String(p.catalogoProcedimentoSaudeId || p.catalogoId || '').trim();
+        if (cat && cat === oId) return true;
+        if (oId.startsWith('idx_')) {
+          const idxNum = Number(oId.replace('idx_', ''));
+          if (p.procedimentoIndex === idxNum) return true;
+        }
+        return false;
+      };
+
+      setPontosPorVista((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        Object.keys(next).forEach((vista) => {
+          const lista = next[vista];
+          if (!Array.isArray(lista) || lista.length === 0) return;
+          let vistaChanged = false;
+          const novaLista = lista.map((p) => {
+            if (matchesTarget(p)) {
+              vistaChanged = true;
+              return { ...p, cor: novaCor };
+            }
+            if (oId && corAntiga && matchesOutro(p)) {
+              vistaChanged = true;
+              return { ...p, cor: corAntiga };
+            }
+            return p;
+          });
+          if (vistaChanged) {
+            next[vista] = novaLista;
+            changed = true;
+            markDirty(vista);
+          }
+        });
+        return changed ? next : prev;
+      });
+    },
+    [markDirty],
   );
 
   const desfazerUltimoPonto = useCallback(
@@ -304,14 +388,48 @@ export function useMapaAplicacaoState() {
   }, []);
 
   const getPontosVista = useCallback(
-    (vistaCodigo, catalogoId, nomeProcedimento) => {
+    (vistaCodigo, catalogoIdFallback, nomeProcedimentoFallback, procedimentosSessao = []) => {
       const vista = String(vistaCodigo || vistaAtual || '').trim();
       const lista = pontosPorVista[vista];
       if (!Array.isArray(lista) || lista.length === 0) return [];
+
+      const hasCatalogInfo = lista.some((p) => p.catalogoProcedimentoSaudeId || p.catalogoId);
+
+      if (hasCatalogInfo) {
+        const gruposMap = new Map();
+
+        if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
+          procedimentosSessao.forEach((proc, idx) => {
+            const cid = String(proc.catalogoProcedimentoSaudeId || proc.nomeProcedimentoCatalogoId || proc.id || `idx_${idx}`);
+            gruposMap.set(cid, {
+              catalogoProcedimentoSaudeId: cid,
+              nomeProcedimento: proc.nomeProcedimento || proc.procedimentoNome || proc.nome || `Procedimento ${idx + 1}`,
+              unidadeMedida: proc.unidadeMedida || 'u',
+              pontos: [],
+            });
+          });
+        }
+
+        lista.forEach((p) => {
+          const cid = String(p.catalogoProcedimentoSaudeId || p.catalogoId || catalogoIdFallback || 'default');
+          if (!gruposMap.has(cid)) {
+            gruposMap.set(cid, {
+              catalogoProcedimentoSaudeId: cid,
+              nomeProcedimento: p.nomeProcedimento || nomeProcedimentoFallback || 'Procedimento',
+              unidadeMedida: p.unidadeMedida || 'u',
+              pontos: [],
+            });
+          }
+          gruposMap.get(cid).pontos.push(p);
+        });
+
+        return Array.from(gruposMap.values()).filter((g) => g.pontos.length > 0);
+      }
+
       return [
         {
-          catalogoProcedimentoSaudeId: String(catalogoId || ''),
-          nomeProcedimento: String(nomeProcedimento || ''),
+          catalogoProcedimentoSaudeId: String(catalogoIdFallback || ''),
+          nomeProcedimento: String(nomeProcedimentoFallback || ''),
           pontos: lista,
         },
       ];
@@ -383,6 +501,7 @@ export function useMapaAplicacaoState() {
     adicionarPonto,
     removerPonto,
     editarPonto,
+    atualizarCorProcedimento,
     desfazerUltimoPonto,
     limparPontosVista,
     importarPontosDoPlano,

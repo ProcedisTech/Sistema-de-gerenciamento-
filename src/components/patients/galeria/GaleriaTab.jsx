@@ -80,7 +80,9 @@ export function GaleriaTab({
       }
       setCategoriaLightbox({
         fotos: fotosCat,
+        fotoInicial: foto,
         categoriaLabel: GALERIA_CATEGORIA_LABELS[cat] || cat,
+        categoria: cat,
       });
     },
     [modoComparar, onCompararFotoClick],
@@ -121,11 +123,10 @@ export function GaleriaTab({
                   return !prev;
                 });
               }}
-              className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border-[2px] transition-all ${
-                modoComparar
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border-[2px] transition-all ${modoComparar
                   ? 'bg-[#00a88e] text-white border-[#00a88e]'
                   : 'bg-white text-[#00a88e] border-[#00a88e]/40 hover:border-[#00a88e]'
-              }`}
+                }`}
             >
               {modoComparar ? '✕ Cancelar comparação' : '⇄ Comparar'}
             </button>
@@ -276,86 +277,86 @@ export function GaleriaTab({
 
           {compararModalOpen
             ? (() => {
-                const slots = [
-                  {
-                    key: 'avaliacao',
-                    label: 'Avaliação',
-                    color: '#00a88e',
-                    foto: compararSelecionadas.avaliacao,
-                  },
-                  {
-                    key: 'posImediato',
-                    label: 'Pós-Imediato',
-                    color: '#f59e0b',
-                    foto: compararSelecionadas.posImediato,
-                  },
-                  {
-                    key: 'retorno',
-                    label: 'Retorno',
-                    color: '#0ea5e9',
-                    foto: compararSelecionadas.retorno,
-                  },
-                ].filter((s) => s.foto);
-                if (slots.length < 2) return null;
-                return (
+              const slots = [
+                {
+                  key: 'avaliacao',
+                  label: 'Avaliação',
+                  color: '#00a88e',
+                  foto: compararSelecionadas.avaliacao,
+                },
+                {
+                  key: 'posImediato',
+                  label: 'Pós-Imediato',
+                  color: '#f59e0b',
+                  foto: compararSelecionadas.posImediato,
+                },
+                {
+                  key: 'retorno',
+                  label: 'Retorno',
+                  color: '#0ea5e9',
+                  foto: compararSelecionadas.retorno,
+                },
+              ].filter((s) => s.foto);
+              if (slots.length < 2) return null;
+              return (
+                <div
+                  className="fixed inset-0 z-[300] bg-black/90 flex flex-col items-center justify-center p-4 gap-4"
+                  onClick={handleCloseCompararModal}
+                >
                   <div
-                    className="fixed inset-0 z-[300] bg-black/90 flex flex-col items-center justify-center p-4 gap-4"
-                    onClick={handleCloseCompararModal}
-                  >
-                    <div
-                      className={`grid gap-4 w-full max-w-6xl ${
-                        slots.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                    className={`grid gap-4 w-full max-w-6xl ${slots.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
                       }`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {slots.map((s) => (
-                        <div key={s.key} className="flex flex-col items-center gap-2 min-w-0">
-                          <span
-                            className="text-[12px] font-bold uppercase tracking-wide px-3 py-1 rounded-full"
-                            style={{ color: s.color, backgroundColor: `${s.color}33` }}
-                          >
-                            {s.label}
-                          </span>
-                          <ProtectedPatientMedia
-                            src={s.foto.url}
-                            alt={s.label}
-                            className="max-h-[75dvh] max-w-full rounded-xl"
-                            imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {slots.length < 3 ? (
-                        <button
-                          type="button"
-                          onClick={handleCloseCompararModal}
-                          className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {slots.map((s) => (
+                      <div key={s.key} className="flex flex-col items-center gap-2 min-w-0">
+                        <span
+                          className="text-[12px] font-bold uppercase tracking-wide px-3 py-1 rounded-full"
+                          style={{ color: s.color, backgroundColor: `${s.color}33` }}
                         >
-                          Escolher mais uma foto
-                        </button>
-                      ) : null}
+                          {s.label}
+                        </span>
+                        <ProtectedPatientMedia
+                          src={s.foto.url}
+                          alt={s.label}
+                          className="max-h-[75dvh] max-w-full rounded-xl"
+                          imgClassName="max-h-[75dvh] max-w-full object-contain rounded-xl"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {slots.length < 3 ? (
                       <button
                         type="button"
-                        onClick={handleCancelComparar}
+                        onClick={handleCloseCompararModal}
                         className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
                       >
-                        Fechar comparação
+                        Escolher mais uma foto
                       </button>
-                    </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleCancelComparar}
+                      className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[13px] border border-white/20 transition-all"
+                    >
+                      Fechar comparação
+                    </button>
                   </div>
-                );
-              })()
+                </div>
+              );
+            })()
             : null}
 
           <GaleriaCategoriaLightbox
             key={
               categoriaLightbox
-                ? `${categoriaLightbox.categoriaLabel}-${categoriaLightbox.fotos?.length ?? 0}`
+                ? `${categoriaLightbox.categoriaLabel}-${categoriaLightbox.fotos?.length ?? 0}-${categoriaLightbox.fotoInicial?.serverId || categoriaLightbox.fotoInicial?.id || ''}`
                 : 'closed'
             }
             open={Boolean(categoriaLightbox)}
             fotos={categoriaLightbox?.fotos}
+            fotoInicial={categoriaLightbox?.fotoInicial}
             categoriaLabel={categoriaLightbox?.categoriaLabel}
             onClose={() => setCategoriaLightbox(null)}
             pacienteId={selectedPatientId}

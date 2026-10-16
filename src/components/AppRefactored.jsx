@@ -67,11 +67,14 @@ import {
 } from '../services/api';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
+import { normalizeListaPlanos, enriquecerPlanosComCatalogo } from '../utils/planejamentoNormalize.js';
+import { useProcedimentosOptions } from '../hooks/useProcedimentosOptions.js';
 import { pickSessaoAtiva, pickSessaoRetornoAtiva } from '../utils/planejamentoSessoes.js';
 import { hojeDaClinica } from '../utils/datasClinica.js';
 import { convertToWebP } from '../utils/imageUtils.js';
 import { clearTermosJornadaState } from '../utils/termoJornadaLista.js';
-import { registrarAgendaAvulsa } from '../utils/registrarAgendaAvulsa.js';
+import { registrarAgendaAvulsa, registrarRetornoFuturo } from '../utils/registrarAgendaAvulsa.js';
+import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
@@ -92,6 +95,7 @@ import { TermoBloqueioModal } from './termos/TermoBloqueioModal.jsx';
 import { abortarEncerrarPorTermos, bloqueioExecucaoTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, faltantesDoItem, idsFilaExigida, parseTermosBloqueioError, pfIdNestaSessaoParaCatalogo, sessaoComPfDoCatalogo, titulosFaltantes } from '../utils/termoResolucao.js';
 import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
+import { criarItemProcedimentoSessao, criarLoteProcedimentosSessao } from '../utils/procedimentoSessaoFactory.js';
 
 // Componentes da Jornada (paciente na aba Pacientes; etapas 1–5)
 import {
@@ -122,6 +126,7 @@ import {
   loteConcluiuPlano,
 } from './planos/planoConcluidoClinica.js';
 import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
+import { AnnotationCanvasAvaliacao } from './journey/AnnotationCanvasAvaliacao.jsx';
 import {
   normalizeOrientacoesTemplateResponse,
   orientacoesTemplateSignature,
@@ -163,6 +168,13 @@ import { mapBackendPatient } from '../utils/patientMapping.js';
 import { AtalhoConsulta } from './layout/AtalhoConsulta.jsx';
 import SessionTimeoutWarningModal from './session/SessionTimeoutWarningModal';
 
+function toLocalISODate(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeTermosList(raw) {
   if (Array.isArray(raw)) return raw;
   if (raw && Array.isArray(raw.content)) return raw.content;
@@ -180,6 +192,7 @@ function isTermoAtivoRow(row) {
 
 /** Mapeamento legado initialStep → consultaModule (compat. agenda / call sites antigos). */
 const LEGACY_STEP_TO_MODULE = { 1: 'anamnese', 2: 'avaliacao', 3: 'termos', 4: 'procedimento' };
+const UUID_REGEX_PROC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function revokeBlobUrlIfAny(url) {
   if (url == null || typeof url !== 'string') return;
@@ -388,12 +401,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     pacienteNome: '',
     paciente: null,
   });
-
-  const handleTermoAssinaturaSalva = React.useCallback((assinaturaObj) => {
-    if (assinaturaObj?.id && assinaturaObj.statusCodigo === 'ASSINADO') {
-      setAssinaturasRealizadasIds((prev) => [...prev, assinaturaObj.id]);
-    }
-  }, []);
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
   const [clinicaInfo, setClinicaInfo] = useState({
@@ -441,6 +448,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   // --- Lote de Procedimentos ---
   const [procedimentosLote, setProcedimentosLote] = React.useState([]);
+  const { options: catalogoProcedimentosOptions } = useProcedimentosOptions();
   // O índice do procedimento ativo foi movido para o useJourneyState para manter tudo em sincronia.
 
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
@@ -502,6 +510,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const anamneseRef = useRef(null);
+  const planosTabRef = useRef(null);
   /** Vista alvo ao confirmar foto da câmera no step 2 (mapeamento). */
   const mapeamentoCaptureVistaRef = useRef(null);
   const [pendingMapeamentoCapture, setPendingMapeamentoCapture] = React.useState(null);
@@ -524,9 +533,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const retornoFinalizadoRef = useRef(null);
   const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
   const [isSalvandoProcedimento] = React.useState(false);
-  const [sugestaoProcedimentoEnviada, setSugestaoProcedimentoEnviada] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
   const prevJourneyPacienteIdRef = useRef(undefined);
+  /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
+  const pendingAnnotatedGalleryBlobsRef = useRef([]);
+  /** Último mapa relacional de avaliação salvo na sessão (contingência determinística para upload). */
+  const ultimoMapaAvaliacaoRef = useRef(null);
   const finishJourneyModalResolveRef = useRef(null);
   const [finishJourneyModal, setFinishJourneyModal] = React.useState(null);
 
@@ -1001,35 +1013,50 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, []);
 
   const validarTermosDoCatalogo = React.useCallback(
-    async (catalogoId, nomeProc, { abrirModal = true } = {}) => {
+    async (catalogoIdOrIds, nomeProc, { abrirModal = true, procedimentosSessaoOverride = null } = {}) => {
       if (!exigirFilaTermos) {
         limparResolucoesTermos();
         return true;
       }
-      const cat = catalogoId != null ? String(catalogoId).trim() : '';
-      if (!cat || !pacienteAtual?.id) {
+      const rawIds = Array.isArray(catalogoIdOrIds) ? catalogoIdOrIds : [catalogoIdOrIds];
+      const validIds = rawIds
+        .map((id) => (id != null ? String(id).trim() : ''))
+        .filter((id) => id && id !== 'undefined' && id !== 'null' && UUID_REGEX_PROC.test(id));
+      if (validIds.length === 0 || !pacienteAtual?.id) {
         return true;
       }
-      if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) {
+      const sessaoAtual = procedimentosSessaoOverride || journeyState.procedimentosSessao || [];
+      const allPfsInSession = validIds.every((cat) => pfIdNestaSessaoParaCatalogo(cat, sessaoAtual));
+      if (allPfsInSession) {
         return true;
       }
       try {
-        const t0 = performance.now();
-        const resolucao = await termosApi.resolver({
-          pacienteId: pacienteAtual.id,
-          catalogoIds: [cat],
-          atendimentoId: atendimentoIdConsultaRef.current || undefined,
-        });
-        console.info('[termo-perf] GET resolucao', Math.round(performance.now() - t0), 'ms');
-        registrarResolucaoTermos(cat, resolucao);
+        const resolucoes = await Promise.all(
+          validIds.map(async (cId) => {
+            const matched = sessaoAtual.find(
+              (p) => String(p.catalogoProcedimentoId || p.catalogoProcedimentoSaudeId || p.catalogoId || p.id || '') === String(cId)
+            );
+            const pItemId = (matched && !matched.isAvulso && matched.planejamentoItemId)
+              ? String(matched.planejamentoItemId)
+              : null;
+            const res = await termosApi.resolver({
+              pacienteId: pacienteAtual.id,
+              catalogoIds: [cId],
+              planejamentoItemIds: pItemId ? [pItemId] : [],
+              atendimentoId: atendimentoIdConsultaRef.current || undefined,
+            });
+            registrarResolucaoTermos(cId, res);
+            return res;
+          })
+        );
         // F3: o que já está assinado na consulta (releitura) não bloqueia, mesmo com a resolução ainda velha.
-        const faltantesDoServidor = faltantesDoItem(resolucao, termosDaConsultaRef.current);
-        if (faltantesDoServidor.length > 0) {
+        const todosFaltantes = resolucoes.flatMap((r) => faltantesDoItem(r, termosDaConsultaRef.current));
+        if (todosFaltantes.length > 0) {
           if (abrirModal) {
             setTermoBloqueio({
               open: true,
               nomeProcedimento: nomeProc || journeyState.nomeProcedimento || 'procedimento',
-              faltantes: faltantesDoServidor,
+              faltantes: todosFaltantes,
             });
           }
           return false;
@@ -1067,23 +1094,47 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
       return validarTermosDoCatalogo(catalogoId, nomeProc);
     },
-    [validarTermosDoCatalogo, journeyState.nomeProcedimento, journeyState.procedimentosSessao],
+    [validarTermosDoCatalogo, journeyState.nomeProcedimento, journeyState.procedimentosSessao]
+  );
+
+  const handleTermoAssinaturaSalva = React.useCallback(
+    (assinaturaObj) => {
+      if (assinaturaObj?.id && assinaturaObj.statusCodigo === 'ASSINADO') {
+        setAssinaturasRealizadasIds((prev) => [...prev, assinaturaObj.id]);
+        const ids =
+          catalogoIdsConsulta.length > 0
+            ? catalogoIdsConsulta
+            : (journeyState.nomeProcedimentoCatalogoId ? [journeyState.nomeProcedimentoCatalogoId] : []);
+        if (ids.length > 0) {
+          void validarTermosDoCatalogo(ids, journeyState.nomeProcedimento, { abrirModal: false });
+        }
+      }
+    },
+    [catalogoIdsConsulta, journeyState.nomeProcedimentoCatalogoId, journeyState.nomeProcedimento, validarTermosDoCatalogo]
   );
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || consultaModule !== 'procedimento') return;
-    const cat = journeyState.nomeProcedimentoCatalogoId;
-    if (!cat) return;
-    if (pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao)) return;
-    void validarTermosDoCatalogo(cat, journeyState.nomeProcedimento, { abrirModal: false });
+    const ids =
+      catalogoIdsConsulta.length > 0
+        ? catalogoIdsConsulta
+        : (journeyState.nomeProcedimentoCatalogoId ? [journeyState.nomeProcedimentoCatalogoId] : []);
+    if (ids.length === 0) return;
+    const allPfs = ids.every((cat) => pfIdNestaSessaoParaCatalogo(cat, journeyState.procedimentosSessao));
+    if (allPfs) return;
+    void validarTermosDoCatalogo(ids, journeyState.nomeProcedimento, { abrirModal: false });
     // Revalida ao voltar da aba Termos; o select já faz o GET na escolha.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só troca de módulo
-  }, [activeView, consultaModule]);
+  }, [activeView, consultaModule, catalogoIdsConsulta]);
 
   const vincularAssinaturasAoProcedimento = React.useCallback(
-    async (pid) => {
+    async (pid, catalogoId = null) => {
+      // Procedimentos com catálogo já têm termos consumidos atomicamente pelo backend via consumirExigidos.
+      // Re-vincular todas as assinaturas da sessão roubaria termos de outros procedimentos do mesmo lote.
+      if (catalogoId) return;
       if (!pid || assinaturasRealizadasIds.length === 0) return;
-      for (const assinaturaId of assinaturasRealizadasIds) {
+      const assinaturaId = assinaturasRealizadasIds[0];
+      if (assinaturaId) {
         try {
           await termoAssinaturaApi.vincularProcedimento(assinaturaId, pid);
         } catch (e) {
@@ -1202,6 +1253,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     // Clear refs and state to prevent cross-patient corruption
     anamnesePreenchimentoIdRef.current = null;
     autoSaveAnamnesePromiseRef.current = null;
+    pendingAnnotatedGalleryBlobsRef.current = [];
+    ultimoMapaAvaliacaoRef.current = null;
     journeyState.setTermoSelecionadoId(null);
     setAssinaturasRealizadasIds([]);
     journeyState.setJourneyPlanejamentoCtx(null);
@@ -1478,21 +1531,112 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
   };
 
-  /**
-   * Grava na lista da câmera o JPEG já com desenho (etapa 3), para LGPD/galeria usarem a mesma imagem.
-   * F1: mesmo contrato de `salvarFotoProcedimentoAnotada` (troca na lista só depois do servidor; rejeita se falhar).
-   */
-  const handleAnnotatedCaptureSaved = async ({ index, newUrl, blob }) => {
-    const r = await fotoAnotada(cameraState.evaluationCapturedPhotos[index], blob, 'avaliacao');
-    cameraState.replaceEvaluationCapturedPhotoAt(index, {
-      url: newUrl,
-      blob,
-      meta: r?.arquivoAtualizadoEm ? { arquivoAtualizadoEm: r.arquivoAtualizadoEm } : undefined,
+  /** Preserva foto limpa original e dados vetoriais de marcação/procedimentos */
+  const handleAnnotatedCaptureSaved = ({
+    index,
+    newUrl,
+    blob,
+    cleanBlob,
+    cleanUrl,
+    procedimentosMapeados,
+    pontos,
+    isAnnotated,
+    destinoAvaliacao,
+    mapaId,
+    planejamentoId,
+    planejamentoItemId,
+  }) => {
+    if (destinoAvaliacao) {
+      journeyState.setDestinoAvaliacao(destinoAvaliacao);
+    }
+    const targetIdx = Number.isInteger(index) && index >= 0 ? index : 0;
+    const prevPh = (cameraState.evaluationCapturedPhotos || [])[targetIdx] || {};
+    const resolvedCleanBlob = cleanBlob || prevPh?.cleanBlob || prevPh?.blob || blob || null;
+    const resolvedCleanUrl = cleanUrl || prevPh?.cleanUrl || prevPh?.url || newUrl || null;
+    const resolvedMapaId = mapaId || prevPh?.mapaId || null;
+    const resolvedPlanId =
+      planejamentoId ||
+      prevPh?.planejamentoId ||
+      journeyState.journeyPlanejamentoCtx?.id ||
+      journeyState.journeyPlanejamentoCtx?.planejamentoId ||
+      null;
+    const resolvedPlanItemId = planejamentoItemId || prevPh?.planejamentoItemId || null;
+
+    if (resolvedMapaId) {
+      ultimoMapaAvaliacaoRef.current = {
+        mapaId: resolvedMapaId,
+        planejamentoId: resolvedPlanId,
+        planejamentoItemId: resolvedPlanItemId,
+      };
+    }
+
+    cameraState.replaceEvaluationCapturedPhotoAt(targetIdx, {
+      ...prevPh,
+      url: resolvedCleanUrl,
+      blob: resolvedCleanBlob,
+      cleanBlob: resolvedCleanBlob,
+      cleanUrl: resolvedCleanUrl,
+      pontos: pontos || prevPh?.pontos || [],
+      procedimentosMapeados: procedimentosMapeados || prevPh?.procedimentosMapeados || [],
+      isAnnotated: isAnnotated ?? true,
+      mapaId: resolvedMapaId,
+      planejamentoId: resolvedPlanId,
+      planejamentoItemId: resolvedPlanItemId,
     });
-    journeyState.setImageSrc(newUrl);
+    cameraState.setAnamnesePhotoUrl(resolvedCleanUrl);
+    cameraState.setAnamnesePhotoBlob(resolvedCleanBlob);
+    journeyState.setImageSrc(resolvedCleanUrl);
     journeyState.setPaths([]);
-    return r;
+    if (Array.isArray(procedimentosMapeados) && procedimentosMapeados.length > 0) {
+      journeyState.setProcedimentosAvaliados((prev) => {
+        const map = new Map();
+        (prev || []).forEach((p) => map.set(p.catalogoProcedimentoSaudeId, p));
+        procedimentosMapeados.forEach((p) => {
+          const existing = map.get(p.catalogoProcedimentoSaudeId);
+          if (existing) {
+            map.set(p.catalogoProcedimentoSaudeId, {
+              ...existing,
+              ...p,
+              pontosCount: (existing.pontosCount || 0) + (p.pontosCount || 0),
+              quantidadeTotal: (existing.quantidadeTotal || 0) + (p.quantidadeTotal || 0),
+            });
+          } else {
+            map.set(p.catalogoProcedimentoSaudeId, p);
+          }
+        });
+        return Array.from(map.values());
+      });
+    }
   };
+
+  const procedimentosIniciaisAvaliacao = React.useMemo(() => {
+    if (Array.isArray(journeyState.procedimentosSessao) && journeyState.procedimentosSessao.length > 0) {
+      const validos = journeyState.procedimentosSessao.filter((p) => {
+        const n = String(p?.nome || p?.catalogoNome || '').trim();
+        return n && n.toLowerCase() !== 'procedimento';
+      });
+      if (validos.length > 0) return validos;
+    }
+    const nomeProc = String(journeyState.nomeProcedimento || '').trim();
+    if (journeyState.nomeProcedimentoCatalogoId && nomeProc && nomeProc.toLowerCase() !== 'procedimento') {
+      return [
+        {
+          id: journeyState.nomeProcedimentoCatalogoId,
+          catalogoProcedimentoSaudeId: journeyState.nomeProcedimentoCatalogoId,
+          nome: nomeProc,
+          planejamentoItemId: journeyState.planejamentoItemId || null,
+        },
+      ];
+    }
+    return [];
+  }, [
+    journeyState.procedimentosSessao,
+    journeyState.nomeProcedimentoCatalogoId,
+    journeyState.nomeProcedimento,
+    journeyState.planejamentoItemId,
+  ]);
+
+  const planoContextoAvaliacao = journeyState.journeyPlanejamentoCtx || null;
 
   const handleConfirmProcedurePhoto = () => {
     const skipMapeamentoCapture =
@@ -1585,6 +1729,118 @@ function AppRefactoredInner({ onCanalAvisos }) {
     },
     [journeyState.journeyPlanejamentoCtx],
   );
+
+  const recarregarPlanosDoPaciente = React.useCallback(
+    async (pacienteId) => {
+      const pid = pacienteId || pacienteAtual?.id;
+      if (!pid) return;
+      try {
+        const rawPlanos = await planejamentosApi.listarPorPaciente(pid);
+        const planosRaw = normalizeListaPlanos(rawPlanos);
+        const planos = enriquecerPlanosComCatalogo(planosRaw, catalogoProcedimentosOptions);
+        const planosAtivos = planos.filter((p) => {
+          const st = String(p.statusCodigo || '').toLowerCase();
+          return st === 'ativo' || st === 'em_andamento' || st === 'aberto';
+        });
+        if (planosAtivos.length > 0) {
+          const todosItens = [];
+          const itemMap = {};
+          planosAtivos.forEach((plano) => {
+            (plano.itens || []).forEach((it) => {
+              const catId = it.catalogoId || it.catalogoProcedimentoSaudeId;
+              if (catId && it.id) {
+                itemMap[String(catId)] = String(it.id);
+                todosItens.push({
+                  ...it,
+                  planejamentoItemId: it.id,
+                  planoId: plano.id,
+                  planoTitulo: plano.observacao || 'Plano de Tratamento',
+                  catalogoNome: it.catalogoNome || it.nomeProcedimento || it.nome || '',
+                  nomeProcedimento: it.nomeProcedimento || it.catalogoNome || it.nome || '',
+                  nome: it.nome || it.nomeProcedimento || it.catalogoNome || '',
+                });
+              }
+            });
+          });
+          journeyState.setJourneyPlanejamentoCtx((prev) => ({
+            planejamentoId: planosAtivos[0]?.id || null,
+            titulo: planosAtivos[0]?.observacao || 'Plano de Tratamento',
+            itemIdByCatalogo: itemMap,
+            procedimentosComPontos: prev?.procedimentosComPontos || [],
+            itens: todosItens,
+          }));
+        } else {
+          journeyState.setJourneyPlanejamentoCtx(null);
+        }
+      } catch (err) {
+        console.warn('[recarregarPlanosDoPaciente] Erro ao carregar planos do paciente:', err);
+      }
+    },
+    [pacienteAtual?.id, catalogoProcedimentosOptions, journeyState.setJourneyPlanejamentoCtx],
+  );
+
+  React.useEffect(() => {
+    if (activeView === 'consulta' && pacienteAtual?.id) {
+      void recarregarPlanosDoPaciente(pacienteAtual.id);
+    }
+  }, [activeView, consultaModule, pacienteAtual?.id, recarregarPlanosDoPaciente]);
+
+  const [fotosAvaliacaoPlano, setFotosAvaliacaoPlano] = React.useState([]);
+
+  React.useEffect(() => {
+    let cancel = false;
+    const pid = pacienteAtual?.id;
+    const isProc =
+      (activeView === 'consulta' && (consultaModule === 'procedimento' || consultaModule === 'avaliacao' || consultaModule === 'hub')) ||
+      (activeView === 'jornada' && currentStep >= 4);
+
+    if (isProc && pid) {
+      pacientesGaleriaApi
+        .list(pid)
+        .then((resp) => {
+          if (cancel) return;
+          const itens = Array.isArray(resp) ? resp : resp?.itens || resp?.fotos || [];
+          const filtradas = itens
+            .filter((f) => {
+              const code = String(f.tipoFotoCodigo || f.categoria || '').toUpperCase();
+              const leg = String(f.legenda || f.descricaoLegenda || '').toUpperCase();
+              return (
+                code === 'AVALIACAO' ||
+                code === 'MAPA' ||
+                code === 'PLANEJAMENTO' ||
+                leg.includes('AVALIAÇÃO') ||
+                leg.includes('AVALIACAO')
+              );
+            })
+            .map((f) => ({
+              ...f,
+              id: f.id || f.fotoId,
+              fotoId: f.fotoId || f.id,
+              url: f.url,
+              cleanUrl: f.cleanUrl || f.url,
+              pontos: f.pontos || f.mapaOverlay?.pontos || [],
+              mapaOverlay: f.mapaOverlay || (f.pontos ? { pontos: f.pontos } : null),
+            }));
+          setFotosAvaliacaoPlano(filtradas);
+        })
+        .catch((err) => {
+          if (!cancel) {
+            console.warn('[AppRefactored] Erro ao carregar fotos de avaliação da galeria:', err);
+          }
+        });
+    } else {
+      setFotosAvaliacaoPlano([]);
+    }
+    return () => {
+      cancel = true;
+    };
+  }, [activeView, consultaModule, currentStep, pacienteAtual?.id]);
+
+  const fotosAvaliacaoParaProcedimento = React.useMemo(() => {
+    const daSessao = cameraState.evaluationCapturedPhotos || [];
+    if (daSessao.length > 0) return daSessao;
+    return fotosAvaliacaoPlano;
+  }, [cameraState.evaluationCapturedPhotos, fotosAvaliacaoPlano]);
 
   /** Editor fullscreen compartilhado (procedimento / resumo etapa 5). */
   const [photoAnnotationScope, setPhotoAnnotationScope] = React.useState(null);
@@ -1839,8 +2095,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
     if (!isSameDayResume) {
       const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
       if (hasLote) {
-        setProcedimentosLote(options.lote);
-        journeyState.setProcedimentosSessao(options.lote);
+        const loteValido = options.lote.filter((p) => {
+          const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
+          const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
+          return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+        });
+        const loteNormalizado = criarLoteProcedimentosSessao(loteValido);
+        setProcedimentosLote(loteNormalizado);
+        journeyState.setProcedimentosSessao(loteNormalizado);
         journeyState.setActiveProcedureIndex(0);
       } else if (!options.fromAgendaSlot) {
         setProcedimentosLote([]);
@@ -1965,6 +2228,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
         journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
         journeyState.setHouveRetoque(false);
       }
+    }
+    if (patient?.id) {
+      void recarregarPlanosDoPaciente(patient.id);
     }
     const mod = wantsRetorno
       ? (options.initialModule ?? 'hub')
@@ -2303,10 +2569,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
     // C1: o lote só é aplicado depois que o servidor aceitar o abrir (handleStartAttendance).
     let loteDaAgenda = [];
     if (Array.isArray(options?.lote) && options.lote.length > 0) {
-      loteDaAgenda = options.lote;
+      const loteValido = options.lote.filter((p) => {
+        const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
+        const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+        const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
+        return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+      });
+      loteDaAgenda = criarLoteProcedimentosSessao(loteValido);
     } else if (fromSlot && agendaId && dataRaw) {
       // B-42 F2: sem lote do card, só a agenda clicada (nunca o dia inteiro do paciente).
-      loteDaAgenda = loteDasLinhas([options]);
+      loteDaAgenda = criarLoteProcedimentosSessao(loteDasLinhas([options]));
     }
     const opt = { ...(options || {}), loteDaAgenda };
 
@@ -2753,16 +3025,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
           String(journeyState.nomeProcedimentoCatalogoId).trim() !== ''
           ? String(journeyState.nomeProcedimentoCatalogoId).trim()
           : null;
-      if (!nomeP || (!catId && !sugestaoProcedimentoEnviada)) {
+      if (!nomeP || !catId) {
         journeyState.setStep4Errors({
-          nomeProcedimento: !nomeP || (!catId && !sugestaoProcedimentoEnviada),
-          catalogoId: !catId && !sugestaoProcedimentoEnviada,
+          nomeProcedimento: !nomeP,
+          catalogoId: !catId,
         });
         toast.error('Selecione o procedimento no catálogo para continuar.');
         return;
       }
       if (catId) {
-        const ok = await validarTermosDoCatalogo(catId, nomeP);
+        const todosCats = (journeyState.procedimentosSessao || [])
+          .map((p) => p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .filter(Boolean);
+        if (catId && !todosCats.includes(catId)) todosCats.push(catId);
+        const ok = await validarTermosDoCatalogo(todosCats.length > 0 ? todosCats : catId, nomeP);
         if (!ok) return;
       }
       journeyState.setStep4Errors({});
@@ -2803,19 +3079,22 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
 
   const uploadEvaluationCapturedPhotos = React.useCallback(
-    async ({ paciente, procIdOpt, dataRefSessao, tipoFotoCodigo = 'AVALIACAO' }) => {
+    async ({ paciente, procIdOpt, dataRefSessao, tipoFotoCodigo = 'AVALIACAO', agendaId = null }) => {
       const ridUpload = roleUserId;
       const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
-      const fotosAvaliacao = cameraState.evaluationCapturedPhotos || [];
+      const fotosAvaliacao = (cameraState.evaluationCapturedPhotos || []).filter(
+        (f) => !f.uploaded && !f.fotoId && f.destinoAvaliacao !== 'plano' && !f.planejamentoId
+      );
       const tipo = String(tipoFotoCodigo || 'AVALIACAO').trim().toUpperCase();
       const legendaCategoria =
         tipo === 'DEPOIS' ? GALERIA_CATEGORIA.DEPOIS : GALERIA_CATEGORIA.AVALIACAO;
+      const targetAgendaId = agendaId || journeyState.agendaId || null;
       if (fotosAvaliacao.length > 0 && paciente?.id && ridOk) {
         const uploads = fotosAvaliacao.map(async (foto) => {
           try {
-            let fileToUpload = foto.blob;
-            if (!fileToUpload && foto.url) {
-              const resp = await fetch(foto.url);
+            let fileToUpload = foto.cleanBlob || foto.blob;
+            if (!fileToUpload && (foto.cleanUrl || foto.url)) {
+              const resp = await fetch(foto.cleanUrl || foto.url);
               const blob = await resp.blob();
               fileToUpload = new File([blob], 'foto-avaliacao.jpg', {
                 type: blob.type || 'image/jpeg',
@@ -2823,13 +3102,23 @@ function AppRefactoredInner({ onCanalAvisos }) {
             }
             if (!fileToUpload) return false;
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
-            await pacientesGaleriaApi.upload(paciente.id, webp, {
+            const isAvulso = Boolean(
+              foto.destinoAvaliacao === 'avulso' ||
+              journeyState.destinoAvaliacao === 'avulso' ||
+              journeyState.isAvulso ||
+              (!foto.planejamentoId && !journeyState.journeyPlanejamentoCtx?.planejamentoId)
+            );
+            const uploadOpts = {
               roleUserId: ridUpload,
               procedimentoFeitoId: procIdOpt,
-              legenda: formatGaleriaLegendaForUpload(legendaCategoria),
+              legenda: formatGaleriaLegendaForUpload(legendaCategoria, '', { isAvulso }),
               dataReferencia: dataRefSessao,
               tipoFotoCodigo: tipo,
-            });
+            };
+            if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
+            const targetMapaId = foto.mapaId || ultimoMapaAvaliacaoRef.current?.mapaId || null;
+            if (targetMapaId) uploadOpts.mapaId = targetMapaId;
+            await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
             return true;
           } catch (e) {
             console.warn('Erro ao salvar foto de avaliação na galeria:', e);
@@ -2855,7 +3144,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         );
       }
     },
-    [cameraState, roleUserId, toast]
+    [cameraState, roleUserId, toast, journeyState.agendaId]
   );
 
   const handleConcluirAvaliacao = React.useCallback(async () => {
@@ -2912,25 +3201,18 @@ function AppRefactoredInner({ onCanalAvisos }) {
         }));
       }
 
-      // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado
-      journeyState.setProcedimentosSessao([
-        {
-          agendaId,
-          procedimentoNome: nome,
-          nomeProcedimento: nome,
-          catalogoProcedimentoSaudeId: catId,
-          planejamentoItemId: planoItemId,
-          isAgendaRetorno: isRetorno,
-        },
-      ]);
-      setProcedimentosLote([
-        {
-          agendaId,
-          procedimentoNome: nome,
-          catalogoProcedimentoSaudeId: catId,
-          planejamentoItemId: planoItemId,
-        },
-      ]);
+      // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado com fábrica e corHex canônico
+      const itemInicial = criarItemProcedimentoSessao({
+        agendaId,
+        procedimentoNome: nome,
+        nomeProcedimento: nome,
+        catalogoProcedimentoSaudeId: catId,
+        catalogoId: catId,
+        planejamentoItemId: planoItemId,
+        isAgendaRetorno: isRetorno,
+      }, 0);
+      journeyState.setProcedimentosSessao([itemInicial]);
+      setProcedimentosLote([itemInicial]);
 
       if (isRetorno) {
         journeyState.setTipoAtendimento('retorno');
@@ -2972,7 +3254,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
    * próprios botões de conclusão explícita (Avaliação, Termos, Procedimento).
    * NÃO interfere com o fluxo de cancelar atendimento (resetJourney) nem com o encerramento.
    */
-  const handleBackToHub = React.useCallback(() => {
+  const handleBackToHub = React.useCallback(async () => {
     if (consultaModule === 'anamnese') {
       // F4: com a consulta no servidor, "não salvo" é o que difere do servidor (ou está na fila), não "tem texto".
       // Sem consulta no servidor, vale o critério antigo (tem texto).
@@ -2992,8 +3274,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
         return;
       }
     }
+    if (consultaModule === 'planejamento') {
+      if (planosTabRef.current?.flushPendingObservacoes) {
+        try {
+          await planosTabRef.current.flushPendingObservacoes();
+        } catch (e) {
+          console.warn('Erro ao descarregar pendências do plano:', e);
+        }
+      }
+      if (pacienteAtual?.id) {
+        void recarregarPlanosDoPaciente(pacienteAtual.id);
+      }
+    }
     trocarModuloPeloUsuario('hub');
-  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef, trocarModuloPeloUsuario, consultaServidor]);
+  }, [consultaModule, journeyState.queixa, journeyState.expectativas, anamneseRef, planosTabRef, pacienteAtual?.id, recarregarPlanosDoPaciente, trocarModuloPeloUsuario, consultaServidor]);
 
   const resetJourney = React.useCallback(() => {
     setPhotoAnnotationScope(null);
@@ -3025,7 +3319,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setProcedimentoFeitoOrigemId(null);
     journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
     journeyState.setHouveRetoque(false);
-    setSugestaoProcedimentoEnviada(false);
     journeyState.setAgendaId(null);
     journeyState.setStep2Errors({});
     journeyState.setStep4Errors({});
@@ -3047,6 +3340,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
     mapaRetornoCaptureVistaRef.current = null;
     setPendingMapaRetornoCapture(null);
     journeyState.setJourneyPlanejamentoCtx(null);
+    journeyState.setProcedimentosAvaliados([]);
+    journeyState.setDestinoAvaliacao(null);
+    journeyState.setProcedimentosSessao([]);
+    setProcedimentosLote([]);
+    journeyState.setActiveProcedureIndex(0);
     mapaAplicacaoState.resetMapa();
     mapaRetornoState.resetMapa();
     cameraState.resetProcedureCapturedPhotos();
@@ -3061,6 +3359,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     setPendingMapeamentoCapture,
     setPhotoAnnotationIndex,
     setPhotoAnnotationScope,
+    setProcedimentosLote,
     setQueixaVisivel,
     mapaAplicacaoState,
     mapaRetornoState,
@@ -3155,13 +3454,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
             ? String(opts.planejamentoItemId).trim()
             : null;
 
-        if (agendaIdValido) {
+        if (agendaIdValido && (catalogoId || opts.isRetoque)) {
           const body = {
             pacienteId: paciente.id,
             agendaId: agendaIdValido,
             roleUserId,
             ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
             ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
+            ...(planejamentoItemId ? { planejamentoItemId } : {}),
           };
           const tIniciar = performance.now();
           const res = await procedimentosApi.iniciar(body);
@@ -3169,7 +3469,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
           const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
           const idStr = pid != null && pid !== '' ? String(pid) : null;
           if (idStr) {
-            await vincularAssinaturasAoProcedimento(idStr);
+            await vincularAssinaturasAoProcedimento(idStr, catalogoId);
             persistirPfSessao(catalogoId, idStr);
             appendLotePfId(idStr);
           }
@@ -3183,13 +3483,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
           roleUserId,
           observacao,
           catalogoProcedimentoSaudeId: catalogoId,
+          ...(agendaIdValido ? { agendaId: agendaIdValido } : {}),
           ...(planejamentoItemId ? { planejamentoItemId } : {}),
         });
         console.info('[termo-perf] POST registrarManual', Math.round(performance.now() - tManual), 'ms');
         const pid = res?.id ?? res?.procedimentoId ?? res?.procedimentoFeitoId;
         const idStr = pid != null && pid !== '' ? String(pid) : null;
         if (idStr) {
-          await vincularAssinaturasAoProcedimento(idStr);
+          await vincularAssinaturasAoProcedimento(idStr, catalogoId);
           persistirPfSessao(catalogoId, idStr);
           appendLotePfId(idStr);
         }
@@ -3238,8 +3539,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
       const rawItemId =
         opts.planejamentoItemId ||
-        (catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
-        journeyState.procedimentosSessao?.[0]?.planejamentoItemId;
+        (!opts.isAvulso && catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
+        (!opts.isAvulso ? journeyState.procedimentosSessao?.[0]?.planejamentoItemId : null);
       const planejamentoItemId = rawItemId
         ? String(rawItemId).replace(/_retorno$/, '').trim()
         : null;
@@ -3342,13 +3643,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
   );
 
   const uploadProcedureCapturedPhotos = React.useCallback(
-    async (paciente, pidsArray, dataRefSessao, explicitFotos = null) => {
+    async (paciente, pidsArray, dataRefSessao, explicitFotos = null, agendaIdOpt = null) => {
       const ids = Array.isArray(pidsArray) ? pidsArray : [pidsArray].filter(Boolean);
       if (!ids.length) return;
 
       const ridUpload = roleUserId;
       const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
       const fotosProcedimento = explicitFotos || cameraState.procedureCapturedPhotos || [];
+      const targetAgendaId = agendaIdOpt || journeyState.agendaId || null;
       if (fotosProcedimento.length > 0 && paciente?.id && ridOk) {
         const uploads = fotosProcedimento.map(async (foto) => {
           try {
@@ -3382,6 +3684,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                   ),
                   dataReferencia: dataRefSessao,
                 };
+                if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
                 if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
                 await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
                 return true;
@@ -3418,7 +3721,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         );
       }
     },
-    [cameraState, journeyState.nomeProcedimento, roleUserId, toast]
+    [cameraState, journeyState.agendaId, journeyState.nomeProcedimento, roleUserId, toast]
   );
 
   const handleConcluirRetorno = React.useCallback(async () => {
@@ -3503,7 +3806,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
             mapaRetornoState.clearAllDirty();
           }
         }
-
         journeyState.setObservacoesExecucao(
           formatRetornoAvaliacaoTexto(journeyState.retornoAvaliacao),
         );
@@ -3797,6 +4099,25 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const orientacoesPorItem = orientacoesPorItemParaPadrao(journeyState.procedimentosSessao, procedimentos);
         await perguntarPadraoECatalogo({ nomesUnicos, orientacoesPorItem, jaVinculadoAoCatalogo });
       }
+
+      const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
+        journeyProcedureDateIso,
+        journeyState.proximoRetornoDisplay,
+        hojeDaClinica(fusoClinica)
+      );
+
+      if (returnIsoPre && paciente && roleUserId) {
+        await registrarRetornoFuturo({
+          paciente,
+          roleUserId,
+          dataRetornoIso: returnIsoPre,
+          procedimentoOrigemId: procedimentos[0]?.id || null,
+          planejamentoItemId: procedimentos[0]?.planejamentoItemId || null,
+        }).catch((err) => {
+          console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
+        });
+      }
+
       setAttendanceStartTime(null);
 
       if (loteConcluiuPlano(procedimentos)) {
@@ -3813,19 +4134,23 @@ function AppRefactoredInner({ onCanalAvisos }) {
       await finalizarAtendimentoNavegacao(sCpf);
     },
     [
-    registrarResolucaoTermos,
+      registrarResolucaoTermos,
       abrirAgendaRetornoClinica,
       askPlanoConcluidoClinica,
       encerrarConsultaNoServidor,
       finalizarAtendimentoNavegacao,
+      fusoClinica,
+      journeyProcedureDateIso,
       journeyState.activeProcedureIndex,
       journeyState.nomeProcedimento,
       journeyState.nomeProcedimentoCatalogoId,
       journeyState.procedimentosSessao,
+      journeyState.proximoRetornoDisplay,
       pacienteAtual?.cpf,
       perguntarPadraoECatalogo,
       resetJourney,
       resolvePacienteAtendimento,
+      roleUserId,
       selectedPatientCpf,
       setAttendanceStartTime,
       toast,
@@ -3964,6 +4289,62 @@ function AppRefactoredInner({ onCanalAvisos }) {
     // Stub: evita ReferenceError no botão de documentos do widget; implementar envio quando houver API.
   };
 
+  const persistAnnotatedPhotoToGallery = React.useCallback(
+    async (blob, opts = {}) => {
+      if (!blob || !(blob instanceof Blob)) return { ok: false, skipped: true };
+      const pid = pacienteAtual?.id;
+      if (!pid) return { ok: false, skipped: true, reason: 'no_server_id' };
+      const rid = roleUserId;
+      if (!rid || !/^[0-9a-f-]{36}$/i.test(String(rid))) {
+        toast.warning(
+          'Selecione o profissional na barra de contexto para enviar a foto desenhada à galeria no servidor.'
+        );
+        return { ok: false, skipped: true };
+      }
+
+      try {
+        const webp = await convertToWebP(blob, 0.85, 1920);
+        const dataRefSessao = opts.dataReferencia || toLocalISODate(new Date());
+        const isAvulso = Boolean(
+          opts.isAvulso ||
+          opts.destinoAvaliacao === 'avulso' ||
+          journeyState.destinoAvaliacao === 'avulso' ||
+          journeyState.isAvulso
+        );
+        const uploadOpts = {
+          roleUserId: rid,
+          dataReferencia: dataRefSessao,
+          tipoFotoCodigo: opts.tipoFotoCodigo || 'AVALIACAO',
+          legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.AVALIACAO, '', { isAvulso }),
+        };
+        const targetAgendaId = opts.agendaId || journeyState.agendaId || null;
+        if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
+        const targetMapaId = opts.mapaId || ultimoMapaAvaliacaoRef.current?.mapaId || null;
+        if (targetMapaId) uploadOpts.mapaId = targetMapaId;
+
+        const res = await pacientesGaleriaApi.upload(pid, webp, uploadOpts);
+
+        if (opts.index != null) {
+          cameraState.replaceEvaluationCapturedPhotoAt(opts.index, {
+            uploaded: true,
+            fotoId: res?.id,
+            destinoAvaliacao: opts.destinoAvaliacao,
+            planejamentoId: opts.planejamentoId,
+          });
+        }
+
+        if (pid) {
+          void recarregarPlanosDoPaciente(pid);
+        }
+        return { ok: true, data: res };
+      } catch (err) {
+        console.warn('[persistAnnotatedPhotoToGallery] Falha ao persistir na galeria:', err);
+        pendingAnnotatedGalleryBlobsRef.current.push(blob);
+        return { ok: false, error: err };
+      }
+    },
+    [pacienteAtual?.id, roleUserId, toast, journeyState.agendaId, recarregarPlanosDoPaciente, cameraState]
+  );
   // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
   const isJornadaView = activeView === 'jornada';
   const isConsultaView = activeView === 'consulta';
@@ -4363,9 +4744,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           setNomeProcedimento={journeyState.setNomeProcedimento}
                           setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                           setProcedimentoDoCatalogo={journeyState.setProcedimentoDoCatalogo}
+                          procedimentosSessao={journeyState.procedimentosSessao}
+                          setProcedimentosSessao={journeyState.setProcedimentosSessao}
                           onValidarTermosCatalogo={validarTermosDoCatalogo}
                           execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
                           titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
+                          resolucao={termosExecucaoBloqueio.resolucao}
                           consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
                           observacoesExecucao={journeyState.observacoesExecucao}
                           setObservacoesExecucao={journeyState.setObservacoesExecucao}
@@ -4381,7 +4765,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           onProcedureRemovePhoto={removerFotoProcedimento}
                           step4Errors={journeyState.step4Errors}
                           setStep4Errors={journeyState.setStep4Errors}
-                          fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                          fotosAvaliacao={fotosAvaliacaoParaProcedimento}
                           onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                           onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
                           urlArquivoReserva={urlArquivoReservaDaFoto}
@@ -4393,6 +4777,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                             journeyState.nomeProcedimentoCatalogoId,
                           )}
                           planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
+                          journeyPlanejamentoCtx={journeyState.journeyPlanejamentoCtx}
                           procedimentosComPontos={
                             journeyState.journeyPlanejamentoCtx?.procedimentosComPontos ?? []
                           }
@@ -4409,7 +4794,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
                             if (!ok) return null;
                             return ensureProcedimentoFeitoForMapa(pacienteAtual);
                           }}
-                          onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                         />
                       )}
 
@@ -4443,7 +4827,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           profAssinaturaTimestamp={null}
                           patAssinaturaTimestamp={null}
                           termoTitulo={journeyTermoTitulo ?? ''}
-                          fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                          fotosAvaliacao={fotosAvaliacaoParaProcedimento}
                           fotosProcedimento={cameraState.procedureCapturedPhotos ?? []}
                           nomeUsuario={
                             authUser?.nome || authUser?.name || authUser?.email || authUser?.username || ''
@@ -4462,6 +4846,28 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 (photoAnnotationScope === 'procedure'
                   ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                   : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+                photoAnnotationScope === 'evaluation' ? (
+                  <AnnotationCanvasAvaliacao
+                    photos={cameraState.evaluationCapturedPhotos || []}
+                    editingIndex={photoAnnotationIndex}
+                    setEditingIndex={setPhotoAnnotationIndex}
+                    onSelectCapturedPhoto={(i) => {
+                      handleSelectCapturedPhoto(i);
+                      setPhotoAnnotationIndex(i);
+                    }}
+                    imageSrc={
+                      (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
+                      journeyState.imageSrc
+                    }
+                    onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                    persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                    onClose={closeJourneyPhotoAnnotation}
+                    pacienteId={pacienteAtual?.id}
+                    roleUserId={roleUserId}
+                    procedimentosIniciais={procedimentosIniciaisAvaliacao}
+                    planoContexto={planoContextoAvaliacao}
+                  />
+                ) : (
                 <JourneyPhotoAnnotationEditor
                   sidebarInsetPx={sidebarRailWidthPx}
                   photos={
@@ -4525,6 +4931,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                   urlArquivoReserva={urlArquivoReservaDaFoto}
                   onClose={closeJourneyPhotoAnnotation}
                 />
+                )
               ) : null}
 
               <div
@@ -4790,12 +5197,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 ) : null}
                 {consultaModule === 'planejamento' && !journeyState.isAgendaRetorno ? (
                   <PlanosTab
+                    ref={planosTabRef}
                     variant="consulta"
                     pacienteId={pacienteAtual?.id ?? null}
                     roleUserId={roleUserId ?? null}
                     pacienteNome={pacienteAtual?.nome ?? ''}
                     paciente={pacienteAtual}
-                    onVoltar={() => trocarModuloPeloUsuario('hub')}
+                    onVoltar={handleBackToHub}
+                    onPlanoModificado={() => recarregarPlanosDoPaciente(pacienteAtual?.id)}
                     onSelectProcedimentoParaConsulta={handleSelectProcedimentoDoPlano}
                     onAgendarItem={(item, onSaved) =>
                       handleAgendarPlanoItem(pacienteAtual, item, onSaved)
@@ -4807,6 +5216,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       handleConcluirPlanoComRetorno(pacienteAtual, plano, refresh)
                     }
                     onPlanoConcluido={() => handlePlanoConcluidoAposBaixa(pacienteAtual)}
+                    procedimentosAvaliados={journeyState.procedimentosAvaliados}
+                    destinoAvaliacao={journeyState.destinoAvaliacao}
+                    onLimparProcedimentosAvaliados={() => {
+                      journeyState.setProcedimentosAvaliados([]);
+                      journeyState.setDestinoAvaliacao(null);
+                    }}
                   />
                 ) : null}
                 {consultaModule === 'termos' ? (
@@ -4855,7 +5270,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                     procedimentos={journeyState.procedimentosSessao}
-                    onConcluir={() => trocarModuloPeloUsuario('hub')}
+                    onConcluir={() => {
+                      const temProcedimento = Boolean(journeyState.nomeProcedimento) || (journeyState.procedimentosSessao && journeyState.procedimentosSessao.length > 0);
+                      trocarModuloPeloUsuario(temProcedimento ? 'procedimento' : 'hub');
+                    }}
                   />
                 ) : null}
                 {consultaModule === 'procedimento' && !journeyState.isAgendaRetorno ? (
@@ -4865,7 +5283,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     setNomeProcedimento={journeyState.setNomeProcedimento}
                     setNomeProcedimentoCatalogoId={journeyState.setNomeProcedimentoCatalogoId}
                     setProcedimentoDoCatalogo={journeyState.setProcedimentoDoCatalogo}
+                    catalogoId={journeyState.nomeProcedimentoCatalogoId || journeyState.procedimentosSessao?.[0]?.catalogoProcedimentoSaudeId || null}
                     procedimentosLote={journeyState.procedimentosSessao?.length > 0 ? journeyState.procedimentosSessao : procedimentosLote}
+                    setProcedimentosLote={journeyState.setProcedimentosSessao}
+                    journeyPlanejamentoCtx={journeyState.journeyPlanejamentoCtx}
                     activeProcedimentoIndex={journeyState.activeProcedureIndex}
                     setActiveProcedimentoIndex={journeyState.setActiveProcedureIndex}
                     updateProcedureByIndex={journeyState.updateProcedureByIndex}
@@ -4882,7 +5303,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     onProcedureRemovePhoto={removerFotoProcedimento}
                     step4Errors={journeyState.step4Errors}
                     setStep4Errors={journeyState.setStep4Errors}
-                    fotosAvaliacao={cameraState.evaluationCapturedPhotos ?? []}
+                    fotosAvaliacao={fotosAvaliacaoParaProcedimento}
                     onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                     onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
                           urlArquivoReserva={urlArquivoReservaDaFoto}
@@ -4891,7 +5312,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
                     catalogoId={journeyState.nomeProcedimentoCatalogoId}
                     planejamentoItemId={resolvePlanejamentoItemId(
-                      journeyState.nomeProcedimentoCatalogoId,
+                        journeyState.nomeProcedimentoCatalogoId,
                     )}
                     planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
                     procedimentosComPontos={
@@ -4904,9 +5325,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     onValidarTermosCatalogo={validarTermosDoCatalogo}
                     execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
                     titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
+                    resolucao={termosExecucaoBloqueio.resolucao}
                     consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
-                    onIrParaTermosGate={() =>
+                    onIrParaTermosGate={(focoId) =>
                       irParaTermosFaltantes({
+                        termoId: typeof focoId === 'string' ? focoId : idsFilaExigida(termosExecucaoBloqueio.resolucao)[0],
                         termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
                         nomeProcedimento: journeyState.nomeProcedimento,
                       })
@@ -4922,8 +5345,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       if (!journeyState.isAgendaRetorno) return null;
                       return ensureProcedimentoFeitoForMapa(pacienteAtual);
                     }}
-                    sugestaoProcedimentoEnviada={sugestaoProcedimentoEnviada}
-                    onSugestaoEnviada={setSugestaoProcedimentoEnviada}
                     procedureDateIso={journeyProcedureDateIso}
                     itensOrientacoes={itensOrientacoes}
                     setOrientacoesDoItem={setOrientacoesDoItem}
@@ -5061,6 +5482,28 @@ function AppRefactoredInner({ onCanalAvisos }) {
               (photoAnnotationScope === 'procedure'
                 ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                 : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
+              photoAnnotationScope === 'evaluation' ? (
+                <AnnotationCanvasAvaliacao
+                  photos={cameraState.evaluationCapturedPhotos || []}
+                  editingIndex={photoAnnotationIndex}
+                  setEditingIndex={setPhotoAnnotationIndex}
+                  onSelectCapturedPhoto={(i) => {
+                    handleSelectCapturedPhoto(i);
+                    setPhotoAnnotationIndex(i);
+                  }}
+                  imageSrc={
+                    (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
+                    journeyState.imageSrc
+                  }
+                  onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                  persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                  onClose={closeJourneyPhotoAnnotation}
+                  pacienteId={pacienteAtual?.id}
+                  roleUserId={roleUserId}
+                  procedimentosIniciais={procedimentosIniciaisAvaliacao}
+                  planoContexto={planoContextoAvaliacao}
+                />
+              ) : (
               <JourneyPhotoAnnotationEditor
                 sidebarInsetPx={sidebarRailWidthPx}
                 photos={
@@ -5124,6 +5567,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 urlArquivoReserva={urlArquivoReservaDaFoto}
                 onClose={closeJourneyPhotoAnnotation}
               />
+              )
             ) : null}
           </>
         ) : (

@@ -3,7 +3,27 @@
  * hydrateFromApi no hook só aplica estado quando hasMapaHydrateContent é true.
  */
 import { describe, expect, it } from 'vitest';
-import { hasMapaHydrateContent } from './procedimentoMapaPayload.js';
+import { hasMapaHydrateContent, mapLocalPontoToApi } from './procedimentoMapaPayload.js';
+
+describe('mapLocalPontoToApi', () => {
+  it('preserva cor e corHex do ponto local', () => {
+    const ponto = {
+      localId: 'p-1',
+      posX: 12.5,
+      posY: 34.2,
+      procedimentoIndex: 1,
+      quantidade: 2,
+      tamanho: 1,
+      observacoes: 'obs',
+      cor: '#64748b',
+      corHex: '#64748b',
+    };
+    const mapped = mapLocalPontoToApi(ponto);
+    expect(mapped.cor).toBe('#64748b');
+    expect(mapped.corHex).toBe('#64748b');
+    expect(mapped.posX).toBe(12.5);
+  });
+});
 
 describe('hasMapaHydrateContent', () => {
   it('null / undefined / não-objeto → false', () => {

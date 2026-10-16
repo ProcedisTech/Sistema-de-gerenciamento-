@@ -1,0 +1,16 @@
+[
+  {
+    "nome": "Drenagem de Abscesso",
+    "uuid": "34c86deb-f026-426c-8eef-20a8674f514a",
+    "hash": -2024132831,
+    "indice": 11,
+    "corHex": "#64748b"
+  },
+  {
+    "nome": "Biópsia de Pele",
+    "uuid": "ae05fd5a-3362-46ff-9c0f-2846190ccb87",
+    "hash": -416391482,
+    "indice": 10,
+    "corHex": "#d946ef"
+  }
+]

@@ -8,7 +8,7 @@ import { normalizeUnidadeMedida } from '../../../constants/quantidadePresets.js'
 export function PontosResumoPanel({ gruposPontos, gruposSessao, unidadeMedida, isModal = false }) {
   const grupos = Array.isArray(gruposPontos) ? gruposPontos : [];
   const gruposSessaoArr = Array.isArray(gruposSessao) ? gruposSessao : [];
-  const unitSuffix = unidadeMedida ? ` ${normalizeUnidadeMedida(unidadeMedida)}` : '';
+  const fallbackUnit = unidadeMedida ? normalizeUnidadeMedida(unidadeMedida) : 'u';
 
   const totalSessao = gruposSessaoArr.reduce(
     (acc, g) => {
@@ -17,6 +17,17 @@ export function PontosResumoPanel({ gruposPontos, gruposSessao, unidadeMedida, i
     },
     0,
   );
+
+  const activeSessaoGroups = gruposSessaoArr
+    .map((g) => {
+      const unit = normalizeUnidadeMedida(g.unidadeMedida || fallbackUnit);
+      const subtotal = somaQuantidadeListaPontos(Object.values(g.pontosPorVista || {}).flat());
+      return { ...g, unit, subtotal };
+    })
+    .filter((g) => g.subtotal > 0);
+
+  const distinctUnits = Array.from(new Set(activeSessaoGroups.map((g) => g.unit.toLowerCase())));
+  const canShowTotalGeral = distinctUnits.length <= 1 && totalSessao > 0;
 
   return (
     <div className={`flex min-h-0 flex-1 flex-col rounded-xl border border-app-border bg-white p-5 shadow-app-card ${isModal ? 'w-full max-w-sm max-h-[80vh]' : ''}`}>
@@ -37,8 +48,11 @@ export function PontosResumoPanel({ gruposPontos, gruposSessao, unidadeMedida, i
       ) : (
         <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto">
           {grupos.map((g) => {
-            const cor = corParaProcedimento(g.catalogoProcedimentoSaudeId);
+            const cor = g.corHex || g.cor || (g.catalogoProcedimentoSaudeId ? corParaProcedimento(g.catalogoProcedimentoSaudeId) : null) || '#00a88e';
             const subtotal = somaQuantidadeListaPontos(g.pontos);
+            const procUnit = normalizeUnidadeMedida(g.unidadeMedida || fallbackUnit);
+            const unitSuffix = ` ${procUnit}`;
+
             return (
               <div key={g.catalogoProcedimentoSaudeId} className="rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-3">
                 <div className="mb-2 flex items-center gap-2">
@@ -73,11 +87,12 @@ export function PontosResumoPanel({ gruposPontos, gruposSessao, unidadeMedida, i
           </div>
           <div className="space-y-2">
             {gruposSessaoArr.map((g) => {
-              const cor = corParaProcedimento(g.catalogoProcedimentoSaudeId);
+              const cor = g.corHex || g.cor || (g.catalogoProcedimentoSaudeId ? corParaProcedimento(g.catalogoProcedimentoSaudeId) : null) || '#00a88e';
               const pontosDaSessao = Object.values(g.pontosPorVista || {}).flat();
               const subtotalSessao = somaQuantidadeListaPontos(pontosDaSessao);
               if (subtotalSessao === 0) return null;
-              
+              const procUnit = normalizeUnidadeMedida(g.unidadeMedida || fallbackUnit);
+
               return (
                 <div key={g.catalogoProcedimentoSaudeId} className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -85,16 +100,25 @@ export function PontosResumoPanel({ gruposPontos, gruposSessao, unidadeMedida, i
                     <span className="text-[12px] font-semibold text-app-ink">{g.nomeProcedimento}</span>
                   </div>
                   <span className="text-[12px] font-bold text-app-accent-deep">
-                    {subtotalSessao}{unitSuffix}
+                    {subtotalSessao} {procUnit}
                   </span>
                 </div>
               );
             })}
           </div>
-          <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-            <span className="text-[11px] font-bold text-[#64748b] uppercase">Total Geral</span>
-            <span className="text-[13px] font-bold text-app-accent">{totalSessao}{unitSuffix}</span>
-          </div>
+          {canShowTotalGeral ? (
+            <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+              <span className="text-[11px] font-bold text-[#64748b] uppercase">Total Geral</span>
+              <span className="text-[13px] font-bold text-app-accent">
+                {totalSessao} {activeSessaoGroups[0]?.unit || fallbackUnit}
+              </span>
+            </div>
+          ) : activeSessaoGroups.length > 1 ? (
+            <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] font-medium text-[#94a3b8]">
+              <span>Totais por procedimento</span>
+              <span className="text-[10px] uppercase font-semibold text-slate-400">(Unidades distintas)</span>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

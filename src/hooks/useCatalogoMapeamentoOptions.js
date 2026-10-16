@@ -9,6 +9,7 @@ function normalizeCatalogoMapeamentoOptions(data) {
       id: String(c.id || '').trim(),
       nome: String(c.nomeProcedimento || '').trim(),
       duracaoMin: Number(c.duracaoEstimadaMinutos) || 60,
+      unidadeMedida: c.unidadeMedida ? String(c.unidadeMedida).toLowerCase() : 'un',
     }))
     .filter((o) => o.id && o.nome);
 }

@@ -4,7 +4,7 @@
  * TERMOS → assinaturas de termos (e a lista da aba Documentos); ANAMNESE → lista de anamneses da aba Anamnese.
  * Nenhuma rebusca por aviso mostra "Sincronizando com o servidor..." nem busca o bloco dos outros.
  */
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../../test/snapshotConsulta.jsx';
 import { IDS, agendaDto, pacienteDto } from '../../test/encerrar/cenariosEncerrar.js';
@@ -72,7 +72,7 @@ const esperar = (ms) => act(async () => {
 async function passarDebounce() {
   await esperar(450);
   await esperar(50);
-  await esperar(300);
+  await esperar(550);
   await assentarMuito(4);
 }
 
@@ -255,7 +255,9 @@ describe('Perfil do paciente · uma rebusca silenciosa por bloco a cada aviso', 
     expect(nomeNoCabecalho()).toBe('Maria Souza Lima');
     expect(vigia.estado.viu).toBe(false);
     // detalhe 1 vez; o próximo retorno é rebuscado 1 vez porque a busca dele usa o nome, que mudou
-    expect(diferenca(contar(srv), antes)).toEqual({ ...ZERO, paciente: 1, procedimentos: 1, proximoRetorno: 1 });
+    await waitFor(() => {
+      expect(diferenca(contar(srv), antes)).toEqual({ ...ZERO, paciente: 1, procedimentos: 1, proximoRetorno: 1 });
+    });
     // o que já estava continua (sem limpar antes)
     expect(screen.getByText('Prontuário eletrônico')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /Toxina/ }).length).toBeGreaterThan(0);

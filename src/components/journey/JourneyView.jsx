@@ -199,6 +199,8 @@ export function JourneyView({
   procedureCapturedPhotos: procedureCapturedPhotosStep4,
   uploadProcedureFiles: uploadProcedureFilesStep4,
   removeProcedurePhoto: removeProcedurePhotoStep4,
+  procedimentosSessao: procedimentosSessaoProp,
+  setProcedimentosSessao: setProcedimentosSessaoProp,
   /** Orientações por item (ver Step5Finalization); sem as props, a jornada guarda um item local. */
   itensOrientacoes: itensOrientacoesProp,
   setOrientacoesDoItem: setOrientacoesDoItemProp,
@@ -218,6 +220,12 @@ export function JourneyView({
   const { hojeIso } = useAgoraDaClinica();
   const procedureDateIso = procedureDateIsoProp === undefined ? hojeIso : procedureDateIsoProp;
   const [_nomeProcedimentoCatalogoId, setNomeProcedimentoCatalogoIdLocal] = React.useState(null);
+
+  const [localProcedimentosSessao, setLocalProcedimentosSessao] = React.useState([]);
+  const hasParentProcedimentosSessao =
+    procedimentosSessaoProp !== undefined && typeof setProcedimentosSessaoProp === 'function';
+  const procedimentosSessao = hasParentProcedimentosSessao ? procedimentosSessaoProp : localProcedimentosSessao;
+  const setProcedimentosSessao = hasParentProcedimentosSessao ? setProcedimentosSessaoProp : setLocalProcedimentosSessao;
 
   // Sem o pai: um item local (nome do procedimento), `orient: null` até o Step5 carregar o modelo.
   const [localOrient, setLocalOrient] = React.useState(null);
@@ -366,6 +374,8 @@ export function JourneyView({
           nomeProcedimento={nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
           setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoIdLocal}
+          procedimentosSessao={procedimentosSessao}
+          setProcedimentosSessao={setProcedimentosSessao}
           observacoesExecucao={observacoesExecucao}
           setObservacoesExecucao={setObservacoesExecucao}
           procedureCapturedPhotos={procedureCapturedPhotosStep4 ?? evaluationCapturedPhotos}

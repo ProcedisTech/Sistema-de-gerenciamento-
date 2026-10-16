@@ -3,6 +3,7 @@ import { Camera, Eye, ImageIcon, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { FotoCardImagem } from './FotoCardImagem.jsx';
 import { chaveFotoLegenda } from '../journey/chaveFotoLegenda.js';
+import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 
 const noop = () => {};
 
@@ -130,7 +131,18 @@ export function ConsultaAvaliacaoFlow({
         {photos.map((ph, idx) => (
           <div key={chaveFotoLegenda(ph, photos, idx) || idx} className="min-w-0">
             <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
-              <FotoCardImagem photo={ph} urlArquivoReserva={urlArquivoReserva} />
+              {Boolean(ph.pontos?.length) || Boolean(ph.mapaOverlay?.marcacoes?.length) ? (
+                <GaleriaMapaThumb
+                  url={ph.url}
+                  mapaOverlay={ph.mapaOverlay || { pontos: ph.pontos, procedimentosMapeados: ph.procedimentosMapeados }}
+                  density="thumb"
+                  className="h-full w-full"
+                  imgClassName="h-full w-full object-contain"
+                  alt="Foto com anotações da avaliação"
+                />
+              ) : (
+                <FotoCardImagem photo={ph} urlArquivoReserva={urlArquivoReserva} />
+              )}
               {typeof onAnnotatePhoto === 'function' ? (
                 <button
                   type="button"

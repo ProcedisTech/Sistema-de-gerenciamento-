@@ -519,7 +519,13 @@ export function AgendaDashboard({
           String(appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '')
             .toLowerCase() === 'retorno',
         planejamentoItemId: appointment.planejamentoItemId ?? null,
-        lote: loteDasLinhas(items),
+        lote: loteDasLinhas(
+          items.filter((a) => {
+            const nome = a.tipoProcedimento?.nome || a.procedimentoNome || '';
+            const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
+            return Boolean((a.catalogoProcedimentoSaudeId && String(a.catalogoProcedimentoSaudeId).trim()) || (!isPlaceholder && String(nome).trim()));
+          })
+        ),
       });
       return;
     }

@@ -17,6 +17,8 @@ export function useMapeamentoFullscreenKeyboardShortcuts({
   blocked = false,
   onSetModo,
   onDesfazer,
+  onResetZoom,
+  onToggleDoses,
   onEscape,
 }) {
   useEffect(() => {
@@ -44,19 +46,22 @@ export function useMapeamentoFullscreenKeyboardShortcuts({
       if (lower === 'p') {
         event.preventDefault();
         onSetModo?.('ponto');
-      } else if (lower === 'm') {
-        event.preventDefault();
-        onSetModo?.('mover');
       } else if (lower === 't') {
         event.preventDefault();
         onSetModo?.('traco');
       } else if (lower === 'b') {
         event.preventDefault();
         onSetModo?.('borracha');
+      } else if (lower === 'd') {
+        event.preventDefault();
+        onToggleDoses?.();
+      } else if (lower === '0' || lower === 'r') {
+        event.preventDefault();
+        onResetZoom?.();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enabled, blocked, onSetModo, onDesfazer, onEscape]);
+  }, [enabled, blocked, onSetModo, onDesfazer, onResetZoom, onToggleDoses, onEscape]);
 }

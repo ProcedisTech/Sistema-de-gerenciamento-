@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { corParaProcedimento } from '../../constants/mapeamentoPaletaCores.js';
 
 /** Formato antigo do horário de início no sessionStorage (com o CPF do paciente na chave): só para remover. */
 const PREFIXO_HORARIO_ANTIGO = 'procedis_start_time_';
@@ -49,6 +50,8 @@ export const useJourneyState = () => {
   // ============ ETAPA 2: AVALIAÇÃO — contexto do plano (step 2 → 4) ============
   /** { planejamentoId, itemIdByCatalogo, procedimentosComPontos? } */
   const [journeyPlanejamentoCtx, setJourneyPlanejamentoCtx] = useState(null);
+  const [procedimentosAvaliados, setProcedimentosAvaliados] = useState([]);
+  const [destinoAvaliacao, setDestinoAvaliacao] = useState(null); // 'plano' | 'avulso' | null
 
   // ============ ETAPA 2: AVALIAÇÃO ============
   /**
@@ -187,14 +190,17 @@ export const useJourneyState = () => {
       const cur = nextArr[activeProcedureIndex] || {};
       const nextNome = nome != null ? String(nome) : '';
       const nextTrim = nextNome.trim();
-      const catalogo = catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null;
+      const cid = catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null;
       const naTela = String(cur.nomeProcedimento || cur.procedimentoNome || '').trim();
       // B-42 F3: escolher do catálogo (ou outro nome) é a pessoa mudando o procedimento: a linha perde a marca.
-      const trocou = catalogo != null || (nextTrim !== '' && nextTrim !== naTela);
+      const trocou = cid != null || (nextTrim !== '' && nextTrim !== naTela);
       nextArr[activeProcedureIndex] = {
         ...cur,
         nomeProcedimento: nextNome,
-        nomeProcedimentoCatalogoId: catalogo,
+        nomeProcedimentoCatalogoId: cid,
+        catalogoProcedimentoSaudeId: cid,
+        catalogoId: cid,
+        corHex: cur.corHex || (cid ? corParaProcedimento(cid) : undefined),
         ...(trocou ? { nomeSoDeTela: false } : {}),
       };
       return nextArr;
@@ -250,6 +256,10 @@ export const useJourneyState = () => {
     salvarRespostaAnamnese,
     journeyPlanejamentoCtx,
     setJourneyPlanejamentoCtx,
+    procedimentosAvaliados,
+    setProcedimentosAvaliados,
+    destinoAvaliacao,
+    setDestinoAvaliacao,
     observacoesAvaliacao,
     setObservacoesAvaliacao,
     /** Alias de `observacoesAvaliacao`/`setObservacoesAvaliacao` (nome antigo; mantido por compatibilidade). */

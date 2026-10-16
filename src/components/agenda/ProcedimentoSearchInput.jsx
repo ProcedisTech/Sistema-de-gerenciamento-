@@ -19,6 +19,7 @@ export function ProcedimentoSearchInput({
   onRemover,
   readOnly = false,
   selectionMode = 'multi',
+  selectedVariant = 'list',
   showDuracao = true,
   onSelect,
 }) {
@@ -30,6 +31,21 @@ export function ProcedimentoSearchInput({
   const close = useCallback(() => setOpen(false), []);
 
   if (readOnly) {
+    if (selectedVariant === 'chips') {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Procedimentos selecionados">
+          {(procedimentosSelecionados || []).map((proc) => (
+            <span
+              key={proc.id}
+              role="listitem"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50/80 px-2.5 py-1 text-xs font-semibold text-teal-900 shadow-2xs"
+            >
+              <span className="truncate max-w-[240px]">{proc.nome}</span>
+            </span>
+          ))}
+        </div>
+      );
+    }
     return (
       <ProcedimentosMultiSeletor
         procedimentos={procedimentosSelecionados}
@@ -217,12 +233,51 @@ export function ProcedimentoSearchInput({
       </SearchDropdownShell>
 
       {!isSingle && procedimentosSelecionados.length > 0 ? (
-        <div className="mt-2">
-          <ProcedimentosMultiSeletor
-            procedimentos={procedimentosSelecionados}
-            onRemover={onRemover}
-            showAdicionar={false}
-          />
+        <div className="mt-2.5">
+          {selectedVariant === 'chips' ? (
+            <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Procedimentos selecionados">
+              {procedimentosSelecionados.map((proc) => {
+                const isPlano = Boolean(proc.planejamentoItemId) || proc.isAvulso === false;
+                return (
+                  <span
+                    key={proc.id}
+                    role="listitem"
+                    className="inline-flex items-center gap-2 rounded-xl border-[1.5px] border-[#00a88e] bg-white px-3 py-1.5 text-xs font-bold text-[#0f172a] shadow-xs transition-all hover:border-[#008f79] hover:shadow-sm"
+                  >
+                    <span className="truncate max-w-[240px] text-slate-900">{proc.nome}</span>
+                    {isPlano ? (
+                      <span className="rounded-md bg-[#e6f7f5] px-1.5 py-0.5 text-[10px] font-extrabold text-[#008f79] border border-[#00a88e]/30">
+                        Plano
+                      </span>
+                    ) : proc.isAvulso ? (
+                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                        Avulso
+                      </span>
+                    ) : null}
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemover?.(proc.id);
+                        }}
+                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00a88e] cursor-pointer"
+                        aria-label={`Remover ${proc.nome}`}
+                      >
+                        <X className="h-3 w-3 stroke-[2.5]" />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <ProcedimentosMultiSeletor
+              procedimentos={procedimentosSelecionados}
+              onRemover={onRemover}
+              showAdicionar={false}
+            />
+          )}
         </div>
       ) : null}
     </div>

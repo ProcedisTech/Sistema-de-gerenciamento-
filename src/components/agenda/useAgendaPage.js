@@ -39,6 +39,7 @@ import {
 } from '../../utils/agendaDateUtils';
 import { diaDaSemana, hojeDaClinica, parseDataCalendario, somarDias } from '../../utils/datasClinica.js';
 import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
+import { garantirProcedimentosNoPlano } from '../../utils/sincronizarProcedimentosPlanoAgenda.js';
 import {
   fetchKpiDrilldownRows,
   filterKpiCountableAppointments,
@@ -2689,6 +2690,20 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           return false;
         }
 
+        let planoItemIdMap = {};
+        if (modalMode !== 'reagendar') {
+          try {
+            planoItemIdMap = await garantirProcedimentosNoPlano({
+              pacienteId: String(form.pacienteId || patient?.id || '').trim(),
+              catalogoProcedimentoSaudeIds: procIds,
+              roleUserId: agendaRole,
+              dataIso: form.data,
+            });
+          } catch (errPlano) {
+            console.warn('[saveAppointment] Falha ao sincronizar procedimentos com plano:', errPlano);
+          }
+        }
+
         let startHh = String(form.horaInicio || '09:00').slice(0, 5);
         const resultados = [];
         const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
@@ -2698,11 +2713,13 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           const catalogoProcedimentoSaudeId = procIds[i];
           const dMin = divisao[i] ?? 30;
 
-          const planejamentoItemId = resolvePlanejamentoItemIdForCatalogo(
-            catalogoProcedimentoSaudeId,
-            planejamentoItemIdPorCatalogo,
-            planejamentoItemIdVinculoRef.current,
-          );
+          const planejamentoItemId =
+            planoItemIdMap[catalogoProcedimentoSaudeId] ||
+            resolvePlanejamentoItemIdForCatalogo(
+              catalogoProcedimentoSaudeId,
+              planejamentoItemIdPorCatalogo,
+              planejamentoItemIdVinculoRef.current,
+            );
           const agendaOrigemResolvida =
             modalMode === 'reagendar'
               ? (grupoReagendarMap[catalogoProcedimentoSaudeId] ||

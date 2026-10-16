@@ -29,11 +29,33 @@ function AtendimentoAvulsoItemCard({
   const { fuso } = useFusoClinica();
   const [expandido, setExpandido] = useState(false);
 
-  const fotos = Array.isArray(atendimento.fotos) ? atendimento.fotos : [];
+  const fotos = useMemo(() => (Array.isArray(atendimento?.fotos) ? atendimento.fotos : []), [atendimento.fotos]);
   const retornos = Array.isArray(atendimento.retornos) ? atendimento.retornos : [];
   const hasFotos = fotos.length > 0;
   const hasRetornos = retornos.length > 0;
   const hasObservacao = Boolean(atendimento.observacao && String(atendimento.observacao).trim());
+
+  const procedimentosLista = useMemo(() => {
+    if (Array.isArray(atendimento?.procedimentosItens) && atendimento.procedimentosItens.length > 0) {
+      return atendimento.procedimentosItens;
+    }
+    if (Array.isArray(atendimento?.nomesProcedimentos) && atendimento.nomesProcedimentos.length > 0) {
+      return atendimento.nomesProcedimentos.map((nome, idx) => ({
+        id: `p_${idx}`,
+        nome,
+        corHex: null,
+      }));
+    }
+    return [
+      {
+        id: atendimento?.procedimentoFeitoId || 'single',
+        nome: atendimento?.nomeProcedimento || 'Procedimento Avulso',
+        corHex: null,
+      },
+    ];
+  }, [atendimento]);
+
+  const temMultiplosProcedimentos = procedimentosLista.length > 1;
 
   // Agrupamento estrito por categoria clínica em prateleiras separadas um embaixo do outro
   const categoriasOrganizadas = useMemo(() => {
@@ -85,12 +107,40 @@ function AtendimentoAvulsoItemCard({
           
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-bold text-slate-900 text-xs truncate">
-                {atendimento.nomeProcedimento}
-              </h4>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {atendimento.statusNome || 'FINALIZADO'}
-              </span>
+              {temMultiplosProcedimentos ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {procedimentosLista.slice(0, 2).map((proc, idx) => (
+                    <span
+                      key={proc.id || idx}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white border border-slate-300 text-slate-800 shadow-2xs"
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: proc.corHex || '#00a88e' }}
+                      />
+                      <span className="truncate max-w-[140px]">{proc.nome}</span>
+                    </span>
+                  ))}
+                  {procedimentosLista.length > 2 && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 border border-slate-200 text-slate-600">
+                      +{procedimentosLista.length - 2} outros
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <h4 className="font-bold text-slate-900 text-xs truncate">
+                  {atendimento.nomeProcedimento}
+                </h4>
+              )}
+              {atendimento.isAvaliacao ? (
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  AVALIAÇÃO
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {atendimento.statusNome || 'REALIZADO'}
+                </span>
+              )}
               {hasFotos && (
                 <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
                   <Camera className="w-3 h-3" />
@@ -119,6 +169,9 @@ function AtendimentoAvulsoItemCard({
             <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono flex items-center gap-1">
               <Calendar className="w-3 h-3 text-slate-400" />
               {formatDataSessaoPtBr(atendimento.dataISO)}
+              {atendimento.horaInicio && (
+                <span className="text-slate-400 font-sans font-medium">· {atendimento.horaInicio}</span>
+              )}
             </span>
           )}
 
@@ -134,6 +187,29 @@ function AtendimentoAvulsoItemCard({
       {expandido && (
         <div className="p-3 bg-slate-50/50 border-t border-slate-100 space-y-2.5 animate-in fade-in duration-150 text-xs">
           
+          {/* LISTA COMPLETA DE PROCEDIMENTOS DA SESSÃO */}
+          {temMultiplosProcedimentos && (
+            <div className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                Procedimentos Realizados nesta Sessão ({procedimentosLista.length}):
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {procedimentosLista.map((proc, idx) => (
+                  <span
+                    key={proc.id || idx}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium bg-slate-50 border border-slate-200 text-slate-700"
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: proc.corHex || '#00a88e' }}
+                    />
+                    <span className="font-semibold text-slate-800">{proc.nome}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* OBSERVAÇÃO CLÍNICA */}
           {hasObservacao && (
             <div className="p-2 rounded bg-white border border-slate-200 text-slate-600 flex items-start gap-1.5">

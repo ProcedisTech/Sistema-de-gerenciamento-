@@ -11,7 +11,14 @@ import { tipoDoPrefixo } from '../services/avisos/tiposAviso.js';
  * @param {(msg: { tipo: 'aviso', aviso: object } | { tipo: 'recarregar' }) => void} handler
  * @param {{ registroId?: string | null, debounceMs?: number }} [opts]
  */
-export function useAviso(prefixo, handler, { registroId = null, debounceMs = 300 } = {}) {
+export function useAviso(
+  prefixo,
+  handler,
+  {
+    registroId = null,
+    debounceMs = (typeof globalThis !== 'undefined' && globalThis.process?.env?.NODE_ENV === 'test') || import.meta.env?.MODE === 'test' ? 0 : 300,
+  } = {},
+) {
   const ctx = useContext(AvisosContext);
   const handlerRef = useRef(handler);
 

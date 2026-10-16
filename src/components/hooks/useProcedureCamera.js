@@ -422,7 +422,7 @@ export function useProcedureCamera({
     [selectedPatientCpf, cpf, setPatients]
   );
 
-  /** Substitui um item da lista de fotos do procedimento pelo JPEG já com desenho. */
+  /** Substitui um item da lista de fotos do procedimento preservando referências válidas */
   const replaceProcedureCapturedPhotoAt = useCallback((index, entry) => {
     const newUrl = entry?.url;
     if (!newUrl) return;
@@ -431,7 +431,7 @@ export function useProcedureCamera({
       if (!Array.isArray(prev) || index < 0 || index >= prev.length) return prev;
       const old = prev[index];
       try {
-        if (old?.url) URL.revokeObjectURL(old.url);
+        if (old?.url && old.url !== newUrl) URL.revokeObjectURL(old.url);
       } catch {
         // ignore
       }
@@ -442,39 +442,52 @@ export function useProcedureCamera({
       };
       const next = [...prev];
       next[index] = {
+        ...old,
+        ...entry,
         url: newUrl,
-        blob: entry.blob ?? null,
+        blob: entry.blob ?? old?.blob ?? null,
         meta: mergedMeta,
       };
       return next;
     });
   }, []);
 
-  /** Substitui um item da lista de avaliação pelo JPEG já com desenho (mesmo índice selecionado na etapa 3). */
+  /** Substitui um item da lista de avaliação preservando foto limpa e dados vetoriais */
   const replaceEvaluationCapturedPhotoAt = useCallback(
     (index, entry) => {
-      const newUrl = entry?.url;
-      if (!newUrl) return;
+      if (!entry) return;
 
       let nextSnapshot = null;
+      let effectiveNewUrl = null;
       setEvaluationCapturedPhotos((prev) => {
         if (!Array.isArray(prev) || index < 0 || index >= prev.length) return prev;
         const old = prev[index];
+        const newUrl = entry.url || old?.url;
+        effectiveNewUrl = newUrl;
         try {
-          if (old?.url) URL.revokeObjectURL(old.url);
+          if (old?.url && entry.url && old.url !== entry.url) URL.revokeObjectURL(old.url);
         } catch {
           // ignore
         }
         const mergedMeta = {
           ...(old?.meta || {}),
           ...(entry.meta || {}),
-          annotated: true,
+          ...(entry.isAnnotated || old?.isAnnotated ? { annotated: true } : {}),
         };
         nextSnapshot = [...prev];
         nextSnapshot[index] = {
+          ...old,
+          ...entry,
           url: newUrl,
-          blob: entry.blob ?? null,
+          blob: entry.blob ?? old?.blob ?? null,
+          cleanBlob: entry.cleanBlob ?? old?.cleanBlob ?? entry.blob ?? old?.blob ?? null,
+          cleanUrl: entry.cleanUrl ?? old?.cleanUrl ?? newUrl,
+          pontos: entry.pontos || old?.pontos || [],
+          procedimentosMapeados: entry.procedimentosMapeados || old?.procedimentosMapeados || [],
           meta: mergedMeta,
+          isAnnotated: entry.isAnnotated ?? old?.isAnnotated ?? (Boolean(old?.pontos?.length) || Boolean(entry.pontos?.length)),
+          uploaded: entry.uploaded ?? old?.uploaded ?? false,
+          fotoId: entry.fotoId ?? old?.fotoId ?? null,
         };
         return nextSnapshot;
       });
@@ -489,10 +502,9 @@ export function useProcedureCamera({
             return {
               ...p,
               evaluationCapturedPhotos: nextSnapshot.map((ph) => ({
-                url: ph.url,
-                meta: ph.meta,
+                ...ph,
               })),
-              evaluationAnnotatedPhotoUrl: newUrl,
+              ...(effectiveNewUrl ? { evaluationAnnotatedPhotoUrl: effectiveNewUrl } : {}),
             };
           })
         );

@@ -812,6 +812,8 @@ export const pacientesGaleriaApi = {
       tipoFotoCodigo,
       atendimentoId,
       atendimentoItemId,
+      agendaId,
+      mapaId,
     } = options;
     if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
       fd.append('roleUserId', String(roleUserId));
@@ -824,6 +826,12 @@ export const pacientesGaleriaApi = {
     }
     if (procedimentoFeitoId != null && String(procedimentoFeitoId).trim()) {
       fd.append('procedimentoFeitoId', String(procedimentoFeitoId).trim());
+    }
+    if (agendaId != null && String(agendaId).trim()) {
+      fd.append('agendaId', String(agendaId).trim());
+    }
+    if (mapaId != null && String(mapaId).trim()) {
+      fd.append('mapaId', String(mapaId).trim());
     }
     if (legenda != null && String(legenda).trim()) {
       fd.append('legenda', String(legenda).trim());
@@ -1509,7 +1517,7 @@ export const termosApi = {
   update: (id, data) =>
     request(`/api/v1/termos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/termos/${id}`, { method: 'DELETE' }),
-  resolver: ({ pacienteId, catalogoIds = [], atendimentoId } = {}) => {
+  resolver: ({ pacienteId, catalogoIds = [], planejamentoItemIds = [], atendimentoId } = {}) => {
     const params = new URLSearchParams();
     if (pacienteId) params.set('pacienteId', String(pacienteId));
     // Dentro de consulta: só vale assinatura ASSINADA nesta consulta. Fora dela, não envia.
@@ -1517,8 +1525,14 @@ export const termosApi = {
     if (atend) params.set('atendimentoId', atend);
     (Array.isArray(catalogoIds) ? catalogoIds : [])
       .map((id) => String(id || '').trim())
-      .filter(Boolean)
+      .filter((id) => id && id !== 'undefined' && id !== 'null')
       .forEach((id) => params.append('catalogoProcedimentoSaudeIds', id));
+    if (Array.isArray(planejamentoItemIds) && planejamentoItemIds.length > 0) {
+      params.set(
+        'planejamentoItemIds',
+        planejamentoItemIds.map((id) => (id ? String(id).trim() : 'null')).join(','),
+      );
+    }
     const qs = params.toString();
     return request(`/api/v1/termos/resolucao${qs ? `?${qs}` : ''}`);
   },
