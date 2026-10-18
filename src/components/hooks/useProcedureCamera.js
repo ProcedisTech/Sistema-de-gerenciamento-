@@ -483,11 +483,13 @@ export function useProcedureCamera({
           cleanBlob: entry.cleanBlob ?? old?.cleanBlob ?? entry.blob ?? old?.blob ?? null,
           cleanUrl: entry.cleanUrl ?? old?.cleanUrl ?? newUrl,
           pontos: entry.pontos || old?.pontos || [],
+          mapaOverlay: entry.mapaOverlay || old?.mapaOverlay || null,
           procedimentosMapeados: entry.procedimentosMapeados || old?.procedimentosMapeados || [],
           meta: mergedMeta,
-          isAnnotated: entry.isAnnotated ?? old?.isAnnotated ?? (Boolean(old?.pontos?.length) || Boolean(entry.pontos?.length)),
+          isAnnotated: entry.isAnnotated ?? old?.isAnnotated ?? (Boolean(old?.pontos?.length) || Boolean(entry.pontos?.length) || Boolean(old?.mapaOverlay?.marcacoes?.length) || Boolean(entry.mapaOverlay?.marcacoes?.length)),
           uploaded: entry.uploaded ?? old?.uploaded ?? false,
-          fotoId: entry.fotoId ?? old?.fotoId ?? null,
+          id: entry.id ?? old?.id ?? entry.fotoId ?? old?.fotoId ?? null,
+          fotoId: entry.fotoId ?? old?.fotoId ?? entry.id ?? old?.id ?? null,
         };
         return nextSnapshot;
       });

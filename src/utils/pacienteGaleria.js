@@ -152,7 +152,10 @@ export function groupGaleriaItemsBySession(items, fuso) {
     const feitoId = it.procedimentoFeitoId != null && String(it.procedimentoFeitoId).trim() !== ''
       ? String(it.procedimentoFeitoId).trim()
       : null;
-    const key = feitoId ? `${dataISO}_${feitoId}` : dataISO;
+    const atendId = it.atendimentoId != null && String(it.atendimentoId).trim() !== ''
+      ? String(it.atendimentoId).trim()
+      : null;
+    const key = feitoId ? `${dataISO}_${feitoId}` : (atendId ? `${dataISO}_${atendId}` : dataISO);
 
     if (!groups.has(key)) {
       groups.set(key, {
@@ -271,6 +274,8 @@ export function normalizePacienteGaleriaItem(raw) {
 
   const agendaId =
     raw.agendaId ?? raw.agenda_id ?? raw.agenda?.id ?? null;
+  const atendimentoId =
+    raw.atendimentoId ?? raw.atendimento_id ?? raw.atendimento?.id ?? null;
   const planejamentoItemId =
     raw.planejamentoItemId ?? raw.planejamento_item_id ?? null;
   const planejamentoId =
@@ -340,6 +345,7 @@ export function normalizePacienteGaleriaItem(raw) {
         ? String(procedimentoFeitoCardId)
         : null,
     agendaId: agendaId != null && String(agendaId).trim() !== '' ? String(agendaId).trim() : null,
+    atendimentoId: atendimentoId != null && String(atendimentoId).trim() !== '' ? String(atendimentoId).trim() : null,
     planejamentoItemId: effectivePlanejamentoItemId,
     planejamentoId: effectivePlanejamentoId,
     mapaOverlay,

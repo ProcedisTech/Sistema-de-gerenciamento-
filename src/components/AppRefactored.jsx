@@ -383,6 +383,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const journeyState = useJourneyState();
   const mapaAplicacaoState = useMapaAplicacaoState();
   const mapaRetornoState = useMapaAplicacaoState();
+
+  /** Editor fullscreen compartilhado (procedimento / avaliação). */
+  const [photoAnnotationScope, setPhotoAnnotationScope] = React.useState(null);
+  const [photoAnnotationIndex, setPhotoAnnotationIndex] = React.useState(null);
+
+  const closeJourneyPhotoAnnotation = React.useCallback(() => {
+    setPhotoAnnotationScope(null);
+    setPhotoAnnotationIndex(null);
+    journeyState.setPaths([]);
+    journeyState.setIsHoveringCanvas(false);
+    journeyState.setCursorPos({ x: -100, y: -100 });
+    journeyState.setIsDrawing(false);
+  }, [journeyState]);
+
   /** Data (YYYY-MM-DD, calendário da clínica) do início do atendimento — limite mínimo para “próximo retorno”. */
   const [journeyProcedureDateIso, setJourneyProcedureDateIso] = useState(null);
   React.useEffect(() => {
@@ -1360,15 +1374,86 @@ function AppRefactoredInner({ onCanalAvisos }) {
   catalogoAtivoTermosRef.current = journeyState.nomeProcedimentoCatalogoId
     ? String(journeyState.nomeProcedimentoCatalogoId).trim()
     : null;
-  /** F3: o bloqueio do item ativo = resolução do catálogo dele menos o que já está assinado na consulta. */
+  /** F3: o bloqueio = resolução agregada de todos os procedimentos da consulta menos o que já está assinado. */
   const termosExecucaoBloqueio = React.useMemo(() => {
-    const cat = journeyState.nomeProcedimentoCatalogoId
+    const ids = Array.isArray(catalogoIdsConsulta) && catalogoIdsConsulta.length > 0
+      ? catalogoIdsConsulta
+      : (journeyState.nomeProcedimentoCatalogoId ? [String(journeyState.nomeProcedimentoCatalogoId).trim()] : []);
+
+    const catAtivo = journeyState.nomeProcedimentoCatalogoId
       ? String(journeyState.nomeProcedimentoCatalogoId).trim()
-      : null;
-    const base = cat ? resolucaoTermosPorCatalogo[cat] : null;
-    if (!base) return { catalogoId: cat, resolucao: null };
-    return { catalogoId: cat, resolucao: { ...base, faltantes: faltantesDoItem(base, termosDaConsulta) } };
-  }, [resolucaoTermosPorCatalogo, termosDaConsulta, journeyState.nomeProcedimentoCatalogoId]);
+      : (ids[0] || null);
+
+    if (ids.length === 0) {
+      return { catalogoId: catAtivo, resolucao: null };
+    }
+
+    const resolucoesValidas = ids
+      .map((id) => resolucaoTermosPorCatalogo[id])
+      .filter(Boolean);
+
+    if (resolucoesValidas.length === 0) {
+      return { catalogoId: catAtivo, resolucao: null };
+    }
+
+    const dedupPorId = (arr) => {
+      const map = new Map();
+      (arr || []).forEach((item) => {
+        const id = item?.termoId || item?.id || item?.catalogoId || item?.catalogoProcedimentoSaudeId;
+        if (id && !map.has(String(id))) {
+          map.set(String(id), item);
+        }
+      });
+      return Array.from(map.values());
+    };
+
+    const dedupTermosExigidos = (arr) => {
+      const map = new Map();
+      (arr || []).forEach((item) => {
+        const id = String(item?.termoId || item?.id || '').trim();
+        if (!id) return;
+        if (!map.has(id)) {
+          map.set(id, {
+            ...item,
+            catalogos: Array.isArray(item.catalogos) ? [...item.catalogos] : [],
+          });
+        } else {
+          const existing = map.get(id);
+          if (Array.isArray(item.catalogos)) {
+            item.catalogos.forEach((cat) => {
+              if (cat?.id && !existing.catalogos.some((c) => String(c.id) === String(cat.id))) {
+                existing.catalogos.push(cat);
+              }
+            });
+          }
+          if (item.vigente) existing.vigente = true;
+          if (item.assinaturaId) existing.assinaturaId = item.assinaturaId;
+          if (item.assinadoEm && !existing.assinadoEm) existing.assinadoEm = item.assinadoEm;
+        }
+      });
+      return Array.from(map.values());
+    };
+
+    const termosObrigatorios = dedupPorId(resolucoesValidas.flatMap((r) => r.termosObrigatorios || []));
+    const faltantes = dedupPorId(resolucoesValidas.flatMap((r) => faltantesDoItem(r, termosDaConsulta)));
+    const termosExigidos = dedupTermosExigidos(resolucoesValidas.flatMap((r) => r.termosExigidos || []));
+    const consentimentosVigentes = dedupPorId(resolucoesValidas.flatMap((r) => r.consentimentosVigentes || []));
+    const procedimentos = dedupPorId(resolucoesValidas.flatMap((r) => r.procedimentos || []));
+    const procedimentosSemVinculo = dedupPorId(resolucoesValidas.flatMap((r) => r.procedimentosSemVinculo || []));
+
+    const resolucaoAgregada = {
+      termosObrigatorios,
+      faltantes,
+      termosExigidos,
+      consentimentosVigentes,
+      procedimentos,
+      procedimentosSemVinculo,
+      totalObrigatorios: termosObrigatorios.length,
+      totalFaltantes: faltantes.length,
+    };
+
+    return { catalogoId: catAtivo, resolucao: resolucaoAgregada };
+  }, [catalogoIdsConsulta, resolucaoTermosPorCatalogo, termosDaConsulta, journeyState.nomeProcedimentoCatalogoId]);
   const execucaoBloqueadaPorTermos = bloqueioExecucaoTermos({
     resolucao: termosExecucaoBloqueio.resolucao,
     pfIdNestaSessao: pfIdCatalogoAtivo,
@@ -1459,7 +1544,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
     },
     avisarErro: avisarErroFoto,
   });
-  const { fotoRemovida, fotoAnotada, aguardarPendentes: aguardarFotosPendentes } = envioFotos;
+  const {
+    fotoRemovida,
+    fotoAnotada,
+    aguardarPendentes: aguardarFotosPendentes,
+    obterFotoId: obterFotoIdConsulta,
+  } = envioFotos;
   const { aguardarMapa: aguardarMapaRascunho } = useMapaRascunhoAutosave({
     consulta: consultaDasFotos,
     itemId: itemDoProcedimentoAtivo,
@@ -1500,6 +1590,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     },
     [fotoAnotada, cameraState, journeyState],
   );
+
+
   /** F1: URL de reserva do arquivo no servidor para o editor carregar a foto (`?v=` pela versão que a foto conhece). */
   const urlArquivoReservaDaFoto = React.useCallback(
     (photo) => urlDeReservaDaFoto(pacienteAtual?.id, photo?.meta?.fotoId, photo?.meta?.arquivoAtualizadoEm),
@@ -1577,6 +1669,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
       cleanBlob: resolvedCleanBlob,
       cleanUrl: resolvedCleanUrl,
       pontos: pontos || prevPh?.pontos || [],
+      mapaOverlay: {
+        pontos: pontos || prevPh?.pontos || [],
+        marcacoes: pontos || prevPh?.pontos || [],
+        procedimentos: procedimentosMapeados || prevPh?.procedimentosMapeados || [],
+        planejamentoId: resolvedPlanId,
+        planejamentoItemId: resolvedPlanItemId,
+      },
       procedimentosMapeados: procedimentosMapeados || prevPh?.procedimentosMapeados || [],
       isAnnotated: isAnnotated ?? true,
       mapaId: resolvedMapaId,
@@ -1606,15 +1705,88 @@ function AppRefactoredInner({ onCanalAvisos }) {
         });
         return Array.from(map.values());
       });
+
+      if (destinoAvaliacao === 'plano' || resolvedPlanId) {
+        const itemMap = {};
+        const itensEnriquecidos = [];
+        procedimentosMapeados.forEach((p) => {
+          const cid = String(p.catalogoProcedimentoSaudeId || p.id || '').trim();
+          const piId = p.planejamentoItemId ? String(p.planejamentoItemId).trim() : null;
+          if (cid && piId) {
+            itemMap[cid] = piId;
+            itensEnriquecidos.push({
+              ...p,
+              id: piId,
+              planejamentoItemId: piId,
+              catalogoNome: p.nomeProcedimento || p.nome || '',
+              nome: p.nomeProcedimento || p.nome || '',
+            });
+          }
+        });
+        if (Object.keys(itemMap).length > 0) {
+          journeyState.setJourneyPlanejamentoCtx((prev) => ({
+            planejamentoId: resolvedPlanId || prev?.planejamentoId || null,
+            titulo: prev?.titulo || 'Plano de Tratamento',
+            itemIdByCatalogo: { ...(prev?.itemIdByCatalogo || {}), ...itemMap },
+            procedimentosComPontos: prev?.procedimentosComPontos || [],
+            itens: [...(prev?.itens || []), ...itensEnriquecidos],
+          }));
+
+          journeyState.setProcedimentosSessao((prev) => {
+            if (!Array.isArray(prev) || prev.length === 0) return prev;
+            return prev.map((linha) => {
+              const cid = String(linha?.catalogoProcedimentoSaudeId || linha?.nomeProcedimentoCatalogoId || linha?.catalogoId || '').trim();
+              if (cid && itemMap[cid] && (!linha?.planejamentoItemId || destinoAvaliacao === 'plano') && (destinoAvaliacao === 'plano' || !linha?.isAvulso)) {
+                return {
+                  ...linha,
+                  planejamentoItemId: itemMap[cid],
+                  ...(destinoAvaliacao === 'plano' ? { isAvulso: false } : {}),
+                };
+              }
+              return linha;
+            });
+          });
+        }
+      }
+    }
+
+    if (pacienteAtual?.id && (destinoAvaliacao === 'plano' || resolvedPlanId)) {
+      void recarregarPlanosDoPaciente(pacienteAtual.id);
     }
   };
 
   const procedimentosIniciaisAvaliacao = React.useMemo(() => {
+    const activePhoto =
+      photoAnnotationIndex != null
+        ? (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]
+        : null;
+    const procsFoto = activePhoto?.procedimentosMapeados || activePhoto?.mapaOverlay?.procedimentos;
+    if (Array.isArray(procsFoto) && procsFoto.length > 0) {
+      return procsFoto.map((p) => ({
+        id: p.catalogoProcedimentoSaudeId || p.id,
+        catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+        nome: p.nomeProcedimento || p.catalogoNome || p.nome || 'Procedimento',
+        corHex: p.corHex || p.cor || null,
+        unidadeMedida: p.unidadeMedida || 'un',
+        planejamentoItemId: p.planejamentoItemId || null,
+      }));
+    }
+
     if (Array.isArray(journeyState.procedimentosSessao) && journeyState.procedimentosSessao.length > 0) {
-      const validos = journeyState.procedimentosSessao.filter((p) => {
-        const n = String(p?.nome || p?.catalogoNome || '').trim();
-        return n && n.toLowerCase() !== 'procedimento';
-      });
+      const validos = journeyState.procedimentosSessao
+        .filter((p) => {
+          const n = String(p?.procedimentoNome || p?.nomeProcedimento || p?.nome || p?.catalogoNome || '').trim();
+          return n && n.toLowerCase() !== 'procedimento';
+        })
+        .map((p) => ({
+          ...p,
+          id: p.catalogoProcedimentoSaudeId || p.id,
+          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+          nome: p.procedimentoNome || p.nomeProcedimento || p.nome || p.catalogoNome || 'Procedimento',
+          corHex: p.corHex || p.cor || null,
+          unidadeMedida: p.unidadeMedida || 'un',
+          planejamentoItemId: p.planejamentoItemId || null,
+        }));
       if (validos.length > 0) return validos;
     }
     const nomeProc = String(journeyState.nomeProcedimento || '').trim();
@@ -1630,6 +1802,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     }
     return [];
   }, [
+    photoAnnotationIndex,
+    cameraState.evaluationCapturedPhotos,
     journeyState.procedimentosSessao,
     journeyState.nomeProcedimentoCatalogoId,
     journeyState.nomeProcedimento,
@@ -1800,17 +1974,33 @@ function AppRefactoredInner({ onCanalAvisos }) {
         .then((resp) => {
           if (cancel) return;
           const itens = Array.isArray(resp) ? resp : resp?.itens || resp?.fotos || [];
+          const currentAtendId = consultaServidor.atual?.id || atendimentoIdConsultaRef.current;
+          const currentPlanId = planoContextoAvaliacao?.id || planoContextoAvaliacao?.planejamentoId;
+
           const filtradas = itens
             .filter((f) => {
               const code = String(f.tipoFotoCodigo || f.categoria || '').toUpperCase();
               const leg = String(f.legenda || f.descricaoLegenda || '').toUpperCase();
-              return (
+              const isAvaliacaoFoto = (
                 code === 'AVALIACAO' ||
                 code === 'MAPA' ||
                 code === 'PLANEJAMENTO' ||
                 leg.includes('AVALIAÇÃO') ||
                 leg.includes('AVALIACAO')
               );
+              if (!isAvaliacaoFoto) return false;
+
+              // Restringe estritamente a fotos do atendimento ativo ou do plano de tratamento vinculado
+              if (currentAtendId) {
+                const fotoAtendId = f.atendimentoId || f.atendimento?.id;
+                const fotoPlanId = f.planejamentoId || f.mapaOverlay?.planejamentoId;
+                if (fotoAtendId || fotoPlanId) {
+                  const pertenceAoAtendimento = fotoAtendId && String(fotoAtendId) === String(currentAtendId);
+                  const pertenceAoPlano = currentPlanId && fotoPlanId && String(fotoPlanId) === String(currentPlanId);
+                  return Boolean(pertenceAoAtendimento || pertenceAoPlano);
+                }
+              }
+              return true;
             })
             .map((f) => ({
               ...f,
@@ -1821,7 +2011,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
               pontos: f.pontos || f.mapaOverlay?.pontos || [],
               mapaOverlay: f.mapaOverlay || (f.pontos ? { pontos: f.pontos } : null),
             }));
-          setFotosAvaliacaoPlano(filtradas);
+
+          // Deduplicação inteligente de fotos de avaliação por mapaId_angulo ou url/id
+          const deduplicadasMap = new Map();
+          for (const f of filtradas) {
+            const mapaId = f.mapaOverlay?.mapaId || f.mapaOverlay?.id || f.mapaId;
+            const angulo = f.anguloFotoCodigo || f.angulo || f.mapaOverlay?.anguloFotoCodigo || 'frontal';
+            const chave = mapaId ? `mapa_${mapaId}_${angulo}` : `foto_${f.fotoId || f.id || f.url}`;
+            deduplicadasMap.set(chave, f);
+          }
+          setFotosAvaliacaoPlano(Array.from(deduplicadasMap.values()));
         })
         .catch((err) => {
           if (!cancel) {
@@ -1834,26 +2033,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
     return () => {
       cancel = true;
     };
-  }, [activeView, consultaModule, currentStep, pacienteAtual?.id]);
+  }, [activeView, consultaModule, currentStep, pacienteAtual?.id, consultaServidor.atual?.id, planoContextoAvaliacao?.id]);
 
   const fotosAvaliacaoParaProcedimento = React.useMemo(() => {
     const daSessao = cameraState.evaluationCapturedPhotos || [];
     if (daSessao.length > 0) return daSessao;
     return fotosAvaliacaoPlano;
   }, [cameraState.evaluationCapturedPhotos, fotosAvaliacaoPlano]);
-
-  /** Editor fullscreen compartilhado (procedimento / resumo etapa 5). */
-  const [photoAnnotationScope, setPhotoAnnotationScope] = React.useState(null);
-  const [photoAnnotationIndex, setPhotoAnnotationIndex] = React.useState(null);
-
-  const closeJourneyPhotoAnnotation = React.useCallback(() => {
-    setPhotoAnnotationScope(null);
-    setPhotoAnnotationIndex(null);
-    journeyState.setPaths([]);
-    journeyState.setIsHoveringCanvas(false);
-    journeyState.setCursorPos({ x: -100, y: -100 });
-    journeyState.setIsDrawing(false);
-  }, [journeyState]);
 
   const openProcedurePhotoAnnotation = React.useCallback(
     (idx) => {
@@ -3083,7 +3269,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       const ridUpload = roleUserId;
       const ridOk = ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload));
       const fotosAvaliacao = (cameraState.evaluationCapturedPhotos || []).filter(
-        (f) => !f.uploaded && !f.fotoId && f.destinoAvaliacao !== 'plano' && !f.planejamentoId
+        (f) => !f.uploaded && !f.fotoId && !f.meta?.fotoId && f.destinoAvaliacao !== 'plano' && !f.planejamentoId
       );
       const tipo = String(tipoFotoCodigo || 'AVALIACAO').trim().toUpperCase();
       const legendaCategoria =
@@ -4321,15 +4507,21 @@ function AppRefactoredInner({ onCanalAvisos }) {
         if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
         const targetMapaId = opts.mapaId || ultimoMapaAvaliacaoRef.current?.mapaId || null;
         if (targetMapaId) uploadOpts.mapaId = targetMapaId;
+        const targetAtendimentoId = opts.atendimentoId || consultaServidor.atual?.id || atendimentoIdConsultaRef.current || null;
+        if (targetAtendimentoId) uploadOpts.atendimentoId = targetAtendimentoId;
 
         const res = await pacientesGaleriaApi.upload(pid, webp, uploadOpts);
 
         if (opts.index != null) {
+          const currentPh = (cameraState.evaluationCapturedPhotos || [])[opts.index] || {};
           cameraState.replaceEvaluationCapturedPhotoAt(opts.index, {
+            ...currentPh,
             uploaded: true,
+            id: res?.id,
             fotoId: res?.id,
-            destinoAvaliacao: opts.destinoAvaliacao,
-            planejamentoId: opts.planejamentoId,
+            meta: { ...(currentPh.meta || {}), fotoId: res?.id },
+            destinoAvaliacao: opts.destinoAvaliacao || currentPh.destinoAvaliacao,
+            planejamentoId: opts.planejamentoId || currentPh.planejamentoId,
           });
         }
 
@@ -4846,7 +5038,51 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 (photoAnnotationScope === 'procedure'
                   ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                   : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
-                photoAnnotationScope === 'evaluation' ? (
+                photoAnnotationScope === 'procedure' ? (
+                  <JourneyPhotoAnnotationEditor
+                    photos={cameraState.procedureCapturedPhotos || []}
+                    editingIndex={photoAnnotationIndex}
+                    setEditingIndex={setPhotoAnnotationIndex}
+                    imageSrc={
+                      (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
+                      (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.url ||
+                      journeyState.imageSrc
+                    }
+                    activeTool={journeyState.activeTool}
+                    setActiveTool={journeyState.setActiveTool}
+                    activeColor={journeyState.activeColor}
+                    setActiveColor={journeyState.setActiveColor}
+                    pointSize={journeyState.pointSize}
+                    setPointSize={journeyState.setPointSize}
+                    showPointNumbers={journeyState.showPointNumbers}
+                    setShowPointNumbers={journeyState.setShowPointNumbers}
+                    eraserSize={journeyState.eraserSize}
+                    setEraserSize={journeyState.setEraserSize}
+                    cursorPos={journeyState.cursorPos}
+                    setCursorPos={journeyState.setCursorPos}
+                    isHoveringCanvas={journeyState.isHoveringCanvas}
+                    setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
+                    paths={journeyState.paths}
+                    setPaths={journeyState.setPaths}
+                    isDrawing={journeyState.isDrawing}
+                    setIsDrawing={journeyState.setIsDrawing}
+                    canvasRef={canvasRef}
+                    containerRef={containerRef}
+                    evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
+                    setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
+                    onSelectCapturedPhoto={(i) => {
+                      setPhotoAnnotationIndex(i);
+                      const ph = (cameraState.procedureCapturedPhotos || [])[i];
+                      if (ph?.cleanUrl || ph?.url) {
+                        journeyState.setImageSrc(ph.cleanUrl || ph.url);
+                        journeyState.setPaths([]);
+                      }
+                    }}
+                    onAnnotatedCaptureSaved={salvarFotoProcedimentoAnotada}
+                    urlArquivoReserva={urlArquivoReservaDaFoto}
+                    onClose={closeJourneyPhotoAnnotation}
+                  />
+                ) : (
                   <AnnotationCanvasAvaliacao
                     photos={cameraState.evaluationCapturedPhotos || []}
                     editingIndex={photoAnnotationIndex}
@@ -4856,81 +5092,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       setPhotoAnnotationIndex(i);
                     }}
                     imageSrc={
+                      (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
                       (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
                       journeyState.imageSrc
                     }
                     onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
                     persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                    aguardarFotosPendentes={aguardarFotosPendentes}
+                    obterFotoId={obterFotoIdConsulta}
                     onClose={closeJourneyPhotoAnnotation}
                     pacienteId={pacienteAtual?.id}
                     roleUserId={roleUserId}
                     procedimentosIniciais={procedimentosIniciaisAvaliacao}
                     planoContexto={planoContextoAvaliacao}
                   />
-                ) : (
-                <JourneyPhotoAnnotationEditor
-                  sidebarInsetPx={sidebarRailWidthPx}
-                  photos={
-                    photoAnnotationScope === 'procedure'
-                      ? cameraState.procedureCapturedPhotos || []
-                      : cameraState.evaluationCapturedPhotos || []
-                  }
-                  editingIndex={photoAnnotationIndex}
-                  setEditingIndex={setPhotoAnnotationIndex}
-                  fallbackSelectedPhotoIndex={photoAnnotationIndex}
-                  saveListLength={
-                    (photoAnnotationScope === 'procedure'
-                      ? cameraState.procedureCapturedPhotos
-                      : cameraState.evaluationCapturedPhotos
-                    )?.length ?? 0
-                  }
-                  imageSrc={journeyState.imageSrc}
-                  activeTool={journeyState.activeTool}
-                  setActiveTool={journeyState.setActiveTool}
-                  activeColor={journeyState.activeColor}
-                  setActiveColor={journeyState.setActiveColor}
-                  pointSize={journeyState.pointSize}
-                  setPointSize={journeyState.setPointSize}
-                  showPointNumbers={journeyState.showPointNumbers}
-                  setShowPointNumbers={journeyState.setShowPointNumbers}
-                  eraserSize={journeyState.eraserSize}
-                  setEraserSize={journeyState.setEraserSize}
-                  cursorPos={journeyState.cursorPos}
-                  setCursorPos={journeyState.setCursorPos}
-                  isHoveringCanvas={journeyState.isHoveringCanvas}
-                  setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                  paths={journeyState.paths}
-                  setPaths={journeyState.setPaths}
-                  isDrawing={journeyState.isDrawing}
-                  setIsDrawing={journeyState.setIsDrawing}
-                  canvasRef={canvasRef}
-                  containerRef={containerRef}
-                  evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                  setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                  selectedPatientCpf={selectedPatientCpf}
-                  cpf={pacienteAtual?.cpf || ''}
-                  setPatients={setPatients}
-                  onSelectCapturedPhoto={(i) => {
-                    if (photoAnnotationScope === 'procedure') {
-                      const ph = (cameraState.procedureCapturedPhotos || [])[i];
-                      if (ph?.url) {
-                        journeyState.setImageSrc(ph.url);
-                        journeyState.setPaths([]);
-                      }
-                      setPhotoAnnotationIndex(i);
-                    } else {
-                      handleSelectCapturedPhoto(i);
-                      setPhotoAnnotationIndex(i);
-                    }
-                  }}
-                  onAnnotatedCaptureSaved={
-                    photoAnnotationScope === 'procedure'
-                      ? salvarFotoProcedimentoAnotada
-                      : handleAnnotatedCaptureSaved
-                  }
-                  urlArquivoReserva={urlArquivoReservaDaFoto}
-                  onClose={closeJourneyPhotoAnnotation}
-                />
                 )
               ) : null}
 
@@ -5482,7 +5657,51 @@ function AppRefactoredInner({ onCanalAvisos }) {
               (photoAnnotationScope === 'procedure'
                 ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                 : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
-              photoAnnotationScope === 'evaluation' ? (
+              photoAnnotationScope === 'procedure' ? (
+                <JourneyPhotoAnnotationEditor
+                  photos={cameraState.procedureCapturedPhotos || []}
+                  editingIndex={photoAnnotationIndex}
+                  setEditingIndex={setPhotoAnnotationIndex}
+                  imageSrc={
+                    (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
+                    (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.url ||
+                    journeyState.imageSrc
+                  }
+                  activeTool={journeyState.activeTool}
+                  setActiveTool={journeyState.setActiveTool}
+                  activeColor={journeyState.activeColor}
+                  setActiveColor={journeyState.setActiveColor}
+                  pointSize={journeyState.pointSize}
+                  setPointSize={journeyState.setPointSize}
+                  showPointNumbers={journeyState.showPointNumbers}
+                  setShowPointNumbers={journeyState.setShowPointNumbers}
+                  eraserSize={journeyState.eraserSize}
+                  setEraserSize={journeyState.setEraserSize}
+                  cursorPos={journeyState.cursorPos}
+                  setCursorPos={journeyState.setCursorPos}
+                  isHoveringCanvas={journeyState.isHoveringCanvas}
+                  setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
+                  paths={journeyState.paths}
+                  setPaths={journeyState.setPaths}
+                  isDrawing={journeyState.isDrawing}
+                  setIsDrawing={journeyState.setIsDrawing}
+                  canvasRef={canvasRef}
+                  containerRef={containerRef}
+                  evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
+                  setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
+                  onSelectCapturedPhoto={(i) => {
+                    setPhotoAnnotationIndex(i);
+                    const ph = (cameraState.procedureCapturedPhotos || [])[i];
+                    if (ph?.cleanUrl || ph?.url) {
+                      journeyState.setImageSrc(ph.cleanUrl || ph.url);
+                      journeyState.setPaths([]);
+                    }
+                  }}
+                  onAnnotatedCaptureSaved={salvarFotoProcedimentoAnotada}
+                  urlArquivoReserva={urlArquivoReservaDaFoto}
+                  onClose={closeJourneyPhotoAnnotation}
+                />
+              ) : (
                 <AnnotationCanvasAvaliacao
                   photos={cameraState.evaluationCapturedPhotos || []}
                   editingIndex={photoAnnotationIndex}
@@ -5492,81 +5711,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     setPhotoAnnotationIndex(i);
                   }}
                   imageSrc={
+                    (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
                     (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
                     journeyState.imageSrc
                   }
                   onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
                   persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                  aguardarFotosPendentes={aguardarFotosPendentes}
+                  obterFotoId={obterFotoIdConsulta}
                   onClose={closeJourneyPhotoAnnotation}
                   pacienteId={pacienteAtual?.id}
                   roleUserId={roleUserId}
                   procedimentosIniciais={procedimentosIniciaisAvaliacao}
                   planoContexto={planoContextoAvaliacao}
                 />
-              ) : (
-              <JourneyPhotoAnnotationEditor
-                sidebarInsetPx={sidebarRailWidthPx}
-                photos={
-                  photoAnnotationScope === 'procedure'
-                    ? cameraState.procedureCapturedPhotos || []
-                    : cameraState.evaluationCapturedPhotos || []
-                }
-                editingIndex={photoAnnotationIndex}
-                setEditingIndex={setPhotoAnnotationIndex}
-                fallbackSelectedPhotoIndex={photoAnnotationIndex}
-                saveListLength={
-                  (photoAnnotationScope === 'procedure'
-                    ? cameraState.procedureCapturedPhotos
-                    : cameraState.evaluationCapturedPhotos
-                  )?.length ?? 0
-                }
-                imageSrc={journeyState.imageSrc}
-                activeTool={journeyState.activeTool}
-                setActiveTool={journeyState.setActiveTool}
-                activeColor={journeyState.activeColor}
-                setActiveColor={journeyState.setActiveColor}
-                pointSize={journeyState.pointSize}
-                setPointSize={journeyState.setPointSize}
-                showPointNumbers={journeyState.showPointNumbers}
-                setShowPointNumbers={journeyState.setShowPointNumbers}
-                eraserSize={journeyState.eraserSize}
-                setEraserSize={journeyState.setEraserSize}
-                cursorPos={journeyState.cursorPos}
-                setCursorPos={journeyState.setCursorPos}
-                isHoveringCanvas={journeyState.isHoveringCanvas}
-                setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                paths={journeyState.paths}
-                setPaths={journeyState.setPaths}
-                isDrawing={journeyState.isDrawing}
-                setIsDrawing={journeyState.setIsDrawing}
-                canvasRef={canvasRef}
-                containerRef={containerRef}
-                evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                selectedPatientCpf={selectedPatientCpf}
-                cpf={pacienteAtual?.cpf || ''}
-                setPatients={setPatients}
-                onSelectCapturedPhoto={(i) => {
-                  if (photoAnnotationScope === 'procedure') {
-                    const ph = (cameraState.procedureCapturedPhotos || [])[i];
-                    if (ph?.url) {
-                      journeyState.setImageSrc(ph.url);
-                      journeyState.setPaths([]);
-                    }
-                    setPhotoAnnotationIndex(i);
-                  } else {
-                    handleSelectCapturedPhoto(i);
-                    setPhotoAnnotationIndex(i);
-                  }
-                }}
-                onAnnotatedCaptureSaved={
-                  photoAnnotationScope === 'procedure'
-                    ? salvarFotoProcedimentoAnotada
-                    : handleAnnotatedCaptureSaved
-                }
-                urlArquivoReserva={urlArquivoReservaDaFoto}
-                onClose={closeJourneyPhotoAnnotation}
-              />
               )
             ) : null}
           </>

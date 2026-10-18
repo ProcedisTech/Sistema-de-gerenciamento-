@@ -137,6 +137,37 @@ describe('AssistiveTouchToolbar', () => {
     expect(screen.getByTestId('assistive-touch-capsule')).toBeInTheDocument();
   });
 
+  // Regressão prevenida: Ao clicar na cor pertencente a outro procedimento na paleta,
+  // deve armar/selecionar aquele procedimento em vez de forçar mutação da cor atual
+  it('quando onArmar é fornecido e clica em cor em uso por outro procedimento, aciona onArmar', () => {
+    const onArmar = vi.fn();
+    const onMudarCor = vi.fn();
+    render(
+      <AssistiveTouchToolbar
+        {...defaultProps}
+        onArmar={onArmar}
+        onMudarCor={onMudarCor}
+      />
+    );
+
+    // Abre cápsula
+    const orb = screen.getByTestId('assistive-touch-orb');
+    fireEvent.pointerDown(orb, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(orb, { clientX: 100, clientY: 100 });
+
+    // Abre paleta
+    fireEvent.click(screen.getByTestId('btn-capsule-color'));
+
+    // Clica no botão com a cor do Ácido Hialurônico (proc-2)
+    const redButton = screen.getByTitle('Em uso por: Ácido Hialurônico');
+    fireEvent.click(redButton);
+
+    expect(onArmar).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'proc-2', nome: 'Ácido Hialurônico' })
+    );
+    expect(onMudarCor).not.toHaveBeenCalled();
+  });
+
   it('restaura posição salva do localStorage', () => {
     localStorage.setItem(
       'procedi_canvas_assistive_touch_pos',

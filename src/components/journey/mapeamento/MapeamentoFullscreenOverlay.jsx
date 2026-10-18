@@ -60,7 +60,7 @@ export function MapeamentoFullscreenOverlay({
   const [configMarcacao, setConfigMarcacao] = useState({
     dosePadrao: 1,
     profundidade: '',
-    confirmarDose: true,
+    confirmarDose: false,
   });
 
   const transformWrapperRef = useRef(null);
@@ -153,12 +153,25 @@ export function MapeamentoFullscreenOverlay({
     (procId) => {
       let pontosCount = 0;
       let doseTotal = 0;
-      const pontos = Array.isArray(pontosVista) ? pontosVista : [];
-      pontos.forEach((pt) => {
-        const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || pt.procedimentoId || '');
-        if (ptId === String(procId)) {
-          pontosCount++;
-          doseTotal += Number(pt.quantidade || pt.dose || 0);
+      const targetId = String(procId || '');
+      const colecao = Array.isArray(pontosVista) ? pontosVista : [];
+
+      colecao.forEach((item) => {
+        if (Array.isArray(item.pontos)) {
+          const grupoCatId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || '');
+          item.pontos.forEach((pt) => {
+            const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || pt.procedimentoId || grupoCatId);
+            if (ptId === targetId) {
+              pontosCount++;
+              doseTotal += Number(pt.quantidade || pt.dose || 0);
+            }
+          });
+        } else {
+          const ptId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || item.procedimentoId || '');
+          if (ptId === targetId) {
+            pontosCount++;
+            doseTotal += Number(item.quantidade || item.dose || 0);
+          }
         }
       });
       return { pontosCount, doseTotal: Number(doseTotal.toFixed(2)) };
@@ -295,6 +308,7 @@ export function MapeamentoFullscreenOverlay({
           activeCor={activeCor}
           activeProc={activeProc}
           procedimentos={listaProcedimentos}
+          onArmar={handleSelectProcedimento}
           onMudarCor={(novaCor) => {
             if (activeProc) {
               handleMudarCorProcedimento(activeProc.id, novaCor);

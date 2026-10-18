@@ -36,6 +36,7 @@ import {
   getPlanoStatusPresentation,
   isItemAgendado,
   isItemPendente,
+  isItemFinalizado,
 } from '../../utils/planejamentoStatusUi.js';
 import {
   calcSessoesPlano,
@@ -336,10 +337,12 @@ function renderItensComIntervalo({
   const gruposPorData = new Map();
 
   itens.forEach((item) => {
+    const isRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
     const dataIso =
       item.sessaoAtiva?.dataAgendamento ||
       item.sessaoRealizada?.dataAgendamento ||
-      item.dataPlanejada;
+      item.dataPlanejada ||
+      (isRealizado ? (item.dataRealizacao || item.realizadoEm || item.dataAtendimento || hojeIso) : null);
     const dataKey = dataIso ? String(dataIso).slice(0, 10) : null;
 
     if (!dataKey) {
@@ -2611,9 +2614,9 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
               Histórico Clínico Recente
             </span>
 
-            {procedimentosFeitos.length > 0 ? (
+            {listaProcedimentosFeitos.length > 0 ? (
               <div className="space-y-2">
-                {procedimentosFeitos.slice(0, 4).map((proc, idx) => (
+                {listaProcedimentosFeitos.slice(0, 4).map((proc, idx) => (
                   <div key={idx} className="flex items-start justify-between gap-2 text-xs">
                     <span className="font-medium text-slate-700 truncate">
                       {proc.nomeProcedimento || proc.nome || 'Procedimento'}
@@ -2802,7 +2805,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                         catalogoOptions={catalogoOptions}
                         selecionados={selecionados}
                         onToggleSelecao={toggleSelecao}
-                        procedimentosFeitos={procedimentosFeitos}
+                        procedimentosFeitos={listaProcedimentosFeitos}
                         onEdit={(item) =>
                           setEditItemState({
                             planoId: plano.id,

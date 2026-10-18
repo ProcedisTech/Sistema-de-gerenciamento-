@@ -285,54 +285,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       }
     }
 
-    // 5. Fallback clínico para fotos/mapas de avaliação com procedimentos correspondentes a um plano do paciente
-    // ATENÇÃO: Regras de inferência 5 e 6 NUNCA tocam em planos concluídos/cancelados (documentos clínicos selados).
-    if (!matchedPlanoId && (foto.categoria === 'avaliacao' || String(foto.tipoFotoCodigo || '').toUpperCase() === 'AVALIACAO')) {
-      const planosAtivos = (planos || []).filter((p) => {
-        const st = String(p.statusCodigo || p.status || '').toLowerCase().trim();
-        return !st || (st !== 'concluido' && st !== 'cancelado');
-      });
 
-      if (Array.isArray(foto.mapaOverlay?.procedimentos) && foto.mapaOverlay.procedimentos.length > 0) {
-        for (const plano of planosAtivos) {
-          const itens = plano.itens || [];
-          const temMatch = foto.mapaOverlay.procedimentos.some((mp) => {
-            const catId = mp.catalogoProcedimentoSaudeId ? String(mp.catalogoProcedimentoSaudeId).trim() : null;
-            return catId && itens.some((it) => String(it.catalogoProcedimentoSaudeId || it.catalogoId).trim() === catId);
-          });
-          if (temMatch) {
-            matchedPlanoId = String(plano.id).trim();
-            break;
-          }
-        }
-      }
-      // 6. Heurística de sessão clínica / data para fotos de avaliação do plano (apenas planos ativos)
-      if (!matchedPlanoId && foto.dataISO && foto.dataISO !== 'sem-data') {
-        const planosComAtividadeNaData = planosAtivos.filter((plano) => {
-          const pId = String(plano.id).trim();
-          const temProcNaData = (procedimentosFeitos || []).some((pf) => {
-            const match = procedimentoFeitoToPlanoItemMap.get(String(pf.id || pf.procedimentoFeitoId || '').trim());
-            if (!match || match.planoId !== pId) return false;
-            const pfData = pf.dataReferencia || (pf.criadoEm ? String(pf.criadoEm).slice(0, 10) : null);
-            return pfData === foto.dataISO;
-          });
-          if (temProcNaData) return true;
-          return (plano.itens || []).some((it) => {
-            const datasItem = [
-              it.sessaoAtiva?.dataAgendamento,
-              it.sessaoRealizada?.dataAgendamento,
-              it.sessaoRetornoAtiva?.dataAgendamento,
-              it.sessaoRetornoRealizada?.dataAgendamento,
-              ...(Array.isArray(it.sessoes) ? it.sessoes.map((s) => s.dataAgendamento) : []),
-            ].filter(Boolean).map((d) => String(d).slice(0, 10));
-            return datasItem.includes(foto.dataISO);
-          });
-        });
-        if (planosComAtividadeNaData.length === 1) {
-          matchedPlanoId = String(planosComAtividadeNaData[0].id).trim();
-        }
-      }
-    }
 
     const enrichedFoto = {
       ...foto,
@@ -370,8 +323,10 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     // Se o procedimento não estiver vinculado a nenhum item de plano e nem mapeado no procedimentoFeitoToPlanoItemMap
     if (pfId && (!pItemId || !itemToPlanoMap.has(pItemId)) && !procedimentoFeitoToPlanoItemMap.has(pfId)) {
       const dataISO = diaDoInstante(proc.criadoEm, fuso) || (proc.criadoEm ? String(proc.criadoEm).slice(0, 10) : 'sem-data');
-      const horaInicio = proc.criadoEm ? String(proc.criadoEm).slice(11, 16) : null;
-      const chave = agId ? `ag_${agId}` : `pf_${pfId}`;
+      const horaInicio = proc.criadoEm ? String(proc.criadoEm).slice(11, 16) : (proc.horaInicio ? String(proc.horaInicio).slice(11, 16) : null);
+      const atId = proc.atendimentoId || proc.atendimento?.id || null;
+      const sessaoChave = atId ? `at_${atId}` : (horaInicio ? `sessao_${dataISO}_${horaInicio}` : null);
+      const chave = agId ? `ag_${agId}` : (sessaoChave || `pf_${pfId}`);
       const nomeAtual = proc.procedimentoNome || proc.nome || 'Procedimento Avulso';
 
       if (atendimentosAvulsosMap.has(chave)) {
@@ -427,8 +382,11 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     const agId = foto.agendaId ? String(foto.agendaId).trim() : null;
 
     let chave = null;
+    const atFotoId = foto.atendimentoId ? String(foto.atendimentoId).trim() : null;
     if (agId && atendimentosAvulsosMap.has(`ag_${agId}`)) {
       chave = `ag_${agId}`;
+    } else if (atFotoId && atendimentosAvulsosMap.has(`at_${atFotoId}`)) {
+      chave = `at_${atFotoId}`;
     } else if (pfId) {
       if (atendimentosAvulsosMap.has(`pf_${pfId}`)) {
         chave = `pf_${pfId}`;

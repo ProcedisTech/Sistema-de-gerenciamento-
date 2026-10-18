@@ -35,6 +35,7 @@ dist-ssr
 .tmp-openapi.json
 conflito.txt
 diff_availability.txt
+scratch/
 
 # Agentes / Skills locais
 .agents/

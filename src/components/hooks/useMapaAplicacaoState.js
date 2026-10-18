@@ -8,6 +8,7 @@ import {
   hasMapaHydrateContent,
   hydrateMapaFromGet,
 } from '../../utils/procedimentoMapaPayload.js';
+import { corParaProcedimento } from '../../constants/mapeamentoPaletaCores.js';
 
 let localIdSeq = 0;
 function nextLocalId() {
@@ -335,20 +336,28 @@ export function useMapaAplicacaoState() {
   );
 
   const importarPontosDoPlano = useCallback(
-
-    (pontosPlano, vistaCodigo) => {
+    (pontosPlano, vistaCodigo, catalogoIdDefault = null, nomeProcedimentoDefault = '') => {
       const vista = String(vistaCodigo || vistaAtual || '').trim();
       if (!vista || !Array.isArray(pontosPlano) || pontosPlano.length === 0) return false;
 
-      const lista = pontosPlano.map((p, idx) => ({
-        localId: nextLocalId(),
-        posX: Number(p.posX),
-        posY: Number(p.posY),
-        quantidade: Number(p.quantidade),
-        tamanho: normalizeTamanho(p.tamanho ?? TAMANHO_DEFAULT),
-        regiaoFacial: p.regiaoFacial != null ? String(p.regiaoFacial) : undefined,
-        ordem: idx + 1,
-      }));
+      const lista = pontosPlano.map((p, idx) => {
+        const catId = p.catalogoProcedimentoSaudeId || p.catalogoId || catalogoIdDefault || null;
+        return {
+          localId: nextLocalId(),
+          posX: Number(p.posX),
+          posY: Number(p.posY),
+          quantidade: Number(p.quantidade),
+          tamanho: normalizeTamanho(p.tamanho ?? TAMANHO_DEFAULT),
+          regiaoFacial: p.regiaoFacial != null ? String(p.regiaoFacial) : undefined,
+          ordem: idx + 1,
+          tipoGeometria: p.tipoGeometria || (Array.isArray(p.vertices) && p.vertices.length > 1 ? 'traco' : 'ponto'),
+          vertices: Array.isArray(p.vertices) ? p.vertices : [],
+          catalogoProcedimentoSaudeId: catId,
+          catalogoId: catId,
+          nomeProcedimento: p.nomeProcedimento || nomeProcedimentoDefault || undefined,
+          cor: p.cor || p.corHex || (catId ? corParaProcedimento(catId) : undefined),
+        };
+      });
 
       setPontosPorVista((prev) => ({ ...prev, [vista]: lista }));
       markDirty(vista);
@@ -400,36 +409,62 @@ export function useMapaAplicacaoState() {
 
         if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
           procedimentosSessao.forEach((proc, idx) => {
-            const cid = String(proc.catalogoProcedimentoSaudeId || proc.nomeProcedimentoCatalogoId || proc.id || `idx_${idx}`);
+            const cid = String(proc.catalogoProcedimentoSaudeId || proc.nomeProcedimentoCatalogoId || proc.catalogoId || proc.id || `idx_${idx}`);
             gruposMap.set(cid, {
               catalogoProcedimentoSaudeId: cid,
               nomeProcedimento: proc.nomeProcedimento || proc.procedimentoNome || proc.nome || `Procedimento ${idx + 1}`,
               unidadeMedida: proc.unidadeMedida || 'u',
+              corHex: proc.corHex || corParaProcedimento(cid),
               pontos: [],
             });
           });
         }
 
         lista.forEach((p) => {
-          const cid = String(p.catalogoProcedimentoSaudeId || p.catalogoId || catalogoIdFallback || 'default');
-          if (!gruposMap.has(cid)) {
-            gruposMap.set(cid, {
-              catalogoProcedimentoSaudeId: cid,
+          let targetCid = null;
+          const pCatId = p.catalogoProcedimentoSaudeId || p.catalogoId;
+          if (pCatId && gruposMap.has(String(pCatId))) {
+            targetCid = String(pCatId);
+          } else if (p.procedimentoIndex != null && Array.isArray(procedimentosSessao) && procedimentosSessao[p.procedimentoIndex]) {
+            const proc = procedimentosSessao[p.procedimentoIndex];
+            const procCid = String(proc.catalogoProcedimentoSaudeId || proc.nomeProcedimentoCatalogoId || proc.catalogoId || proc.id || `idx_${p.procedimentoIndex}`);
+            if (gruposMap.has(procCid)) {
+              targetCid = procCid;
+            }
+          }
+          if (!targetCid) {
+            targetCid = String(pCatId || catalogoIdFallback || 'default');
+          }
+          if (!gruposMap.has(targetCid)) {
+            gruposMap.set(targetCid, {
+              catalogoProcedimentoSaudeId: targetCid,
               nomeProcedimento: p.nomeProcedimento || nomeProcedimentoFallback || 'Procedimento',
               unidadeMedida: p.unidadeMedida || 'u',
+              corHex: p.cor || (targetCid !== 'default' ? corParaProcedimento(targetCid) : undefined),
               pontos: [],
             });
           }
-          gruposMap.get(cid).pontos.push(p);
+          gruposMap.get(targetCid).pontos.push(p);
         });
 
         return Array.from(gruposMap.values()).filter((g) => g.pontos.length > 0);
       }
 
+      const defaultCatId =
+        (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0
+          ? String(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].id || '')
+          : null) || String(catalogoIdFallback || '');
+
+      const defaultNome =
+        (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0
+          ? String(procedimentosSessao[0].nomeProcedimento || procedimentosSessao[0].nome || '')
+          : null) || String(nomeProcedimentoFallback || '');
+
       return [
         {
-          catalogoProcedimentoSaudeId: String(catalogoIdFallback || ''),
-          nomeProcedimento: String(nomeProcedimentoFallback || ''),
+          catalogoProcedimentoSaudeId: defaultCatId,
+          nomeProcedimento: defaultNome,
+          corHex: defaultCatId ? corParaProcedimento(defaultCatId) : undefined,
           pontos: lista,
         },
       ];

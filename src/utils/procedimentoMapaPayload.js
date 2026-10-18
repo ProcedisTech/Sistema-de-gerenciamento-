@@ -88,7 +88,19 @@ export function hydrateMapaFromGet(response) {
        p.procedimentoPontoId = m.id;
     }
 
-    pontosPorVista[vista].push(mapExecucaoApiPontoToLocal(p, idx + 1));
+    const pontoLocal = mapExecucaoApiPontoToLocal(p, idx + 1);
+    if (m.catalogoProcedimentoSaudeId) {
+      pontoLocal.catalogoProcedimentoSaudeId = String(m.catalogoProcedimentoSaudeId);
+      pontoLocal.catalogoId = String(m.catalogoProcedimentoSaudeId);
+    }
+    if (m.corHex) {
+      pontoLocal.cor = String(m.corHex);
+      pontoLocal.corHex = String(m.corHex);
+    }
+    if (m.procedimentoIndex != null) {
+      pontoLocal.procedimentoIndex = Number(m.procedimentoIndex);
+    }
+    pontosPorVista[vista].push(pontoLocal);
   });
 
   Object.keys(fotoGaleriaIdPorVista).forEach((vista) => {

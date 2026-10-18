@@ -465,7 +465,7 @@ export function MapaAplicacaoPanel({
         toast.info('Nenhum ponto do plano nesta vista.');
         return;
       }
-      mapaState.importarPontosDoPlano(pontos, vistaAtual);
+      mapaState.importarPontosDoPlano(pontos, vistaAtual, catalogoId, nomeProcedimento);
       toast.success('Pontos importados do plano (sem foto).');
     } catch (e) {
       toast.error(e?.message || 'Falha ao importar pontos do plano.');
@@ -693,7 +693,7 @@ export function MapaAplicacaoPanel({
         vistaAtual={vistaAtual}
         foto={fotoAtual}
         procedimentoArmado={procedimentoArmado}
-        hideProcedimentoPicker={true}
+        hideProcedimentoPicker={false}
         onArmar={(proc) => setProcedimentoArmadoId(proc?.id)}
         procedimentosUsados={listaProcedimentosSessao}
         pontosVista={gruposPontos}

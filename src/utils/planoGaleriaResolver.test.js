@@ -389,7 +389,7 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
     expect(resultado.fotosAvulsas).toHaveLength(0);
   });
 
-  it('vincula foto/mapa de avaliação ao plano via fallback por catalogoProcedimentoSaudeId', () => {
+  it('isola foto/mapa de avaliação sem vínculo em fotosAvulsas mesmo que coincida o catálogo do plano (Zero Leakage)', () => {
     const planos = [
       {
         id: 'plano-labios',
@@ -424,9 +424,8 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
 
     const resultado = resolverFotosEPlanos(planos, fotosBrutas, []);
 
-    expect(resultado.fotosPorPlanoId['plano-labios']).toHaveLength(1);
-    expect(resultado.fotosPorPlanoId['plano-labios'][0].id).toBe('foto-avaliacao-sem-itemId');
-    expect(resultado.fotosAvulsas).toHaveLength(0);
+    expect(resultado.fotosPorPlanoId['plano-labios']).toBeUndefined();
+    expect(resultado.fotosAvulsas.map((f) => f.id)).toContain('foto-avaliacao-sem-itemId');
   });
 
   it('vincula foto de avaliação com mapaOverlay.planejamentoId diretamente ao plano em fotosPorPlanoId', () => {
@@ -483,7 +482,7 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
     expect(resultado.fotosAvulsas).toHaveLength(0);
   });
 
-  it('vincula foto de avaliação sem mapa mas na mesma data da execução do procedimento do plano', () => {
+  it('isola foto de avaliação sem vínculo em fotosAvulsas mesmo que coincida com a data de um procedimento do plano (Anti-Data Leakage)', () => {
     const planos = [
       {
         id: 'plano-biopsia-1',
@@ -509,9 +508,8 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
     ];
 
     const resultado = resolverFotosEPlanos(planos, fotosBrutas, procedimentosFeitos);
-    expect(resultado.fotosPorPlanoId['plano-biopsia-1']).toHaveLength(1);
-    expect(resultado.fotosPorPlanoId['plano-biopsia-1'][0].id).toBe('foto-aval-mesma-data');
-    expect(resultado.fotosAvulsas).toHaveLength(0);
+    expect(resultado.fotosPorPlanoId['plano-biopsia-1']).toBeUndefined();
+    expect(resultado.fotosAvulsas.map((f) => f.id)).toContain('foto-aval-mesma-data');
   });
 
   it('vincula foto de avaliação que compartilha agendaId com procedimento realizado do plano mesmo sem agenda pré-mapeada', () => {
@@ -573,6 +571,42 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
     expect(resultado.fotosPorPlanoId['plano-vigente-ativo']).toBeUndefined();
     expect(resultado.fotosAvulsas).toHaveLength(1);
     expect(resultado.fotosAvulsas[0].id).toBe('foto-aval-clinica');
+  });
+
+  it('unifica múltiplos procedimentos avulsos da mesma sessão (sem agenda prévia) em um único card e compartilha fotos', () => {
+    const procedimentosFeitos = [
+      {
+        id: 'pf-biopsia',
+        procedimentoNome: 'Biópsia de Pele',
+        agendaId: null,
+        atendimentoId: 'at-sessao-avulsa-123',
+        criadoEm: '2026-10-18T04:00:00Z',
+      },
+      {
+        id: 'pf-drenagem',
+        procedimentoNome: 'Drenagem de Abscesso',
+        agendaId: null,
+        atendimentoId: 'at-sessao-avulsa-123',
+        criadoEm: '2026-10-18T04:00:05Z',
+      },
+    ];
+
+    const fotosBrutas = [
+      {
+        id: 'foto-procedimento-1',
+        categoria: 'procedimento',
+        procedimentoFeitoId: 'pf-biopsia',
+        atendimentoId: 'at-sessao-avulsa-123',
+      },
+    ];
+
+    const resultado = resolverFotosEPlanos([], fotosBrutas, procedimentosFeitos);
+    expect(resultado.atendimentosAvulsos).toHaveLength(1);
+    const card = resultado.atendimentosAvulsos[0];
+    expect(card.nomeProcedimento).toBe('Biópsia de Pele + Drenagem de Abscesso');
+    expect(card.procedimentosFeitosIds).toEqual(['pf-biopsia', 'pf-drenagem']);
+    expect(card.fotos).toHaveLength(1);
+    expect(card.fotos[0].id).toBe('foto-procedimento-1');
   });
 });
 

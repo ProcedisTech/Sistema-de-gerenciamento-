@@ -119,22 +119,12 @@ function PlanoVisitaGaleria({
     // preserva a versão mais recente de cada ângulo (ex: frontal e perfil separados).
     let fotosAvaliacao = grupos.avaliacao;
     if (fotosAvaliacao.length > 1) {
-      const mapaSeen = new Map();
-      const semMapa = [];
+      const porAngulo = new Map();
       fotosAvaliacao.forEach((f) => {
-        const mapaId = f.mapaOverlay?.id || f.mapaOverlay?.mapaId || f.mapaId;
         const angulo = f.anguloFotoCodigo || f.angulo || f.mapaOverlay?.anguloCodigo || 'frontal';
-        if (mapaId) {
-          mapaSeen.set(`${mapaId}_${angulo}`, f);
-        } else {
-          semMapa.push(f);
-        }
+        porAngulo.set(angulo, f);
       });
-      if (mapaSeen.size > 0) {
-        fotosAvaliacao = Array.from(mapaSeen.values());
-      } else if (semMapa.length > 1) {
-        fotosAvaliacao = [semMapa[semMapa.length - 1]];
-      }
+      fotosAvaliacao = Array.from(porAngulo.values());
     }
 
     const ordem = [

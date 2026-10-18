@@ -30,6 +30,9 @@ function marcacoesDo(pontosPorVista) {
         tipoGeometria: pt.tipoGeometria || 'ponto',
         quantidade: pt.quantidade,
         tamanho: pt.tamanho,
+        catalogoProcedimentoSaudeId: pt.catalogoProcedimentoSaudeId || pt.catalogoId || null,
+        procedimentoIndex: pt.procedimentoIndex != null ? pt.procedimentoIndex : null,
+        corHex: pt.cor || pt.corHex || null,
         vertices: pt.vertices?.length ? pt.vertices : [{ ordem: 1, posX: pt.posX, posY: pt.posY }],
       });
     }

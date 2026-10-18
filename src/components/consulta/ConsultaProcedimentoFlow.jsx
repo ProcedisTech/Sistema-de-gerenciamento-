@@ -15,8 +15,8 @@ export function ConsultaProcedimentoFlow({
   procedimentosLote = [],
   setProcedimentosLote = () => {},
   journeyPlanejamentoCtx = null,
-  activeProcedimentoIndex = 0,
-  setActiveProcedimentoIndex = () => {},
+  activeProcedimentoIndex: _activeProcedimentoIndex = 0,
+  setActiveProcedimentoIndex: _setActiveProcedimentoIndex = () => {},
   observacoesExecucao,
   setObservacoesExecucao,
   procedureCapturedPhotos,
@@ -117,12 +117,7 @@ export function ConsultaProcedimentoFlow({
       if (!ok) return;
     }
     setStep4Errors({});
-    if (procedimentosLote && procedimentosLote.length > 1 && activeProcedimentoIndex < procedimentosLote.length - 1) {
-      setActiveProcedimentoIndex(activeProcedimentoIndex + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      setPhase('orientacoes');
-    }
+    setPhase('orientacoes');
   };
 
   const handleRemoverDoLote = async (procId) => {
@@ -195,29 +190,9 @@ export function ConsultaProcedimentoFlow({
   if (phase === 'registro') {
     return (
       <>
-        {procedimentosLote && procedimentosLote.length > 1 && (
-          <div className="flex border-b border-[#e2e8f0] mb-6 overflow-x-auto">
-            {procedimentosLote.map((proc, index) => (
-              <button
-                key={index}
-                type="button"
-                onClick={() => {
-                  setActiveProcedimentoIndex(index);
-                }}
-                className={`px-5 py-3 font-semibold text-[13px] whitespace-nowrap border-b-2 transition-colors ${
-                  activeProcedimentoIndex === index
-                    ? 'border-[#00a88e] text-[#00a88e]'
-                    : 'border-transparent text-[#64748b] hover:text-[#334155] hover:border-[#cbd5e1]'
-                }`}
-              >
-                {index + 1}. {proc.procedimentoNome || proc.nomeProcedimento || proc.nome || 'Procedimento'}
-              </button>
-            ))}
-          </div>
-        )}
         <Step4Procedimento
           pacienteIdForProcedures={pacienteIdForProcedures}
-          nomeProcedimento={procedimentosLote?.[activeProcedimentoIndex]?.procedimentoNome || nomeProcedimento}
+          nomeProcedimento={procedimentosLote?.[0]?.procedimentoNome || nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
           setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoId}
           setProcedimentoDoCatalogo={setProcedimentoDoCatalogo}
@@ -256,7 +231,7 @@ export function ConsultaProcedimentoFlow({
           onProcedureOpenCamera={execucaoBloqueadaPorTermos ? undefined : onProcedureOpenCamera}
           onClearMapaCaptureIntent={onClearMapaCaptureIntent}
           urlArquivoReserva={urlArquivoReserva}
-          itemId={procedimentosLote?.[activeProcedimentoIndex]?.itemId || null}
+          itemId={procedimentosLote?.[0]?.itemId || null}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button

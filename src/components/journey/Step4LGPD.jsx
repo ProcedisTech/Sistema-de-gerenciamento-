@@ -2226,8 +2226,11 @@ export function Step4Procedimento({
       .join(',');
   }, [procedimentosSelecionados]);
 
+  const lastValidatedKeyRef = useRef('');
   useEffect(() => {
-    if (!procsIdsKey || resolucao !== null || typeof onValidarTermosCatalogo !== 'function') return;
+    if (!procsIdsKey || typeof onValidarTermosCatalogo !== 'function') return;
+    if (lastValidatedKeyRef.current === procsIdsKey && resolucao !== null) return;
+    lastValidatedKeyRef.current = procsIdsKey;
     const ids = procsIdsKey.split(',').filter(Boolean);
     if (ids.length === 0) return;
     const nomes = (procedimentosSelecionados || []).map((p) => p.nomeProcedimento || p.nome || '').filter(Boolean).join(' + ');
@@ -2239,7 +2242,27 @@ export function Step4Procedimento({
 
   const itensPlanoPendentes = useMemo(() => {
     const rawItens = journeyPlanejamentoCtx?.itens || journeyPlanejamentoCtx?.planejamentoItens || [];
-    if (!Array.isArray(rawItens) || rawItens.length === 0) return [];
+    if (!Array.isArray(rawItens) || rawItens.length === 0) {
+      if (journeyPlanejamentoCtx?.itemIdByCatalogo && Object.keys(journeyPlanejamentoCtx.itemIdByCatalogo).length > 0) {
+        const idsNaSessao = new Set(
+          (procedimentosSessao || []).map((p) =>
+            String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id),
+          ),
+        );
+        return Object.entries(journeyPlanejamentoCtx.itemIdByCatalogo)
+          .filter(([catId]) => !idsNaSessao.has(String(catId)))
+          .map(([catId, planItemId]) => {
+            const matched = procedimentoSearchOptions.find((o) => String(o.id) === String(catId));
+            return {
+              id: String(catId),
+              planejamentoItemId: planItemId,
+              nome: matched?.nome || 'Procedimento do Plano',
+              planoTitulo: journeyPlanejamentoCtx?.titulo || 'Plano de Tratamento',
+            };
+          });
+      }
+      return [];
+    }
     const idsNaSessao = new Set(
       (procedimentosSessao || []).map((p) =>
         String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id),
@@ -2290,9 +2313,12 @@ export function Step4Procedimento({
     const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
       !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
       (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
+      : novoItem;
     const novaLista = isFirstEmpty
-      ? [novoItem]
-      : [...(procedimentosSessao || []), novoItem];
+      ? [itemFinal]
+      : [...(procedimentosSessao || []), itemFinal];
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }
@@ -2380,11 +2406,14 @@ export function Step4Procedimento({
     const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
       !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
       (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
+      : novoItem;
     const novaLista = isFirstEmpty
-      ? [novoItem]
+      ? [itemFinal]
       : [
           ...(procedimentosSessao || []),
-          novoItem,
+          itemFinal,
         ];
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
@@ -2462,7 +2491,15 @@ export function Step4Procedimento({
       (procedimentosSessao || []).length,
       procedimentosSessao || [],
     );
-    const novaLista = [...(procedimentosSessao || []), novoItem];
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
+      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
+      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
+      : novoItem;
+    const novaLista = isFirstEmpty
+      ? [itemFinal]
+      : [...(procedimentosSessao || []), itemFinal];
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }
@@ -2769,7 +2806,7 @@ export function Step4Procedimento({
       </div>
 
       {/* ── 2. TERMOS DE CONSENTIMENTO DA SESSÃO (LOGO ABAIXO) ── */}
-      {!execucaoBloqueadaPorTermos && procedimentosSelecionados.length > 0 ? (
+      {procedimentosSelecionados.length > 0 ? (
         <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">

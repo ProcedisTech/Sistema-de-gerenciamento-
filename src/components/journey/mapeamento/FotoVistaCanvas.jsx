@@ -21,6 +21,7 @@ import { TracadoEmProgresso } from './TracadoEmProgresso.jsx';
 import { MapaComparacaoModal } from './MapaComparacaoModal.jsx';
 import { MapaRetornoOverlay } from './MapaRetornoOverlay.jsx';
 import { MapaMarcacoesOverlay } from './MapaMarcacoesOverlay.jsx';
+import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 
 
 
@@ -182,21 +183,15 @@ export function FotoVistaCanvasCore({
   const allPontos = [];
 
   (pontosVista || []).forEach((grupo) => {
-
     (grupo.pontos || []).forEach((p) => {
-
       allPontos.push({
-
         ...p,
-
-        catalogoId: grupo.catalogoProcedimentoSaudeId,
-
-        nomeProcedimento: grupo.nomeProcedimento,
-
+        catalogoId: p.catalogoId || grupo.catalogoProcedimentoSaudeId,
+        catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.catalogoId || grupo.catalogoProcedimentoSaudeId,
+        nomeProcedimento: p.nomeProcedimento || grupo.nomeProcedimento,
+        cor: p.cor || grupo.corHex,
       });
-
     });
-
   });
 
 
@@ -236,12 +231,17 @@ export function FotoVistaCanvasCore({
       if (!coords) return;
 
       if (configMarcacao?.confirmarDose === false) {
+        const catId = procedimentoArmado?.catalogoProcedimentoSaudeId || procedimentoArmado?.catalogoId || procedimentoArmado?.id;
         onAddPonto?.(vistaAtual, {
           ...coords,
           quantidade: configMarcacao.dosePadrao || 1,
           tamanho: tamanhoGlobalPonto,
           profundidade: configMarcacao.profundidade ? Number(configMarcacao.profundidade) : undefined,
           tipoGeometria: 'ponto',
+          catalogoId: catId,
+          catalogoProcedimentoSaudeId: catId,
+          nomeProcedimento: procedimentoArmado?.nome || procedimentoArmado?.procedimentoNome,
+          cor: procedimentoArmado?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
         });
       } else {
         setPendingClick(coords);
@@ -296,11 +296,16 @@ export function FotoVistaCanvasCore({
       const simplified = simplifyCurveRDP(finalVertices, 0.5);
       if (simplified.length > 1) {
         if (configMarcacao?.confirmarDose === false) {
+          const catId = procedimentoArmado?.catalogoProcedimentoSaudeId || procedimentoArmado?.catalogoId || procedimentoArmado?.id;
           onAddPonto?.(vistaAtual, {
             vertices: simplified,
             quantidade: configMarcacao.dosePadrao || 1,
             tamanho: tamanhoGlobalPonto,
             tipoGeometria: 'traco',
+            catalogoId: catId,
+            catalogoProcedimentoSaudeId: catId,
+            nomeProcedimento: procedimentoArmado?.nome || procedimentoArmado?.procedimentoNome,
+            cor: procedimentoArmado?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
           });
         } else {
           setPendingTraco(simplified);
@@ -316,6 +321,9 @@ export function FotoVistaCanvasCore({
 
   const handleConfirmQty = (quantidade, tamanho) => {
     if (!procedimentoArmado?.id) return;
+    const catId = procedimentoArmado?.catalogoProcedimentoSaudeId || procedimentoArmado?.catalogoId || procedimentoArmado?.id;
+    const nomeProc = procedimentoArmado?.nome || procedimentoArmado?.procedimentoNome;
+    const corProc = procedimentoArmado?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e');
 
     if (pendingClick) {
       onAddPonto?.(vistaAtual, {
@@ -323,6 +331,10 @@ export function FotoVistaCanvasCore({
         quantidade,
         tamanho: tamanho ?? tamanhoGlobalPonto,
         tipoGeometria: 'ponto',
+        catalogoId: catId,
+        catalogoProcedimentoSaudeId: catId,
+        nomeProcedimento: nomeProc,
+        cor: corProc,
       });
       setPendingClick(null);
     } else if (pendingTraco) {
@@ -331,6 +343,10 @@ export function FotoVistaCanvasCore({
         quantidade,
         tamanho,
         tipoGeometria: 'traco',
+        catalogoId: catId,
+        catalogoProcedimentoSaudeId: catId,
+        nomeProcedimento: nomeProc,
+        cor: corProc,
       });
       setPendingTraco(null);
     }

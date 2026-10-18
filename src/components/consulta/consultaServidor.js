@@ -50,6 +50,7 @@ export function camposDoItemServidor(item) {
     cat: idOuNulo(item?.catalogoProcedimentoSaudeId),
     nome: texto(item?.nomeLivre ?? item?.procedimentoNome).trim(),
     orient: orientacoesNormalizadas(item?.orientacoes),
+    planItemId: idOuNulo(item?.planejamentoItemId),
   };
 }
 
@@ -81,6 +82,7 @@ export function camposDaLinhaSessao(linha) {
     cat: idOuNulo(linha?.nomeProcedimentoCatalogoId ?? linha?.catalogoProcedimentoSaudeId),
     nome: linha?.nomeSoDeTela === true ? '' : texto(linha?.nomeProcedimento || linha?.procedimentoNome).trim(),
     orient: orientacoesNormalizadas(linha?.orient),
+    planItemId: idOuNulo(linha?.planejamentoItemId),
   };
 }
 
@@ -226,7 +228,10 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
         nomeSoDeTela: false,
         nomeProcedimentoCatalogoId: srv.cat,
         catalogoProcedimentoSaudeId: srv.cat,
+        planejamentoItemId: srv.planItemId ?? nova.planejamentoItemId ?? null,
       };
+    } else if (srv.planItemId && srv.planItemId !== nova.planejamentoItemId && !pendente(`item:${item.id}:proc`)) {
+      nova = { ...nova, planejamentoItemId: srv.planItemId };
     }
     if (!mesmasOrientacoes(srv.orient, mem.orient) && !pendente(`item:${item.id}:orient`)) {
       nova = { ...nova, orient: srv.orient };
@@ -270,7 +275,9 @@ export function diferencasDosItens(sessao, mapa, base) {
     const itemId = mapa[idx];
     if (!itemId) {
       if (mem.cat || mem.nome) {
-        criar.push({ indice: idx, catalogoProcedimentoSaudeId: mem.cat, nomeLivre: mem.cat ? null : mem.nome || null });
+        const novo = { indice: idx, catalogoProcedimentoSaudeId: mem.cat, nomeLivre: mem.cat ? null : mem.nome || null };
+        if (mem.planItemId) novo.planejamentoItemId = mem.planItemId;
+        criar.push(novo);
       }
       return;
     }
@@ -279,11 +286,16 @@ export function diferencasDosItens(sessao, mapa, base) {
     if (mem.obs !== srv.obs) {
       alterar.push({ itemId, campo: 'obs', campos: { observacaoExecucao: mem.obs } });
     }
-    if (!mesmoProcedimento(mem, srv)) {
+    const procMudou = !mesmoProcedimento(mem, srv) || (mem.planItemId !== srv.planItemId && Boolean(mem.planItemId || srv.planItemId));
+    if (procMudou) {
+      const campos = { catalogoProcedimentoSaudeId: mem.cat, nomeLivre: mem.cat ? null : mem.nome || null };
+      if (mem.planItemId || srv.planItemId) {
+        campos.planejamentoItemId = mem.planItemId || null;
+      }
       alterar.push({
         itemId,
         campo: 'proc',
-        campos: { catalogoProcedimentoSaudeId: mem.cat, nomeLivre: mem.cat ? null : mem.nome || null },
+        campos,
       });
     }
     if (mem.orient != null && !mesmasOrientacoes(mem.orient, srv.orient)) {

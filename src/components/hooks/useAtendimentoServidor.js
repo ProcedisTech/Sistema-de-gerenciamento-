@@ -783,7 +783,7 @@ export function useAtendimentoServidor({
       // "não salvo" e avisa com erro; em 2xx não sai o toast "sobrescreveu". Não sobrescreve marca já existente.
       const chaveMarca = `item:${itemId}:${campo}`;
       if (!sobrescreveuRef.current.has(chaveMarca)) {
-        const remoto = campo === 'obs' ? b.obs : campo === 'orient' ? b.orient : { cat: b.cat, nome: b.nome };
+        const remoto = campo === 'obs' ? b.obs : campo === 'orient' ? b.orient : { cat: b.cat, nome: b.nome, planItemId: b.planItemId };
         sobrescreveuRef.current.set(chaveMarca, { remoto, silencioso: true });
       }
       if (campo === 'obs') b.obs = campos.observacaoExecucao;
@@ -791,6 +791,9 @@ export function useAtendimentoServidor({
       else {
         b.cat = campos.catalogoProcedimentoSaudeId;
         b.nome = campos.nomeLivre ?? b.nome;
+        if (Object.hasOwn(campos, 'planejamentoItemId')) {
+          b.planItemId = campos.planejamentoItemId;
+        }
       }
     }
   }, []);
@@ -846,11 +849,12 @@ export function useAtendimentoServidor({
       }
     } else if (partes.campo === 'orient') {
       if (Array.isArray(enviados.orientacoes) && mesmasOrientacoes(b.orient, enviados.orientacoes)) b.orient = srv.orient;
-    } else if (Object.hasOwn(enviados, 'catalogoProcedimentoSaudeId') || Object.hasOwn(enviados, 'nomeLivre')) {
+    } else if (Object.hasOwn(enviados, 'catalogoProcedimentoSaudeId') || Object.hasOwn(enviados, 'nomeLivre') || Object.hasOwn(enviados, 'planejamentoItemId')) {
       const enviado = { cat: enviados.catalogoProcedimentoSaudeId ?? null, nome: enviados.nomeLivre ?? b.nome };
       if (mesmoProcedimento(b, enviado)) {
         b.cat = srv.cat;
         b.nome = srv.nome;
+        b.planItemId = srv.planItemId;
       }
     }
   }, [partesDaChaveDeItem]);
@@ -1046,7 +1050,7 @@ export function useAtendimentoServidor({
           if (partes && b) {
             if (partes.campo === 'obs') b.obs = marca.remoto;
             else if (partes.campo === 'orient') b.orient = marca.remoto;
-            else { b.cat = marca.remoto.cat; b.nome = marca.remoto.nome; }
+            else { b.cat = marca.remoto.cat; b.nome = marca.remoto.nome; b.planItemId = marca.remoto.planItemId; }
           }
           naoSalvoRef.current.set(entrada.chave, JSON.stringify(entrada.dados?.campos ?? null));
         }
@@ -1122,13 +1126,17 @@ export function useAtendimentoServidor({
     });
     enfileirarAlteracoes(fila, alterar);
     for (const novo of itens.criar) {
+      const corpo = { catalogoProcedimentoSaudeId: novo.catalogoProcedimentoSaudeId, nomeLivre: novo.nomeLivre };
+      if (novo.planejamentoItemId) {
+        corpo.planejamentoItemId = novo.planejamentoItemId;
+      }
       fila.enfileirar({
         chave: `item:novo:${novo.indice}`,
         grupo: 'item:novo',
         tipo: 'itemNovo',
         dados: {
           indice: novo.indice,
-          corpo: { catalogoProcedimentoSaudeId: novo.catalogoProcedimentoSaudeId, nomeLivre: novo.nomeLivre },
+          corpo,
         },
         debounceMs: DEBOUNCE_TEXTO_MS,
       });

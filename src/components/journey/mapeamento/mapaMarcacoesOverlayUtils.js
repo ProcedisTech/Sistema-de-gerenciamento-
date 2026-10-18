@@ -33,8 +33,9 @@ export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
       }
       cor = MAPEAMENTO_PALETA_CORES[procIdToIndex.get(mapaProcId) % MAPEAMENTO_PALETA_CORES.length];
     }
-    const finalCor = cor || MAPEAMENTO_PALETA_CORES[0];
-    const nomeProcedimento = m.nomeProcedimento || proc?.catalogoNome || proc?.nome || '';
+    const COR_PADRAO_AVALIACAO = '#3b82f6';
+    const finalCor = cor || COR_PADRAO_AVALIACAO;
+    const nomeProcedimento = m.nomeProcedimento || proc?.catalogoNome || proc?.nome || 'Avaliação';
 
     const resolvedPosX =
       first?.posX ??

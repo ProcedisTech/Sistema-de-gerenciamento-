@@ -35,15 +35,16 @@ export function mergeFotosPorId(locais, doServidor, {
   const idsServidor = new Set(servidor.map((f) => String(f.id)));
   const porId = new Map(servidor.map((f) => [String(f.id), f]));
 
+  const extrairIdDaFoto = (f) => f?.meta?.fotoId || f?.fotoId || f?.id || null;
   let trocou = false;
   const ficam = lista
     .filter((f) => {
-      const id = f?.meta?.fotoId;
+      const id = extrairIdDaFoto(f);
       if (!id) return true;
       return idsServidor.has(String(id)) || !idsAnteriores.has(String(id));
     })
     .map((f) => {
-      const id = f?.meta?.fotoId;
+      const id = extrairIdDaFoto(f);
       if (!id) return f;
       const srv = porId.get(String(id));
       const versaoServidor = srv?.arquivoAtualizadoEm ?? null;
@@ -52,21 +53,27 @@ export function mergeFotosPorId(locais, doServidor, {
       if (versaoLocal === versaoServidor) return f;
       if (!versaoLocal) {
         trocou = true;
-        return { ...f, meta: { ...(f.meta || {}), arquivoAtualizadoEm: versaoServidor } };
+        return { ...f, meta: { ...(f.meta || {}), fotoId: String(id), arquivoAtualizadoEm: versaoServidor } };
       }
       // Foto que este aparelho acabou de anotar: a troca só vale quando a do servidor é mais nova.
       if (Date.parse(versaoServidor) < Date.parse(versaoLocal)) return f;
       const url = urlDeReservaDaFoto(pacienteId, id, versaoServidor);
       if (!url) return f;
       trocou = true;
-      return { url, blob: null, meta: { ...(f.meta || {}), arquivoAtualizadoEm: versaoServidor } };
+      return {
+        ...f,
+        url,
+        blob: null,
+        meta: { ...(f.meta || {}), fotoId: String(id), arquivoAtualizadoEm: versaoServidor },
+      };
     });
-  const idsLocais = new Set(ficam.map((f) => f?.meta?.fotoId).filter(Boolean).map(String));
+  const idsLocais = new Set(ficam.map(extrairIdDaFoto).filter(Boolean).map(String));
+  const urlsLocais = new Set(ficam.map((f) => f.cleanUrl || f.url).filter(Boolean).map(String));
   const novas = [];
   for (const f of servidor) {
     if (idsLocais.has(String(f.id)) || !entra(f)) continue;
     const url = urlDe(String(f.id));
-    if (!url) continue;
+    if (!url || urlsLocais.has(url)) continue;
     const categoria = categoriaDe ? categoriaDe(f) : null;
     novas.push({
       url,

@@ -37,7 +37,7 @@ import { MapeamentoFullscreenToolbar } from './mapeamento/MapeamentoFullscreenTo
 import { useMapeamentoFullscreenKeyboardShortcuts } from './mapeamento/useMapeamentoFullscreenKeyboardShortcuts.js';
 import { PontoMarcadorPopover } from './mapeamento/PontoMarcadorPopover.jsx';
 import { AssistiveTouchToolbar } from './mapeamento/AssistiveTouchToolbar.jsx';
-import { mapasApi, planejamentosApi, catalogosApi } from '../../services/api.js';
+import { mapasApi, planejamentosApi, catalogosApi, pacientesGaleriaApi } from '../../services/api.js';
 import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { garantirProcedimentosNoPlano } from '../../utils/sincronizarProcedimentosPlanoAgenda.js';
 
@@ -114,6 +114,8 @@ export function AnnotationCanvasAvaliacao({
   imageSrc,
   onAnnotatedCaptureSaved,
   persistAnnotatedPhotoToGallery,
+  aguardarFotosPendentes,
+  obterFotoId,
   onClose,
   pacienteId,
   roleUserId = null,
@@ -121,6 +123,8 @@ export function AnnotationCanvasAvaliacao({
   planoContexto = null,
 }) {
   const toast = useToast();
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
 
 
   // Ferramentas: 'traco' | 'ponto' | 'borracha'
@@ -129,20 +133,39 @@ export function AnnotationCanvasAvaliacao({
   // Estado dos múltiplos procedimentos selecionados para este mapa
   const [procedimentos, setProcedimentos] = useState(() => {
     if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) {
-      const validos = procedimentosIniciais
-        .filter((proc) => {
-          const nome = String(proc?.catalogoNome || proc?.nome || '').trim();
-          return nome && nome.toLowerCase() !== 'procedimento';
-        })
-        .map((proc, idx) => ({
-          id: proc.id || proc.catalogoProcedimentoSaudeId || `proc_${idx}`,
-          catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId || proc.id,
-          nome: proc.catalogoNome || proc.nome,
-          unidadeMedida: proc.unidadeMedida || proc.unidade || 'un',
-          corHex: proc.corHex || proc.cor || corParaProcedimento(proc.catalogoProcedimentoSaudeId || proc.id),
-          planejamentoItemId: proc.planejamentoItemId || null,
-        }));
-      if (validos.length > 0) return validos;
+      const validos = procedimentosIniciais.filter((proc) => {
+        const nome = String(proc?.catalogoNome || proc?.nome || '').trim();
+        return nome && nome.toLowerCase() !== 'procedimento';
+      });
+
+      if (validos.length > 0) {
+        // Passagem 1: coleta cores já explícitas e válidas para não sobrescrever
+        const coresOcupadas = new Set();
+        validos.forEach((p) => {
+          const cor = p?.corHex || p?.cor;
+          if (cor && typeof cor === 'string' && cor.startsWith('#')) {
+            coresOcupadas.add(cor.toLowerCase());
+          }
+        });
+
+        // Passagem 2: aloca cores cumulativamente evitando colisão entre procedimentos com mesmo hash
+        return validos.map((proc, idx) => {
+          const catId = proc.catalogoProcedimentoSaudeId || proc.id;
+          let cor = proc.corHex || proc.cor;
+          if (!cor || typeof cor !== 'string' || !cor.startsWith('#')) {
+            cor = getCorLivreParaProcedimento(catId, coresOcupadas);
+          }
+          coresOcupadas.add(cor.toLowerCase());
+          return {
+            id: proc.id || proc.catalogoProcedimentoSaudeId || `proc_${idx}`,
+            catalogoProcedimentoSaudeId: catId,
+            nome: proc.catalogoNome || proc.nome,
+            unidadeMedida: proc.unidadeMedida || proc.unidade || 'un',
+            corHex: cor,
+            planejamentoItemId: proc.planejamentoItemId || null,
+          };
+        });
+      }
     }
     return [];
   });
@@ -252,31 +275,71 @@ export function AnnotationCanvasAvaliacao({
       baseImageRef.current = null;
       return;
     }
-    const im = new Image();
-    im.crossOrigin = 'anonymous';
-    im.onload = () => {
-      baseImageRef.current = im;
-      setImageEpoch((n) => n + 1);
-    };
-    im.onerror = () => {
-      baseImageRef.current = null;
-    };
-    im.src = displayUrl;
+    let cancelled = false;
+    let localBlobUrl = null;
+
+    async function prepararImagem() {
+      let finalSrc = displayUrl;
+      if (typeof displayUrl === 'string' && (displayUrl.startsWith('/api/') || displayUrl.includes('/pacientes/'))) {
+        try {
+          const blob = await pacientesGaleriaApi.fetchArquivoBlob(displayUrl);
+          if (cancelled) return;
+          localBlobUrl = URL.createObjectURL(blob);
+          finalSrc = localBlobUrl;
+        } catch (err) {
+          console.warn('[AnnotationCanvasAvaliacao] Falha ao baixar blob autenticado:', err);
+        }
+      }
+      const im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = () => {
+        if (cancelled) return;
+        baseImageRef.current = im;
+        setImageEpoch((n) => n + 1);
+      };
+      im.onerror = () => {
+        if (cancelled) return;
+        baseImageRef.current = null;
+        setImageEpoch((n) => n + 1);
+      };
+      im.src = finalSrc;
+    }
+
+    prepararImagem();
+
     return () => {
-      im.onload = null;
-      im.onerror = null;
+      cancelled = true;
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
     };
   }, [displayUrl]);
 
   // Restaura marcações existentes (da memória ou hidratadas diretamente do banco via mapaOverlay), ou limpa e reseta visualização
   useEffect(() => {
     let existingPontos = Array.isArray(activePhoto?.pontos) ? activePhoto.pontos : [];
+    const procs =
+      activePhoto?.procedimentosMapeados ||
+      activePhoto?.mapaOverlay?.procedimentos ||
+      activePhoto?.mapaOverlay?.procedimentosMapeados ||
+      [];
     if (existingPontos.length === 0 && activePhoto?.mapaOverlay) {
       const rawMarcacoes = activePhoto.mapaOverlay.marcacoes || activePhoto.mapaOverlay.pontos || [];
-      const procs = activePhoto.mapaOverlay.procedimentos || activePhoto.mapaOverlay.procedimentosMapeados || [];
       existingPontos = marcacoesApiToOverlayPontos(rawMarcacoes, procs);
     }
     setPontos(existingPontos);
+
+    if (Array.isArray(procs) && procs.length > 0) {
+      setProcedimentos(
+        procs.map((p) => ({
+          id: p.catalogoProcedimentoSaudeId || p.id,
+          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+          nome: p.nomeProcedimento || p.catalogoNome || p.nome || 'Procedimento',
+          corHex: p.corHex || p.cor || null,
+          unidadeMedida: p.unidadeMedida || 'un',
+          planejamentoItemId: p.planejamentoItemId || null,
+        }))
+      );
+    }
+
     setHistory([]);
     resetView();
   }, [editingIndex, displayUrl, resetView, activePhoto]);
@@ -361,15 +424,33 @@ export function AnnotationCanvasAvaliacao({
             const hasRealProcs = (prev || []).some(
               (p) => p?.nome && p.nome.trim().toLowerCase() !== 'procedimento'
             );
-            if (hasRealProcs && (pontos || []).length > 0) return prev;
-            return itensPlano.map((it) => ({
-              id: it.id,
-              catalogoProcedimentoSaudeId: it.id,
-              nome: it.nome,
-              unidadeMedida: it.unidadeMedida || 'un',
-              corHex: corParaProcedimento(it.id),
-              planejamentoItemId: it.planejamentoItemId || null,
-            }));
+            if (hasRealProcs) {
+              // Já existem procedimentos definidos (pelo usuário, foto anterior ou sessão).
+              // Preserva integralmente as cores escolhidas (corHex) e enriquece com planejamentoItemId se houver correspondência
+              return prev.map((p) => {
+                const matchPlano = itensPlano.find(
+                  (it) => it.id === (p.catalogoProcedimentoSaudeId || p.id)
+                );
+                return {
+                  ...p,
+                  planejamentoItemId: p.planejamentoItemId || matchPlano?.planejamentoItemId || null,
+                  unidadeMedida: p.unidadeMedida || matchPlano?.unidadeMedida || 'un',
+                };
+              });
+            }
+            const coresOcupadas = new Set();
+            return itensPlano.map((it) => {
+              const cor = getCorLivreParaProcedimento(it.id, coresOcupadas);
+              coresOcupadas.add(cor.toLowerCase());
+              return {
+                id: it.id,
+                catalogoProcedimentoSaudeId: it.id,
+                nome: it.nome,
+                unidadeMedida: it.unidadeMedida || 'un',
+                corHex: cor,
+                planejamentoItemId: it.planejamentoItemId || null,
+              };
+            });
           });
           setActiveProcedimentoId((prev) => {
             if (prev && itensPlano.some((it) => it.id === prev)) return prev;
@@ -1456,10 +1537,37 @@ export function AnnotationCanvasAvaliacao({
   const executarSalvar = async (destino = 'plano') => {
     setIsSaving(true);
     try {
+      if (typeof aguardarFotosPendentes === 'function') {
+        try {
+          await aguardarFotosPendentes();
+        } catch (errWait) {
+          console.warn('[AnnotationCanvasAvaliacao] Falha ao aguardar fotos pendentes:', errWait);
+        }
+      }
+
       const targetIdx = typeof editingIndex === 'number' ? editingIndex : 0;
       const fotoAtual =
+        (Array.isArray(photosRef.current) && targetIdx != null ? photosRef.current[targetIdx] : null) ||
         (Array.isArray(photos) && targetIdx != null ? photos[targetIdx] : null) ||
         (typeof imageSrc === 'object' ? imageSrc : null);
+
+      let resolvedFotoGaleriaId =
+        fotoAtual?.fotoId ||
+        fotoAtual?.id ||
+        fotoAtual?.meta?.fotoId ||
+        (fotoAtual?.blob && typeof obterFotoId === 'function' ? obterFotoId(fotoAtual) : null) ||
+        null;
+
+      if (!resolvedFotoGaleriaId && typeof aguardarFotosPendentes === 'function') {
+        try {
+          await aguardarFotosPendentes();
+          if (typeof obterFotoId === 'function') {
+            resolvedFotoGaleriaId = obterFotoId(fotoAtual) || null;
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       const cleanBlobOriginal = fotoAtual?.cleanBlob || fotoAtual?.blob || null;
       const cleanUrlOriginal =
@@ -1470,6 +1578,7 @@ export function AnnotationCanvasAvaliacao({
         const stats = getProcedimentoStats(proc.id);
         return {
           catalogoProcedimentoSaudeId: proc.id,
+          planejamentoItemId: proc.planejamentoItemId || null,
           nomeProcedimento: proc.nome,
           unidadeMedida: proc.unidadeMedida || 'un',
           corHex: proc.corHex,
@@ -1501,6 +1610,8 @@ export function AnnotationCanvasAvaliacao({
               quantidade: Math.max(0.1, Number(p.quantidade) || (activeUnidade === 'ml' ? 0.5 : 1)),
               tamanho: p.tamanho ? Number(p.tamanho) : 1.0,
               procedimentoIndex: procIdx >= 0 ? procIdx : null,
+              corHex: p.cor || p.corHex || null,
+              catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.procedimentoId || null,
               vertices:
                 isTraco && Array.isArray(p.vertices)
                   ? p.vertices.map((v, i) => ({
@@ -1575,12 +1686,14 @@ export function AnnotationCanvasAvaliacao({
             tipoMapaCodigo: 'avaliacao',
             procedimentos: procedimentosPayload,
             marcacoes: marcacoesPayload,
+            ...(resolvedFotoGaleriaId ? { fotoGaleriaIdPorVista: { [anguloCanonico]: resolvedFotoGaleriaId } } : {}),
           };
 
-          if (destino === 'plano' && targetPlanejamentoItemId) {
+          const effectivePlanItemId = targetPlanejamentoItemId || procedimentosPayload.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId || null;
+          if (effectivePlanItemId) {
             mapaPayload.origemTipo = 'planejamento';
-            mapaPayload.origemId = targetPlanejamentoItemId;
-            mapaPayload.planejamentoItemId = targetPlanejamentoItemId;
+            mapaPayload.origemId = effectivePlanItemId;
+            mapaPayload.planejamentoItemId = effectivePlanItemId;
           }
 
           const savedMapa = await mapasApi.salvar(mapaPayload);
@@ -1601,6 +1714,18 @@ export function AnnotationCanvasAvaliacao({
         }
       }
 
+      const pontosEnriquecidos = pontos.map((p) => {
+        const proc = procedimentos.find(
+          (pr) => pr.id === (p.catalogoProcedimentoSaudeId || p.procedimentoId)
+        );
+        return {
+          ...p,
+          cor: p.cor || p.corHex || proc?.corHex || activeCor || '#3b82f6',
+          corHex: p.corHex || p.cor || proc?.corHex || activeCor || '#3b82f6',
+          nomeProcedimento: p.nomeProcedimento || proc?.nome || (procedimentos.length === 0 ? 'Avaliação' : 'Procedimento'),
+        };
+      });
+
       // Entrega o contrato downstream com os procedimentos mapeados e destino explícito
       onAnnotatedCaptureSaved?.({
         index: targetIdx,
@@ -1609,7 +1734,14 @@ export function AnnotationCanvasAvaliacao({
         cleanBlob: cleanBlobOriginal,
         cleanUrl: cleanUrlOriginal,
         procedimentosMapeados: resumoProcedimentos,
-        pontos,
+        pontos: pontosEnriquecidos,
+        mapaOverlay: {
+          pontos: pontosEnriquecidos,
+          marcacoes: pontosEnriquecidos,
+          procedimentos: resumoProcedimentos,
+          planejamentoId: targetPlanejamentoId,
+          planejamentoItemId: targetPlanejamentoItemId,
+        },
         isAnnotated: true,
         destinoAvaliacao: destino,
         isAvulso,
@@ -1618,7 +1750,7 @@ export function AnnotationCanvasAvaliacao({
         planejamentoItemId: targetPlanejamentoItemId,
       });
 
-      if (typeof persistAnnotatedPhotoToGallery === 'function') {
+      if (!resolvedFotoGaleriaId && typeof persistAnnotatedPhotoToGallery === 'function') {
         try {
           let blobParaUpload = cleanBlobOriginal;
           if (!blobParaUpload && cleanUrlOriginal) {

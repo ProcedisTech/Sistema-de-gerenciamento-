@@ -86,7 +86,14 @@ function comFotoId(lista, blob, fotoId) {
   if (!Array.isArray(lista) || !lista.some((f) => f?.blob === blob)) return lista;
   return lista
     .filter((f) => f?.blob === blob || f?.blob || f?.meta?.fotoId !== fotoId)
-    .map((f) => (f?.blob === blob ? { ...f, meta: { ...(f.meta || {}), fotoId } } : f));
+    .map((f) => {
+      if (f?.blob === blob) {
+        if (f.meta) f.meta.fotoId = fotoId;
+        f.fotoId = fotoId;
+        return { ...f, fotoId, meta: { ...(f.meta || {}), fotoId } };
+      }
+      return f;
+    });
 }
 
 /** F1: grava a versão do arquivo (`arquivoAtualizadoEm`) na foto do `fotoId` (pela meta ou pelo blob que a subiu). */
@@ -460,5 +467,7 @@ export function useEnvioFotosConsulta({
     return naoEnviadas.size;
   }, []);
 
-  return { fotoRemovida, fotoAnotada, aguardarPendentes };
+  const obterFotoId = useCallback((foto) => fotoIdDe(foto, fotoIdPorBlobRef.current), []);
+
+  return { fotoRemovida, fotoAnotada, aguardarPendentes, obterFotoId };
 }

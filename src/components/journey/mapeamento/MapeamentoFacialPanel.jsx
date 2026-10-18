@@ -27,6 +27,7 @@ import { EscolherGrupoFotoModal } from './EscolherGrupoFotoModal.jsx';
 import { EscolherVistaModal } from './EscolherVistaModal.jsx';
 
 import { MapeamentoFullscreenOverlay } from './MapeamentoFullscreenOverlay.jsx';
+import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 
 
 
@@ -539,7 +540,18 @@ export function MapeamentoFacialPanel({
                 onRequestFullscreen={() => setFullscreenOpen(true)}
                 previewMode={true}
 
-                onAddPonto={state.adicionarPonto}
+                onAddPonto={(vista, pontoData) => {
+                  const armed = state.procedimentoArmado;
+                  const catId = armed?.catalogoProcedimentoSaudeId || armed?.catalogoId || armed?.id || pontoData?.catalogoProcedimentoSaudeId || pontoData?.catalogoId;
+                  state.adicionarPonto(vista, {
+                    ...pontoData,
+                    catalogoProcedimentoSaudeId: catId,
+                    catalogoId: catId,
+                    procedimentoIndex: armed?.index ?? 0,
+                    nomeProcedimento: armed?.nome || pontoData?.nomeProcedimento,
+                    cor: pontoData?.cor || armed?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
+                  });
+                }}
 
                 onEditarPonto={state.editarPonto}
 
