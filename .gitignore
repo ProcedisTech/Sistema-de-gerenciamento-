@@ -47,3 +47,6 @@ docs_export/
 # Playwright Test Artifacts
 playwright-report/
 test-results/
+
+# Cofre Procedi (Junction local para documentacao/Obsidian)
+cofre/

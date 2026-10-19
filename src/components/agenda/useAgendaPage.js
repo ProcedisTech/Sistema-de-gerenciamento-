@@ -39,7 +39,6 @@ import {
 } from '../../utils/agendaDateUtils';
 import { diaDaSemana, hojeDaClinica, parseDataCalendario, somarDias } from '../../utils/datasClinica.js';
 import { formatDataPt } from '../../utils/planejamentoDraftUtils.js';
-import { garantirProcedimentosNoPlano } from '../../utils/sincronizarProcedimentosPlanoAgenda.js';
 import {
   fetchKpiDrilldownRows,
   filterKpiCountableAppointments,
@@ -379,6 +378,13 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [grupoReagendarDuracoes, setGrupoReagendarDuracoes] = useState({});
   /** Mapa {catalogoProcedimentoSaudeId → planejamentoItemId} para vincular POST de agenda ao item do plano. */
   const [planejamentoItemIdPorCatalogo, setPlanejamentoItemIdPorCatalogo] = useState({});
+  /** Itens agendáveis do plano ativo do paciente selecionado */
+  const [planoAgendavel, setPlanoAgendavel] = useState([]);
+  const [planoAgendavelLoading, setPlanoAgendavelLoading] = useState(false);
+  /** Escolha do usuário no seletor de procedimentos do modal: { [catalogoId]: planejamentoItemId } */
+  const [planoItemEscolhidoPorCatalogo, setPlanoItemEscolhidoPorCatalogo] = useState({});
+  /** Token anti-corrida para descartar respostas assíncronas de pacientes anteriores */
+  const planoLoadTokenRef = useRef(0);
   /** Retornos vinculados ao procedimento pai sendo reagendado (para validação de consistência cronológica). */
   const [retornosVinculadosReagendar, setRetornosVinculadosReagendar] = useState([]);
   const [equipeList, setEquipeList] = useState([]);
@@ -997,6 +1003,72 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     });
   }, []);
 
+  const carregarPlanoAgendavel = useCallback(async (pacienteId) => {
+    const id = String(pacienteId || '').trim();
+    if (!id) {
+      setPlanoAgendavel([]);
+      setPlanoAgendavelLoading(false);
+      return;
+    }
+
+    const token = (planoLoadTokenRef.current += 1);
+    setPlanoAgendavelLoading(true);
+
+    try {
+      const res = await planejamentosApi.listarPorPaciente(id);
+      if (token !== planoLoadTokenRef.current) return;
+
+      const planos = normalizeListaPlanos(res);
+      const planosAtivos = planos.filter(
+        (p) => String(p.statusCodigo || p.status || '').toLowerCase() === 'ativo',
+      );
+
+      const agendaveis = [];
+      planosAtivos.forEach((plano) => {
+        const itens = Array.isArray(plano.itens) ? plano.itens : [];
+        itens.forEach((it) => {
+          if (it.isRetorno) return;
+          const status = String(it.statusItem || it.statusItemNome || '').toLowerCase();
+          if (['cancelado', 'desistência', 'desistencia', 'finalizado', 'realizado', 'agendado', 'em_andamento'].includes(status)) return;
+
+          const jaAgendado = Boolean(
+            it.sessaoAtiva?.dataAgendamento ||
+            it.sessaoAtiva?.id ||
+            it.sessoes?.some((s) => s?.dataAgendamento),
+          );
+          const jaRealizado = Boolean(it.sessaoRealizada?.dataAgendamento || it.sessaoRealizada?.id);
+          if (jaAgendado || jaRealizado) return;
+
+          const catId = String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim();
+          const pItemId = String(it.id || it.planejamentoItemId || '').trim();
+          if (!pItemId) return;
+
+          agendaveis.push({
+            rowKey: `plano:${pItemId}`,
+            catalogoProcedimentoSaudeId: catId,
+            planejamentoItemId: pItemId,
+            nome: it.catalogoNome || 'Procedimento',
+            planoTitulo: plano.titulo || plano.nome || 'Plano de Tratamento',
+            sessaoNumero: it.sessaoNumero || null,
+            numeroSessoesTotal: it.numeroSessoesTotal || null,
+            dataPlanejada: it.dataPlanejada || null,
+            duracaoMin: Number(it.duracaoMin) || 30,
+          });
+        });
+      });
+
+      setPlanoAgendavel(agendaveis);
+    } catch (err) {
+      if (token !== planoLoadTokenRef.current) return;
+      console.warn('[useAgendaPage] Erro ao carregar plano agendável:', err);
+      setPlanoAgendavel([]);
+    } finally {
+      if (token === planoLoadTokenRef.current) {
+        setPlanoAgendavelLoading(false);
+      }
+    }
+  }, []);
+
   const selectPaciente = useCallback(
     (pacienteId, paciente) => {
       const id = String(pacienteId || '').trim();
@@ -1021,18 +1093,28 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         planejamentoItensRaiz: precisaCarregarRaizes ? [] : isRetorno ? prev.planejamentoItensRaiz : [],
         procedimentosRaizLoading: precisaCarregarRaizes,
         procedimentosRaizError: '',
+        catalogoProcedimentoSaudeIds: [],
       }));
       setFormErrors((prev) => ({
         ...prev,
         pacienteId: undefined,
         procedimentoFeitoOrigemId: undefined,
+        catalogoProcedimentoSaudeIds: undefined,
       }));
+      setPlanoItemEscolhidoPorCatalogo({});
 
       if (precisaCarregarRaizes) {
+        setPlanoAgendavel([]);
+        planoLoadTokenRef.current += 1;
         carregarProcedimentosRaiz(id);
+      } else if (!isRetorno && Boolean(id)) {
+        carregarPlanoAgendavel(id);
+      } else {
+        setPlanoAgendavel([]);
+        planoLoadTokenRef.current += 1;
       }
     },
-    [carregarProcedimentosRaiz, form.tipoAtendimento, form.procedimentoFeitoOrigemId],
+    [carregarProcedimentosRaiz, carregarPlanoAgendavel, form.tipoAtendimento, form.procedimentoFeitoOrigemId],
   );
 
   const clearPacienteSelection = useCallback(() => {
@@ -1043,15 +1125,22 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       telefone: '',
       procedimentoFeitoOrigemId: '',
       procedimentosFeitosRaiz: [],
+      planejamentoItensRaiz: [],
       procedimentosRaizLoading: false,
       procedimentosRaizError: '',
+      catalogoProcedimentoSaudeIds: [],
     }));
     setPacienteContext(null);
     setPacienteContextLoading(false);
+    setPlanoAgendavel([]);
+    setPlanoAgendavelLoading(false);
+    setPlanoItemEscolhidoPorCatalogo({});
+    planoLoadTokenRef.current += 1;
     setFormErrors((prev) => ({
       ...prev,
       pacienteId: undefined,
       procedimentoFeitoOrigemId: undefined,
+      catalogoProcedimentoSaudeIds: undefined,
     }));
   }, []);
 
@@ -1097,13 +1186,22 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         procedimentoFeitoOrigemId: undefined,
       }));
       setPlanejamentoItemIdPorCatalogo({});
+      setPlanoItemEscolhidoPorCatalogo({});
 
       if (precisaCarregarRaizes) {
+        setPlanoAgendavel([]);
+        planoLoadTokenRef.current += 1;
         carregarProcedimentosRaiz(pacienteId);
+      } else if (tipo === TIPO_ATENDIMENTO_PROCEDIMENTO && Boolean(pacienteId)) {
+        carregarPlanoAgendavel(pacienteId);
+      } else {
+        setPlanoAgendavel([]);
+        planoLoadTokenRef.current += 1;
       }
     },
     [
       carregarProcedimentosRaiz,
+      carregarPlanoAgendavel,
       form.pacienteId,
       form.tipoAtendimento,
       form.tipoAtendimentoLocked,
@@ -2250,12 +2348,34 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
             next.pacienteNome = patient.nome;
             next.telefone = patient.telefone;
           }
+          next.catalogoProcedimentoSaudeIds = [];
         }
         return next;
       });
       setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+
+      if (field === 'pacienteId') {
+        setPlanoItemEscolhidoPorCatalogo({});
+        const nextId = String(value || '').trim();
+        if (formRef.current?.tipoAtendimento === TIPO_ATENDIMENTO_PROCEDIMENTO && nextId) {
+          carregarPlanoAgendavel(nextId);
+        } else {
+          setPlanoAgendavel([]);
+          planoLoadTokenRef.current += 1;
+        }
+      } else if (field === 'tipoAtendimento') {
+        const nextTipo = String(value || '').trim();
+        const curPacienteId = String(formRef.current?.pacienteId || '').trim();
+        if (nextTipo === TIPO_ATENDIMENTO_PROCEDIMENTO && curPacienteId) {
+          carregarPlanoAgendavel(curPacienteId);
+        } else if (nextTipo !== TIPO_ATENDIMENTO_PROCEDIMENTO) {
+          setPlanoAgendavel([]);
+          setPlanoItemEscolhidoPorCatalogo({});
+          planoLoadTokenRef.current += 1;
+        }
+      }
     },
-    [patientOptions]
+    [patientOptions, carregarPlanoAgendavel]
   );
 
   const openCreateModal = useCallback(
@@ -2264,6 +2384,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setEditingAppointment(null);
       setPatientSelectLocked(false);
       setPlanejamentoItemIdPorCatalogo({});
+      setPlanoAgendavel([]);
+      setPlanoAgendavelLoading(false);
+      setPlanoItemEscolhidoPorCatalogo({});
+      planoLoadTokenRef.current += 1;
       planejamentoItemIdVinculoRef.current = null;
       setForm(defaultForm(date, patientOptions, null));
       setFormErrors({});
@@ -2281,6 +2405,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setEditingAppointment(null);
       setPatientSelectLocked(false);
       setPlanejamentoItemIdPorCatalogo({});
+      setPlanoAgendavel([]);
+      setPlanoAgendavelLoading(false);
+      setPlanoItemEscolhidoPorCatalogo({});
+      planoLoadTokenRef.current += 1;
       planejamentoItemIdVinculoRef.current = null;
       setSelectedDay(date);
       const base = defaultForm(date, patientOptions, null);
@@ -2335,8 +2463,17 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         retornoStatusPai: opts.retornoStatusPai ?? null,
       });
       if (precisaCarregarRaizes) {
+        setPlanoAgendavel([]);
+        planoLoadTokenRef.current += 1;
         carregarProcedimentosRaiz(patient.id);
+      } else if (!opts.modoRetorno && (!mapaPlano || Object.keys(mapaPlano).length === 0)) {
+        carregarPlanoAgendavel(patient.id);
+      } else {
+        setPlanoAgendavel([]);
+        setPlanoAgendavelLoading(false);
+        planoLoadTokenRef.current += 1;
       }
+      setPlanoItemEscolhidoPorCatalogo({});
       const mapaNormalizado = opts.modoRetorno
         ? {}
         : normalizePlanoItemIdMap(mapaPlano);
@@ -2362,7 +2499,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
       setModalMode('create');
     },
-    [isNivel1, patientOptions, todayIso, applyProfissionalPreselect]
+    [isNivel1, patientOptions, todayIso, applyProfissionalPreselect, carregarPlanoAgendavel, carregarProcedimentosRaiz]
   );
 
   const openReagendarModal = useCallback(
@@ -2475,6 +2612,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setGrupoReagendarDuracoes({});
     setPlanejamentoItemIdPorCatalogo({});
     planejamentoItemIdVinculoRef.current = null;
+    setPlanoAgendavel([]);
+    setPlanoAgendavelLoading(false);
+    setPlanoItemEscolhidoPorCatalogo({});
+    planoLoadTokenRef.current += 1;
     setRetornosVinculadosReagendar([]);
     equipeFetchedRef.current = false;
     dispMonthCacheRef.current = {};
@@ -2690,20 +2831,6 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           return false;
         }
 
-        let planoItemIdMap = {};
-        if (modalMode !== 'reagendar') {
-          try {
-            planoItemIdMap = await garantirProcedimentosNoPlano({
-              pacienteId: String(form.pacienteId || patient?.id || '').trim(),
-              catalogoProcedimentoSaudeIds: procIds,
-              roleUserId: agendaRole,
-              dataIso: form.data,
-            });
-          } catch (errPlano) {
-            console.warn('[saveAppointment] Falha ao sincronizar procedimentos com plano:', errPlano);
-          }
-        }
-
         let startHh = String(form.horaInicio || '09:00').slice(0, 5);
         const resultados = [];
         const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
@@ -2713,13 +2840,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           const catalogoProcedimentoSaudeId = procIds[i];
           const dMin = divisao[i] ?? 30;
 
-          const planejamentoItemId =
-            planoItemIdMap[catalogoProcedimentoSaudeId] ||
-            resolvePlanejamentoItemIdForCatalogo(
-              catalogoProcedimentoSaudeId,
-              planejamentoItemIdPorCatalogo,
-              planejamentoItemIdVinculoRef.current,
-            );
+          const origemLock = Object.keys(planejamentoItemIdPorCatalogo).length > 0;
+          const planejamentoItemId = origemLock
+            ? resolvePlanejamentoItemIdForCatalogo(
+                catalogoProcedimentoSaudeId,
+                planejamentoItemIdPorCatalogo,
+                planejamentoItemIdVinculoRef.current,
+              )
+            : (planoItemEscolhidoPorCatalogo[catalogoProcedimentoSaudeId] || null);
           const agendaOrigemResolvida =
             modalMode === 'reagendar'
               ? (grupoReagendarMap[catalogoProcedimentoSaudeId] ||
@@ -2850,6 +2978,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     modalMode,
     monthDate,
     planejamentoItemIdPorCatalogo,
+    planoItemEscolhidoPorCatalogo,
     patientOptions,
     refreshWeekGrid,
     refreshHojeIfOffCurrentMonth,
@@ -2975,6 +3104,10 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     openReagendarModal,
     grupoReagendarDuracoes,
     setPlanejamentoItemIdPorCatalogo,
+    itensPlanoDisponiveis: planoAgendavel,
+    planoAgendavelLoading,
+    planoItemEscolhidoPorCatalogo,
+    setPlanoItemEscolhidoPorCatalogo,
     closeModal,
     patientSelectLocked,
     retornosVinculadosReagendar,

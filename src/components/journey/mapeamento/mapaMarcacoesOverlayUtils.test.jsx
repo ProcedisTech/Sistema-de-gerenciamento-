@@ -61,4 +61,49 @@ describe('marcacoesApiToOverlayPontos — Regras de Cores e Rótulos Clínicos',
     expect(pontos[0].cor).toBe('#8b5cf6');
     expect(pontos[0].nomeProcedimento).toBe('Toxina Botulínica');
   });
+
+  it('resolve cor do procedimento por catalogoProcedimentoSaudeId mesmo com mapaProcedimentoId nulo (cenário em memória do Hub)', () => {
+    // Procedimento sem id relacional, apenas catalogoProcedimentoSaudeId com cor customizada laranja
+    const procedimentos = [
+      {
+        catalogoProcedimentoSaudeId: 'cat-biopsia-1',
+        nomeProcedimento: 'Biópsia de Pele',
+        corHex: '#f97316',
+      },
+    ];
+    // Marcação local com mapaProcedimentoId nulo
+    const marcacoes = [
+      {
+        id: 'm-local-1',
+        mapaProcedimentoId: null,
+        catalogoProcedimentoSaudeId: 'cat-biopsia-1',
+        vertices: [{ posX: 50.0, posY: 50.0, ordem: 1 }],
+      },
+    ];
+
+    const pontos = marcacoesApiToOverlayPontos(marcacoes, procedimentos);
+    expect(pontos[0].cor).toBe('#f97316');
+    expect(pontos[0].nomeProcedimento).toBe('Biópsia de Pele');
+  });
+
+  it('preserva a precedência estrita: m.corHex na marcação continua vencendo quando fornecida explicitamente', () => {
+    const procedimentos = [
+      {
+        id: 'proc-1',
+        catalogoProcedimentoSaudeId: 'cat-1',
+        corHex: '#8b5cf6',
+      },
+    ];
+    const marcacoes = [
+      {
+        id: 'm-1',
+        mapaProcedimentoId: 'proc-1',
+        corHex: '#ec4899', // rosa explícito na marcação
+        vertices: [{ posX: 50.0, posY: 50.0, ordem: 1 }],
+      },
+    ];
+
+    const pontos = marcacoesApiToOverlayPontos(marcacoes, procedimentos);
+    expect(pontos[0].cor).toBe('#ec4899');
+  });
 });

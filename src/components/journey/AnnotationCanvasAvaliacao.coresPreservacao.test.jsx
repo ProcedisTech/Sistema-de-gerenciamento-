@@ -52,17 +52,23 @@ describe('Regressão Zero — Preservação de Cores e Vínculo de Plano no Anno
   it('preserva cores customizadas ao reabrir foto existente e não as sobrescreve ao carregar itens do plano', async () => {
     // Foto já anotada com cor customizada (#06b6d4 - ciano)
     const customCor = '#06b6d4';
+    const catToxinaId = 'a0000000-0000-4000-8000-000000000001';
+    const planItemId = 'b0000000-0000-4000-8000-000000000002';
+    const pacienteUuid = 'c0000000-0000-4000-8000-000000000003';
+    const planoAtivoId = 'd0000000-0000-4000-8000-000000000004';
+    const itemPlanoId = 'e0000000-0000-4000-8000-000000000005';
+
     const activePhoto = {
       id: 'foto-1',
       url: 'blob:http://localhost/clean-photo-1',
       cleanUrl: 'blob:http://localhost/clean-photo-1',
       procedimentosMapeados: [
         {
-          id: 'cat-toxina-1',
-          catalogoProcedimentoSaudeId: 'cat-toxina-1',
+          id: catToxinaId,
+          catalogoProcedimentoSaudeId: catToxinaId,
           nome: 'Toxina Botulínica',
           corHex: customCor,
-          planejamentoItemId: 'pi-123',
+          planejamentoItemId: planItemId,
           unidadeMedida: 'u',
         },
       ],
@@ -74,7 +80,7 @@ describe('Regressão Zero — Preservação de Cores e Vínculo de Plano no Anno
           posY: 50,
           cor: customCor,
           corHex: customCor,
-          catalogoProcedimentoSaudeId: 'cat-toxina-1',
+          catalogoProcedimentoSaudeId: catToxinaId,
           quantidade: 2,
         },
       ],
@@ -83,14 +89,14 @@ describe('Regressão Zero — Preservação de Cores e Vínculo de Plano no Anno
     // Plano ativo retornado pelo backend
     planejamentosApi.listarPorPaciente.mockResolvedValue([
       {
-        id: 'plano-ativo-1',
+        id: planoAtivoId,
         statusCodigo: 'ativo',
         itens: [
           {
-            id: 'item-plano-1',
-            catalogoProcedimentoSaudeId: 'cat-toxina-1',
+            id: itemPlanoId,
+            catalogoProcedimentoSaudeId: catToxinaId,
             catalogoNome: 'Toxina Botulínica',
-            planejamentoItemId: 'pi-123',
+            planejamentoItemId: planItemId,
           },
         ],
       },
@@ -104,7 +110,7 @@ describe('Regressão Zero — Preservação de Cores e Vínculo de Plano no Anno
         editingIndex={0}
         setEditingIndex={() => {}}
         imageSrc={activePhoto.url}
-        pacienteId="paciente-uuid-1"
+        pacienteId={pacienteUuid}
         procedimentosIniciais={activePhoto.procedimentosMapeados}
         onAnnotatedCaptureSaved={onSaved}
         onClose={() => {}}
@@ -113,7 +119,7 @@ describe('Regressão Zero — Preservação de Cores e Vínculo de Plano no Anno
 
     // Aguarda o effect de carregar itens do plano rodar
     await waitFor(() => {
-      expect(planejamentosApi.listarPorPaciente).toHaveBeenCalledWith('paciente-uuid-1');
+      expect(planejamentosApi.listarPorPaciente).toHaveBeenCalledWith(pacienteUuid);
     });
 
     // Clica em "Salvar Avaliação" e confirma o destino no modal clínico
@@ -132,9 +138,75 @@ describe('Regressão Zero — Preservação de Cores e Vínculo de Plano no Anno
     expect(callPayload.procedimentos[0].corHex).toBe(customCor);
     // Marcacao deve conter corHex e catalogoProcedimentoSaudeId
     expect(callPayload.marcacoes[0].corHex).toBe(customCor);
-    expect(callPayload.marcacoes[0].catalogoProcedimentoSaudeId).toBe('cat-toxina-1');
+    expect(callPayload.marcacoes[0].catalogoProcedimentoSaudeId).toBe(catToxinaId);
     // Deve preservar o vínculo com o planejamentoItemId
-    expect(callPayload.procedimentos[0].planejamentoItemId).toBe('pi-123');
-    expect(callPayload.planejamentoItemId).toBe('pi-123');
+    expect(callPayload.procedimentos[0].planejamentoItemId).toBe(planItemId);
+    expect(callPayload.planejamentoItemId).toBe(planItemId);
+
+    expect(onSaved).toHaveBeenCalled();
+    const savedCapture = onSaved.mock.calls[0][0];
+    expect(savedCapture.pontos[0].corHex).toBe(customCor);
+    expect(savedCapture.mapaOverlay.marcacoes[0].corHex).toBe(customCor);
+  });
+
+  it('atualiza corHex dos pontos e do mapaOverlay para a cor do procedimento ao salvar fotos em memória', async () => {
+    // Foto com ponto antigo carregando cor cinza legada (#64748b)
+    // Mas o procedimento do mapa foi configurado para Laranja (#f97316)
+    const activePhoto = {
+      id: 'foto-2',
+      url: 'blob:http://localhost/clean-photo-2',
+      cleanUrl: 'blob:http://localhost/clean-photo-2',
+      procedimentosMapeados: [
+        {
+          id: 'cat-biopsia-1',
+          catalogoProcedimentoSaudeId: 'cat-biopsia-1',
+          nome: 'Biópsia de Pele',
+          corHex: '#f97316', // Laranja
+        },
+      ],
+      pontos: [
+        {
+          id: 'pt-antigo-1',
+          tipoGeometria: 'ponto',
+          posX: 30,
+          posY: 40,
+          cor: '#64748b', // Cinza antigo
+          corHex: '#64748b', // Cinza antigo
+          catalogoProcedimentoSaudeId: 'cat-biopsia-1',
+          quantidade: 1,
+        },
+      ],
+    };
+
+    planejamentosApi.listarPorPaciente.mockResolvedValue([]);
+    const onSaved = vi.fn();
+
+    render(
+      <AnnotationCanvasAvaliacao
+        photos={[activePhoto]}
+        editingIndex={0}
+        setEditingIndex={() => {}}
+        imageSrc={activePhoto.url}
+        pacienteId="paciente-uuid-1"
+        procedimentosIniciais={activePhoto.procedimentosMapeados}
+        onAnnotatedCaptureSaved={onSaved}
+        onClose={() => {}}
+      />
+    );
+
+    const btnSalvar = screen.getByRole('button', { name: /Salvar Avaliação/i });
+    fireEvent.click(btnSalvar);
+
+    const btnGerarPlano = await screen.findByRole('button', { name: /Sim, gerar Plano de Tratamento/i });
+    fireEvent.click(btnGerarPlano);
+
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalled();
+    });
+
+    const savedCapture = onSaved.mock.calls[0][0];
+    // A cor entregue ao Hub em memória deve ser o Laranja (#f97316), NÃO o cinza antigo
+    expect(savedCapture.pontos[0].corHex).toBe('#f97316');
+    expect(savedCapture.mapaOverlay.marcacoes[0].corHex).toBe('#f97316');
   });
 });

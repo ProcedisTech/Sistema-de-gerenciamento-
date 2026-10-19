@@ -331,6 +331,9 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
 
       if (atendimentosAvulsosMap.has(chave)) {
         const existente = atendimentosAvulsosMap.get(chave);
+        if (atId && !existente.atendimentoId) {
+          existente.atendimentoId = atId;
+        }
         if (!existente.procedimentosFeitosIds.includes(pfId)) {
           existente.procedimentosFeitosIds.push(pfId);
           existente.nomesProcedimentos.push(nomeAtual);
@@ -350,8 +353,9 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       } else {
         atendimentosAvulsosMap.set(chave, {
           chave,
-          id: agId || pfId || chave,
+          id: agId || atId || pfId || chave,
           agendaId: agId,
+          atendimentoId: atId,
           procedimentoFeitoId: pfId,
           procedimentosFeitosIds: [pfId],
           nomesProcedimentos: [nomeAtual],
@@ -383,11 +387,28 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
 
     let chave = null;
     const atFotoId = foto.atendimentoId ? String(foto.atendimentoId).trim() : null;
-    if (agId && atendimentosAvulsosMap.has(`ag_${agId}`)) {
+
+    // 1. Tenta casar primeiro por atendimentoId explícito (unifica fotos e mapas da mesma consulta)
+    if (atFotoId) {
+      if (atendimentosAvulsosMap.has(`at_${atFotoId}`)) {
+        chave = `at_${atFotoId}`;
+      } else {
+        for (const [k, at] of atendimentosAvulsosMap.entries()) {
+          if (at.atendimentoId && String(at.atendimentoId) === atFotoId) {
+            chave = k;
+            break;
+          }
+        }
+      }
+    }
+
+    // 2. Se não casou por atendimentoId, tenta por agendaId
+    if (!chave && agId && atendimentosAvulsosMap.has(`ag_${agId}`)) {
       chave = `ag_${agId}`;
-    } else if (atFotoId && atendimentosAvulsosMap.has(`at_${atFotoId}`)) {
-      chave = `at_${atFotoId}`;
-    } else if (pfId) {
+    }
+
+    // 3. Se não casou, tenta por procedimentoFeitoId
+    if (!chave && pfId) {
       if (atendimentosAvulsosMap.has(`pf_${pfId}`)) {
         chave = `pf_${pfId}`;
       } else {
@@ -399,8 +420,12 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         }
       }
     }
+
+    // 4. Se ainda não achou chave existente, define chave para nova entrada
     if (!chave) {
-      if (agId) {
+      if (atFotoId) {
+        chave = `at_${atFotoId}`;
+      } else if (agId) {
         chave = `ag_${agId}`;
       } else if (pfId) {
         chave = `pf_${pfId}`;
@@ -413,8 +438,9 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       const horaInicio = foto.registradoEm ? String(foto.registradoEm).slice(11, 16) : null;
       atendimentosAvulsosMap.set(chave, {
         chave,
-        id: agId || pfId || chave,
+        id: agId || atFotoId || pfId || chave,
         agendaId: agId,
+        atendimentoId: atFotoId,
         procedimentoFeitoId: pfId,
         procedimentosFeitosIds: pfId ? [pfId] : [],
         nomesProcedimentos: [],

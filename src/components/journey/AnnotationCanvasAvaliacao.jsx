@@ -895,10 +895,10 @@ export function AnnotationCanvasAvaliacao({
     setPontos((prev) =>
       prev.map((pt) => {
         if (pt.catalogoProcedimentoSaudeId === procId) {
-          return { ...pt, cor: novaCor };
+          return { ...pt, cor: novaCor, corHex: novaCor };
         }
         if (outroAfetado && pt.catalogoProcedimentoSaudeId === outroAfetado.id && corAntigaAlvo) {
-          return { ...pt, cor: corAntigaAlvo };
+          return { ...pt, cor: corAntigaAlvo, corHex: corAntigaAlvo };
         }
         return pt;
       })
@@ -1718,10 +1718,11 @@ export function AnnotationCanvasAvaliacao({
         const proc = procedimentos.find(
           (pr) => pr.id === (p.catalogoProcedimentoSaudeId || p.procedimentoId)
         );
+        const procCor = proc?.corHex || proc?.cor;
         return {
           ...p,
-          cor: p.cor || p.corHex || proc?.corHex || activeCor || '#3b82f6',
-          corHex: p.corHex || p.cor || proc?.corHex || activeCor || '#3b82f6',
+          cor: procCor || p.cor || p.corHex || activeCor || '#3b82f6',
+          corHex: procCor || p.cor || p.corHex || activeCor || '#3b82f6',
           nomeProcedimento: p.nomeProcedimento || proc?.nome || (procedimentos.length === 0 ? 'Avaliação' : 'Procedimento'),
         };
       });

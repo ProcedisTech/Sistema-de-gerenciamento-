@@ -131,6 +131,7 @@ import {
   normalizeOrientacoesTemplateResponse,
   orientacoesTemplateSignature,
 } from '../utils/orientacoesJourney.js';
+import { montarEntradaFotoPersistida } from './consulta/entradaFotoPersistida.js';
 
 // Utilitarios
 import { getPatientInitials } from './utils';
@@ -1990,17 +1991,18 @@ function AppRefactoredInner({ onCanalAvisos }) {
               );
               if (!isAvaliacaoFoto) return false;
 
-              // Restringe estritamente a fotos do atendimento ativo ou do plano de tratamento vinculado
-              if (currentAtendId) {
-                const fotoAtendId = f.atendimentoId || f.atendimento?.id;
-                const fotoPlanId = f.planejamentoId || f.mapaOverlay?.planejamentoId;
-                if (fotoAtendId || fotoPlanId) {
-                  const pertenceAoAtendimento = fotoAtendId && String(fotoAtendId) === String(currentAtendId);
-                  const pertenceAoPlano = currentPlanId && fotoPlanId && String(fotoPlanId) === String(currentPlanId);
-                  return Boolean(pertenceAoAtendimento || pertenceAoPlano);
-                }
+              const fotoAtendId = f.atendimentoId || f.atendimento?.id;
+              const fotoPlanId = f.planejamentoId || f.mapaOverlay?.planejamentoId;
+
+              const pertenceAoAtendimento = Boolean(currentAtendId && fotoAtendId && String(fotoAtendId) === String(currentAtendId));
+              const pertenceAoPlano = Boolean(currentPlanId && fotoPlanId && String(fotoPlanId) === String(currentPlanId));
+
+              // Em atendimento avulso (sem plano), NUNCA vaza fotos de atendimentos passados
+              if (!currentPlanId) {
+                return pertenceAoAtendimento;
               }
-              return true;
+
+              return Boolean(pertenceAoAtendimento || pertenceAoPlano);
             })
             .map((f) => ({
               ...f,
@@ -4514,15 +4516,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
         if (opts.index != null) {
           const currentPh = (cameraState.evaluationCapturedPhotos || [])[opts.index] || {};
-          cameraState.replaceEvaluationCapturedPhotoAt(opts.index, {
-            ...currentPh,
-            uploaded: true,
-            id: res?.id,
-            fotoId: res?.id,
-            meta: { ...(currentPh.meta || {}), fotoId: res?.id },
-            destinoAvaliacao: opts.destinoAvaliacao || currentPh.destinoAvaliacao,
-            planejamentoId: opts.planejamentoId || currentPh.planejamentoId,
+          const entrada = montarEntradaFotoPersistida({
+            res,
+            opts,
+            metaAtual: currentPh.meta,
           });
+          cameraState.replaceEvaluationCapturedPhotoAt(opts.index, entrada);
         }
 
         if (pid) {

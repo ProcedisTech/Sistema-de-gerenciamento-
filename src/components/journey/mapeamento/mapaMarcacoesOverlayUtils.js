@@ -10,6 +10,12 @@ export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
       if (p?.id != null) {
         procMap.set(String(p.id), p);
       }
+      if (p?.catalogoProcedimentoSaudeId != null) {
+        procMap.set(String(p.catalogoProcedimentoSaudeId), p);
+      }
+      if (p?.procedimentoId != null) {
+        procMap.set(String(p.procedimentoId), p);
+      }
     }
   }
 
@@ -24,7 +30,7 @@ export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
     const first = vertices[0];
     const catId = m.catalogoId || m.catalogoProcedimentoSaudeId || null;
     const mapaProcId = m.mapaProcedimentoId != null ? String(m.mapaProcedimentoId) : null;
-    const proc = mapaProcId ? procMap.get(mapaProcId) : null;
+    const proc = (mapaProcId ? procMap.get(mapaProcId) : null) || (catId ? procMap.get(String(catId)) : null);
 
     let cor = m.corHex || m.cor || proc?.corHex || (catId ? corParaProcedimento(catId) : null);
     if (!cor && mapaProcId) {
@@ -35,7 +41,7 @@ export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
     }
     const COR_PADRAO_AVALIACAO = '#3b82f6';
     const finalCor = cor || COR_PADRAO_AVALIACAO;
-    const nomeProcedimento = m.nomeProcedimento || proc?.catalogoNome || proc?.nome || 'Avaliação';
+    const nomeProcedimento = m.nomeProcedimento || proc?.catalogoNome || proc?.nome || proc?.nomeProcedimento || 'Avaliação';
 
     const resolvedPosX =
       first?.posX ??
