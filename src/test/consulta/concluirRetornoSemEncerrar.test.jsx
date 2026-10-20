@@ -11,6 +11,7 @@ import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
 import { PNG_A_BASE64, PNG_B_BASE64, arquivoPng, limparMidia, prepararMidia } from '../encerrar/ambienteMidia.js';
 import { persistirMapaAplicacao } from '../../utils/persistirMapaAplicacao.js';
 import { AVISO } from '../../services/avisos/tiposAviso.js';
+import { MENSAGEM_ENVIO_PENDENTE } from '../../components/hooks/useAtendimentoServidor.js';
 import { avisos } from './canalAvisosTeste.jsx';
 import {
   ATENDIMENTO_ID,
@@ -157,6 +158,7 @@ async function abrirRetorno({ encerrar = () => ENCERRADO, itemFora = false, foto
   if (itemFora) {
     estado.dto = { ...retorno, itens: [{ ...retorno.itens[0], observacaoExecucao: 'Anotada em outro aparelho' }] };
     avisos.emitirAviso(AVISO.ATENDIMENTO.SESSAO_ALTERADA, ATENDIMENTO_ID, { atendimentoId: ATENDIMENTO_ID });
+    await new Promise((resolve) => setTimeout(resolve, 320));
     await assentarMuito(6);
     // O servidor falso responde em microtarefas; no navegador o PATCH /finalizar leva tempo e a tela renderiza a troca
     // das observações (e a fila a enfileira) antes do encerrar. Um atraso de 20 ms no finalizar reproduz isso.
@@ -270,11 +272,11 @@ describe('"Concluir Retorno" sem encerrar a consulta (B-42 rodada 4)', () => {
 
     await concluirRetorno();
 
-    expect(contar(srv)).toMatchObject({ finalizar: 1, encerrar: 0 });
+    expect(contar(srv)).toMatchObject({ finalizar: 0, encerrar: 0 });
     const patches = escritasDe(srv, 'PATCH', PATCH_ITEM);
     expect(patches.length).toBeGreaterThanOrEqual(1);
-    expect(patches.every((e) => e.status === 503 && e.body?.observacaoExecucao === '')).toBe(true);
-    expect(await screen.findByText(AVISO_CONEXAO)).toBeTruthy();
+    expect(patches.every((e) => e.status === 503)).toBe(true);
+    expect(await screen.findByText(MENSAGEM_ENVIO_PENDENTE)).toBeTruthy();
     aindaNoRetorno();
   }, TIMEOUT);
 

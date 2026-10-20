@@ -494,6 +494,7 @@ describe('(h) nível App: consulta encerrada em outro aparelho com envio pendent
     // Outra aba encerrou; o servidor já recusa o envio guardado; chega o aviso.
     estado.dto = appConsultaDto({ status: 'encerrado', encerradoEm: '2026-10-06T13:05:00Z', itens: estado.dto.itens });
     avisos.emitirAviso(AVISO.ATENDIMENTO.ENCERRADO, APP_ATENDIMENTO_ID, { atendimentoId: APP_ATENDIMENTO_ID });
+    await new Promise((resolve) => setTimeout(resolve, 320));
     await assentarMuito(8);
 
     expect(naConsulta()).toBe(false);

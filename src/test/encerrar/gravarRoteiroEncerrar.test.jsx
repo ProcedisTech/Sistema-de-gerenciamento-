@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Etapa 0 (Y5): grava o roteiro real do `encerrarAtendimento` de hoje, cenário a cenário, rodando o
  * AppRefactored de verdade (via AppRoot) com o backend falso no `fetch`.
  *
@@ -272,14 +272,34 @@ async function marcarPontoNoMapa({ quantidade } = {}) {
   const overlay = document.querySelector('.fixed.inset-0.z-\\[140\\]');
   const area = overlay?.querySelector('.cursor-crosshair');
   if (!area) throw new Error('Área de marcação do mapa não encontrada.');
+
+  if (quantidade != null) {
+    // Se a barra estiver recolhida em tela estreita, abre o menu
+    const btnDrawer = overlay?.querySelector('button[aria-label="Abrir menu de ferramentas"]');
+    if (btnDrawer) {
+      fireEvent.click(btnDrawer);
+      await assentar();
+    }
+    const labelDose = Array.from(overlay?.querySelectorAll('label') || []).find((l) =>
+      /Dose padrão/i.test(l.textContent || ''),
+    );
+    const inputDose = labelDose?.querySelector('input[type="number"]');
+    if (inputDose) {
+      fireEvent.change(inputDose, { target: { value: String(quantidade) } });
+      await assentar();
+    }
+  }
+
   fireEvent.pointerDown(area, { clientX: 400, clientY: 300, pointerId: 1 });
   await assentar();
-  const modal = screen.getByRole('dialog', { name: /Quantidade no ponto/ });
-  if (quantidade != null) {
-    fireEvent.change(within(modal).getByRole('spinbutton'), { target: { value: String(quantidade) } });
+  const modal = screen.queryByRole('dialog', { name: /Quantidade no ponto/ });
+  if (modal) {
+    if (quantidade != null) {
+      fireEvent.change(within(modal).getByRole('spinbutton'), { target: { value: String(quantidade) } });
+    }
+    fireEvent.click(within(modal).getByRole('button', { name: /^Confirmar$/ }));
+    await assentar();
   }
-  fireEvent.click(within(modal).getByRole('button', { name: /^Confirmar$/ }));
-  await assentar();
   // Com a tela "estreita" (matchMedia falso) a barra fica no drawer; Esc fecha (useMapeamentoFullscreenKeyboardShortcuts.js:37).
   fireEvent.keyDown(window, { key: 'Escape' });
   await assentarMuito();
@@ -832,7 +852,7 @@ describe('roteiro de hoje do encerrar (Y5)', () => {
     await abrirModulo('Procedimento');
     await enviarFotoDoMapa(arquivoPng('mapa-item-1.png', PNG_A_BASE64));
     await marcarPontoNoMapa();
-    clicarBotao(/^2\. Preenchimento labial/);
+    clicarBotao(/^(2\.\s*)?Preenchimento labial/);
     await assentarMuito();
     await enviarFotoDoMapa(arquivoPng('mapa-item-2.png', PNG_B_BASE64));
     await marcarPontoNoMapa();
@@ -842,8 +862,8 @@ describe('roteiro de hoje do encerrar (Y5)', () => {
       fixture: { agendas },
       // Hoje o iniciar do mapa do item 2 levava a agenda do item 1; no encerrar do servidor cada item leva a sua.
       diferencaAceita: iniciarDoMapaVaiParaOEncerrar(),
-      // A aba ativa é a do item 2 (2º POST /itens → ...003): é ele o item ativo do encerrar.
-      encerrar: { ...ENCERRAR_PELO_HUB, itemAtivoId: 'c0000000-0000-4000-8000-000000000003' },
+      // Na sessão unificada sem abas fragmentadas, o item ativo do encerramento é o item raiz (...002).
+      encerrar: { ...ENCERRAR_PELO_HUB, itemAtivoId: 'c0000000-0000-4000-8000-000000000002' },
     });
   }, TIMEOUT);
 

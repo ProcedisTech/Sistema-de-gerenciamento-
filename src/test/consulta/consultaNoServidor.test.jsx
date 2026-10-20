@@ -125,6 +125,7 @@ describe('consulta no servidor (Etapa 1)', () => {
       fechadaPor: { profissionalNome: 'Ana Prado', pacienteNome: 'Maria Souza' },
     });
     avisos.emitirAviso(AVISO.ATENDIMENTO.CANCELADO, ATENDIMENTO_ID, { atendimentoId: ATENDIMENTO_ID });
+    await new Promise((resolve) => setTimeout(resolve, 320));
     await assentarMuito(6);
 
     expect(emConsulta()).toBe(false);
@@ -142,6 +143,7 @@ describe('consulta no servidor (Etapa 1)', () => {
     const antes = leiturasDoDetalhe(srv).length;
 
     avisos.emitirAviso(AVISO.ATENDIMENTO.SESSAO_ALTERADA, ATENDIMENTO_ID, { atendimentoId: ATENDIMENTO_ID });
+    await new Promise((resolve) => setTimeout(resolve, 320));
     await assentarMuito(6);
 
     expect(leiturasDoDetalhe(srv).length - antes).toBe(1);

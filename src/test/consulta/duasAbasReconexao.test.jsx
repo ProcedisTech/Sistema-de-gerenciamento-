@@ -308,6 +308,7 @@ describe('F6a no App: quem encerrou x outro aparelho', () => {
 
     estado.dto = appConsultaDto({ status: 'encerrado', encerradoEm: '2026-10-06T13:05:00Z' });
     avisos.emitirAviso(AVISO.ATENDIMENTO.ENCERRADO, APP_ATENDIMENTO_ID, { atendimentoId: APP_ATENDIMENTO_ID });
+    await new Promise((resolve) => setTimeout(resolve, 320));
     await assentarMuito(6);
 
     expect(emConsulta()).toBe(false);

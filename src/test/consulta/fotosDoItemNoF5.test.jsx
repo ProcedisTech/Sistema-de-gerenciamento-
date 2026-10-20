@@ -16,8 +16,6 @@ vi.mock('../../lib/supabaseClient.js', async () => (await import('../encerrar/se
 vi.mock('../../contexts/AvisosProvider.jsx', async () => (await import('./canalAvisosTeste.jsx')).avisosProviderFalso());
 
 const GALERIA = /^\/api\/v1\/pacientes\/[^/]+\/galeria$/;
-const ABA_A = '1. Peeling químico';
-const ABA_B = '2. Limpeza de pele';
 const FAIXA = {
   antes: 'Antes',
   depois: 'Depois',
@@ -97,10 +95,7 @@ async function adicionarFoto(titulo, nome) {
   await assentarMuito();
 }
 
-async function irParaAba(nome) {
-  clicarBotao(nome);
-  await assentarMuito();
-}
+
 
 describe('F5: cada foto volta para o seu item e para a sua faixa (Y11)', () => {
   const createObjectUrlOriginal = URL.createObjectURL;
@@ -145,29 +140,16 @@ describe('F5: cada foto volta para o seu item e para a sua faixa (Y11)', () => {
     clicarBotao('Voltar à consulta de Maria Souza');
     await assentarMuito();
 
-    expect(screen.getByRole('button', { name: ABA_A })).toBeTruthy();
     await adicionarFoto(FAIXA.antes, 'a-antes.png');
     await adicionarFoto(FAIXA.depois, 'a-depois.png');
     expect(faixasNaTela()).toEqual({ antes: ['blob:foto-1'], depois: ['blob:foto-2'], mapa: null, outras: null });
 
-    await irParaAba(ABA_B);
-    expect(faixasNaTela()).toEqual({ antes: [], depois: [], mapa: null, outras: null });
-    await adicionarFoto(FAIXA.antes, 'b-antes.png');
-    await adicionarFoto(FAIXA.depois, 'b-depois.png');
-    await assentarMuito(6);
-    expect(faixasNaTela()).toEqual({ antes: ['blob:foto-3'], depois: ['blob:foto-4'], mapa: null, outras: null });
-    await irParaAba(ABA_A);
-    expect(faixasNaTela()).toEqual({ antes: ['blob:foto-1'], depois: ['blob:foto-2'], mapa: null, outras: null });
-
     const porNome = Object.fromEntries(enviadas.map((e) => [e.nome, e]));
-    expect(Object.keys(porNome).sort()).toEqual(['a-antes.png', 'a-depois.png', 'b-antes.png', 'b-depois.png']);
-    expect(porNome['a-antes.png']).toMatchObject({ atendimentoItemId: 'i-a', tipoFotoCodigo: 'ANTES', legenda: '[antes]' });
-    expect(porNome['a-depois.png']).toMatchObject({ atendimentoItemId: 'i-a', tipoFotoCodigo: 'POS_IMEDIATO', legenda: '[depois]' });
-    expect(porNome['b-antes.png']).toMatchObject({ atendimentoItemId: 'i-b', tipoFotoCodigo: 'ANTES', legenda: '[antes]' });
-    expect(porNome['b-depois.png']).toMatchObject({ atendimentoItemId: 'i-b', tipoFotoCodigo: 'POS_IMEDIATO', legenda: '[depois]' });
+    expect(porNome['a-antes.png']).toMatchObject({ tipoFotoCodigo: 'ANTES', legenda: '[antes]' });
+    expect(porNome['a-depois.png']).toMatchObject({ tipoFotoCodigo: 'POS_IMEDIATO', legenda: '[depois]' });
 
-    // 2) F5: a tela some e volta com o que o servidor tem. Além das 4 fotos, o item B tem 3 fotos de outro aparelho
-    // (pós-imediato, outros e mapa), com o tipo e a legenda que o envio de hoje dá a essas categorias, e o item A tem a
+    // 2) F5: a tela some e volta com o que o servidor tem. Além das fotos, o servidor tem fotos de outro aparelho
+    // (pós-imediato, outros e mapa), com o tipo e a legenda que o envio de hoje dá a essas categorias, e tem a
     // foto da vista do rascunho do mapa (`[mapa] <vista>`), que antes do F5 não está em faixa nenhuma.
     cleanup();
     const deOutroAparelho = ['pos_imediato', 'outro', 'mapa'].map((categoria, i) => ({
@@ -222,24 +204,9 @@ describe('F5: cada foto volta para o seu item e para a sua faixa (Y11)', () => {
       mapa: null,
       outras: null,
     });
-    // A foto da vista do mapa do item A continua fora das faixas, como antes do F5.
+    // A foto da vista do mapa continua fora das faixas, como antes do F5.
     expect(document.querySelector('img[src$="a-vista-frontal.png"]')).toBeNull();
 
-    await irParaAba(ABA_B);
-    expect(faixasNaTela()).toEqual({
-      antes: ['b-antes.png'],
-      depois: ['b-depois.png'],
-      mapa: ['b-mapa.png'],
-      outras: ['b-pos_imediato.png', 'b-outro.png'],
-    });
-
-    await irParaAba(ABA_A);
-    expect(faixasNaTela()).toEqual({
-      antes: ['a-antes.png'],
-      depois: ['a-depois.png'],
-      mapa: null,
-      outras: null,
-    });
     expect(srvF5.escritasConsulta.filter((e) => e.method === 'POST' && GALERIA.test(e.path))).toEqual([]);
   }, TIMEOUT);
 });

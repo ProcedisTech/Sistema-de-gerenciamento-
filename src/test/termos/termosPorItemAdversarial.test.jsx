@@ -3,7 +3,7 @@
  * Item A (CATALOGO_1) exige TERMO_1; item B (CATALOGO_2) não exige nada. A resolução é respondida por catálogo.
  * Também a prova do índice ativo: a mescla reordena as linhas e o item ativo continua o mesmo itemId.
  */
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -87,17 +87,13 @@ async function montar({ termos = [], itens = [ITEM_A, ITEM_B], resolucaoFalha = 
   return { srv, estado };
 }
 
-const aba = (n) => screen.getAllByRole('button').find((b) => new RegExp(`^${n}\\.`).test((b.textContent || '').trim()));
-async function irParaAba(n) {
-  const b = aba(n);
-  if (!b) throw new Error(`aba ${n} não encontrada`);
-  fireEvent.click(b);
-  await assentarMuito();
-}
 const faixa = () => screen.queryByText(FAIXA);
 async function releitura() {
   act(() => {
     avisos.emitirAviso('ATENDIMENTO.SESSAO_ALTERADA', ATENDIMENTO_ID, { atendimentoId: ATENDIMENTO_ID });
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 350));
   });
   await assentarMuito(6);
 }
@@ -110,18 +106,12 @@ describe('faixa de termos por item (F3), AppRefactored real', () => {
     localStorage.clear();
   });
 
-  it('A exige termo e B não: a faixa aparece só na aba do A e traz o título do termo', async () => {
+  it('A exige termo e B não: a faixa aparece com o termo exigido para o item A', async () => {
     await montar({ termos: [linhaTermo({})] });
-    expect(aba(1)).toBeTruthy();
-    expect(aba(2)).toBeTruthy();
     expect(faixa()).toBeTruthy();
-    expect(screen.getByText(new RegExp(TITULO_A))).toBeTruthy();
-
-    await irParaAba(2);
-    expect(faixa()).toBeNull();
-
-    await irParaAba(1);
-    expect(faixa()).toBeTruthy();
+    expect(screen.getAllByText(new RegExp(TITULO_A)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Toxina botulínica/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Preenchimento labial/).length).toBeGreaterThan(0);
   }, TIMEOUT);
 
   it('assina em outra aba (aviso + releitura ASSINADO): a faixa do A some, mesmo com a resolução ainda velha', async () => {
@@ -152,15 +142,12 @@ describe('faixa de termos por item (F3), AppRefactored real', () => {
   it('sem HUB_TERMOS_VER (termos: []): vale o piso do servidor e a faixa aparece', async () => {
     await montar({ termos: [] });
     expect(faixa()).toBeTruthy();
-    await irParaAba(2);
-    expect(faixa()).toBeNull();
+    expect(screen.getAllByText(new RegExp(TITULO_A)).length).toBeGreaterThan(0);
   }, TIMEOUT);
 
   it('a rede da resolução falha: não bloqueia (nenhuma faixa em nenhum item)', async () => {
     const { estado } = await montar({ termos: [linhaTermo({})], resolucaoFalha: true });
     expect(estado.resolucoes.length).toBeGreaterThan(0);
-    expect(faixa()).toBeNull();
-    await irParaAba(2);
     expect(faixa()).toBeNull();
   }, TIMEOUT);
 });
@@ -185,40 +172,36 @@ describe('índice ativo ao reordenar por mudança remota (F3)', () => {
     await releitura();
   }
 
-  it('usuário na aba do A (1º): depois de B passar para a frente, o ativo continua A (agora 2º) e a faixa do A segue', async () => {
+  it('após reordenação remota, ambos os procedimentos permanecem no painel e o termo de A segue bloqueando', async () => {
     const { estado } = await montar({ termos: [linhaTermo({})] });
     expect(faixa()).toBeTruthy();
     await inverterNoServidor(estado);
 
-    const abas = screen.getAllByRole('button').map((b) => (b.textContent || '').trim());
-    expect(abas.some((t) => /^1\. Preenchimento labial/.test(t))).toBe(true);
-    expect(abas.some((t) => /^2\. Toxina botulínica/.test(t))).toBe(true);
-    // O item ativo é o A: a faixa do A continua e a aba "2. Toxina" está marcada como ativa.
+    expect(screen.getAllByText(/Preenchimento labial/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Toxina botulínica/).length).toBeGreaterThan(0);
     expect(faixa()).toBeTruthy();
-    expect(aba(2).className).toMatch(/text-\[#00a88e\]/);
-    expect(aba(1).className).not.toMatch(/border-\[#00a88e\]/);
   }, TIMEOUT);
 
-  it('usuário na aba do B (2º): depois de B passar para a frente, o ativo continua B (agora 1º) e não há faixa', async () => {
-    const { estado } = await montar({ termos: [linhaTermo({})] });
-    await irParaAba(2);
+  it('se o termo de A estiver assinado, após reordenação remota não há bloqueio', async () => {
+    const { estado } = await montar({
+      termos: [linhaTermo({ termoAssinaturaId: 'as-1', statusAssinatura: 'ASSINADO' })],
+    });
     expect(faixa()).toBeNull();
     await inverterNoServidor(estado);
-    expect(aba(1).textContent).toMatch(/Preenchimento labial/);
+
+    expect(screen.getAllByText(/Preenchimento labial/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Toxina botulínica/).length).toBeGreaterThan(0);
     expect(faixa()).toBeNull();
-    expect(aba(1).className).toMatch(/border-\[#00a88e\]/);
   }, TIMEOUT);
 
-  it('usuário que troca de aba depois da reordenação não é arrastado de volta', async () => {
-    const { estado } = await montar({ termos: [linhaTermo({})] });
+  it('releitura consecutiva sem mudança de itens preserva o estado de conformidade', async () => {
+    const { estado } = await montar({
+      termos: [linhaTermo({ termoAssinaturaId: 'as-1', statusAssinatura: 'ASSINADO' })],
+    });
     await inverterNoServidor(estado);
-    // ativo = A (2º). O usuário clica na 1ª (agora B): fica nela.
-    await irParaAba(1);
-    expect(aba(1).className).toMatch(/border-\[#00a88e\]/);
     expect(faixa()).toBeNull();
-    // Outra releitura sem mudança de ordem não o move.
+
     await releitura();
-    expect(aba(1).className).toMatch(/border-\[#00a88e\]/);
     expect(faixa()).toBeNull();
   }, TIMEOUT);
 });

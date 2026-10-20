@@ -266,6 +266,8 @@ describe('"Concluir Retorno" sem encerrar — testador T1 (B-42 rodada 4)', () =
     const { srv } = await fecharDuranteOFinalizar({ atrasoMs: 400 });
 
     await concluirRetorno();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await assentarMuito(6);
     const c1 = contar(srv);
     // O encerrar nem sai: a consulta já foi esquecida (CONSULTA_NAO_ENCONTRADA, sem status → texto de conexão).
     expect(c1).toMatchObject({ procedimentos: 1, galeria: 1, finalizar: 1, encerrar: 0 });

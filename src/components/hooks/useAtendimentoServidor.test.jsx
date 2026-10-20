@@ -72,6 +72,13 @@ describe('useAtendimentoServidor', () => {
     sessionStorage.clear();
     vi.mocked(atendimentosApi.minhas).mockResolvedValue([]);
     vi.mocked(atendimentosApi.abrir).mockResolvedValue(dto());
+    vi.mocked(atendimentosApi.novoItem).mockResolvedValue({
+      id: 'item-mock',
+      ordem: 0,
+      agendaId: null,
+      nomeLivre: 'Botox',
+      catalogoProcedimentoSaudeId: null,
+    });
   });
   afterEach(() => {
     vi.clearAllMocks();
