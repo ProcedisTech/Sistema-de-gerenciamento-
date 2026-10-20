@@ -7,6 +7,7 @@ import {
 } from '../../services/api.js';
 import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext.jsx';
+import { usePapel } from '../../hooks/usePapel.js';
 import { encontrarSobrepostos } from './horarioSemanaUtils.js';
 import { HorarioSemanaEditor } from './HorarioSemanaEditor.jsx';
 import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
@@ -75,6 +76,7 @@ function validarDiasConfig(diasConfig) {
 
 export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange }) {
   const { orgId } = useOrg();
+  const { isDono } = usePapel();
   const [tipoOrg, setTipoOrg] = useState('clinica');
   const [diasConfig, setDiasConfig] = useState(() =>
     Array.from({ length: 7 }, () => ({ ativo: false, turnos: [] }))
@@ -132,6 +134,10 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
 
   // ── Salvar ────────────────────────────────────────────────────────────────
   const handleSalvar = async () => {
+    if (!isDono) {
+      toastError('Apenas o Dono da clínica pode salvar alterações gerais de horário');
+      return;
+    }
     const erro = validarDiasConfig(diasConfig);
     if (erro === 'invalid-time') {
       toastError('Horário final deve ser depois do horário inicial');
@@ -163,6 +169,18 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
 
   return (
     <div className="space-y-6">
+      {!isDono && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-800"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+          <p>
+            Apenas o Dono da clínica pode alterar o tipo de organização e os horários gerais de funcionamento.
+          </p>
+        </div>
+      )}
+
       {tipoOrg === 'autonomo' ? (
         <div
           role="note"
@@ -176,10 +194,19 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
       ) : null}
 
       <section>
-        <h3 className="mb-3 text-[15px] font-bold text-[#0f172a]">Tipo de organização</h3>
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="text-[15px] font-bold text-[#0f172a]">Tipo de organização</h3>
+          {!isDono && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+              Exclusivo do Dono
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label
-            className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-colors ${
+            className={`flex items-center gap-3 rounded-xl border-2 p-4 transition-colors ${
+              !isDono ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+            } ${
               tipoOrg === 'clinica'
                 ? 'border-[#00a88e] bg-[#f0fdf9]'
                 : 'border-[#e2e8f0] bg-white hover:border-[#cbd5e1]'
@@ -189,9 +216,10 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
               type="radio"
               name="tipoOrg"
               value="clinica"
+              disabled={!isDono}
               checked={tipoOrg === 'clinica'}
               onChange={(e) => setTipoOrg(e.target.value)}
-              className="h-4 w-4"
+              className="h-4 w-4 disabled:cursor-not-allowed"
             />
             <Building2 className="h-5 w-5 text-[#00a88e]" />
             <div>
@@ -200,7 +228,9 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
             </div>
           </label>
           <label
-            className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-colors ${
+            className={`flex items-center gap-3 rounded-xl border-2 p-4 transition-colors ${
+              !isDono ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+            } ${
               tipoOrg === 'autonomo'
                 ? 'border-[#00a88e] bg-[#f0fdf9]'
                 : 'border-[#e2e8f0] bg-white hover:border-[#cbd5e1]'
@@ -210,9 +240,10 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
               type="radio"
               name="tipoOrg"
               value="autonomo"
+              disabled={!isDono}
               checked={tipoOrg === 'autonomo'}
               onChange={(e) => setTipoOrg(e.target.value)}
-              className="h-4 w-4"
+              className="h-4 w-4 disabled:cursor-not-allowed"
             />
             <User className="h-5 w-5 text-[#00a88e]" />
             <div>
@@ -231,7 +262,7 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
         {loading ? (
           <ConfigFormSectionsSkeleton sections={7} />
         ) : (
-          <HorarioSemanaEditor diasConfig={diasConfig} onChange={setDiasConfig} />
+          <HorarioSemanaEditor diasConfig={diasConfig} onChange={setDiasConfig} disabled={!isDono} />
         )}
       </section>
 
@@ -242,9 +273,10 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
         <button
           type="button"
           onClick={handleSalvar}
-          disabled={saving || temErro || !isDirty || loading}
+          disabled={saving || temErro || !isDirty || loading || !isDono}
+          title={!isDono ? 'Apenas o Dono da clínica pode salvar' : undefined}
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold text-white transition-colors disabled:opacity-50 ${
-            isDirty && !temErro
+            isDirty && !temErro && isDono
               ? 'bg-[#00a88e] hover:bg-[#008f78]'
               : 'cursor-not-allowed bg-[#94a3b8]'
           }`}
