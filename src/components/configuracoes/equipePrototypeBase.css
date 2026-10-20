@@ -1,0 +1,170 @@
+.prototype-equipe {
+  --app-accent: #00a88e;
+  --app-accent-hover: #00977f;
+  --app-accent-deep: #007f6b;
+  --app-accent-soft: #e6f7f5;
+  --app-nav-active: #ecfdf5;
+  --app-ink: #0f172a;
+  --app-ink-2: #1e293b;
+  --app-muted: #64748b;
+  --app-faint: #94a3b8;
+  --app-border: #e2e8f0;
+  --app-bg: #f8fafc;
+  --app-card: #ffffff;
+  --app-violet: #7c3aed;
+  --app-violet-soft: #f3f0ff;
+  --app-gold: #f59e0b;
+  --app-gold-soft: #fffbeb;
+  --app-gold-ink: #b45309;
+  --app-red: #ef4444;
+  --app-red-soft: #fef2f2;
+  --app-orange: #c2410c;
+  font:
+    14px/1.45 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  color: var(--app-ink);
+  min-width: 0;
+}
+.prototype-equipe button,
+.prototype-equipe input,
+.prototype-equipe select,
+.prototype-equipe textarea {
+  font: inherit;
+  color: inherit;
+}
+.prototype-equipe button {
+  cursor: pointer;
+}
+.prototype-icon {
+  flex: none;
+  vertical-align: middle;
+}
+.prototype-equipe .btn-p {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--app-accent);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 14px;
+  height: 40px;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.prototype-equipe .btn-p:hover {
+  background: var(--app-accent-hover);
+}
+.prototype-equipe .btn-s {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #fff;
+  color: var(--app-ink-2);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  padding: 0 14px;
+  height: 40px;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.prototype-equipe .btn-s:hover {
+  border-color: var(--app-accent);
+  color: var(--app-accent-deep);
+}
+.prototype-equipe .btn-g {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  color: var(--app-accent-deep);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 40px;
+}
+.prototype-equipe .btn-g:hover {
+  background: var(--app-nav-active);
+}
+.prototype-equipe .btn-d {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  color: #b91c1c;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 40px;
+}
+.prototype-equipe .av {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #fff;
+  flex: none;
+  background: var(--app-accent);
+  font-size: 14px;
+  position: relative;
+}
+.prototype-equipe .av.ph {
+  background: radial-gradient(circle at 35% 35%, #fdba74, #9a3412 70%);
+}
+.prototype-equipe .trunc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prototype-equipe button:focus-visible,
+.prototype-equipe a:focus-visible,
+.prototype-equipe input:focus-visible,
+.prototype-equipe select:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 3px;
+}
+
+.prototype-equipe h1,
+.prototype-equipe h2,
+.prototype-equipe h3,
+.prototype-equipe h4,
+.prototype-equipe h5 {
+  font-weight: 700;
+}
+
+.prototype-icon {
+  display: inline-block;
+}
+.prototype-equipe .tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  min-height: 46px;
+  color: var(--app-muted);
+  font-weight: 600;
+  border: 0;
+  background: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.prototype-equipe .tab.on {
+  color: var(--app-accent-deep);
+  border-bottom-color: var(--app-accent);
+}

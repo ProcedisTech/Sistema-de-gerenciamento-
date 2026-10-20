@@ -1,0 +1,729 @@
+{
+  "catalog": [
+    {
+      "permissaoId": "agenda:VER",
+      "codigo": "AGENDA_VER",
+      "nome": "Ver agenda",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_APARECER",
+      "codigo": "AGENDA_APARECER",
+      "nome": "Atender pacientes e aparecer na agenda",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_MULTI_VER",
+      "codigo": "AGENDA_MULTI_VER",
+      "nome": "Ver a agenda de todos os profissionais",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_CRIAR",
+      "codigo": "AGENDA_CRIAR",
+      "nome": "Criar agendamentos",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_EDITAR",
+      "codigo": "AGENDA_EDITAR",
+      "nome": "Editar e reagendar",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_CONFIRMAR",
+      "codigo": "AGENDA_CONFIRMAR",
+      "nome": "Confirmar presença do paciente",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_CANCELAR",
+      "codigo": "AGENDA_CANCELAR",
+      "nome": "Cancelar agendamentos",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_BLOQUEAR",
+      "codigo": "AGENDA_BLOQUEAR",
+      "nome": "Bloquear horários",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "AGENDA_DISPONIBILIDADE",
+      "codigo": "AGENDA_DISPONIBILIDADE",
+      "nome": "Configurar horários de atendimento",
+      "modulo": "Agenda"
+    },
+    {
+      "permissaoId": "pacientes:VER",
+      "codigo": "PACIENTES_VER",
+      "nome": "Ver pacientes",
+      "modulo": "Pacientes"
+    },
+    {
+      "permissaoId": "PACIENTE_CRIAR",
+      "codigo": "PACIENTE_CRIAR",
+      "nome": "Cadastrar pacientes",
+      "modulo": "Pacientes"
+    },
+    {
+      "permissaoId": "PACIENTE_EDITAR",
+      "codigo": "PACIENTE_EDITAR",
+      "nome": "Editar dados dos pacientes",
+      "modulo": "Pacientes"
+    },
+    {
+      "permissaoId": "PACIENTE_INATIVAR",
+      "codigo": "PACIENTE_INATIVAR",
+      "nome": "Inativar pacientes",
+      "modulo": "Pacientes"
+    },
+    {
+      "permissaoId": "anamnese:VER",
+      "codigo": "ANAMNESE_VER",
+      "nome": "Ver anamnese",
+      "modulo": "Anamnese"
+    },
+    {
+      "permissaoId": "ANAMNESE_PREENCHER",
+      "codigo": "ANAMNESE_PREENCHER",
+      "nome": "Preencher e pedir anamnese ao paciente",
+      "modulo": "Anamnese"
+    },
+    {
+      "permissaoId": "atendimento:VER",
+      "codigo": "ATENDIMENTO_VER",
+      "nome": "Ver atendimento",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "ATEND_INICIAR",
+      "codigo": "ATEND_INICIAR",
+      "nome": "Iniciar atendimento",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "ATEND_PROCEDIMENTO",
+      "codigo": "ATEND_PROCEDIMENTO",
+      "nome": "Registrar procedimentos",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "ATEND_MAPEAMENTO",
+      "codigo": "ATEND_MAPEAMENTO",
+      "nome": "Usar o mapeamento facial",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "ATEND_FOTOS",
+      "codigo": "ATEND_FOTOS",
+      "nome": "Tirar fotos do procedimento",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "ATEND_ENCERRAR",
+      "codigo": "ATEND_ENCERRAR",
+      "nome": "Encerrar a consulta",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "ATEND_RETORNO",
+      "codigo": "ATEND_RETORNO",
+      "nome": "Marcar retorno e acompanhamento",
+      "modulo": "Atendimento"
+    },
+    {
+      "permissaoId": "prontuario:VER",
+      "codigo": "PRONTUARIO_VER",
+      "nome": "Ver prontuário",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_PERFIL",
+      "codigo": "PRONT_PERFIL",
+      "nome": "Editar o perfil clínico",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_NOTAS",
+      "codigo": "PRONT_NOTAS",
+      "nome": "Escrever notas do paciente",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_GALERIA",
+      "codigo": "PRONT_GALERIA",
+      "nome": "Ver a galeria de fotos",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_FOTOS",
+      "codigo": "PRONT_FOTOS",
+      "nome": "Enviar fotos",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_PLANOS",
+      "codigo": "PRONT_PLANOS",
+      "nome": "Montar planos de tratamento",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_COMPARAR",
+      "codigo": "PRONT_COMPARAR",
+      "nome": "Comparar mapeamentos",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_PDF",
+      "codigo": "PRONT_PDF",
+      "nome": "Exportar em PDF",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "PRONT_EXCLUIR",
+      "codigo": "PRONT_EXCLUIR",
+      "nome": "Excluir fotos",
+      "modulo": "Prontuário"
+    },
+    {
+      "permissaoId": "documentos:VER",
+      "codigo": "DOCUMENTOS_VER",
+      "nome": "Ver documentos",
+      "modulo": "Documentos"
+    },
+    {
+      "permissaoId": "DOC_GERAR",
+      "codigo": "DOC_GERAR",
+      "nome": "Gerar e enviar termos",
+      "modulo": "Documentos"
+    },
+    {
+      "permissaoId": "DOC_MODELOS",
+      "codigo": "DOC_MODELOS",
+      "nome": "Gerenciar modelos de termo",
+      "modulo": "Documentos"
+    },
+    {
+      "permissaoId": "catalogo:VER",
+      "codigo": "CATALOGO_VER",
+      "nome": "Ver catálogo",
+      "modulo": "Catálogo"
+    },
+    {
+      "permissaoId": "CAT_CRIAR",
+      "codigo": "CAT_CRIAR",
+      "nome": "Cadastrar procedimentos",
+      "modulo": "Catálogo"
+    },
+    {
+      "permissaoId": "CAT_EDITAR",
+      "codigo": "CAT_EDITAR",
+      "nome": "Editar procedimentos e preços",
+      "modulo": "Catálogo"
+    },
+    {
+      "permissaoId": "CAT_EXCLUIR",
+      "codigo": "CAT_EXCLUIR",
+      "nome": "Excluir procedimentos",
+      "modulo": "Catálogo"
+    },
+    {
+      "permissaoId": "CAT_INSUMOS",
+      "codigo": "CAT_INSUMOS",
+      "nome": "Gerenciar insumos",
+      "modulo": "Catálogo"
+    },
+    {
+      "permissaoId": "equipe:VER",
+      "codigo": "EQUIPE_VER",
+      "nome": "Ver equipe",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "EQ_CONTATOS",
+      "codigo": "EQ_CONTATOS",
+      "nome": "Ver contatos da equipe",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "EQ_HISTORICO",
+      "codigo": "EQ_HISTORICO",
+      "nome": "Ver o histórico de ações",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "EQ_CONVIDAR",
+      "codigo": "EQ_CONVIDAR",
+      "nome": "Convidar pessoas",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "EQ_EDITAR",
+      "codigo": "EQ_EDITAR",
+      "nome": "Editar pessoas",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "EQ_DESATIVAR",
+      "codigo": "EQ_DESATIVAR",
+      "nome": "Desativar pessoas",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "EQ_PERFIS",
+      "codigo": "EQ_PERFIS",
+      "nome": "Criar e editar perfis de acesso",
+      "modulo": "Equipe"
+    },
+    {
+      "permissaoId": "clinica:VER",
+      "codigo": "CLINICA_VER",
+      "nome": "Ver clínica",
+      "modulo": "Clínica"
+    },
+    {
+      "permissaoId": "CLI_DADOS",
+      "codigo": "CLI_DADOS",
+      "nome": "Editar os dados da clínica",
+      "modulo": "Clínica"
+    },
+    {
+      "permissaoId": "CLI_HORARIO",
+      "codigo": "CLI_HORARIO",
+      "nome": "Editar o horário de funcionamento",
+      "modulo": "Clínica"
+    },
+    {
+      "permissaoId": "CLI_FERIADOS",
+      "codigo": "CLI_FERIADOS",
+      "nome": "Gerenciar feriados",
+      "modulo": "Clínica"
+    },
+    {
+      "permissaoId": "sistema:VER",
+      "codigo": "SISTEMA_VER",
+      "nome": "Ver sistema",
+      "modulo": "Sistema"
+    },
+    {
+      "permissaoId": "SIS_CONFIG",
+      "codigo": "SIS_CONFIG",
+      "nome": "Alterar configurações gerais",
+      "modulo": "Sistema"
+    },
+    {
+      "permissaoId": "SIS_MENSAGENS",
+      "codigo": "SIS_MENSAGENS",
+      "nome": "Editar modelos de mensagem",
+      "modulo": "Sistema"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "dono",
+      "nome": "Dono",
+      "descricao": "Acesso total. Não pode ser editado nem removido.",
+      "codigo": "DONO",
+      "organizacaoSaudeDonaId": null
+    },
+    {
+      "id": "sec1",
+      "nome": "Secretaria-1",
+      "descricao": "Secretaria com acesso básico e minimamente funcional, recomenda-se esse perfil para estagiarios.",
+      "codigo": "SEC1",
+      "organizacaoSaudeDonaId": "fixture-clinic"
+    },
+    {
+      "id": "sec2",
+      "nome": "Secretaria-2",
+      "descricao": "",
+      "codigo": "SEC2",
+      "organizacaoSaudeDonaId": "fixture-clinic"
+    },
+    {
+      "id": "sec3",
+      "nome": "Secretaria-3",
+      "descricao": "",
+      "codigo": "SEC3",
+      "organizacaoSaudeDonaId": "fixture-clinic"
+    },
+    {
+      "id": "adm",
+      "nome": "Administrador",
+      "descricao": "Gestão completa da clínica, equipe, relatórios, configurações e financeiro",
+      "codigo": "ADMINISTRADOR",
+      "organizacaoSaudeDonaId": null
+    },
+    {
+      "id": "soc",
+      "nome": "Sócio / Investidor",
+      "descricao": "Acesso gerencial, relatórios estratégicos, faturamento, orçamentos e auditoria",
+      "codigo": "SOCIO",
+      "organizacaoSaudeDonaId": null
+    },
+    {
+      "id": "prof",
+      "nome": "Profissional Clínico",
+      "descricao": "Atendimento clínico completo, prontuário, evolução, receitas, procedimentos e agenda individual",
+      "codigo": "PROFISSIONAL_CLINICO",
+      "organizacaoSaudeDonaId": null
+    }
+  ],
+  "people": [
+    {
+      "id": "dono-0",
+      "nomeCompleto": "João Henrique",
+      "email": "dono0@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "dono",
+      "perfilAcessoCodigo": "DONO",
+      "perfilAcessoNome": "Dono",
+      "apareceNaAgenda": true
+    },
+    {
+      "id": "sec1-0",
+      "nomeCompleto": "Eduarda Prado",
+      "email": "sec10@example.test",
+      "roleName": "RECEPCIONISTA",
+      "ativo": true,
+      "perfilAcessoId": "sec1",
+      "perfilAcessoCodigo": "SEC1",
+      "perfilAcessoNome": "Secretaria-1",
+      "apareceNaAgenda": false
+    },
+    {
+      "id": "sec2-0",
+      "nomeCompleto": "Secretaria-2 1",
+      "email": "sec20@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "sec2",
+      "perfilAcessoCodigo": "SEC2",
+      "perfilAcessoNome": "Secretaria-2",
+      "apareceNaAgenda": false
+    },
+    {
+      "id": "sec3-0",
+      "nomeCompleto": "Secretaria-3 1",
+      "email": "sec30@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "sec3",
+      "perfilAcessoCodigo": "SEC3",
+      "perfilAcessoNome": "Secretaria-3",
+      "apareceNaAgenda": false
+    },
+    {
+      "id": "adm-0",
+      "nomeCompleto": "Administrador 1",
+      "email": "adm0@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "adm",
+      "perfilAcessoCodigo": "ADMINISTRADOR",
+      "perfilAcessoNome": "Administrador",
+      "apareceNaAgenda": false
+    },
+    {
+      "id": "soc-0",
+      "nomeCompleto": "Sócio / Investidor 1",
+      "email": "soc0@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "soc",
+      "perfilAcessoCodigo": "SOCIO",
+      "perfilAcessoNome": "Sócio / Investidor",
+      "apareceNaAgenda": false
+    },
+    {
+      "id": "prof-0",
+      "nomeCompleto": "Profissional Clínico 1",
+      "email": "prof0@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "prof",
+      "perfilAcessoCodigo": "PROFISSIONAL_CLINICO",
+      "perfilAcessoNome": "Profissional Clínico",
+      "apareceNaAgenda": true
+    },
+    {
+      "id": "prof-1",
+      "nomeCompleto": "Profissional Clínico 2",
+      "email": "prof1@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "prof",
+      "perfilAcessoCodigo": "PROFISSIONAL_CLINICO",
+      "perfilAcessoNome": "Profissional Clínico",
+      "apareceNaAgenda": true
+    },
+    {
+      "id": "prof-2",
+      "nomeCompleto": "Profissional Clínico 3",
+      "email": "prof2@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "prof",
+      "perfilAcessoCodigo": "PROFISSIONAL_CLINICO",
+      "perfilAcessoNome": "Profissional Clínico",
+      "apareceNaAgenda": true
+    },
+    {
+      "id": "prof-3",
+      "nomeCompleto": "Profissional Clínico 4",
+      "email": "prof3@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "prof",
+      "perfilAcessoCodigo": "PROFISSIONAL_CLINICO",
+      "perfilAcessoNome": "Profissional Clínico",
+      "apareceNaAgenda": true
+    },
+    {
+      "id": "prof-4",
+      "nomeCompleto": "Profissional Clínico 5",
+      "email": "prof4@example.test",
+      "roleName": "DENTISTA",
+      "ativo": true,
+      "perfilAcessoId": "prof",
+      "perfilAcessoCodigo": "PROFISSIONAL_CLINICO",
+      "perfilAcessoNome": "Profissional Clínico",
+      "apareceNaAgenda": true
+    }
+  ],
+  "permissions": {
+    "dono": [
+      "agenda:VER",
+      "AGENDA_APARECER",
+      "AGENDA_MULTI_VER",
+      "AGENDA_CRIAR",
+      "AGENDA_EDITAR",
+      "AGENDA_CONFIRMAR",
+      "AGENDA_CANCELAR",
+      "AGENDA_BLOQUEAR",
+      "AGENDA_DISPONIBILIDADE",
+      "pacientes:VER",
+      "PACIENTE_CRIAR",
+      "PACIENTE_EDITAR",
+      "PACIENTE_INATIVAR",
+      "anamnese:VER",
+      "ANAMNESE_PREENCHER",
+      "atendimento:VER",
+      "ATEND_INICIAR",
+      "ATEND_PROCEDIMENTO",
+      "ATEND_MAPEAMENTO",
+      "ATEND_FOTOS",
+      "ATEND_ENCERRAR",
+      "ATEND_RETORNO",
+      "prontuario:VER",
+      "PRONT_PERFIL",
+      "PRONT_NOTAS",
+      "PRONT_GALERIA",
+      "PRONT_FOTOS",
+      "PRONT_PLANOS",
+      "PRONT_COMPARAR",
+      "PRONT_PDF",
+      "PRONT_EXCLUIR",
+      "documentos:VER",
+      "DOC_GERAR",
+      "DOC_MODELOS",
+      "catalogo:VER",
+      "CAT_CRIAR",
+      "CAT_EDITAR",
+      "CAT_EXCLUIR",
+      "CAT_INSUMOS",
+      "equipe:VER",
+      "EQ_CONTATOS",
+      "EQ_HISTORICO",
+      "EQ_CONVIDAR",
+      "EQ_EDITAR",
+      "EQ_DESATIVAR",
+      "EQ_PERFIS",
+      "clinica:VER",
+      "CLI_DADOS",
+      "CLI_HORARIO",
+      "CLI_FERIADOS",
+      "sistema:VER",
+      "SIS_CONFIG",
+      "SIS_MENSAGENS"
+    ],
+    "sec1": ["pacientes:VER", "agenda:VER"],
+    "sec2": [
+      "pacientes:VER",
+      "PACIENTE_CRIAR",
+      "PACIENTE_EDITAR",
+      "agenda:VER",
+      "AGENDA_CRIAR",
+      "AGENDA_EDITAR",
+      "AGENDA_CONFIRMAR"
+    ],
+    "sec3": [
+      "pacientes:VER",
+      "PACIENTE_CRIAR",
+      "PACIENTE_EDITAR",
+      "agenda:VER",
+      "AGENDA_CRIAR",
+      "AGENDA_EDITAR",
+      "AGENDA_CONFIRMAR",
+      "AGENDA_CANCELAR",
+      "AGENDA_BLOQUEAR",
+      "anamnese:VER",
+      "ANAMNESE_PREENCHER",
+      "documentos:VER",
+      "DOC_GERAR"
+    ],
+    "adm": [
+      "agenda:VER",
+      "AGENDA_MULTI_VER",
+      "AGENDA_CRIAR",
+      "AGENDA_EDITAR",
+      "AGENDA_CONFIRMAR",
+      "AGENDA_CANCELAR",
+      "AGENDA_BLOQUEAR",
+      "AGENDA_DISPONIBILIDADE",
+      "pacientes:VER",
+      "PACIENTE_CRIAR",
+      "PACIENTE_EDITAR",
+      "PACIENTE_INATIVAR",
+      "anamnese:VER",
+      "ANAMNESE_PREENCHER",
+      "atendimento:VER",
+      "ATEND_INICIAR",
+      "ATEND_PROCEDIMENTO",
+      "ATEND_MAPEAMENTO",
+      "ATEND_FOTOS",
+      "ATEND_ENCERRAR",
+      "ATEND_RETORNO",
+      "prontuario:VER",
+      "PRONT_PERFIL",
+      "PRONT_NOTAS",
+      "PRONT_GALERIA",
+      "PRONT_FOTOS",
+      "PRONT_PLANOS",
+      "PRONT_COMPARAR",
+      "PRONT_PDF",
+      "PRONT_EXCLUIR",
+      "documentos:VER",
+      "DOC_GERAR",
+      "DOC_MODELOS",
+      "catalogo:VER",
+      "CAT_CRIAR",
+      "CAT_EDITAR",
+      "CAT_EXCLUIR",
+      "CAT_INSUMOS",
+      "equipe:VER",
+      "EQ_CONTATOS",
+      "EQ_HISTORICO",
+      "EQ_CONVIDAR",
+      "EQ_EDITAR",
+      "EQ_DESATIVAR",
+      "EQ_PERFIS",
+      "clinica:VER",
+      "CLI_DADOS",
+      "CLI_HORARIO",
+      "CLI_FERIADOS",
+      "sistema:VER",
+      "SIS_CONFIG",
+      "SIS_MENSAGENS"
+    ],
+    "soc": [
+      "agenda:VER",
+      "AGENDA_MULTI_VER",
+      "AGENDA_CRIAR",
+      "AGENDA_EDITAR",
+      "AGENDA_CONFIRMAR",
+      "AGENDA_CANCELAR",
+      "AGENDA_BLOQUEAR",
+      "AGENDA_DISPONIBILIDADE",
+      "pacientes:VER",
+      "PACIENTE_CRIAR",
+      "PACIENTE_EDITAR",
+      "PACIENTE_INATIVAR",
+      "anamnese:VER",
+      "ANAMNESE_PREENCHER",
+      "atendimento:VER",
+      "ATEND_INICIAR",
+      "ATEND_PROCEDIMENTO",
+      "ATEND_MAPEAMENTO",
+      "ATEND_FOTOS",
+      "ATEND_ENCERRAR",
+      "ATEND_RETORNO",
+      "prontuario:VER",
+      "PRONT_PERFIL",
+      "PRONT_NOTAS",
+      "PRONT_GALERIA",
+      "PRONT_FOTOS",
+      "PRONT_PLANOS",
+      "PRONT_COMPARAR",
+      "PRONT_PDF",
+      "PRONT_EXCLUIR",
+      "documentos:VER",
+      "DOC_GERAR",
+      "DOC_MODELOS",
+      "catalogo:VER",
+      "CAT_CRIAR",
+      "CAT_EDITAR",
+      "CAT_EXCLUIR",
+      "CAT_INSUMOS",
+      "equipe:VER",
+      "EQ_CONTATOS",
+      "EQ_HISTORICO",
+      "EQ_CONVIDAR",
+      "EQ_EDITAR",
+      "EQ_DESATIVAR",
+      "EQ_PERFIS",
+      "clinica:VER",
+      "CLI_DADOS",
+      "CLI_HORARIO",
+      "CLI_FERIADOS",
+      "sistema:VER",
+      "SIS_CONFIG",
+      "SIS_MENSAGENS"
+    ],
+    "prof": [
+      "agenda:VER",
+      "AGENDA_APARECER",
+      "AGENDA_MULTI_VER",
+      "AGENDA_CRIAR",
+      "AGENDA_EDITAR",
+      "AGENDA_CONFIRMAR",
+      "AGENDA_CANCELAR",
+      "AGENDA_BLOQUEAR",
+      "AGENDA_DISPONIBILIDADE",
+      "pacientes:VER",
+      "PACIENTE_CRIAR",
+      "PACIENTE_EDITAR",
+      "PACIENTE_INATIVAR",
+      "anamnese:VER",
+      "ANAMNESE_PREENCHER",
+      "atendimento:VER",
+      "ATEND_INICIAR",
+      "ATEND_PROCEDIMENTO",
+      "ATEND_MAPEAMENTO",
+      "ATEND_FOTOS",
+      "ATEND_ENCERRAR",
+      "ATEND_RETORNO",
+      "prontuario:VER",
+      "PRONT_PERFIL",
+      "PRONT_NOTAS",
+      "PRONT_GALERIA",
+      "PRONT_FOTOS",
+      "PRONT_PLANOS",
+      "PRONT_COMPARAR",
+      "PRONT_PDF",
+      "PRONT_EXCLUIR",
+      "documentos:VER",
+      "DOC_GERAR",
+      "DOC_MODELOS",
+      "catalogo:VER",
+      "CAT_CRIAR",
+      "CAT_EDITAR",
+      "CAT_EXCLUIR",
+      "CAT_INSUMOS",
+      "clinica:VER",
+      "sistema:VER"
+    ]
+  }
+}
