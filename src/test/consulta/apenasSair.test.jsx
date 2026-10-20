@@ -233,6 +233,7 @@ describe('"Apenas Sair" mantém a consulta aberta, sem rota de pausa', () => {
 
     estado.respostaDetalhe = () => ({ status: 404, corpo: { message: 'Consulta não encontrada' } });
     avisos.emitirAviso(AVISO.ATENDIMENTO.SESSAO_ALTERADA, ATENDIMENTO_ID, { atendimentoId: ATENDIMENTO_ID });
+    await new Promise((resolve) => setTimeout(resolve, 320));
     await assentarMuito(6);
 
     await voltarAoHubEApenasSair();
