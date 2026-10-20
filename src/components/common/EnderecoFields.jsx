@@ -12,6 +12,7 @@ import { useCepLookup } from '../hooks/useCepLookup.js';
 export function EnderecoFields({
   variant = 'page',
   readOnly = false,
+  lookupOnMount = true,
   cep = '',
   onCepChange,
   rua = '',
@@ -30,6 +31,7 @@ export function EnderecoFields({
   errors = {},
   clearError,
 }) {
+  const initialCep = useRef(cep);
   const isDense = variant === 'modal' || variant === 'profile';
   const gridGapClass = isDense ? 'gap-x-5 gap-y-4' : 'gap-x-6 gap-y-5';
 
@@ -68,6 +70,7 @@ export function EnderecoFields({
   }, [onRuaChange, onBairroChange, onCidadeChange, onEstadoChange]);
 
   useEffect(() => {
+    if (readOnly || (!lookupOnMount && cep === initialCep.current)) return undefined;
     const d = onlyDigitsCep(cep);
     if (d.length < 8) {
       reset();
@@ -97,7 +100,7 @@ export function EnderecoFields({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [cep, lookup, reset]);
+  }, [cep, lookup, reset, readOnly, lookupOnMount]);
 
   const showCepFallbackMsg =
     (status === 'not_found' || status === 'error') && onlyDigitsCep(cep).length === 8;
