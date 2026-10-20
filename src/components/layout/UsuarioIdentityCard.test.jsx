@@ -107,3 +107,9 @@ describe('UsuarioIdentityCard', () => {
     expect(foto).not.toHaveClass('ring-offset-2');
   });
 });
+
+it('abre Meu Usuário pelo callback mesmo sem acesso às configurações', () => {
+  const onOpen = vi.fn(); render(<UsuarioIdentityCard variant="header" displayName="Maria Souza" roleLabel="Usuário" canSeeConfig={false} onOpenPerfilSettings={onOpen} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Abrir perfil do profissional' }));
+  expect(onOpen).toHaveBeenCalledOnce();
+});

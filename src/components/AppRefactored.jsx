@@ -242,6 +242,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     canSeeConfigAgenda,
     canSeeConfigEquipe,
     canDeleteAgenda,
+    canSeePacientes,
     canStartAtendimento,
   } = usePapel();
   const toast = useToast();
@@ -423,6 +424,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     logoUrl: '',
   });
   const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', apelido: '', fotoUrl: '' });
+  const [equipeTargetUserId, setEquipeTargetUserId] = React.useState(null);
+  const openingSelfProfile = Boolean(roleUserId && (equipeTargetUserId === 'me' || String(equipeTargetUserId) === String(roleUserId)));
   const [configSection, setConfigSectionState] = useState(readStoredSection);
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
@@ -2119,7 +2122,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         // ignore
       }
     }
-    if (activeView === 'gestao-equipe' && postLoginGate === 'ready' && !canSeeConfigEquipe) {
+    if (activeView === 'gestao-equipe' && postLoginGate === 'ready' && !canSeeConfigEquipe && !openingSelfProfile) {
       setActiveView('pacientes');
       try {
         sessionStorage.setItem('activeView', 'pacientes');
@@ -2127,10 +2130,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
         // ignore
       }
     }
-  }, [activeView, postLoginGate, canSeeConfig, canSeeConfigEquipe, setActiveView]);
+  }, [activeView, postLoginGate, canSeeConfig, canSeeConfigEquipe, openingSelfProfile, setActiveView]);
 
   const setConfigSection = React.useCallback((section) => {
-    const next = VALID_SECTIONS.has(section) ? section : 'fichas';
+    const next = section === null ? null : VALID_SECTIONS.has(section) ? section : 'fichas';
     setConfigSectionState(next);
     persistSection(next);
   }, []);
@@ -2142,10 +2145,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, [canSeeConfig, setActiveView, setConfigSection]);
 
   const onOpenPerfilSettings = React.useCallback(() => {
-    if (!canSeeConfig) return;
     setActiveView('configuracoes');
     setConfigSection('perfil');
-  }, [canSeeConfig, setActiveView, setConfigSection]);
+  }, [setActiveView, setConfigSection]);
 
   /** Migração de `activeView` salvo: jornada/consulta → pacientes; anamnese/termos → configuracoes. */
   React.useEffect(() => {
@@ -2839,6 +2841,34 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const handleCreatePatientFromPatients = () => {
     setPatientView('create');
   };
+
+  const patientNavigationScope = React.useRef(orgId);
+  const patientNavigationRequest = React.useRef(0);
+  patientNavigationScope.current = orgId;
+  const handleOpenPatientFromEquipe = React.useCallback(async (selected) => {
+    if (!canSeePacientes || !selected) return;
+    const request = ++patientNavigationRequest.current;
+    try {
+      let patient = [...patients, ...(patientListItems || [])].find((item) =>
+        (selected.id && String(item.id) === String(selected.id)) ||
+        (selected.cpf && String(item.cpf).replace(/\D/g, '') === String(selected.cpf).replace(/\D/g, '')));
+      if (!patient && selected.id) {
+        patient = mapBackendPatient(await pacientesApi.get(selected.id), { fuso: fusoClinica });
+        if (patientNavigationScope.current !== orgId || patientNavigationRequest.current !== request) return;
+        if (patient?.cpf) setPatients((previous) => [...previous.filter((item) => String(item.id) !== String(patient.id)), patient]);
+      }
+      const cpf = String(patient?.cpf || selected.cpf || '').trim();
+      if (!cpf) throw new Error('Não foi possível identificar o paciente.');
+      if (patientNavigationScope.current !== orgId || patientNavigationRequest.current !== request) return;
+      captureProfileNavSnapshot?.(cpf);
+      setSelectedPatientCpf(cpf);
+      setPatientDetailTab('timeline');
+      setPatientView('profile');
+      setActiveView('pacientes');
+    } catch (error) {
+      if (patientNavigationScope.current === orgId && patientNavigationRequest.current === request) toast.error(getApiErrorToastMessage(error, 'Não foi possível abrir o histórico do paciente.'));
+    }
+  }, [canSeePacientes, patients, patientListItems, orgId, fusoClinica, setPatients, captureProfileNavSnapshot, setSelectedPatientCpf, setPatientDetailTab, setPatientView, setActiveView, toast]);
 
   const handleGlobalPatientSelect = React.useCallback(
     (patient) => {
@@ -5758,7 +5788,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
               }
             />
             <div
-              className={`w-full mx-auto ${activeView === 'configuracoes' || activeView === 'gestao-equipe'
+              className={`w-full mx-auto ${activeView === 'gestao-equipe' ? 'max-w-none bg-[#f8fafc]' : activeView === 'configuracoes'
                 ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] 3xl:max-w-[min(100%,1960px)] 4xl:max-w-[min(100%,2200px)]'
                 : isAgendaView
                   ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-2 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)] 3xl:max-w-[min(100%,1880px)] 4xl:max-w-[min(100%,2080px)]'
@@ -5773,7 +5803,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-3'
                     : activeView === 'pacientes'
                       ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
-                      : activeView === 'configuracoes' || activeView === 'gestao-equipe'
+                      : activeView === 'gestao-equipe' ? 'procedi-equipe-content' : activeView === 'configuracoes'
                         ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                         : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
                 }
@@ -5863,6 +5893,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         setClinicaInfo({ nome, logoUrl: logoUrl ?? '' })
                       }
                       onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
+                      onNavigateAgenda={() => setActiveView('agenda')}
+                      onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
+                      onEquipeInvalidate={agendaSchedule.refreshEquipe}
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}
                       onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                       onDirtyHorariosChange={setIsDirtyHorarios}
@@ -5872,10 +5905,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 )}
 
                 {activeView === 'gestao-equipe' && (
-                  <RoleGuard requiredPermission={PERMISSOES.USUARIO_VER} minLevel="NIVEL_5" showError>
+                  <RoleGuard condition={canSeeConfigEquipe || openingSelfProfile} showError>
                     <GestaoUsuariosView
+                      key={`${orgId}-${roleUserId}`}
+                      targetUserId={equipeTargetUserId}
+                      onClearTargetUserId={() => setEquipeTargetUserId(null)}
+                      onPerfilAtualizado={(data) => setPerfilInfo((previous) => ({ ...previous, ...data }))}
                       onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
                       onEquipeInvalidate={agendaSchedule.refreshEquipe}
+                      onNavigateAgenda={() => setActiveView('agenda')}
+                      onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
                     />
                   </RoleGuard>
                 )}

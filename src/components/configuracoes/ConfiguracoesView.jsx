@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Settings, ChevronDown } from 'lucide-react';
 import { ConfigHub } from './ConfigHub';
 import { getVisibleCategories, CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
@@ -34,6 +34,9 @@ export function ConfiguracoesView({
   canSeeEquipe = false,
   onClinicaAtualizada,
   onPerfilAtualizado,
+  onNavigateAgenda,
+  onSelectPatient,
+  onEquipeInvalidate,
   onPacientesCatalogRefresh,
   onDisponibilidadeInvalidate,
   onDirtyHorariosChange,
@@ -54,6 +57,16 @@ export function ConfiguracoesView({
     );
     return found?.key ?? null;
   });
+
+  useEffect(() => {
+    if (!configSection) return;
+    const category = CATEGORY_DEFS.find((cat) =>
+      cat.items.some((item) => item.id === configSection)
+    );
+    // Sincroniza a categoria local com deep-links enviados pelo App (avatar/dropdown).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveCategory(category?.key ?? null);
+  }, [configSection]);
 
   const displayCategory = configSection == null ? null : activeCategory;
 
@@ -90,6 +103,7 @@ export function ConfiguracoesView({
 
   const handleBackToHub = () => {
     setActiveCategory(null);
+    setConfigSection(null);
   };
 
   // Label da seção ativa para o subtítulo no header (hub ou detalhe)
@@ -157,6 +171,9 @@ export function ConfiguracoesView({
             canSeeEquipe={canSeeEquipe}
             onClinicaAtualizada={onClinicaAtualizada}
             onPerfilAtualizado={onPerfilAtualizado}
+            onNavigateAgenda={onNavigateAgenda}
+            onSelectPatient={onSelectPatient}
+            onEquipeInvalidate={onEquipeInvalidate}
             onPacientesCatalogRefresh={onPacientesCatalogRefresh}
             onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
             onDirtyHorariosChange={onDirtyHorariosChange}

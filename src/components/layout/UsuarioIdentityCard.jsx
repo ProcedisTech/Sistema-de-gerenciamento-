@@ -78,7 +78,7 @@ export function UsuarioIdentityCard({
     </>
   );
 
-  if (canSeeConfig) {
+  if (canSeeConfig || typeof onOpenPerfilSettings === 'function') {
     return (
       <button
         type="button"
