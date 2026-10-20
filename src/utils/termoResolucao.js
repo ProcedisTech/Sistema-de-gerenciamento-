@@ -54,9 +54,27 @@ export function pfIdNestaSessaoParaCatalogo(catalogoId, procedimentosSessao) {
     const itemCat = catalogoIdDoItemSessao(item);
     if (!itemCat || itemCat !== cat) continue;
     const pid = item.id != null ? String(item.id).trim() : '';
-    if (pid) return pid;
+    // Um ID igual ao catalogoId não é um Procedimento Feito (PF) persistido
+    if (pid && pid !== cat) return pid;
   }
   return null;
+}
+
+/**
+ * F3: faltantes de UM item. Parte dos faltantes da resolução do catálogo do item (piso do servidor) e tira os
+ * termos que já constam em `termosDaConsulta` com statusAssinatura ASSINADO (releitura da consulta). Sem a
+ * resolução (rede falhou) -> [] (não bloqueia). Sem termos da consulta (`[]`, p.ex. sem HUB_TERMOS_VER) a resolução
+ * do servidor vale como está.
+ */
+export function faltantesDoItem(resolucaoDoCatalogo, termosDaConsulta) {
+  if (!resolucaoDoCatalogo || !Array.isArray(resolucaoDoCatalogo.faltantes)) return [];
+  const assinados = new Set(
+    (Array.isArray(termosDaConsulta) ? termosDaConsulta : [])
+      .filter((t) => t && t.termoId != null && String(t.statusAssinatura || '').toUpperCase() === 'ASSINADO')
+      .map((t) => String(t.termoId)),
+  );
+  if (assinados.size === 0) return resolucaoDoCatalogo.faltantes.slice();
+  return resolucaoDoCatalogo.faltantes.filter((f) => !(f && f.termoId != null && assinados.has(String(f.termoId))));
 }
 
 /** Faltantes só bloqueiam se ainda não existe PF deste catálogo na sessão. */
@@ -106,11 +124,6 @@ export function abortarEncerrarPorTermos({
   return Boolean(bloqueadoPorTermos) && !isApenasSair && !pularGateTermos;
 }
 
-/** Não cria PF nem consome consentimento quando o termo ainda falta. */
-export function deveCriarProcedimentoNoEncerrar(bloqueadoPorTermos) {
-  return !bloqueadoPorTermos;
-}
-
 export function titulosFaltantes(resolucao) {
   if (!resolucao || !Array.isArray(resolucao.faltantes)) return [];
   return resolucao.faltantes
@@ -118,18 +131,47 @@ export function titulosFaltantes(resolucao) {
     .filter(Boolean);
 }
 
+/**
+ * Detalha os termos faltantes com seus títulos e a lista de procedimentos que os exigem.
+ */
+export function detalharTermosFaltantes(resolucao) {
+  if (!resolucao || !Array.isArray(resolucao.faltantes) || resolucao.faltantes.length === 0) {
+    return [];
+  }
+  const exigidos = Array.isArray(resolucao.termosExigidos) ? resolucao.termosExigidos : [];
+  return resolucao.faltantes.map((f) => {
+    const termoId = f && f.termoId != null ? String(f.termoId) : '';
+    const titulo = f && f.titulo != null ? String(f.titulo).trim() : 'Termo';
+    const exigido = exigidos.find((e) => String(e.termoId) === termoId);
+    const procedimentos = Array.isArray(exigido?.catalogos)
+      ? exigido.catalogos.map((c) => (c && c.nome ? String(c.nome).trim() : '')).filter(Boolean)
+      : [];
+    return {
+      termoId,
+      titulo,
+      procedimentos,
+    };
+  });
+}
+
 /** Créditos vigentes do catálogo, aguardando o PF consumir. */
 export function consentimentosAguardandoExecucao(resolucao) {
-  if (!resolucao || !Array.isArray(resolucao.termosExigidos) || temFaltantes(resolucao)) {
+  if (!resolucao || !Array.isArray(resolucao.termosExigidos)) {
     return [];
   }
   return resolucao.termosExigidos
     .filter((e) => e && e.vigente && e.assinaturaId)
-    .map((e) => ({
-      termoId: e.termoId != null ? String(e.termoId) : '',
-      titulo: e.titulo != null ? String(e.titulo).trim() : 'Termo',
-      assinadoEm: e.assinadoEm || null,
-    }))
+    .map((e) => {
+      const item = {
+        termoId: e.termoId != null ? String(e.termoId) : '',
+        titulo: e.titulo != null ? String(e.titulo).trim() : 'Termo',
+        assinadoEm: e.assinadoEm || null,
+      };
+      if (Array.isArray(e.catalogos)) {
+        item.procedimentos = e.catalogos.map((c) => (c && c.nome ? String(c.nome).trim() : '')).filter(Boolean);
+      }
+      return item;
+    })
     .filter((e) => e.termoId);
 }
 
@@ -163,8 +205,54 @@ export function catalogoIdsDoAtendimento({
   add(catalogoOrigemId);
   if (Array.isArray(procedimentosSessao)) {
     for (const p of procedimentosSessao) {
-      add(p?.nomeProcedimentoCatalogoId || p?.catalogoProcedimentoSaudeId);
+      add(p?.nomeProcedimentoCatalogoId || p?.catalogoProcedimentoSaudeId || p?.catalogoId);
     }
   }
   return ids;
 }
+
+/**
+ * Procedimentos do catálogo que não possuem termo de consentimento vinculado
+ * na clínica (dispensados de termo). Extraído do campo procedimentosSemVinculo do DTO.
+ */
+export function procedimentosSemTermoExigido(resolucao) {
+  if (!resolucao) return [];
+  const list = resolucao.procedimentosSemVinculo || resolucao.semVinculo || [];
+  return Array.isArray(list) ? list : [];
+}
+
+/**
+ * Retorna o status do termo de consentimento para um procedimento específico
+ * a partir do TermoResolucaoDTO: 'pendente' | 'assinado' | 'dispensado' | 'desconhecido'
+ */
+export function statusTermoPorProcedimento(catalogoId, resolucao) {
+  if (!resolucao) return { status: 'desconhecido', rotulo: 'Em verificação' };
+  const cid = catalogoId != null ? String(catalogoId).trim() : '';
+  if (!cid) return { status: 'desconhecido', rotulo: 'Não identificado' };
+
+  // 1. Procedimento sem vínculo (dispensado explicitamente pelo backend)
+  const semVinculo = procedimentosSemTermoExigido(resolucao);
+  if (semVinculo.some((p) => String(p.catalogoId || p.id) === cid)) {
+    return { status: 'dispensado', rotulo: 'Não requer termo de consentimento (Dispensado)' };
+  }
+
+  // 2. Verificar se termo exigido está pendente (em faltantes)
+  const exigidos = Array.isArray(resolucao.termosExigidos) ? resolucao.termosExigidos : [];
+  const faltantes = Array.isArray(resolucao.faltantes) ? resolucao.faltantes : [];
+  const faltantesIds = new Set(faltantes.map((f) => String(f.termoId)));
+
+  for (const ex of exigidos) {
+    const pertenca = Array.isArray(ex.catalogos) && ex.catalogos.some((c) => String(c.catalogoId || c.id) === cid);
+    if (pertenca) {
+      if (faltantesIds.has(String(ex.termoId))) {
+        return { status: 'pendente', rotulo: `Pendente (${ex.titulo || 'Termo'})`, titulo: ex.titulo };
+      }
+      if (ex.vigente) {
+        return { status: 'assinado', rotulo: `Termo assinado (${ex.titulo || 'Termo'})`, titulo: ex.titulo };
+      }
+    }
+  }
+
+  return { status: 'dispensado', rotulo: 'Não requer termo de consentimento (Dispensado)' };
+}
+

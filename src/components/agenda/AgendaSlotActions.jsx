@@ -33,12 +33,13 @@ export default function AgendaSlotActions({
   const v = getAgendaSlotActionVisibility(status, { tipo });
   const showCancelar = Boolean(v.showCancelar && onCancelar && canCancelar);
   const showNaoCompareceu = Boolean(v.showNaoCompareceu && onMarcarNaoCompareceu && canCancelar);
+  const showReagendar = Boolean(v.showReagendar && onReagendar);
   const anyChip =
     v.showRealizado ||
     showNaoCompareceu ||
     v.showWhatsApp ||
     v.showAnamnese ||
-    v.showReagendar ||
+    showReagendar ||
     showCancelar ||
     v.showRemoverBloqueio;
 
@@ -113,7 +114,7 @@ export default function AgendaSlotActions({
                 Anamnese
               </button>
             ) : null}
-            {v.showReagendar ? (
+            {showReagendar ? (
               <button
                 type="button"
                 onClick={onReagendar}
@@ -216,7 +217,7 @@ export default function AgendaSlotActions({
             <FileText className="h-3.5 w-3.5" aria-hidden />
           </button>
         ) : null}
-        {v.showReagendar ? (
+        {showReagendar ? (
           <button
             type="button"
             onClick={onReagendar}
@@ -323,7 +324,7 @@ export default function AgendaSlotActions({
               Anamnese
             </button>
           ) : null}
-          {v.showReagendar ? (
+          {showReagendar ? (
             <button
               type="button"
               onClick={onReagendar}

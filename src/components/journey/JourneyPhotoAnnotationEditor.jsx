@@ -5,7 +5,12 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useCanvasZoom } from '../../hooks/useCanvasZoom.js';
 import { drawAnnotationPaths, drawLetterboxedImage } from '../../utils/canvasAnnotationDraw.js';
 import { contentToLocalScreen, toCanvasCoordsFromEvent } from '../../utils/canvasZoomCoords.js';
-import { formatPacienteGaleriaError } from '../../utils/pacienteGaleria.js';
+import { usePacienteGaleriaArquivoBlobUrl } from '../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
+
+/** `blob:`/`data:` já estão na memória da aba; o resto (http/https ou /api) passa pelo fetch autenticado. */
+function ehFonteLocal(src) {
+  return typeof src === 'string' && (src.startsWith('blob:') || src.startsWith('data:'));
+}
 
 const colors = [
   '#ef4444',
@@ -65,8 +70,13 @@ export function JourneyPhotoAnnotationEditor({
   cpf = '',
   setPatients,
   onSelectCapturedPhoto,
+  /**
+   * `({ index, blob, newUrl }) => Promise<{ estado: 'salva' | 'pendente', arquivoAtualizadoEm? }>`.
+   * Rejeita com Error de mensagem amigável; o editor fica aberto com o desenho.
+   */
   onAnnotatedCaptureSaved,
-  persistAnnotatedPhotoToGallery,
+  /** `(photo) => string | null`: URL do GET /arquivo?v=<epochMs> para carregar a foto do servidor. */
+  urlArquivoReserva,
   onClose,
   onAfterSaveAnnotated,
 }) {
@@ -75,6 +85,57 @@ export function JourneyPhotoAnnotationEditor({
   const isDrawingRef = useRef(false);
   const baseImageRef = useRef(/** @type {HTMLImageElement | null} */ (null));
   const [imageEpoch, setImageEpoch] = useState(0);
+  const [salvando, setSalvando] = useState(false);
+  /**
+   * Resultado do `new Image()` para uma fonte/tentativa específica (vale para fonte local e para a
+   * objectURL vinda do hook). Fonte ou tentativa diferente da gravada = ainda carregando.
+   */
+  const [cargaImagem, setCargaImagem] = useState(
+    /** @type {{ src: string | null, tentativa: number, estado: 'ok' | 'erro' } | null} */ (null)
+  );
+  const [tentativa, setTentativa] = useState(0);
+  const [pausaReserva, setPausaReserva] = useState(false);
+
+  const fonteLocal = ehFonteLocal(imageSrc);
+  const fotoAtual = editingIndex != null ? photos?.[editingIndex] : null;
+  const urlRemota = useMemo(() => {
+    if (!imageSrc || fonteLocal) return null;
+    const reserva =
+      typeof urlArquivoReserva === 'function' && fotoAtual ? urlArquivoReserva(fotoAtual) : null;
+    return typeof reserva === 'string' && reserva.trim() ? reserva.trim() : imageSrc;
+  }, [imageSrc, fonteLocal, urlArquivoReserva, fotoAtual]);
+
+  const {
+    src: blobSrcRemoto,
+    loading: carregandoRemoto,
+    error: erroRemoto,
+  } = usePacienteGaleriaArquivoBlobUrl(urlRemota, Boolean(urlRemota) && !pausaReserva, true);
+
+  const srcParaImagem = fonteLocal ? imageSrc : blobSrcRemoto;
+  const estadoImagemElemento =
+    cargaImagem && cargaImagem.src === srcParaImagem && cargaImagem.tentativa === tentativa
+      ? cargaImagem.estado
+      : 'carregando';
+
+  /** @type {'carregando' | 'ok' | 'erro'} */
+  const imagem = !imageSrc
+    ? 'erro'
+    : fonteLocal
+      ? estadoImagemElemento
+      : erroRemoto
+        ? 'erro'
+        : carregandoRemoto || !blobSrcRemoto
+          ? 'carregando'
+          : estadoImagemElemento;
+
+  const tentarDeNovo = () => {
+    setTentativa((n) => n + 1);
+    if (!fonteLocal) {
+      // Desliga e religa o hook: ele refaz o fetch ao ser reabilitado.
+      setPausaReserva(true);
+      setTimeout(() => setPausaReserva(false), 0);
+    }
+  };
 
   useLayoutEffect(() => {
     isDrawingRef.current = isDrawing;
@@ -128,25 +189,27 @@ export function JourneyPhotoAnnotationEditor({
   }, [redrawCanvas]);
 
   useEffect(() => {
-    if (!imageSrc) {
-      baseImageRef.current = null;
-      return;
+    baseImageRef.current = null;
+    if (!srcParaImagem) {
+      return undefined;
     }
+    // Sem crossOrigin: fonte local (blob:/data:) ou objectURL do fetch autenticado — mesma origem.
     const im = new Image();
-    im.crossOrigin = 'anonymous';
     im.onload = () => {
       baseImageRef.current = im;
+      setCargaImagem({ src: srcParaImagem, tentativa, estado: 'ok' });
       setImageEpoch((n) => n + 1);
     };
     im.onerror = () => {
       baseImageRef.current = null;
+      setCargaImagem({ src: srcParaImagem, tentativa, estado: 'erro' });
     };
-    im.src = imageSrc;
+    im.src = srcParaImagem;
     return () => {
       im.onload = null;
       im.onerror = null;
     };
-  }, [imageSrc]);
+  }, [srcParaImagem, tentativa]);
 
   useEffect(() => {
     resetView();
@@ -169,9 +232,15 @@ export function JourneyPhotoAnnotationEditor({
     redrawCanvas();
   }, [redrawCanvas, imageEpoch]);
 
+  const fecharAposSalvar = () => {
+    if (typeof onAfterSaveAnnotated === 'function') onAfterSaveAnnotated();
+    else onClose?.();
+  };
+
   const saveAnnotatedPhoto = async () => {
     if (!imageSrc) return;
     if (!canvasRef.current) return;
+    if (imagem !== 'ok' || salvando) return;
     if (!paths || paths.length === 0) {
       toast.warning('Desenhe algo no canvas antes de salvar.');
       return;
@@ -196,18 +265,38 @@ export function JourneyPhotoAnnotationEditor({
       typeof idx === 'number' && idx >= 0 && idx < listLen && typeof onAnnotatedCaptureSaved === 'function';
 
     if (hasSlot) {
-      onAnnotatedCaptureSaved({ index: idx, newUrl: url, blob });
-    } else if (evaluationAnnotatedPhotoUrl) {
+      setSalvando(true);
+      let resultado;
+      try {
+        resultado = await onAnnotatedCaptureSaved({ index: idx, blob, newUrl: url });
+      } catch (e) {
+        setSalvando(false);
+        toast.error(e?.message || 'Não foi possível salvar a anotação. Tente de novo.');
+        return;
+      }
+      setSalvando(false);
+      setEvaluationAnnotatedPhotoUrl?.(url);
+      if (resultado?.estado === 'pendente') {
+        toast.warning('Anotação guardada; sobe junto com a foto. Não atualize a página antes de enviar.');
+      } else {
+        toast.success('Foto anotada salva.');
+      }
+      fecharAposSalvar();
+      return;
+    }
+
+    // Sem vaga na lista (fluxo antigo da avaliação sem fotos): fica só na ficha local.
+    if (evaluationAnnotatedPhotoUrl) {
       try {
         URL.revokeObjectURL(evaluationAnnotatedPhotoUrl);
       } catch {
         // ignore
       }
     }
-    setEvaluationAnnotatedPhotoUrl(url);
+    setEvaluationAnnotatedPhotoUrl?.(url);
 
     const targetCpf = (selectedPatientCpf || cpf || '').trim();
-    if (targetCpf && !hasSlot && typeof setPatients === 'function') {
+    if (targetCpf && typeof setPatients === 'function') {
       setPatients((prev) =>
         prev.map((p) =>
           (p.cpf || '').trim() !== targetCpf ? p : { ...p, evaluationAnnotatedPhotoUrl: url }
@@ -215,28 +304,8 @@ export function JourneyPhotoAnnotationEditor({
       );
     }
 
-    let uploadedToServer = false;
-    if (typeof persistAnnotatedPhotoToGallery === 'function') {
-      try {
-        const r = await persistAnnotatedPhotoToGallery(blob);
-        if (r?.ok) uploadedToServer = true;
-        else if (r?.reason === 'no_server_id') {
-          toast.info(
-            'Paciente sem ID no servidor: a foto anotada ficou só neste aparelho. Após cadastrar, envie pela galeria do perfil ou salve de novo aqui.'
-          );
-        }
-      } catch (e) {
-        toast.error(formatPacienteGaleriaError(e));
-      }
-    }
-
-    toast.success(
-      uploadedToServer
-        ? 'Foto anotada salva na ficha e enviada à galeria no servidor.'
-        : 'Foto anotada salva na ficha do paciente.'
-    );
-
-    onAfterSaveAnnotated?.();
+    toast.success('Foto anotada salva.');
+    fecharAposSalvar();
   };
 
   const getContentPoint = (event) => {
@@ -257,6 +326,7 @@ export function JourneyPhotoAnnotationEditor({
 
   const startDrawing = (e) => {
     if (e.button != null && e.button !== 0) return;
+    if (imagem !== 'ok') return;
     if (onPanPointerDown(e)) {
       setIsDrawing(false);
       return;
@@ -363,6 +433,8 @@ export function JourneyPhotoAnnotationEditor({
     }),
     [canZoomIn, canZoomOut, fitToScreen, offsetX, offsetY, scale, zoomIn, zoomOut, zoomPercent]
   );
+
+  const podeSalvar = Boolean(paths && paths.length > 0) && imagem === 'ok' && !salvando;
 
   if (!hasPhoto) return null;
 
@@ -510,7 +582,30 @@ export function JourneyPhotoAnnotationEditor({
               className={`absolute inset-0 h-full w-full touch-none ${cursorClass}`}
               style={{ zIndex: 10 }}
             />
-            {isHoveringCanvas && (activeTool === 'erase' || activeTool === 'point') && (
+            {imagem === 'carregando' && (
+              <div
+                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center text-[13px] text-slate-300"
+                role="status"
+              >
+                Carregando foto…
+              </div>
+            )}
+            {imagem === 'erro' && (
+              <div
+                className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#0f172a]/80 px-4 text-center"
+                role="alert"
+              >
+                <p className="text-[14px] text-slate-100">Não foi possível carregar a foto. Tente de novo.</p>
+                <button
+                  type="button"
+                  onClick={tentarDeNovo}
+                  className="min-h-[44px] rounded-lg border border-slate-400/60 px-4 text-[13px] font-semibold text-white hover:bg-slate-700/80"
+                >
+                  Tentar de novo
+                </button>
+              </div>
+            )}
+            {imagem === 'ok' && isHoveringCanvas && (activeTool === 'erase' || activeTool === 'point') && (
               <div
                 className="pointer-events-none absolute z-20 rounded-full shadow-sm"
                 style={{
@@ -566,14 +661,14 @@ export function JourneyPhotoAnnotationEditor({
           <button
             type="button"
             onClick={saveAnnotatedPhoto}
-            disabled={!paths || paths.length === 0}
+            disabled={!podeSalvar}
             className={`min-h-[48px] w-full flex-shrink-0 rounded-lg px-4 text-[14px] font-semibold transition-colors sm:min-h-[44px] sm:w-auto ${
-              paths && paths.length > 0
+              podeSalvar
                 ? 'bg-[#00a88e] text-white active:bg-[#00967f] sm:hover:bg-[#00967f]'
                 : 'cursor-not-allowed bg-[#e2e8f0] text-[#94a3b8]'
             }`}
           >
-            Salvar anotação
+            {salvando ? 'Salvando…' : 'Salvar anotação'}
           </button>
         </div>
       </div>

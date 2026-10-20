@@ -22,6 +22,41 @@ export function formatDurationText(totalMinutes) {
 const EXECUCAO_VAZIA = { hasExecution: false, dataReal: '', horaInicioReal: '', horaFimReal: '', duracaoRealMin: 0, duracaoText: '', rangeText: '', badge: null };
 
 /**
+ * Horário da consulta ligada. Consulta cancelada não fornece horário (decisão do Johnn, 09/10): o fim dela é a hora
+ * do cancelamento, não do atendimento — início e fim caem na regra de hoje.
+ */
+function horarioDaConsulta(appointment) {
+  if (String(appointment.atendimentoStatusCodigo || '').toLowerCase() === 'cancelado') {
+    return { inicio: null, fim: null };
+  }
+  return { inicio: appointment.atendimentoIniciadoEm || null, fim: appointment.atendimentoEncerradoEm || null };
+}
+
+/**
+ * Início real: parâmetro explícito → `atendimentoIniciadoEm` (consulta ligada) → regra de hoje
+ * (attendanceStartTimeIso / horaInicioReal / criadoEm se realizado). A consulta só troca a fonte do horário:
+ * sem a regra de hoje haver execução, nada aparece (mesma visibilidade de antes).
+ */
+function inicioRealIso(appointment, attendanceStartTimeIso) {
+  if (attendanceStartTimeIso) return attendanceStartTimeIso;
+  const regraDeHoje =
+    appointment.attendanceStartTimeIso ||
+    appointment.horaInicioReal ||
+    (appointment.status === 'realizado' ? appointment.criadoEm : null);
+  if (!regraDeHoje) return null;
+  return horarioDaConsulta(appointment).inicio || regraDeHoje;
+}
+
+/** Fim real: `horaFimReal` → `atendimentoEncerradoEm` (consulta ligada) → regra de hoje (atualizadoEm se realizado, senão agora). */
+function fimRealMs(appointment) {
+  if (appointment.horaFimReal) return instanteMs(appointment.horaFimReal);
+  const { fim } = horarioDaConsulta(appointment);
+  if (fim) return instanteMs(fim);
+  if (appointment.status === 'realizado' && appointment.atualizadoEm) return instanteMs(appointment.atualizadoEm);
+  return getGuaranteedNow().getTime();
+}
+
+/**
  * Calcula o badge de pontualidade (Atraso / Adiantamento / No horário)
  * comparando o horário agendado com o horário real de execução.
  * 
@@ -45,13 +80,9 @@ export function getTimingBadge(appointment, fuso, attendanceStartTimeIso = null)
 
   // Prioridade da hora real:
   // 1. Parametro explicito attendanceStartTimeIso
-  // 2. Prop no appointment (attendanceStartTimeIso / horaInicioReal)
-  // 3. Data de criacao/execucao (procedimentoFeitoHoraInicio / criadoEm se status for realizado)
-  const actualIso =
-    attendanceStartTimeIso ||
-    appointment.attendanceStartTimeIso ||
-    appointment.horaInicioReal ||
-    (appointment.status === 'realizado' ? appointment.criadoEm : null);
+  // 2. Início da consulta ligada (atendimentoIniciadoEm)
+  // 3. Regra de hoje: prop no appointment (attendanceStartTimeIso / horaInicioReal) ou criadoEm se realizado
+  const actualIso = inicioRealIso(appointment, attendanceStartTimeIso);
 
   if (!actualIso) return null;
 
@@ -104,11 +135,7 @@ export function getExecutionSummary(appointment, fuso, attendanceStartTimeIso = 
 
   const badge = getTimingBadge(appointment, fuso, attendanceStartTimeIso);
 
-  const startIso =
-    attendanceStartTimeIso ||
-    appointment.attendanceStartTimeIso ||
-    appointment.horaInicioReal ||
-    (appointment.status === 'realizado' ? appointment.criadoEm : null);
+  const startIso = inicioRealIso(appointment, attendanceStartTimeIso);
 
   if (!startIso) return { ...EXECUCAO_VAZIA };
 
@@ -118,14 +145,7 @@ export function getExecutionSummary(appointment, fuso, attendanceStartTimeIso = 
   const dataReal = formatarInstante(startMs, fuso, 'diaMes');
   const hiReal = appointment.horaInicioRealStr || formatarInstante(startMs, fuso, 'hora');
 
-  let endMs;
-  if (appointment.horaFimReal) {
-    endMs = instanteMs(appointment.horaFimReal);
-  } else if (appointment.status === 'realizado' && appointment.atualizadoEm) {
-    endMs = instanteMs(appointment.atualizadoEm);
-  } else {
-    endMs = getGuaranteedNow().getTime();
-  }
+  const endMs = fimRealMs(appointment);
 
   const hfReal = appointment.horaFimRealStr || (Number.isNaN(endMs) ? '' : formatarInstante(endMs, fuso, 'hora'));
 

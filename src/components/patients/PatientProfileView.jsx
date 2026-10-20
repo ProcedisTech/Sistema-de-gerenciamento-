@@ -43,7 +43,10 @@ import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
 import { mapBackendPatient, mergePacienteDtoWithEditing, proximoAgendamentoEhFuturo } from '../../utils/patientMapping';
 import { formatDateBR } from '../../utils/replaceTermVariables';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 import {
+  buscarProximoAgendamentoDoPaciente,
   fetchNextAppointmentIsoForPaciente,
   formatCartaoDiaPtBr,
   formatCartaoIfIsoString,
@@ -104,6 +107,7 @@ import {
 } from './GaleriaArquivoImage.jsx';
 import { ZoomableGalleryLightbox } from './ZoomableGalleryLightbox.jsx';
 import { GaleriaMapaThumb } from './galeria/GaleriaMapaThumb.jsx';
+import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
@@ -160,6 +164,32 @@ function sexoForPatientFormSelect(patientSexoRaw) {
 }
 
 const SEXO_DISPLAY_LABELS = { F: 'Feminino', M: 'Masculino', N: 'Prefiro não dizer' };
+
+/** Abas do perfil que buscam a galeria (a listagem grava a auditoria de visualização no back). */
+const ABAS_COM_GALERIA = new Set(['planos', 'geral', 'avulsos', 'prontuario']);
+
+/** Espera dos avisos do canal no perfil: avisos juntos dentro dela viram uma rebusca só. */
+const DEBOUNCE_AVISO_PERFIL_MS = 400;
+
+/**
+ * DTO de `GET /pacientes/{id}` → paciente da tela, preservando o que só o front guarda.
+ * @param {object} prev paciente atual
+ * @param {object} dto resposta do servidor
+ * @param {{ fuso: string, hojeIso: string }} opts
+ */
+function mesclarDetalhePaciente(prev, dto, opts) {
+  const mapped = mapBackendPatient(dto, opts);
+  return {
+    ...mapped,
+    fotoPerfilUrl: mapped.fotoPerfilUrl ?? prev.fotoPerfilUrl,
+    evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
+    evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
+    evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
+    galeria: prev.galeria,
+    notas: prev.notas,
+    procedures: prev.procedures,
+  };
+}
 
 /** Endereço completo em uma linha, pra Seção 2 da Ficha Clínica em PDF. */
 function buildEnderecoDisplayForFicha(p) {
@@ -346,8 +376,8 @@ function ProntuarioSessionPhotos({ fotosProc, onPreviewPhoto, selectedPatientId 
                       setSelectedStage(tab.id);
                     }}
                     className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${active
-                        ? 'bg-[#00a88e] text-white shadow-2xs'
-                        : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                      ? 'bg-[#00a88e] text-white shadow-2xs'
+                      : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
                       }`}
                   >
                     <span>{tab.label}</span>
@@ -521,12 +551,16 @@ function AnamneseTab({
   const [editingObservacoes, setEditingObservacoes] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [errosObrigatorias, setErrosObrigatorias] = useState(new Set());
+  /** Geração da lista de anamneses: resposta de uma busca mais antiga é descartada. */
+  const geracaoListaRef = useRef(0);
 
   useEffect(() => {
     if (!pacienteId) return;
+    const geracao = ++geracaoListaRef.current;
     setLoading(true);
     anamneseApi.listPaciente(pacienteId)
       .then((data) => {
+        if (geracao !== geracaoListaRef.current) return;
         const list = Array.isArray(data) ? data : [];
         setAnamneses(list);
         if (list.length > 0) setSelectedId(list[0].id);
@@ -534,6 +568,23 @@ function AnamneseTab({
       .catch((err) => console.warn('Erro ao buscar anamneses:', err.message))
       .finally(() => setLoading(false));
   }, [pacienteId]);
+
+  /** Aviso ANAMNESE: rebusca só a lista, sem loading e sem limpar; mantém a anamnese escolhida se ela continuar lá. */
+  const recarregarListaPorAviso = useCallback(async () => {
+    if (!pacienteId) return;
+    const geracao = ++geracaoListaRef.current;
+    let data;
+    try {
+      data = await anamneseApi.listPaciente(pacienteId);
+    } catch {
+      return; // mantém o que está na tela
+    }
+    if (geracao !== geracaoListaRef.current) return;
+    const list = Array.isArray(data) ? data : [];
+    setAnamneses(list);
+    setSelectedId((atual) => (atual != null && list.some((a) => a.id === atual) ? atual : list[0]?.id ?? atual));
+  }, [pacienteId]);
+  useAviso(PREFIXO_AVISO.ANAMNESE, recarregarListaPorAviso, { debounceMs: DEBOUNCE_AVISO_PERFIL_MS });
 
   useEffect(() => {
     if (!pacienteId || !selectedId) return;
@@ -1243,12 +1294,12 @@ export function PatientProfileView({
     const defaultTab = canSeeOrcamentos
       ? 'planos'
       : (canSeeProntuario
-          ? 'prontuario'
-          : ((canStartAnamnese || canSeeRespostasAnamnese)
-              ? 'anamnese'
-              : (canSeeGaleria
-                  ? 'galeria'
-                  : 'documentos')));
+        ? 'prontuario'
+        : ((canStartAnamnese || canSeeRespostasAnamnese)
+          ? 'anamnese'
+          : (canSeeGaleria
+            ? 'galeria'
+            : 'documentos')));
 
     if (
       patientDetailTab === 'timeline' ||
@@ -1557,10 +1608,26 @@ export function PatientProfileView({
     setBirthdayModalOpen(true);
   }, [birthAlert?.isToday, patient.cpf, selectedPatient?.id, hojeIso]);
 
+  /**
+   * Gerações por bloco do perfil (detalhe, documentos, próximo retorno, galeria): toda busca sobe a sua, e a resposta
+   * de uma busca mais antiga do mesmo bloco é descartada (carga inicial × rebusca por aviso).
+   */
+  const geracaoDetalheRef = useRef(0);
+  const geracaoDocumentosRef = useRef(0);
+  const geracaoProximoRef = useRef(0);
+  const geracaoGaleriaRef = useRef(0);
+  /** Paciente aberto agora: resposta de rebusca por aviso de outro paciente é descartada. */
+  const pacienteAbertoIdRef = useRef(selectedPatient?.id ?? null);
+  useEffect(() => {
+    pacienteAbertoIdRef.current = selectedPatient?.id ?? null;
+  }, [selectedPatient?.id]);
+
   useEffect(() => {
     const id = selectedPatient?.id;
     if (!id) return undefined;
     let cancelled = false;
+    const geracaoDetalhe = ++geracaoDetalheRef.current;
+    const geracaoDocumentos = ++geracaoDocumentosRef.current;
     setDetailLoading(true);
     (async () => {
       try {
@@ -1571,29 +1638,19 @@ export function PatientProfileView({
           termoAssinaturaApi.listarPorPaciente(id),
         ]);
         if (cancelled) return;
+        const detalheAtual = geracaoDetalhe === geracaoDetalheRef.current;
+        const documentosAtual = geracaoDocumentos === geracaoDocumentosRef.current;
         const dto = dtoResult.status === 'fulfilled' ? dtoResult.value : null;
-        if (dto) {
-          mergePatientById?.(id, (prev) => {
-            const mapped = mapBackendPatient(dto, { fuso, hojeIso });
-            return {
-              ...mapped,
-              fotoPerfilUrl: mapped.fotoPerfilUrl ?? prev.fotoPerfilUrl,
-              evaluationCapturedPhotos: prev.evaluationCapturedPhotos,
-              evaluationSelectedPhotoIndex: prev.evaluationSelectedPhotoIndex,
-              evaluationAnnotatedPhotoUrl: prev.evaluationAnnotatedPhotoUrl,
-              galeria: prev.galeria,
-              notas: prev.notas,
-              procedures: prev.procedures,
-            };
-          });
+        if (dto && detalheAtual) {
+          mergePatientById?.(id, (prev) => mesclarDetalhePaciente(prev, dto, { fuso, hojeIso }));
         }
         const notasList = notasResult.status === 'fulfilled' ? notasResult.value : [];
         const procList = procResult.status === 'fulfilled' ? procResult.value : [];
         const assinRaw = assinResult.status === 'fulfilled' ? assinResult.value : [];
         const assinList = Array.isArray(assinRaw) ? assinRaw : assinRaw?.content ?? [];
         setApiNotes(Array.isArray(notasList) ? notasList : []);
-        setApiProcedures(Array.isArray(procList) ? procList : []);
-        setAssinaturas(Array.isArray(assinList) ? assinList : []);
+        if (detalheAtual) setApiProcedures(Array.isArray(procList) ? procList : []);
+        if (documentosAtual) setAssinaturas(Array.isArray(assinList) ? assinList : []);
       } catch {
         if (!cancelled) {
           setApiNotes([]);
@@ -1619,16 +1676,116 @@ export function PatientProfileView({
       return undefined;
     }
     let cancelled = false;
+    const geracao = ++geracaoProximoRef.current;
     fetchNextAppointmentIsoForPaciente(id, {
       pacienteNome: selectedPatient?.nome,
       fuso,
     }).then((iso) => {
-      if (!cancelled) setProximoAgendaIso(iso);
+      if (!cancelled && geracao === geracaoProximoRef.current) setProximoAgendaIso(iso);
     });
     return () => {
       cancelled = true;
     };
   }, [selectedPatient?.id, selectedPatient?.nome, fuso]);
+
+  /*
+   * Rebusca por aviso do canal: uma por bloco, silenciosa (sem "Sincronizando...", sem limpar antes; erro mantém a
+   * tela). O aviso não diz o paciente, então cada bloco rebusca só o que é seu.
+   */
+
+  /** Detalhe: `GET /pacientes/{id}` + procedimentos (avisos AGENDA e ATENDIMENTO). */
+  const recarregarDetalhePorAviso = useCallback(async () => {
+    const id = selectedPatient?.id;
+    if (!id) return;
+    const geracao = ++geracaoDetalheRef.current;
+    const [dtoResult, procResult] = await Promise.allSettled([
+      pacientesApi.get(id),
+      procedimentosApi.byPaciente(id),
+    ]);
+    if (geracao !== geracaoDetalheRef.current || pacienteAbertoIdRef.current !== id) return;
+    const dto = dtoResult.status === 'fulfilled' ? dtoResult.value : null;
+    if (dto) {
+      mergePatientById?.(id, (prev) => mesclarDetalhePaciente(prev, dto, { fuso, hojeIso }));
+    }
+    if (procResult.status === 'fulfilled' && Array.isArray(procResult.value)) {
+      setApiProcedures(procResult.value);
+    }
+  }, [selectedPatient?.id, mergePatientById, fuso, hojeIso]);
+
+  /** Próximo retorno (aviso AGENDA). */
+  const recarregarProximoPorAviso = useCallback(async () => {
+    const id = selectedPatient?.id;
+    if (!id) return;
+    const geracao = ++geracaoProximoRef.current;
+    let iso;
+    try {
+      iso = await buscarProximoAgendamentoDoPaciente(id, { pacienteNome: selectedPatient?.nome, fuso });
+    } catch {
+      return; // mantém o que está na tela
+    }
+    if (geracao !== geracaoProximoRef.current || pacienteAbertoIdRef.current !== id) return;
+    setProximoAgendaIso(iso);
+  }, [selectedPatient?.id, selectedPatient?.nome, fuso]);
+
+  /** Documentos: assinaturas de termos do paciente (aviso TERMOS). */
+  const recarregarDocumentosPorAviso = useCallback(async () => {
+    const id = selectedPatient?.id;
+    if (!id) return;
+    const geracao = ++geracaoDocumentosRef.current;
+    let assinRaw;
+    try {
+      assinRaw = await termoAssinaturaApi.listarPorPaciente(id);
+    } catch {
+      return; // mantém o que está na tela
+    }
+    if (geracao !== geracaoDocumentosRef.current || pacienteAbertoIdRef.current !== id) return;
+    const assinList = Array.isArray(assinRaw) ? assinRaw : assinRaw?.content ?? [];
+    setAssinaturas(Array.isArray(assinList) ? assinList : []);
+  }, [selectedPatient?.id]);
+
+  /** Galeria (aviso GALERIA): só nas abas que mostram a galeria; nas outras, abrir a aba já busca. */
+  const recarregarGaleriaPorAviso = useCallback(async () => {
+    const id = selectedPatient?.id;
+    if (!id || !ABAS_COM_GALERIA.has(patientDetailTab)) return;
+    const geracao = ++geracaoGaleriaRef.current;
+    let data;
+    try {
+      data = await pacientesGaleriaApi.list(id);
+    } catch {
+      return; // mantém o que está na tela
+    }
+    if (geracao !== geracaoGaleriaRef.current || pacienteAbertoIdRef.current !== id) return;
+    setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
+    setGaleriaBackend('api');
+  }, [selectedPatient?.id, patientDetailTab]);
+
+  const recarregarAgendaPorAviso = useCallback(
+    () => Promise.all([recarregarDetalhePorAviso(), recarregarProximoPorAviso()]),
+    [recarregarDetalhePorAviso, recarregarProximoPorAviso],
+  );
+
+  /**
+   * Aviso ATENDIMENTO e PACIENTE: só o detalhe. Ignoram o `recarregar` do canal: o handler de AGENDA já rebusca o
+   * detalhe (senão seriam três).
+   */
+  const recarregarDetalhePorAvisoSemRecarregar = useCallback(
+    (msg) => {
+      if (msg?.tipo === 'recarregar') return undefined;
+      return recarregarDetalhePorAviso();
+    },
+    [recarregarDetalhePorAviso],
+  );
+
+  useAviso(PREFIXO_AVISO.AGENDA, recarregarAgendaPorAviso, { debounceMs: DEBOUNCE_AVISO_PERFIL_MS });
+  useAviso(PREFIXO_AVISO.ATENDIMENTO, recarregarDetalhePorAvisoSemRecarregar, { debounceMs: DEBOUNCE_AVISO_PERFIL_MS });
+  useAviso(PREFIXO_AVISO.GALERIA, recarregarGaleriaPorAviso, { debounceMs: DEBOUNCE_AVISO_PERFIL_MS });
+  useAviso(PREFIXO_AVISO.TERMOS, recarregarDocumentosPorAviso, { debounceMs: DEBOUNCE_AVISO_PERFIL_MS });
+  // Aviso PACIENTE (criado/editado): só o do paciente aberto. O detalhe rebuscado vai para o catálogo e a lista
+  // (mergePatientById), de onde o cabeçalho lê.
+  useAviso(PREFIXO_AVISO.PACIENTE, recarregarDetalhePorAvisoSemRecarregar, {
+    registroId: selectedPatient?.id ?? null,
+    debounceMs: DEBOUNCE_AVISO_PERFIL_MS,
+  });
 
   useEffect(() => {
     const id = selectedPatient?.id;
@@ -1637,19 +1794,20 @@ export function PatientProfileView({
       setApiGaleriaItems([]);
       return undefined;
     }
-    if (patientDetailTab !== 'planos' && patientDetailTab !== 'geral' && patientDetailTab !== 'avulsos') {
+    if (!ABAS_COM_GALERIA.has(patientDetailTab)) {
       return undefined;
     }
     let cancelled = false;
+    const geracao = ++geracaoGaleriaRef.current;
     setGaleriaBackend('loading');
     (async () => {
       try {
         const data = await pacientesGaleriaApi.list(id);
-        if (cancelled) return;
+        if (cancelled || geracao !== geracaoGaleriaRef.current) return;
         setApiGaleriaItems(normalizePacienteGaleriaResponse(data));
         setGaleriaBackend('api');
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || geracao !== geracaoGaleriaRef.current) return;
         setApiGaleriaItems([]);
         setGaleriaBackend('local');
         // 401/403 = sessão/org; 404 = rota inexistente — fallback local sem alarme no console.
@@ -2491,8 +2649,8 @@ export function PatientProfileView({
                                 setProntuarioVisibleCount(PRONTUARIO_PAGE_SIZE);
                               }}
                               className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${active
-                                  ? 'bg-[#00a88e] text-white shadow-2xs'
-                                  : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
+                                ? 'bg-[#00a88e] text-white shadow-2xs'
+                                : 'border border-[#e2e8f0] bg-white text-[#64748b] hover:bg-[#f1f5f9] hover:text-[#0f172a]'
                                 }`}
                             >
                               <span>{f.label}</span>
@@ -2563,8 +2721,8 @@ export function PatientProfileView({
                               <ProcedureTimelineEntry key={rowKey} depth={depth}>
                                 <div
                                   className={`overflow-hidden rounded-xl border transition-all ${depth > 0
-                                      ? 'border-sky-200/80 border-l-4 border-l-sky-500 bg-[#f0f9ff]/40 shadow-2xs hover:shadow-xs'
-                                      : 'border-[#e2e8f0] border-l-4 border-l-[#00a88e] bg-white shadow-xs hover:shadow-sm'
+                                    ? 'border-sky-200/80 border-l-4 border-l-sky-500 bg-[#f0f9ff]/40 shadow-2xs hover:shadow-xs'
+                                    : 'border-[#e2e8f0] border-l-4 border-l-[#00a88e] bg-white shadow-xs hover:shadow-sm'
                                     }`}
                                 >
                                   <button
@@ -2647,8 +2805,8 @@ export function PatientProfileView({
                                           toggleProntuarioRetornos(proc.id);
                                         }}
                                         className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${expandedProntuarioRetornosMap[proc.id]
-                                            ? 'border-2 border-sky-400 bg-sky-100 text-sky-950 shadow-xs'
-                                            : 'border-2 border-sky-300/90 bg-sky-50/90 text-sky-950 shadow-2xs hover:border-sky-400 hover:bg-sky-100'
+                                          ? 'border-2 border-sky-400 bg-sky-100 text-sky-950 shadow-xs'
+                                          : 'border-2 border-sky-300/90 bg-sky-50/90 text-sky-950 shadow-2xs hover:border-sky-400 hover:bg-sky-100'
                                           }`}
                                       >
                                         <span className="flex items-center gap-1.5">
@@ -3421,33 +3579,32 @@ export function PatientProfileView({
       )}
 
       {galleryPreview && (
-        <div
-          className="fixed inset-0 z-[220] bg-black/70 flex items-center justify-center p-4"
-          onClick={() => setGalleryPreview(null)}
-          role="presentation"
-        >
-          <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setGalleryPreview(null)}
-              className="absolute -top-10 right-0 text-white font-bold"
-            >
-              Fechar
-            </button>
-            {Boolean(galleryPreview.mapaOverlay?.marcacoes?.length) ||
-              galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ? (
-              <div className="aspect-square w-[min(90vw,85vh)] overflow-hidden rounded-xl border border-white/30 bg-slate-900">
-                <GaleriaMapaThumb
-                  url={galleryPreview.url}
-                  mapaOverlay={galleryPreview.mapaOverlay}
-                  alt={galleryPreview.caption || 'Preview da foto'}
-                  className="h-full w-full"
-                  density="full"
-                  pacienteId={selectedPatient?.id}
-                  fotoId={galleryPreview.serverId}
-                />
-              </div>
-            ) : (
+        Boolean(galleryPreview.mapaOverlay?.marcacoes?.length) ||
+        galleryPreview.categoria === GALERIA_CATEGORIA.MAPA ||
+        galleryPreview.categoria === GALERIA_CATEGORIA.AVALIACAO ||
+        galleryPreview.categoria === 'avaliacao' ||
+        galleryPreview.tipoFotoCodigo === 'avaliacao' ||
+        Boolean(galleryPreview.pontos?.length) ? (
+          <PlanoFotoLightbox
+            foto={galleryPreview}
+            fotos={galleryPreview.fotos || [galleryPreview]}
+            pacienteId={selectedPatient?.id}
+            onClose={() => setGalleryPreview(null)}
+          />
+        ) : (
+          <div
+            className="fixed inset-0 z-[220] bg-black/70 flex items-center justify-center p-4"
+            onClick={() => setGalleryPreview(null)}
+            role="presentation"
+          >
+            <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setGalleryPreview(null)}
+                className="absolute -top-10 right-0 text-white font-bold"
+              >
+                Fechar
+              </button>
               <ZoomableGalleryLightbox
                 url={galleryPreview.url}
                 alt={galleryPreview.caption || 'Preview da foto'}
@@ -3455,9 +3612,9 @@ export function PatientProfileView({
                 pacienteId={selectedPatient?.id}
                 fotoId={galleryPreview.serverId}
               />
-            )}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       <RelatoAcompanhamentoModal

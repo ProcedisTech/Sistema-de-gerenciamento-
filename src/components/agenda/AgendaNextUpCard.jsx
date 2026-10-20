@@ -1,7 +1,8 @@
-import { getRailCardActions } from '../../utils/agendaCardActions.js';
+import { useMemo } from 'react';
+import { getConsultaEmAndamento, getRailCardActions } from '../../utils/agendaCardActions.js';
 import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
-import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 
 function formatHmDisplay(hm) {
@@ -15,18 +16,30 @@ export function AgendaNextUpCard({
   isNivel1,
   compact = false,
   onCheckIn,
+  onVoltarConsulta,
   onWhatsApp,
   onEnviarAnamnese,
   onReagendar,
   onCancelar,
   onOpenSlotDetail,
 }) {
-  const { canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  const atendimentoId = appointment?.atendimentoId;
+  const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
+  const atendimentoAnfitriaoRoleUserId = appointment?.atendimentoAnfitriaoRoleUserId;
+  const andamento = useMemo(
+    () =>
+      getConsultaEmAndamento(
+        [{ atendimentoId, atendimentoStatusCodigo, atendimentoAnfitriaoRoleUserId }],
+        roleUserId,
+      ),
+    [atendimentoId, atendimentoStatusCodigo, atendimentoAnfitriaoRoleUserId, roleUserId],
+  );
   if (!appointment) return null;
 
   const countdown = formatCountdown(appointment.horaInicio, nowMinutes);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento);
 
   return (
     <article
@@ -78,11 +91,16 @@ export function AgendaNextUpCard({
             primaryHeightClass="h-9"
             primaryIconClass="h-4 w-4"
             onPrimaryClick={onCheckIn}
+            onVoltarConsulta={onVoltarConsulta}
             onWhatsApp={onWhatsApp}
             onEnviarAnamnese={onEnviarAnamnese}
             onReagendar={onReagendar}
             onCancelar={canCancelar ? onCancelar : null}
           />
+        </div>
+      ) : andamento.emAndamento ? (
+        <div className="col-span-2 border-t border-ink-150 pt-3">
+          <ConsultaEmAndamentoChip />
         </div>
       ) : null}
     </article>

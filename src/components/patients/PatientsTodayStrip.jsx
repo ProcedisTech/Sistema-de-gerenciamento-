@@ -17,9 +17,15 @@ function DotSep() {
  * Reaproveita dados do usePatientsKpi (mesma fonte da PulseSidebar).
  */
 export function PatientsTodayStrip({ kpi, loading = false, onSelectPatient }) {
-  const agendamentos = kpi?.agendamentosHoje ?? [];
-  const proximo = agendamentos[0] ?? null;
-  const restantes = agendamentos.length > 1 ? agendamentos.length - 1 : 0;
+  // Conta cards (simples ou grupo), como a PulseSidebar.
+  const entradas = kpi?.entradasHoje ?? [];
+  const primeiraEntrada = entradas[0] ?? null;
+  // Grupo: a 1ª agenda do grupo (o início do grupo é o início dela).
+  const proximo =
+    primeiraEntrada?.kind === 'group'
+      ? primeiraEntrada.appointments?.[0] ?? null
+      : primeiraEntrada?.appointment ?? null;
+  const restantes = entradas.length > 1 ? entradas.length - 1 : 0;
 
   const { hojeIso } = useAgoraDaClinica();
 

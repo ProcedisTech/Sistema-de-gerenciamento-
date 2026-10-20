@@ -24,15 +24,8 @@ import {
   normalizeWaPhoneDigits,
   getPresetOrientacoesByProcedimento,
 } from '../../utils/orientacoesJourney.js';
-import { maxIsoDate, addCalendarYearsToIso } from '../../utils/dateLimits.js';
-import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 import { formatarInstante } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
-import {
-  sanitizeBirthDateDigits,
-  formatBirthDigitsBR,
-  validateCalendarDateDigits8,
-} from '../utils/formatters';
 
 function fallbackOrientacoesFromDefaults(nomesArray = []) {
   const itens = getPresetOrientacoesByProcedimento(nomesArray);
@@ -42,6 +35,46 @@ function fallbackOrientacoesFromDefaults(nomesArray = []) {
     ordem,
     checado: false,
   }));
+}
+
+/** Modelo do perfil pelo nome do procedimento; reserva: lista fixa por palavra-chave. */
+async function carregarModeloDoItem(nome) {
+  const nomeLimpo = String(nome || '').trim();
+  if (nomeLimpo) {
+    try {
+      const raw = await perfilApi.getOrientacoesTemplate(nomeLimpo);
+      const parsed = normalizeOrientacoesTemplateResponse(raw);
+      if (parsed.length > 0) {
+        return parsed.map((row, idx) => ({ ...row, id: newOrientacaoId(), ordem: idx }));
+      }
+    } catch (e) {
+      if (e?.status !== 404 && e?.status !== 400) {
+        console.warn(`orientacoes-template (${nomeLimpo}):`, e?.message || e);
+      }
+    }
+  }
+  return fallbackOrientacoesFromDefaults([nomeLimpo].filter(Boolean));
+}
+
+/** Lista ordenada por `ordem` (estável para linhas sem `ordem`). */
+function ordenar(lista) {
+  return (Array.isArray(lista) ? lista : [])
+    .map((row, idx) => ({ row, idx }))
+    .sort((a, b) => (Number(a.row.ordem) || 0) - (Number(b.row.ordem) || 0) || a.idx - b.idx)
+    .map((x) => x.row);
+}
+
+/** Renumera `ordem` de 0..n-1 na ordem atual. */
+function renumerar(lista) {
+  return lista.map((row, idx) => ({ ...row, ordem: idx }));
+}
+
+function chaveDoItem(item, indice) {
+  return item?.itemId != null && item.itemId !== '' ? `id:${item.itemId}` : `idx:${indice}`;
+}
+
+function nomeDoItem(item, indice) {
+  return String(item?.nome || '').trim() || `Procedimento ${indice + 1}`;
 }
 
 function isoToBR(iso) {
@@ -63,16 +96,19 @@ function formatTs(ts, fuso) {
   return formatarInstante(ts, fuso, FORMATO_TS);
 }
 
+/**
+ * Orientações por item da consulta.
+ * `itensOrientacoes[i].orient === null` = nunca definido (carrega o modelo); `[]` = a pessoa limpou (não recarrega).
+ * Item `legado` mostra as orientações do procedimento já registrado, só leitura.
+ */
 export function Step5Finalization({
   procedureDateIso,
-  proximoRetornoDisplay,
-  setProximoRetornoDisplay,
-  /** Pelo menos um item checado (derivado no hook; usado para borda de erro). */
-  orientacoes: orientacoesOk = false,
-  orientacoesItens = [],
-  setOrientacoesItens = () => {},
-  orientacoesCarregadas = false,
-  setOrientacoesCarregadas = () => {},
+  /** Um por linha de procedimento da consulta, na ordem das abas. */
+  itensOrientacoes = [],
+  /** Grava a lista inteira do item `indice` (o núcleo manda o PATCH). */
+  setOrientacoesDoItem = () => {},
+  /** Índices dos itens que bloqueiam o encerrar (sem orientação marcada). */
+  itensSemOrientacaoMarcada = [],
   step5Errors = {},
   setStep5Errors = () => {},
   pacienteNome = '',
@@ -94,20 +130,21 @@ export function Step5Finalization({
   nomeUsuario = '',
   onAnnotateEvaluationPhoto,
   onAnnotateProcedurePhoto,
-  hideProximoRetorno = false,
   procedimentosLote = [],
 }) {
   const toast = useToast();
-  const { fuso, hojeIso: todayIso } = useAgoraDaClinica();
-  const minReturnIso = useMemo(
-    () => maxIsoDate(procedureDateIso || todayIso, todayIso),
-    [procedureDateIso, todayIso],
-  );
-  const maxReturnIso = useMemo(() => addCalendarYearsToIso(todayIso, 10), [todayIso]);
+  const { fuso } = useAgoraDaClinica();
 
-  const lastRangeToastIsoRef = useRef('');
   const resumoRef = useRef(null);
-  const [editingId, setEditingId] = useState(null);
+  /** `"<indice>:<posicao>"` da linha em edição. */
+  const [editingKey, setEditingKey] = useState(null);
+
+  const itens = useMemo(
+    () => (Array.isArray(itensOrientacoes) ? itensOrientacoes : []),
+    [itensOrientacoes],
+  );
+  const variosItens = itens.length > 1;
+  const orientacoesOk = (itensSemOrientacaoMarcada || []).length === 0;
 
   const allObservacoes = useMemo(() => {
     if (procedimentosLote && procedimentosLote.length > 0) {
@@ -118,6 +155,9 @@ export function Step5Finalization({
   }, [procedimentosLote, observacoesProcedimento]);
 
   const allFotosProcedimento = useMemo(() => {
+    if (Array.isArray(fotosProcedimento) && fotosProcedimento.length > 0) {
+      return fotosProcedimento;
+    }
     if (procedimentosLote && procedimentosLote.length > 0) {
       const photos = [];
       procedimentosLote.forEach(p => {
@@ -125,108 +165,78 @@ export function Step5Finalization({
       });
       if (photos.length > 0) return photos;
     }
-    return fotosProcedimento || [];
+    return [];
   }, [procedimentosLote, fotosProcedimento]);
 
+  /** Chaves (itemId ou índice) cujo modelo já foi pedido nesta montagem. */
+  const modeloPedidoRef = useRef(new Set());
+  const montadoRef = useRef(true);
   useEffect(() => {
-    if (orientacoesCarregadas) return;
-    let cancelled = false;
-    
-    const nomesArray = procedimentosLote && procedimentosLote.length > 0
-      ? procedimentosLote.map(p => String(p.nomeProcedimento || p.procedimentoNome || '').trim()).filter(Boolean)
-      : [String(nomeProcedimento || '').trim()].filter(Boolean);
-      
-    const nomesUnicos = [...new Set(nomesArray)];
-
-    (async () => {
-      try {
-        let allParsed = [];
-        if (nomesUnicos.length > 0) {
-          const promises = nomesUnicos.map(n => 
-             perfilApi.getOrientacoesTemplate(n).catch(e => {
-               if (e?.status !== 404 && e?.status !== 400) {
-                 console.warn(`orientacoes-template (${n}):`, e?.message || e);
-               }
-               return null;
-             })
-          );
-          
-          const results = await Promise.all(promises);
-          if (cancelled) return;
-          
-          for (const raw of results) {
-            if (raw) {
-               const parsed = normalizeOrientacoesTemplateResponse(raw);
-               allParsed.push(...parsed);
-            }
-          }
-        }
-        
-        if (allParsed.length > 0) {
-          const uniqueTexts = new Set();
-          const uniqueParsed = [];
-          
-          allParsed.forEach(item => {
-             const textKey = String(item.descricao || '').trim().toLowerCase();
-             if (!uniqueTexts.has(textKey)) {
-                uniqueTexts.add(textKey);
-                uniqueParsed.push({ ...item, id: newOrientacaoId() });
-             }
-          });
-          
-          const finalParsed = uniqueParsed.map((item, idx) => ({ ...item, ordem: idx }));
-          
-          setOrientacoesItens(finalParsed);
-          setOrientacoesCarregadas(true);
-          return;
-        }
-      } catch (e) {
-        console.warn('orientacoes-template batch:', e?.message || e);
-      }
-
-      if (!cancelled) {
-        setOrientacoesItens(fallbackOrientacoesFromDefaults(nomesUnicos));
-        setOrientacoesCarregadas(true);
-      }
-    })();
-
+    montadoRef.current = true;
     return () => {
-      cancelled = true;
+      montadoRef.current = false;
     };
-  }, [nomeProcedimento, procedimentosLote, orientacoesCarregadas, setOrientacoesItens, setOrientacoesCarregadas]);
+  }, []);
 
-  const sortedItens = useMemo(
-    () => [...(Array.isArray(orientacoesItens) ? orientacoesItens : [])].sort((a, b) => a.ordem - b.ordem),
-    [orientacoesItens],
-  );
+  useEffect(() => {
+    itens.forEach((item, indice) => {
+      if (!item || item.legado) return;
+      if (item.orient !== null && item.orient !== undefined) return;
+      const chave = chaveDoItem(item, indice);
+      if (modeloPedidoRef.current.has(chave)) return;
+      modeloPedidoRef.current.add(chave);
+      (async () => {
+        const lista = await carregarModeloDoItem(item.nome);
+        if (!montadoRef.current) return;
+        setOrientacoesDoItem(indice, lista);
+      })();
+    });
+  }, [itens, setOrientacoesDoItem]);
 
-  const updateItem = (id, patch) => {
-    setOrientacoesItens((prev) =>
-      (Array.isArray(prev) ? prev : []).map((row) => (row.id === id ? { ...row, ...patch } : row)),
+  const listasOrdenadas = useMemo(() => itens.map((item) => ordenar(item?.orient)), [itens]);
+
+  const limparErro = () => setStep5Errors((e) => ({ ...e, orientacoes: false }));
+
+  const gravar = (indice, lista) => {
+    setOrientacoesDoItem(indice, renumerar(lista));
+    limparErro();
+  };
+
+  const updateRow = (indice, posicao, patch) => {
+    const lista = listasOrdenadas[indice] || [];
+    gravar(
+      indice,
+      lista.map((row, idx) => (idx === posicao ? { ...row, ...patch } : row)),
     );
-    setStep5Errors((e) => ({ ...e, orientacoes: false }));
   };
 
-  const removeItem = (id) => {
-    setOrientacoesItens((prev) => {
-      const next = (Array.isArray(prev) ? prev : []).filter((row) => row.id !== id);
-      return next.map((row, idx) => ({ ...row, ordem: idx }));
-    });
-    if (editingId === id) setEditingId(null);
-    setStep5Errors((e) => ({ ...e, orientacoes: false }));
+  const removeRow = (indice, posicao) => {
+    const lista = listasOrdenadas[indice] || [];
+    gravar(
+      indice,
+      lista.filter((_, idx) => idx !== posicao),
+    );
+    if (editingKey === `${indice}:${posicao}`) setEditingKey(null);
   };
 
-  const addItem = () => {
-    setOrientacoesItens((prev) => {
-      const list = Array.isArray(prev) ? prev : [];
-      const maxOrd = list.reduce((m, r) => Math.max(m, Number(r.ordem) || 0), -1);
-      return [
-        ...list,
-        { id: newOrientacaoId(), descricao: '', ordem: maxOrd + 1, checado: false },
-      ];
-    });
-    setStep5Errors((e) => ({ ...e, orientacoes: false }));
+  const addRow = (indice) => {
+    const lista = listasOrdenadas[indice] || [];
+    gravar(indice, [...lista, { id: newOrientacaoId(), descricao: '', ordem: lista.length, checado: false }]);
   };
+
+  /** Marcadas de todos os itens, com o nome do item (só quando há mais de um). */
+  const blocosMarcados = useMemo(
+    () =>
+      itens
+        .map((item, indice) => ({
+          nome: nomeDoItem(item, indice),
+          linhas: (listasOrdenadas[indice] || []).filter(
+            (i) => i && i.checado && String(i.descricao || '').trim(),
+          ),
+        }))
+        .filter((b) => b.linhas.length > 0),
+    [itens, listasOrdenadas],
+  );
 
   const handleWhatsApp = () => {
     const phone = normalizeWaPhoneDigits(telefonePaciente);
@@ -234,56 +244,24 @@ export function Step5Finalization({
       toast.error('Cadastre o telefone do paciente para enviar por WhatsApp.');
       return;
     }
-    const lines = sortedItens.filter((i) => i.checado && String(i.descricao || '').trim());
-    if (lines.length === 0) {
+    if (blocosMarcados.length === 0) {
       toast.error('Marque ao menos uma orientação para enviar.');
       return;
     }
+    const tituloUnico = variosItens ? '' : blocosMarcados[0]?.nome || nomeProcedimento;
     const header = [
       pacienteNome ? `Olá, ${pacienteNome}!` : 'Olá!',
-      nomeProcedimento ? `Orientações pós — ${nomeProcedimento}` : 'Orientações pós-procedimento',
-      '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-    const body = lines.map((i) => `• ${String(i.descricao).trim()}`).join('\n');
+      tituloUnico ? `Orientações pós — ${tituloUnico}` : 'Orientações pós-procedimento',
+    ].join('\n');
+    const body = blocosMarcados
+      .map((b) => {
+        const linhas = b.linhas.map((i) => `• ${String(i.descricao).trim()}`).join('\n');
+        return variosItens ? `*${b.nome}*\n${linhas}` : linhas;
+      })
+      .join('\n\n');
     const texto = `${header}\n\n${body}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener,noreferrer');
   };
-
-  const handleReturnDateChange = (raw) => {
-    const digits = sanitizeBirthDateDigits(raw);
-    const display = formatBirthDigitsBR(digits);
-    setProximoRetornoDisplay(display);
-
-    if (digits.length < 8) {
-      lastRangeToastIsoRef.current = '';
-      return;
-    }
-
-    const cal = validateCalendarDateDigits8(digits);
-    if (!cal.ok) {
-      lastRangeToastIsoRef.current = '';
-      return;
-    }
-
-    if (cal.iso < minReturnIso || cal.iso > maxReturnIso) {
-      if (lastRangeToastIsoRef.current !== cal.iso) {
-        lastRangeToastIsoRef.current = cal.iso;
-        toast.error('Data de retorno fora do período permitido.');
-      }
-      return;
-    }
-
-    lastRangeToastIsoRef.current = '';
-  };
-
-  const { fieldMessage: returnDateFieldMessage } = evaluateProximoRetornoStep5(
-    procedureDateIso,
-    proximoRetornoDisplay,
-    todayIso
-  );
-  const returnDateInputInvalid = Boolean(returnDateFieldMessage);
 
   const handleExportPDF = async () => {
     try {
@@ -542,24 +520,30 @@ export function Step5Finalization({
         await drawFotos(fotosProcedimento, `Registro do Procedimento (${fotosProcedimento.length})`);
       }
 
-      const orientChecked = (Array.isArray(orientacoesItens) ? orientacoesItens : []).filter(
-        (i) => i && i.checado && String(i.descricao || '').trim(),
-      );
-      if (orientChecked.length > 0) {
+      if (blocosMarcados.length > 0) {
         checkPage(14);
         drawLabel('Orientações Pós-Procedimento');
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...dark);
-        [...orientChecked]
-          .sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0))
-          .forEach((i) => {
+        blocosMarcados.forEach((bloco) => {
+          if (variosItens) {
+            checkPage(7);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text(bloco.nome, margin, y);
+            y += 5;
+          }
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(...dark);
+          bloco.linhas.forEach((i) => {
             checkPage(6);
             const t = `✓ ${String(i.descricao || '').trim()}`;
             const lines = doc.splitTextToSize(t, contentW);
             doc.text(lines, margin, y);
             y += lines.length * 4.2 + 1;
           });
+          if (variosItens) y += 2;
+        });
         drawLine();
       }
 
@@ -657,10 +641,15 @@ export function Step5Finalization({
                   <div className="text-[12px] font-bold uppercase tracking-widest text-[#94a3b8]">Procedimento{procedimentosLote?.length > 1 ? 's' : ''}</div>
                   <div className="text-[15px] font-semibold text-[#0f172a]">
                     {(procedimentosLote && procedimentosLote.length > 0)
-                      ? procedimentosLote.map((p, idx) => (
-                          <div key={idx}>{p.procedimentoNome || p.nomeProcedimento}</div>
-                        ))
-                      : nomeProcedimento}
+                      ? procedimentosLote
+                          .filter((p) => {
+                            const n = p.procedimentoNome || p.nomeProcedimento || '';
+                            return n && !/^Procedimento\s*\d*$/i.test(String(n).trim());
+                          })
+                          .map((p, idx) => (
+                            <div key={idx}>{p.procedimentoNome || p.nomeProcedimento}</div>
+                          ))
+                      : (!/^Procedimento\s*\d*$/i.test(String(nomeProcedimento || '').trim()) ? nomeProcedimento : '')}
                   </div>
                   {allObservacoes ? (
                     <div className="mt-1 text-[13px] leading-relaxed text-[#475569] whitespace-pre-wrap">{allObservacoes}</div>
@@ -876,122 +865,175 @@ export function Step5Finalization({
           step5Errors.orientacoes && !orientacoesOk ? 'border-red-300' : 'border-[#00a88e]/25'
         }`}
       >
-        <div>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h4 className="text-[18px] font-bold text-[#0f766e]">Orientações Pós-Procedimento</h4>
-            <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h4 className="text-[18px] font-bold text-[#0f766e]">Orientações Pós-Procedimento</h4>
+          <div className="flex flex-wrap gap-2">
+            {!variosItens && itens[0] && !itens[0].legado ? (
               <button
                 type="button"
-                onClick={addItem}
+                onClick={() => addRow(0)}
+                {...(itens[0].itemId != null && itens[0].itemId !== ''
+                  ? { 'data-campo-consulta': `item:${itens[0].itemId}:orient` }
+                  : {})}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/40 bg-[#f0fdf9] px-3 py-2 text-[12px] font-bold text-[#0f766e] transition-colors hover:bg-[#e6f7f5]"
               >
                 <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
                 Adicionar orientação
               </button>
-              <button
-                type="button"
-                onClick={handleWhatsApp}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#25D366]/50 bg-[#dcfce7] px-3 py-2 text-[12px] font-bold text-[#166534] transition-colors hover:bg-[#bbf7d0]"
-              >
-                <MessageCircle className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                Enviar por WhatsApp
-              </button>
-            </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleWhatsApp}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#25D366]/50 bg-[#dcfce7] px-3 py-2 text-[12px] font-bold text-[#166534] transition-colors hover:bg-[#bbf7d0]"
+            >
+              <MessageCircle className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              Enviar por WhatsApp
+            </button>
           </div>
-          <div className="space-y-2">
-            {sortedItens.length === 0 ? (
-              <p className="text-[13px] font-medium text-[#64748b]">Carregando orientações…</p>
-            ) : (
-              sortedItens.map((item) => (
-                <div
-                  key={item.id}
-                  className={`flex items-start gap-3 rounded-lg border p-3 ${
-                    item.checado ? 'border-[#86efac] bg-[#f0fdf4]' : 'border-[#e2e8f0] bg-[#f8fafc]'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={item.checado}
-                    onClick={() => updateItem(item.id, { checado: !item.checado })}
-                    className="mt-0.5 shrink-0 rounded p-0.5 text-[#00a88e] outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40"
-                  >
-                    {item.checado ? (
-                      <CheckSquare className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-                    ) : (
-                      <Square className="h-5 w-5 text-[#94a3b8]" strokeWidth={2.5} aria-hidden />
-                    )}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    {editingId === item.id ? (
-                      <textarea
-                        value={item.descricao}
-                        onChange={(e) => updateItem(item.id, { descricao: e.target.value })}
-                        onBlur={() => setEditingId(null)}
-                        rows={2}
-                        className="w-full resize-y rounded-lg border border-[#00a88e]/40 bg-white px-3 py-2 text-[14px] font-medium text-[#0f172a] outline-none focus:ring-2 focus:ring-[#00a88e]/20"
-                        autoFocus
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(item.id)}
-                        className="w-full rounded-lg px-1 py-0.5 text-left text-[14px] font-medium leading-snug text-[#0f172a] hover:bg-black/[0.03]"
-                      >
-                        {item.descricao ? item.descricao : <span className="text-[#94a3b8]">Clique para editar</span>}
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(item.id)}
-                    className="shrink-0 rounded-lg p-2 text-[#94a3b8] transition-colors hover:bg-red-50 hover:text-red-600"
-                    aria-label="Remover orientação"
-                  >
-                    <Trash2 className="h-4 w-4" strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-          {step5Errors.orientacoes && !orientacoesOk ? (
-            <p className="mt-2 text-[12px] font-bold text-red-600" role="alert">
-              Marque ao menos uma orientação para continuar.
-            </p>
-          ) : null}
         </div>
 
-        {!hideProximoRetorno ? (
-        <div className="space-y-1.5 border-t border-[#e2e8f0] pt-5">
-          <label htmlFor="next-return-date" className="text-[13px] font-bold text-[#00a88e]">
-            Data do próximo retorno (opcional)
-          </label>
-          <input
-            id="next-return-date"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            value={proximoRetornoDisplay}
-            onChange={(e) => handleReturnDateChange(e.target.value)}
-            placeholder="DD/MM/AAAA"
-            maxLength={10}
-            className={`w-full max-w-xs rounded-xl border bg-[#f8fbfb] px-4 py-3 text-[14px] font-medium text-[#0f172a] outline-none transition-all focus:ring-4 focus:ring-[#00a88e]/20 ${
-              returnDateInputInvalid
-                ? 'border-red-400 bg-red-50'
-                : 'border-[#00a88e]/25 focus:border-[#00a88e]'
-            }`}
-          />
-          <p className="text-[12px] font-medium text-[#64748b]">
-            Entre {isoToBR(minReturnIso)} e {isoToBR(maxReturnIso)}.
-          </p>
-          {returnDateFieldMessage ? (
-            <p className="text-[12px] font-bold text-red-600" role="alert">
-              {returnDateFieldMessage}
-            </p>
-          ) : null}
-        </div>
+        {itens.length === 0 ? (
+          <p className="text-[13px] font-medium text-[#64748b]">Carregando orientações…</p>
         ) : null}
 
+        {itens.map((item, indice) => {
+          const lista = listasOrdenadas[indice] || [];
+          const legado = Boolean(item?.legado);
+          const carregando = !legado && (item?.orient === null || item?.orient === undefined);
+          const semMarcada = (itensSemOrientacaoMarcada || []).includes(indice);
+          // Chave da fila de edição: o hook protege a lista inteira do item enquanto qualquer controle dela tem foco.
+          const campoAttr =
+            !legado && item?.itemId != null && item.itemId !== ''
+              ? { 'data-campo-consulta': `item:${item.itemId}:orient` }
+              : {};
+          return (
+            <section
+              key={chaveDoItem(item, indice)}
+              data-item-orientacoes={indice}
+              className={variosItens ? 'border-t border-[#e2e8f0] pt-5' : ''}
+            >
+              {variosItens ? (
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h5 className="text-[15px] font-bold text-[#0f172a]">{nomeDoItem(item, indice)}</h5>
+                  {!legado ? (
+                    <button
+                      type="button"
+                      onClick={() => addRow(indice)}
+                      {...campoAttr}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#00a88e]/40 bg-[#f0fdf9] px-3 py-2 text-[12px] font-bold text-[#0f766e] transition-colors hover:bg-[#e6f7f5]"
+                    >
+                      <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                      Adicionar orientação
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {legado ? (
+                <p className="mb-2 text-[12px] font-medium text-[#64748b]">
+                  Orientações do procedimento já registrado
+                </p>
+              ) : null}
+              <div className="space-y-2">
+                {carregando ? (
+                  <p className="text-[13px] font-medium text-[#64748b]">Carregando orientações…</p>
+                ) : lista.length === 0 ? (
+                  <p className="text-[13px] font-medium text-[#64748b]">
+                    {legado ? 'Sem orientações registradas.' : 'Nenhuma orientação. Adicione uma para continuar.'}
+                  </p>
+                ) : (
+                  lista.map((row, posicao) => {
+                    const chave = `${indice}:${posicao}`;
+                    if (legado) {
+                      return (
+                        <div
+                          key={row.id ?? chave}
+                          className={`flex items-start gap-3 rounded-lg border p-3 ${
+                            row.checado ? 'border-[#86efac] bg-[#f0fdf4]' : 'border-[#e2e8f0] bg-[#f8fafc]'
+                          }`}
+                        >
+                          <span
+                            role="checkbox"
+                            aria-checked={Boolean(row.checado)}
+                            aria-disabled="true"
+                            className="mt-0.5 shrink-0 rounded p-0.5 text-[#00a88e]"
+                          >
+                            {row.checado ? (
+                              <CheckSquare className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                            ) : (
+                              <Square className="h-5 w-5 text-[#94a3b8]" strokeWidth={2.5} aria-hidden />
+                            )}
+                          </span>
+                          <div className="min-w-0 flex-1 px-1 py-0.5 text-[14px] font-medium leading-snug text-[#0f172a]">
+                            {row.descricao}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={row.id ?? chave}
+                        className={`flex items-start gap-3 rounded-lg border p-3 ${
+                          row.checado ? 'border-[#86efac] bg-[#f0fdf4]' : 'border-[#e2e8f0] bg-[#f8fafc]'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={Boolean(row.checado)}
+                          onClick={() => updateRow(indice, posicao, { checado: !row.checado })}
+                          {...campoAttr}
+                          className="mt-0.5 shrink-0 rounded p-0.5 text-[#00a88e] outline-none focus-visible:ring-2 focus-visible:ring-[#00a88e]/40"
+                        >
+                          {row.checado ? (
+                            <CheckSquare className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                          ) : (
+                            <Square className="h-5 w-5 text-[#94a3b8]" strokeWidth={2.5} aria-hidden />
+                          )}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          {editingKey === chave ? (
+                            <textarea
+                              value={row.descricao}
+                              onChange={(e) => updateRow(indice, posicao, { descricao: e.target.value })}
+                              onBlur={() => setEditingKey(null)}
+                              {...campoAttr}
+                              rows={2}
+                              className="w-full resize-y rounded-lg border border-[#00a88e]/40 bg-white px-3 py-2 text-[14px] font-medium text-[#0f172a] outline-none focus:ring-2 focus:ring-[#00a88e]/20"
+                              autoFocus
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingKey(chave)}
+                              {...campoAttr}
+                              className="w-full rounded-lg px-1 py-0.5 text-left text-[14px] font-medium leading-snug text-[#0f172a] hover:bg-black/[0.03]"
+                            >
+                              {row.descricao ? row.descricao : <span className="text-[#94a3b8]">Clique para editar</span>}
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(indice, posicao)}
+                          {...campoAttr}
+                          className="shrink-0 rounded-lg p-2 text-[#94a3b8] transition-colors hover:bg-red-50 hover:text-red-600"
+                          aria-label="Remover orientação"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              {step5Errors.orientacoes && semMarcada ? (
+                <p className="mt-2 text-[12px] font-bold text-red-600" role="alert">
+                  Marque ao menos uma orientação para continuar.
+                </p>
+              ) : null}
+            </section>
+          );
+        })}
       </div>
     </div>
   );

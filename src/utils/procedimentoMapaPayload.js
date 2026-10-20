@@ -20,6 +20,21 @@ export function mapLocalPontoToApi(p) {
   if (p.regiaoFacial != null && String(p.regiaoFacial).trim()) {
     row.regiaoFacial = String(p.regiaoFacial).trim();
   }
+  if (p.procedimentoIndex != null) {
+    row.procedimentoIndex = Number(p.procedimentoIndex);
+  }
+  if (p.catalogoProcedimentoSaudeId != null && String(p.catalogoProcedimentoSaudeId).trim()) {
+    row.catalogoProcedimentoSaudeId = String(p.catalogoProcedimentoSaudeId).trim();
+  }
+  if (p.nomeProcedimento != null && String(p.nomeProcedimento).trim()) {
+    row.nomeProcedimento = String(p.nomeProcedimento).trim();
+  }
+  if (p.cor != null && String(p.cor).trim()) {
+    row.cor = String(p.cor).trim();
+  }
+  if (p.corHex != null && String(p.corHex).trim()) {
+    row.corHex = String(p.corHex).trim();
+  }
   return row;
 }
 
@@ -73,7 +88,19 @@ export function hydrateMapaFromGet(response) {
        p.procedimentoPontoId = m.id;
     }
 
-    pontosPorVista[vista].push(mapExecucaoApiPontoToLocal(p, idx + 1));
+    const pontoLocal = mapExecucaoApiPontoToLocal(p, idx + 1);
+    if (m.catalogoProcedimentoSaudeId) {
+      pontoLocal.catalogoProcedimentoSaudeId = String(m.catalogoProcedimentoSaudeId);
+      pontoLocal.catalogoId = String(m.catalogoProcedimentoSaudeId);
+    }
+    if (m.corHex) {
+      pontoLocal.cor = String(m.corHex);
+      pontoLocal.corHex = String(m.corHex);
+    }
+    if (m.procedimentoIndex != null) {
+      pontoLocal.procedimentoIndex = Number(m.procedimentoIndex);
+    }
+    pontosPorVista[vista].push(pontoLocal);
   });
 
   Object.keys(fotoGaleriaIdPorVista).forEach((vista) => {

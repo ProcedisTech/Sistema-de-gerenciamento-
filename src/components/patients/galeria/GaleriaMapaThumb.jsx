@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2 } from 'lucide-react';
 import { usePacienteGaleriaArquivoBlobUrl, buildGaleriaArquivoFallbackPath } from '../../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
 import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
@@ -17,7 +17,7 @@ function metricsEqual(a, b) {
 
 /**
  * Miniatura da galeria com foto limpa (object-contain) + overlay de marcações do mapa.
- * density=thumb oculta doses; density=full para lightbox/zoom.
+ * density=thumb (miniaturas pequenas sem doses); density=preview (cards de pré-visualização sem doses); density=full (lightbox/zoom interativo com doses).
  */
 export function GaleriaMapaThumb({
   url,
@@ -28,6 +28,13 @@ export function GaleriaMapaThumb({
   imgClassName = 'h-full w-full object-contain',
   pacienteId = null,
   fotoId = null,
+  interactive = false,
+  filtroProcedimentoId = null,
+  procedimentosOcultosIds = [],
+  hoveredPontoId = null,
+  onMarkerHover = null,
+  onMarkerClick = null,
+  ocultarMarcacoes = false,
 }) {
   const fallback = buildGaleriaArquivoFallbackPath(pacienteId, fotoId);
   const { src, loading, error, onImgError } = usePacienteGaleriaArquivoBlobUrl(
@@ -66,7 +73,17 @@ export function GaleriaMapaThumb({
     return () => ro.disconnect();
   }, [src, syncMetrics]);
 
-  const pontos = marcacoesApiToOverlayPontos(mapaOverlay?.marcacoes);
+  const pontos = useMemo(() => {
+    const rawList =
+      mapaOverlay?.marcacoes ||
+      mapaOverlay?.pontos ||
+      (Array.isArray(mapaOverlay) ? mapaOverlay : []);
+    const procs =
+      mapaOverlay?.procedimentos ||
+      mapaOverlay?.procedimentosMapeados ||
+      [];
+    return marcacoesApiToOverlayPontos(rawList, procs);
+  }, [mapaOverlay]);
 
   if (error) {
     return (
@@ -94,13 +111,18 @@ export function GaleriaMapaThumb({
         onLoad={syncMetrics}
         onError={onImgError}
       />
-      {pontos.length > 0 ? (
+      {!ocultarMarcacoes && pontos.length > 0 ? (
         <MapaMarcacoesOverlay
           pontos={pontos}
           layoutMetrics={layoutMetrics}
           density={density}
           mostrarValores={density === 'full'}
-          interactive={false}
+          interactive={interactive}
+          filtroProcedimentoId={filtroProcedimentoId}
+          procedimentosOcultosIds={procedimentosOcultosIds}
+          hoveredPontoId={hoveredPontoId}
+          onMarkerHover={onMarkerHover}
+          onMarkerClick={onMarkerClick}
         />
       ) : null}
     </div>

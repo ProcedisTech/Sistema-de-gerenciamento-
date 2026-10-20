@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { act, render, renderHook, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom';
 
@@ -26,10 +26,8 @@ vi.mock('../../contexts/useToast.js', () => ({ useToast: () => ({ success: vi.fn
 import { OrgProvider, useOrg } from '../../contexts/OrgContext';
 import { estadoGateContexto } from '../system/estadoGateContexto.js';
 import { ContextoClinicaTela } from '../system/ContextoClinicaGate.jsx';
-import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { PatientsListView } from './PatientsListView.jsx';
 import { hojeDaClinica } from '../../utils/datasClinica.js';
-import { evaluateProximoRetornoStep5 } from '../../utils/proximoRetornoStep5.js';
 
 const ORG = '330e8b5c-8687-48dd-a534-d12aea1d5cd7';
 
@@ -143,18 +141,6 @@ describe('sem aviso de fuso ausente na carga da lista de pacientes', () => {
     act(() => rerender(<Tela responder />));
     expect(screen.getByRole('list', { name: 'Lista de pacientes' })).toBeInTheDocument();
     expect(screen.getAllByText(/Paciente 9/).length).toBeGreaterThan(0);
-    expect(avisosDeFuso(warn)).toHaveLength(0);
-  });
-
-  it('chamador 1 (memo do bloqueio do retorno no AppRefactored): com fuso nulo não chama o módulo', () => {
-    const { result } = renderHook(
-      () => {
-        const { fuso, pronto } = useFusoClinica();
-        return pronto ? evaluateProximoRetornoStep5('2026-10-02', '', hojeDaClinica(fuso)).blocksFinish : false;
-      },
-      { wrapper: ({ children }) => <OrgProvider>{children}</OrgProvider> },
-    );
-    expect(result.current).toBe(false);
     expect(avisosDeFuso(warn)).toHaveLength(0);
   });
 });

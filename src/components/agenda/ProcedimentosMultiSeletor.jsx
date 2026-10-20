@@ -51,6 +51,11 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onAbrirPai
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 truncate">
                   <span className="truncate text-xs font-medium text-ink-800">{proc.nome}</span>
+                  {(proc.isPlano || proc.planejamentoItemId) && (
+                    <span className="shrink-0 rounded-md bg-[#e6f7f5] px-1.5 py-0.5 text-[10px] font-extrabold text-[#008f79] border border-[#00a88e]/30">
+                      Plano
+                    </span>
+                  )}
                   {badge && (
                     <span className="shrink-0 rounded-full bg-ink-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-ink-500">
                       {badge}

@@ -4,7 +4,7 @@ import { PERMISSOES, PERFIS_ACESSO, PESOS_PERFIL } from '../constants/permissoes
 export { PERMISSOES, PERFIS_ACESSO, PESOS_PERFIL };
 
 export function usePapel() {
-  const { papel, permissoes = [] } = useOrg();
+  const { papel, permissoes = [], roleUserId = '' } = useOrg();
 
   // ── Hierarquia de pesos ──────────────────────────────────────────────────
   const getPeso = (p) => PESOS_PERFIL[p] || 0;
@@ -149,6 +149,7 @@ export function usePapel() {
 
   return {
     papel,
+    roleUserId,
     permissoes,
     PERMISSOES,
     PERFIS_ACESSO,

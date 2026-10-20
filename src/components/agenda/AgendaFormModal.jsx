@@ -270,6 +270,17 @@ export function AgendaFormModal({ agenda }) {
     !agenda.form.horaFimSlot ||
     !agenda.roleUserIdAgenda;
 
+  // Reset de procedimentos selecionados na troca de paciente quando não em modo travado
+  const prevModalPacienteIdRef = useRef(agenda.form.pacienteId);
+  useEffect(() => {
+    if (prevModalPacienteIdRef.current !== agenda.form.pacienteId) {
+      prevModalPacienteIdRef.current = agenda.form.pacienteId;
+      if (!lockPlanejamento) {
+        setProcedimentosSelecionados([]);
+      }
+    }
+  }, [agenda.form.pacienteId, lockPlanejamento]);
+
   // Reset expanders when tipo changes
   useEffect(() => {
     setProcSearchExpanded(false);
@@ -325,14 +336,41 @@ export function AgendaFormModal({ agenda }) {
 
   const handleToggleProc = useCallback(
     (proc) => {
+      const procId = String(proc?.id || proc?.catalogoProcedimentoSaudeId || '').trim();
+      const pItemId = proc?.planejamentoItemId ? String(proc.planejamentoItemId).trim() : null;
+
       setProcedimentosSelecionados((current) => {
-        const existe = current.find((p) => p.id === proc.id);
+        const existe = current.find((p) => p.id === procId);
         const proximos = existe
-          ? current.filter((p) => p.id !== proc.id)
-          : [...current, { id: proc.id, nome: proc.nome, tipoCodigo: proc.tipoCodigo, duracaoMin: proc.duracaoMin, duracaoSelecionada: proc.duracaoMin }];
+          ? current.filter((p) => p.id !== procId)
+          : [
+              ...current,
+              {
+                id: procId,
+                nome: proc.nome,
+                tipoCodigo: proc.tipoCodigo,
+                duracaoMin: proc.duracaoMin,
+                duracaoSelecionada: proc.duracaoMin,
+                planejamentoItemId: pItemId,
+                isPlano: Boolean(pItemId),
+                planoTitulo: proc.planoTitulo,
+                sessaoNumero: proc.sessaoNumero,
+              },
+            ];
         // Sincroniza IDs com o hook
         agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
         return proximos;
+      });
+
+      // Atualiza planoItemEscolhidoPorCatalogo FORA do updater funcional (regra 2.1/2.4)
+      agenda.setPlanoItemEscolhidoPorCatalogo?.((prev) => {
+        const next = { ...(prev || {}) };
+        if (pItemId) {
+          next[procId] = pItemId;
+        } else {
+          delete next[procId];
+        }
+        return next;
       });
     },
     [agenda]
@@ -340,10 +378,17 @@ export function AgendaFormModal({ agenda }) {
 
   const handleRemoverProc = useCallback(
     (id) => {
+      const procId = String(id).trim();
       setProcedimentosSelecionados((current) => {
-        const proximos = current.filter((p) => p.id !== id);
+        const proximos = current.filter((p) => p.id !== procId);
         agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
         return proximos;
+      });
+      agenda.setPlanoItemEscolhidoPorCatalogo?.((prev) => {
+        if (!prev || !prev[procId]) return prev;
+        const next = { ...prev };
+        delete next[procId];
+        return next;
       });
     },
     [agenda]
@@ -519,6 +564,7 @@ export function AgendaFormModal({ agenda }) {
               procedimentosSelecionados={procedimentosSelecionados}
               onToggle={handleToggleProc}
               onRemover={handleRemoverProc}
+              itensPlano={agenda.itensPlanoDisponiveis}
               readOnly
             />
           ) : chipsOnly ? (
@@ -546,6 +592,7 @@ export function AgendaFormModal({ agenda }) {
                 procedimentosSelecionados={procedimentosSelecionados}
                 onToggle={handleToggleProc}
                 onRemover={handleRemoverProc}
+                itensPlano={agenda.itensPlanoDisponiveis}
               />
               {procedimentosSelecionados.length > 0 ? (
                 <button

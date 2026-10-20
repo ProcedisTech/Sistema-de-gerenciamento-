@@ -28,12 +28,22 @@ function instantesPresentes(dto, campos) {
   return campos.filter((c) => dto[c] != null).map((c) => [c, dto[c]]);
 }
 
+const lerJson = (caminho) => JSON.parse(readFileSync(caminho, 'utf8'));
+
 describe('contrato de datas com o backend', () => {
-  it.each(ARQUIVOS)('%s é cópia idêntica do backend (quando o repositório está ao lado)', (arquivo) => {
+  it.each(ARQUIVOS)('%s tem o mesmo conteúdo do backend (quando o repositório está ao lado)', (arquivo) => {
     const backend = resolve(PASTA_BACKEND, arquivo);
     if (!existsSync(backend)) return;
-    const local = readFileSync(resolve(AQUI, arquivo), 'utf8');
-    expect(local.replace(/\r\n/g, '\n')).toBe(readFileSync(backend, 'utf8').replace(/\r\n/g, '\n'));
+    expect(lerJson(resolve(AQUI, arquivo))).toStrictEqual(lerJson(backend));
+  });
+
+  it('comparação é pelo conteúdo: formatação diferente passa, campo diferente falha', () => {
+    const compacto = JSON.parse('{"a" : 1, "b":[1,2], "c": {"d" :"x"}}');
+    const formatado = JSON.parse('{\n  "a": 1,\n  "b": [1, 2],\n  "c": { "d": "x" }\n}');
+    const outroValor = JSON.parse('{"a": 1, "b": [1, 2], "c": {"d": "y"}}');
+
+    expect(compacto).toStrictEqual(formatado);
+    expect(() => expect(outroValor).toStrictEqual(formatado)).toThrow();
   });
 
   it('agenda: instantes em UTC com Z e calendário sem fuso', () => {

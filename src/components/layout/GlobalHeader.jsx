@@ -26,6 +26,7 @@ import { resolveIdentity } from './identityDisplay';
  *   perfilFotoUrl?: string,
  *   onOpenClinicaSettings?: () => void,
  *   onOpenPerfilSettings?: () => void,
+ *   atalhoConsulta?: React.ReactNode,
  * }} props
  */
 export function GlobalHeader({
@@ -46,6 +47,7 @@ export function GlobalHeader({
   perfilFotoUrl,
   onOpenClinicaSettings,
   onOpenPerfilSettings,
+  atalhoConsulta = null,
 }) {
   const { canCreatePacientes, canWriteAgenda, isNivel1, canSeeConfig } = usePapel();
   const { tituloClinica, clinicaLogoResolved, displayName, shortName, perfilFotoResolved, roleLabel } =
@@ -137,6 +139,12 @@ export function GlobalHeader({
               <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
               Novo Paciente
             </button>
+          ) : null}
+
+          {atalhoConsulta ? (
+            <div className="shrink-0" data-atalho-consulta>
+              {atalhoConsulta}
+            </div>
           ) : null}
 
           <div className="shrink-0">

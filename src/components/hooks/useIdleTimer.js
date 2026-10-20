@@ -4,6 +4,9 @@ import {
   SESSION_STORAGE_KEY,
 } from '../../config/sessionTimeout';
 
+/** Enquanto a inatividade estiver vencida (e o timer ativo), reenvia `onTimeout` a cada 5 s. */
+export const REENVIO_TIMEOUT_MS = 5000;
+
 /**
  * Hook genérico de inatividade.
  *
@@ -22,7 +25,8 @@ export function useIdleTimer({ enabled, timeoutMs, warningBeforeMs, onWarning, o
 
   const isWarningRef = useRef(false);
   const warnedRef = useRef(false);
-  const timedOutRef = useRef(false);
+  /** Instante do último `onTimeout` enviado (null = nenhum desde a última atividade/religada). */
+  const ultimoTimeoutRef = useRef(null);
   const lastStampRef = useRef(0);
   const intervalRef = useRef(null);
 
@@ -55,8 +59,9 @@ export function useIdleTimer({ enabled, timeoutMs, warningBeforeMs, onWarning, o
     const wMs = warningBeforeMsRef.current;
 
     if (elapsed >= tMs) {
-      if (!timedOutRef.current) {
-        timedOutRef.current = true;
+      const agora = Date.now();
+      if (ultimoTimeoutRef.current == null || agora - ultimoTimeoutRef.current >= REENVIO_TIMEOUT_MS) {
+        ultimoTimeoutRef.current = agora;
         onTimeoutRef.current();
       }
       return;
@@ -73,7 +78,7 @@ export function useIdleTimer({ enabled, timeoutMs, warningBeforeMs, onWarning, o
     } else {
       if (warnedRef.current) {
         warnedRef.current = false;
-        timedOutRef.current = false;
+        ultimoTimeoutRef.current = null;
         isWarningRef.current = false;
         setIsWarning(false);
       }
@@ -83,7 +88,7 @@ export function useIdleTimer({ enabled, timeoutMs, warningBeforeMs, onWarning, o
   const resetTimer = useCallback(() => {
     stampActivity(true);
     warnedRef.current = false;
-    timedOutRef.current = false;
+    ultimoTimeoutRef.current = null;
     isWarningRef.current = false;
     setIsWarning(false);
     const now = Date.now();
@@ -98,6 +103,11 @@ export function useIdleTimer({ enabled, timeoutMs, warningBeforeMs, onWarning, o
       }
       return;
     }
+
+    // Religou (ex.: novo login): zera o estado da rodada anterior. Sem isso, depois de vencer sem aviso
+    // a inatividade não disparava mais.
+    ultimoTimeoutRef.current = null;
+    lastStampRef.current = 0;
 
     // Semeadura: gravar carimbo SE nao existir (preserva no F5).
     if (!sessionStorage.getItem(SESSION_STORAGE_KEY)) {

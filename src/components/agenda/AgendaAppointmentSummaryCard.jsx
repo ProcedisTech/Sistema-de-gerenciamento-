@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Clock3, Lock, Plus, Stethoscope, UserRound } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel.js';
 import { useFusoClinica } from '../hooks/useFusoClinica.js';
@@ -5,6 +6,8 @@ import { getStatusColors } from '../../utils/agendaStatusColors.js';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
 import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBadges.js';
+import { getConsultaEmAndamento } from '../../utils/agendaCardActions.js';
+import { ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
   bloqueioHoraFimLabel,
@@ -110,6 +113,7 @@ function panelActionLabel(status) {
 export function AgendaAppointmentSummaryCard({
   appointment,
   onPrimary,
+  onVoltarConsulta,
   renderSlotActions,
   isNivel1 = false,
   advanceOffer,
@@ -122,8 +126,19 @@ export function AgendaAppointmentSummaryCard({
   const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
   const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
-  const { canStartAnamnese } = usePapel();
+  const { canStartAnamnese, roleUserId } = usePapel();
   const { fuso } = useFusoClinica();
+  const atendimentoId = appointment?.atendimentoId;
+  const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
+  const atendimentoAnfitriaoRoleUserId = appointment?.atendimentoAnfitriaoRoleUserId;
+  const andamento = useMemo(
+    () =>
+      getConsultaEmAndamento(
+        [{ atendimentoId, atendimentoStatusCodigo, atendimentoAnfitriaoRoleUserId }],
+        roleUserId,
+      ),
+    [atendimentoId, atendimentoStatusCodigo, atendimentoAnfitriaoRoleUserId, roleUserId],
+  );
 
   if (isBloqueio) {
     const motivo = bloqueioMotivoLabel(appointment);
@@ -209,6 +224,18 @@ export function AgendaAppointmentSummaryCard({
     : STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   const isPanel = variant === 'panel' || variant === 'highlight';
+  // Consulta em andamento: só quem abriu vê "Voltar à consulta"; para os outros o botão some.
+  const mostrarPrincipal = andamento.emAndamento
+    ? andamento.minha
+    : showPrimaryActionButton(appointment.status, canStartAnamnese);
+  const rotuloVoltar = andamento.emAndamento ? 'Voltar à consulta' : null;
+  const handlePrincipal = () => {
+    if (andamento.emAndamento && andamento.minha && typeof onVoltarConsulta === 'function') {
+      onVoltarConsulta(andamento.atendimentoId);
+      return;
+    }
+    onPrimary(appointment);
+  };
   const highlightClass =
     variant === 'highlight'
       ? 'border-teal-300 ring-1 ring-teal-200 shadow-md'
@@ -293,19 +320,20 @@ export function AgendaAppointmentSummaryCard({
             </button>
           ) : null}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {andamento.emAndamento ? <ConsultaEmAndamentoChip /> : null}
             {isNivel1 ? (
               <div className="w-full rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-center text-[11px] font-bold text-rose-600">
                 Nível 1: Apenas visualização
               </div>
             ) : (
               <>
-                {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
+                {mostrarPrincipal ? (
                   <button
                     type="button"
-                    onClick={() => onPrimary(appointment)}
+                    onClick={handlePrincipal}
                     className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors duration-150 ${styles.primary}`}
                   >
-                    {panelActionLabel(appointment.status)}
+                    {rotuloVoltar || panelActionLabel(appointment.status)}
                   </button>
                 ) : null}
               </>
@@ -366,6 +394,7 @@ export function AgendaAppointmentSummaryCard({
           <p className="mt-0.5 truncate text-[11px] font-medium text-[#555]">{metaParts.join(' · ')}</p>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {andamento.emAndamento ? <ConsultaEmAndamentoChip /> : null}
             {isNivel1 ? (
               <div className="w-full rounded-md bg-rose-50 border border-rose-100 px-2 py-1 text-center text-[10px] font-bold text-rose-600">
                 Nível 1: Apenas visualização
@@ -381,13 +410,13 @@ export function AgendaAppointmentSummaryCard({
                     <Plus className="h-3 w-3" /> Agendar novo paciente
                   </button>
                 ) : null}
-                {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
+                {mostrarPrincipal ? (
                   <button
                     type="button"
-                    onClick={() => onPrimary(appointment)}
+                    onClick={handlePrincipal}
                     className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${styles.primary}`}
                   >
-                    {compactActionLabel(appointment.status)}
+                    {rotuloVoltar || compactActionLabel(appointment.status)}
                   </button>
                 ) : null}
                 {typeof renderSlotActions === 'function' ? (
@@ -483,6 +512,7 @@ export function AgendaAppointmentSummaryCard({
         </div>
 
         <div className="mt-3 flex flex-wrap items-stretch justify-end gap-2">
+          {andamento.emAndamento ? <ConsultaEmAndamentoChip className="self-center" /> : null}
           {isNivel1 ? (
             <div className="flex w-full items-center justify-center rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-center text-[11px] font-bold text-rose-600">
               Nível 1: Apenas visualização
@@ -498,13 +528,13 @@ export function AgendaAppointmentSummaryCard({
                   <Plus className="h-4 w-4" /> Agendar novo paciente neste horário
                 </button>
               ) : null}
-              {showPrimaryActionButton(appointment.status, canStartAnamnese) ? (
+              {mostrarPrincipal ? (
                 <button
                   type="button"
-                  onClick={() => onPrimary(appointment)}
+                  onClick={handlePrincipal}
                   className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
                 >
-                  {actionLabel(appointment.status)}
+                  {rotuloVoltar || actionLabel(appointment.status)}
                 </button>
               ) : null}
             </>

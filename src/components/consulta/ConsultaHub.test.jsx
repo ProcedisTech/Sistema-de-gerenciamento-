@@ -69,3 +69,41 @@ describe('ConsultaHub — gate do card Procedimento', () => {
     expect(onSelect).toHaveBeenCalledWith('procedimento');
   });
 });
+
+describe('ConsultaHub — F3 faltantes filtrados pela consulta', () => {
+  it('não bloqueia Procedimento quando a consulta já tem o termo ASSINADO (resolução velha)', async () => {
+    const onSelect = vi.fn();
+    const onBloqueio = vi.fn();
+    render(
+      <ConsultaHub
+        paciente={paciente}
+        catalogoIds={['cat-b']}
+        exigirFilaVinculo
+        termosDaConsulta={[{ termoId: 't1', statusAssinatura: 'ASSINADO' }]}
+        onSelectModule={onSelect}
+        onTermosBloqueio={onBloqueio}
+      />
+    );
+    await userEvent.click(cardProcedimento());
+    expect(onBloqueio).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith('procedimento');
+  });
+
+  it('segue bloqueando quando o termo da consulta não está ASSINADO', async () => {
+    const onSelect = vi.fn();
+    const onBloqueio = vi.fn();
+    render(
+      <ConsultaHub
+        paciente={paciente}
+        catalogoIds={['cat-b']}
+        exigirFilaVinculo
+        termosDaConsulta={[{ termoId: 't1', statusAssinatura: 'PENDENTE' }]}
+        onSelectModule={onSelect}
+        onTermosBloqueio={onBloqueio}
+      />
+    );
+    await userEvent.click(cardProcedimento());
+    expect(onBloqueio).toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});

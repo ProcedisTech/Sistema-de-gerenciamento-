@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Cake, CalendarDays, ChevronRight, Clock, FileX } from 'lucide-react';
 import { PatientAvatar } from './PatientAvatar.jsx';
 import { formatCartaoDiaPtBr } from '../../utils/patientProfileDerivedDates.js';
@@ -6,11 +6,20 @@ import {
   formatBirthdayCountdown,
   getPatientNextBirthdayInfo,
 } from '../../utils/patientBirthdayList.js';
-import { getRailCardActions } from '../../utils/agendaCardActions.js';
+import {
+  getConsultaEmAndamento,
+  getGroupedRailCardActions,
+  getRailCardActions,
+} from '../../utils/agendaCardActions.js';
+import {
+  applyGroupActionAndRefresh,
+  formatGroupActionResultMessage,
+} from '../../utils/agendaGroupActions.js';
 import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
+import { useToast } from '../../contexts/useToast.js';
 import { CollapsibleSection } from '../shared/CollapsibleSection.jsx';
-import { isAgendamentoHojePassado } from '../../utils/sortAgendamentosHojePulse.js';
+import { isEntradaHojePassada } from '../../utils/sortAgendamentosHojePulse.js';
 import { formatarDataCalendario } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
@@ -108,20 +117,71 @@ function SidebarSkeleton() {
   );
 }
 
+/** id do card (simples = id da agenda; grupo = id do grupo). */
+function idDaEntrada(entrada) {
+  return entrada?.kind === 'group' ? entrada.id : entrada?.appointment?.id;
+}
+
+function isPendente(status) {
+  return status === 'pendente' || status === 'aguardando_confirmacao';
+}
+
+/** Card do painel: agenda simples ou grupo consecutivo (mesmo critério da Agenda). */
 function AgendaRow({
-  slot,
+  entrada,
   fuso,
   agendaSchedule,
   onStartAttendance,
   getPatientInitials,
   onSolicitarAnamnese,
   onSlotCancelar,
+  onVoltarConsulta,
+  onRecarregarAgendaHoje,
 }) {
-  const { isNivel1, canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { isNivel1, canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  const toast = useToast();
+  const isGrupo = entrada?.kind === 'group';
+  const linhas = isGrupo ? entrada.appointments || [] : entrada?.appointment ? [entrada.appointment] : [];
+  const slot = linhas[0] ?? null;
   const nome = slot?.pacienteNome || 'Paciente';
-  const hora = slot?.horaInicio ? String(slot.horaInicio).slice(0, 5) : '';
-  const procedimento = slot?.procedimentoNome || '';
-  const isPast = isAgendamentoHojePassado(slot, fuso);
+  const horaInicio = isGrupo ? entrada.horaInicio : slot?.horaInicio;
+  const hora = horaInicio ? String(horaInicio).slice(0, 5) : '';
+  const procedimento = linhas
+    .map((l) => l?.procedimentoNome)
+    .filter(Boolean)
+    .join(' + ');
+  const isPast = isEntradaHojePassada(entrada, fuso);
+  const podeCancelar = Boolean(canDeleteAgenda && onSlotCancelar);
+  const andamento = getConsultaEmAndamento(linhas, roleUserId);
+  const actions = isGrupo
+    ? getGroupedRailCardActions(linhas.map((l) => l.status), canStartAnamnese, podeCancelar, andamento)
+    : getRailCardActions(slot?.status, canStartAnamnese, podeCancelar, andamento);
+
+  const confirmar = async () => {
+    const pendentes = linhas.filter((l) => isPendente(l.status));
+    const alvo = pendentes.length ? pendentes : linhas;
+    if (alvo.length <= 1) {
+      const a = alvo[0];
+      if (!a?.agendaId) return;
+      await agendaSchedule.handleAtualizarStatus(a.agendaId, 'confirmado');
+      await onRecarregarAgendaHoje?.();
+      return;
+    }
+    const result = await applyGroupActionAndRefresh(
+      alvo,
+      (item) =>
+        agendaSchedule.handleAtualizarStatus(item.agendaId, 'confirmado', {
+          successToast: false,
+          skipDashboardRefresh: true,
+        }),
+      async () => {
+        await agendaSchedule.refreshDashboard?.();
+        await onRecarregarAgendaHoje?.();
+      },
+    );
+    if (result.allOk) toast.success(`${alvo.length} agendamentos confirmados`);
+    else if (result.partial) toast.error(formatGroupActionResultMessage(result, { verb: 'confirmadas' }));
+  };
 
   return (
     <div
@@ -153,14 +213,17 @@ function AgendaRow({
         <div className="border-t border-[#f1f5f9] pt-2">
           <AgendaRailCardActions
             appointment={slot}
-            actions={getRailCardActions(slot.status, canStartAnamnese, Boolean(canDeleteAgenda && onSlotCancelar))}
+            actions={actions}
             compact={true}
-            onConfirmar={() => agendaSchedule.handleAtualizarStatus(slot.agendaId, 'confirmado')}
-            onIniciarAtendimento={() => onStartAttendance?.(slot)}
+            onConfirmar={() => {
+              void confirmar();
+            }}
+            onIniciarAtendimento={() => onStartAttendance?.(slot, linhas)}
+            onVoltarConsulta={onVoltarConsulta}
             onWhatsApp={() => agendaSchedule.handleEnviarWhatsApp(slot.agendaId)}
             onEnviarAnamnese={() => onSolicitarAnamnese?.(slot)}
-            onReagendar={() => agendaSchedule.openReagendarModal(slot, [slot])}
-            onCancelar={canDeleteAgenda && onSlotCancelar ? () => onSlotCancelar?.(slot) : null}
+            onReagendar={() => agendaSchedule.openReagendarModal(slot, linhas)}
+            onCancelar={podeCancelar ? () => onSlotCancelar?.(isGrupo ? entrada : slot) : null}
           />
         </div>
       )}
@@ -252,23 +315,26 @@ export function PulseSidebar({
   onStartAttendance,
   onSolicitarAnamnese,
   onSlotCancelar,
+  onVoltarConsulta,
 }) {
   const nome = primeiroNome(nomeUsuario);
   const { fuso, hojeIso, minutos } = useAgoraDaClinica();
 
-  const agendamentos = kpi?.agendamentosHoje ?? [];
+  /** Cards (simples ou grupo): tudo no painel conta cards, não linhas. */
+  const entradasKpi = kpi?.entradasHoje;
+  const entradas = useMemo(() => entradasKpi ?? [], [entradasKpi]);
   const semPlano = kpi?.semPlanoList ?? [];
   const totalSemPlano = kpi?.totalSemPlano ?? 0;
   const aniversariantes = kpi?.aniversariantesList ?? [];
 
-  const nAtendimentos = agendamentos.length;
+  const nAtendimentos = entradas.length;
   const nSemPlano = totalSemPlano ?? 0;
   const nAniversarios = countAniversariantesEstaSemana(aniversariantes, hojeIso);
   const welcomeResumo = buildWelcomeResumo({ nAtendimentos, nSemPlano, nAniversarios });
   const resumoVazio = !loading && nAtendimentos === 0 && nSemPlano === 0 && nAniversarios === 0;
 
   const verAgendaBtn =
-    agendamentos.length > 0 && onNavigateToAgenda ? (
+    entradas.length > 0 && onNavigateToAgenda ? (
       <button
         type="button"
         onClick={onNavigateToAgenda}
@@ -311,36 +377,38 @@ export function PulseSidebar({
           id="agendamentos"
           icon={CalendarDays}
           title="Agendamentos de hoje"
-          count={agendamentos.length > 0 ? agendamentos.length : undefined}
+          count={entradas.length > 0 ? entradas.length : undefined}
           headerExtra={verAgendaBtn}
         >
           {loading ? (
             <SidebarSkeleton />
-          ) : agendamentos.length === 0 ? (
+          ) : entradas.length === 0 ? (
             <p className="px-1 py-3 text-center text-[12px] text-[#94a3b8]">
               Nenhum agendamento hoje
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              {agendamentos.slice(0, 5).map((slot) => (
+              {entradas.slice(0, 5).map((entrada) => (
                 <AgendaRow
-                  key={slot.id}
-                  slot={slot}
+                  key={idDaEntrada(entrada)}
+                  entrada={entrada}
                   fuso={fuso}
                   agendaSchedule={agendaSchedule}
                   onStartAttendance={onStartAttendance}
                   getPatientInitials={getPatientInitials}
                   onSolicitarAnamnese={onSolicitarAnamnese}
                   onSlotCancelar={onSlotCancelar}
+                  onVoltarConsulta={onVoltarConsulta}
+                  onRecarregarAgendaHoje={kpi?.recarregarAgendaHoje}
                 />
               ))}
-              {agendamentos.length > 5 ? (
+              {entradas.length > 5 ? (
                 <button
                   type="button"
                   onClick={onNavigateToAgenda}
                   className="flex items-center justify-center gap-1 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] py-2 text-[12px] font-medium text-[#64748b] hover:bg-[#f1f5f9]"
                 >
-                  +{agendamentos.length - 5} mais
+                  +{entradas.length - 5} mais
                   <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 </button>
               ) : null}

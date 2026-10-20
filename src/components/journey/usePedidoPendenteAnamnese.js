@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { anamneseEnvioApi } from '../../services/api';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+import { useBuscaNoVencimento } from '../hooks/useBuscaNoVencimento.js';
 import {
   carregarEnvioAtivoDocumento,
   escolherFichaEmBrancoPendente,
@@ -7,12 +10,11 @@ import {
   pedidoVencido,
 } from './step2PedidoPendente.js';
 
-const INTERVALO_STATUS_MS = 3000;
-
 /**
  * Pedido de anamnese em branco pendente do paciente (consulta).
  * Fonte: ficha em branco da lista + `envioAtivo` do documento dela; enquanto houver pedido,
- * consulta o status do envio (provisório até o SSE do hub).
+ * consulta o status do envio ao abrir, a cada aviso ANAMNESE do envio e no vencimento.
+ * Sem pedido conhecido, qualquer aviso ANAMNESE do paciente faz uma nova leitura do envio ativo.
  */
 export function usePedidoPendenteAnamnese({
   ativo,
@@ -40,6 +42,8 @@ export function usePedidoPendenteAnamnese({
     [ativo, historicoPaciente],
   );
   const candidataId = candidata?.id ?? null;
+  /** Sobe a cada aviso ANAMNESE sem envio conhecido: relê o envio ativo da ficha em branco. */
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     if (!ativo || !pacienteId || !candidataId) return undefined;
@@ -57,7 +61,7 @@ export function usePedidoPendenteAnamnese({
     };
     // `candidata` muda de identidade a cada recarga da lista; só o id dispara nova leitura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ativo, pacienteId, candidataId]);
+  }, [ativo, pacienteId, candidataId, recarga]);
 
   const pedidoLista = candidataId && resolvido.fichaId === candidataId ? resolvido.pedido : null;
   const pedido = ativo ? (pedidoLista ?? pedidoSolicitacao) : null;
@@ -70,43 +74,54 @@ export function usePedidoPendenteAnamnese({
     setPedidoSolicitacao(null);
   }, []);
 
-  const envioId = pedido?.envioId ?? null;
+  const envioId = ativo && pacienteId ? (pedido?.envioId ?? null) : null;
+  /** Envio já encerrado (respondido, expirado, cancelado ou vencido): não consulta de novo. */
+  const encerradoRef = useRef(null);
+
+  const verificarStatus = useCallback(async () => {
+    const id = envioId;
+    if (!id || encerradoRef.current === id) return;
+    const encerrar = (callbackRef) => {
+      encerradoRef.current = id;
+      limpar();
+      callbackRef.current?.();
+    };
+    if (pedidoVencido(pedidoRef.current)) {
+      encerrar(onEncerradoRef);
+      return;
+    }
+    try {
+      const statusData = await anamneseEnvioApi.status(id);
+      if (encerradoRef.current === id || pedidoRef.current?.envioId !== id) return;
+      if (statusData?.status === 'CONCLUIDO') {
+        encerrar(onRespondidoRef);
+      } else if (statusData?.status === 'EXPIRADO' || statusData?.status === 'CANCELADO') {
+        encerrar(onEncerradoRef);
+      }
+    } catch (err) {
+      console.error('Erro ao consultar status do pedido de anamnese', err);
+    }
+  }, [envioId, limpar]);
 
   useEffect(() => {
-    if (!ativo || !pacienteId || !envioId) return undefined;
-    let encerrado = false;
-    const interval = setInterval(async () => {
-      if (encerrado) return;
-      const encerrar = (callbackRef) => {
-        encerrado = true;
-        clearInterval(interval);
-        limpar();
-        callbackRef.current?.();
-      };
-      if (pedidoVencido(pedidoRef.current)) {
-        encerrar(onEncerradoRef);
-        return;
-      }
-      try {
-        const statusData = await anamneseEnvioApi.status(envioId);
-        if (encerrado) return;
-        if (statusData?.status === 'CONCLUIDO') {
-          encerrar(onRespondidoRef);
-        } else if (statusData?.status === 'EXPIRADO' || statusData?.status === 'CANCELADO') {
-          encerrar(onEncerradoRef);
-        }
-      } catch (err) {
-        console.error('Erro no polling do pedido de anamnese', err);
-      }
-    }, INTERVALO_STATUS_MS);
-    return () => {
-      encerrado = true;
-      clearInterval(interval);
-    };
-  }, [ativo, pacienteId, envioId, limpar]);
+    verificarStatus();
+  }, [verificarStatus]);
+
+  /** Sem envio conhecido (ex.: pedido feito em outro aparelho), qualquer aviso ANAMNESE relê o pedido ativo. */
+  const aoAvisoAnamnese = useCallback(() => {
+    if (envioId) {
+      verificarStatus();
+    } else if (ativo && pacienteId) {
+      setRecarga((n) => n + 1);
+    }
+  }, [envioId, verificarStatus, ativo, pacienteId]);
+
+  useAviso(PREFIXO_AVISO.ANAMNESE, aoAvisoAnamnese, { registroId: envioId });
+  useBuscaNoVencimento(envioId ? pedido?.expiraEm : null, verificarStatus);
 
   const registrar = useCallback((data) => {
     if (data?.envioId) {
+      encerradoRef.current = null;
       setPedidoSolicitacao({
         envioId: data.envioId,
         preenchimentoId: data.preenchimentoAnamneseId ?? null,

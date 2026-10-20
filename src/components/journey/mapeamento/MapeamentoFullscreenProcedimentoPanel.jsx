@@ -14,7 +14,7 @@ export function MapeamentoFullscreenProcedimentoToggle({
   narrow = false,
 }) {
   const armado = Boolean(procedimentoArmado?.id);
-  const corArmado = armado ? corParaProcedimento(procedimentoArmado.id) : null;
+  const corArmado = armado ? (procedimentoArmado.corHex || corParaProcedimento(procedimentoArmado.id)) : null;
   const ariaLabel = armado
     ? `Procedimentos — ${procedimentoArmado.nome}`
     : 'Procedimentos';
@@ -57,6 +57,7 @@ export function MapeamentoFullscreenProcedimentoFloatingPanel({
   procedimentoArmado,
   onArmar,
   procedimentosUsados = [],
+  onClose,
 }) {
   if (!open) return null;
 
@@ -67,12 +68,13 @@ export function MapeamentoFullscreenProcedimentoFloatingPanel({
       aria-label="Seleção de procedimento"
       onPointerDown={stopBubble}
       onClick={stopBubble}
-      className="absolute left-4 top-4 z-[35] w-[min(360px,calc(100%-2rem))] max-h-[min(70dvh,520px)] overflow-y-auto rounded-xl shadow-2xl"
+      className="absolute left-4 top-4 z-[45] w-[380px] sm:w-[420px] max-w-[calc(100vw-2rem)] filter drop-shadow-2xl overflow-visible animate-in fade-in zoom-in-95 duration-100"
     >
       <MapeamentoProcedimentoPicker
         procedimentoArmado={procedimentoArmado}
         onArmar={onArmar}
         procedimentosUsados={procedimentosUsados}
+        onClose={onClose}
       />
     </div>
   );
