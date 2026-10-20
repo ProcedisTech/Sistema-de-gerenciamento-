@@ -942,6 +942,10 @@ export const notasApi = {
   remove: (id) => request(`/api/v1/notas-paciente/${id}`, { method: 'DELETE' }),
 };
 
+export const permissoesApi = {
+  list: (opts = {}) => request('/api/v1/permissoes', opts),
+};
+
 // ── Equipe / usuários ──────────────────────────────────────
 
 export const equipeApi = {
@@ -1000,8 +1004,19 @@ export const orientacoesApi = {
     request(`/api/v1/procedimentos/${encodeURIComponent(String(procedimentoFeitoId))}/orientacoes`),
 };
 
-/** Preferências de perfil / clínica (templates). */
+/** Cadastro pessoal do usuário autenticado, assinatura e templates de orientação. */
 export const perfilApi = {
+  buscar: (opts = {}) => request('/api/v1/perfil', opts),
+  atualizar: (data) => request('/api/v1/perfil', { method: 'PUT', body: JSON.stringify(data) }),
+  uploadFoto: (file) => {
+    const body = new FormData();
+    body.append('file', file);
+    return requestForm('/api/v1/perfil/foto', { body });
+  },
+  buscarAssinatura: () => request('/api/v1/perfil/assinatura'),
+  salvarAssinatura: (assinaturaPadrao) => request('/api/v1/perfil/assinatura', {
+    method: 'PUT', body: JSON.stringify({ assinaturaPadrao }),
+  }),
   getOrientacoesTemplate: (procedimentoNome) => {
     const q = encodeURIComponent(String(procedimentoNome || '').trim());
     return request(`/api/v1/perfil/orientacoes-template?procedimentoNome=${q}`);
@@ -1766,19 +1781,23 @@ export const disponibilidadeApi = {
    * @param {string} roleUserId
    * @returns {Promise<Array<{id?: string, diaSemana: number, horaInicio: string, horaFim: string, ativo: boolean}>>}
    */
-  buscar: (roleUserId) =>
-    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`),
+  buscar: (roleUserId, opts = {}) =>
+    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`, opts),
 
   /**
-   * Replace-all de intervalos por profissional.
+   * Replace-all de intervalos por profissional (suporta lista ou envelope { seguirHorarioClinica, turnos }).
    * @param {string} roleUserId
-   * @param {Array<{id?: string, diaSemana: number, horaInicio: string, horaFim: string, ativo: boolean}>} payload
+   * @param {Array|object} payload
    */
-  atualizar: (roleUserId, payload) =>
-    request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`, {
+  atualizar: (roleUserId, payload) => {
+    const body = Array.isArray(payload)
+      ? { seguirHorarioClinica: false, turnos: payload }
+      : payload;
+    return request(`/api/v1/equipe/${encodeURIComponent(roleUserId)}/disponibilidade`, {
       method: 'PUT',
-      body: JSON.stringify(Array.isArray(payload) ? payload : []),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
 };
 
 // ── Auditoria ──────────────────────────────────────────────

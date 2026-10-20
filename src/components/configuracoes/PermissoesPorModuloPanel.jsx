@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CheckSquare, Square, Loader2, ChevronDown } from 'lucide-react';
+import { sortPermissionsByHierarchy } from './equipePrototypeUtils';
 
 // As permissões de visualização raiz e intrínsecas dos módulos são ocultadas como checkbox individual
 // e marcadas automaticamente ao expandir o módulo pelo botão "Ver" para evitar erros operacionais.
@@ -41,6 +42,10 @@ export function PermissoesPorModuloPanel({ permissoes, selecionadas, onChange, d
     acc[mod].push(perm);
     return acc;
   }, {});
+
+  Object.keys(permissoesPorModulo).forEach((mod) => {
+    permissoesPorModulo[mod] = sortPermissionsByHierarchy(permissoesPorModulo[mod]);
+  });
 
   if (loading) {
     return (

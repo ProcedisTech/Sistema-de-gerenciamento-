@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:clean": "npm run ports:clean && npm run dev",
-    "ports:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/clean-ports.ps1",
+    "ports:clean": "node ./scripts/clean-ports.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -1,28 +1,77 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Shield, UserX, Edit2, CalendarClock, Phone, Mail, Crown, Stethoscope, Settings2, PartyPopper, CalendarDays, MessageCircle, Activity, Award, Eye } from 'lucide-react';
-import { resolveApiUrl } from '../../config/apiEnv';
-import { authHeadersForFetch, configuracoesClinicaApi, getApiErrorDetail, getApiErrorToastMessage } from '../../services/api';
-import { useToast } from '../../contexts/useToast.js';
-import { useOrg } from '../../contexts/OrgContext';
-import { usePapel } from '../../hooks/usePapel';
-import DisponibilidadeProfissionalModal from './DisponibilidadeProfissionalModal';
-import { AuditoriaView } from './AuditoriaView';
-import { GestaoPerfisTab } from './GestaoPerfisTab';
-import { formatCargoLabel } from './gestaoUsuariosUtils';
-import { InviteModal } from './InviteModal';
-import { EditRoleModal } from './EditRoleModal';
-import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
-import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
-import { diaDoInstante, parseDataCalendario, proximoAniversario } from '../../utils/datasClinica.js';
-import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { resolveApiUrl } from "../../config/apiEnv";
+import {
+  authHeadersForFetch,
+  agendasApi,
+  configuracoesClinicaApi,
+  equipeApi,
+  perfilApi,
+  getApiErrorDetail,
+  getApiErrorToastMessage,
+} from "../../services/api";
+import { useToast } from "../../contexts/useToast.js";
+import { useOrg } from "../../contexts/OrgContext";
+import { usePapel } from "../../hooks/usePapel";
+import { AuditoriaView } from "./AuditoriaView";
+import { GestaoPerfisTab } from "./GestaoPerfisTab";
+import { formatCargoLabel } from "./gestaoUsuariosUtils";
+import { InviteModal } from "./InviteModal";
+import { ConfigTableSkeleton } from "../shared/ConfigPanelSkeletons";
+import { initialsFromName } from "../../utils/agendaAvatarUtils";
+import { perfilFotoDisplaySrc } from "../layout/identityDisplay";
+import PrototypeIcon from "./PrototypeIcon";
+import { Switch } from "../shared/Switch";
+import EquipePessoaView from "./EquipePessoaView";
+import {
+  profileType,
+  sortPrototypeProfiles,
+  effectiveProfilePermissions,
+  summarizeModules,
+} from "./equipePrototypeUtils";
+import "./equipePrototypeBase.css";
+import "./gestaoEquipe.css";
+import { useAgoraDaClinica } from "../hooks/useAgoraDaClinica.js";
 
-export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvalidate }) {
-  // eslint-disable-next-line no-unused-vars
-  const { isAdmin, canSeeConfigEquipe } = usePapel();
-  const { roleUserId: currentRoleUserId } = useOrg();
+export function GestaoUsuariosView({
+  onDisponibilidadeInvalidate,
+  onEquipeInvalidate,
+  onNavigateAgenda,
+  onSelectPatient,
+  targetUserId,
+  onClearTargetUserId,
+  onPerfilAtualizado,
+}) {
+  const {
+    canSeeConfigEquipe,
+    canCreateUsers,
+    canManageUsers,
+    canDeleteUsers,
+    canSeeConfigPerfil,
+    canEditConfigPerfil,
+    canSeeConfigAuditoria,
+    canSeeAgenda,
+    canSeeAgendaMulti,
+    canManageBloqueiosAgenda,
+  } = usePapel();
+  const {
+    roleUserId: currentRoleUserId,
+    recarregarContextoOrg,
+    orgId,
+    roleNome,
+    papel,
+    apareceNaAgenda,
+  } = useOrg();
+  const resolvedTarget =
+    targetUserId === "me" ? currentRoleUserId : targetUserId;
+  const selfTarget = Boolean(
+    currentRoleUserId &&
+    resolvedTarget &&
+    String(resolvedTarget) === String(currentRoleUserId),
+  );
+  const selfOnly = !canSeeConfigEquipe && selfTarget;
   const { fuso, hojeIso } = useAgoraDaClinica(60000);
   const toast = useToast();
-  
+
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -30,30 +79,72 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
   const [especialidadesList, setEspecialidadesList] = useState([]);
   const [permissoes, setPermissoes] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editModalReadOnly, setEditModalReadOnly] = useState(false);
-  const [showDispModal, setShowDispModal] = useState(false);
-  const [selectedUsuario, setSelectedUsuario] = useState(null);
-  const [activeTab, setActiveTab] = useState('membros'); // 'membros' | 'auditoria' | 'perfis'
-  const [tipoOrg, setTipoOrg] = useState('clinica');
+  const [inviteDraft, setInviteDraft] = useState(null);
+  const [activeTab, setActiveTab] = useState("membros"); // 'membros' | 'auditoria' | 'perfis'
+  const [tipoOrg, setTipoOrg] = useState("clinica");
   const [perfilParaAbrirNaAba, setPerfilParaAbrirNaAba] = useState(null);
 
   const onEditarPerfilNaAba = useCallback((perfilAcessoId) => {
+    setDetailId(null);
     setPerfilParaAbrirNaAba(perfilAcessoId);
-    setActiveTab('perfis');
+    setActiveTab("perfis");
   }, []);
-  
+
   // Filtros
-  const [searchName, setSearchName] = useState('');
-  const [filterRole, setFilterRole] = useState('');
-  const [filterLevel, setFilterLevel] = useState('');
-  const [showEntrance, setShowEntrance] = useState(true);
+  const [searchName, setSearchName] = useState("");
+  const [filterLevel, setFilterLevel] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [detailId, setDetailId] = useState(null);
+  const [sortOption, setSortOption] = useState("az"); // 'az' | 'za' | 'perfil' | 'atendimentos'
+  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [agendaAvailabilityFilter, setAgendaAvailabilityFilter] = useState("all"); // 'all' | 'yes' | 'no'
+  const [periodo, setPeriodo] = useState("mes");
+  const [criarNovoNonce, setCriarNovoNonce] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [agenda, setAgenda] = useState(null);
+  const [agendaError, setAgendaError] = useState("");
+  const [agendaReload, setAgendaReload] = useState(0);
+  const [permissionsByProfile, setPermissionsByProfile] = useState({});
+  const [previewError, setPreviewError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [savingOwnerAgenda, setSavingOwnerAgenda] = useState("");
+  const [ownerAgendaError, setOwnerAgendaError] = useState("");
+  const [isOwnerAgendaOpen, setIsOwnerAgendaOpen] = useState(false);
+
+  const filterPopoverRef = useRef(null);
+  const sortMenuRef = useRef(null);
 
   useEffect(() => {
-    if (!showEntrance) return undefined;
-    const id = window.setTimeout(() => setShowEntrance(false), 1800);
-    return () => window.clearTimeout(id);
-  }, [showEntrance]);
+    const handleClickOutside = (event) => {
+      if (
+        filterPopoverRef.current &&
+        !filterPopoverRef.current.contains(event.target)
+      ) {
+        setIsFilterPopoverOpen(false);
+      }
+      if (
+        sortMenuRef.current &&
+        !sortMenuRef.current.contains(event.target)
+      ) {
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsFilterPopoverOpen(false);
+        setIsSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   const fetchHeaders = useCallback(() => {
     return authHeadersForFetch({ needsOrg: true });
@@ -61,60 +152,94 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
-      const [equipeRes, rolesRes, perfisRes, especialidadesRes, permissoesRes] = await Promise.all([
-        fetch(resolveApiUrl('/api/v1/equipe'), {
-          headers: await fetchHeaders(),
-          credentials: 'include'
-        }),
-        fetch(resolveApiUrl('/api/v1/dimensoes/roles'), {
-          headers: await fetchHeaders(),
-          credentials: 'include'
-        }),
-        fetch(resolveApiUrl('/api/v1/perfis-acesso'), {
-          headers: await fetchHeaders(),
-          credentials: 'include'
-        }),
-        fetch(resolveApiUrl('/api/v1/dimensoes/especialidades'), {
-          headers: await fetchHeaders(),
-          credentials: 'include'
-        }),
-        fetch(resolveApiUrl('/api/v1/permissoes'), {
-          headers: await fetchHeaders(),
-          credentials: 'include'
-        })
-      ]);
+      const [equipeRes, rolesRes, perfisRes, especialidadesRes, permissoesRes] =
+        await Promise.all([
+          fetch(resolveApiUrl("/api/v1/equipe"), {
+            headers: await fetchHeaders(),
+            credentials: "include",
+          }),
+          fetch(resolveApiUrl("/api/v1/dimensoes/roles"), {
+            headers: await fetchHeaders(),
+            credentials: "include",
+          }),
+          fetch(resolveApiUrl("/api/v1/perfis-acesso"), {
+            headers: await fetchHeaders(),
+            credentials: "include",
+          }),
+          fetch(resolveApiUrl("/api/v1/dimensoes/especialidades"), {
+            headers: await fetchHeaders(),
+            credentials: "include",
+          }),
+          fetch(resolveApiUrl("/api/v1/permissoes"), {
+            headers: await fetchHeaders(),
+            credentials: "include",
+          }),
+        ]);
 
-      if (equipeRes.ok && rolesRes.ok && perfisRes.ok && especialidadesRes.ok && permissoesRes.ok) {
+      if (
+        equipeRes.ok &&
+        rolesRes.ok &&
+        perfisRes.ok &&
+        especialidadesRes.ok &&
+        permissoesRes.ok
+      ) {
         const equipeData = await equipeRes.json();
         const rolesData = await rolesRes.json();
         const perfisData = await perfisRes.json();
         const especialidadesData = await especialidadesRes.json();
         const permissoesData = await permissoesRes.json();
-        setUsuarios(Array.isArray(equipeData) ? equipeData : equipeData.content || []);
-        setRoles(Array.isArray(rolesData) ? rolesData : rolesData.content || []);
-        setPerfisAcesso(Array.isArray(perfisData) ? perfisData : perfisData.content || []);
-        setEspecialidadesList(Array.isArray(especialidadesData) ? especialidadesData : especialidadesData.content || []);
-        setPermissoes(Array.isArray(permissoesData) ? permissoesData : permissoesData.content || []);
+        setUsuarios(
+          Array.isArray(equipeData) ? equipeData : equipeData.content || [],
+        );
+        setRoles(
+          Array.isArray(rolesData) ? rolesData : rolesData.content || [],
+        );
+        setPerfisAcesso(
+          Array.isArray(perfisData) ? perfisData : perfisData.content || [],
+        );
+        setEspecialidadesList(
+          Array.isArray(especialidadesData)
+            ? especialidadesData
+            : especialidadesData.content || [],
+        );
+        setPermissoes(
+          Array.isArray(permissoesData)
+            ? permissoesData
+            : permissoesData.content || [],
+        );
       } else {
-        const badRes = !equipeRes.ok ? equipeRes : (!rolesRes.ok ? rolesRes : (!perfisRes.ok ? perfisRes : (!especialidadesRes.ok ? especialidadesRes : permissoesRes)));
+        const badRes = !equipeRes.ok
+          ? equipeRes
+          : !rolesRes.ok
+            ? rolesRes
+            : !perfisRes.ok
+              ? perfisRes
+              : !especialidadesRes.ok
+                ? especialidadesRes
+                : permissoesRes;
         const body = await badRes.json().catch(() => ({}));
-        toast.error(
-          getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao carregar dados da equipe.'
+        setLoadError(
+          getApiErrorDetail({ body }) ||
+            body?.message ||
+            "Erro ao carregar dados da equipe.",
         );
       }
     } catch (e) {
-      toast.error(getApiErrorToastMessage(e, 'Falha de rede ao carregar equipe.'));
+      setLoadError(
+        getApiErrorToastMessage(e, "Falha de rede ao carregar equipe."),
+      );
     } finally {
       setLoading(false);
     }
-  }, [fetchHeaders, toast]);
+  }, [fetchHeaders]);
 
   useEffect(() => {
     if (canSeeConfigEquipe) {
       loadData();
     }
-  }, [canSeeConfigEquipe, loadData]);
+  }, [canSeeConfigEquipe, loadData, orgId]);
 
   useEffect(() => {
     if (!canSeeConfigEquipe) return;
@@ -122,7 +247,7 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
     (async () => {
       try {
         const dto = await configuracoesClinicaApi.buscar();
-        if (alive) setTipoOrg(dto?.tipoOrg || 'clinica');
+        if (alive) setTipoOrg(dto?.tipoOrg || "clinica");
       } catch {
         /* mantém default 'clinica'; falha aqui não deve quebrar a tela de equipe */
       }
@@ -132,587 +257,485 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
     };
   }, [canSeeConfigEquipe]);
 
-  // Lógica de aniversários e tempo de casa
-  const [aniversariantesHoje, setAniversariantesHoje] = useState([]);
-  const [proximoAniversariante, setProximoAniversariante] = useState(null);
-  const [tempoCasaHoje, setTempoCasaHoje] = useState([]);
+  useEffect(() => {
+    if (!resolvedTarget || (!canSeeConfigEquipe && !selfTarget)) return;
+    setDetailId(String(resolvedTarget));
+    setActiveTab("membros");
+  }, [resolvedTarget, canSeeConfigEquipe, selfTarget]);
+
+  const loadSelf = useCallback(
+    async (signal) => {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const data = await perfilApi.buscar({ signal });
+        if (signal?.aborted) return;
+        setUsuarios([
+          {
+            ...data,
+            usuarioId: data.id,
+            id: currentRoleUserId,
+            roleName: roleNome || data.cargoNome,
+            perfilAcessoCodigo: papel,
+            perfilAcessoNome: papel,
+            apareceNaAgenda,
+          },
+        ]);
+      } catch (err) {
+        if (!signal?.aborted)
+          setLoadError(
+            getApiErrorToastMessage(
+              err,
+              "Não foi possível carregar seu cadastro.",
+            ),
+          );
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [currentRoleUserId, roleNome, papel, apareceNaAgenda],
+  );
+  useEffect(() => {
+    if (!selfOnly) return;
+    const controller = new AbortController();
+    loadSelf(controller.signal);
+    return () => controller.abort();
+  }, [selfOnly, loadSelf, orgId]);
+
+  const retryData = selfOnly ? loadSelf : loadData;
+  const detail = usuarios.find((u) => String(u.id) === String(detailId));
+  const selectedProfile = perfisAcesso.find(
+    (p) => String(p.id) === String(filterLevel),
+  );
+  useEffect(() => {
+    if (!canSeeAgenda || !hojeIso) return;
+    let alive = true;
+    const controller = new AbortController();
+    const [year, month] = hojeIso.split("-").map(Number);
+    const end = `${hojeIso.slice(0, 7)}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, "0")}`;
+    setAgenda(null);
+    setAgendaError("");
+    const offset = periodo === "3m" ? 2 : periodo === "ano" ? month - 1 : 0;
+    const beginning = new Date(Date.UTC(year, month - 1 - offset, 1));
+    const start = `${beginning.getUTCFullYear()}-${String(beginning.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    agendasApi
+      .byRange(start, end, {
+        signal: controller.signal,
+        excluirCancelado: true,
+      })
+      .then((data) => {
+        if (alive) setAgenda(Array.isArray(data) ? data : data?.content || []);
+      })
+      .catch((err) => {
+        if (alive)
+          setAgendaError(
+            getApiErrorToastMessage(err, "Não foi possível carregar a agenda."),
+          );
+      });
+    return () => {
+      alive = false;
+      controller.abort();
+    };
+  }, [canSeeAgenda, hojeIso, agendaReload, periodo]);
 
   useEffect(() => {
-    if (!usuarios || usuarios.length === 0 || !hojeIso) return;
-
-    const hoje = parseDataCalendario(hojeIso);
-
-    const hojeList = [];
-    const tempoList = [];
-    let prox = null;
-    let minDaysDiff = Infinity;
-
-    usuarios.forEach(u => {
-      // 1. Tempo de Casa (criadoEm é instante: o dia é o da clínica)
-      const inicio = u.criadoEm ? parseDataCalendario(diaDoInstante(u.criadoEm, fuso)) : null;
-      if (inicio && inicio.mes === hoje.mes && inicio.dia === hoje.dia && inicio.ano < hoje.ano) {
-        tempoList.push({ usuario: u, anos: hoje.ano - inicio.ano });
-      }
-
-      // 2. Aniversários
-      const aniv = u.dataNascimento ? proximoAniversario(u.dataNascimento, hojeIso) : null;
-      if (!aniv) return;
-      if (aniv.ehHoje) {
-        hojeList.push(u);
-      } else if (aniv.dias < minDaysDiff) {
-        minDaysDiff = aniv.dias;
-        prox = {
-          usuario: u,
-          dias: aniv.dias,
-          dataStr: `${String(aniv.dia).padStart(2, '0')}/${String(aniv.mes).padStart(2, '0')}`
-        };
-      }
-    });
-
-    setAniversariantesHoje(hojeList);
-    setProximoAniversariante(prox);
-    setTempoCasaHoje(tempoList);
-  }, [usuarios, hojeIso, fuso]);
-
-  // Mini Dashboard Stats
-  const stats = React.useMemo(() => {
-    const total = usuarios.length;
-    const ativos = usuarios.filter(u => u.ativo !== false).length;
-    const medicos = usuarios.filter(u => {
-      const role = String(u.roleName || u.role?.nome || '').toUpperCase();
-      const isNotAdminOrRecep = role && !['ADMINISTRADOR', 'ADMIN', 'RECEPCIONISTA', 'RECEPCAO', 'ATENDENTE'].includes(role);
-      const isProfLevel = String(u.perfilAcessoCodigo || '').toUpperCase().match(/NIVEL_(3|4)/);
-      return isNotAdminOrRecep || isProfLevel;
-    }).length;
-    return { total, ativos, medicos };
-  }, [usuarios]);
-
-  const filteredUsers = React.useMemo(() => {
-    return usuarios.filter(u => {
-      const matchName = searchName === '' || (u.nomeCompleto || u.usuarioNome || '').toLowerCase().includes(searchName.toLowerCase());
-      const matchRole = filterRole === '' || String(u.roleId || u.role?.id) === String(filterRole);
-      const matchLevel = filterLevel === '' || String(u.perfilAcessoId) === String(filterLevel);
-      return matchName && matchRole && matchLevel;
-    });
-  }, [usuarios, searchName, filterRole, filterLevel]);
-
-  const handleDeactivate = async (id) => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm('Tem certeza que deseja desativar este acesso?')) return;
-    
-    try {
-      const res = await fetch(resolveApiUrl(`/api/v1/equipe/${id}`), {
-        method: 'DELETE',
-        headers: await fetchHeaders(),
-        credentials: 'include'
+    let alive = true;
+    setPreviewLoading(true);
+    setPreviewError("");
+    Promise.all(
+      perfisAcesso.map(async (profile) => {
+        const response = await fetch(
+          resolveApiUrl(`/api/v1/perfis-acesso/${profile.id}/permissoes`),
+          { headers: await fetchHeaders(), credentials: "include" },
+        );
+        if (!response.ok)
+          throw new Error("Não foi possível carregar as funções dos perfis.");
+        const ids = await response.json();
+        if (!Array.isArray(ids))
+          throw new Error("Não foi possível carregar as funções dos perfis.");
+        return [
+          profile.id,
+          effectiveProfilePermissions(
+            profile,
+            Array.isArray(ids) ? ids : [],
+            permissoes,
+          ),
+        ];
+      }),
+    )
+      .then((entries) => {
+        if (alive) setPermissionsByProfile(Object.fromEntries(entries));
+      })
+      .catch((error) => {
+        if (alive) setPreviewError(error.message);
+      })
+      .finally(() => {
+        if (alive) setPreviewLoading(false);
       });
-      if (res.ok) {
-        toast.success('Acesso desativado com sucesso.');
-        loadData();
-      } else {
+    return () => {
+      alive = false;
+    };
+  }, [perfisAcesso, permissoes, fetchHeaders]);
+
+  const nameOf = (u) => u.nomeCompleto || u.usuarioNome || "Pessoa sem nome";
+  const appointmentsFor = (u) =>
+    agenda?.filter(
+      (a) => (a.profissionalRoleUserId || a.roleUserId) === u.id,
+    ) || [];
+  const stats = {
+    ativos: usuarios.filter((u) => u.ativo !== false).length,
+    atendem: usuarios.filter(
+      (u) => u.ativo !== false && u.apareceNaAgenda === true,
+    ).length,
+    hoje: agenda?.filter((a) => a.dataAgendamento === hojeIso).length,
+    mes: agenda?.filter(
+      (a) =>
+        String(a.statusCodigo).toUpperCase() === "REALIZADO" &&
+        a.dataAgendamento?.startsWith(hojeIso.slice(0, 7)),
+    ).length,
+  };
+  const filteredUsers = usuarios
+    .filter((u) => {
+      const text = [
+        nameOf(u),
+        u.email,
+        u.telefone,
+        formatCargoLabel(u.roleName),
+      ]
+        .join(" ")
+        .toLocaleLowerCase("pt-BR");
+      return (
+        text.includes(searchName.toLocaleLowerCase("pt-BR")) &&
+        (!filterLevel || String(u.perfilAcessoId) === String(filterLevel)) &&
+        (statusFilter !== "ativos" || u.ativo !== false) &&
+        (statusFilter !== "inativos" || u.ativo === false) &&
+        (!["agenda", "hoje", "mes"].includes(statusFilter) ||
+          (u.ativo !== false && u.apareceNaAgenda === true)) &&
+        (agendaAvailabilityFilter === "all" ||
+          (agendaAvailabilityFilter === "yes" &&
+            u.ativo !== false &&
+            u.apareceNaAgenda === true) ||
+          (agendaAvailabilityFilter === "no" &&
+            u.apareceNaAgenda !== true))
+      );
+    })
+    .sort((a, b) => {
+      if (sortOption === "za") {
+        return nameOf(b).localeCompare(nameOf(a), "pt-BR");
+      }
+      if (sortOption === "perfil") {
+        const perfilA =
+          perfisAcesso.find((p) => p.id === a.perfilAcessoId)?.nome || "";
+        const perfilB =
+          perfisAcesso.find((p) => p.id === b.perfilAcessoId)?.nome || "";
+        const diff = perfilA.localeCompare(perfilB, "pt-BR");
+        if (diff !== 0) return diff;
+        return nameOf(a).localeCompare(nameOf(b), "pt-BR");
+      }
+      if (sortOption === "atendimentos") {
+        const countA = appointmentsFor(a).length;
+        const countB = appointmentsFor(b).length;
+        if (countB !== countA) return countB - countA;
+        return nameOf(a).localeCompare(nameOf(b), "pt-BR");
+      }
+      return nameOf(a).localeCompare(nameOf(b), "pt-BR");
+    });
+
+  const activeFiltersCount =
+    (statusFilter ? 1 : 0) +
+    (filterLevel ? 1 : 0) +
+    (agendaAvailabilityFilter !== "all" ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setSearchName("");
+    setFilterLevel("");
+    setStatusFilter("");
+    setAgendaAvailabilityFilter("all");
+  };
+
+  const openDetail = (u) => {
+    setDetailId(u.id);
+    setPeriodo("mes");
+  };
+  const newProfile = () => {
+    setActiveTab("perfis");
+    setCriarNovoNonce((n) => n + 1);
+  };
+  const handleDeactivate = async (u) => {
+    if (
+      !canDeleteUsers ||
+      u.id === currentRoleUserId ||
+      u.perfilAcessoCodigo === "DONO"
+    )
+      return;
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Desativar o acesso de ${nameOf(u)}?`)) return;
+    try {
+      const res = await fetch(resolveApiUrl(`/api/v1/equipe/${u.id}`), {
+        method: "DELETE",
+        headers: await fetchHeaders(),
+        credentials: "include",
+      });
+      if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        toast.error(
-          getApiErrorDetail({ body }) || (body?.message && String(body.message).trim()) || 'Erro ao desativar acesso.'
+        throw new Error(
+          getApiErrorDetail({ body }) || "Erro ao desativar acesso.",
         );
       }
+      toast.success("Acesso desativado com sucesso.");
+      await loadData();
+      onEquipeInvalidate?.();
+    } catch (err) {
+      toast.error(getApiErrorToastMessage(err, "Erro ao desativar acesso."));
+    }
+  };
+  const avatar = (u) => (
+    <span
+      className="av"
+      style={{
+        background:
+          u.perfilAcessoCodigo === "DONO" ? "#f59e0b" : "var(--app-accent)",
+      }}
+    >
+      {u.fotoUrl ? (
+        <img src={perfilFotoDisplaySrc(u.fotoUrl)} alt="" className="h-full w-full rounded-full object-cover" />
+      ) : (
+        initialsFromName(nameOf(u))
+      )}
+      {u.perfilAcessoCodigo === "DONO" && (
+        <span className="crown">
+          <PrototypeIcon name="crown" />
+        </span>
+      )}
+    </span>
+  );
+  const badge = (profile) => (
+    <span className={`chip ${profileType(profile)}`}>
+      <PrototypeIcon
+        name={profile?.codigo === "DONO" ? "crown" : "shield"}
+        size="s"
+      />
+      <span className="trunc">{profile?.nome || "Sem perfil"}</span>
+    </span>
+  );
+  const profileIds = (profile) => permissionsByProfile[profile?.id];
+  const agendaModule =
+    selectedProfile?.codigo === "DONO"
+      ? summarizeModules(permissoes, profileIds(selectedProfile)).find(
+          (module) => module.key === "agenda",
+        )
+      : null;
+  const attends = (profile) =>
+    profileIds(profile)?.some(
+      (id) =>
+        permissoes.find((p) => p.permissaoId === id)?.codigo ===
+        "AGENDA_APARECER",
+    );
+  const count = (profile) =>
+    usuarios.filter((u) => u.ativo !== false && u.perfilAcessoId === profile.id)
+      .length;
+  const sortedProfiles = sortPrototypeProfiles(perfisAcesso);
+  const railItem = (profile) => (
+    <button
+      className={`rit ${String(profile.id) === filterLevel ? "on" : ""}`}
+      onClick={() => setFilterLevel(String(profile.id))}
+      key={profile.id}
+    >
+      <span className={`dot ${profileType(profile)}`}>
+        <PrototypeIcon
+          name={profile.codigo === "DONO" ? "crown" : "shield"}
+          size="s"
+        />
+      </span>
+      <span className="nm">
+        <b className="trunc">{profile.nome}</b>
+        <span>
+          {profileIds(profile)
+            ? `${profileIds(profile).length} de ${permissoes.length} · ${attends(profile) ? "atende" : "não atende"}`
+            : previewLoading
+              ? "Carregando funções…"
+              : "Funções indisponíveis"}
+        </span>
+      </span>
+      <span className="ct">{count(profile)}</span>
+    </button>
+  );
+  const backToTeam = () => {
+    setDetailId(null);
+    setActiveTab("membros");
+    onClearTargetUserId?.();
+  };
+  const saveAccess = async (person, changes) => {
+    if (!canManageUsers || person.perfilAcessoCodigo === "DONO") return;
+    await equipeApi.update(person.id, {
+      ...person,
+      apareceNaAgenda: undefined,
+      agendaMultiVer: undefined,
+      nomeCompleto: nameOf(person),
+      ...changes,
+    });
+    toast.success("Acesso atualizado.");
+    await loadData();
+    onEquipeInvalidate?.();
+    onDisponibilidadeInvalidate?.({ scope: "role", roleUserId: person.id });
+  };
+
+  const ownerPerson = usuarios.find(
+    (person) =>
+      person.id === currentRoleUserId && person.perfilAcessoCodigo === "DONO",
+  );
+  const changeOwnerAgenda = async (code, enabled) => {
+    const permission = permissoes.find((p) => p.codigo === code);
+    if (
+      !ownerPerson ||
+      !canManageUsers ||
+      savingOwnerAgenda ||
+      previewLoading ||
+      previewError ||
+      !permission
+    )
+      return;
+    setSavingOwnerAgenda(code);
+    setOwnerAgendaError("");
+    try {
+      const field =
+        code === "AGENDA_APARECER" ? "apareceNaAgenda" : "agendaMultiVer";
+      await equipeApi.update(ownerPerson.id, {
+        usuarioId: ownerPerson.usuarioId,
+        roleId: ownerPerson.roleId,
+        [field]: enabled,
+      });
+      setPermissionsByProfile((previous) => {
+        const ids = previous[ownerPerson.perfilAcessoId] || [];
+        return {
+          ...previous,
+          [ownerPerson.perfilAcessoId]: enabled
+            ? [...new Set([...ids, permission.permissaoId])]
+            : ids.filter((id) => id !== permission.permissaoId),
+        };
+      });
+      if (field === "apareceNaAgenda")
+        setUsuarios((people) =>
+          people.map((person) =>
+            person.id === ownerPerson.id
+              ? { ...person, apareceNaAgenda: enabled }
+              : person,
+          ),
+        );
+      recarregarContextoOrg();
+      setAgendaReload((value) => value + 1);
+      onEquipeInvalidate?.();
+      onDisponibilidadeInvalidate?.({
+        scope: "role",
+        roleUserId: ownerPerson.id,
+      });
+      toast.success("Opção da agenda atualizada.");
     } catch (error) {
-      console.error('Erro ao buscar papéis:', error);
-      toast.error(getApiErrorToastMessage(error, 'Erro ao desativar acesso.'));
+      const message = getApiErrorToastMessage(
+        error,
+        "Não foi possível salvar a opção da agenda.",
+      );
+      setOwnerAgendaError(message);
+      toast.error(message);
+    } finally {
+      setSavingOwnerAgenda("");
     }
   };
 
-  if (!canSeeConfigEquipe) {
+  if (!canSeeConfigEquipe && !selfOnly)
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Shield className="h-12 w-12 text-slate-300" />
-        <p className="mt-4 text-slate-600 font-medium">Acesso restrito a administradores.</p>
+      <div className="empty">
+        Você não tem permissão para visualizar a equipe.
       </div>
     );
-  }
-
+  const monthName = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(`${hojeIso || "2026-01-01"}T12:00:00Z`));
   return (
-    <div className="space-y-6">
-      {/* Barra de Ações & Abas Internas */}
-      <div className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${agendaEnterClass(showEntrance, 'agenda-delay-100')}`}>
-        <h2 className="sr-only">Gestão de Equipe</h2>
-
-        {/* Abas Internas (Segmented Control) */}
-        <div className="flex p-1 bg-slate-100/80 backdrop-blur-sm rounded-xl border border-slate-200/50 w-full sm:inline-flex sm:w-auto relative z-10">
-        <button
-          onClick={() => setActiveTab('membros')}
-          className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${
-            activeTab === 'membros' 
-              ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-          }`}
-        >
-          <Users className="h-5 w-5 sm:h-4 sm:w-4" />
-          <span className="text-center leading-tight">Membros <span className="hidden sm:inline">da Equipe</span></span>
-        </button>
-        <button
-          onClick={() => setActiveTab('perfis')}
-          className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${
-            activeTab === 'perfis'
-              ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-          }`}
-        >
-          <Settings2 className="h-5 w-5 sm:h-4 sm:w-4" />
-          <span className="text-center leading-tight">Perfis <span className="hidden sm:inline">de Acesso</span></span>
-        </button>
-        <button
-          onClick={() => setActiveTab('auditoria')}
-          className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-2.5 text-[12px] sm:text-sm font-semibold rounded-lg transition-all duration-200 ${
-            activeTab === 'auditoria'
-              ? 'bg-white text-[#00a88e] shadow-sm ring-1 ring-slate-900/5'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-          }`}
-        >
-          <Shield className="h-5 w-5 sm:h-4 sm:w-4" />
-          <span className="text-center leading-tight">Histórico <span className="hidden sm:inline">de Ações</span></span>
-        </button>
-      </div>
-
-      {/* Botão de ação primária da aba Membros */}
-      {activeTab === 'membros' && (
-        <button
-          type="button"
-          onClick={() => setShowInviteModal(true)}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#00a88e] to-teal-500 text-white text-sm font-semibold rounded-xl shadow-sm shadow-teal-500/20 hover:shadow-md hover:shadow-teal-500/30 hover:-translate-y-0.5 active:scale-95 transition-all touch-manipulation cursor-pointer shrink-0"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>Convidar Membro</span>
-        </button>
-      )}
-      </div>
-
-      {activeTab === 'membros' ? (
-        <>
-          <div className={agendaEnterClass(showEntrance, 'agenda-delay-200')}>
-          {/* Mini Dashboard */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="bg-teal-50 text-teal-600 p-3 rounded-xl shrink-0">
-                <Users className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 font-medium">Total da Equipe</p>
-                <h4 className="text-2xl font-bold text-slate-900">
-                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-200" /> : stats.total}
-                </h4>
-              </div>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="bg-green-50 text-green-600 p-3 rounded-xl shrink-0">
-                <Activity className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 font-medium">Membros Ativos</p>
-                <h4 className="text-2xl font-bold text-slate-900">
-                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-200" /> : stats.ativos}
-                </h4>
-              </div>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="bg-indigo-50 text-indigo-600 p-3 rounded-xl shrink-0">
-                <Stethoscope className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 font-medium">Profissionais/Médicos</p>
-                <h4 className="text-2xl font-bold text-slate-900">
-                  {loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-slate-200" /> : stats.medicos}
-                </h4>
-              </div>
-            </div>
-          </div>
-
-          {/* Alertas de Aniversário e Tempo de Casa */}
-          {!loading && tempoCasaHoje.length > 0 && (
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-4 shadow-md text-white mb-4 flex items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4">
-              <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
-                <Award className="h-6 w-6 sm:h-8 sm:w-8" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-lg font-bold tracking-tight mb-0.5 flex flex-wrap gap-1">
-                  Dia de comemorar! 🏆
-                </h4>
-                <p className="text-orange-100 text-sm leading-relaxed">
-                  {tempoCasaHoje.map(tc => {
-                    const isMe = String(tc.usuario.id) === String(currentRoleUserId);
-                    return isMe ? (
-                      <span key={tc.usuario.id} className="block mt-1">
-                        Hoje você completa <span className="font-bold">{tc.anos} ano(s)</span> com a gente! Parabéns pela trajetória! 🌟
-                      </span>
-                    ) : (
-                      <span key={tc.usuario.id} className="block mt-1">
-                        Parabéns para <span className="font-bold">{tc.usuario.nomeCompleto || tc.usuario.usuarioNome}</span> que completa <span className="font-bold">{tc.anos} ano(s)</span> de casa hoje!
-                      </span>
-                    );
-                  })}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!loading && aniversariantesHoje.length > 0 && (
-            <div className="bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl p-4 shadow-md text-white mb-4 flex items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4">
-              <div className="bg-white/20 p-2 sm:p-3 rounded-xl shrink-0">
-                <PartyPopper className="h-6 w-6 sm:h-8 sm:w-8" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-lg font-bold tracking-tight mb-0.5 flex flex-wrap gap-1">
-                  Hoje é dia de festa! 🎉
-                </h4>
-                <p className="text-pink-100 text-sm leading-relaxed">
-                  {aniversariantesHoje.map(u => {
-                    const isMe = String(u.id) === String(currentRoleUserId);
-                    return isMe ? (
-                      <span key={u.id} className="block mt-1">
-                        Feliz aniversário, <span className="font-bold">{u.nomeCompleto || u.usuarioNome}</span>! Desejamos um dia incrível e muito sucesso! 🎂🎁
-                      </span>
-                    ) : (
-                      <span key={u.id} className="block mt-1">
-                        Parabéns para <span className="font-bold">{u.nomeCompleto || u.usuarioNome}</span>! Não esqueça de parabenizar.
-                      </span>
-                    );
-                  })}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!loading && aniversariantesHoje.length === 0 && proximoAniversariante && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 flex items-center gap-3">
-              <div className="bg-blue-50 text-blue-500 p-2 rounded-lg shrink-0">
-                <CalendarDays className="h-5 w-5" />
-              </div>
-              <p className="text-sm text-slate-600">
-                Próximo aniversário da equipe: <span className="font-semibold text-slate-900">{proximoAniversariante.usuario.nomeCompleto || proximoAniversariante.usuario.usuarioNome}</span> em <span className="font-semibold text-blue-600">{proximoAniversariante.dataStr}</span> ({proximoAniversariante.dias} dias).
-              </p>
-            </div>
-          )}
-
-          </div>
-
-          <div className={`space-y-6 ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}>
-          {/* Filters */}
-          <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="Buscar por nome..."
-                  value={searchName}
-                  onChange={e => setSearchName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10"
-                />
-              </div>
-              <div className="sm:w-48">
-                <select
-                  value={filterRole}
-                  onChange={e => setFilterRole(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
-                >
-                  <option value="">Todos os cargos</option>
-                  {roles.filter(r => !['ADMIN', 'ADMINISTRADOR'].includes((r.nome || '').toUpperCase())).map(r => (
-                    <option key={r.id} value={r.id}>{formatCargoLabel(r.nome)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="sm:w-48">
-                <select
-                  value={filterLevel}
-                  onChange={e => setFilterLevel(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-[14px] text-slate-900 outline-none transition-all focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 appearance-none"
-                >
-                  <option value="">Todos os níveis</option>
-                  {perfisAcesso.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '')).map(p => (
-                    <option key={p.id} value={p.id}>{p.nome}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Contador de resultados e botão para limpar filtros */}
-            {(searchName || filterRole || filterLevel) && (
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-500">
-                <span>
-                  Mostrando <strong className="font-semibold text-slate-800">{filteredUsers.length}</strong> de <strong className="font-semibold text-slate-800">{usuarios.length}</strong> membros
-                </span>
-                <button
-                  type="button"
-                  onClick={() => { setSearchName(''); setFilterRole(''); setFilterLevel(''); }}
-                  className="font-semibold text-[#00a88e] hover:text-teal-700 transition-colors cursor-pointer"
-                >
-                  Limpar filtros
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Unified Rich Card Grid */}
-          {loading ? (
-            <ConfigTableSkeleton rows={6} mobileCards />
-          ) : (() => {
-            if (filteredUsers.length === 0) {
-              return (
-                <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-20 px-6 text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
-                    <Users className="h-8 w-8 text-slate-400" />
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-bold text-slate-900">Nenhum membro encontrado</h4>
-                    <p className="text-sm font-medium text-slate-500 mt-1 max-w-sm mx-auto">Não há membros correspondentes aos filtros aplicados.</p>
-                  </div>
-                  {(searchName || filterRole || filterLevel) && (
-                    <button
-                      type="button"
-                      onClick={() => { setSearchName(''); setFilterRole(''); setFilterLevel(''); }}
-                      className="mt-1 inline-flex items-center justify-center px-4 py-2 text-xs font-bold text-[#00a88e] bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors cursor-pointer"
-                    >
-                      Limpar filtros de busca
-                    </button>
-                  )}
-                </div>
-              );
-            }
-
-            return (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredUsers.map((u) => {
-
-                const isDono = (u.perfilAcessoCodigo || '').toUpperCase() === 'DONO';
-                const isProfissional = (u.roleName || '').toUpperCase().includes('PROFISSIONAL');
-                const isMe = String(u.id) === String(currentRoleUserId);
-                const cannotDeactivate = isDono || isMe;
-                const deactivateTitle = isDono
-                  ? 'O proprietário da clínica não pode ser desativado.'
-                  : isMe
-                  ? 'Você não pode desativar o próprio acesso.'
-                  : 'Desativar acesso';
-                const perfilData = perfisAcesso.find(p => String(p.id) === String(u.perfilAcessoId)) || {};
-                const nivelNome = u.perfilAcessoNome || perfilData.nome || (isDono ? 'Dono' : 'Nível não definido');
-                // Generate avatar initials from full name
-                const initials = (u.nomeCompleto || u.usuarioNome || '?')
-                  .split(' ')
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map(w => w[0].toUpperCase())
-                  .join('');
-                // Avatar background color based on role
-                const avatarBg = isDono
-                  ? 'from-amber-400 to-orange-500'
-                  : isProfissional
-                  ? 'from-[#00a88e] to-teal-500'
-                  : 'from-slate-400 to-slate-500';
-
-                return (
-                  <div
-                    key={u.id}
-                    className={`group relative flex flex-col rounded-2xl border bg-white shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 ${
-                      u.ativo ? 'border-slate-100' : 'border-slate-100 opacity-60 grayscale-[0.2]'
-                    }`}
-                  >
-                    {/* Status strip at top */}
-                    <div className={`h-1.5 w-full rounded-t-2xl ${
-                      u.ativo ? (isDono ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-[#00a88e] to-teal-400') : 'bg-slate-300'
-                    }`} />
-
-                    <div className="flex flex-col gap-5 p-5">
-                      {/* Header row: avatar + name + status */}
-                      <div className="flex items-start gap-3.5">
-                        {/* Avatar */}
-                        <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-white text-base font-bold shadow-md bg-gradient-to-br ring-2 ring-white ${avatarBg}`}>
-                          {isDono ? <Crown className="h-6 w-6" /> : initials}
-                        </div>
-
-                        {/* Name + badges */}
-                        <div className="min-w-0 flex-1 pt-0.5">
-                          <h4 className="font-bold text-base text-slate-900 leading-snug truncate">
-                            {u.nomeCompleto || u.usuarioNome}
-                            {String(u.id) === String(currentRoleUserId) && <span className="text-xs text-slate-400 ml-2 font-normal">(Você)</span>}
-                          </h4>
-                          {/* Role badges */}
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {/* Nível Badge */}
-                            <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                              isDono 
-                                ? 'bg-amber-50 border-amber-200/60 text-amber-700' 
-                                : 'bg-indigo-50 border-indigo-200/60 text-indigo-700'
-                            }`}>
-                              {isDono && <Crown className="h-3 w-3 mr-1" />}
-                              {nivelNome}
-                            </span>
-                            
-                            {u.roleName && (
-                              <span className="inline-flex items-center rounded-md bg-teal-50 border border-teal-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-700">
-                                {u.roleName === 'PROFISSIONAL' ? 'Profissional' : u.roleName}
-                              </span>
-                            )}
-                            {!isDono && !u.roleName && (
-                              <span className="inline-flex items-center rounded-md bg-slate-50 border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                Sem cargo
-                              </span>
-                            )}
-                            {!u.ativo && (
-                              <span className="inline-flex items-center rounded-md bg-slate-100 text-slate-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                                Inativo
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Contact info */}
-                      <div className="space-y-2.5 bg-slate-50/50 rounded-xl p-3 border border-slate-100/50">
-                        {u.email && (
-                          <div className="flex items-center gap-2.5 text-[13px] text-slate-600 min-w-0">
-                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-slate-900/5">
-                              <Mail className="h-3.5 w-3.5 text-slate-400" />
-                            </div>
-                            <span className="truncate font-medium">{u.email}</span>
-                          </div>
-                        )}
-                        {(u.telefone || u.usuarioTelefone) && (() => {
-                          const fone = u.telefone || u.usuarioTelefone;
-                          const onlyNumbers = String(fone).replace(/\D/g, '');
-                          const isMobile = onlyNumbers.length >= 10;
-                          return (
-                            <div className="flex items-center justify-between text-[13px] text-slate-600">
-                              <div className="flex items-center gap-2.5">
-                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-slate-900/5">
-                                  <Phone className="h-3.5 w-3.5 text-slate-400" />
-                                </div>
-                                <span className="font-medium">{fone}</span>
-                              </div>
-                              {isMobile && (
-                                <a 
-                                  href={`https://wa.me/${onlyNumbers.length <= 11 && !onlyNumbers.startsWith('55') ? '55' + onlyNumbers : onlyNumbers}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-colors font-semibold text-xs"
-                                  title="Abrir no WhatsApp"
-                                >
-                                  <MessageCircle className="h-3.5 w-3.5" />
-                                  <span className="hidden sm:inline">WhatsApp</span>
-                                </a>
-                              )}
-                            </div>
-                          );
-                        })()}
-                        {!u.email && !(u.telefone || u.usuarioTelefone) && (
-                          <p className="text-[12px] text-slate-400 italic py-1 text-center">Sem contato cadastrado</p>
-                        )}
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 pt-2">
-                        {tipoOrg === 'clinica' && isProfissional && (
-                          <button
-                            onClick={() => { setSelectedUsuario(u); setShowDispModal(true); }}
-                            title="Configurar disponibilidade"
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-teal-50 px-2 py-2.5 text-xs font-bold text-[#00a88e] transition hover:bg-teal-100 active:scale-95 touch-manipulation"
-                          >
-                            <CalendarClock className="h-4 w-4 shrink-0" />
-                            <span className="truncate">Agenda</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { setSelectedUsuario(u); setEditModalReadOnly(true); setShowEditModal(true); }}
-                          title="Ver dados do membro"
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white border border-slate-200 px-2 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-95 touch-manipulation"
-                        >
-                          <Eye className="h-4 w-4 text-slate-400 shrink-0" />
-                          <span className="truncate">Ver</span>
-                        </button>
-                        <button
-                          onClick={() => { setSelectedUsuario(u); setEditModalReadOnly(false); setShowEditModal(true); }}
-                          title="Editar membro"
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white border border-slate-200 px-2 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-95 touch-manipulation"
-                        >
-                          <Edit2 className="h-4 w-4 text-slate-400 shrink-0" />
-                          <span className="truncate">Editar</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={cannotDeactivate}
-                          onClick={() => !cannotDeactivate && handleDeactivate(u.id)}
-                          title={deactivateTitle}
-                          className={`flex flex-none items-center justify-center rounded-xl border p-2.5 shadow-sm transition touch-manipulation ${
-                            cannotDeactivate
-                              ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed'
-                              : 'bg-white border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 active:scale-95 cursor-pointer'
-                          }`}
-                        >
-                          <UserX className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-          </div>
-
-          {showInviteModal && (
-            <InviteModal
-              roles={roles}
-              perfisAcesso={perfisAcesso}
-              permissoes={permissoes}
-              especialidadesList={especialidadesList}
-              onClose={() => setShowInviteModal(false)}
-              onSuccess={() => { setShowInviteModal(false); loadData(); }}
-              fetchHeaders={fetchHeaders}
-              onEditarPerfilNaAba={onEditarPerfilNaAba}
-            />
-          )}
-
-          {showEditModal && selectedUsuario && (
-            <EditRoleModal
-              usuario={selectedUsuario}
-              roles={roles}
-              perfisAcesso={perfisAcesso}
-              permissoes={permissoes}
-              especialidadesList={especialidadesList}
-              onClose={() => setShowEditModal(false)}
-              onSuccess={({ ownerAgendaUpdated, roleUserId } = {}) => {
-                setShowEditModal(false);
-                loadData();
-                if (ownerAgendaUpdated) {
-                  onEquipeInvalidate?.();
-                  onDisponibilidadeInvalidate?.({ scope: 'role', roleUserId });
-                }
-              }}
-              fetchHeaders={fetchHeaders}
-              readOnly={editModalReadOnly}
-              onEditarPerfilNaAba={onEditarPerfilNaAba}
-            />
-          )}
-
-          {showDispModal && selectedUsuario && (
-            <DisponibilidadeProfissionalModal
-              roleUserId={selectedUsuario.id}
-              nome={selectedUsuario.nomeCompleto || selectedUsuario.usuarioNome}
-              tipoOrg={null}
-              onClose={() => { setShowDispModal(false); setSelectedUsuario(null); }}
-              onSaved={() => {
-                onDisponibilidadeInvalidate?.({
-                  scope: 'role',
-                  roleUserId: selectedUsuario.id,
-                });
-              }}
-            />
-          )}
-        </>
-      ) : activeTab === 'auditoria' ? (
-        <div className={agendaEnterClass(showEntrance, 'agenda-delay-250')}>
-          <AuditoriaView />
+    <div className="prototype-equipe">
+      {loadError ? (
+        <div role="alert" className="team-error">
+          {loadError}
+          <button className="btn-s" onClick={() => retryData()}>
+            Tentar novamente
+          </button>
         </div>
-      ) : (
-        <div className={agendaEnterClass(showEntrance, 'agenda-delay-250')}>
+      ) : loading ? (
+        <ConfigTableSkeleton rows={5} cols={4} />
+      ) : detail ? (
+        <EquipePessoaView
+          key={detail.id}
+          pessoa={detail}
+          isSelf={Boolean(
+            currentRoleUserId &&
+            String(detail.id) === String(currentRoleUserId),
+          )}
+          onPerfilAtualizado={(data) => {
+            if (String(detail.id) !== String(currentRoleUserId)) return;
+            const fields = { ...data };
+            delete fields.id;
+            setUsuarios((previous) =>
+              previous.map((user) =>
+                String(user.id) === String(detail.id)
+                  ? { ...user, ...fields }
+                  : user,
+              ),
+            );
+            if (fields.apareceNaAgenda !== undefined || fields.agendaMultiVer !== undefined) {
+              setPermissionsByProfile((previous) => {
+                let ids = previous[detail.perfilAcessoId] || [];
+                for (const [field, code] of [['apareceNaAgenda', 'AGENDA_APARECER'], ['agendaMultiVer', 'AGENDA_MULTI_VER']]) {
+                  if (fields[field] === undefined) continue;
+                  const id = permissoes.find((p) => p.codigo === code)?.permissaoId;
+                  if (id) ids = fields[field] ? [...new Set([...ids, id])] : ids.filter((value) => value !== id);
+                }
+                return { ...previous, [detail.perfilAcessoId]: ids };
+              });
+            }
+            onPerfilAtualizado?.(fields);
+          }}
+          perfil={
+            perfisAcesso.find((p) => p.id === detail.perfilAcessoId) ||
+            (selfOnly ? { codigo: papel, nome: papel } : undefined)
+          }
+          pessoas={usuarios}
+          permissoes={permissoes}
+          permissoesPerfil={permissionsByProfile[detail.perfilAcessoId] || []}
+          loadingPermissoes={previewLoading}
+          permissoesError={previewError}
+          onRetryPermissoes={selfOnly ? undefined : loadData}
+          agenda={agenda || []}
+          loadingAgenda={agenda === null}
+          agendaError={agendaError}
+          fuso={fuso}
+          hojeIso={hojeIso}
+          canManageUsers={!selfOnly && canManageUsers}
+          canDeleteUsers={
+            !selfOnly &&
+            canDeleteUsers &&
+            String(detail.id) !== String(currentRoleUserId)
+          }
+          canSeeAgenda={canSeeAgenda}
+          canSeeConfigPerfil={canSeeConfigPerfil}
+          canSeeConfigAuditoria={canSeeConfigAuditoria}
+          onBack={backToTeam}
+          onEditarPerfil={onEditarPerfilNaAba}
+          onDesativar={() => handleDeactivate(detail)}
+          orgId={orgId}
+          canManageDisponibilidade={canManageBloqueiosAgenda}
+          onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
+          onEquipeInvalidate={() => { recarregarContextoOrg(); onEquipeInvalidate?.(); }}
+          onSelectPatient={onSelectPatient}
+          onNavigateAgenda={onNavigateAgenda}
+          onSalvarAcesso={saveAccess}
+          roles={roles}
+          perfisAcesso={perfisAcesso}
+          onPeriodoChange={setPeriodo}
+        />
+      ) : selfOnly ? (
+        <p role="status">Carregando seu usuário…</p>
+      ) : activeTab === "perfis" ? (
         <GestaoPerfisTab
           perfisAcesso={perfisAcesso}
           permissoes={permissoes}
@@ -723,9 +746,972 @@ export function GestaoUsuariosView({ onDisponibilidadeInvalidate, onEquipeInvali
           tipoOrg={tipoOrg}
           perfilParaAbrir={perfilParaAbrirNaAba}
           onPerfilParaAbrirConsumido={() => setPerfilParaAbrirNaAba(null)}
+          criarNovoNonce={criarNovoNonce}
+          canEdit={canEditConfigPerfil}
+          onBack={() => {
+            backToTeam();
+            if (inviteDraft) setShowInviteModal(true);
+          }}
+          onSaved={(profile) => {
+            if (inviteDraft)
+              setInviteDraft((prev) => ({
+                ...prev,
+                form: { ...prev.form, perfilAcessoId: String(profile.id) },
+              }));
+          }}
         />
-        </div>
+      ) : activeTab === "auditoria" ? (
+        <>
+          <div className="crumb">
+            <button onClick={backToTeam}>
+              <PrototypeIcon name="cl" size="s" />
+              Gestão de Equipe
+            </button>
+            <span>/</span>
+            <span>Histórico / Auditoria</span>
+          </div>
+          <div className="phd">
+            <div>
+              <h1>Histórico / Auditoria</h1>
+              <p>Acompanhe quem fez cada ação e o que mudou na clínica.</p>
+            </div>
+          </div>
+          <AuditoriaView />
+        </>
+      ) : (
+        <>
+          <div className="phd">
+            <div>
+              <h1>Gestão de Equipe</h1>
+              <p>
+                Quem trabalha na clínica, o que cada um faz e o que pode
+                acessar.
+              </p>
+            </div>
+            <div className="acts">
+              {canSeeConfigAuditoria && (
+                <button
+                  className="btn-s"
+                  aria-label="Histórico / Auditoria"
+                  onClick={() => setActiveTab("auditoria")}
+                >
+                  <PrototypeIcon name="hist" size="s" />
+                  <span className="lbl">Histórico / Auditoria</span>
+                </button>
+              )}
+              {canCreateUsers && (
+                <button
+                  className="btn-p"
+                  onClick={() => setShowInviteModal(true)}
+                  aria-label="Convidar pessoa"
+                >
+                  <PrototypeIcon name="uplus" size="s" />
+                  <span className="lbl">Convidar pessoa</span>
+                </button>
+              )}
+            </div>
+          </div>
+          {usuarios.length === 1 && (
+            <div className="hint">
+              <PrototypeIcon name="info" />
+              <span>
+                <b>Só você por enquanto.</b> Convide a equipe e escolha o perfil
+                de acesso de cada pessoa: é ele que decide o que a pessoa pode
+                fazer.
+              </span>
+            </div>
+          )}
+          <div className="kpis">
+            {[
+              ["ativos", "Ativos", stats.ativos, "users"],
+              ["agenda", "Atendem na agenda", stats.atendem, "calok"],
+              ["hoje", "Atendimentos hoje", stats.hoje ?? "—", "cal"],
+              [
+                "mes",
+                `Atendimentos em ${monthName}`,
+                stats.mes ?? "—",
+                "steth",
+              ],
+              ["conv", "Convites pendentes", "—", "mail"],
+            ].map(([id, label, value, icon]) => (
+              <button
+                key={id}
+                className={`kpi ${statusFilter === id ? "on" : ""}`}
+                title={
+                  id === "conv"
+                    ? "Convites pendentes por e-mail ainda não disponíveis na API."
+                    : !canSeeAgendaMulti && (id === "hoje" || id === "mes")
+                      ? "Dados da agenda disponíveis para seu acesso."
+                      : undefined
+                }
+                onClick={() => {
+                  if (id === "conv") {
+                    toast.info(
+                      "O sistema atual cria o acesso diretamente. Convites pendentes por e-mail ainda não estão disponíveis.",
+                    );
+                    return;
+                  }
+                  setStatusFilter(statusFilter === id ? "" : id);
+                }}
+              >
+                <span>
+                  <small>{label}</small>
+                  <b>{value}</b>
+                </span>
+                <span className="ic">
+                  <PrototypeIcon name={icon} size="l" />
+                </span>
+              </button>
+            ))}
+          </div>
+          {(previewError || agendaError) && (
+            <p role="alert" className="team-error">
+              {previewError || agendaError}
+              <button
+                className="btn-s"
+                onClick={() => {
+                  loadData();
+                  setAgendaReload((n) => n + 1);
+                }}
+              >
+                Tentar novamente
+              </button>
+            </p>
+          )}
+          <div className="ws">
+            <aside className="rail">
+              <div className="rail-h">
+                <PrototypeIcon name="shield" />
+                Perfis de acesso<small>{perfisAcesso.length}</small>
+              </div>
+              {canEditConfigPerfil && (
+                <button
+                  className="rail-btn-create prominent"
+                  onClick={newProfile}
+                  aria-label="Criar perfil de acesso"
+                >
+                  <PrototypeIcon name="plus" size="s" />
+                  <span>Criar perfil de acesso</span>
+                </button>
+              )}
+              <button
+                className={`rit ${!filterLevel ? "on" : ""}`}
+                onClick={() => setFilterLevel("")}
+              >
+                <span className="dot all">
+                  <PrototypeIcon name="users" size="s" />
+                </span>
+                <span className="nm">
+                  <b>Toda a equipe</b>
+                  <span>todos os perfis</span>
+                </span>
+                <span className="ct">{stats.ativos}</span>
+              </button>
+              <div className="rgl">Da sua clínica</div>
+              {sortedProfiles
+                .filter((p) => profileType(p) !== "tpl")
+                .map(railItem)}
+              <div className="rgl">
+                <PrototypeIcon name="lock" size="s" />
+                Modelos prontos
+              </div>
+              {sortedProfiles
+                .filter((p) => profileType(p) === "tpl")
+                .map(railItem)}
+            </aside>
+            <div style={{ minWidth: 0 }}>
+              <div className="pchips">
+                <button
+                  className={!filterLevel ? "on" : ""}
+                  onClick={() => setFilterLevel("")}
+                >
+                  Toda a equipe <i>{stats.ativos}</i>
+                </button>
+                {sortedProfiles.map((p) => (
+                  <button
+                    key={p.id}
+                    className={filterLevel === String(p.id) ? "on" : ""}
+                    onClick={() => setFilterLevel(String(p.id))}
+                  >
+                    <PrototypeIcon
+                      name={p.codigo === "DONO" ? "crown" : "shield"}
+                      size="s"
+                    />
+                    {p.nome} <i>{count(p)}</i>
+                  </button>
+                ))}
+                {canEditConfigPerfil && (
+                  <button onClick={newProfile}>
+                    <PrototypeIcon name="plus" size="s" />
+                    Novo perfil
+                  </button>
+                )}
+              </div>
+              {selectedProfile && (
+                <section className={`pban ${profileType(selectedProfile)}`}>
+                  <div className="t">
+                    <div style={{ minWidth: 0 }}>
+                      {badge(selectedProfile)}
+                      <h3 style={{ marginTop: 8 }}>{selectedProfile.nome}</h3>
+                      <p>{selectedProfile.descricao || "Sem descrição."}</p>
+                    </div>
+                    <div className="ac">
+                      {selectedProfile.codigo === "DONO" ? (
+                        <span className="lock">
+                          <PrototypeIcon name="lock" size="s" />
+                          Fixo: o dono sempre tem acesso total
+                        </span>
+                      ) : (
+                        canEditConfigPerfil && (
+                          <>
+                            <button
+                              className={
+                                profileType(selectedProfile) === "tpl"
+                                  ? "btn-s"
+                                  : "btn-p"
+                              }
+                              onClick={() =>
+                                onEditarPerfilNaAba(selectedProfile.id)
+                              }
+                            >
+                              <PrototypeIcon
+                                name={
+                                  profileType(selectedProfile) === "tpl"
+                                    ? "copy"
+                                    : "pen"
+                                }
+                                size="s"
+                              />
+                              {profileType(selectedProfile) === "tpl"
+                                ? "Usar como base"
+                                : "Editar perfil"}
+                            </button>
+                            {profileType(selectedProfile) === "cli" && (
+                              <button
+                                className="btn-s"
+                                onClick={() => {
+                                  setPerfilParaAbrirNaAba(
+                                    `copy:${selectedProfile.id}`,
+                                  );
+                                  setActiveTab("perfis");
+                                }}
+                              >
+                                <PrototypeIcon name="copy" size="s" />
+                                Duplicar
+                              </button>
+                            )}
+                          </>
+                        )
+                      )}
+                    </div>
+                  </div>
+                  {selectedProfile.codigo === "DONO" &&
+                    ownerPerson &&
+                    canManageUsers && (
+                      <div className="owner-agenda-card">
+                        <button
+                          type="button"
+                          className="rnf-header-top rnf-header-btn"
+                          aria-expanded={isOwnerAgendaOpen}
+                          aria-controls="owner-agenda-options"
+                          onClick={() => setIsOwnerAgendaOpen((prev) => !prev)}
+                        >
+                          <div
+                            className={`area ${agendaModule.k === "0" ? "off" : ""}`}
+                          >
+                            <b>
+                              <PrototypeIcon
+                                name={agendaModule.icon}
+                                size="s"
+                              />
+                              <span className="trunc">{agendaModule.name}</span>
+                            </b>
+                            <span className={`l${agendaModule.k}`}>
+                              {agendaModule.k === "c"
+                                ? "Parcial"
+                                : agendaModule.t}
+                            </span>
+                          </div>
+                          <span className="rnf-toggle-text">
+                            <span className="lbl">Mais configurações</span>
+                            <PrototypeIcon
+                              name="cd"
+                              size="s"
+                              className={`rnf-chevron ${isOwnerAgendaOpen ? "open" : ""}`}
+                            />
+                          </span>
+                        </button>
+                        {isOwnerAgendaOpen && (
+                          <div
+                            className="owner-agenda-options"
+                            id="owner-agenda-options"
+                          >
+                            <div className="options-stack-2a">
+                              {[
+                                [
+                                  "AGENDA_APARECER",
+                                  "Aparecer na agenda",
+                                  "Receber agendamentos e definir seus horários de atendimento.",
+                                ],
+                                [
+                                  "AGENDA_MULTI_VER",
+                                  "Ver múltiplas agendas",
+                                  "Consultar as agendas dos profissionais da clínica.",
+                                ],
+                              ].map(([code, label, description]) => {
+                                const permission = permissoes.find(
+                                  (p) => p.codigo === code,
+                                );
+                                return (
+                                  <div className="option-row-2a" key={code}>
+                                    <div className="option-top-2a">
+                                      <Switch
+                                        checked={Boolean(
+                                          permission &&
+                                          profileIds(selectedProfile)?.includes(
+                                            permission.permissaoId,
+                                          ),
+                                        )}
+                                        ariaLabel={label}
+                                        disabled={Boolean(
+                                          savingOwnerAgenda ||
+                                          previewLoading ||
+                                          previewError ||
+                                          !permission ||
+                                          !profileIds(selectedProfile),
+                                        )}
+                                        loading={savingOwnerAgenda === code}
+                                        onChange={(enabled) =>
+                                          changeOwnerAgenda(code, enabled)
+                                        }
+                                      />
+                                      <strong>{label}</strong>
+                                    </div>
+                                    <p>{description}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {ownerAgendaError && (
+                              <p role="alert">{ownerAgendaError}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  {previewLoading || previewError ? (
+                    <p role={previewError ? "alert" : "status"}>
+                      {previewError || "Carregando funções…"}
+                      {previewError && (
+                        <button className="btn-s" onClick={loadData}>
+                          Tentar novamente
+                        </button>
+                      )}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="gauge">
+                        <b>
+                          {profileIds(selectedProfile)?.length ?? "—"} de{" "}
+                          {permissoes.length} funções
+                        </b>
+                        <span className="bar">
+                          <i
+                            style={{
+                              width: `${((profileIds(selectedProfile)?.length || 0) / (permissoes.length || 1)) * 100}%`,
+                            }}
+                          />
+                        </span>
+                        <span
+                          className={
+                            attends(selectedProfile) ? "ag-yes" : "ag-no"
+                          }
+                        >
+                          <PrototypeIcon
+                            name={attends(selectedProfile) ? "calok" : "caloff"}
+                            size="s"
+                          />
+                          {attends(selectedProfile)
+                            ? "Atende na agenda"
+                            : "Não atende"}
+                        </span>
+                        <span>· {count(selectedProfile)} pessoas</span>
+                      </div>
+                      <div className="areas">
+                        {summarizeModules(
+                          permissoes,
+                          profileIds(selectedProfile),
+                        ).map((m) => (
+                          <div
+                            key={m.key}
+                            className={`area ${m.k === "0" ? "off" : ""}`}
+                          >
+                            <b>
+                              <PrototypeIcon name={m.icon} size="s" />
+                              <span className="trunc">{m.name}</span>
+                            </b>
+                            <span className={`l${m.k}`}>
+                              {m.k === "c" ? "Parcial" : m.t}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </section>
+              )}
+              <div className="tool">
+                <label className="search">
+                  <PrototypeIcon name="search" />
+                  <input
+                    placeholder="Buscar por nome, e-mail ou telefone"
+                    aria-label="Buscar pessoa"
+                    value={searchName}
+                    onChange={(e) => setSearchName(e.target.value)}
+                  />
+                </label>
+
+                <div
+                  className="filter-wrapper"
+                  ref={filterPopoverRef}
+                  style={{ position: "relative" }}
+                >
+                  <button
+                    type="button"
+                    className={`filter-btn ${activeFiltersCount > 0 ? "has-filters" : ""}`}
+                    onClick={() => {
+                      setIsFilterPopoverOpen((prev) => !prev);
+                      setIsSortMenuOpen(false);
+                    }}
+                    aria-expanded={isFilterPopoverOpen}
+                    aria-haspopup="dialog"
+                    aria-label="Filtros"
+                  >
+                    <PrototypeIcon name="filter" size="s" />
+                    <span className="lbl">Filtros</span>
+                    {activeFiltersCount > 0 && (
+                      <span className="filter-btn-count">
+                        {activeFiltersCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {isFilterPopoverOpen && (
+                    <div
+                      className="filter-popover"
+                      role="dialog"
+                      aria-label="Opções de filtros"
+                    >
+                      <div className="popover-h">
+                        <h3>Filtrar Pessoas</h3>
+                        {activeFiltersCount > 0 && (
+                          <button
+                            type="button"
+                            className="btn-clear-all"
+                            onClick={() => {
+                              setStatusFilter("");
+                              setFilterLevel("");
+                              setAgendaAvailabilityFilter("all");
+                            }}
+                          >
+                            Limpar
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="popover-section">
+                        <span className="section-title">Status do Acesso</span>
+                        <div className="popover-options">
+                          <label className="popover-radio">
+                            <input
+                              type="radio"
+                              name="popover_status"
+                              checked={
+                                !statusFilter ||
+                                ["agenda", "hoje", "mes"].includes(statusFilter)
+                              }
+                              onChange={() => setStatusFilter("")}
+                            />
+                            <span>Todos</span>
+                          </label>
+                          <label className="popover-radio">
+                            <input
+                              type="radio"
+                              name="popover_status"
+                              checked={statusFilter === "ativos"}
+                              onChange={() => setStatusFilter("ativos")}
+                            />
+                            <span>Apenas Ativos</span>
+                          </label>
+                          <label className="popover-radio">
+                            <input
+                              type="radio"
+                              name="popover_status"
+                              checked={statusFilter === "inativos"}
+                              onChange={() => setStatusFilter("inativos")}
+                            />
+                            <span>Apenas Inativos</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="popover-section">
+                        <span className="section-title">Perfil de Acesso</span>
+                        <select
+                          className="input-select"
+                          style={{
+                            width: "100%",
+                            padding: "6px 10px",
+                            borderRadius: "8px",
+                            border: "1px solid var(--app-border)",
+                            fontSize: "13px",
+                            color: "var(--app-ink)",
+                            background: "#fff",
+                          }}
+                          value={filterLevel}
+                          onChange={(e) => setFilterLevel(e.target.value)}
+                          aria-label="Filtrar por perfil"
+                        >
+                          <option value="">Todos os perfis</option>
+                          {perfisAcesso.map((p) => (
+                            <option key={p.id} value={String(p.id)}>
+                              {p.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="popover-section">
+                        <span className="section-title">
+                          Disponibilidade na Agenda
+                        </span>
+                        <div className="popover-options">
+                          <label className="popover-radio">
+                            <input
+                              type="radio"
+                              name="popover_agenda"
+                              checked={agendaAvailabilityFilter === "all"}
+                              onChange={() => setAgendaAvailabilityFilter("all")}
+                            />
+                            <span>Todos</span>
+                          </label>
+                          <label className="popover-radio">
+                            <input
+                              type="radio"
+                              name="popover_agenda"
+                              checked={agendaAvailabilityFilter === "yes"}
+                              onChange={() => setAgendaAvailabilityFilter("yes")}
+                            />
+                            <span>Atendem na agenda</span>
+                          </label>
+                          <label className="popover-radio">
+                            <input
+                              type="radio"
+                              name="popover_agenda"
+                              checked={agendaAvailabilityFilter === "no"}
+                              onChange={() => setAgendaAvailabilityFilter("no")}
+                            />
+                            <span>Não atendem</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="popover-actions">
+                        <button
+                          type="button"
+                          className="btn-s"
+                          style={{ width: "100%" }}
+                          onClick={() => setIsFilterPopoverOpen(false)}
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className="sort-wrapper"
+                  ref={sortMenuRef}
+                  style={{ position: "relative" }}
+                >
+                  <button
+                    type="button"
+                    className="sort-btn"
+                    onClick={() => {
+                      setIsSortMenuOpen((prev) => !prev);
+                      setIsFilterPopoverOpen(false);
+                    }}
+                    aria-expanded={isSortMenuOpen}
+                    aria-haspopup="menu"
+                    aria-label="Opções de ordenação"
+                  >
+                    <PrototypeIcon name="sort" size="s" />
+                    <span className="lbl">
+                      {sortOption === "az"
+                        ? "Nome (A–Z)"
+                        : sortOption === "za"
+                          ? "Nome (Z–A)"
+                          : sortOption === "perfil"
+                            ? "Perfil de acesso"
+                            : "Mais atendimentos"}
+                    </span>
+                  </button>
+
+                  {isSortMenuOpen && (
+                    <div
+                      className="sort-menu"
+                      role="menu"
+                      aria-label="Menu de ordenação"
+                    >
+                      {[
+                        { id: "az", label: "Nome (A–Z)" },
+                        { id: "za", label: "Nome (Z–A)" },
+                        { id: "perfil", label: "Perfil de acesso" },
+                        { id: "atendimentos", label: "Mais atendimentos" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          role="menuitem"
+                          className={`sort-item ${sortOption === opt.id ? "selected" : ""}`}
+                          onClick={() => {
+                            setSortOption(opt.id);
+                            setIsSortMenuOpen(false);
+                          }}
+                        >
+                          <span>{opt.label}</span>
+                          {sortOption === opt.id && <span>✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {(searchName ||
+                  filterLevel ||
+                  statusFilter ||
+                  agendaAvailabilityFilter !== "all") && (
+                  <button
+                    type="button"
+                    className="btn-g"
+                    onClick={clearAllFilters}
+                    aria-label="Limpar todos os filtros"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+
+              <div
+                className="quick-chips"
+                aria-label="Filtros rápidos de status"
+              >
+                <button
+                  type="button"
+                  className={`quick-chip ${!statusFilter ? "active" : ""}`}
+                  onClick={() => setStatusFilter("")}
+                >
+                  <span>Todos</span>
+                  <span className="chip-count">{usuarios.length}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`quick-chip ${statusFilter === "ativos" ? "active" : ""}`}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === "ativos" ? "" : "ativos")
+                  }
+                >
+                  <span>Ativos</span>
+                  <span className="chip-count">{stats.ativos}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`quick-chip ${statusFilter === "agenda" ? "active" : ""}`}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === "agenda" ? "" : "agenda")
+                  }
+                >
+                  <span>Atendem na agenda</span>
+                  <span className="chip-count">{stats.atendem}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`quick-chip ${statusFilter === "hoje" ? "active" : ""}`}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === "hoje" ? "" : "hoje")
+                  }
+                >
+                  <span>Atendimentos hoje</span>
+                  <span className="chip-count">{stats.hoje ?? "—"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`quick-chip ${statusFilter === "mes" ? "active" : ""}`}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === "mes" ? "" : "mes")
+                  }
+                >
+                  <span>Atendimentos em {monthName}</span>
+                  <span className="chip-count">{stats.mes ?? "—"}</span>
+                </button>
+              </div>
+
+              {(searchName ||
+                filterLevel ||
+                statusFilter ||
+                agendaAvailabilityFilter !== "all") && (
+                <div className="active-pills-bar" aria-label="Filtros ativos">
+                  <span className="active-pills-title">Filtros ativos:</span>
+                  {Boolean(searchName) && (
+                    <span className="active-pill">
+                      Busca: &ldquo;{searchName}&rdquo;
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => setSearchName("")}
+                        aria-label="Remover filtro de busca"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {Boolean(filterLevel) && (
+                    <span className="active-pill">
+                      Perfil:{" "}
+                      {perfisAcesso.find(
+                        (p) => String(p.id) === String(filterLevel),
+                      )?.nome || "Selecionado"}
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => setFilterLevel("")}
+                        aria-label="Remover filtro de perfil"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {Boolean(statusFilter) && (
+                    <span className="active-pill">
+                      Status:{" "}
+                      {statusFilter === "ativos"
+                        ? "Ativos"
+                        : statusFilter === "inativos"
+                          ? "Inativos"
+                          : statusFilter === "agenda"
+                            ? "Atendem na agenda"
+                            : statusFilter === "hoje"
+                              ? "Atendimentos hoje"
+                              : statusFilter === "mes"
+                                ? `Atendimentos em ${monthName}`
+                                : statusFilter}
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => setStatusFilter("")}
+                        aria-label="Remover filtro de status"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {agendaAvailabilityFilter !== "all" && (
+                    <span className="active-pill">
+                      Agenda:{" "}
+                      {agendaAvailabilityFilter === "yes"
+                        ? "Atendem"
+                        : "Não atendem"}
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => setAgendaAvailabilityFilter("all")}
+                        aria-label="Remover filtro de agenda"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-clear-all"
+                    onClick={clearAllFilters}
+                  >
+                    Limpar todos
+                  </button>
+                </div>
+              )}
+              <div className="lst" aria-label="Pessoas da equipe">
+                <div className="lhd">
+                  <span>Pessoa e cargo</span>
+                  <span>Perfil de acesso</span>
+                  <span>Hoje</span>
+                  <span className="h-mes">Atendimentos</span>
+                  <span />
+                </div>
+                {filteredUsers.length ? (
+                  filteredUsers.map((u) => {
+                    const pf = perfisAcesso.find(
+                      (p) => p.id === u.perfilAcessoId,
+                    );
+                    const today = appointmentsFor(u).filter(
+                      (a) => a.dataAgendamento === hojeIso,
+                    );
+                    return (
+                      <div
+                        className="row"
+                        key={u.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Abrir ficha de ${nameOf(u)}`}
+                        onClick={() => openDetail(u)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openDetail(u);
+                          }
+                        }}
+                        style={
+                          u.ativo === false ? { opacity: 0.55 } : undefined
+                        }
+                      >
+                        <div className="who c-who">
+                          {avatar(u)}
+                          <span className="t">
+                            <b className="trunc">{nameOf(u)}</b>
+                            <span className="trunc">
+                              {formatCargoLabel(u.roleName)}
+                              {u.ativo === false ? " · desativado" : ""}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="c-pf">{badge(pf)}</div>
+                        <div className="c-hoje">
+                          {u.apareceNaAgenda ? (
+                            <div className="today">
+                              {today.length ? (
+                                <>
+                                  <b>{today.length} hoje</b>
+                                  <span>
+                                    próximo às{" "}
+                                    {String(today[0].horaInicio || "").slice(
+                                      0,
+                                      5,
+                                    )}
+                                  </span>
+                                </>
+                              ) : (
+                                <span>
+                                  {agenda ? "sem horários hoje" : "—"}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="ag-no">
+                              <PrototypeIcon name="caloff" size="s" />
+                              Não atende
+                            </span>
+                          )}
+                        </div>
+                        <div className="c-mes mes">
+                          {u.apareceNaAgenda && agenda ? (
+                            <>
+                              {
+                                appointmentsFor(u).filter(
+                                  (a) =>
+                                    a.dataAgendamento?.startsWith(
+                                      hojeIso.slice(0, 7),
+                                    ) &&
+                                    String(a.statusCodigo).toUpperCase() ===
+                                      "REALIZADO",
+                                ).length
+                              }
+                              <span>em {monthName}</span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </div>
+                        <div className="racts c-acts">
+                          {u.telefone && (
+                            <a
+                              className="ib"
+                              title="WhatsApp"
+                              href={`https://wa.me/${u.telefone.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <PrototypeIcon name="wa" />
+                            </a>
+                          )}
+                          <button
+                            className="vm"
+                            aria-label={`Ver ${nameOf(u)}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openDetail(u);
+                            }}
+                          >
+                            <span className="lbl">Ver</span>
+                            <PrototypeIcon name="cr" size="s" />
+                          </button>
+                        </div>
+                        <div className="c-meta">
+                          {badge(pf)}
+                          <span
+                            className={u.apareceNaAgenda ? "ag-yes" : "ag-no"}
+                          >
+                            <PrototypeIcon
+                              name={u.apareceNaAgenda ? "cal" : "caloff"}
+                              size="s"
+                            />
+                            {u.apareceNaAgenda && agenda
+                              ? `${today.length} hoje`
+                              : "Não atende"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="empty">
+                    <PrototypeIcon name="users" size="l" />
+                    <b>Nenhuma pessoa encontrada</b>Revise a busca e os filtros.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
+      {showInviteModal && (
+        <InviteModal
+          roles={roles}
+          perfisAcesso={perfisAcesso}
+          permissoes={permissoes}
+          especialidadesList={especialidadesList}
+          initialDraft={inviteDraft}
+          onClose={() => {
+            setShowInviteModal(false);
+            setInviteDraft(null);
+          }}
+          onSuccess={() => {
+            setShowInviteModal(false);
+            setInviteDraft(null);
+            loadData();
+            onEquipeInvalidate?.();
+          }}
+          fetchHeaders={fetchHeaders}
+          onEditarPerfilNaAba={(id, draft) => {
+            setInviteDraft(draft);
+            setShowInviteModal(false);
+            onEditarPerfilNaAba(id);
+          }}
+        />
+      )}
+
     </div>
   );
 }
