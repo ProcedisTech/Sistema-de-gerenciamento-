@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { Download, FileText, Loader2, ChevronDown, ChevronUp, Stethoscope, ShieldCheck, ShieldX } from 'lucide-react';
 import { resolveApiUrl } from '../../../config/apiEnv';
 import { getFreshToken } from '../../../services/api';
 import { useToast } from '../../../contexts/useToast';
 import { useOrg } from '../../../contexts/OrgContext';
+import { useAviso } from '../../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../../services/avisos/tiposAviso.js';
 import { generateTermoPdf } from '../../../utils/pdfGenerator';
 import { replaceTermVariables } from '../../../utils/replaceTermVariables';
 import { buildPacienteCtx } from '../../../utils/pacienteCtx';
@@ -26,6 +28,26 @@ function isRecusado(doc) {
   return doc?.statusCodigo === 'RECUSADO' || Boolean(doc?.recusadoEm);
 }
 
+/** `GET /pacientes/{id}/documentos-assinados`; lança em falha. */
+async function buscarDocumentosAssinados(pacienteId, orgId) {
+  const token = await getFreshToken();
+  const res = await fetch(resolveApiUrl(`/api/v1/pacientes/${pacienteId}/documentos-assinados`), {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'X-Org-Id': orgId
+    }
+  });
+
+  if (!res.ok) {
+    throw new Error('Falha ao carregar documentos assinados.');
+  }
+
+  return res.json();
+}
+
+/** Espera do aviso TERMOS: avisos juntos dentro dela viram uma rebusca só. */
+const DEBOUNCE_AVISO_DOCUMENTOS_MS = 400;
+
 export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perfilInfo }) {
   const [documentos, setDocumentos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,30 +55,26 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
   const { orgId, fusoHorario: fuso } = useOrg();
   const toast = useToast();
   const [expandedDocId, setExpandedDocId] = useState(null);
+  /** Geração da busca da lista: resposta de uma busca mais antiga é descartada. */
+  const geracaoRef = useRef(0);
+  /** Paciente da aba agora: resposta de rebusca de outro paciente é descartada. */
+  const pacienteAtualRef = useRef(pacienteId);
+  useEffect(() => {
+    pacienteAtualRef.current = pacienteId;
+  }, [pacienteId]);
 
   useEffect(() => {
     if (!pacienteId || !orgId) return;
 
     let mounted = true;
+    const geracao = ++geracaoRef.current;
     const fetchDocs = async () => {
       try {
         setLoading(true);
-        const token = await getFreshToken();
-        const res = await fetch(resolveApiUrl(`/api/v1/pacientes/${pacienteId}/documentos-assinados`), {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-Org-Id': orgId
-          }
-        });
-        
-        if (!res.ok) {
-          throw new Error('Falha ao carregar documentos assinados.');
-        }
-
-        const data = await res.json();
-        if (mounted) setDocumentos(data);
+        const data = await buscarDocumentosAssinados(pacienteId, orgId);
+        if (mounted && geracao === geracaoRef.current) setDocumentos(data);
       } catch (err) {
-        if (mounted) setError(err.message);
+        if (mounted && geracao === geracaoRef.current) setError(err.message);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -65,6 +83,22 @@ export function DocumentosAssinadosTab({ pacienteId, paciente, clinicaInfo, perf
     fetchDocs();
     return () => { mounted = false; };
   }, [pacienteId, orgId]);
+
+  /** Aviso TERMOS: rebusca só a lista, sem spinner e sem limpar antes; erro mantém a tela. */
+  const recarregarPorAviso = useCallback(async () => {
+    if (!pacienteId || !orgId) return;
+    const geracao = ++geracaoRef.current;
+    let data;
+    try {
+      data = await buscarDocumentosAssinados(pacienteId, orgId);
+    } catch {
+      return; // mantém o que está na tela
+    }
+    if (geracao !== geracaoRef.current || pacienteAtualRef.current !== pacienteId) return;
+    setDocumentos(data);
+    setError(null);
+  }, [pacienteId, orgId]);
+  useAviso(PREFIXO_AVISO.TERMOS, recarregarPorAviso, { debounceMs: DEBOUNCE_AVISO_DOCUMENTOS_MS });
 
   const pacienteCtx = useMemo(() => buildPacienteCtx(paciente), [paciente]);
   const clinicaCtx = useMemo(() => ({

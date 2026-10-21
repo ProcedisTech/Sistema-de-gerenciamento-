@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { Clock3, Lock, Stethoscope, X } from 'lucide-react';
 import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
-import { getRailCardActions } from '../../utils/agendaCardActions.js';
+import { getConsultaEmAndamento, getRailCardActions } from '../../utils/agendaCardActions.js';
 import {
   formatAgendaShortId,
   getRailStripeClass,
@@ -10,7 +11,7 @@ import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBad
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 import { useFusoClinica } from '../hooks/useFusoClinica.js';
-import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
   bloqueioHoraFimLabel,
@@ -34,6 +35,7 @@ export function AgendaAppointmentCardRich({
   onAdvanceClick,
   onConfirmar,
   onIniciarAtendimento,
+  onVoltarConsulta,
   onWhatsApp,
   onReagendar,
   onCancelar,
@@ -42,8 +44,19 @@ export function AgendaAppointmentCardRich({
   onOpenSlotDetail,
   submittingRemoverBloqueioId,
 }) {
-  const { canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
   const { fuso } = useFusoClinica();
+  const atendimentoId = appointment?.atendimentoId;
+  const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
+  const atendimentoAnfitriaoRoleUserId = appointment?.atendimentoAnfitriaoRoleUserId;
+  const andamento = useMemo(
+    () =>
+      getConsultaEmAndamento(
+        [{ atendimentoId, atendimentoStatusCodigo, atendimentoAnfitriaoRoleUserId }],
+        roleUserId,
+      ),
+    [atendimentoId, atendimentoStatusCodigo, atendimentoAnfitriaoRoleUserId, roleUserId],
+  );
   const isBloqueio = appointment?.tipo === 'bloqueio' && appointment.status !== 'cancelado';
 
   if (isBloqueio) {
@@ -117,7 +130,7 @@ export function AgendaAppointmentCardRich({
 
   const stripe = getRailStripeClass(appointment);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento);
   const execSummary = getExecutionSummary(appointment, fuso);
   const timingBadge = execSummary?.badge || getTimingBadge(appointment, fuso);
 
@@ -175,11 +188,16 @@ export function AgendaAppointmentCardRich({
             compact={compact}
             onConfirmar={onConfirmar}
             onIniciarAtendimento={onIniciarAtendimento}
+            onVoltarConsulta={onVoltarConsulta}
             onWhatsApp={onWhatsApp}
             onReagendar={onReagendar}
             onCancelar={canCancelar ? onCancelar : null}
             onEnviarAnamnese={onEnviarAnamnese}
           />
+        ) : andamento.emAndamento ? (
+          <div className="mt-2">
+            <ConsultaEmAndamentoChip />
+          </div>
         ) : null}
         {isValidAdvanceOffer(appointment, advanceOffer) && typeof onAdvanceClick === 'function' && !isNivel1 ? (
           <button

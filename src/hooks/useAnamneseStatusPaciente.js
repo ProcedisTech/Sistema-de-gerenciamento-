@@ -10,7 +10,7 @@ import { useFusoClinica } from '../components/hooks/useFusoClinica.js';
  * Status do card Anamnese no hub: GET da ficha do paciente (mesmo padrão de termos/planos).
  * Não usa só as flags da listagem — o pin de pacienteAtual não atualiza após preencher.
  */
-export function useAnamneseStatusPaciente(paciente, { enabled = true } = {}) {
+export function useAnamneseStatusPaciente(paciente, { enabled = true, chaveRebusca = 0 } = {}) {
   const pacienteId = paciente?.id != null ? String(paciente.id).trim() : '';
   const canFetch = Boolean(enabled && pacienteId);
   const { fuso } = useFusoClinica();
@@ -37,7 +37,7 @@ export function useAnamneseStatusPaciente(paciente, { enabled = true } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [canFetch, pacienteId]);
+  }, [canFetch, pacienteId, chaveRebusca]);
 
   const list = canFetch ? fetchedList : [];
   const isLoading = canFetch ? fetchLoading : false;

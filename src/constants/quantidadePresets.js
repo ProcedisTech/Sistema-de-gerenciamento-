@@ -1,4 +1,5 @@
 const PRESETS_BY_UNIDADE = {
+  u: [1, 2, 4, 6],
   ui: [0.5, 1, 1.5, 2],
   ml: [0.1, 0.5, 1, 2],
   mg: [0.5, 1, 2],
@@ -6,6 +7,7 @@ const PRESETS_BY_UNIDADE = {
 };
 
 const PASSO_BY_UNIDADE = {
+  u: 1,
   ui: 0.5,
   ml: 0.1,
   mg: 0.5,

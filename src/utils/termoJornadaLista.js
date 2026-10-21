@@ -38,9 +38,18 @@ export function idsPendentesSemAssinadosNestaJornada(pendentesIds, termosAssinad
     .filter((id) => id && !signed.has(id));
 }
 
-export function mesclarFilaExigida(pendentesAtuais, idsFilaExigida, termosAssinados) {
+export function mesclarFilaExigida(pendentesAtuais, idsFilaExigida, termosAssinados, idsVigentesAssinados = null) {
   const signed = idsAssinadosNestaJornada(termosAssinados);
-  const next = new Set(idsPendentesSemAssinadosNestaJornada(pendentesAtuais, termosAssinados));
+  if (idsVigentesAssinados) {
+    for (const vId of idsVigentesAssinados) {
+      if (vId != null && String(vId).trim() !== '') signed.add(String(vId));
+    }
+  }
+  const next = new Set(
+    (pendentesAtuais || [])
+      .map((id) => (id != null ? String(id) : ''))
+      .filter((id) => id && !signed.has(id))
+  );
   for (const raw of idsFilaExigida || []) {
     const id = raw != null ? String(raw) : '';
     if (id && !signed.has(id)) next.add(id);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   Calendar,
@@ -20,6 +20,8 @@ import {
   Check,
   ChevronRight,
   User,
+  Layers,
+  Sparkles,
 } from 'lucide-react';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
@@ -34,6 +36,7 @@ import {
   getPlanoStatusPresentation,
   isItemAgendado,
   isItemPendente,
+  isItemFinalizado,
 } from '../../utils/planejamentoStatusUi.js';
 import {
   calcSessoesPlano,
@@ -66,6 +69,8 @@ import {
   somarDias,
 } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
+
+const EMPTY_ARRAY = Object.freeze([]);
 
 function formatValorBrl(val) {
   if (val == null || val === '') return '—';
@@ -332,10 +337,12 @@ function renderItensComIntervalo({
   const gruposPorData = new Map();
 
   itens.forEach((item) => {
+    const isRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
     const dataIso =
       item.sessaoAtiva?.dataAgendamento ||
       item.sessaoRealizada?.dataAgendamento ||
-      item.dataPlanejada;
+      item.dataPlanejada ||
+      (isRealizado ? (item.dataRealizacao || item.realizadoEm || item.dataAtendimento || hojeIso) : null);
     const dataKey = dataIso ? String(dataIso).slice(0, 10) : null;
 
     if (!dataKey) {
@@ -1085,13 +1092,13 @@ function PlanoHistoricoProfileCard({
   );
 }
 
-export function PlanosTab({
+export const PlanosTab = React.forwardRef(function PlanosTab({
   pacienteId,
   paciente,
   roleUserId,
   pacienteNome,
-  procedimentosFeitos = [],
-  galeriaFotosInicial = [],
+  procedimentosFeitos = EMPTY_ARRAY,
+  galeriaFotosInicial = EMPTY_ARRAY,
   onAgendarItem,
   onAgendarRetornoItem,
   onReagendarItem,
@@ -1101,7 +1108,11 @@ export function PlanosTab({
   onPlanoConcluido,
   variant = 'profile',
   onVoltar,
-}) {
+  procedimentosAvaliados = EMPTY_ARRAY,
+  onLimparProcedimentosAvaliados,
+  onPlanoModificado,
+  destinoAvaliacao = null,
+}, ref) {
   const { fuso } = useAgoraDaClinica();
   const isConsulta = variant === 'consulta';
   const canCrud = isConsulta;
@@ -1117,11 +1128,14 @@ export function PlanosTab({
     mutating,
     refresh,
     criarPlano,
+    adicionarItem,
+    editarItem,
     removerItem,
     alterarStatusPlano,
     darBaixaItem,
     salvarPlano,
     clearError,
+    hasLoaded,
   } = usePlanosPaciente({ pacienteId, roleUserId });
 
   const {
@@ -1129,7 +1143,6 @@ export function PlanosTab({
     hydrateFromPlano,
     initEmptyDraft,
     setObservacao,
-    addItem,
     updateItem,
     removeItem,
     isDirty: _isDirty,
@@ -1248,14 +1261,18 @@ export function PlanosTab({
   }, [carregarGaleria]);
 
   const [internalProcedimentosFeitos, setInternalProcedimentosFeitos] = useState(
-    Array.isArray(procedimentosFeitos) ? procedimentosFeitos : []
+    Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0 ? procedimentosFeitos : EMPTY_ARRAY
   );
+
+  const pacienteFeitosPedidoRef = useRef('');
 
   const carregarProcedimentosFeitos = useCallback(async () => {
     const pid = String(pacienteId ?? '').trim();
+    pacienteFeitosPedidoRef.current = pid;
     if (!pid) return;
     try {
       const res = await procedimentosApi.byPaciente(pid);
+      if (pacienteFeitosPedidoRef.current !== pid) return;
       if (Array.isArray(res)) {
         setInternalProcedimentosFeitos(res);
       }
@@ -1264,13 +1281,19 @@ export function PlanosTab({
     }
   }, [pacienteId]);
 
+  // Se o componente pai fornecer procedimentosFeitos com itens (ex: Perfil do Paciente), sincroniza diretamente
   useEffect(() => {
     if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
       setInternalProcedimentosFeitos(procedimentosFeitos);
-    } else {
+    }
+  }, [procedimentosFeitos]);
+
+  // Se não houver lista externa de procedimentos, busca do backend uma única vez por pacienteId
+  useEffect(() => {
+    if (!Array.isArray(procedimentosFeitos) || procedimentosFeitos.length === 0) {
       carregarProcedimentosFeitos();
     }
-  }, [procedimentosFeitos, carregarProcedimentosFeitos]);
+  }, [pacienteId, carregarProcedimentosFeitos, procedimentosFeitos]);
 
   const listaProcedimentosFeitos = useMemo(() => {
     if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
@@ -1416,6 +1439,146 @@ export function PlanosTab({
     }
   }, [clearError, criarPlano, initEmptyDraft, isConsulta, toast]);
 
+  // ── SINCRONIZADOR DE AVALIAÇÃO CLÍNICA -> PLANO DE TRATAMENTO ──
+  const autoSyncProcessingRef = useRef(false);
+  const autoSyncAttemptedRef = useRef(false);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+
+  const sincronizarProcedimentosNoPlano = useCallback(async (customPlanoId = null) => {
+    if (!canCrud || loading || !hasLoaded || catalogoLoading || !pacienteId) return;
+    if (!Array.isArray(procedimentosAvaliados) || procedimentosAvaliados.length === 0) return;
+    if (autoSyncProcessingRef.current) return;
+
+    autoSyncProcessingRef.current = true;
+    setIsAutoSyncing(true);
+    try {
+      let targetPlanoId = customPlanoId ? String(customPlanoId) : null;
+      if (!targetPlanoId) {
+        let planoAtivo = sortedPlanos.find(
+          (p) => p.statusCodigo === 'ativo' || p.status === 'ativo' || p.status === 'em_andamento'
+        );
+
+        if (planoAtivo) {
+          targetPlanoId = String(planoAtivo.id);
+        } else {
+          try {
+            const created = await criarPlano('');
+            const novoId = created?.planejamentoId ?? created?.id;
+            if (novoId) {
+              targetPlanoId = String(novoId);
+              initEmptyDraft(targetPlanoId);
+              hydratedPlanIdsRef.current.add(targetPlanoId);
+            }
+          } catch (createErr) {
+            if (createErr?.status === 409 || String(createErr?.message || '').includes('PLANO_ATIVO_EXISTENTE')) {
+              const recarregados = await refresh();
+              planoAtivo = (recarregados || []).find(
+                (p) => p.statusCodigo === 'ativo' || p.status === 'ativo' || p.status === 'em_andamento'
+              );
+              if (planoAtivo) {
+                targetPlanoId = String(planoAtivo.id);
+              }
+            } else {
+              throw createErr;
+            }
+          }
+        }
+      }
+
+      if (!targetPlanoId) return;
+
+      const targetPlano = displayPlanos.find((p) => String(p.id) === targetPlanoId);
+      const draftAtivo = getDraft(targetPlanoId);
+      const itensAtuais = draftAtivo?.itens || targetPlano?.itens || [];
+      const existingCatIds = new Set(
+        itensAtuais.map((i) => String(i.catalogoProcedimentoSaudeId || i.catalogoId || ''))
+      );
+
+      const itensParaInserir = procedimentosAvaliados.filter(
+        (p) => isRealUuid(p.catalogoProcedimentoSaudeId) && !existingCatIds.has(String(p.catalogoProcedimentoSaudeId))
+      );
+
+      if (itensParaInserir.length === 0) {
+        if (typeof onLimparProcedimentosAvaliados === 'function') {
+          onLimparProcedimentosAvaliados();
+        }
+        return;
+      }
+
+      for (const proc of itensParaInserir) {
+        const opt = catalogoOptions.find((c) => String(c.id) === String(proc.catalogoProcedimentoSaudeId));
+        const valor = opt?.valorPadrao ?? opt?.valorBase ?? 0;
+        await planejamentosApi.adicionarItem(targetPlanoId, {
+          catalogoProcedimentoSaudeId: proc.catalogoProcedimentoSaudeId,
+          tipo: 'manual',
+          valorOrcado: valor,
+          dataPlanejada: null,
+          roleUserId: roleUserId || null,
+          statusProcedimentoId: null,
+        });
+      }
+
+      const detalhe = await planejamentosApi.detalhe(targetPlanoId);
+      applyDetalhe(targetPlanoId, detalhe, catalogoOptions);
+      hydratedPlanIdsRef.current.add(targetPlanoId);
+      setExpandidos((prev) => ({ ...prev, [targetPlanoId]: true }));
+      await refresh();
+
+      toast.success(
+        `${itensParaInserir.length} procedimento${itensParaInserir.length > 1 ? 's' : ''} da avaliação facial incluído${itensParaInserir.length > 1 ? 's' : ''} no plano.`
+      );
+
+      if (typeof onLimparProcedimentosAvaliados === 'function') {
+        onLimparProcedimentosAvaliados();
+      }
+      onPlanoModificado?.();
+    } catch (err) {
+      console.error('[PlanosTab] Erro na inclusão de procedimentos da avaliação:', err);
+    } finally {
+      autoSyncProcessingRef.current = false;
+      setIsAutoSyncing(false);
+    }
+  }, [
+    applyDetalhe,
+    canCrud,
+    catalogoLoading,
+    catalogoOptions,
+    criarPlano,
+    displayPlanos,
+    getDraft,
+    hasLoaded,
+    initEmptyDraft,
+    loading,
+    onLimparProcedimentosAvaliados,
+    onPlanoModificado,
+    pacienteId,
+    procedimentosAvaliados,
+    refresh,
+    roleUserId,
+    sortedPlanos,
+    toast,
+  ]);
+
+  // Disparo automático apenas se o profissional explicitamente escolheu destino 'plano'
+  useEffect(() => {
+    if (
+      destinoAvaliacao === 'plano' &&
+      Array.isArray(procedimentosAvaliados) &&
+      procedimentosAvaliados.length > 0 &&
+      !autoSyncAttemptedRef.current
+    ) {
+      autoSyncAttemptedRef.current = true;
+      sincronizarProcedimentosNoPlano();
+    }
+  }, [destinoAvaliacao, procedimentosAvaliados, sincronizarProcedimentosNoPlano]);
+
+  // Reseta a tentativa de auto-sync quando a lista de avaliados for limpa
+  useEffect(() => {
+    if (!Array.isArray(procedimentosAvaliados) || procedimentosAvaliados.length === 0) {
+      autoSyncAttemptedRef.current = false;
+    }
+  }, [procedimentosAvaliados]);
+
   const handleSalvarPlano = useCallback(
     async (planoId) => {
       const id = String(planoId ?? '').trim();
@@ -1451,19 +1614,115 @@ export function PlanosTab({
         setSavingPlanoId('');
       }
     },
-    [applyDetalhe, buildPutPayload, catalogoOptions, getRemovedSinceBaseline, refresh, rollbackRemoved, salvarPlano, toast],
+    [applyDetalhe, buildPutPayload, carregarGaleria, carregarProcedimentosFeitos, catalogoOptions, getRemovedSinceBaseline, refresh, rollbackRemoved, salvarPlano, toast],
   );
+
+  const handleAdicionarProcedimento = useCallback(
+    async (planoId, opt) => {
+      let targetPlanoId = planoId;
+      if (!targetPlanoId) {
+        try {
+          const novo = await criarPlano('Plano de Tratamento');
+          targetPlanoId = novo?.id;
+        } catch (err) {
+          const msg = getApiErrorDetail(err) || err?.message || 'Erro ao inicializar plano.';
+          toast.error(msg);
+          return;
+        }
+      }
+      if (!targetPlanoId || !opt?.id) return;
+
+      setActionError('');
+      try {
+        const valor = opt.valorPadrao ?? opt.valorBase ?? 0;
+        await adicionarItem(targetPlanoId, {
+          catalogoProcedimentoSaudeId: String(opt.id),
+          valorOrcado: valor,
+          dataPlanejada: null,
+        });
+        const detalhe = await planejamentosApi.detalhe(targetPlanoId);
+        applyDetalhe(targetPlanoId, detalhe, catalogoOptions);
+        hydratedPlanIdsRef.current.add(targetPlanoId);
+        toast.success(`"${opt.nomeProcedimento}" adicionado ao plano!`);
+        onPlanoModificado?.();
+      } catch (err) {
+        const msg = getApiErrorDetail(err) || err?.message || 'Erro ao adicionar procedimento ao plano.';
+        setActionError(msg);
+        toast.error(msg);
+      }
+    },
+    [adicionarItem, applyDetalhe, catalogoOptions, criarPlano, onPlanoModificado, toast],
+  );
+
+  const [obsStatus, setObsStatus] = useState('salvo'); // 'salvo' | 'salvando' | 'erro'
+  const obsDebounceRef = useRef(null);
+  const pendingObsRef = useRef(null);
+
+  const handleObservacaoChange = useCallback(
+    (planoId, text) => {
+      setObservacao(planoId, text);
+      pendingObsRef.current = { planoId, text };
+      setObsStatus('salvando');
+
+      if (obsDebounceRef.current) clearTimeout(obsDebounceRef.current);
+      obsDebounceRef.current = setTimeout(async () => {
+        try {
+          const body = buildPutPayload(planoId);
+          body.observacao = String(text ?? '').trim();
+          await salvarPlano(planoId, body);
+          setObsStatus('salvo');
+          pendingObsRef.current = null;
+        } catch (err) {
+          console.warn('Erro no auto-save de observações do plano:', err);
+          setObsStatus('erro');
+        }
+      }, 800);
+    },
+    [buildPutPayload, salvarPlano, setObservacao],
+  );
+
+  const flushPendingObservacoes = useCallback(async () => {
+    if (obsDebounceRef.current) {
+      clearTimeout(obsDebounceRef.current);
+      obsDebounceRef.current = null;
+    }
+    if (pendingObsRef.current) {
+      const { planoId, text } = pendingObsRef.current;
+      pendingObsRef.current = null;
+      try {
+        const body = buildPutPayload(planoId);
+        body.observacao = String(text ?? '').trim();
+        await salvarPlano(planoId, body);
+        setObsStatus('salvo');
+      } catch (err) {
+        console.warn('Erro ao descarregar observação pendente:', err);
+      }
+    }
+  }, [buildPutPayload, salvarPlano]);
+
+  useImperativeHandle(ref, () => ({
+    flushPendingObservacoes,
+  }), [flushPendingObservacoes]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingObsRef.current) {
+        flushPendingObservacoes();
+      }
+    };
+  }, [flushPendingObservacoes]);
 
   const handleEncerrar = useCallback(
     async (planoId) => {
       setActionError('');
       try {
         await alterarStatusPlano(planoId, 'encerrado');
+        onPlanoModificado?.();
       } catch (e) {
         setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível encerrar o plano.');
       }
     },
-    [alterarStatusPlano],
+    [alterarStatusPlano, onPlanoModificado],
   );
 
   const openEncerrarModal = useCallback((planoId) => {
@@ -1600,7 +1859,9 @@ export function PlanosTab({
       let targetItem = item;
       let targetPlano = _plano || displayPlanos.find((p) => String(p.id) === String(item?.planejamentoId)) || displayPlanos[0];
       const pid = targetPlano?.id;
-      const itemId = targetItem?.id || targetItem?.planejamentoItemId;
+      // O item de retorno da linha do tempo tem id `${planejamentoItemId}_retorno`; trocá-lo pelo item do detalhe
+      // perderia isRetorno e a origem.
+      const itemId = String(targetItem?.id || targetItem?.planejamentoItemId || '').replace(/_retorno$/, '');
 
       if (pid && (targetPlano?.statusCodigo === 'rascunho' || !isRealUuid(itemId))) {
         try {
@@ -1880,18 +2141,18 @@ export function PlanosTab({
 
     try {
       for (const item of itensParaRemover) {
-        if (isConsulta) {
-          removeItem(planoAtivo.id, itemReactKey(item));
-        } else {
+        if (isRealUuid(item.id)) {
           await removerItem(planoAtivo.id, item.id);
         }
+        removeItem(planoAtivo.id, itemReactKey(item));
       }
       toast.success(`${itensParaRemover.length} procedimentos removidos do plano.`);
       limparSelecao();
+      onPlanoModificado?.();
     } catch (e) {
       setActionError(getApiErrorDetail(e) || e?.message || 'Erro ao remover itens selecionados.');
     }
-  }, [displayPlanos, isConsulta, limparSelecao, removeItem, removerItem, selecionados, toast]);
+  }, [displayPlanos, limparSelecao, onPlanoModificado, removeItem, removerItem, selecionados, toast]);
 
   const handleAgendarItem = useCallback(
     async (item, onSaved, planoId) => {
@@ -2014,13 +2275,25 @@ export function PlanosTab({
   }, [concluirRetornoModal, handleConcluirComRetorno]);
 
   const handleEditItemSave = useCallback(
-    (patch) => {
+    async (patch) => {
       if (!editItemState) return;
-      const { planoId, itemKey: key } = editItemState;
-      updateItem(planoId, key, patch, catalogoOptions);
-      setEditItemState(null);
+      const { planoId, itemKey: key, item } = editItemState;
+      try {
+        const realId = item?.id || (isRealUuid(key) ? key : null);
+        if (realId) {
+          await editarItem(planoId, realId, patch);
+        }
+        updateItem(planoId, key, patch, catalogoOptions);
+        toast.success('Procedimento atualizado.');
+        onPlanoModificado?.();
+      } catch (err) {
+        const msg = getApiErrorDetail(err) || err?.message || 'Erro ao atualizar procedimento.';
+        toast.error(msg);
+      } finally {
+        setEditItemState(null);
+      }
     },
-    [catalogoOptions, editItemState, updateItem],
+    [catalogoOptions, editItemState, editarItem, onPlanoModificado, toast, updateItem],
   );
 
 
@@ -2126,15 +2399,29 @@ export function PlanosTab({
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
                 Observações Clínicas do Plano
               </span>
-              <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
-                <Check className="h-3 w-3" />
-                <span>Salvo</span>
-              </span>
+              {obsStatus === 'salvando' && (
+                <span className="text-[11px] font-medium text-amber-600 flex items-center gap-1 animate-pulse">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Salvando...</span>
+                </span>
+              )}
+              {obsStatus === 'salvo' && (
+                <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  <span>Salvo</span>
+                </span>
+              )}
+              {obsStatus === 'erro' && (
+                <span className="text-[11px] font-medium text-rose-500 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>Erro ao salvar</span>
+                </span>
+              )}
             </div>
             <textarea
               rows={2}
               value={planoDraft?.observacao ?? planoAtivo?.observacao ?? ''}
-              onChange={(e) => setObservacao(planoAtivo.id, e.target.value)}
+              onChange={(e) => handleObservacaoChange(planoAtivo.id, e.target.value)}
               placeholder="Ex: Paciente sensível na região dos lábios, aplicar anestésico tópico 20 min antes…"
               className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#00a88e] focus:bg-white transition-all resize-none"
             />
@@ -2174,6 +2461,7 @@ export function PlanosTab({
                   if (!isRealUuid(itemId)) {
                     removeItem(planoAtivo.id, itemKey);
                     toast.success('Procedimento removido.');
+                    onPlanoModificado?.();
                     return;
                   }
                   await removerItem(planoAtivo.id, itemId);
@@ -2182,6 +2470,7 @@ export function PlanosTab({
                   await removerItem(planoAtivo.id, itemId);
                 }
                 toast.success('Procedimento removido.');
+                onPlanoModificado?.();
               } catch (e) {
                 setActionError(
                   getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.',
@@ -2192,7 +2481,7 @@ export function PlanosTab({
             selecionados={selecionados}
             onToggleSelecao={toggleSelecao}
             termosFaltantes={termosFaltantes}
-            procedimentosFeitos={procedimentosFeitos}
+            procedimentosFeitos={listaProcedimentosFeitos}
           />
         </div>
 
@@ -2325,9 +2614,9 @@ export function PlanosTab({
               Histórico Clínico Recente
             </span>
 
-            {procedimentosFeitos.length > 0 ? (
+            {listaProcedimentosFeitos.length > 0 ? (
               <div className="space-y-2">
-                {procedimentosFeitos.slice(0, 4).map((proc, idx) => (
+                {listaProcedimentosFeitos.slice(0, 4).map((proc, idx) => (
                   <div key={idx} className="flex items-start justify-between gap-2 text-xs">
                     <span className="font-medium text-slate-700 truncate">
                       {proc.nomeProcedimento || proc.nome || 'Procedimento'}
@@ -2516,7 +2805,7 @@ export function PlanosTab({
                         catalogoOptions={catalogoOptions}
                         selecionados={selecionados}
                         onToggleSelecao={toggleSelecao}
-                        procedimentosFeitos={procedimentosFeitos}
+                        procedimentosFeitos={listaProcedimentosFeitos}
                         onEdit={(item) =>
                           setEditItemState({
                             planoId: plano.id,
@@ -2528,6 +2817,7 @@ export function PlanosTab({
                           setActionError('');
                           try {
                             await removerItem(pid, iid);
+                            onPlanoModificado?.();
                           } catch (e) {
                             setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível remover o item.');
                           }
@@ -2552,7 +2842,10 @@ export function PlanosTab({
           {typeof onVoltar === 'function' ? (
             <button
               type="button"
-              onClick={onVoltar}
+              onClick={async () => {
+                await flushPendingObservacoes();
+                onVoltar();
+              }}
               className="rounded-xl border border-app-border bg-white px-4 py-2.5 text-[13px] font-semibold text-[#64748b] transition-colors hover:bg-app-nav-hover"
             >
               Voltar ao hub
@@ -2577,6 +2870,14 @@ export function PlanosTab({
           </button>
         ) : null}
       </div>
+
+      {/* ── INDICADOR DE SINCRONIZAÇÃO DA AVALIAÇÃO FACIAL ── */}
+      {isAutoSyncing && (
+        <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/80 px-3 py-2 text-xs text-teal-800 shadow-2xs animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" />
+          <span>Incluindo procedimentos mapeados na avaliação facial no plano...</span>
+        </div>
+      )}
 
       {/* ── BARRA DE BUSCA RÁPIDA (ATALHO "/") + TOP 5 CHIPS FAVORITOS ── */}
       {canCrud && displayPlanos.length > 0 && (
@@ -2607,21 +2908,9 @@ export function PlanosTab({
                   type="button"
                   disabled={mutating || !planoAtivoId}
                   onClick={() => {
-                    if (planoAtivoId) {
-                      addItem(
-                        planoAtivoId,
-                        {
-                          catalogoProcedimentoSaudeId: String(opt.id),
-                          catalogoNome: opt.nomeProcedimento,
-                          tipoCodigo: opt.tipoCodigo ?? '',
-                          valorOrcado: opt.valorPadrao ?? opt.valorBase ?? 0,
-                        },
-                        catalogoOptions,
-                      );
-                      toast.success(`"${opt.nomeProcedimento}" adicionado ao plano!`);
-                    }
+                    handleAdicionarProcedimento(planoAtivoId, opt);
                   }}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-teal-50 hover:border-[#00a88e] hover:text-[#00a88e] px-2 py-1 text-[11px] font-medium text-slate-600 transition-all active:scale-95"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-teal-50 hover:border-[#00a88e] hover:text-[#00a88e] px-2 py-1 text-[11px] font-medium text-slate-600 transition-all active:scale-95 disabled:opacity-60"
                 >
                   <Plus className="h-3 w-3" />
                   <span>{opt.nomeProcedimento}</span>
@@ -2648,22 +2937,10 @@ export function PlanosTab({
                       type="button"
                       disabled={mutating || !planoAtivoId}
                       onClick={() => {
-                        if (planoAtivoId) {
-                          addItem(
-                            planoAtivoId,
-                            {
-                              catalogoProcedimentoSaudeId: String(opt.id),
-                              catalogoNome: opt.nomeProcedimento,
-                              tipoCodigo: opt.tipoCodigo ?? '',
-                              valorOrcado: opt.valorPadrao ?? opt.valorBase ?? 0,
-                            },
-                            catalogoOptions,
-                          );
-                          setBuscaProcedimento('');
-                          toast.success(`"${opt.nomeProcedimento}" adicionado ao plano!`);
-                        }
+                        handleAdicionarProcedimento(planoAtivoId, opt);
+                        setBuscaProcedimento('');
                       }}
-                      className="w-full flex items-center justify-between rounded-lg p-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-[#00a88e] transition-colors"
+                      className="w-full flex items-center justify-between rounded-lg p-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-[#00a88e] transition-colors disabled:opacity-60"
                     >
                       <span>{opt.nomeProcedimento}</span>
                       <span className="text-[11px] font-mono text-slate-400">
@@ -2683,7 +2960,54 @@ export function PlanosTab({
         </div>
       ) : null}
 
-      {loading ? (
+      {/* BANNER CONTEXTUAL: PROCEDIMENTOS DA AVALIAÇÃO FACIAL */}
+      {Array.isArray(procedimentosAvaliados) && procedimentosAvaliados.length > 0 && destinoAvaliacao !== 'plano' && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50/90 via-emerald-50/50 to-white p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00a88e] text-white shadow-xs">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-800">
+                Procedimentos sugeridos na Avaliação Facial
+              </h4>
+              <p className="mt-0.5 text-xs text-slate-600">
+                Encontramos <strong className="text-teal-700">{procedimentosAvaliados.length} procedimento{procedimentosAvaliados.length > 1 ? 's' : ''}</strong> mapeado{procedimentosAvaliados.length > 1 ? 's' : ''} na última avaliação facial. Deseja importá-los para o Plano de Tratamento?
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              disabled={isAutoSyncing}
+              onClick={() => sincronizarProcedimentosNoPlano()}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#00a88e] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#008f7a] active:scale-95 transition-all disabled:opacity-60"
+            >
+              {isAutoSyncing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Importando...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Puxar Procedimentos</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              disabled={isAutoSyncing}
+              onClick={() => onLimparProcedimentosAvaliados?.()}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Dispensar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading && !hasLoaded ? (
         <div className="flex items-center justify-center gap-2 py-12 text-[#64748b]">
           <Loader2 className="h-5 w-5 animate-spin text-[#00a88e]" />
           <span className="text-[13px] font-medium">Carregando planos…</span>
@@ -2874,4 +3198,4 @@ export function PlanosTab({
       )}
     </div>
   );
-}
+});

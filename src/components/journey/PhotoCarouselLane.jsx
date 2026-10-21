@@ -1,6 +1,8 @@
 import React from 'react';
 import { Camera, Trash2, ImageIcon } from 'lucide-react';
 import { GALERIA_CATEGORIA_LABELS, GALERIA_CATEGORIA } from '../../utils/pacienteGaleria.js';
+import { FotoCardImagem } from '../consulta/FotoCardImagem.jsx';
+import { chaveFotoLegenda } from './chaveFotoLegenda.js';
 
 const STEP4_FOTO_OVERLAY_BADGE = {
   [GALERIA_CATEGORIA.ANTES]: 'bg-[#f59e0b]',
@@ -21,9 +23,12 @@ export function PhotoCarouselLane({
   onUpload,
   onRemove,
   onAnnotate,
+  /** F5: (photo) => path /arquivo da foto no servidor; o card nunca põe URL /api/ crua no <img>. */
+  urlArquivoReserva = null,
   showUpload = true,
   emptyHint = 'Nenhuma foto adicionada nesta categoria.',
 }) {
+  const listaFotos = items.map((it) => it.photo);
   return (
     <div className="mb-4 flex flex-col gap-2">
       {title && (
@@ -32,8 +37,11 @@ export function PhotoCarouselLane({
 
       <div className="flex flex-row overflow-x-auto flex-nowrap gap-3 pb-2 scroll-smooth overscroll-x-contain scrollbar-thin scrollbar-thumb-[#cbd5e1] scrollbar-track-transparent">
         
-        {items.map(({ photo, originalIndex }) => (
-          <div key={photo.url || originalIndex} className="w-32 shrink-0 flex flex-col gap-1">
+        {items.map(({ photo, originalIndex }) => {
+          // F5: a chave e a legenda seguem o fotoId (a url muda no aviso GALERIA); sem fotoId, a url como antes.
+          const chaveFoto = chaveFotoLegenda(photo, listaFotos, originalIndex);
+          return (
+          <div key={chaveFoto || originalIndex} className="w-32 shrink-0 flex flex-col gap-1">
             <div className="group relative aspect-square overflow-hidden rounded-xl bg-[#f1f5f9]">
               <div
                 className={`absolute left-1 top-1 z-10 rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${
@@ -43,7 +51,7 @@ export function PhotoCarouselLane({
                 {getUIAlias(photo.meta?.categoria)}
               </div>
               
-              <img src={photo.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+              <FotoCardImagem photo={photo} urlArquivoReserva={urlArquivoReserva} loading="lazy" />
               
               {typeof onAnnotate === 'function' && (
                 <button
@@ -71,15 +79,16 @@ export function PhotoCarouselLane({
             
             <input
               type="text"
-              value={legendas[photo.url] ?? ''}
+              value={legendas[chaveFoto] ?? ''}
               onChange={(e) =>
-                setLegendas((prev) => ({ ...prev, [photo.url]: e.target.value }))
+                setLegendas((prev) => ({ ...prev, [chaveFoto]: e.target.value }))
               }
               placeholder="Ex: Detalhe..."
               className="w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-2 py-1 text-[11px] text-[#0f172a] outline-none placeholder:text-[#cbd5e1] focus:border-[#00a88e]"
             />
           </div>
-        ))}
+          );
+        })}
 
         {showUpload && (
           <button

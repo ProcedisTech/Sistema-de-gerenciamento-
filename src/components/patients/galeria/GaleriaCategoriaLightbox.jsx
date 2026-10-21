@@ -3,27 +3,48 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { GaleriaArquivoImage } from '../GaleriaArquivoImage.jsx';
 import { GaleriaMapaThumb } from './GaleriaMapaThumb.jsx';
 import { ZoomableGalleryLightbox } from '../ZoomableGalleryLightbox.jsx';
+import { PlanoFotoLightbox } from '../../planos/PlanoFotoLightbox.jsx';
 import { GALERIA_CATEGORIA } from '../../../utils/pacienteGaleria.js';
 
 function shouldShowMapaOverlay(foto) {
-  return Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === GALERIA_CATEGORIA.MAPA;
+  return (
+    Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
+    foto?.categoria === GALERIA_CATEGORIA.MAPA ||
+    foto?.categoria === GALERIA_CATEGORIA.AVALIACAO ||
+    foto?.categoria === 'avaliacao' ||
+    foto?.tipoFotoCodigo === 'avaliacao' ||
+    Boolean(foto?.pontos?.length) ||
+    (typeof foto?.fileName === 'string' && foto.fileName.toLowerCase().includes('avaliacao'))
+  );
 }
 
-export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose, pacienteId = null }) {
-  const [zoomIndex, setZoomIndex] = useState(null);
+export function GaleriaCategoriaLightbox({
+  open,
+  fotos,
+  fotoInicial = null,
+  categoriaLabel,
+  onClose,
+  pacienteId = null,
+}) {
+  const [zoomIndex, setZoomIndex] = useState(() => {
+    if (!fotoInicial || !fotos?.length) return fotos?.length === 1 ? 0 : null;
+    const fId = String(fotoInicial.serverId || fotoInicial.id || fotoInicial.url);
+    const idx = fotos.findIndex((item) => String(item.serverId || item.id || item.url) === fId);
+    return idx >= 0 ? idx : 0;
+  });
 
   const handleKeyDown = useCallback(
     (e) => {
       if (!open) return;
       if (e.key === 'Escape') {
-        if (zoomIndex != null && fotos?.length) {
+        if (zoomIndex != null && fotos?.length && !fotoInicial) {
           setZoomIndex(null);
         } else {
           onClose?.();
         }
       }
     },
-    [open, zoomIndex, fotos?.length, onClose],
+    [open, zoomIndex, fotos?.length, fotoInicial, onClose],
   );
 
   useEffect(() => {
@@ -38,6 +59,24 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose,
 
   const goPrev = () => setZoomIndex((i) => (i > 0 ? i - 1 : fotos.length - 1));
   const goNext = () => setZoomIndex((i) => (i < fotos.length - 1 ? i + 1 : 0));
+
+  // Se estiver em zoom e for foto de mapa ou avaliação, exibe o modelo novo completo (PlanoFotoLightbox)
+  if (inZoom && currentFoto && shouldShowMapaOverlay(currentFoto)) {
+    return (
+      <PlanoFotoLightbox
+        foto={currentFoto}
+        fotos={fotos}
+        pacienteId={pacienteId}
+        onClose={() => {
+          if (fotoInicial || fotos.length <= 1) {
+            onClose?.();
+          } else {
+            setZoomIndex(null);
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div
@@ -90,29 +129,13 @@ export function GaleriaCategoriaLightbox({ open, fotos, categoriaLabel, onClose,
               </button>
             </>
           ) : null}
-          {shouldShowMapaOverlay(currentFoto) ? (
-            <div className="flex max-h-[85vh] w-full max-w-[90vw] items-center justify-center">
-              <div className="aspect-square w-full max-h-[85vh] max-w-[min(90vw,85vh)] overflow-hidden rounded-xl border border-white/30 bg-slate-900">
-                <GaleriaMapaThumb
-                  url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
-                  mapaOverlay={currentFoto.mapaOverlay}
-                  alt={currentFoto.fileName || categoriaLabel || 'Foto'}
-                  className="h-full w-full"
-                  density="full"
-                  pacienteId={pacienteId}
-                  fotoId={currentFoto.serverId}
-                />
-              </div>
-            </div>
-          ) : (
-            <ZoomableGalleryLightbox
-              url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
-              alt={currentFoto.fileName || categoriaLabel || 'Foto'}
-              authFetch
-              pacienteId={pacienteId}
-              fotoId={currentFoto.serverId}
-            />
-          )}
+          <ZoomableGalleryLightbox
+            url={currentFoto.url ?? currentFoto.src ?? currentFoto.presignedUrl}
+            alt={currentFoto.fileName || categoriaLabel || 'Foto'}
+            authFetch
+            pacienteId={pacienteId}
+            fotoId={currentFoto.serverId}
+          />
           <button
             type="button"
             onClick={() => setZoomIndex(null)}

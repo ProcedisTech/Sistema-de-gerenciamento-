@@ -3,6 +3,8 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { AguardandoPacienteModal } from './AguardandoPacienteModal.jsx';
+import { criarAvisosFalsos } from '../../test/avisosFalsos.jsx';
+import { AVISO } from '../../services/avisos/tiposAviso.js';
 
 vi.mock('../../config/apiEnv', () => ({
   resolveApiUrl: (path) => path,
@@ -99,6 +101,8 @@ describe('AguardandoPacienteModal', () => {
 
   it('callback trocado entre renders é executado na versão nova, via ref, sem re-disparar o effect de geração', async () => {
     vi.useFakeTimers();
+    const canal = criarAvisosFalsos();
+    let statusAtual = 'PENDENTE';
 
     fetch.mockImplementation((url) => {
       const urlStr = String(url);
@@ -115,7 +119,7 @@ describe('AguardandoPacienteModal', () => {
       if (urlStr.includes('/status')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ status: 'CONCLUIDO' }),
+          json: () => Promise.resolve({ status: statusAtual }),
         });
       }
       if (urlStr.includes('/termos/assinaturas/')) {
@@ -140,7 +144,8 @@ describe('AguardandoPacienteModal', () => {
           telefonePaciente: '',
         }}
         onAssinaturaConcluida={cb1}
-      />
+      />,
+      { wrapper: canal.Wrapper },
     );
 
     // Processa a chamada inicial de gerar
@@ -174,17 +179,16 @@ describe('AguardandoPacienteModal', () => {
     );
     expect(gerarCallsAposTroca.length).toBe(1);
 
-    // Avança o timer de polling (3000ms)
+    // Paciente assina: o canal avisa a sessão e o modal rebusca o status
+    statusAtual = 'CONCLUIDO';
+    canal.emitirAviso(AVISO.TERMOS.ASSINATURA_REMOTA_ALTERADA, 'sess-polling');
     await act(async () => {
-      vi.advanceTimersByTime(3000);
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(300);
     });
 
     // Avança o setTimeout do callback (1500ms)
     await act(async () => {
-      vi.advanceTimersByTime(1500);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1500);
     });
 
     expect(cb1).not.toHaveBeenCalled();
@@ -319,9 +323,10 @@ describe('AguardandoPacienteModal', () => {
     });
   });
 
-  it('ao fechar (open=false) limpa o polling (clearInterval)', async () => {
+  it('ao fechar (open=false) para de consultar o status mesmo com avisos da sessão', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const clearSpy = vi.spyOn(globalThis, 'clearInterval');
+    const canal = criarAvisosFalsos();
+    const statusCalls = () => fetch.mock.calls.filter(([url]) => String(url).includes('/status')).length;
 
     fetch.mockImplementation((url) => {
       if (String(url).includes('/gerar')) {
@@ -351,14 +356,27 @@ describe('AguardandoPacienteModal', () => {
         }}
         onAssinaturaConcluida={vi.fn()}
         onCancelar={vi.fn()}
-      />
+      />,
+      { wrapper: canal.Wrapper },
     );
 
     await waitFor(() => {
       expect(screen.getByText('Aguardando Paciente')).toBeInTheDocument();
     });
+    await waitFor(() => expect(statusCalls()).toBe(1));
 
-    clearSpy.mockClear();
+    canal.emitirAviso(AVISO.TERMOS.ASSINATURA_REMOTA_ALTERADA, 'outra-sessao');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(statusCalls()).toBe(1);
+
+    canal.emitirAviso(AVISO.TERMOS.ASSINATURA_REMOTA_ALTERADA, 'sess-poll');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(statusCalls()).toBe(2);
+
     rerender(
       <AguardandoPacienteModal
         open={false}
@@ -373,8 +391,12 @@ describe('AguardandoPacienteModal', () => {
       />
     );
 
-    expect(clearSpy).toHaveBeenCalled();
+    canal.emitirAviso(AVISO.TERMOS.ASSINATURA_REMOTA_ALTERADA, 'sess-poll');
+    canal.emitirRecarregar();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(statusCalls()).toBe(2);
     vi.useRealTimers();
-    clearSpy.mockRestore();
   });
 });

@@ -29,7 +29,8 @@ import { PatientsTodayStrip } from './PatientsTodayStrip.jsx';
 import { PatientFiltersSheet } from './PatientFiltersSheet.jsx';
 import { PatientFiltersPopover } from './PatientFiltersPopover.jsx';
 import { PatientActiveFilterChips } from './PatientActiveFilterChips.jsx';
-import { getRailCardActions } from '../../utils/agendaCardActions.js';
+import { getConsultaEmAndamento, getRailCardActions } from '../../utils/agendaCardActions.js';
+import { linhasDoCard, loteDasLinhas } from '../../utils/loteAgendasDoPaciente.js';
 import { AgendaRailCardActions } from '../agenda/AgendaRailCardActions.jsx';
 import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
 import {
@@ -92,8 +93,11 @@ function applyQuickFilter(items, filter) {
   return applyPatientQuickFilter(items, filter);
 }
 
-/** Espelha AgendaDashboard.jsx — monta as options de tolerância a partir de um slot de agenda. */
-function buildAgendaSlotOptions(slot) {
+/**
+ * Espelha AgendaDashboard.jsx — monta as options de tolerância a partir de um slot de agenda.
+ * B-42 F2: `linhas` = as agendas do card clicado; o lote leva só elas (nunca o dia inteiro).
+ */
+function buildAgendaSlotOptions(slot, linhas) {
   return {
     agendaId: slot.agendaId,
     data: slot.data,
@@ -105,6 +109,7 @@ function buildAgendaSlotOptions(slot) {
     tipoProcedimentoCodigo: slot.tipoProcedimentoCodigo,
     procedimentoFeitoOrigemId: slot.procedimentoFeitoOrigemId,
     isAgendaRetorno: String(slot.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno',
+    lote: loteDasLinhas(Array.isArray(linhas) && linhas.length > 0 ? linhas : [slot]),
   };
 }
 
@@ -514,14 +519,22 @@ export function PatientPreviewPanel({
   previewProcedures = [],
   loadingPreviewProcedures = false,
   onStartAttendance,
+  onVoltarConsulta,
   previewAnamneseLoading = false,
   captureProfileNavSnapshot,
   agendaSchedule,
   previewAgendaSlot,
+  entradasHoje,
   onSolicitarAnamnese,
   onSlotCancelar,
 }) {
-  const { isNivel1, canSeeProntuario, canStartAnamnese, canDeleteAgenda } = usePapel();
+  const { isNivel1, canSeeProntuario, canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  /** B-42 F2: opções do Iniciar com o lote só do card do slot da prévia. */
+  const opcoesDoSlotDaPrevia = () =>
+    buildAgendaSlotOptions(
+      previewAgendaSlot,
+      linhasDoCard(entradasHoje, previewAgendaSlot.agendaId, previewAgendaSlot),
+    );
   const { fuso, hojeIso } = useAgoraDaClinica();
 
   const [expandedRetornosMap, setExpandedRetornosMap] = useState({});
@@ -560,7 +573,7 @@ export function PatientPreviewPanel({
 
   const handleIniciarAtendimentoClick = () => {
     if (!canStartAnamnese || previewAnamneseLoading || typeof onStartAttendance !== 'function') return;
-    onStartAttendance(selectedPatient, previewAgendaSlot ? buildAgendaSlotOptions(previewAgendaSlot) : {});
+    onStartAttendance(selectedPatient, previewAgendaSlot ? opcoesDoSlotDaPrevia() : {});
   };
 
   const rawPhone = String(selectedPatient?.telefone || '').replace(/\D/g, '');
@@ -686,10 +699,16 @@ export function PatientPreviewPanel({
           <h4 className="text-[13px] font-bold text-[#0f172a]">Agendamento de Hoje</h4>
           <AgendaRailCardActions
             appointment={previewAgendaSlot}
-            actions={getRailCardActions(previewAgendaSlot.status, canStartAnamnese, Boolean(canDeleteAgenda && onSlotCancelar))}
+            actions={getRailCardActions(
+              previewAgendaSlot.status,
+              canStartAnamnese,
+              Boolean(canDeleteAgenda && onSlotCancelar),
+              getConsultaEmAndamento([previewAgendaSlot], roleUserId),
+            )}
             compact={false}
+            onVoltarConsulta={onVoltarConsulta}
             onConfirmar={() => agendaSchedule?.handleAtualizarStatus(previewAgendaSlot.agendaId, 'confirmado')}
-            onIniciarAtendimento={() => onStartAttendance?.(selectedPatient, buildAgendaSlotOptions(previewAgendaSlot))}
+            onIniciarAtendimento={() => onStartAttendance?.(selectedPatient, opcoesDoSlotDaPrevia())}
             onWhatsApp={() => agendaSchedule?.handleEnviarWhatsApp(previewAgendaSlot.agendaId)}
             onEnviarAnamnese={() => onSolicitarAnamnese?.(previewAgendaSlot)}
             onReagendar={() => agendaSchedule?.openReagendarModal(previewAgendaSlot, [previewAgendaSlot])}
@@ -847,6 +866,7 @@ export function PatientsListView({
   getPatientInitials,
   onCreatePatient,
   onStartAttendance,
+  onVoltarConsulta,
   isRecepcionista: _isRecepcionista,
   statusPlanoFilter = '',
   setStatusPlanoFilter,
@@ -1067,13 +1087,13 @@ export function PatientsListView({
   };
 
   /** PulseSidebar só tem o slot cru (kpi.agendamentosHoje) — resolve o paciente completo antes de iniciar. */
-  const handleStartAttendanceFromSlot = (slot) => {
+  const handleStartAttendanceFromSlot = (slot, linhas) => {
     if (!slot?.pacienteId || typeof onStartAttendance !== 'function') return;
     const pid = String(slot.pacienteId);
     const fullPatient =
       patients.find((p) => String(p.id) === pid) || patientListItems.find((p) => String(p.id) === pid);
     if (!fullPatient) return;
-    onStartAttendance(fullPatient, buildAgendaSlotOptions(slot));
+    onStartAttendance(fullPatient, buildAgendaSlotOptions(slot, linhas));
   };
 
   const clinicaSlug = clinicaInfo?.slug || '';
@@ -1397,10 +1417,12 @@ export function PatientsListView({
                   previewProcedures={previewProcedures}
                   loadingPreviewProcedures={loadingPreviewProcedures}
                   onStartAttendance={onStartAttendance}
+                  onVoltarConsulta={onVoltarConsulta}
                   previewAnamneseLoading={previewAnamneseLoading}
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
                   agendaSchedule={agendaSchedule}
                   previewAgendaSlot={previewAgendaSlot}
+                  entradasHoje={kpi?.entradasHoje}
                   onSolicitarAnamnese={handleSolicitarAnamnese}
                   onSlotCancelar={onSlotCancelar}
                   shellClassName="patient-preview-sheet w-full border-0 shadow-none"
@@ -1433,10 +1455,12 @@ export function PatientsListView({
                   previewProcedures={previewProcedures}
                   loadingPreviewProcedures={loadingPreviewProcedures}
                   onStartAttendance={onStartAttendance}
+                  onVoltarConsulta={onVoltarConsulta}
                   previewAnamneseLoading={previewAnamneseLoading}
                   captureProfileNavSnapshot={captureProfileNavSnapshot}
                   agendaSchedule={agendaSchedule}
                   previewAgendaSlot={previewAgendaSlot}
+                  entradasHoje={kpi?.entradasHoje}
                   onSolicitarAnamnese={handleSolicitarAnamnese}
                   onSlotCancelar={onSlotCancelar}
                   shellClassName="w-full min-w-0 flex-1 border-0 shadow-none"
@@ -1455,6 +1479,7 @@ export function PatientsListView({
               getPatientInitials={getPatientInitials}
               agendaSchedule={agendaSchedule}
               onStartAttendance={handleStartAttendanceFromSlot}
+              onVoltarConsulta={onVoltarConsulta}
               onSolicitarAnamnese={handleSolicitarAnamnese}
               onSlotCancelar={onSlotCancelar}
             />

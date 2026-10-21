@@ -8,7 +8,7 @@ import { idsFilaExigida } from '../utils/termoResolucao';
  */
 export function useTermosPendentes(
   pacienteId,
-  { catalogoIds = [], exigirFilaVinculo = true } = {}
+  { catalogoIds = [], exigirFilaVinculo = true, chaveRebusca = 0, atendimentoId = null } = {}
 ) {
   const [pendentes, setPendentes] = useState([]);
   const [resolucao, setResolucao] = useState(null);
@@ -26,7 +26,11 @@ export function useTermosPendentes(
     setIsLoading(true);
     (async () => {
       try {
-        const resolucaoRaw = await termosApi.resolver({ pacienteId, catalogoIds });
+        const resolucaoRaw = await termosApi.resolver({
+          pacienteId,
+          catalogoIds,
+          ...(atendimentoId ? { atendimentoId } : {}),
+        });
         if (cancelled) return;
         const resolucaoDto = resolucaoRaw && typeof resolucaoRaw === 'object' ? resolucaoRaw : {};
         setResolucao(resolucaoDto);
@@ -51,7 +55,7 @@ export function useTermosPendentes(
     return () => {
       cancelled = true;
     };
-  }, [pacienteId, catalogoKey, exigirFilaVinculo]);
+  }, [pacienteId, catalogoKey, exigirFilaVinculo, chaveRebusca, atendimentoId]);
 
   return { pendentes, count: pendentes.length, isLoading, resolucao };
 }

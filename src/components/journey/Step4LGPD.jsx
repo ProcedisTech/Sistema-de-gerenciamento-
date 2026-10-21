@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  CheckCircle2,
   Shield,
   RotateCw,
   Image as ImageIcon,
@@ -17,14 +18,15 @@ import {
   AlertTriangle,
   Search,
   XCircle,
+  Sparkles,
+  Info,
+  Loader2,
 } from 'lucide-react';
 import {
   authHeadersForFetch,
   termoAssinaturaApi,
   assinaturaExternaApi,
   termosApi,
-  notificacoesApi,
-  getApiErrorToastMessage,
   organizacaoApi,
 } from '../../services/api';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
@@ -32,13 +34,16 @@ import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
 import { useToast } from '../../contexts/useToast.js';
-import { consentimentosAguardandoExecucao, idsFilaExigida } from '../../utils/termoResolucao';
+import {
+  consentimentosAguardandoExecucao,
+  detalharTermosFaltantes,
+  idsFilaExigida,
+  procedimentosSemTermoExigido,
+} from '../../utils/termoResolucao';
 import {
   idsAssinadosNestaJornada,
-  idsPendentesSemAssinadosNestaJornada,
   linhasDropdownTermos,
   mesclarFilaExigida,
-  proximoTermoPendente,
   ROTULO_DROPDOWN_TERMOS,
   seloLinhaTermo,
   termosDropdownSelecionaveis,
@@ -46,16 +51,28 @@ import {
 import { MapaAplicacaoPanel } from './mapa-aplicacao/MapaAplicacaoPanel.jsx';
 import { GALERIA_CATEGORIA, GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { PhotoCarouselLane } from './PhotoCarouselLane.jsx';
+import { chaveFotoLegenda } from './chaveFotoLegenda.js';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.jsx';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
+import { criarItemProcedimentoSessao } from '../../utils/procedimentoSessaoFactory.js';
+import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
+import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
+import { GaleriaArquivoImage } from '../patients/GaleriaArquivoImage.jsx';
 import { formatarInstante } from '../../utils/datasClinica';
 import { useFusoClinica } from '../hooks/useFusoClinica';
 
-
-
 const DEFAULT_TERMO_TITULO = 'TERMO DE CONSENTIMENTO';
+
+/**
+ * `enviarAssinaturaPelaFila` devolve o envelope { ok, assinatura, naFila, status, erro, naoEntrou }.
+ * Tolera o formato cru (a própria assinatura, legado/mocks) embrulhando-o como sucesso.
+ */
+function desembrulharAssinatura(r) {
+  if (r != null && typeof r === 'object' && 'ok' in r && 'naFila' in r) return r;
+  return { ok: true, assinatura: r, naFila: false, status: null };
+}
 
 function formatTimestamp(ts, fuso) {
   if (!ts) return '';
@@ -298,11 +315,11 @@ export function Step3Termos({
   profissionalAssinaturaDataUrl,
   setProfissionalAssinaturaDataUrl,
   _step4Errors = {},
-  setStep4Errors = () => {},
+  setStep4Errors = () => { },
   termosAssinados = [],
-  setTermosAssinados = () => {},
+  setTermosAssinados = () => { },
   termosPendentesIds = [],
-  setTermosPendentesIds = () => {},
+  setTermosPendentesIds = () => { },
   termoTitulo,
   termoConteudo,
   onTermoChange,
@@ -318,6 +335,10 @@ export function Step3Termos({
   exigirFilaVinculo = true,
   termoFocoId = null,
   onAbrirMetodosAssinatura,
+  atendimentoId = null,
+  termosDaConsulta,
+  gravarEstadoTermos,
+  enviarAssinaturaPelaFila,
 }) {
   const toast = useToast();
   const [termosDisponiveis, setTermosDisponiveis] = useState([]);
@@ -369,6 +390,29 @@ export function Step3Termos({
   const [permiteQrCode, setPermiteQrCode] = useState(true);
   const [permiteLink, setPermiteLink] = useState(true);
 
+  const idsAssinadosJornada = useMemo(() => {
+    const signed = idsAssinadosNestaJornada(termosAssinados);
+    for (const c of consentimentosAguardando || []) {
+      if (c?.termoId != null && String(c.termoId).trim() !== '') {
+        signed.add(String(c.termoId));
+      }
+    }
+    return signed;
+  }, [termosAssinados, consentimentosAguardando]);
+
+  const termosPendentesFila = useMemo(
+    () => (termosPendentesIds || []).map(String).filter((id) => id && !idsAssinadosJornada.has(id)),
+    [termosPendentesIds, idsAssinadosJornada],
+  );
+
+  useEffect(() => {
+    setTermosPendentesIds((prev) => {
+      const next = (prev || []).map(String).filter((id) => id && !idsAssinadosJornada.has(id));
+      if (next.length === (prev || []).length && next.every((id, i) => id === String(prev[i]))) return prev;
+      return next;
+    });
+  }, [idsAssinadosJornada, setTermosPendentesIds]);
+
   useEffect(() => {
     if (!orgId) return;
     organizacaoApi.getMinhas()
@@ -384,9 +428,48 @@ export function Step3Termos({
       .catch(e => console.warn('Falha ao carregar configurações de assinatura:', e));
   }, [orgId]);
 
+  const termosDaConsultaRef = useRef(termosDaConsulta);
+  const carregarAssinadosLegadoRef = useRef(null);
+  termosDaConsultaRef.current = termosDaConsulta;
+  const termosDisponiveisRef = useRef(termosDisponiveis);
+  termosDisponiveisRef.current = termosDisponiveis;
+
+  /**
+   * F3: título do termo por id. Ordem: `titulo` do termo na consulta (servidor) -> termo do catálogo carregado ->
+   * `extra` (ex.: termoTitulo do registro legado). O fallback genérico só entra por último, em quem chama.
+   */
+  const tituloDoTermoId = useCallback((termoId, extra = null) => {
+    const id = termoId != null ? String(termoId) : '';
+    if (id) {
+      const daConsulta = (Array.isArray(termosDaConsultaRef.current) ? termosDaConsultaRef.current : []).find(
+        (t) => String(t?.termoId) === id,
+      );
+      const t1 = typeof daConsulta?.titulo === 'string' ? daConsulta.titulo.trim() : '';
+      if (t1) return t1;
+      const doCatalogo = termosDisponiveisRef.current.find((t) => String(t?.id) === id);
+      const t2 = typeof doCatalogo?.titulo === 'string' ? doCatalogo.titulo.trim() : '';
+      if (t2) return t2;
+    }
+    const t3 = typeof extra === 'string' ? extra.trim() : '';
+    return t3 || null;
+  }, []);
+
+  const fechadoNoServidor = useCallback((termoId) => {
+    if (termoId == null || !Array.isArray(termosDaConsultaRef.current)) return false;
+    return termosDaConsultaRef.current.some(
+      (t) =>
+        String(t?.termoId) === String(termoId) &&
+        (t.statusAssinatura === 'ASSINADO' || t.statusAssinatura === 'RECUSADO'),
+    );
+  }, []);
+
   const handlePrepararSessaoExterna = async (escolha) => {
     setModalEscolhaOpen(false);
     let assinaturaId = backendAssinaturaId;
+    if (!assinaturaId && fechadoNoServidor(termoSelecionadoId)) {
+      toast.info('Este termo já consta como assinado nesta consulta.');
+      return;
+    }
     if (!assinaturaId) {
       try {
         const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
@@ -415,8 +498,9 @@ export function Step3Termos({
           conteudoSnapshot,
           userAgent: navigator.userAgent,
           ipAddress,
+          ...(atendimentoId ? { atendimentoId } : {}),
         });
-        
+
         assinaturaId = resultado.id;
         setBackendAssinaturaId(assinaturaId);
       } catch (e) {
@@ -444,9 +528,13 @@ export function Step3Termos({
     }
     onAssinaturaSalva?.(resultado);
     const titulo =
+      tituloDoTermoId(termoSelecionadoId ?? resultado?.termoId) ??
       termoSelecionado?.titulo ??
       termoSelecionado?.title ??
       (typeof termoTitulo === 'string' && termoTitulo.trim() ? termoTitulo.trim() : 'Termo de Consentimento');
+    const idAssinado = String(termoSelecionadoId ?? resultado?.termoId ?? '');
+    const idsRemover = new Set([idAssinado, String(resultado?.termoId ?? '')].filter(Boolean));
+
     setTermosAssinados((prev) => [
       ...prev,
       {
@@ -456,22 +544,29 @@ export function Step3Termos({
         resultadoCompleto: resultado,
       },
     ]);
-    setTermosPendentesIds((prev) => {
-      const idsRemover = [termoSelecionadoId, resultado?.termoId];
-      const aposAssinar = [
-        ...(termosAssinados || []),
-        {
-          termoId: termoSelecionadoId ?? resultado?.termoId,
-          resultadoCompleto: resultado,
-        },
-      ];
-      const newList = idsPendentesSemAssinadosNestaJornada(prev, aposAssinar).filter(
-        (id) => !idsRemover.some((r) => r != null && String(r) === id),
-      );
-      const next = proximoTermoPendente(newList, aposAssinar, idsRemover);
-      if (next) setPendingNextTermoId(next);
-      return newList;
-    });
+
+    // Todos os termos assinados (nesta jornada + backend vigentes)
+    const todosAssinados = new Set(idsAssinadosJornada);
+    if (idAssinado) todosAssinados.add(idAssinado);
+    for (const c of consentimentosAguardando || []) {
+      if (c?.termoId != null) todosAssinados.add(String(c.termoId));
+    }
+
+    // Calcula os termos pendentes restantes de forma pura e segura
+    const restantes = (termosPendentesIds || [])
+      .map(String)
+      .filter((id) => !idsRemover.has(id) && !todosAssinados.has(id));
+
+    setTermosPendentesIds(restantes);
+
+    // Próximo termo pendente é setado diretamente fora de qualquer updater
+    const next = restantes[0] || null;
+    if (next) {
+      setPendingNextTermoId(next);
+    } else {
+      setPendingNextTermoId(null);
+    }
+
     setProfissionalAssinaturaDataUrl('');
     setTermoAssinaturaDataUrl('');
     setProfAssinaturaTimestamp(null);
@@ -492,8 +587,11 @@ export function Step3Termos({
     termoSelecionado,
     termoSelecionadoId,
     termoTitulo,
-    termosAssinados,
+    termosPendentesIds,
+    idsAssinadosJornada,
+    consentimentosAguardando,
     toast,
+    tituloDoTermoId,
   ]);
 
   useEffect(() => {
@@ -509,6 +607,15 @@ export function Step3Termos({
     }
 
     const salvar = async () => {
+      if (fechadoNoServidor(termoSelecionadoId)) {
+        setAssinaturaPersistida(true);
+        toast.info('Este termo já consta como assinado nesta consulta.');
+        setProfissionalAssinaturaDataUrl('');
+        setTermoAssinaturaDataUrl('');
+        setTermoSelecionadoId(null);
+        setTermoSelecionado(null);
+        return;
+      }
       try {
         setAssinaturaPersistida(true);
         const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
@@ -524,7 +631,7 @@ export function Step3Termos({
           console.warn('Não foi possível capturar o IP', e);
         }
 
-        const resultado = await termoAssinaturaApi.criar({
+        const corpoAssinatura = {
           termoId: termoSelecionadoId,
           pacienteId,
           procedimentoFeitoId: procedimentoFeitoId ?? null,
@@ -545,10 +652,43 @@ export function Step3Termos({
           conteudoSnapshot,
           userAgent: navigator.userAgent,
           ipAddress,
-        });
+          ...(atendimentoId ? { atendimentoId } : {}),
+        };
+
+        let resultado;
+        if (typeof enviarAssinaturaPelaFila === 'function') {
+          // Com hub: pela fila (sobe sozinha, sobrevive ao F5). Devolve { ok, assinatura, naFila }.
+          const r = desembrulharAssinatura(await enviarAssinaturaPelaFila(corpoAssinatura));
+          if (r.naFila) {
+            // Sem internet: guardada na fila; não reenvia em laço (assinaturaPersistida segue verdadeiro).
+            toast.info('Assinatura guardada; será enviada quando a internet voltar.');
+            return;
+          } else if (r.ok && r.assinatura?.id) {
+            resultado = r.assinatura;
+          } else if (r.ok) {
+            // Sucesso sem id: não registra como assinada; relê a lista da consulta.
+            if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegadoRef.current?.();
+            return;
+          } else if (r.naoEntrou) {
+            toast.warning('A consulta já foi encerrada; a assinatura não entrou.');
+            return;
+          } else {
+            const erro = new Error('Não foi possível salvar a assinatura.');
+            erro.status = r.status ?? r.erro?.status;
+            throw erro;
+          }
+        } else {
+          resultado = await termoAssinaturaApi.criar(corpoAssinatura);
+        }
 
         registrarTermoNaJornada(resultado);
       } catch (e) {
+        if (e?.status === 409) {
+          // Já existe para esta consulta (corrida de duas abas): relê sem erro, sem reenviar.
+          if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegadoRef.current?.();
+          toast.info('Este termo já foi registrado nesta consulta.');
+          return;
+        }
         setAssinaturaPersistida(false);
         toast.error('Erro ao salvar assinatura: ' + (e?.message || 'Tente novamente'));
       }
@@ -569,10 +709,115 @@ export function Step3Termos({
     pacienteRecusou,
     registrarTermoNaJornada,
     toast,
+    atendimentoId,
+    fechadoNoServidor,
+    enviarAssinaturaPelaFila,
+    setProfissionalAssinaturaDataUrl,
+    setTermoAssinaturaDataUrl,
   ]);
 
   const termosAssinadosRef = useRef(termosAssinados);
   termosAssinadosRef.current = termosAssinados;
+
+  // Com o hub, a lista de termos da consulta chega pela prop `termosDaConsulta` (o hook reage ao aviso)
+  // e SUBSTITUI a lista de assinados a cada mudança. Sem hub (fluxo antigo), lê do servidor uma vez.
+  const temHub = Array.isArray(termosDaConsulta);
+  useEffect(() => {
+    if (!Array.isArray(termosDaConsulta)) return;
+    const fechados = termosDaConsulta.filter(
+      (t) =>
+        t?.termoId &&
+        t.termoAssinaturaId &&
+        (t.statusAssinatura === 'ASSINADO' || t.statusAssinatura === 'RECUSADO'),
+    );
+    setTermosAssinados((prev) => {
+      const lista = Array.isArray(prev) ? prev : [];
+      const locaisEmEnvio = lista.filter((t) => !t?.backendAssinaturaId);
+      const comId = lista.filter((t) => t?.backendAssinaturaId);
+      const porId = new Map(comId.map((t) => [String(t.backendAssinaturaId), t]));
+      const doServidor = fechados.map(
+        (a) =>
+          porId.get(String(a.termoAssinaturaId)) ?? {
+            termoId: String(a.termoId),
+            termoTitulo: tituloDoTermoId(a.termoId, a.termoTitulo) || DEFAULT_TERMO_TITULO,
+            backendAssinaturaId: a.termoAssinaturaId,
+            resultadoCompleto: {
+              id: a.termoAssinaturaId,
+              termoId: a.termoId,
+              statusCodigo: a.statusAssinatura,
+              atendimentoId,
+            },
+          },
+      );
+      const igual =
+        doServidor.length === comId.length &&
+        doServidor.every((t, i) => String(t.backendAssinaturaId) === String(comId[i].backendAssinaturaId));
+      return igual ? prev : [...doServidor, ...locaisEmEnvio];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termosDaConsulta]);
+
+  const assinadosCarregadosRef = useRef(null);
+  const carregarAssinadosLegado = useCallback(() => {
+    if (!atendimentoId || !pacienteId) return () => {};
+    let cancelled = false;
+    termoAssinaturaApi.listarPorPaciente(pacienteId)
+      .then((lista) => {
+        if (cancelled) return;
+        assinadosCarregadosRef.current = atendimentoId;
+        const daConsulta = (Array.isArray(lista) ? lista : []).filter(
+          (a) =>
+            a?.termoId &&
+            String(a.atendimentoId || '') === String(atendimentoId) &&
+            (a.statusCodigo === 'ASSINADO' || a.statusCodigo === 'RECUSADO'),
+        );
+        if (daConsulta.length === 0) return;
+        setTermosAssinados((prev) => {
+          const ja = new Set((prev || []).map((t) => String(t?.termoId)));
+          const novos = daConsulta
+            .filter((a) => !ja.has(String(a.termoId)))
+            .map((a) => ({
+              termoId: String(a.termoId),
+              termoTitulo: tituloDoTermoId(a.termoId, a.termoTitulo) || DEFAULT_TERMO_TITULO,
+              backendAssinaturaId: a.id,
+              resultadoCompleto: a,
+            }));
+          return novos.length > 0 ? [...(prev || []), ...novos] : prev;
+        });
+      })
+      .catch((e) => console.warn('[termos] Falha ao carregar os assinados da consulta:', e?.message || e));
+    return () => {
+      cancelled = true;
+    };
+  }, [atendimentoId, pacienteId, setTermosAssinados, tituloDoTermoId]);
+  carregarAssinadosLegadoRef.current = carregarAssinadosLegado;
+
+  useEffect(() => {
+    if (temHub) return undefined;
+    if (!atendimentoId || !pacienteId || assinadosCarregadosRef.current === atendimentoId) return undefined;
+    return carregarAssinadosLegado();
+  }, [temHub, atendimentoId, pacienteId, carregarAssinadosLegado]);
+
+  // PENDENTE da consulta: o termo escolhido reaproveita a assinatura existente (concluir-presencial).
+  useEffect(() => {
+    if (!Array.isArray(termosDaConsulta) || !termoSelecionadoId || backendAssinaturaId) return;
+    const pendente = termosDaConsulta.find(
+      (t) =>
+        String(t?.termoId) === String(termoSelecionadoId) &&
+        t.statusAssinatura === 'PENDENTE' &&
+        t.termoAssinaturaId,
+    );
+    if (pendente) setBackendAssinaturaId(pendente.termoAssinaturaId);
+  }, [termosDaConsulta, termoSelecionadoId, backendAssinaturaId]);
+
+  // Grava o estado dos termos no servidor uma vez por ação (escolher termo / mudar pendentes).
+  const [gravarTick, setGravarTick] = useState(0);
+  const termosLidosAbertosRef = useRef(new Set());
+  const gravarEstadoTermosRef = useRef(gravarEstadoTermos);
+  gravarEstadoTermosRef.current = gravarEstadoTermos;
+  useEffect(() => {
+    if (gravarTick > 0) gravarEstadoTermosRef.current?.();
+  }, [gravarTick]);
 
   const catalogoKey = (catalogoIds || []).map(String).join(',');
 
@@ -583,7 +828,7 @@ export function Step3Termos({
       try {
         const listPromise = termosApi.list();
         const resolucaoPromise = pacienteId
-          ? termosApi.resolver({ pacienteId, catalogoIds })
+          ? termosApi.resolver({ pacienteId, catalogoIds, atendimentoId })
           : Promise.resolve(null);
         const [raw, resolucaoRaw] = await Promise.all([listPromise, resolucaoPromise]);
         if (cancelled) return;
@@ -605,10 +850,12 @@ export function Step3Termos({
 
         const idsObrigatorios = idsFilaExigida(resolucaoRaw);
         setIdsFilaExigidaAtual(new Set(idsObrigatorios));
-        setConsentimentosAguardando(consentimentosAguardandoExecucao(resolucaoRaw));
+        const vigentes = consentimentosAguardandoExecucao(resolucaoRaw);
+        setConsentimentosAguardando(vigentes);
         if (!exigirFilaVinculo) return;
+        const vigentesIds = new Set(vigentes.map((c) => String(c.termoId)));
         setTermosPendentesIds((prev) =>
-          mesclarFilaExigida(prev, idsObrigatorios, termosAssinadosRef.current),
+          mesclarFilaExigida(prev, idsObrigatorios, termosAssinadosRef.current, vigentesIds),
         );
       } catch {
         if (!cancelled) {
@@ -622,7 +869,7 @@ export function Step3Termos({
     return () => {
       cancelled = true;
     };
-  }, [pacienteId, catalogoKey, exigirFilaVinculo, setTermosPendentesIds]);
+  }, [pacienteId, catalogoKey, atendimentoId, exigirFilaVinculo, setTermosPendentesIds]);
 
   useEffect(() => {
     if (!termoMenuOpen) return undefined;
@@ -659,30 +906,14 @@ export function Step3Termos({
     typeof termoConteudo === 'string' && termoConteudo.trim() ? termoConteudo.trim() : '';
 
   const tituloExibicao =
-    termoSelecionado?.titulo ?? termoSelecionado?.title ?? tituloFallbackProp;
-  
+    tituloDoTermoId(termoSelecionadoId) ??
+    termoSelecionado?.titulo ??
+    termoSelecionado?.title ??
+    tituloFallbackProp;
   let conteudoExibicao =
     termoSelecionado?.conteudo ?? termoSelecionado?.content ?? conteudoFallbackProp;
 
   const _temConteudoTexto = String(conteudoExibicao || '').trim().length > 0;
-
-  const idsAssinadosJornada = useMemo(
-    () => idsAssinadosNestaJornada(termosAssinados),
-    [termosAssinados],
-  );
-
-  const termosPendentesFila = useMemo(
-    () => idsPendentesSemAssinadosNestaJornada(termosPendentesIds, termosAssinados),
-    [termosPendentesIds, termosAssinados],
-  );
-
-  useEffect(() => {
-    setTermosPendentesIds((prev) => {
-      const next = idsPendentesSemAssinadosNestaJornada(prev, termosAssinados);
-      if (next.length === prev.length && next.every((id, i) => id === String(prev[i]))) return prev;
-      return next;
-    });
-  }, [termosAssinados, setTermosPendentesIds]);
 
   const termosFiltradosBusca = useMemo(() => {
     const q = termoSearch.trim().toLowerCase();
@@ -722,6 +953,7 @@ export function Step3Termos({
         return [...prev, id];
       }
     });
+    setGravarTick((n) => n + 1);
   }, [setTermosPendentesIds, termoSelecionadoId, idsAssinadosJornada]);
 
   const abrirTermoParaAssinatura = useCallback(
@@ -732,19 +964,30 @@ export function Step3Termos({
       if (typeof onTermoChange === 'function') onTermoChange(String(id));
       setTermoSelecionadoId(String(id));
       setTermoSelecionado(termo);
-      
+
       setProfissionalAssinaturaDataUrl('');
       setTermoAssinaturaDataUrl('');
       setProfAssinaturaTimestamp(null);
       setPatAssinaturaTimestamp(null);
       setAssinaturaPersistida(false);
       setBackendAssinaturaId(null);
-      
+      // "Lido" automático ao abrir o termo para ler: 1 marcação/gravação por termo.
+      const idStr = String(id);
+      const jaLidoNoServidor =
+        Array.isArray(termosDaConsulta) &&
+        termosDaConsulta.some((t) => String(t?.termoId) === idStr && (t.lido === true || t.lidoEm));
+      if (jaLidoNoServidor || termosLidosAbertosRef.current.has(idStr)) {
+        // nada a marcar nem gravar de novo
+      } else {
+        termosLidosAbertosRef.current.add(idStr);
+        if (typeof setTermoLido === 'function') setTermoLido(true);
+        setGravarTick((n) => n + 1);
+      }
       if (typeof setStep4Errors === 'function') {
         setStep4Errors((prev) => ({ ...prev, lerTermo: false, profissional: false, paciente: false }));
       }
     },
-    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis, idsAssinadosJornada]
+    [onTermoChange, setTermoLido, setProfissionalAssinaturaDataUrl, setTermoAssinaturaDataUrl, setTermoAssinado, setStep4Errors, termosDisponiveis, idsAssinadosJornada, termosDaConsulta]
   );
 
   useEffect(() => {
@@ -874,6 +1117,17 @@ export function Step3Termos({
         return;
       }
 
+      if (fechadoNoServidor(termoSelecionadoId)) {
+        toast.info('Este termo já consta como assinado nesta consulta.');
+        setPatSigningOpen(false);
+        setPatSigningSaving(false);
+        setProfissionalAssinaturaDataUrl('');
+        setTermoAssinaturaDataUrl('');
+        setTermoSelecionadoId(null);
+        setTermoSelecionado(null);
+        return;
+      }
+
       setAssinaturaPersistida(true);
       const conteudoSnapshot = String(conteudoExibicao || '').trim() || null;
       let ipAddress = null;
@@ -887,7 +1141,7 @@ export function Step3Termos({
         // ignore
       }
 
-      const resultado = await termoAssinaturaApi.criar({
+      const corpoAssinatura = {
         termoId: termoSelecionadoId,
         pacienteId,
         procedimentoFeitoId: procedimentoFeitoId ?? null,
@@ -904,9 +1158,54 @@ export function Step3Termos({
         conteudoSnapshot,
         userAgent: navigator.userAgent,
         ipAddress,
-      });
-      finalizeSuccess(resultado);
+        ...(atendimentoId ? { atendimentoId } : {}),
+      };
+      // 201 (nova) e 200 (já existia, idempotente) são sucesso; pela fila, tenta de novo sozinha sem internet.
+      if (typeof enviarAssinaturaPelaFila !== 'function') {
+        finalizeSuccess(await termoAssinaturaApi.criar(corpoAssinatura));
+        return;
+      }
+      const r = desembrulharAssinatura(await enviarAssinaturaPelaFila(corpoAssinatura));
+      if (r.naFila) {
+        // Sem internet: a fila reenvia sozinha; nada marcado como assinado na jornada.
+        toast.info('Assinatura guardada; será enviada quando a internet voltar.');
+        setPatSigningOpen(false);
+        setPatSigningError(null);
+        setPatSigningSaving(false);
+        return;
+      }
+      if (r.ok) {
+        if (r.assinatura?.id) {
+          finalizeSuccess(r.assinatura);
+        } else {
+          // Sucesso sem id: não registra como assinada; relê.
+          if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegado();
+          setPatSigningOpen(false);
+          setPatSigningError(null);
+          setPatSigningSaving(false);
+        }
+        return;
+      }
+      if (r.naoEntrou) {
+        toast.warning('A consulta já foi encerrada; a assinatura não entrou.');
+        setPatSigningOpen(false);
+        setPatSigningError(null);
+        setPatSigningSaving(false);
+        return;
+      }
+      const erro = new Error('Erro ao salvar assinatura: ' + (r.erro?.message || 'Tente novamente'));
+      erro.status = r.status ?? r.erro?.status;
+      throw erro;
     } catch (e) {
+      if (e?.status === 409) {
+        // Já existe para esta consulta: relê sem erro (hub: o aviso entrega a lista nova pela prop).
+        if (!Array.isArray(termosDaConsultaRef.current)) carregarAssinadosLegado();
+        toast.info('Este termo já foi registrado nesta consulta.');
+        setPatSigningOpen(false);
+        setPatSigningError(null);
+        setPatSigningSaving(false);
+        return;
+      }
       setAssinaturaPersistida(false);
       setPatSigningError(e?.message || 'Erro ao salvar assinatura');
       setPatSigningRetryable(true);
@@ -1002,7 +1301,7 @@ export function Step3Termos({
 
   const handleConcluirClick = () => {
     if (typeof onConcluir !== 'function') return;
-    const nenhumAssinado = termosAssinados.length === 0;
+    const nenhumAssinado = termosAssinados.length === 0 && (consentimentosAguardando || []).length === 0;
     const temPendentes = termosPendentesFila.length > 0;
     if (nenhumAssinado || temPendentes) {
       setShowConcluirConfirm(true);
@@ -1032,21 +1331,21 @@ export function Step3Termos({
           </div>
           <div>
             <h3 className="text-[20px] font-bold text-[#0f172a]">Termos de consentimento</h3>
-          <p className="text-[14px] font-medium text-[#64748b]">Leitura e assinaturas (profissional e paciente)</p>
+            <p className="text-[14px] font-medium text-[#64748b]">Leitura e assinaturas (profissional e paciente)</p>
+          </div>
         </div>
-      </div>
 
-      {consentimentosAguardando.length > 0 ? (
-        <div className="mb-6 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <h4 className="text-[13px] font-bold text-emerald-900">Aguardando execução</h4>
-          {consentimentosAguardando.map((c) => (
-            <p key={c.termoId} className="text-[13px] font-medium text-emerald-800">
-              Termo já assinado — {c.titulo}
-              {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm, fuso)}` : ''}
-            </p>
-          ))}
-        </div>
-      ) : null}
+        {consentimentosAguardando.length > 0 ? (
+          <div className="mb-6 space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <h4 className="text-[13px] font-bold text-emerald-900">Aguardando execução</h4>
+            {consentimentosAguardando.map((c) => (
+              <p key={c.termoId} className="text-[13px] font-medium text-emerald-800">
+                Termo já assinado — {c.titulo}
+                {c.assinadoEm ? ` — em ${formatTimestamp(c.assinadoEm, fuso)}` : ''}
+              </p>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {termosAssinados.length > 0 && (
@@ -1059,87 +1358,84 @@ export function Step3Termos({
               ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
               : null;
             return (
-            <div
-              key={index}
-              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border px-4 py-3 ${
-                recusado
+              <div
+                key={index}
+                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border px-4 py-3 ${recusado
                   ? 'border-red-200 bg-red-50'
                   : 'border-emerald-200 bg-emerald-50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    recusado ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
                   }`}
-                >
-                  {recusado ? (
-                    <XCircle className="h-4 w-4" strokeWidth={3} />
-                  ) : (
-                    <Check className="h-4 w-4" strokeWidth={3} />
-                  )}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg ${recusado ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+                      }`}
+                  >
+                    {recusado ? (
+                      <XCircle className="h-4 w-4" strokeWidth={3} />
+                    ) : (
+                      <Check className="h-4 w-4" strokeWidth={3} />
+                    )}
+                  </div>
+                  <div>
+                    <p className={`text-[14px] font-bold ${recusado ? 'text-red-900' : 'text-emerald-900'}`}>
+                      {t.termoTitulo || 'Termo de Consentimento'}
+                    </p>
+                    <p className={`text-[12px] ${recusado ? 'text-red-700' : 'text-emerald-700'}`}>
+                      {recusado
+                        ? `Termo recusado pelo paciente${recusaData ? ` em ${recusaData}` : '.'}`
+                        : 'Assinado e salvo com sucesso.'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className={`text-[14px] font-bold ${recusado ? 'text-red-900' : 'text-emerald-900'}`}>
-                    {t.termoTitulo || 'Termo de Consentimento'}
-                  </p>
-                  <p className={`text-[12px] ${recusado ? 'text-red-700' : 'text-emerald-700'}`}>
-                    {recusado
-                      ? `Termo recusado pelo paciente${recusaData ? ` em ${recusaData}` : '.'}`
-                      : 'Assinado e salvo com sucesso.'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
-                      generateTermoPdf({
-                        titulo: t.termoTitulo || 'Termo',
-                        conteudo: t.resultadoCompleto?.conteudoSnapshot || '',
-                        fileName: `termo_assinado_${t.backendAssinaturaId}.pdf`,
-                        pacienteCtx: pacienteCtx,
-                        clinicaCtx: clinicaCtx,
-                        profissionalCtx: profissionalCtx,
-                        assinaturaProfissional: t.resultadoCompleto?.assinaturaProfissional,
-                        assinaturaPaciente: t.resultadoCompleto?.assinaturaPaciente,
-                        metadados: {
-                          pacienteNome: pacienteCtx?.nome || t.resultadoCompleto?.pacienteNome,
-                          profissionalNome: profissionalCtx?.nome || t.resultadoCompleto?.profissionalNome,
-                          dataHora: t.resultadoCompleto?.recusadoEm
-                            ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
-                            : t.resultadoCompleto?.profissionalAssinouEm
-                              ? formatarInstante(t.resultadoCompleto.profissionalAssinouEm, fuso, 'dataHoraSeg')
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      import('../../utils/pdfGenerator.js').then(({ generateTermoPdf }) => {
+                        generateTermoPdf({
+                          titulo: t.termoTitulo || 'Termo',
+                          conteudo: t.resultadoCompleto?.conteudoSnapshot || '',
+                          fileName: `termo_assinado_${t.backendAssinaturaId}.pdf`,
+                          pacienteCtx: pacienteCtx,
+                          clinicaCtx: clinicaCtx,
+                          profissionalCtx: profissionalCtx,
+                          assinaturaProfissional: t.resultadoCompleto?.assinaturaProfissional,
+                          assinaturaPaciente: t.resultadoCompleto?.assinaturaPaciente,
+                          metadados: {
+                            pacienteNome: pacienteCtx?.nome || t.resultadoCompleto?.pacienteNome,
+                            profissionalNome: profissionalCtx?.nome || t.resultadoCompleto?.profissionalNome,
+                            dataHora: t.resultadoCompleto?.recusadoEm
+                              ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
+                              : t.resultadoCompleto?.profissionalAssinouEm
+                                ? formatarInstante(t.resultadoCompleto.profissionalAssinouEm, fuso, 'dataHoraSeg')
+                                : undefined,
+                            ipAddress: t.resultadoCompleto?.ipAddress,
+                            statusCodigo: t.resultadoCompleto?.statusCodigo,
+                            recusadoEm: t.resultadoCompleto?.recusadoEm
+                              ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
                               : undefined,
-                          ipAddress: t.resultadoCompleto?.ipAddress,
-                          statusCodigo: t.resultadoCompleto?.statusCodigo,
-                          recusadoEm: t.resultadoCompleto?.recusadoEm
-                            ? formatarInstante(t.resultadoCompleto.recusadoEm, fuso, 'dataHoraSeg')
-                            : undefined,
-                        }
+                          }
+                        });
                       });
-                    });
-                  }}
-                  className={`rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold border transition-colors ${
-                    recusado
+                    }}
+                    className={`rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold border transition-colors ${recusado
                       ? 'text-red-700 border-red-200 hover:bg-red-100'
                       : 'text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                  }`}
-                >
-                  Ver PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTermoToCancel(t);
-                  }}
-                  className="rounded-lg bg-red-50 px-3 py-1.5 text-[12px] font-bold text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
-                >
-                  Cancelar
-                </button>
+                      }`}
+                  >
+                    Ver PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTermoToCancel(t);
+                    }}
+                    className="rounded-lg bg-red-50 px-3 py-1.5 text-[12px] font-bold text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
-            </div>
             );
           })}
         </div>
@@ -1158,18 +1454,16 @@ export function Step3Termos({
             <button
               type="button"
               onClick={() => setTermoMenuOpen((o) => !o)}
-              className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 transition-all duration-150 ${
-                termoMenuOpen
-                  ? 'border-[#00a88e] bg-[#f0fdfa] ring-2 ring-[#00a88e]/20'
-                  : termoSelecionado
-                    ? 'border-[#00a88e] bg-[#f0fdfa]'
-                    : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/40 hover:bg-[#f8fafc]'
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3.5 transition-all duration-150 ${termoMenuOpen
+                ? 'border-[#00a88e] bg-[#f0fdfa] ring-2 ring-[#00a88e]/20'
+                : termoSelecionado
+                  ? 'border-[#00a88e] bg-[#f0fdfa]'
+                  : 'border-[#e2e8f0] bg-white hover:border-[#00a88e]/40 hover:bg-[#f8fafc]'
+                }`}
             >
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                  termoSelecionado ? 'bg-[#00a88e]' : 'bg-[#f1f5f9]'
-                }`}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${termoSelecionado ? 'bg-[#00a88e]' : 'bg-[#f1f5f9]'
+                  }`}
               >
                 <FileText
                   className={`h-4 w-4 ${termoSelecionado ? 'text-white' : 'text-[#94a3b8]'}`}
@@ -1696,7 +1990,7 @@ export function Step3Termos({
                     });
                   }
                   if (typeof setTermoAssinado === 'function' && termosAssinados.length <= 1) {
-                     setTermoAssinado(false);
+                    setTermoAssinado(false);
                   }
                   setTermoToCancel(null);
                 }}
@@ -1795,55 +2089,69 @@ export function Step3Termos({
 export function Step4Procedimento({
   pacienteIdForProcedures: _pacienteIdForProcedures = null,
   nomeProcedimento = '',
-  setNomeProcedimento = () => {},
-  setNomeProcedimentoCatalogoId = () => {},
+  setNomeProcedimento = () => { },
+  setNomeProcedimentoCatalogoId = () => { },
   setProcedimentoDoCatalogo,
   onValidarTermosCatalogo,
   execucaoBloqueadaPorTermos = false,
   titulosTermosFaltantes = [],
+  resolucao = null,
   onIrParaTermosGate,
   consentimentosAguardandoExecucao: consentimentosAguardando = [],
   observacoesExecucao = '',
-  setObservacoesExecucao = () => {},
+  setObservacoesExecucao = () => { },
   procedureCapturedPhotos = [],
   procedurePhotoMax = 30,
   onProcedureUploadFiles,
   onProcedureRemovePhoto,
   step4Errors = {},
-  setStep4Errors = () => {},
+  setStep4Errors = () => { },
   fotosAvaliacao = [],
-  onProcedureFotoCategoriaSync = () => {},
+  onProcedureFotoCategoriaSync = () => { },
   onProcedureAnnotatePhoto,
   mapaState = null,
   roleUserId = null,
   procedimentoFeitoId = null,
   catalogoId = null,
+  procedimentosSessao = [],
+  setProcedimentosSessao = (arg) => {
+    if (import.meta.env.DEV) {
+      console.warn('[Step4LGPD] setProcedimentosSessao chamado com handler default vazio:', arg);
+    }
+  },
+  journeyPlanejamentoCtx = null,
   planejamentoItemId = null,
   planejamentoId = null,
   procedimentosComPontos = [],
   sidebarInsetPx = 0,
   pendingMapaCapture = null,
-  onMapaCaptureConsumed = () => {},
-  onPrepareMapaCapture = () => {},
+  onMapaCaptureConsumed = () => { },
+  onPrepareMapaCapture = () => { },
   onEnsureProcedimento = () => Promise.resolve(null),
-  onSugestaoEnviada = () => {},
   onAutoSaveProcedimento = null,
   onProcedureOpenCamera,
   onClearMapaCaptureIntent,
+  /** Id do item da consulta (servidor); só com ele a observação ganha `data-campo-consulta`. */
+  itemId = null,
+  /** F5: (photo) => path /arquivo da foto no servidor (`?v=` pela versão que a foto conhece); repassado às faixas. */
+  urlArquivoReserva = null,
 }) {
   const { fuso } = useFusoClinica();
-  const gravarProcedimentoCatalogo = (nome, id) => {
+  const gravarProcedimentoCatalogo = React.useCallback((nome, id) => {
     if (typeof setProcedimentoDoCatalogo === 'function') {
       setProcedimentoDoCatalogo(nome, id);
-      return;
     }
-    setNomeProcedimento(nome);
-    setNomeProcedimentoCatalogoId(id);
-  };
+    if (typeof setNomeProcedimento === 'function') {
+      setNomeProcedimento(nome);
+    }
+    if (typeof setNomeProcedimentoCatalogoId === 'function') {
+      setNomeProcedimentoCatalogoId(id);
+    }
+  }, [setProcedimentoDoCatalogo, setNomeProcedimento, setNomeProcedimentoCatalogoId]);
 
+  const [modalDecisaoPlano, setModalDecisaoPlano] = React.useState({ open: false, catalogo: null, itemPlano: null });
   const [obsaveStatus, setObsaveStatus] = React.useState(''); // '' | 'saving' | 'saved'
   const uploadInputRef = React.useRef(null);
-  const toast = useToast();
   const { options: catalogoOptions } = useProcedimentosOptions();
   const procedimentoSearchOptions = useMemo(
     () =>
@@ -1855,21 +2163,404 @@ export function Step4Procedimento({
       })),
     [catalogoOptions],
   );
-  const procedimentosSelecionados =
-    catalogoId && nomeProcedimento
-      ? procedimentoSearchOptions.filter(
-          (p) => String(p.id).trim() === String(catalogoId).trim(),
-        )
-      : [];
+  const itensFaltantes = useMemo(() => {
+    const detalhados = detalharTermosFaltantes(resolucao);
+    if (detalhados.length > 0) return detalhados;
+    return (titulosTermosFaltantes || []).map((t, idx) => ({
+      termoId: `termo_${idx}`,
+      titulo: t,
+      procedimentos: [],
+    }));
+  }, [resolucao, titulosTermosFaltantes]);
+
+  const itensSemTermoExigido = useMemo(() => {
+    return procedimentosSemTermoExigido(resolucao);
+  }, [resolucao]);
+
+  const procedimentosSelecionados = useMemo(() => {
+    const isPlaceholder = (nome) => !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
+
+    if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
+      const validos = procedimentosSessao.filter((p) => {
+        const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId;
+        const nome = p.nomeProcedimento || p.procedimentoNome || p.nome;
+        if (isPlaceholder(nome) && !cid) return false;
+        if (isPlaceholder(nome) && cid) {
+          const matched = procedimentoSearchOptions.find((o) => String(o.id) === String(cid));
+          if (!matched || isPlaceholder(matched.nome)) return false;
+        }
+        return Boolean((cid && String(cid).trim()) || (nome && String(nome).trim() && !isPlaceholder(nome)));
+      });
+      if (validos.length > 0) {
+        return validos
+          .map((p, idx) => {
+            const cid = String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id || `idx_${idx}`);
+            const matched = procedimentoSearchOptions.find((o) => String(o.id) === cid);
+            const rawNome = p.nomeProcedimento || p.procedimentoNome || p.nome || matched?.nome;
+            const finalNome = !isPlaceholder(rawNome) ? rawNome : (matched?.nome && !isPlaceholder(matched.nome) ? matched.nome : '');
+            return {
+              id: cid,
+              nome: finalNome,
+              tipoCodigo: matched?.tipoCodigo,
+              duracaoMin: matched?.duracaoMin,
+              planejamentoItemId: p.planejamentoItemId || null,
+              isAvulso: Boolean(p.isAvulso),
+            };
+          })
+          .filter((item) => item.nome && !isPlaceholder(item.nome));
+      }
+    }
+    if (catalogoId && nomeProcedimento && String(nomeProcedimento).trim() && !isPlaceholder(nomeProcedimento)) {
+      return procedimentoSearchOptions.filter(
+        (p) => String(p.id).trim() === String(catalogoId).trim(),
+      );
+    }
+    return [];
+  }, [procedimentosSessao, catalogoId, nomeProcedimento, procedimentoSearchOptions]);
+
+  const procsIdsKey = useMemo(() => {
+    return (procedimentosSelecionados || [])
+      .map((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || ''))
+      .filter((id) => id && id !== 'undefined' && id !== 'null')
+      .sort()
+      .join(',');
+  }, [procedimentosSelecionados]);
+
+  const lastValidatedKeyRef = useRef('');
+  useEffect(() => {
+    if (!procsIdsKey || typeof onValidarTermosCatalogo !== 'function') return;
+    if (lastValidatedKeyRef.current === procsIdsKey && resolucao !== null) return;
+    lastValidatedKeyRef.current = procsIdsKey;
+    const ids = procsIdsKey.split(',').filter(Boolean);
+    if (ids.length === 0) return;
+    const nomes = (procedimentosSelecionados || []).map((p) => p.nomeProcedimento || p.nome || '').filter(Boolean).join(' + ');
+    void onValidarTermosCatalogo(ids, nomes, {
+      abrirModal: false,
+      procedimentosSessaoOverride: procedimentosSessao,
+    });
+  }, [procsIdsKey, resolucao, onValidarTermosCatalogo, procedimentosSelecionados, procedimentosSessao]);
+
+  const itensPlanoPendentes = useMemo(() => {
+    const rawItens = journeyPlanejamentoCtx?.itens || journeyPlanejamentoCtx?.planejamentoItens || [];
+    if (!Array.isArray(rawItens) || rawItens.length === 0) {
+      if (journeyPlanejamentoCtx?.itemIdByCatalogo && Object.keys(journeyPlanejamentoCtx.itemIdByCatalogo).length > 0) {
+        const idsNaSessao = new Set(
+          (procedimentosSessao || []).map((p) =>
+            String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id),
+          ),
+        );
+        return Object.entries(journeyPlanejamentoCtx.itemIdByCatalogo)
+          .filter(([catId]) => !idsNaSessao.has(String(catId)))
+          .map(([catId, planItemId]) => {
+            const matched = procedimentoSearchOptions.find((o) => String(o.id) === String(catId));
+            return {
+              id: String(catId),
+              planejamentoItemId: planItemId,
+              nome: matched?.nome || 'Procedimento do Plano',
+              planoTitulo: journeyPlanejamentoCtx?.titulo || 'Plano de Tratamento',
+            };
+          });
+      }
+      return [];
+    }
+    const idsNaSessao = new Set(
+      (procedimentosSessao || []).map((p) =>
+        String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id),
+      ),
+    );
+    const isGeneric = (name) => !name || /^Procedimento\s*(do\s*Plano)?\s*\d*$/i.test(String(name).trim());
+
+    return rawItens
+      .filter((it) => {
+        const cid = String(it.catalogoProcedimentoSaudeId || it.catalogoId || it.id);
+        const status = String(it.statusItem || it.statusProcedimentoCodigo || it.status || '').toLowerCase();
+        const jaConcluido = status === 'finalizado' || status === 'cancelado' || it.concluido === true;
+        return !jaConcluido && !idsNaSessao.has(cid);
+      })
+      .map((it) => {
+        const cid = String(it.catalogoProcedimentoSaudeId || it.catalogoId || it.id);
+        const matched = procedimentoSearchOptions.find((o) => String(o.id) === cid);
+        const rawNome = it.nomeProcedimento || it.catalogoNome || it.nome;
+        const nomeFinal = !isGeneric(rawNome) ? rawNome : (matched?.nome || rawNome || 'Procedimento do Plano');
+
+        return {
+          id: cid,
+          planejamentoItemId: it.planejamentoItemId || it.id,
+          nome: nomeFinal,
+          planoTitulo: it.planoTitulo || it.planoNome || journeyPlanejamentoCtx?.titulo || 'Plano de Tratamento',
+        };
+      });
+  }, [journeyPlanejamentoCtx, procedimentosSessao, procedimentoSearchOptions]);
+
+  const handleAdicionarItemDoPlano = React.useCallback(async (itemPlano) => {
+    const procId = String(itemPlano.id);
+    const jaExiste = (procedimentosSessao || []).some(
+      (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) === procId,
+    );
+    if (jaExiste) return;
+    const novoItem = criarItemProcedimentoSessao(
+      {
+        catalogoProcedimentoSaudeId: procId,
+        catalogoId: procId,
+        nomeProcedimento: itemPlano.nome,
+        nome: itemPlano.nome,
+        planejamentoItemId: itemPlano.planejamentoItemId || null,
+        isAvulso: false,
+      },
+      (procedimentosSessao || []).length,
+      procedimentosSessao || [],
+    );
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
+      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
+      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
+      : novoItem;
+    const novaLista = isFirstEmpty
+      ? [itemFinal]
+      : [...(procedimentosSessao || []), itemFinal];
+    if (typeof setProcedimentosSessao === 'function') {
+      setProcedimentosSessao(novaLista);
+    }
+    if (novaLista.length === 1) {
+      gravarProcedimentoCatalogo(novoItem.nomeProcedimento, procId);
+    }
+    setStep4Errors((prev) => ({
+      ...prev,
+      nomeProcedimento: false,
+      catalogoId: false,
+    }));
+    if (typeof onValidarTermosCatalogo === 'function') {
+      const todosIds = novaLista.map((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id));
+      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        abrirModal: false,
+        procedimentosSessaoOverride: novaLista,
+      });
+    }
+  }, [procedimentosSessao, setProcedimentosSessao, setStep4Errors, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
+
+  const handleToggleProcedimento = React.useCallback(async (proc) => {
+    const procId = String(proc.id);
+    const jaExiste = (procedimentosSessao || []).some(
+      (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) === procId,
+    );
+    if (jaExiste) {
+      const novaLista = (procedimentosSessao || []).filter(
+        (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) !== procId,
+      );
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao(novaLista);
+      }
+      if (novaLista.length > 0) {
+        const primeiro = novaLista[0];
+        const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
+        const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
+        gravarProcedimentoCatalogo(
+          primeiro.nomeProcedimento || primeiro.nome,
+          primeiroId,
+        );
+      } else {
+        gravarProcedimentoCatalogo('', null);
+      }
+      setStep4Errors((prev) => ({
+        ...prev,
+        nomeProcedimento: false,
+        catalogoId: false,
+      }));
+      if (typeof onValidarTermosCatalogo === 'function') {
+        const todosIds = novaLista
+          .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .filter((id) => id && id !== 'undefined' && id !== 'null');
+        await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+          abrirModal: false,
+          procedimentosSessaoOverride: novaLista,
+        });
+      }
+      return;
+    }
+
+    // Interceptor: se o item está pendente no plano de tratamento ativo, abrir modal de decisão
+    const itemNoPlano = itensPlanoPendentes.find((it) => String(it.id) === procId);
+    if (itemNoPlano) {
+      setModalDecisaoPlano({
+        open: true,
+        catalogo: proc,
+        itemPlano: itemNoPlano,
+      });
+      return;
+    }
+
+    // Caso não esteja no plano, adiciona como avulso
+    const novoItem = criarItemProcedimentoSessao(
+      {
+        catalogoProcedimentoSaudeId: procId,
+        catalogoId: procId,
+        nomeProcedimento: proc.nome,
+        nome: proc.nome,
+        isAvulso: true,
+        planejamentoItemId: null,
+      },
+      (procedimentosSessao || []).length,
+      procedimentosSessao || [],
+    );
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
+      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
+      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
+      : novoItem;
+    const novaLista = isFirstEmpty
+      ? [itemFinal]
+      : [
+          ...(procedimentosSessao || []),
+          itemFinal,
+        ];
+    if (typeof setProcedimentosSessao === 'function') {
+      setProcedimentosSessao(novaLista);
+    }
+    if (novaLista.length > 0) {
+      const primeiro = novaLista[0];
+      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
+      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
+      gravarProcedimentoCatalogo(
+        primeiro.nomeProcedimento || primeiro.nome,
+        primeiroId,
+      );
+    } else {
+      gravarProcedimentoCatalogo('', null);
+    }
+    setStep4Errors((prev) => ({
+      ...prev,
+      nomeProcedimento: false,
+      catalogoId: false,
+    }));
+    if (typeof onValidarTermosCatalogo === 'function') {
+      const todosIds = novaLista
+        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+        .filter((id) => id && id !== 'undefined' && id !== 'null');
+      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        abrirModal: false,
+        procedimentosSessaoOverride: novaLista,
+      });
+    }
+  }, [procedimentosSessao, itensPlanoPendentes, setProcedimentosSessao, setStep4Errors, onValidarTermosCatalogo, gravarProcedimentoCatalogo, setModalDecisaoPlano]);
+
+  const handleRemoverProcedimento = React.useCallback(async (procId) => {
+    const pid = String(procId);
+    const novaLista = (procedimentosSessao || []).filter(
+      (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) !== pid,
+    );
+    if (typeof setProcedimentosSessao === 'function') {
+      setProcedimentosSessao(novaLista);
+    }
+    if (novaLista.length > 0) {
+      const primeiro = novaLista[0];
+      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
+      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
+      gravarProcedimentoCatalogo(
+        primeiro.nomeProcedimento || primeiro.nome,
+        primeiroId,
+      );
+    } else {
+      gravarProcedimentoCatalogo('', null);
+    }
+    if (typeof onValidarTermosCatalogo === 'function') {
+      const todosIds = novaLista
+        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+        .filter((id) => id && id !== 'undefined' && id !== 'null');
+      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        abrirModal: false,
+        procedimentosSessaoOverride: novaLista,
+      });
+    }
+  }, [procedimentosSessao, setProcedimentosSessao, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
+
+  const handleConfirmarDecisaoAvulso = React.useCallback(async () => {
+    if (!modalDecisaoPlano.catalogo) return;
+    const proc = modalDecisaoPlano.catalogo;
+    const procId = String(proc.id);
+    const novoItem = criarItemProcedimentoSessao(
+      {
+        catalogoProcedimentoSaudeId: procId,
+        catalogoId: procId,
+        nomeProcedimento: proc.nome,
+        nome: proc.nome,
+        isAvulso: true,
+        planejamentoItemId: null,
+      },
+      (procedimentosSessao || []).length,
+      procedimentosSessao || [],
+    );
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
+      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
+      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
+      : novoItem;
+    const novaLista = isFirstEmpty
+      ? [itemFinal]
+      : [...(procedimentosSessao || []), itemFinal];
+    if (typeof setProcedimentosSessao === 'function') {
+      setProcedimentosSessao(novaLista);
+    }
+    if (novaLista.length > 0) {
+      const primeiro = novaLista[0];
+      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
+      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
+      gravarProcedimentoCatalogo(primeiro.nomeProcedimento || primeiro.nome, primeiroId);
+    }
+    setStep4Errors((prev) => ({
+      ...prev,
+      nomeProcedimento: false,
+      catalogoId: false,
+    }));
+    if (typeof onValidarTermosCatalogo === 'function') {
+      const todosIds = novaLista
+        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+        .filter((id) => id && id !== 'undefined' && id !== 'null');
+      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        abrirModal: false,
+        procedimentosSessaoOverride: novaLista,
+      });
+    }
+    setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
+  }, [modalDecisaoPlano, procedimentosSessao, setProcedimentosSessao, setStep4Errors, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
+
+  const handleMudarCorProcedimento = React.useCallback((procId, novaCor, outroProcId, corAntiga) => {
+    if (typeof setProcedimentosSessao !== 'function') return;
+    const matchProc = (p, targetId) => {
+      if (!targetId || !p) return false;
+      const t = String(targetId).trim();
+      return [p.catalogoProcedimentoSaudeId, p.catalogoId, p.nomeProcedimentoCatalogoId, p.id, p._uid]
+        .filter(Boolean)
+        .some((id) => String(id).trim() === t);
+    };
+    setProcedimentosSessao((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      return prev.map((p) => {
+        if (matchProc(p, procId)) {
+          return { ...p, corHex: novaCor };
+        }
+        if (outroProcId && matchProc(p, outroProcId)) {
+          return { ...p, corHex: corAntiga };
+        }
+        return p;
+      });
+    });
+  }, [setProcedimentosSessao]);
+
+  const handleConfirmarDecisaoPlano = React.useCallback(async () => {
+    if (!modalDecisaoPlano.itemPlano) return;
+    const item = modalDecisaoPlano.itemPlano;
+    setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
+    await handleAdicionarItemDoPlano(item);
+  }, [modalDecisaoPlano, handleAdicionarItemDoPlano, setModalDecisaoPlano]);
+
   /** Legenda por foto; chave = `ph.url` (estável ao remover; índice não é). */
   const [legendas, setLegendas] = React.useState({});
   const [fotoCategoria, setFotoCategoria] = React.useState(GALERIA_CATEGORIA.ANTES);
-  /** Lightbox somente leitura para fotos da avaliação (referência). */
-  const [referencePreviewUrl, setReferencePreviewUrl] = React.useState(null);
-  const [sugestaoAberta, setSugestaoAberta] = React.useState(false);
-  const [sugestaoTexto, setSugestaoTexto] = React.useState('');
-  const [sugestaoEnviada, setSugestaoEnviada] = React.useState(false);
-  const [sugestaoEnviando, setSugestaoEnviando] = React.useState(false);
+  /** Lightbox para fotos da avaliação (referência). */
+  const [referenceLightboxData, setReferenceLightboxData] = React.useState(null);
 
   const [laneMenuOpen, setLaneMenuOpen] = React.useState(false);
   const intendedCategoryRef = React.useRef(null);
@@ -1882,7 +2573,7 @@ export function Step4Procedimento({
     if (execucaoBloqueadaPorTermos) return;
     const cat = intendedCategoryRef.current;
     if (!cat) return;
-    
+
     setFotoCategoria(cat);
     onProcedureFotoCategoriaSync(cat);
 
@@ -1892,18 +2583,9 @@ export function Step4Procedimento({
     } else if (option === 'upload') {
       uploadInputRef.current?.click();
     }
-    
+
     setLaneMenuOpen(false);
   };
-
-  React.useEffect(() => {
-    if (!referencePreviewUrl) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setReferencePreviewUrl(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [referencePreviewUrl]);
 
   React.useEffect(() => {
     if (!laneMenuOpen) return undefined;
@@ -1915,7 +2597,24 @@ export function Step4Procedimento({
   }, [laneMenuOpen]);
 
   React.useEffect(() => {
-    const urls = new Set((procedureCapturedPhotos || []).map((p) => p.url).filter(Boolean));
+    // F5: mesma chave do PhotoCarouselLane (calculada por faixa de categoria, com o índice original).
+    const todas = procedureCapturedPhotos || [];
+    const faixas = { antes: [], depois: [], mapa: [], outros: [] };
+    todas.forEach((photo, originalIndex) => {
+      const cat = photo.meta?.categoria;
+      const faixa = cat === GALERIA_CATEGORIA.ANTES ? 'antes'
+        : cat === GALERIA_CATEGORIA.DEPOIS ? 'depois'
+          : cat === GALERIA_CATEGORIA.MAPA ? 'mapa' : 'outros';
+      faixas[faixa].push({ photo, originalIndex });
+    });
+    const urls = new Set();
+    Object.values(faixas).forEach((faixa) => {
+      const lista = faixa.map((it) => it.photo);
+      faixa.forEach(({ photo, originalIndex }) => {
+        const k = chaveFotoLegenda(photo, lista, originalIndex);
+        if (k) urls.add(k);
+      });
+    });
     setLegendas((prev) => {
       const next = { ...prev };
       let changed = false;
@@ -1966,27 +2665,6 @@ export function Step4Procedimento({
     }
   };
 
-  const handleEnviarSugestao = async () => {
-    const nome = String(sugestaoTexto || '').trim();
-    if (!nome || sugestaoEnviando || sugestaoEnviada) return;
-    setSugestaoEnviando(true);
-    try {
-      const apiResult = await notificacoesApi.sugerirProcedimento(nome);
-      if (!apiResult || Number(apiResult.criadas) <= 0) {
-        toast.error('Nenhum administrador da clínica está disponível para receber a sugestão.');
-        return;
-      }
-      setNomeProcedimento(nome);
-      setSugestaoEnviada(true);
-      onSugestaoEnviada(true);
-      toast.success('Sugestão enviada aos administradores da clínica ✓');
-    } catch (e) {
-      toast.error(getApiErrorToastMessage(e, 'Não foi possível enviar a sugestão.'));
-    } finally {
-      setSugestaoEnviando(false);
-    }
-  };
-
   return (
     <div className="min-w-0">
       <div className="mb-6 flex items-center gap-4">
@@ -2028,75 +2706,67 @@ export function Step4Procedimento({
         </div>
       ) : null}
 
+      {/* ── 1. PROCEDIMENTOS & DESCRIÇÃO (VEM PRIMEIRO) ── */}
       <div
-        className={`mb-6 space-y-5 rounded-2xl border bg-white p-4 sm:p-6 ${
-          step4Errors.nomeProcedimento || step4Errors.catalogoId
-            ? 'border-red-300'
-            : 'border-[#00a88e]/25'
-        }`}
+        className={`mb-6 space-y-4 rounded-2xl border bg-white p-4 sm:p-6 ${step4Errors.nomeProcedimento || step4Errors.catalogoId
+          ? 'border-red-300'
+          : 'border-[#00a88e]/25'
+          }`}
       >
-        <div className="space-y-1.5">
-          <label className="text-[13px] font-bold text-[#00a88e]">
-            Nome do procedimento <span className="text-red-500">*</span>
-          </label>
-          <div className="space-y-2">
+        <div className="space-y-3">
+          {itensPlanoPendentes.length > 0 && (
+            <div className="rounded-xl border border-teal-200/90 bg-teal-50/50 p-3.5 transition-all">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
+                    <Sparkles className="h-3 w-3" />
+                  </span>
+                  <span className="text-[12px] font-bold text-teal-950">
+                    Procedimentos do Plano de Tratamento Ativo
+                  </span>
+                  <span className="rounded-full bg-teal-100/90 px-2 py-0.2 text-[10px] font-bold text-teal-800">
+                    {itensPlanoPendentes.length} {itensPlanoPendentes.length === 1 ? 'pendente' : 'pendentes'}
+                  </span>
+                </div>
+                <span className="text-[11px] text-teal-700 hidden sm:inline">
+                  Aproveita o termo assinado do plano
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {itensPlanoPendentes.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleAdicionarItemDoPlano(item)}
+                    className="group inline-flex items-center gap-2 rounded-xl border border-teal-300/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-teal-900 shadow-2xs hover:border-teal-500 hover:bg-teal-50 hover:text-teal-950 transition-all cursor-pointer"
+                  >
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-teal-100 text-teal-700 group-hover:bg-teal-200 font-bold text-[11px]">
+                      +
+                    </span>
+                    <span>{item.nome}</span>
+                    <span className="text-[10px] font-medium text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60">
+                      Realizar pelo Plano
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="text-[13px] font-bold text-[#00a88e]">
+              Nome do procedimento <span className="text-red-500">*</span>
+            </label>
             <ProcedimentoSearchInput
-              selectionMode="single"
+              selectionMode="multi"
+              selectedVariant="chips"
               showDuracao={false}
               procedimentoOptions={procedimentoSearchOptions}
               procedimentosSelecionados={procedimentosSelecionados}
-              onSelect={async (proc) => {
-                gravarProcedimentoCatalogo(proc.nome, String(proc.id));
-                setStep4Errors((prev) => ({
-                  ...prev,
-                  nomeProcedimento: false,
-                  catalogoId: false,
-                }));
-                if (typeof onValidarTermosCatalogo === 'function') {
-                  await onValidarTermosCatalogo(String(proc.id), proc.nome);
-                }
-              }}
-              onToggle={() => {}}
-              onRemover={() => {
-                gravarProcedimentoCatalogo('', null);
-                if (typeof onValidarTermosCatalogo === 'function') {
-                  void onValidarTermosCatalogo('', '');
-                }
-              }}
+              onSelect={handleToggleProcedimento}
+              onToggle={handleToggleProcedimento}
+              onRemover={handleRemoverProcedimento}
             />
-            {sugestaoEnviada ? (
-              <p className="text-[12px] font-semibold text-[#64748b]">✓ Sugestão enviada</p>
-            ) : (
-              <>
-                {!sugestaoAberta ? (
-                  <button
-                    type="button"
-                    onClick={() => setSugestaoAberta(true)}
-                    className="text-[12px] font-medium text-[#64748b] hover:text-[#00a88e]"
-                  >
-                    Não achou o procedimento específico?
-                  </button>
-                ) : (
-                  <div className="rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-3 space-y-2">
-                    <input
-                      type="text"
-                      value={sugestaoTexto}
-                      onChange={(e) => setSugestaoTexto(e.target.value)}
-                      placeholder="Descreva o procedimento que não encontrou..."
-                      className="w-full rounded-lg border border-[#e2e8f0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#00a88e]"
-                    />
-                    <button
-                      type="button"
-                      disabled={!String(sugestaoTexto || '').trim() || sugestaoEnviando}
-                      onClick={handleEnviarSugestao}
-                      className="rounded-lg border border-[#00a88e]/30 bg-white px-3 py-2 text-[12px] font-semibold text-[#00a88e] hover:bg-[#f0fdf9] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Enviar sugestão
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
           </div>
         </div>
         <div className="space-y-1.5">
@@ -2118,6 +2788,7 @@ export function Step4Procedimento({
             )}
             <textarea
               value={observacoesExecucao}
+              data-campo-consulta={itemId ? `item:${itemId}:obs` : undefined}
               onChange={(e) => setObservacoesExecucao(e.target.value)}
               onBlur={async () => {
                 if (!observacoesExecucao?.trim() || typeof onAutoSaveProcedimento !== 'function') return;
@@ -2127,40 +2798,209 @@ export function Step4Procedimento({
                 setTimeout(() => setObsaveStatus(''), 2500);
               }}
               placeholder="Ex: Aplicação de 20U de toxina botulínica na glabela, 10U nas linhas frontais. Produto: Dysport lote #XXXX. Paciente tolerou bem..."
-              rows={5}
-              className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-4 py-3 text-[16px] outline-none focus:border-[#00a88e] sm:text-[14px]"
+              rows={2}
+              className="w-full resize-none rounded-xl border-[2px] border-[#e2e8f0] px-3.5 py-2 text-[14px] outline-none focus:border-[#00a88e] sm:text-[13px]"
             />
           </div>
         </div>
       </div>
 
+      {/* ── 2. TERMOS DE CONSENTIMENTO DA SESSÃO (LOGO ABAIXO) ── */}
+      {procedimentosSelecionados.length > 0 ? (
+        <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-[#00a88e]" />
+              <h4 className="text-[13px] font-bold text-slate-800">
+                Termos de Consentimento da Sessão
+              </h4>
+            </div>
+            <div className="flex items-center gap-2">
+              {resolucao === null ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                  <Loader2 className="h-3 w-3 animate-spin text-[#00a88e]" />
+                  Verificando termos...
+                </span>
+              ) : (
+                <>
+                  {execucaoBloqueadaPorTermos && itensFaltantes.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700">
+                      <X className="h-3 w-3 text-rose-500" />
+                      {itensFaltantes.length} {itensFaltantes.length > 1 ? 'pendentes' : 'pendente'}
+                    </span>
+                  ) : null}
+                  {consentimentosAguardando.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      <Check className="h-3 w-3 text-emerald-600" />
+                      {consentimentosAguardando.length} {consentimentosAguardando.length > 1 ? 'assinados' : 'assinado'}
+                    </span>
+                  ) : null}
+                  {itensSemTermoExigido.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+                      <Info className="h-3 w-3 text-blue-500" />
+                      {itensSemTermoExigido.length} {itensSemTermoExigido.length > 1 ? 'dispensados' : 'dispensado'}
+                    </span>
+                  ) : null}
+                  {!execucaoBloqueadaPorTermos && itensFaltantes.length === 0 && consentimentosAguardando.length === 0 && itensSemTermoExigido.length === 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      <Check className="h-3 w-3 text-emerald-600" />
+                      Em conformidade
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100 pt-1">
+            {resolucao === null ? (
+              <div className="py-3 text-[12px] text-slate-500 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[#00a88e]" />
+                <span>Consultando conformidade dos termos de consentimento para os procedimentos selecionados...</span>
+              </div>
+            ) : null}
+
+            {execucaoBloqueadaPorTermos && itensFaltantes.length > 0
+              ? itensFaltantes.map((item) => (
+                <div key={item.termoId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+                      <X className="h-3.5 w-3.5 stroke-[2.5]" />
+                    </div>
+                    <div className="min-w-0 text-[13px]">
+                      <span className="font-semibold text-slate-900">
+                        {item.procedimentos.length > 0 ? item.procedimentos.join(', ') : 'Procedimento'}:
+                      </span>{' '}
+                      <span className="text-slate-600">{item.titulo}</span>
+                    </div>
+                  </div>
+                  {typeof onIrParaTermosGate === 'function' ? (
+                    <button
+                      type="button"
+                      onClick={() => onIrParaTermosGate(item.termoId)}
+                      className="ml-auto shrink-0 text-[12px] font-bold text-[#00a88e] hover:text-[#008f79] hover:underline cursor-pointer"
+                    >
+                      Assinar agora →
+                    </button>
+                  ) : null}
+                </div>
+              ))
+              : null}
+
+            {consentimentosAguardando.map((c) => (
+              <div key={c.termoId} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                    <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                  </div>
+                  <div className="min-w-0 text-[13px]">
+                    <span className="font-semibold text-slate-900">
+                      {c.procedimentos && c.procedimentos.length > 0
+                        ? c.procedimentos.join(', ')
+                        : 'Procedimento'}:
+                    </span>{' '}
+                    <span className="text-slate-600">{c.titulo}</span>
+                  </div>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-slate-400">
+                  {c.assinadoEm ? <span>em {formatTimestamp(c.assinadoEm, fuso)}</span> : null}
+                  <span className="rounded-full border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                    Assinado
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {itensSemTermoExigido.map((item, idx) => (
+              <div key={item.catalogoId || item.id || `sem_termo_${idx}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <Info className="h-3.5 w-3.5 stroke-[2.5]" />
+                  </div>
+                  <div className="min-w-0 text-[13px]">
+                    <span className="font-semibold text-slate-900">{item.nome || 'Procedimento'}:</span>{' '}
+                    <span className="text-slate-600">Não requer termo de consentimento</span>
+                  </div>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2 text-[11px]">
+                  <span className="rounded-full border border-blue-200/60 bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
+                    Dispensado
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {fotosAvaliacao.length > 0 && (
         <div className="mb-4">
-          <div className="mb-2 flex items-center gap-2">
-            <Eye className="h-4 w-4 text-[#64748b]" strokeWidth={2} />
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">
-              Avaliação — apenas referência
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-[#64748b]" strokeWidth={2} />
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#64748b]">
+                Avaliação — apenas referência
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Clique para ampliar e ver planejamento
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-2 opacity-70">
-            {fotosAvaliacao.slice(0, 3).map((foto, idx) => (
-              <button
-                key={foto.url ? `${foto.url}_${idx}` : idx}
-                type="button"
-                onClick={() => foto.url && setReferencePreviewUrl(foto.url)}
-                title="Ampliar (somente visualização)"
-                className="group relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-xl border-2 border-dashed border-[#e2e8f0] p-0 text-left outline-none transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#00a88e] focus-visible:ring-offset-2"
-              >
-                <img src={foto.url} alt="" className="h-full w-full object-cover" />
-                <div className="pointer-events-none absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/5" />
-                <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/50 px-1 text-[9px] font-bold text-white">
-                  Ref.{idx + 1}
-                </span>
-                <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/45 px-1.5 py-0.5 text-[8px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:text-[9px]">
-                  Ver
-                </span>
-              </button>
-            ))}
+          <div className="grid grid-cols-3 gap-2">
+            {fotosAvaliacao.slice(0, 3).map((foto, idx) => {
+              const temPontos = Array.isArray(foto?.pontos) && foto.pontos.length > 0;
+              const mapaOverlay =
+                foto?.mapaOverlay ||
+                (temPontos
+                  ? {
+                      pontos: foto.pontos,
+                      procedimentos: foto.procedimentosMapeados || foto.procedimentos || [],
+                    }
+                  : null);
+              const totalPontos = foto?.pontos?.length || foto?.mapaOverlay?.pontos?.length || 0;
+
+              return (
+                <button
+                  key={foto.id || foto.fotoId || foto.url || idx}
+                  type="button"
+                  onClick={() => setReferenceLightboxData({ foto, fotos: fotosAvaliacao })}
+                  title="Ampliar avaliação (com zoom e marcações)"
+                  className="group relative aspect-square w-full cursor-zoom-in overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0 text-left outline-none transition-all hover:border-[#00a88e] hover:shadow-xs focus-visible:ring-2 focus-visible:ring-[#00a88e]"
+                >
+                  {mapaOverlay ? (
+                    <GaleriaMapaThumb
+                      url={foto.cleanUrl || foto.url}
+                      mapaOverlay={mapaOverlay}
+                      pacienteId={_pacienteIdForProcedures}
+                      fotoId={foto.fotoId || foto.id || foto.serverId}
+                      alt={`Avaliação Ref.${idx + 1}`}
+                      density="preview"
+                      className="h-full w-full"
+                    />
+                  ) : (
+                    <GaleriaArquivoImage
+                      url={foto.cleanUrl || foto.url}
+                      pacienteId={_pacienteIdForProcedures}
+                      fotoId={foto.fotoId || foto.id || foto.serverId}
+                      alt={`Avaliação Ref.${idx + 1}`}
+                      className="h-full w-full"
+                    />
+                  )}
+                  <div className="pointer-events-none absolute inset-0 bg-black/5 transition-colors group-hover:bg-black/0" />
+                  <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs backdrop-blur-xs">
+                    Ref.{idx + 1}
+                  </span>
+                  {totalPontos > 0 && (
+                    <span className="pointer-events-none absolute top-1.5 left-1.5 rounded-md bg-emerald-600/90 px-1.5 py-0.5 text-[9px] font-semibold text-white shadow-xs">
+                      {totalPontos} pt{totalPontos === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  <span className="pointer-events-none absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 sm:text-[9px]">
+                    Ver Mapa
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2197,6 +3037,7 @@ export function Step4Procedimento({
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
         onAnnotate={onProcedureAnnotatePhoto}
+        urlArquivoReserva={urlArquivoReserva}
         showUpload={!execucaoBloqueadaPorTermos}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.antes}' adicionada.`}
       />
@@ -2210,6 +3051,7 @@ export function Step4Procedimento({
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
         onAnnotate={onProcedureAnnotatePhoto}
+        urlArquivoReserva={urlArquivoReserva}
         showUpload={!execucaoBloqueadaPorTermos}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.depois}' adicionada.`}
       />
@@ -2223,6 +3065,7 @@ export function Step4Procedimento({
           setLegendas={setLegendas}
           onRemove={onProcedureRemovePhoto}
           onAnnotate={onProcedureAnnotatePhoto}
+          urlArquivoReserva={urlArquivoReserva}
           showUpload={false}
           emptyHint="Sem fotos mapa (Legado)"
         />
@@ -2238,6 +3081,7 @@ export function Step4Procedimento({
           onUpload={handleLaneUploadClick}
           onRemove={onProcedureRemovePhoto}
           onAnnotate={onProcedureAnnotatePhoto}
+          urlArquivoReserva={urlArquivoReserva}
           showUpload={!execucaoBloqueadaPorTermos}
           emptyHint="Nenhuma foto diversa adicionada."
         />
@@ -2252,6 +3096,8 @@ export function Step4Procedimento({
             procedimentoFeitoId={procedimentoFeitoId}
             catalogoId={catalogoId}
             nomeProcedimento={nomeProcedimento}
+            procedimentosSessao={procedimentosSessao}
+            onMudarCorProcedimento={handleMudarCorProcedimento}
             planejamentoItemId={planejamentoItemId}
             planejamentoId={planejamentoId}
             procedimentosComPontos={procedimentosComPontos}
@@ -2260,7 +3106,10 @@ export function Step4Procedimento({
             onCaptureConsumed={onMapaCaptureConsumed}
             onPrepareCapture={onPrepareMapaCapture}
             onEnsureProcedimento={onEnsureProcedimento}
-            disabled={!String(nomeProcedimento || '').trim() || !catalogoId || execucaoBloqueadaPorTermos}
+            disabled={
+              procedimentosSelecionados.length === 0 ||
+              execucaoBloqueadaPorTermos
+            }
             disabledHint={
               execucaoBloqueadaPorTermos
                 ? 'Assine os termos obrigatórios para habilitar o mapa de aplicação.'
@@ -2272,51 +3121,34 @@ export function Step4Procedimento({
 
       {groupedPhotos.outros.length === 0 && (
         <div className="mt-4 flex justify-end">
-           <button
-             type="button"
-             disabled={execucaoBloqueadaPorTermos}
-             onClick={() => handleLaneUploadClick(null, GALERIA_CATEGORIA.OUTRO, false)}
-             className="flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-           >
-             <Camera className="h-4 w-4" />
-             + Adicionar Outras Fotos (Durante/Produtos)
-           </button>
+          <button
+            type="button"
+            disabled={execucaoBloqueadaPorTermos}
+            onClick={() => handleLaneUploadClick(null, GALERIA_CATEGORIA.OUTRO, false)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Camera className="h-4 w-4" />
+            + Adicionar Outras Fotos (Durante/Produtos)
+          </button>
         </div>
       )}
 
-      {referencePreviewUrl ? (
-        <div
-          className="fixed inset-0 z-[145] flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setReferencePreviewUrl(null)}
-          role="presentation"
-        >
-          <img
-            src={referencePreviewUrl}
-            alt=""
-            className="max-h-[90dvh] max-w-full rounded-xl object-contain shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            type="button"
-            onClick={() => setReferencePreviewUrl(null)}
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-lg font-bold text-white transition-colors hover:bg-white/30"
-            aria-label="Fechar"
-          >
-            ×
-          </button>
-          <p className="pointer-events-none absolute bottom-6 left-0 right-0 text-center text-[12px] font-medium text-white/80">
-            Referência da avaliação — somente visualização
-          </p>
-        </div>
-      ) : null}
+      {referenceLightboxData && (
+        <PlanoFotoLightbox
+          foto={referenceLightboxData.foto}
+          fotos={referenceLightboxData.fotos}
+          pacienteId={_pacienteIdForProcedures}
+          onClose={() => setReferenceLightboxData(null)}
+        />
+      )}
 
       {laneMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-[500] flex items-end justify-center bg-black/50 p-4 sm:items-center"
           onClick={() => setLaneMenuOpen(false)}
           role="presentation"
         >
-          <div 
+          <div
             className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-2xl animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2344,6 +3176,91 @@ export function Step4Procedimento({
                 className="mt-2 flex items-center justify-center rounded-xl bg-transparent px-4 py-3 text-[14px] font-semibold text-[#64748b] active:bg-[#f1f5f9] sm:hover:bg-[#f1f5f9]"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Interceptor de Decisão: Plano vs Avulso */}
+      {modalDecisaoPlano.open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-decisao-plano-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null })}
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              aria-label="Fechar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 border border-teal-100">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 id="modal-decisao-plano-title" className="text-[16px] font-bold text-slate-900 leading-snug">
+                  Procedimento Encontrado no Plano
+                </h3>
+                <p className="text-[12px] font-medium text-slate-500">
+                  {modalDecisaoPlano.catalogo?.nome || 'Procedimento'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[13px] text-slate-600 mb-4 leading-relaxed">
+              O paciente já possui este procedimento no plano de tratamento ativo. Como deseja registrar este atendimento?
+            </p>
+
+            <div className="space-y-3">
+              {/* Opção 1: Realizar pelo Plano */}
+              <button
+                type="button"
+                onClick={handleConfirmarDecisaoPlano}
+                className="w-full text-left rounded-xl border-2 border-teal-500 bg-teal-50/40 p-3.5 hover:bg-teal-50/80 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-teal-500/20"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-teal-600 shrink-0" />
+                    <span className="text-[13px] font-bold text-teal-950">
+                      Realizar pelo Plano de Tratamento
+                    </span>
+                  </div>
+                  <span className="rounded bg-teal-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white tracking-wider">
+                    Recomendado
+                  </span>
+                </div>
+                <ul className="text-[11px] text-teal-800 space-y-0.5 pl-6 list-disc">
+                  <li>Aproveita o Termo de Consentimento já assinado no plano</li>
+                  <li>Dá baixa de 1 sessão no saldo do plano ao finalizar</li>
+                  <li>Sincroniza o atendimento clínico automaticamente</li>
+                </ul>
+              </button>
+
+              {/* Opção 2: Realizar como Avulso */}
+              <button
+                type="button"
+                onClick={handleConfirmarDecisaoAvulso}
+                className="w-full text-left rounded-xl border border-slate-200 bg-white p-3.5 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-slate-300"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">
+                    !
+                  </span>
+                  <span className="text-[13px] font-bold text-slate-800">
+                    Realizar como Procedimento Avulso (Fora do Plano)
+                  </span>
+                </div>
+                <ul className="text-[11px] text-slate-500 space-y-0.5 pl-6 list-disc">
+                  <li>Não desconta do saldo de sessões do plano</li>
+                  <li>Exige nova assinatura de Termo de Consentimento avulso</li>
+                </ul>
               </button>
             </div>
           </div>

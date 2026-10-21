@@ -1,5 +1,6 @@
 import { toDateKey } from './agendaDateUtils.js';
 import { fetchDashboardAppointmentsForRange } from './agendaDashboardMapping.js';
+import { STATUS_AGENDA_ATIVOS } from './loteAgendasDoPaciente.js';
 import {
   agoraDaClinica,
   diaDoInstante,
@@ -202,42 +203,53 @@ function rowMatchesPaciente(row, pid, nomePacienteNorm) {
   return rowNome.length >= 2 && rowNome === nomePacienteNorm;
 }
 
-function rowLooksCanceled(row) {
-  const st = String(row?.status ?? '').toLowerCase();
-  const sn = String(row?.statusNome ?? '').toLowerCase();
-  return st === 'cancelado' || sn.includes('cancel');
+/** Só agenda que ainda vai acontecer conta como próximo retorno (realizado, reagendado e cancelado saem). */
+function rowStatusAtivo(row) {
+  return STATUS_AGENDA_ATIVOS.includes(String(row?.status ?? '').toLowerCase());
 }
 
 /**
  * Próximo compromisso futuro do paciente no intervalo [hoje da clínica, +366 dias],
  * usando o mesmo pipeline da agenda (`fetchDashboardAppointmentsForRange`).
+ * Só agendas com status em `STATUS_AGENDA_ATIVOS` e com início a partir de agora (relógio da clínica).
+ * Erro da busca é lançado (quem chama decide se mantém o que está na tela).
  *
  * @param {string} pacienteId UUID do paciente
  * @param {{ pacienteNome?: string, fuso?: string }} [opts] — `fuso` da clínica (IANA); se o backend não enviar
  *   `pacienteId` no compromisso, tenta casar pelo nome (homônimos podem colidir).
  * @returns {Promise<string | null>} data+hora de calendário da clínica `"YYYY-MM-DDTHH:mm"`
  */
-export async function fetchNextAppointmentIsoForPaciente(pacienteId, opts = {}) {
+export async function buscarProximoAgendamentoDoPaciente(pacienteId, opts = {}) {
   const pid = pacienteId != null ? String(pacienteId).trim() : '';
   if (!pid) return null;
   const nomeRef = nomeCarteiraNorm(opts.pacienteNome ?? opts.nome ?? '');
   const today = todayIsoInClinica(opts.fuso);
   const end = addCalendarDaysIsoYmd(today, 366);
-  let rows = [];
-  try {
-    rows = await fetchDashboardAppointmentsForRange(today, end);
-  } catch {
-    return null;
-  }
+  const rows = await fetchDashboardAppointmentsForRange(today, end);
   if (!Array.isArray(rows)) return null;
   const nowCmp = nowComparableDateTimeClinica(opts.fuso);
   for (const row of rows) {
     if (!row || row.tipo === 'bloqueio') continue;
-    if (rowLooksCanceled(row)) continue;
+    if (!rowStatusAtivo(row)) continue;
     if (!rowMatchesPaciente(row, pid, nomeRef)) continue;
     const cmp = dashboardRowComparableDateTime(row);
     if (cmp < nowCmp) continue;
     return dashboardRowToCalendarDateTime(row);
   }
   return null;
+}
+
+/**
+ * Igual a `buscarProximoAgendamentoDoPaciente`, mas erro da busca vira `null`.
+ *
+ * @param {string} pacienteId UUID do paciente
+ * @param {{ pacienteNome?: string, fuso?: string }} [opts]
+ * @returns {Promise<string | null>}
+ */
+export async function fetchNextAppointmentIsoForPaciente(pacienteId, opts = {}) {
+  try {
+    return await buscarProximoAgendamentoDoPaciente(pacienteId, opts);
+  } catch {
+    return null;
+  }
 }

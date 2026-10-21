@@ -43,6 +43,8 @@ export const ACOES_MAP = {
   EDITAR_AGENDA:          { label: 'Editou agenda',          cor: 'blue' },
   CANCELAR_AGENDA:        { label: 'Cancelou agenda',        cor: 'red' },
   REAGENDAR_AGENDA:       { label: 'Reagendou agenda',       cor: 'purple' },
+  RECUSAR_ABRIR_CONSULTA: { label: 'Recusou abrir consulta em andamento com outra profissional', cor: 'red' },
+  CANCELAR_CONSULTA_ABANDONADA: { label: 'Cancelou consulta abandonada sem registro clínico', cor: 'red' },
   
   // Procedimento & Notas
   INICIAR_PROCEDIMENTO:   { label: 'Iniciou procedimento',   cor: 'blue' },

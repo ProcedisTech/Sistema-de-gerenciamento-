@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:clean": "npm run ports:clean && npm run dev",
-    "ports:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/clean-ports.ps1",
+    "ports:clean": "node ./scripts/clean-ports.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -23,6 +23,7 @@
     "@supabase/supabase-js": "^2.104.0",
     "@tailwindcss/typography": "^0.5.20",
     "dompurify": "^3.4.10",
+    "eventsource-parser": "^3.1.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

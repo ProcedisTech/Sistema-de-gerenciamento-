@@ -51,6 +51,7 @@ Before finalizing architecture:
 
 - [ ] Requirements clearly understood
 - [ ] Constraints identified
+- [ ] Proactive UX and workflow improvements evaluated before drafting (zero shallow/literal plans)
 - [ ] Each decision has trade-off analysis
 - [ ] Simpler alternatives considered
 - [ ] ADRs written for significant decisions

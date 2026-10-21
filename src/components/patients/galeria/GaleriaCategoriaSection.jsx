@@ -117,7 +117,7 @@ export function GaleriaCategoriaSection({
               >
                 {shouldShowMapaOverlay(foto) ? (
                   <GaleriaMapaThumb
-                    url={foto.url}
+                    url={foto.cleanUrl || foto.url}
                     mapaOverlay={foto.mapaOverlay}
                     alt=""
                     className="h-full w-full"

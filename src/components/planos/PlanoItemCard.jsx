@@ -303,25 +303,34 @@ export function PlanoItemCard({
                   </span>
                 </>
               )}
-              {isRealizado && (item.sessaoRealizada?.dataAgendamento || item.sessaoAtiva?.dataAgendamento) ? (
-                <>
-                  <span>·</span>
-                  <span className="text-slate-500 font-medium">
-                    Realizado em {formatDataPt(item.sessaoRealizada?.dataAgendamento || item.sessaoAtiva?.dataAgendamento)}
-                    {(item.sessaoRealizada?.horaInicio || item.sessaoAtiva?.horaInicio)
-                      ? ` às ${String(item.sessaoRealizada?.horaInicio || item.sessaoAtiva?.horaInicio).slice(0, 5)}`
-                      : ''}
-                  </span>
-                </>
-              ) : item.sessaoAtiva?.dataAgendamento ? (
-                <>
-                  <span>·</span>
-                  <span className="text-teal-700 font-medium">
-                    Agendado em {formatDataPt(item.sessaoAtiva.dataAgendamento)}
-                    {item.sessaoAtiva.horaInicio ? ` às ${String(item.sessaoAtiva.horaInicio).slice(0, 5)}` : ''}
-                  </span>
-                </>
-              ) : null}
+              {(() => {
+                const dataRealizada = item.sessaoRealizada?.dataAgendamento || item.sessaoAtiva?.dataAgendamento || (isRealizado ? (item.dataPlanejada || _visitaData) : null);
+                const horaRealizada = item.sessaoRealizada?.horaInicio || item.sessaoAtiva?.horaInicio || (isRealizado ? _visitaHora : null);
+
+                if (isRealizado && dataRealizada) {
+                  return (
+                    <>
+                      <span>·</span>
+                      <span className="text-slate-500 font-medium">
+                        Realizado em {formatDataPt(dataRealizada)}
+                        {horaRealizada ? ` às ${String(horaRealizada).slice(0, 5)}` : ''}
+                      </span>
+                    </>
+                  );
+                }
+                if (item.sessaoAtiva?.dataAgendamento) {
+                  return (
+                    <>
+                      <span>·</span>
+                      <span className="text-teal-700 font-medium">
+                        Agendado em {formatDataPt(item.sessaoAtiva.dataAgendamento)}
+                        {item.sessaoAtiva.horaInicio ? ` às ${String(item.sessaoAtiva.horaInicio).slice(0, 5)}` : ''}
+                      </span>
+                    </>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {item.sessaoRetornoAtiva?.dataAgendamento && (

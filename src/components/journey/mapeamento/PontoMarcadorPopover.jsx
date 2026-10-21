@@ -13,6 +13,7 @@ function PontoMarcadorPopoverForm({
   ponto,
   nomeProcedimento,
   catalogoId,
+  cor: corProp,
   anchorLeft,
   anchorTop,
   onSave,
@@ -37,9 +38,10 @@ function PontoMarcadorPopoverForm({
     }
   }, [unit]);
 
-  const cor = corParaProcedimento(catalogoId);
+  const cor = corProp || ponto?.cor || corParaProcedimento(catalogoId);
   const left = anchorLeft ?? 50;
   const top = anchorTop ?? 50;
+  const isNearTop = top < 26;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -68,17 +70,39 @@ function PontoMarcadorPopoverForm({
         aria-labelledby="ponto-edit-title"
         onSubmit={handleSubmit}
         style={popoverStyle}
-        className="absolute z-[25] w-[280px] -translate-x-1/2 -translate-y-[calc(100%+12px)] rounded-xl border border-app-border bg-white p-4 shadow-app-card"
+        className={`absolute z-[45] w-[295px] -translate-x-1/2 ${
+          isNearTop ? 'translate-y-4' : '-translate-y-[calc(100%+12px)]'
+        } rounded-2xl border border-app-border bg-white p-4 shadow-xl`}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-center gap-2">
-          <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: cor }} aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p id="ponto-edit-title" className="truncate text-[13px] font-bold text-app-ink">
-              {nomeProcedimento || 'Procedimento'}
-            </p>
-            <p className="text-[11px] font-medium text-[#94a3b8]">Ponto #{ponto.ordem}</p>
+        <div className="mb-3.5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2.5 shadow-2xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span
+                className="h-3.5 w-3.5 shrink-0 rounded-full ring-2 ring-white shadow-2xs"
+                style={{ backgroundColor: cor }}
+                aria-hidden="true"
+              />
+              <div className="min-w-0 flex-1">
+                <p id="ponto-edit-title" className="truncate text-[13px] font-bold leading-tight text-slate-800">
+                  {nomeProcedimento || 'Anotação Livre'}
+                </p>
+                <p className="text-[10px] font-medium text-slate-400 leading-tight mt-0.5">
+                  {nomeProcedimento ? 'Procedimento vinculado' : 'Marcação sem procedimento'}
+                </p>
+              </div>
+            </div>
+            <span
+              className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-2xs border"
+              style={{
+                backgroundColor: `${cor}18`,
+                color: cor,
+                borderColor: `${cor}35`,
+              }}
+            >
+              {ponto?.tipoGeometria === 'traco' ? 'Traço' : 'Ponto'} #{ponto?.ordem ?? 1}
+            </span>
           </div>
         </div>
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
@@ -161,6 +185,7 @@ export function PontoMarcadorPopover({
   ponto,
   nomeProcedimento,
   catalogoId,
+  cor,
   /** @deprecated use anchorLeft/anchorTop (container %) */
   anchorPercent,
   anchorLeft,
@@ -177,10 +202,11 @@ export function PontoMarcadorPopover({
 
   return (
     <PontoMarcadorPopoverForm
-      key={`${ponto.localId}-${normalizeUnidadeMedida(unidadeMedida)}`}
+      key={`${ponto.localId || ponto.id || 'ponto'}-${normalizeUnidadeMedida(unidadeMedida)}`}
       ponto={ponto}
       nomeProcedimento={nomeProcedimento}
       catalogoId={catalogoId}
+      cor={cor}
       anchorLeft={anchorLeft ?? anchorPercent?.posX}
       anchorTop={anchorTop ?? anchorPercent?.posY}
       onSave={onSave}

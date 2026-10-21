@@ -40,10 +40,11 @@ export function usePacienteGaleriaArquivoBlobUrl(url, enabled, forceBlob = false
     }
 
     const trimmed = url.trim();
+    const isBlobOrData = trimmed.startsWith('blob:') || trimmed.startsWith('data:');
     const isPresigned =
       typeof url === 'string' && trimmed.startsWith('https://') && trimmed.includes('X-Amz-Signature');
 
-    if (isPresigned && !forceBlob) {
+    if ((isPresigned || isBlobOrData) && !forceBlob) {
       revoke();
       setBlobSrc(trimmed);
       setLoading(false);

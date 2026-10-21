@@ -13,6 +13,7 @@ function nextLocalId() {
 /** Mapeia ponto da API → objeto local (hydrate futuro). NULL tamanho → 1.0. */
 export function mapApiPontoToLocal(apiPonto, ordem) {
   const p = apiPonto && typeof apiPonto === 'object' ? apiPonto : {};
+  const catId = p.catalogoProcedimentoSaudeId || p.catalogoId || undefined;
   const row = {
     localId: nextLocalId(),
     posX: Number(p.posX), // fallback legado
@@ -25,6 +26,19 @@ export function mapApiPontoToLocal(apiPonto, ordem) {
   };
   if (p.regiaoFacial != null && String(p.regiaoFacial).trim()) {
     row.regiaoFacial = String(p.regiaoFacial).trim();
+  }
+  if (p.cor || p.corHex) {
+    row.cor = String(p.cor || p.corHex).trim();
+  }
+  if (catId) {
+    row.catalogoProcedimentoSaudeId = String(catId);
+    row.catalogoId = String(catId);
+  }
+  if (p.procedimentoIndex != null) {
+    row.procedimentoIndex = Number(p.procedimentoIndex);
+  }
+  if (p.nomeProcedimento != null && String(p.nomeProcedimento).trim()) {
+    row.nomeProcedimento = String(p.nomeProcedimento).trim();
   }
   return row;
 }

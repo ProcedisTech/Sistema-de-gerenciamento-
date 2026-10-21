@@ -19,6 +19,11 @@
  * @see src/config/apiEnv.js — VITE_DEFAULT_ORG_ID, VITE_ALT_ORG_ID
  */
 
+import {
+  isAuthApiError,
+  isAuthRetryableFetchError,
+  isAuthSessionMissingError,
+} from '@supabase/supabase-js';
 import { sanitizeOrgId, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 import { supabase } from '../lib/supabaseClient';
 import { updateServerTimeOffset } from '../utils/serverTime';
@@ -78,13 +83,92 @@ export async function authHeadersForFetch({ needsOrg = true, token } = {}) {
   return h;
 }
 
+/** Texto de sessão expirada (só quando a renovação do acesso falhou de forma definitiva). */
+export const MENSAGEM_SESSAO_EXPIRADA = 'Sua sessão expirou. Faça login novamente.';
+
 /**
- * Dispara `auth:expired` (logout) apenas se GET /api/auth/me também retornar 401 — ou seja,
- * a sessão realmente expirou. Se /me responder 200, o 401 é de negócio/org e não desloga.
- * Usa dynamic import para evitar dependência circular estática com authMeProbe.js.
+ * Classifica a falha de `refreshSession()`:
+ * - 'definitiva': o servidor de auth recusou o acesso (refresh token inválido/vencido): AuthApiError 4xx
+ *   (fora 429) ou AuthSessionMissingError;
+ * - 'rede': offline, timeout, servidor fora (AuthRetryableFetchError, status 0/5xx) e qualquer outra falha
+ *   que não seja uma recusa do servidor.
+ * @param {unknown} error
+ * @returns {'definitiva' | 'rede'}
  */
-async function dispatchAuthExpiredIfSessionReallyGone(failedUrl) {
-  console.warn(`[api] A requisição para ${failedUrl} retornou 401. Como a sessão é controlada pelo Supabase, ignorando logout forçado.`);
+function classificarFalhaRenovacao(error) {
+  if (isAuthRetryableFetchError(error)) return 'rede';
+  if (isAuthSessionMissingError(error)) return 'definitiva';
+  if (isAuthApiError(error)) {
+    const status = Number(error.status);
+    if (status >= 400 && status < 500 && status !== 429) return 'definitiva';
+  }
+  return 'rede';
+}
+
+/** Log da falha sem sessão nem token. */
+function logarFalhaRenovacao(error, tipo) {
+  const e = error && typeof error === 'object' ? error : {};
+  console.warn('[api] Falha ao renovar o acesso', {
+    code: e.code ?? null,
+    status: e.status ?? null,
+    name: e.name ?? null,
+    message: typeof e.message === 'string' ? e.message : null,
+    tipo,
+    em: new Date().toISOString(),
+  });
+}
+
+/** @type {Promise<{ tipo: 'ok', token: string } | { tipo: 'definitiva' } | { tipo: 'rede' }> | null} */
+let renovacaoEmCurso = null;
+
+async function renovarAcesso(tokenUsado) {
+  if (tokenUsado) {
+    // Chegou atrasado: outra requisição já renovou; só repete com o token atual.
+    const atual = await getFreshToken();
+    if (atual && atual !== tokenUsado) return { tipo: 'ok', token: atual };
+  }
+  let error = null;
+  try {
+    const { data, error: erroSupabase } = await supabase.auth.refreshSession();
+    const token = data?.session?.access_token;
+    if (!erroSupabase && token) return { tipo: 'ok', token };
+    error = erroSupabase;
+  } catch (e) {
+    error = e;
+  }
+  const tipo = error ? classificarFalhaRenovacao(error) : 'definitiva';
+  logarFalhaRenovacao(error, tipo);
+  if (tipo === 'definitiva' && typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('auth:expired', { detail: { scope: 'local', motivo: 'renovacao' } }),
+    );
+  }
+  return { tipo };
+}
+
+/**
+ * Renova o acesso depois de um 401. Promessa compartilhada: N 401 simultâneos → 1 renovação (e no máximo
+ * 1 `auth:expired`). Quem chega atrasado com o token velho só repete com o token atual.
+ * Só a falha definitiva dispara `auth:expired` ({ scope: 'local', motivo: 'renovacao' }).
+ * @param {string | null} [tokenUsado] token que recebeu o 401
+ * @returns {Promise<{ tipo: 'ok', token: string } | { tipo: 'definitiva' } | { tipo: 'rede' }>}
+ */
+export function attemptTokenRefresh(tokenUsado) {
+  if (renovacaoEmCurso) return renovacaoEmCurso;
+  const emCurso = renovarAcesso(tokenUsado).finally(() => {
+    if (renovacaoEmCurso === emCurso) renovacaoEmCurso = null;
+  });
+  renovacaoEmCurso = emCurso;
+  return emCurso;
+}
+
+/** Erro HTTP com `sessaoExpirada` só quando a renovação falhou de forma definitiva. */
+function erroHttp(res, body, sessaoExpirada) {
+  const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
+  err.status = res.status;
+  err.body = body;
+  if (sessaoExpirada && res.status === 401) err.sessaoExpirada = true;
+  return err;
 }
 
 async function requestDelete(path, { needsOrg = true } = {}) {
@@ -94,12 +178,15 @@ async function requestDelete(path, { needsOrg = true } = {}) {
   if (needsOrg && currentOrgId) headers['X-Org-Id'] = currentOrgId;
   const url = path.startsWith('http') ? path : resolveApiUrl(path);
 
+  let sessaoExpirada = false;
   let res = await fetch(url, { method: 'DELETE', credentials: 'omit', headers });
   if (res.status === 401) {
-    const refreshed = await attemptTokenRefresh();
-    if (refreshed) {
-      headers.Authorization = `Bearer ${refreshed}`;
+    const renovacao = await attemptTokenRefresh(token);
+    if (renovacao.tipo === 'ok') {
+      headers.Authorization = `Bearer ${renovacao.token}`;
       res = await fetch(url, { method: 'DELETE', credentials: 'omit', headers });
+    } else if (renovacao.tipo === 'definitiva') {
+      sessaoExpirada = true;
     }
   }
 
@@ -107,13 +194,9 @@ async function requestDelete(path, { needsOrg = true } = {}) {
   if (!res.ok) {
     if (res.status === 401) {
       console.warn(`[api] DELETE ${url} retornou 401 fatal.`);
-      await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const body = await res.json().catch(() => ({}));
-    const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
-    err.status = res.status;
-    err.body = body;
-    throw err;
+    throw erroHttp(res, body, sessaoExpirada);
   }
   const text = await res.text();
   if (!text.trim()) return null;
@@ -203,7 +286,7 @@ export function getApiErrorDetail(err) {
  * ao profissional se é sessão expirada, internet caída ou backend fora.
  *
  * Ordem:
- *   1. status conhecido → frase amigável fixa (401/5xx/network).
+ *   1. status conhecido → frase amigável fixa (401 com `sessaoExpirada`/5xx/network).
  *   2. corpo Spring (`getApiErrorDetail`) — validação Bean / ProblemDetail.
  *   3. Axios-shape (`err.response.data.message`).
  *   4. `Error.message` cru.
@@ -221,7 +304,9 @@ export function isAbortError(err) {
 export function getApiErrorToastMessage(err, fallback) {
   const status = err != null && typeof err === 'object' ? err.status : undefined;
 
-  if (status === 401) return 'Sua sessão expirou. Faça login novamente.';
+  // Texto de sessão só quando a renovação falhou de forma definitiva; outro 401 (ex.: "Senha incorreta.")
+  // segue o caminho comum (detalhe do backend / fallback).
+  if (status === 401 && err.sessaoExpirada === true) return MENSAGEM_SESSAO_EXPIRADA;
   if (status === 500 || status === 502 || status === 503 || status === 504) {
     return 'Erro do servidor. Tente novamente em alguns minutos.';
   }
@@ -274,16 +359,6 @@ export function getPacienteCreateErrorFeedback(err) {
   return { banner, cpfField: '', highlightCpf: false };
 }
 
-async function attemptTokenRefresh() {
-  try {
-    const { data: { session }, error } = await supabase.auth.refreshSession();
-    if (error || !session?.access_token) return null;
-    return session.access_token;
-  } catch {
-    return null;
-  }
-}
-
 async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   assertOrgForTenantRequest(needsOrg);
   const token = await getFreshToken();
@@ -298,21 +373,24 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
     credentials: 'omit',
   });
 
+  let sessaoExpirada = false;
   if (res.status === 401) {
     if (fetchOpts.signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
-    const refreshed = await attemptTokenRefresh();
-    if (refreshed) {
+    const renovacao = await attemptTokenRefresh(token);
+    if (renovacao.tipo === 'ok') {
       if (fetchOpts.signal?.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
-      headers.Authorization = `Bearer ${refreshed}`;
+      headers.Authorization = `Bearer ${renovacao.token}`;
       res = await fetch(url, {
         ...fetchOpts,
         headers,
         credentials: 'omit',
       });
+    } else if (renovacao.tipo === 'definitiva') {
+      sessaoExpirada = true;
     }
   }
 
@@ -324,13 +402,9 @@ async function request(path, { needsOrg = true, ...fetchOpts } = {}) {
   if (!res.ok) {
     if (res.status === 401) {
       console.warn(`[api] ${fetchOpts.method || 'GET'} ${url} retornou 401 fatal.`);
-      await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const body = await res.json().catch(() => ({}));
-    const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
-    err.status = res.status;
-    err.body = body;
-    throw err;
+    throw erroHttp(res, body, sessaoExpirada);
   }
   return res.json();
 }
@@ -352,10 +426,11 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
     credentials: 'omit',
   });
 
+  let sessaoExpirada = false;
   if (res.status === 401) {
-    const refreshed = await attemptTokenRefresh();
-    if (refreshed) {
-      headers.Authorization = `Bearer ${refreshed}`;
+    const renovacao = await attemptTokenRefresh(token);
+    if (renovacao.tipo === 'ok') {
+      headers.Authorization = `Bearer ${renovacao.token}`;
       res = await fetch(url, {
         ...rest,
         method,
@@ -363,6 +438,8 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
         headers,
         credentials: 'omit',
       });
+    } else if (renovacao.tipo === 'definitiva') {
+      sessaoExpirada = true;
     }
   }
 
@@ -374,13 +451,9 @@ async function requestForm(path, { needsOrg = true, method = 'POST', body, ...re
   if (!res.ok) {
     if (res.status === 401) {
       console.warn(`[api] POST/form ${url} retornou 401 fatal.`);
-      await dispatchAuthExpiredIfSessionReallyGone(url);
     }
     const resBody = await res.json().catch(() => ({}));
-    const err = new Error(buildApiErrorMessage(res.status, resBody, res.statusText));
-    err.status = res.status;
-    err.body = resBody;
-    throw err;
+    throw erroHttp(res, resBody, sessaoExpirada);
   }
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('application/json')) {
@@ -418,16 +491,18 @@ async function requestBlob(path, { needsOrg = true } = {}) {
 
   const promise = (async () => {
     try {
+      let sessaoExpirada = false;
       let res = await fetch(url, { method: 'GET', credentials, headers });
       if (res.status === 401 && attachAuth) {
-        const refreshed = await attemptTokenRefresh();
-        if (refreshed) {
-          headers.Authorization = `Bearer ${refreshed}`;
+        const renovacao = await attemptTokenRefresh(token);
+        if (renovacao.tipo === 'ok') {
+          headers.Authorization = `Bearer ${renovacao.token}`;
           res = await fetch(url, { method: 'GET', credentials, headers });
+        } else if (renovacao.tipo === 'definitiva') {
+          sessaoExpirada = true;
         }
       }
       if (!res.ok) {
-        // Não disparar auth:expired aqui (ver comentário anterior no histórico).
         const body = await res.json().catch(() => ({}));
         if (import.meta.env.DEV && res.status === 401) {
           console.warn(
@@ -440,10 +515,7 @@ async function requestBlob(path, { needsOrg = true } = {}) {
             url,
           );
         }
-        const err = new Error(buildApiErrorMessage(res.status, body, res.statusText));
-        err.status = res.status;
-        err.body = body;
-        throw err;
+        throw erroHttp(res, body, sessaoExpirada);
       }
       return res.blob();
     } finally {
@@ -738,6 +810,10 @@ export const pacientesGaleriaApi = {
       procedimentoFeitoId,
       legenda,
       tipoFotoCodigo,
+      atendimentoId,
+      atendimentoItemId,
+      agendaId,
+      mapaId,
     } = options;
     if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
       fd.append('roleUserId', String(roleUserId));
@@ -751,11 +827,23 @@ export const pacientesGaleriaApi = {
     if (procedimentoFeitoId != null && String(procedimentoFeitoId).trim()) {
       fd.append('procedimentoFeitoId', String(procedimentoFeitoId).trim());
     }
+    if (agendaId != null && String(agendaId).trim()) {
+      fd.append('agendaId', String(agendaId).trim());
+    }
+    if (mapaId != null && String(mapaId).trim()) {
+      fd.append('mapaId', String(mapaId).trim());
+    }
     if (legenda != null && String(legenda).trim()) {
       fd.append('legenda', String(legenda).trim());
     }
     if (tipoFotoCodigo != null && String(tipoFotoCodigo).trim()) {
       fd.append('tipoFotoCodigo', String(tipoFotoCodigo).trim().toUpperCase());
+    }
+    if (atendimentoId) {
+      fd.append('atendimentoId', String(atendimentoId));
+    }
+    if (atendimentoItemId) {
+      fd.append('atendimentoItemId', String(atendimentoItemId));
     }
     return requestForm(`/api/v1/pacientes/${pacienteId}/galeria`, { method: 'POST', body: fd });
   },
@@ -907,16 +995,11 @@ export const clinicaProcedimentoApi = {
 };
 
 /**
- * Orientações pós-procedimento + template por nome (contrato alinhar com `plataforma-procedimentos`).
- * Esperado: POST body `[{ descricao, checado, ordem }]`, GET template JSON com `itens` ou array,
- * PUT template `{ procedimentoNome, itens }`, POST catálogo `{ nomeProcedimento }` (ajustar se o DTO Spring divergir).
+ * Orientações pós-procedimento gravadas (leitura) + template por nome. F5b: a escrita das orientações é por item da
+ * consulta (`atendimentosApi.alterarItem` com `orientacoes`); o encerrar grava no procedimento. GET template JSON
+ * com `itens` ou array, PUT template `{ procedimentoNome, itens }`, POST catálogo `{ nomeProcedimento }`.
  */
 export const orientacoesApi = {
-  salvar: (procedimentoFeitoId, itens) =>
-    request(`/api/v1/procedimentos/${encodeURIComponent(String(procedimentoFeitoId))}/orientacoes`, {
-      method: 'POST',
-      body: JSON.stringify(Array.isArray(itens) ? itens : []),
-    }),
   listar: (procedimentoFeitoId) =>
     request(`/api/v1/procedimentos/${encodeURIComponent(String(procedimentoFeitoId))}/orientacoes`),
 };
@@ -1123,6 +1206,102 @@ export const procedimentosApi = {
     request(`/api/v1/procedimentos/${id}/observacao`, {
       method: 'PATCH',
       body: JSON.stringify({ observacao: String(observacao ?? '').trim() }),
+    }),
+};
+
+// ── Consulta (atendimento) ─────────────────────────────────
+
+const ATENDIMENTOS = '/api/v1/atendimentos';
+const atendimentoPath = (id, resto = '') => `${ATENDIMENTOS}/${encodeURIComponent(id)}${resto}`;
+
+export const atendimentosApi = {
+  abrir: (data) => request(ATENDIMENTOS, { method: 'POST', body: JSON.stringify(data) }),
+  minhas: () => request(`${ATENDIMENTOS}/minhas`),
+  detalhe: (id) => request(atendimentoPath(id)),
+  trocarModulo: (id, modulo) =>
+    request(atendimentoPath(id, '/modulo'), { method: 'PATCH', body: JSON.stringify({ modulo }) }),
+  novoItem: (id, data) =>
+    request(atendimentoPath(id, '/itens'), { method: 'POST', body: JSON.stringify(data) }),
+  /**
+   * PATCH do item: `observacaoExecucao`, `catalogoProcedimentoSaudeId`/`nomeLivre` e, F5b, `orientacoes` (lista
+   * inteira `[{ descricao, checado, ordem }]`; `null` = vazia).
+   */
+  alterarItem: (id, itemId, campos) =>
+    request(atendimentoPath(id, `/itens/${encodeURIComponent(itemId)}`), {
+      method: 'PATCH',
+      body: JSON.stringify(campos),
+    }),
+  /**
+   * Textos da avaliação (queixa, expectativas, observações): só a chave PRESENTE em `campos` muda (`null` ou `''`
+   * limpa). Devolve o detalhe completo da consulta (com `preenchimentoAnamneseId`).
+   * @param {string} id
+   * @param {{ queixa?: string | null, expectativas?: string | null, observacoesAvaliacao?: string | null }} campos
+   */
+  alterarAvaliacaoTexto: (id, campos) =>
+    request(atendimentoPath(id, '/avaliacao-texto'), { method: 'PATCH', body: JSON.stringify(campos) }),
+  substituirPeloPlano: (id, data) =>
+    request(atendimentoPath(id, '/itens/plano'), { method: 'PUT', body: JSON.stringify(data) }),
+  /**
+   * Termos da consulta (lista final = `termosPendentesIds` + `termoSelecionadoId`; `termoLido` marca o selecionado
+   * como lido, nunca desmarca). Devolve o detalhe atualizado (`termos[]`).
+   * @param {string} id
+   * @param {{ termoSelecionadoId: string | null, termoLido: boolean, termosPendentesIds: string[] }} corpo
+   */
+  salvarTermos: (id, { termoSelecionadoId = null, termoLido = false, termosPendentesIds = [] } = {}) =>
+    request(atendimentoPath(id, '/termos'), {
+      method: 'PUT',
+      body: JSON.stringify({ termoSelecionadoId, termoLido: Boolean(termoLido), termosPendentesIds }),
+    }),
+  removerFoto: (id, fotoId) =>
+    request(atendimentoPath(id, `/fotos/${encodeURIComponent(fotoId)}`), { method: 'DELETE' }),
+  anotarFoto: (id, fotoId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return requestForm(atendimentoPath(id, `/fotos/${encodeURIComponent(fotoId)}/arquivo`), {
+      method: 'PUT',
+      body: fd,
+    });
+  },
+  salvarMapa: (id, itemId, data) =>
+    request(atendimentoPath(id, `/itens/${encodeURIComponent(itemId)}/mapa`), {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  buscarMapa: (id, itemId) => request(atendimentoPath(id, `/itens/${encodeURIComponent(itemId)}/mapa`)),
+  /**
+   * Etapa 3: encerra a consulta numa transação no servidor (EncerramentoResultadoDTO).
+   * `modo`: 'COMPLETO' | 'SOMENTE_FECHAR'; `itemAtivoId`: item do servidor da aba ativa (portão de termos);
+   * O servidor decide por item (termo assinado) e devolve `itensSemRegistro`; o corpo não leva mais `criarProcedimentos`.
+   * Sem `orientacoes` (F5b): cada item já tem as suas pelo PATCH `/itens/{itemId}` (campo `orientacoes`); o
+   * servidor grava em cada procedimento a lista do item dele e devolve `procedimentos[].orientacoes`.
+   */
+  encerrar: (
+    id,
+    { modo = 'COMPLETO', pularGateTermos = false, itemAtivoId = null } = {},
+    { abaId = null } = {},
+  ) =>
+    request(atendimentoPath(id, '/encerrar'), {
+      method: 'POST',
+      ...(abaId ? { headers: { 'X-Aba-Id': abaId } } : {}),
+      body: JSON.stringify({
+        modo,
+        pularGateTermos: Boolean(pularGateTermos),
+        itemAtivoId: itemAtivoId ?? null,
+      }),
+    }),
+  /**
+   * F7: declara (ou retira) a pendência de envio desta aba na consulta. `seq` cresce por consulta (o servidor ignora
+   * declaração mais velha). 204; 409 consulta encerrada; 403 aba que não é a anfitriã. `X-Aba-Id` é obrigatório.
+   * O id da aba vem do chamador (canalAvisos importa este arquivo: aqui não há import de volta).
+   * @param {string} id
+   * @param {{ pendente: boolean, seq: number }} corpo
+   * @param {{ abaId: string }} opcoes
+   */
+  pendencia: (id, { pendente, seq }, { abaId } = {}) =>
+    request(atendimentoPath(id, '/pendencia'), {
+      method: 'PUT',
+      headers: { 'X-Aba-Id': abaId },
+      body: JSON.stringify({ pendente: Boolean(pendente), seq }),
     }),
 };
 
@@ -1353,13 +1532,22 @@ export const termosApi = {
   update: (id, data) =>
     request(`/api/v1/termos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id) => request(`/api/v1/termos/${id}`, { method: 'DELETE' }),
-  resolver: ({ pacienteId, catalogoIds = [] } = {}) => {
+  resolver: ({ pacienteId, catalogoIds = [], planejamentoItemIds = [], atendimentoId } = {}) => {
     const params = new URLSearchParams();
     if (pacienteId) params.set('pacienteId', String(pacienteId));
+    // Dentro de consulta: só vale assinatura ASSINADA nesta consulta. Fora dela, não envia.
+    const atend = atendimentoId != null ? String(atendimentoId).trim() : '';
+    if (atend) params.set('atendimentoId', atend);
     (Array.isArray(catalogoIds) ? catalogoIds : [])
       .map((id) => String(id || '').trim())
-      .filter(Boolean)
+      .filter((id) => id && id !== 'undefined' && id !== 'null')
       .forEach((id) => params.append('catalogoProcedimentoSaudeIds', id));
+    if (Array.isArray(planejamentoItemIds) && planejamentoItemIds.length > 0) {
+      params.set(
+        'planejamentoItemIds',
+        planejamentoItemIds.map((id) => (id ? String(id).trim() : 'null')).join(','),
+      );
+    }
     const qs = params.toString();
     return request(`/api/v1/termos/resolucao${qs ? `?${qs}` : ''}`);
   },

@@ -23,6 +23,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery.js';
 import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel.js';
 import { buildAdvanceOffersByAgendaId } from '../../utils/agendaAdvanceOffer.js';
+import { getConsultaEmAndamento } from '../../utils/agendaCardActions.js';
 import { addMinutesToTime } from '../../utils/agendaMapping.js';
 import {
   formatListDayCountLabel,
@@ -32,6 +33,7 @@ import {
   groupConsecutiveAppointments,
 } from '../../utils/agendaDayInsights.js';
 import { toDateKey } from '../../utils/agendaDateUtils.js';
+import { loteDasLinhas } from '../../utils/loteAgendasDoPaciente.js';
 import {
   applyGroupActionAndRefresh,
   formatGroupActionResultMessage,
@@ -41,12 +43,11 @@ import {
 } from '../../utils/agendaGroupActions.js';
 import { getEntryDomId } from '../../utils/agendaRailHelpers.js';
 
+/** B2: só por id; nome igual não é o mesmo paciente (homônimos). */
 function samePatient(a, b) {
   if (!a || !b) return false;
-  return (
-    String(a.id || '') === String(b.pacienteId || '') ||
-    String(a.nome || a.nomeCompleto || '').trim() === String(b.pacienteNome || '').trim()
-  );
+  const id = String(a.id || '').trim();
+  return id !== '' && id === String(b.pacienteId || '').trim();
 }
 
 
@@ -176,6 +177,7 @@ export function AgendaDashboard({
   agenda,
   patients = [],
   onStartAttendance,
+  onVoltarConsulta,
   onSlotCancelar,
   onSlotReagendar,
   clinicaNome = 'Procedi',
@@ -196,7 +198,7 @@ export function AgendaDashboard({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const isMobile = !isDesktop;
   const toast = useToast();
-  const { canDeleteAgenda } = usePapel();
+  const { canDeleteAgenda, roleUserId } = usePapel();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
@@ -388,6 +390,8 @@ export function AgendaDashboard({
       const disabled = Boolean(agenda.loading) || agenda.isNivel1;
       const isGroup = items.length > 1;
       const batchOpts = { successToast: false, skipDashboardRefresh: true };
+      // Consulta em andamento no agendamento/grupo: some Cancelar, Reagendar e "Não compareceu".
+      const { emAndamento } = getConsultaEmAndamento(items, roleUserId);
 
       return (
         <AgendaSlotActions
@@ -425,15 +429,15 @@ export function AgendaDashboard({
             }
             if (primary.agendaId) agenda.handleMarcarNaoCompareceu(primary.agendaId);
           } : null}
-          onReagendar={() => {
+          onReagendar={emAndamento ? null : () => {
             closeOverlay?.();
             onSlotReagendar?.(items.length > 1 ? target : primary);
           }}
-          onCancelar={canDeleteAgenda && onSlotCancelar ? () => {
+          onCancelar={!emAndamento && canDeleteAgenda && onSlotCancelar ? () => {
             closeOverlay?.();
             onSlotCancelar?.(items.length > 1 ? target : primary);
           } : null}
-          canCancelar={Boolean(canDeleteAgenda && onSlotCancelar)}
+          canCancelar={Boolean(!emAndamento && canDeleteAgenda && onSlotCancelar)}
           onEnviarWhatsApp={async () => {
             if (isGroup) {
               const result = await applyGroupActionAndRefresh(
@@ -455,13 +459,20 @@ export function AgendaDashboard({
         />
       );
     },
-    [agenda, batchRefresh, canDeleteAgenda, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese],
+    [agenda, batchRefresh, canDeleteAgenda, onSlotCancelar, onSlotReagendar, toast, handleEnviarAnamnese, roleUserId],
   );
 
   const handlePrimary = React.useCallback((target) => {
     const items = resolveActionAppointments(target);
     const appointment = items[0];
     if (!appointment || appointment.tipo === 'bloqueio') return;
+
+    // Consulta em andamento minha: volta para a mesma consulta, sem confirmar nem abrir outra.
+    const andamento = getConsultaEmAndamento(items, roleUserId);
+    if (andamento.minha) {
+      onVoltarConsulta?.(andamento.atendimentoId);
+      return;
+    }
 
     const hasPending = items.some(
       (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
@@ -508,17 +519,18 @@ export function AgendaDashboard({
           String(appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '')
             .toLowerCase() === 'retorno',
         planejamentoItemId: appointment.planejamentoItemId ?? null,
-        lote: items.map(a => ({
-          agendaId: a.id || a.agendaId,
-          procedimentoNome: a.tipoProcedimento?.nome || a.procedimentoNome,
-          catalogoProcedimentoSaudeId: a.catalogoProcedimentoSaudeId,
-          planejamentoItemId: a.planejamentoItemId ?? null,
-        })),
+        lote: loteDasLinhas(
+          items.filter((a) => {
+            const nome = a.tipoProcedimento?.nome || a.procedimentoNome || '';
+            const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
+            return Boolean((a.catalogoProcedimentoSaudeId && String(a.catalogoProcedimentoSaudeId).trim()) || (!isPlaceholder && String(nome).trim()));
+          })
+        ),
       });
       return;
     }
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
-  }, [agenda, onSlotReagendar, onStartAttendance, patients, toast]);
+  }, [agenda, onSlotReagendar, onStartAttendance, onVoltarConsulta, patients, roleUserId, toast]);
 
   const resolveWeekTarget = React.useCallback(
     (appt) => {
@@ -604,6 +616,12 @@ export function AgendaDashboard({
       const appointment = items[0];
       if (!appointment) return;
 
+      const andamento = getConsultaEmAndamento(items, roleUserId);
+      if (andamento.minha) {
+        onVoltarConsulta?.(andamento.atendimentoId);
+        return;
+      }
+
       const hasPending = items.some(
         (item) => item.status === 'pendente' || item.status === 'aguardando_confirmacao',
       );
@@ -615,7 +633,7 @@ export function AgendaDashboard({
         handlePrimary(target);
       }
     },
-    [handlePrimary, handleRailConfirmar],
+    [handlePrimary, handleRailConfirmar, onVoltarConsulta, roleUserId],
   );
 
   const handleRailIniciarAtendimento = React.useCallback(

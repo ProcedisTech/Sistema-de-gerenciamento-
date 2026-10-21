@@ -2,7 +2,7 @@ import React from 'react';
 import { useCatalogoMapeamentoOptions } from '../../../hooks/useCatalogoMapeamentoOptions.js';
 import { MapeamentoProcedimentoSearch } from './MapeamentoProcedimentoSearch.jsx';
 
-export function MapeamentoProcedimentoPicker({ procedimentoArmado, onArmar, procedimentosUsados = [] }) {
+export function MapeamentoProcedimentoPicker({ procedimentoArmado, onArmar, procedimentosUsados = [], onClose }) {
   const { options, loading } = useCatalogoMapeamentoOptions({ enabled: true });
 
   return (
@@ -12,6 +12,7 @@ export function MapeamentoProcedimentoPicker({ procedimentoArmado, onArmar, proc
       procedimentoArmado={procedimentoArmado}
       procedimentosUsados={procedimentosUsados}
       onArmar={onArmar}
+      onClose={onClose}
     />
   );
 }

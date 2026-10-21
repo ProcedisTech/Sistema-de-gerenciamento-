@@ -30,3 +30,5 @@ export {
   MapeamentoFullscreenProcedimentoFloatingPanel,
 } from './MapeamentoFullscreenProcedimentoPanel.jsx';
 
+export { AssistiveTouchToolbar } from './AssistiveTouchToolbar.jsx';
+

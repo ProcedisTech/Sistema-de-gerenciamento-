@@ -1,5 +1,6 @@
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { diaDoInstante, formatarDataCalendario, instanteMs, normalizarDataCalendario } from './datasClinica.js';
+import { getApiErrorDetail, MENSAGEM_SESSAO_EXPIRADA } from '../services/api.js';
 
 /** Chaves persistidas no prefixo da legenda: `[antes] …` (sem mudança no backend). */
 export const GALERIA_CATEGORIA = {
@@ -25,11 +26,12 @@ export const GALERIA_CATEGORIA_LABELS = {
 const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o|modelo|mapa)\]\s*(.*)$/i;
 
 /**
- * Lê categoria e texto livre da legenda enviada/recuperada da API.
+ * Lê categoria, flag de avulso e texto livre da legenda enviada/recuperada da API.
  */
 export function parseGaleriaLegenda(legenda) {
   const s = typeof legenda === 'string' ? legenda.trim() : '';
-  if (!s) return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: null };
+  if (!s) return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: null, isAvulso: false };
+  const isAvulso = /\[avulso\]/i.test(s);
   const m = s.match(LEGENDA_TAG_RE);
   if (m) {
     const catRaw = m[1]
@@ -42,26 +44,38 @@ export function parseGaleriaLegenda(legenda) {
         : catRaw === 'modelo'
           ? GALERIA_CATEGORIA.MODELO
           : catRaw;
+    const descLimpa = m[2].replace(/\[avulso\]/gi, '').trim() || null;
     return {
       categoria: catNorm,
-      descricao: m[2].trim() || null,
+      descricao: descLimpa,
+      isAvulso,
     };
   }
   if (/mapeamento|avalia(ç|c)(ã|a)o/i.test(s)) {
-    return { categoria: GALERIA_CATEGORIA.PLANEJAMENTO, descricao: s };
+    return {
+      categoria: GALERIA_CATEGORIA.PLANEJAMENTO,
+      descricao: s.replace(/\[avulso\]/gi, '').trim() || null,
+      isAvulso,
+    };
   }
-  return { categoria: GALERIA_CATEGORIA.OUTRO, descricao: s };
+  return {
+    categoria: GALERIA_CATEGORIA.OUTRO,
+    descricao: s.replace(/\[avulso\]/gi, '').trim() || null,
+    isAvulso,
+  };
 }
 
 /**
  * Monta legenda para upload (categoria obrigatória + descrição opcional, ex. nome do procedimento).
+ * Permite marcar flag isAvulso gerando tag clínica padronizada [categoria] [avulso] descrição.
  */
-export function formatGaleriaLegendaForUpload(categoria, descricaoLivre = '') {
+export function formatGaleriaLegendaForUpload(categoria, descricaoLivre = '', { isAvulso = false } = {}) {
   const allowed = new Set(Object.values(GALERIA_CATEGORIA));
   let cat = String(categoria || '').toLowerCase().trim();
   if (!allowed.has(cat)) cat = GALERIA_CATEGORIA.ANTES;
-  const d = String(descricaoLivre || '').trim();
-  return d ? `[${cat}] ${d}` : `[${cat}]`;
+  const d = String(descricaoLivre || '').replace(/\[avulso\]/gi, '').trim();
+  const avulsoTag = isAvulso ? ' [avulso]' : '';
+  return d ? `[${cat}]${avulsoTag} ${d}` : `[${cat}]${avulsoTag}`;
 }
 
 function msOuZero(v) {
@@ -138,7 +152,10 @@ export function groupGaleriaItemsBySession(items, fuso) {
     const feitoId = it.procedimentoFeitoId != null && String(it.procedimentoFeitoId).trim() !== ''
       ? String(it.procedimentoFeitoId).trim()
       : null;
-    const key = feitoId ? `${dataISO}_${feitoId}` : dataISO;
+    const atendId = it.atendimentoId != null && String(it.atendimentoId).trim() !== ''
+      ? String(it.atendimentoId).trim()
+      : null;
+    const key = feitoId ? `${dataISO}_${feitoId}` : (atendId ? `${dataISO}_${atendId}` : dataISO);
 
     if (!groups.has(key)) {
       groups.set(key, {
@@ -255,11 +272,23 @@ export function normalizePacienteGaleriaItem(raw) {
       ? String(tipoFotoCodigoRaw).trim().toUpperCase()
       : null;
 
+  const agendaId =
+    raw.agendaId ?? raw.agenda_id ?? raw.agenda?.id ?? null;
+  const atendimentoId =
+    raw.atendimentoId ?? raw.atendimento_id ?? raw.atendimento?.id ?? null;
+  const planejamentoItemId =
+    raw.planejamentoItemId ?? raw.planejamento_item_id ?? null;
+  const planejamentoId =
+    raw.planejamentoId ?? raw.planejamento_id ?? null;
+
   const mapaOverlayRaw = raw.mapaOverlay ?? raw.mapa_overlay ?? null;
   let mapaOverlay = null;
   if (mapaOverlayRaw && typeof mapaOverlayRaw === 'object') {
     const marcacoes = Array.isArray(mapaOverlayRaw.marcacoes)
       ? mapaOverlayRaw.marcacoes
+      : [];
+    const procedimentos = Array.isArray(mapaOverlayRaw.procedimentos)
+      ? mapaOverlayRaw.procedimentos
       : [];
     mapaOverlay = {
       mapaId:
@@ -268,9 +297,28 @@ export function normalizePacienteGaleriaItem(raw) {
         mapaOverlayRaw.anguloFotoCodigo != null
           ? String(mapaOverlayRaw.anguloFotoCodigo)
           : null,
+      planejamentoItemId:
+        mapaOverlayRaw.planejamentoItemId != null
+          ? String(mapaOverlayRaw.planejamentoItemId).trim()
+          : (planejamentoItemId ? String(planejamentoItemId).trim() : null),
+      planejamentoId:
+        mapaOverlayRaw.planejamentoId != null
+          ? String(mapaOverlayRaw.planejamentoId).trim()
+          : (planejamentoId ? String(planejamentoId).trim() : null),
+      procedimentos,
       marcacoes,
     };
   }
+
+  const effectivePlanejamentoItemId =
+    planejamentoItemId != null && String(planejamentoItemId).trim() !== ''
+      ? String(planejamentoItemId).trim()
+      : mapaOverlay?.planejamentoItemId || null;
+
+  const effectivePlanejamentoId =
+    planejamentoId != null && String(planejamentoId).trim() !== ''
+      ? String(planejamentoId).trim()
+      : mapaOverlay?.planejamentoId || null;
 
   return {
     id: String(id),
@@ -296,22 +344,71 @@ export function normalizePacienteGaleriaItem(raw) {
       procedimentoFeitoCardId != null && String(procedimentoFeitoCardId).trim() !== ''
         ? String(procedimentoFeitoCardId)
         : null,
+    agendaId: agendaId != null && String(agendaId).trim() !== '' ? String(agendaId).trim() : null,
+    atendimentoId: atendimentoId != null && String(atendimentoId).trim() !== '' ? String(atendimentoId).trim() : null,
+    planejamentoItemId: effectivePlanejamentoItemId,
+    planejamentoId: effectivePlanejamentoId,
     mapaOverlay,
   };
 }
 
-/** Mensagens amigáveis para upload/lista/delete da galeria (401 em JSON dispara auth:expired na api.js). */
+/**
+ * Prefixo `[HTTP n]` que o api.js põe na `message` (buildApiErrorMessage e o download presigned).
+ * A galeria nunca mostra esse prefixo.
+ */
+const PREFIXO_HTTP_RE = /^\s*\[HTTP[^\]]*\]\s*/i;
+
+/** Só o código ou a frase padrão do status (statusText do HTTP/1.1, `error` do Spring): não serve como texto. */
+const FRASES_PADRAO_HTTP = new Set([
+  'bad request',
+  'unauthorized',
+  'forbidden',
+  'not found',
+  'method not allowed',
+  'request timeout',
+  'conflict',
+  'payload too large',
+  'request entity too large',
+  'content too large',
+  'unprocessable entity',
+  'unprocessable content',
+  'too many requests',
+  'internal server error',
+  'bad gateway',
+  'service unavailable',
+  'gateway timeout',
+]);
+
+function soCodigoOuVazio(texto) {
+  const t = texto.trim();
+  return !t || /^\d{3}$/.test(t) || FRASES_PADRAO_HTTP.has(t.toLowerCase());
+}
+
+/**
+ * Texto do erro sem prefixo: primeiro o corpo do backend (getApiErrorDetail, que já junta as mensagens
+ * de validação `errors[]`); sem corpo, a `message` sem o `[HTTP n]`. Vazio ou só código → ''.
+ */
+function textoDoErro(err) {
+  const doCorpo = getApiErrorDetail(err);
+  if (!soCodigoOuVazio(doCorpo)) return doCorpo.trim();
+  const msg = typeof err?.message === 'string' ? err.message.replace(PREFIXO_HTTP_RE, '') : '';
+  return soCodigoOuVazio(msg) ? '' : msg.trim();
+}
+
+/**
+ * Mensagens amigáveis para upload/lista/delete da galeria. Nenhuma saída leva o prefixo `[HTTP n]`.
+ * 401 com `sessaoExpirada` (renovação do acesso recusada, api.js): mensagem do backend; sem ela, o texto
+ * de sessão expirada do api.js. Outro 401 cai no fim: mensagem do backend ou "Erro ao usar a galeria.".
+ * (Importar do api.js não cria ciclo: o api.js não importa este arquivo.)
+ */
 export function formatPacienteGaleriaError(err) {
   const status = err?.status;
-  const base = typeof err?.message === 'string' ? err.message.trim() : '';
+  const base = textoDoErro(err);
   if (status === 413) return 'Arquivo acima do limite permitido pelo servidor.';
   if (status === 400) return base || 'Arquivo ou dados inválidos (tipo, tamanho, legenda ou vínculos).';
   if (status === 404) return base || 'Foto ou paciente não encontrado.';
-  if (status === 401) {
-    return (
-      base ||
-      'Não autorizado (401). Faça login de novo; confira se a organização no app bate com a do banco e se o usuário (ex.: seed-admin) tem permissão nas rotas da galeria e do arquivo no Spring. Isso não é causado por paciente novo.'
-    );
+  if (status === 401 && err?.sessaoExpirada === true) {
+    return base || MENSAGEM_SESSAO_EXPIRADA;
   }
   if (status === 403) {
     return base || 'Sem permissão nesta organização para esta operação na galeria.';

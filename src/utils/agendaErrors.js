@@ -55,7 +55,9 @@ export function formatJourneyFinishError(err) {
   if (isAgendaSlotOverlapError(err)) {
     return 'Conflito de agenda: mesmo após tentar vários horários no dia, não havia intervalo livre de 45 min para este profissional. Libere slots na Agenda, cancele agendamentos antigos ou tente outro dia.';
   }
-  if (err?.status === 401) {
+  // Texto de sessão só quando a renovação do acesso falhou de forma definitiva (api.js); outro 401 segue
+  // o caminho comum abaixo.
+  if (err?.status === 401 && err?.sessaoExpirada === true) {
     return `${err.message || 'Não autorizado'}. Sessão expirada ou sem permissão — faça login novamente.`;
   }
   return err?.message || 'Não foi possível registrar o procedimento.';
@@ -71,7 +73,7 @@ export function formatAgendamentoApiError(err, opts = {}) {
   const msg = String(err?.message || '').toLowerCase();
   const raw = err?.message || '';
 
-  if (status === 401) {
+  if (status === 401 && err?.sessaoExpirada === true) {
     return `${raw || '[HTTP 401]'} — Sessão não autenticada: confira no Network se o POST envia Cookie com jwt, use só http://localhost:5173 ou só http://127.0.0.1:5173 (não misture), e deixe VITE_API_BASE_URL vazio em dev.`;
   }
   if (status === 403) {

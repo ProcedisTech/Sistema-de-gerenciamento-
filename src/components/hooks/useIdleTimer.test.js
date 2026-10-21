@@ -50,7 +50,8 @@ describe('useIdleTimer', () => {
     expect(onWarning).toHaveBeenCalledTimes(1);
   });
 
-  it('dispara onTimeout UMA unica vez', () => {
+  // B-42 FD: antes "UMA unica vez"; agora 1 vez e só reenvia depois de 5 s (T12 abaixo).
+  it('dispara onTimeout uma vez e não repete antes de 5 s', () => {
     const onTimeout = vi.fn();
     renderHook(() => useIdleTimer({ ...defaults, onTimeout }));
 
@@ -59,6 +60,42 @@ describe('useIdleTimer', () => {
 
     act(() => vi.advanceTimersByTime(2000));
     expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('T12: vencido e ainda ativo, reenvia onTimeout a cada 5 s', () => {
+    const onTimeout = vi.fn();
+    renderHook(() => useIdleTimer({ ...defaults, onTimeout }));
+
+    act(() => vi.advanceTimersByTime(5100));
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(4000));
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(onTimeout).toHaveBeenCalledTimes(2);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(onTimeout).toHaveBeenCalledTimes(3);
+  });
+
+  it('T13: venceu sem aviso, desligou (saída) e religou (novo login) → dispara de novo no prazo, sem esperar o reenvio', () => {
+    const onTimeout = vi.fn();
+    const props = { ...defaults, timeoutMs: 2000, warningBeforeMs: 500, onTimeout };
+    // Aba voltou de segundo plano com o carimbo já vencido: vence sem passar pelo aviso.
+    sessionStorage.setItem(KEY, String(Date.now() - 10_000));
+    const { rerender } = renderHook((p) => useIdleTimer(p), { initialProps: props });
+
+    act(() => vi.advanceTimersByTime(1000));
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+
+    // saída: timer desligado e carimbo removido; novo login religa
+    rerender({ ...props, enabled: false });
+    sessionStorage.removeItem(KEY);
+    act(() => vi.advanceTimersByTime(200));
+    rerender({ ...props, enabled: true });
+
+    // 2,1 s depois de religar (3,3 s depois do 1º disparo, antes dos 5 s do reenvio)
+    act(() => vi.advanceTimersByTime(2100));
+    expect(onTimeout).toHaveBeenCalledTimes(2);
   });
 
   it('resetTimer renova carimbo e limpa warning', () => {

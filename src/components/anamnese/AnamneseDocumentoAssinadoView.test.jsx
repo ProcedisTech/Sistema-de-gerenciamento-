@@ -112,6 +112,27 @@ describe('AnamneseDocumentoView', () => {
     expect(screen.getByText(/Link enviado — edição bloqueada/)).toBeInTheDocument();
   });
 
+  it('F4: mostra o bloco Queixa e Expectativas quando há texto e esconde quando não há', async () => {
+    anamneseApi.getDocumento.mockResolvedValue({ ...baseDoc, assinaturaPaciente: null, conteudoHash: null, gravadoEm: null });
+
+    const { unmount } = render(
+      <AnamneseDocumentoView
+        pacienteId="pac1"
+        preenchimentoId="p1"
+        queixa="Dor de cabeça forte"
+        expectativas="Melhorar a pele"
+      />,
+    );
+    expect(await screen.findByText('Queixa e Expectativas')).toBeInTheDocument();
+    expect(screen.getByText('Dor de cabeça forte')).toBeInTheDocument();
+    expect(screen.getByText('Melhorar a pele')).toBeInTheDocument();
+    unmount();
+
+    render(<AnamneseDocumentoView pacienteId="pac1" preenchimentoId="p1" queixa="  " expectativas="" />);
+    expect((await screen.findAllByText('Marina Alves')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Queixa e Expectativas')).not.toBeInTheDocument();
+  });
+
   it('não mostra Foi pro prontuário em texto livre mesmo se id vier no DTO', async () => {
     anamneseApi.getDocumento.mockResolvedValue({
       ...baseDoc,
