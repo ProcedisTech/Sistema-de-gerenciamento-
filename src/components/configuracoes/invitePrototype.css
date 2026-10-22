@@ -13,22 +13,156 @@
 .prototype-invite .invite-preview .chip {
   max-width: 100%;
 }
-.prototype-invite .invite-preview .areas {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.prototype-invite .invite-profile-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
 }
-.prototype-invite .invite-permissions {
+.prototype-invite .invite-matrix {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.prototype-invite .invite-module-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.prototype-invite .invite-module-btn:hover,
+.prototype-invite .invite-module-btn[aria-expanded="true"] {
+  border-color: #007f6b;
+  background: #f0fdfa;
+}
+.prototype-invite .invite-module-btn:focus-visible,
+.prototype-invite .invite-profile-actions button:focus-visible {
+  outline: 2px solid #007f6b;
+  outline-offset: 2px;
+}
+.prototype-invite .invite-module-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.prototype-invite .invite-module-count {
+  font-size: 12px;
+}
+.prototype-invite .invite-module-badge {
+  max-width: calc(100% - 18px);
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.prototype-invite .badge-complete {
+  color: #065f46;
+  background: #ecfdf5;
+}
+.prototype-invite .badge-partial {
+  color: #92400e;
+  background: #fffbeb;
+}
+.prototype-invite .badge-off {
+  color: #334155;
+  background: #f1f5f9;
+}
+.prototype-invite .invite-module-chevron {
+  position: absolute;
+  right: 9px;
+  bottom: 15px;
+}
+.prototype-invite
+  .invite-module-btn[aria-expanded="true"]
+  .invite-module-chevron {
+  transform: rotate(180deg);
+}
+.prototype-invite .invite-module-detail {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+}
+.prototype-invite .invite-module-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+.prototype-invite .invite-module-heading h4 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.prototype-invite .invite-perm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.prototype-invite .invite-perm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: #334155;
+  font-size: 12px;
+}
+.prototype-invite .invite-perm-item + .invite-perm-item {
+  border-top: 1px solid #f1f5f9;
+}
+.prototype-invite .invite-perm-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.prototype-invite .invite-perm-status {
+  font-size: 11px;
+  font-weight: 600;
+}
+.prototype-invite .is-allowed > .prototype-icon,
+.prototype-invite .is-allowed .invite-perm-status {
+  color: #065f46;
+}
+.prototype-invite .invite-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
 }
-.prototype-invite .invite-permissions summary {
-  font-size: 13px;
-  cursor: pointer;
-  font-weight: 700;
-  color: var(--app-accent-deep);
+.prototype-invite .invite-profile-actions button {
+  max-width: 100%;
+  height: auto;
+  min-height: 40px;
+  padding: 10px 12px;
+  white-space: normal;
 }
-.prototype-invite .invite-permissions ul {
-  padding-left: 18px;
-  font-size: 13px;
-  list-style: disc;
+.prototype-invite .invite-profile-actions .btn-p {
+  background: #007f6b;
 }
 .prototype-invite .invite-note {
   font-size: 12px;
@@ -127,8 +261,7 @@
   letter-spacing: -0.01em;
 }
 @media (max-width: 767px) {
-  .prototype-invite .invite-grid,
-  .prototype-invite .invite-preview .areas {
+  .prototype-invite .invite-grid {
     grid-template-columns: 1fr;
   }
   .prototype-invite [role="dialog"] h2 {
@@ -136,5 +269,19 @@
   }
   .prototype-invite [role="dialog"] {
     padding: 18px 14px;
+  }
+}
+@media (max-width: 480px) {
+  .prototype-invite .invite-matrix {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .prototype-invite .invite-module-btn {
+    padding: 10px;
+  }
+  .prototype-invite .invite-profile-actions {
+    flex-direction: column;
+  }
+  .prototype-invite .invite-profile-actions button {
+    width: 100%;
   }
 }

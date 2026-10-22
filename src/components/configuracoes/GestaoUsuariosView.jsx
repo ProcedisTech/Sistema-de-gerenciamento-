@@ -1693,6 +1693,7 @@ export function GestaoUsuariosView({
           permissoes={permissoes}
           especialidadesList={especialidadesList}
           initialDraft={inviteDraft}
+          canEditConfigPerfil={canEditConfigPerfil}
           onClose={() => {
             setShowInviteModal(false);
             setInviteDraft(null);

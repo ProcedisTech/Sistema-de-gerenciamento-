@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { resolveApiUrl } from "../../config/apiEnv";
@@ -35,12 +35,12 @@ export function InviteModal({
   onClose,
   onSuccess,
   fetchHeaders,
+  canEditConfigPerfil = false,
   onEditarPerfilNaAba,
   initialDraft,
 }) {
   const toast = useToast();
   const dialogRef = useRef(null);
-  const editProfileButtonRef = useRef(null);
   const { hojeIso } = useAgoraDaClinica(60000);
   const [form, setForm] = useState(
     initialDraft?.form || {
@@ -74,14 +74,17 @@ export function InviteModal({
 
   // Só leitura: mostra o que o Nível selecionado inclui. Editar de verdade acontece na aba Perfis de Acesso.
   const [permissoesDoNivel, setPermissoesDoNivel] = useState([]);
-  const [permissoesExpandidas, setPermissoesExpandidas] = useState(false);
+  const [expandedModuleKey, setExpandedModuleKey] = useState(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
   const permissionRequest = useRef(0);
-  const perfilEscolhidoManualmente = useRef(Boolean(initialDraft?.form?.perfilAcessoId));
+  const perfilEscolhidoManualmente = useRef(
+    Boolean(initialDraft?.form?.perfilAcessoId),
+  );
 
   const loadPermissoesDoNivel = async (perfilId) => {
     const request = ++permissionRequest.current;
+    setExpandedModuleKey(null);
     setPermissionError(false);
     if (!perfilId) {
       setPermissoesDoNivel([]);
@@ -109,17 +112,24 @@ export function InviteModal({
     }
   };
 
-  const handleEditarNivelClick = () => {
-    if (!form.perfilAcessoId) return;
+  const handlePerfilAction = (copy) => {
+    if (!canEditConfigPerfil || !onEditarPerfilNaAba || !form.perfilAcessoId)
+      return;
     const perfil = perfisAcesso.find(
       (p) => String(p.id) === String(form.perfilAcessoId),
     );
+    const type = profileType(perfil);
+    if (type !== "tpl" && type !== "cli") return;
     const id =
-      profileType(perfil) === "tpl"
+      copy || type === "tpl"
         ? `copy:${form.perfilAcessoId}`
         : form.perfilAcessoId;
-    onEditarPerfilNaAba?.(id, { form, telefoneCountryCode, telefoneNumero });
+    onEditarPerfilNaAba(id, { form, telefoneCountryCode, telefoneNumero });
   };
+  const handleClose = useCallback(() => {
+    setExpandedModuleKey(null);
+    onClose();
+  }, [onClose]);
   useEffect(() => {
     if (initialDraft?.form?.perfilAcessoId)
       loadPermissoesDoNivel(initialDraft.form.perfilAcessoId);
@@ -172,7 +182,7 @@ export function InviteModal({
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        handleClose();
       }
       if (event.key !== "Tab") return;
       const focusable = Array.from(
@@ -207,21 +217,28 @@ export function InviteModal({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [handleClose]);
 
   const handleRoleChangeInvite = (selectedRoleId) => {
+    setExpandedModuleKey(null);
     if (perfilEscolhidoManualmente.current) {
       setForm((prev) => ({ ...prev, roleId: selectedRoleId }));
       return;
     }
     const cargo = roles.find((r) => String(r.id) === String(selectedRoleId));
-    const sugerido = perfisAcesso.find((p) =>
-      cargo?.perfilAcessoPadraoId != null &&
-      String(p.id) === String(cargo.perfilAcessoPadraoId) &&
-      (p.codigo || "").toUpperCase() !== "DONO" && p.ativo !== false,
+    const sugerido = perfisAcesso.find(
+      (p) =>
+        cargo?.perfilAcessoPadraoId != null &&
+        String(p.id) === String(cargo.perfilAcessoPadraoId) &&
+        (p.codigo || "").toUpperCase() !== "DONO" &&
+        p.ativo !== false,
     );
     const perfilId = sugerido ? String(sugerido.id) : "";
-    setForm((prev) => ({ ...prev, roleId: selectedRoleId, perfilAcessoId: perfilId }));
+    setForm((prev) => ({
+      ...prev,
+      roleId: selectedRoleId,
+      perfilAcessoId: perfilId,
+    }));
     loadPermissoesDoNivel(perfilId);
   };
 
@@ -387,6 +404,10 @@ export function InviteModal({
     agendaPermId && permissoesDoNivel.includes(agendaPermId),
   );
   const modules = summarizeModules(permissoes, permissoesDoNivel);
+  const selectedModule = modules.find(
+    (module) => module.key === expandedModuleKey,
+  );
+  const selectedProfileType = profileType(perfilSelecionado);
 
   return createPortal(
     <div className="prototype-equipe prototype-invite">
@@ -394,7 +415,7 @@ export function InviteModal({
         {/* Backdrop limpo e leve para máxima taxa de quadros (60/120 FPS) */}
         <div
           className="fixed inset-0 bg-slate-900/40 pointer-events-auto transition-opacity"
-          onMouseDown={onClose}
+          onMouseDown={handleClose}
         />
 
         {/* Modal Card */}
@@ -427,7 +448,7 @@ export function InviteModal({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Fechar convite"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00a88e]"
             >
@@ -898,6 +919,18 @@ export function InviteModal({
                     <PrototypeIcon name="shield" size="s" />
                     {perfilSelecionado.nome}
                   </span>
+                  {selectedProfileType === "tpl" && (
+                    <span className="invite-profile-kind">
+                      <PrototypeIcon name="lock" size="s" />
+                      Modelo do Sistema · protegido
+                    </span>
+                  )}
+                  {selectedProfileType === "cli" && (
+                    <span className="invite-profile-kind">
+                      <PrototypeIcon name="bld" size="s" />
+                      Perfil da sua Clínica
+                    </span>
+                  )}
                   <p>
                     {perfilSelecionado.descricao ||
                       "Perfil personalizado da clínica."}
@@ -934,68 +967,148 @@ export function InviteModal({
                           ? "Atende na agenda"
                           : "Não atende na agenda"}
                       </span>
-                      <div className="areas">
-                        {modules.map((m) => (
-                          <div
-                            key={m.key}
-                            className={`area${m.k === "0" ? " off" : ""}`}
-                          >
-                            <b>
-                              <PrototypeIcon name={m.icon} size="s" />
-                              {m.name}
-                            </b>
-                            <span className={`l${m.k}`}>{m.t}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <details
-                        className="invite-permissions"
-                        open={permissoesExpandidas}
-                        onToggle={(e) =>
-                          setPermissoesExpandidas(e.currentTarget.open)
-                        }
+                      <div
+                        className="invite-matrix"
+                        role="group"
+                        aria-label="Módulos do perfil"
                       >
-                        <summary>
-                          {permissoesDoNivel.length} funções liberadas ·
-                          consultar uma a uma
-                        </summary>
-                        {modules
-                          .filter((m) => m.selected.length)
-                          .map((m) => (
-                            <div key={m.key}>
-                              <b>{m.name}</b>
-                              <ul>
-                                {m.selected.map((p) => (
-                                  <li key={p.permissaoId}>{p.nome}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                      </details>
-                      {profileType(perfilSelecionado) === "tpl" && (
+                        {modules.map((m) => {
+                          const status = !m.selected.length
+                            ? { className: "badge-off", label: "Sem acesso" }
+                            : m.selected.length === m.permissions.length
+                              ? {
+                                  className: "badge-complete",
+                                  label: "Completo",
+                                }
+                              : {
+                                  className: "badge-partial",
+                                  label: "Parcial",
+                                };
+                          return (
+                            <button
+                              type="button"
+                              key={m.key}
+                              className="invite-module-btn"
+                              aria-label={`${m.name} ${m.selected.length}/${m.permissions.length} liberadas ${status.label}`}
+                              aria-expanded={expandedModuleKey === m.key}
+                              aria-controls="module-detail"
+                              onClick={() =>
+                                setExpandedModuleKey((current) =>
+                                  current === m.key ? null : m.key,
+                                )
+                              }
+                            >
+                              <span className="invite-module-name">
+                                <PrototypeIcon name={m.icon} size="s" />
+                                <b>{m.name}</b>
+                              </span>
+                              <span className="invite-module-count">
+                                {m.selected.length}/{m.permissions.length}{" "}
+                                liberadas
+                              </span>
+                              <span
+                                className={`invite-module-badge ${status.className}`}
+                              >
+                                {status.label}
+                              </span>
+                              <PrototypeIcon
+                                name="cd"
+                                size="s"
+                                className="invite-module-chevron"
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {expandedModuleKey !== null && selectedModule && (
+                        <section
+                          id="module-detail"
+                          className="invite-module-detail"
+                          aria-labelledby="module-detail-title"
+                        >
+                          <div className="invite-module-heading">
+                            <PrototypeIcon name={selectedModule.icon} />
+                            <h4 id="module-detail-title">
+                              Funções de {selectedModule.name}
+                            </h4>
+                            <span className="chip">
+                              {selectedModule.selected.length}/
+                              {selectedModule.permissions.length}
+                            </span>
+                          </div>
+                          <ul className="invite-perm-list">
+                            {selectedModule.permissions.map((permission) => {
+                              const allowed = permissoesDoNivel.includes(
+                                permission.permissaoId,
+                              );
+                              return (
+                                <li
+                                  key={permission.permissaoId}
+                                  className={`invite-perm-item ${allowed ? "is-allowed" : "is-blocked"}`}
+                                >
+                                  <PrototypeIcon
+                                    name={allowed ? "check" : "lock"}
+                                    size="s"
+                                  />
+                                  <span className="invite-perm-name">
+                                    {permission.nome}
+                                  </span>
+                                  <span className="invite-perm-status">
+                                    {allowed ? "Liberada" : "Bloqueada"}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </section>
+                      )}
+                      {selectedProfileType === "tpl" && (
                         <p className="invite-note">
-                          Este é um modelo pronto. Para ajustar, use-o como base
-                          de um novo perfil.
+                          Este é um modelo pronto. Para personalizar, use-o como
+                          base de um novo perfil.
                         </p>
                       )}
-                      <button
-                        type="button"
-                        ref={editProfileButtonRef}
-                        className="btn-g"
-                        onClick={handleEditarNivelClick}
-                      >
-                        <PrototypeIcon
-                          name={
-                            profileType(perfilSelecionado) === "tpl"
-                              ? "copy"
-                              : "pen"
-                          }
-                          size="s"
-                        />
-                        {profileType(perfilSelecionado) === "tpl"
-                          ? "Usar como base"
-                          : "Editar este perfil"}
-                      </button>
+                      {selectedProfileType === "cli" && (
+                        <p className="invite-note">
+                          Você pode editar este perfil ou criar outro a partir
+                          dele. Atenção: alterações afetam os colaboradores que
+                          já utilizam este perfil.
+                        </p>
+                      )}
+                      {canEditConfigPerfil && onEditarPerfilNaAba && (
+                        <div className="invite-profile-actions">
+                          {selectedProfileType === "tpl" && (
+                            <button
+                              type="button"
+                              className="btn-s"
+                              onClick={() => handlePerfilAction(true)}
+                            >
+                              <PrototypeIcon name="copy" size="s" />
+                              Criar perfil com base neste modelo
+                            </button>
+                          )}
+                          {selectedProfileType === "cli" && (
+                            <>
+                              <button
+                                type="button"
+                                className="btn-p"
+                                onClick={() => handlePerfilAction(false)}
+                              >
+                                <PrototypeIcon name="pen" size="s" />
+                                Editar este perfil
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-s"
+                                onClick={() => handlePerfilAction(true)}
+                              >
+                                <PrototypeIcon name="copy" size="s" />
+                                Criar novo com base neste
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -1010,7 +1123,7 @@ export function InviteModal({
             <div className="mt-[22px] flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-200 bg-white pt-[18px]">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="h-10 rounded-[10px] border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00a88e]"
               >
                 Cancelar
