@@ -1,4 +1,7 @@
 import { parseHhmmToMinutes } from './agendaAvailability.js';
+import { normalizeDisponibilidade } from './normalizeDisponibilidade.js';
+
+export { normalizeDisponibilidade };
 
 function parseIsoLocal(iso) {
   const s = String(iso || '').slice(0, 10);
@@ -8,16 +11,20 @@ function parseIsoLocal(iso) {
 
 /**
  * Janelas de expediente do dia (minutos desde meia-noite).
+ * Suporta tanto lista pura de turnos quanto envelope do backend ou fallback de clínica (Backlog B-45).
  * @param {string} iso YYYY-MM-DD
- * @param {Array<{diaSemana: number, horaInicio: string, horaFim: string, ativo?: boolean}>} disponibilidade
+ * @param {Array|object} disponibilidade
+ * @param {Array} [clinicaHorarios]
  * @returns {Array<{startMin: number, endMin: number}>}
  */
-export function getDayWindowsForIso(iso, disponibilidade) {
-  if (!iso || !Array.isArray(disponibilidade)) return [];
+export function getDayWindowsForIso(iso, disponibilidade, clinicaHorarios = []) {
+  if (!iso) return [];
+  const disp = normalizeDisponibilidade(disponibilidade, clinicaHorarios);
+  if (!Array.isArray(disp) || disp.length === 0) return [];
   const date = parseIsoLocal(iso);
   if (Number.isNaN(date.getTime())) return [];
   const diaSemana = date.getDay();
-  const slotsDia = disponibilidade.filter(
+  const slotsDia = disp.filter(
     (d) => Number(d?.diaSemana) === diaSemana && d?.ativo !== false
   );
   const windows = [];
@@ -49,15 +56,16 @@ export function commercialWindowsForIso(iso) {
 
 /**
  * Janelas do dia para renderização de slots.
- * Se há disponibilidade real → retorna getDayWindowsForIso.
- * Se zerado → janelas comerciais visuais (sem persistir).
+ * Se há disponibilidade real (ou herdada da clínica) → retorna getDayWindowsForIso.
+ * Se zerado sem grade → janelas comerciais visuais (sem persistir).
  *
  * @param {string} iso YYYY-MM-DD
- * @param {Array<{diaSemana: number, horaInicio: string, horaFim: string, ativo?: boolean}>} disponibilidade
+ * @param {Array|object} disponibilidade
+ * @param {Array} [clinicaHorarios]
  * @returns {{ windows: Array<{startMin: number, endMin: number}>, isFallback: boolean }}
  */
-export function getDayWindowsWithFallback(iso, disponibilidade) {
-  const real = getDayWindowsForIso(iso, disponibilidade);
+export function getDayWindowsWithFallback(iso, disponibilidade, clinicaHorarios = []) {
+  const real = getDayWindowsForIso(iso, disponibilidade, clinicaHorarios);
   if (real.length > 0) {
     return { windows: real, isFallback: false };
   }

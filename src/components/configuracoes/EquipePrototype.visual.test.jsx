@@ -222,7 +222,7 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
   fireEvent.change(screen.getByLabelText("Perfil de acesso"), {
     target: { value: "sec1" },
   });
-  await screen.findByText("2 funções liberadas · consultar uma a uma");
+  await screen.findByRole("group", { name: "Módulos do perfil" });
   exportView("convite");
   fireEvent.click(screen.getByRole("button", { name: "Editar este perfil" }));
   expect(screen.getByLabelText("Nome do perfil")).toHaveValue("Secretaria-1");

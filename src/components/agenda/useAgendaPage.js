@@ -76,6 +76,7 @@ import {
   dayBoundsFromWindows,
   getDayWindowsForIso,
 } from '../../utils/disponibilidadeDayWindows.js';
+import { normalizeDisponibilidade } from '../../utils/normalizeDisponibilidade.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { useConfirmacaoForaDisp } from './ConfirmacaoForaDispModal';
 import { executarComBypassDisp } from '../../services/agendasHelpers';
@@ -185,8 +186,8 @@ function defaultBloqueioForm(selectedDay) {
   };
 }
 
-function bloqueioBoundsFromDisponibilidade(iso, disponibilidade) {
-  const windows = getDayWindowsForIso(iso, disponibilidade);
+function bloqueioBoundsFromDisponibilidade(iso, disponibilidade, clinicaHorarios = []) {
+  const windows = getDayWindowsForIso(iso, disponibilidade, clinicaHorarios);
   if (!windows.length) {
     return { ok: false, error: 'Profissional não atende neste dia.' };
   }
@@ -725,7 +726,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         ]);
         const dtos = normalizeApiList(raw);
         dispMonthCacheRef.current[key] = { dtos };
-        if (!dispCached && Array.isArray(dispRaw)) {
+        if (!dispCached && dispRaw) {
           setDisponibilidades((prev) => ({ ...prev, [role]: dispRaw }));
         }
         setDispMonthDtos(dtos);
@@ -1305,9 +1306,12 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
   const dispProfissionalDisponibilidade = useMemo(() => {
     const role = String(roleUserIdAgenda || '').trim();
-    if (!role) return [];
-    return Array.isArray(disponibilidades[role]) ? disponibilidades[role] : [];
-  }, [disponibilidades, roleUserIdAgenda]);
+    if (!role) {
+      return normalizeDisponibilidade(null, clinicaHorarios);
+    }
+    const raw = disponibilidades[role];
+    return normalizeDisponibilidade(raw, clinicaHorarios);
+  }, [disponibilidades, roleUserIdAgenda, clinicaHorarios]);
 
   /** Soma das durações do catálogo dos procedimentos selecionados (fallback 30). */
   const calendarioFitDuracaoMin = useMemo(() => {
@@ -1331,6 +1335,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     return buildMonthHeatmap({
       monthDate: dispMonthDate,
       disponibilidade: dispProfissionalDisponibilidade,
+      clinicaHorarios,
       dtos: dispMonthDtos,
       todayIso,
       excludeAgendaId: editingAppointment?.agendaId,
@@ -1342,6 +1347,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     modalMode,
     dispMonthDate,
     dispProfissionalDisponibilidade,
+    clinicaHorarios,
     dispMonthDtos,
     todayIso,
     editingAppointment?.agendaId,
@@ -1389,6 +1395,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     return buildMonthHeatmap({
       monthDate: dispMonthDate,
       disponibilidade: dispProfissionalDisponibilidade,
+      clinicaHorarios,
       dtos: dispMonthDtos,
       todayIso,
       profissionalRoleUserId: role,
@@ -1398,6 +1405,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     bloqueioModalOpen,
     dispMonthDate,
     dispProfissionalDisponibilidade,
+    clinicaHorarios,
     dispMonthDtos,
     todayIso,
     roleUserIdAgenda,
@@ -1852,7 +1860,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         }
         if (!prof) return next;
         const disp = disponibilidades[prof];
-        const bounds = bloqueioBoundsFromDisponibilidade(iso, disp);
+        const bounds = bloqueioBoundsFromDisponibilidade(iso, disp, clinicaHorarios);
         if (!bounds.ok) {
           setBloqueioFormErrors((e) => ({
             ...e,
@@ -1875,7 +1883,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         };
       });
     },
-    [roleUserIdAgenda, disponibilidades]
+    [roleUserIdAgenda, disponibilidades, clinicaHorarios]
   );
 
   const updateBloqueioForm = useCallback(
@@ -1897,7 +1905,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
           }
           if (prev.data && prof) {
             const disp = disponibilidades[prof];
-            const bounds = bloqueioBoundsFromDisponibilidade(prev.data, disp);
+            const bounds = bloqueioBoundsFromDisponibilidade(prev.data, disp, clinicaHorarios);
             if (!bounds.ok) {
               setBloqueioFormErrors((e) => ({ ...e, data: bounds.error }));
               return { ...prev, diaInteiro: true };
@@ -1933,7 +1941,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       });
       setBloqueioFormErrors((prev) => ({ ...prev, [field]: undefined }));
     },
-    [roleUserIdAgenda, disponibilidades]
+    [roleUserIdAgenda, disponibilidades, clinicaHorarios]
   );
 
   const validateBloqueioForm = useCallback(() => {
@@ -1948,7 +1956,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     if (bloqueioForm.diaInteiro) {
       const disp = disponibilidades[prof];
       const bounds = bloqueioForm.data
-        ? bloqueioBoundsFromDisponibilidade(bloqueioForm.data, disp)
+        ? bloqueioBoundsFromDisponibilidade(bloqueioForm.data, disp, clinicaHorarios)
         : { ok: false, error: 'Selecione a data.' };
       if (!bounds.ok) {
         nextErrors.data = bounds.error || 'Profissional não atende neste dia.';
@@ -1977,7 +1985,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     }
     setBloqueioFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  }, [bloqueioForm, roleUserIdAgenda, todayIso, disponibilidades]);
+  }, [bloqueioForm, roleUserIdAgenda, todayIso, disponibilidades, clinicaHorarios]);
 
   const saveBloqueio = useCallback(async () => {
     if (isNivel1) return false;

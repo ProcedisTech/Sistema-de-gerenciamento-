@@ -108,6 +108,7 @@ function formatDayHeaderTitle(iso) {
 export function buildMonthHeatmap({
   monthDate,
   disponibilidade,
+  clinicaHorarios = [],
   dtos,
   todayIso,
   fuso,
@@ -125,7 +126,7 @@ export function buildMonthHeatmap({
       : null;
 
   const cells = baseCells.map((cell) => {
-    const windows = getDayWindowsForIso(cell.iso, disponibilidade);
+    const windows = getDayWindowsForIso(cell.iso, disponibilidade, clinicaHorarios);
     const isPast = cell.iso < today;
     const hasWindows = windows.length > 0;
     const fechado = cell.inCurrentMonth && !hasWindows && !isPast;
@@ -242,15 +243,16 @@ export function buildDaySlotList({
   let isFallback = false;
 
   if (hasProf) {
-    const real = getDayWindowsForIso(iso, disponibilidade);
+    const real = getDayWindowsForIso(iso, disponibilidade, clinicaHorarios);
     if (real.length === 0) {
       windows = commercialWindowsForIso(iso);
       isFallback = true;
     } else {
       windows = real;
+      isFallback = false;
     }
   } else if (Array.isArray(clinicaHorarios) && clinicaHorarios.length > 0) {
-    // Clínica configurada: dia fechado → windows [] → zero slots (sem comercial).
+    // Clínica configurada / autônomo: dia fechado → windows [] → zero slots (sem comercial).
     windows = getDayWindowsForIso(iso, clinicaHorarios);
     isFallback = false;
   } else {
@@ -281,9 +283,10 @@ export function buildDaySlotList({
 
   const slots = [];
 
-  for (let t = dayStartMin; t < dayEndMin; t += step) {
-    const blockEnd = t + step;
-    if (!intervalWithinWindows(t, blockEnd, windows)) continue;
+  for (const win of windows) {
+    for (let t = win.startMin; t < win.endMin; t += step) {
+      const blockEnd = t + step;
+      if (!intervalWithinWindows(t, blockEnd, windows)) continue;
 
     const proposedEnd = t + dur;
     const canStart =
@@ -347,6 +350,7 @@ export function buildDaySlotList({
       observacao,
       agendaId,
     });
+    }
   }
 
   return {
