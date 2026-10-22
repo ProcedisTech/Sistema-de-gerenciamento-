@@ -583,6 +583,38 @@ const chooseProfile = async (id = "clinico") => {
 };
 
 describe("matriz canônica de funções do convite", () => {
+  // Regressão prevenida: a prévia aprovada mantém resumo e personalização antes da consulta de módulos.
+  it("apresenta a cobertura real e a personalização antes dos módulos e dados complementares", async () => {
+    render(<InviteModal {...defaultProps} />);
+    await chooseProfile();
+    const summary = screen.getByRole("region", {
+      name: "Resumo do perfil de acesso",
+    });
+    expect(summary).toHaveTextContent("8 / 53");
+    expect(summary).toHaveTextContent("funções liberadas");
+    expect(
+      within(summary).getByRole("button", {
+        name: "Criar perfil com base neste modelo",
+      }),
+    ).toBeInTheDocument();
+    const heading = screen.getByRole("heading", {
+      name: "O que este perfil pode fazer",
+    });
+    expect(heading.parentElement).toHaveTextContent("8 de 53");
+    expect(heading.parentElement).toHaveTextContent(
+      "Toque em um módulo para detalhar",
+    );
+    const matrix = screen.getByRole("group", { name: "Módulos do perfil" });
+    expect(
+      summary.compareDocumentPosition(matrix) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      matrix.compareDocumentPosition(screen.getByLabelText("CPF")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("mostra os nove módulos com cobertura e consulta somente o módulo expandido", async () => {
     render(<InviteModal {...defaultProps} />);
     await chooseProfile();
@@ -631,7 +663,9 @@ describe("matriz canônica de funções do convite", () => {
     ).toHaveTextContent("Ver Modelos de Anamnese");
     expect(agenda).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(moduleButton("Documentos"));
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
     expect(defaultProps.onSuccess).not.toHaveBeenCalled();
   });
 
@@ -660,7 +694,7 @@ describe("matriz canônica de funções do convite", () => {
           screen.queryByRole("button", { name: "Editar este perfil" }),
         ).not.toBeInTheDocument();
         expect(
-          screen.getByText("Modelo do Sistema · protegido"),
+          screen.getByText("Modelo pronto · protegido"),
         ).toBeInTheDocument();
       }
       fireEvent.click(screen.getByRole("button", { name: label }));
@@ -711,7 +745,9 @@ describe("matriz canônica de funções do convite", () => {
     await chooseProfile();
     fireEvent.click(moduleButton("Agenda"));
     await chooseProfile("custom");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
     expect(moduleButton("Agenda")).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(moduleButton("Agenda"));
     fireEvent.change(screen.getByLabelText("Perfil de acesso"), {
@@ -721,11 +757,15 @@ describe("matriz canônica de funções do convite", () => {
       screen.queryByRole("group", { name: "Módulos do perfil" }),
     ).not.toBeInTheDocument();
     await chooseProfile("clinico");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
     fireEvent.click(moduleButton("Agenda"));
     fireEvent.click(screen.getByRole("button", { name: "Fechar convite" }));
     expect(defaultProps.onClose).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
   });
 
   it("recolhe na sugestão automática ao trocar de cargo", async () => {
@@ -752,7 +792,9 @@ describe("matriz canônica de funções do convite", () => {
     });
     await screen.findByRole("button", { name: /^Agenda / });
     expect(screen.getByLabelText("Perfil de acesso")).toHaveValue("custom");
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
   });
 
   it("esconde dados anteriores em loading/erro e permite tentar novamente sem reabrir painel", async () => {
@@ -776,7 +818,9 @@ describe("matriz canônica de funções do convite", () => {
     expect(
       screen.queryByRole("group", { name: "Módulos do perfil" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
     await waitFor(() => expect(finishRequest).toBeTypeOf("function"));
     await act(async () => finishRequest({ ok: false }));
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -785,11 +829,15 @@ describe("matriz canônica de funções do convite", () => {
     expect(
       screen.queryByRole("group", { name: "Módulos do perfil" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Criar acesso" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
     await screen.findByRole("button", { name: /^Agenda / });
-    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Funções de / }),
+    ).not.toBeInTheDocument();
     consoleError.mockRestore();
   });
 
