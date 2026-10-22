@@ -329,34 +329,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
         if (selected) {
           const id = selected?.id ?? selected?.organizacaoSaudeId;
           if (id) setOrgId(String(id), selected?.slug || '');
-          const clinicaRes = await fetch(resolveApiUrl('/api/v1/clinica'), {
-            credentials: 'include',
-            headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
-          });
-          if (clinicaRes.ok) {
-            const clinicaJson = await clinicaRes.json().catch(() => ({}));
-            const nomeClinica = clinicaJson?.nome || clinicaJson?.nomeFantasia || '';
-            const logoRaw = clinicaJson?.logoUrl ?? clinicaJson?.logo_url;
-            const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
-
-            let endCompleto = String(clinicaJson?.enderecoLogradouro ?? clinicaJson?.endereco ?? clinicaJson?.logradouro ?? '').trim();
-            if (clinicaJson?.enderecoNumero) endCompleto += `, ${clinicaJson.enderecoNumero}`;
-            if (clinicaJson?.enderecoCidade) endCompleto += ` - ${clinicaJson.enderecoCidade}`;
-            if (clinicaJson?.enderecoEstado) endCompleto += `/${clinicaJson.enderecoEstado}`;
-
-            if (nomeClinica || logoUrl || clinicaJson) {
-              setClinicaInfo((prev) => ({
-                ...prev,
-                ...(nomeClinica ? { nome: nomeClinica } : {}),
-                ...(logoUrl ? { logoUrl } : {}),
-                endereco: endCompleto,
-                telefone: String(clinicaJson?.telefone ?? clinicaJson?.celular ?? '').trim(),
-                cnpj: String(clinicaJson?.cnpj ?? '').trim(),
-                slug: String(clinicaJson?.slug ?? '').trim(),
-                anamnesePadraoId: clinicaJson?.anamnesePadraoId ?? null,
-              }));
-            }
-          }
           setPostLoginGate('ready');
           return;
         }
@@ -423,6 +395,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
     nome: 'Procedi',
     logoUrl: '',
   });
+  const recarregarClinicaGenerationRef = useRef(0);
+  const clinicaOrgIdRef = useRef(orgId);
+  React.useLayoutEffect(() => {
+    clinicaOrgIdRef.current = orgId;
+    return () => { recarregarClinicaGenerationRef.current += 1; };
+  }, [orgId]);
   const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', apelido: '', fotoUrl: '' });
   const [equipeTargetUserId, setEquipeTargetUserId] = React.useState(null);
   const openingSelfProfile = Boolean(roleUserId && (equipeTargetUserId === 'me' || String(equipeTargetUserId) === String(roleUserId)));
@@ -506,7 +484,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     consultaModule,
   });
 
-  const goToView = (view) => {
+  const goToView = React.useCallback((view) => {
     // Verificacao de segurança na troca de view
     if (view === 'configuracoes' && !canSeeConfig) {
       toast.error('Você não tem permissão para acessar as configurações.');
@@ -520,7 +498,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       setConfigSectionState(null);
     }
     setActiveView(view);
-  };
+  }, [canSeeConfig, canSeeConfigEquipe, toast, setActiveView]);
 
   const [notifVersion, setNotifVersion] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
@@ -2114,7 +2092,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, [activeView, consultaModule, journeyState.isAgendaRetorno]);
 
   React.useEffect(() => {
-    if (activeView === 'configuracoes' && postLoginGate === 'ready' && !canSeeConfig) {
+    if (activeView === 'configuracoes' && postLoginGate === 'ready' && contextStatus === 'ready' && !canSeeConfig) {
       setActiveView('pacientes');
       try {
         sessionStorage.setItem('activeView', 'pacientes');
@@ -2122,7 +2100,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         // ignore
       }
     }
-    if (activeView === 'gestao-equipe' && postLoginGate === 'ready' && !canSeeConfigEquipe && !openingSelfProfile) {
+    if (activeView === 'gestao-equipe' && postLoginGate === 'ready' && contextStatus === 'ready' && !canSeeConfigEquipe && !openingSelfProfile) {
       setActiveView('pacientes');
       try {
         sessionStorage.setItem('activeView', 'pacientes');
@@ -2130,7 +2108,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         // ignore
       }
     }
-  }, [activeView, postLoginGate, canSeeConfig, canSeeConfigEquipe, openingSelfProfile, setActiveView]);
+  }, [activeView, postLoginGate, contextStatus, canSeeConfig, canSeeConfigEquipe, openingSelfProfile, setActiveView]);
 
   const setConfigSection = React.useCallback((section) => {
     const next = section === null ? null : VALID_SECTIONS.has(section) ? section : 'fichas';
@@ -2195,16 +2173,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
     let cancelled = false;
     (async () => {
       try {
-        const [perfilRes, clinicaRes] = await Promise.all([
-          fetch(resolveApiUrl('/api/v1/perfil'), {
-            credentials: 'include',
-            headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
-          }),
-          fetch(resolveApiUrl('/api/v1/clinica'), {
-            credentials: 'include',
-            headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
-          }),
-        ]);
+        const perfilRes = await fetch(resolveApiUrl('/api/v1/perfil'), {
+          credentials: 'include',
+          headers: { ...(await authHeadersForFetch({ needsOrg: false })) },
+        });
         if (cancelled) return;
         if (perfilRes.ok) {
           const p = await perfilRes.json().catch(() => ({}));
@@ -2217,28 +2189,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
             telefone: String(p?.telefone ?? p?.celular ?? '').trim(),
           });
         }
-        if (clinicaRes.ok) {
-          const c = await clinicaRes.json().catch(() => ({}));
-          const nomeClinica = c?.nome || c?.nomeFantasia || c?.nome_fantasia || '';
-          const logoRaw = c?.logoUrl ?? c?.logo_url;
-          const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
 
-          let endCompleto = String(c?.enderecoLogradouro ?? c?.endereco ?? c?.logradouro ?? '').trim();
-          if (c?.enderecoNumero) endCompleto += `, ${c.enderecoNumero}`;
-          if (c?.enderecoCidade) endCompleto += ` - ${c.enderecoCidade}`;
-          if (c?.enderecoEstado) endCompleto += `/${c.enderecoEstado}`;
-
-          setClinicaInfo((prev) => ({
-            ...prev,
-            ...(nomeClinica ? { nome: String(nomeClinica).trim() } : {}),
-            ...(logoUrl ? { logoUrl } : {}),
-            endereco: endCompleto,
-            telefone: String(c?.telefone ?? c?.celular ?? '').trim(),
-            cnpj: String(c?.cnpj ?? '').trim(),
-            slug: String(c?.slug ?? '').trim(),
-            anamnesePadraoId: c?.anamnesePadraoId ?? null,
-          }));
-        }
       } catch {
         /* ignore */
       }
@@ -2249,13 +2200,23 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, [authSessionReady, orgId]);
 
   const recarregarClinicaInfo = React.useCallback(async () => {
+    if (orgId !== clinicaOrgIdRef.current) return;
+    const generation = ++recarregarClinicaGenerationRef.current;
+    const isCurrent = () => generation === recarregarClinicaGenerationRef.current
+      && orgId === clinicaOrgIdRef.current;
+    if (!orgId || !authSessionReady) return;
     try {
+      const headers = await authHeadersForFetch({ needsOrg: true });
+      if (!isCurrent()) return;
       const clinicaRes = await fetch(resolveApiUrl('/api/v1/clinica'), {
         credentials: 'include',
-        headers: { ...(await authHeadersForFetch({ needsOrg: true })) },
+        headers: { ...headers, 'X-Org-Id': orgId },
       });
-      if (clinicaRes.ok) {
-        const c = await clinicaRes.json().catch(() => ({}));
+      if (!clinicaRes.ok) throw new Error('Não foi possível carregar a clínica');
+      {
+        const c = await clinicaRes.json();
+        if (!isCurrent()) return;
+        if (c?.id && String(c.id) !== String(orgId)) throw new Error('Organização divergente');
         const nomeClinica = c?.nome || c?.nomeFantasia || c?.nome_fantasia || '';
         const logoRaw = c?.logoUrl ?? c?.logo_url;
         const logoUrl = typeof logoRaw === 'string' ? logoRaw.trim() : '';
@@ -2267,6 +2228,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
         setClinicaInfo((prev) => ({
           ...prev,
+          orgId,
           ...(nomeClinica ? { nome: String(nomeClinica).trim() } : {}),
           ...(logoUrl ? { logoUrl } : {}),
           endereco: endCompleto,
@@ -2279,7 +2241,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [orgId, authSessionReady]);
+
+  React.useEffect(() => {
+    void recarregarClinicaInfo();
+    return () => { recarregarClinicaGenerationRef.current += 1; };
+  }, [recarregarClinicaInfo]);
+
+  const handleDisponibilidadeInvalidate = React.useCallback((options) => {
+    if (options?.scope === 'all') void recarregarClinicaInfo();
+    return agendaSchedule.invalidateDisponibilidade(options);
+  }, [agendaSchedule, recarregarClinicaInfo]);
 
   React.useEffect(() => {
     if (!isLoggedIn) {
@@ -5913,6 +5885,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 {activeView === 'configuracoes' && (
                   <RoleGuard condition={canSeeConfig} showError>
                     <ConfiguracoesView
+                      key={`${orgId}-${roleUserId}`}
                       canSeeAnamnese={canSeeConfigAnamnese}
                       canSeeProcedimentos={canSeeConfigProcedimentos}
                       canSeeTermos={canSeeConfigTermos}
@@ -5935,7 +5908,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
                       onEquipeInvalidate={agendaSchedule.refreshEquipe}
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}
-                      onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                      onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
                       onDirtyHorariosChange={setIsDirtyHorarios}
                       onDirtyFichaChange={setIsDirtyFicha}
                     />
@@ -5949,7 +5922,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       targetUserId={equipeTargetUserId}
                       onClearTargetUserId={() => setEquipeTargetUserId(null)}
                       onPerfilAtualizado={(data) => setPerfilInfo((previous) => ({ ...previous, ...data }))}
-                      onDisponibilidadeInvalidate={agendaSchedule.invalidateDisponibilidade}
+                      onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
                       onEquipeInvalidate={agendaSchedule.refreshEquipe}
                       onNavigateAgenda={() => setActiveView('agenda')}
                       onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}

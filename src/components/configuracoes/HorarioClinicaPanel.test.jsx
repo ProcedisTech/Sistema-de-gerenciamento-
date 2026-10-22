@@ -4,8 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { HorarioClinicaPanel } from './HorarioClinicaPanel.jsx';
 
 const mocks = vi.hoisted(() => ({
-  buscarConfig: vi.fn(),
-  atualizarConfig: vi.fn(),
   buscarHorarios: vi.fn(),
   atualizarHorarios: vi.fn(),
   success: vi.fn(),
@@ -14,10 +12,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../services/api.js', () => ({
-  configuracoesClinicaApi: {
-    buscar: mocks.buscarConfig,
-    atualizar: mocks.atualizarConfig,
-  },
   organizacoesHorariosApi: {
     buscar: mocks.buscarHorarios,
     atualizar: mocks.atualizarHorarios,
@@ -38,11 +32,9 @@ vi.mock('../../contexts/useToast.js', () => ({
 }));
 
 beforeEach(() => {
-  mocks.buscarConfig.mockResolvedValue({ tipoOrg: 'clinica' });
   mocks.buscarHorarios.mockResolvedValue([
     { id: 'h1', diaSemana: 1, horaInicio: '08:00', horaFim: '18:00', ativo: true },
   ]);
-  mocks.atualizarConfig.mockResolvedValue({});
   mocks.atualizarHorarios.mockResolvedValue([]);
   mocks.isDono.mockReturnValue(true);
 });
@@ -52,25 +44,34 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it('permite que o Dono edite e salve horários e tipoOrg', async () => {
+it('permite que o Dono edite e salve horários da clínica sem seletor de tipoOrg', async () => {
   mocks.isDono.mockReturnValue(true);
   const onDirty = vi.fn();
-  render(<HorarioClinicaPanel onDirtyChange={onDirty} />);
+  const onInvalidate = vi.fn();
+  render(<HorarioClinicaPanel onDirtyChange={onDirty} onDisponibilidadeInvalidate={onInvalidate} />);
 
-  expect(await screen.findByRole('button', { name: 'Salvar' })).toBeDisabled(); // Inicialmente limpo
+  expect(await screen.findByRole('button', { name: 'Salvar' })).toBeDisabled();
+  expect(screen.queryByRole('radio')).not.toBeInTheDocument();
 
-  // Altera um horário (liga terça-feira)
   const switchTerca = screen.getByRole('switch', { name: 'Terça-feira inativo' });
   fireEvent.click(switchTerca);
+  expect(onDirty).toHaveBeenLastCalledWith(true);
 
   const btnSalvar = screen.getByRole('button', { name: 'Salvar' });
   expect(btnSalvar).not.toBeDisabled();
 
   fireEvent.click(btnSalvar);
   await waitFor(() => {
-    expect(mocks.atualizarConfig).toHaveBeenCalledWith({ tipoOrg: 'clinica' });
-    expect(mocks.atualizarHorarios).toHaveBeenCalled();
+    expect(mocks.atualizarHorarios).toHaveBeenCalledWith(
+      'test-org-123',
+      expect.arrayContaining([
+        expect.objectContaining({ diaSemana: 1, horaInicio: '08:00', horaFim: '18:00' }),
+        expect.objectContaining({ diaSemana: 2, horaInicio: '08:00', horaFim: '18:00' }),
+      ]),
+    );
+    expect(onInvalidate).toHaveBeenCalledWith({ scope: 'all' });
     expect(mocks.success).toHaveBeenCalledWith('Configurações salvas');
+    expect(onDirty).toHaveBeenLastCalledWith(false);
   });
 });
 
@@ -80,18 +81,46 @@ it('bloqueia edição e exibe banner exclusivo do Dono para usuários não-dono'
 
   expect(
     await screen.findByText(
-      'Apenas o Dono da clínica pode alterar o tipo de organização e os horários gerais de funcionamento.',
+      'Apenas o Dono da clínica pode alterar os horários gerais de funcionamento.',
     ),
   ).toBeInTheDocument();
   expect(screen.getByText('Exclusivo do Dono')).toBeInTheDocument();
+  expect(screen.queryByRole('radio')).not.toBeInTheDocument();
 
-  // Radio buttons desabilitados
-  const radios = screen.getAllByRole('radio');
-  expect(radios[0]).toBeDisabled();
-  expect(radios[1]).toBeDisabled();
-
-  // Botão Salvar desabilitado
   const btnSalvar = screen.getByRole('button', { name: 'Salvar' });
   expect(btnSalvar).toBeDisabled();
   expect(btnSalvar).toHaveAttribute('title', 'Apenas o Dono da clínica pode salvar');
+});
+
+it('exibe alerta de erro e permite tentar novamente quando o carregamento falha', async () => {
+  mocks.buscarHorarios.mockRejectedValueOnce(new Error('Falha ao carregar horários'));
+  render(<HorarioClinicaPanel />);
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Não foi possível carregar os horários de funcionamento da clínica.',
+  );
+  expect(mocks.error).toHaveBeenCalledWith('Falha ao carregar horários');
+  fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+
+  expect(await screen.findByRole('switch', { name: 'Segunda-feira ativo' })).toBeInTheDocument();
+  expect(mocks.buscarHorarios).toHaveBeenCalledTimes(2);
+});
+
+it('preserva rascunho e permite tentar salvar novamente quando a API falha', async () => {
+  const dirty = vi.fn();
+  render(<HorarioClinicaPanel onDirtyChange={dirty} />);
+  await screen.findByRole('switch', { name: 'Segunda-feira ativo' });
+
+  fireEvent.click(screen.getByRole('switch', { name: 'Terça-feira inativo' }));
+  expect(dirty).toHaveBeenLastCalledWith(true);
+
+  mocks.atualizarHorarios.mockRejectedValueOnce(new Error('Falha temporária'));
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('Falha temporária'));
+  expect(screen.getByRole('button', { name: 'Salvar' })).toBeEnabled();
+  expect(dirty).toHaveBeenLastCalledWith(true);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+  await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
 });

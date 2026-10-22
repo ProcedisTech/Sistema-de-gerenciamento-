@@ -34,7 +34,7 @@ vi.mock("../../contexts/useToast.js", () => ({
 
 beforeEach(() => {
   mocks.buscar.mockResolvedValue({
-    seguirHorarioClinica: false,
+    seguirHorarioClinica: true,
     turnos: [],
     gradeClinica: [],
   });
@@ -63,7 +63,7 @@ it("salva e chama onSaved antes de fechar automaticamente", async () => {
   );
   await waitFor(() => expect(calls).toEqual(["saved", "close"]));
   expect(mocks.atualizar).toHaveBeenCalledWith("own", {
-    seguirHorarioClinica: false,
+    seguirHorarioClinica: true,
     turnos: [],
   });
 });
@@ -110,7 +110,7 @@ it("bloqueia profissional que extrapola grade da clínica quando não for Dono",
       { diaSemana: 1, horaInicio: "08:00", horaFim: "18:00", ativo: true },
     ],
   });
-  render(<DisponibilidadeProfissionalModal roleUserId="prof-2" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="prof-2" />);
   fireEvent.click(
     await screen.findByRole("button", { name: "Salvar", exact: true }),
   );
@@ -129,7 +129,7 @@ it("permite Dono salvar turno fora da grade da clínica como exceção", async (
       { diaSemana: 1, horaInicio: "08:00", horaFim: "18:00", ativo: true },
     ],
   });
-  render(<DisponibilidadeProfissionalModal roleUserId="prof-dono" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="prof-dono" />);
   fireEvent.click(
     await screen.findByRole("button", { name: "Salvar", exact: true }),
   );
@@ -152,7 +152,7 @@ it("permite Dono salvar turno fora da grade da clínica como exceção", async (
 it("fecha por backdrop e Escape, preservando clique dentro do diálogo", async () => {
   const onClose = vi.fn();
   render(
-    <DisponibilidadeProfissionalModal roleUserId="own" onClose={onClose} />,
+    <DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" onClose={onClose} />,
   );
   await screen.findByRole("button", { name: "Salvar", exact: true });
   fireEvent.click(screen.getByRole("dialog"));
@@ -173,7 +173,7 @@ it("bloqueia qualquer fechamento durante gravação e mantém modal se a API fal
   const onClose = vi.fn(),
     onSaved = vi.fn();
   render(
-    <DisponibilidadeProfissionalModal
+    <DisponibilidadeProfissionalModal tipoOrg="clinica"
       roleUserId="own"
       onClose={onClose}
       onSaved={onSaved}
@@ -205,7 +205,7 @@ it("horário inválido impede persistir ou fechar", async () => {
   ]);
   const onClose = vi.fn();
   render(
-    <DisponibilidadeProfissionalModal roleUserId="own" onClose={onClose} />,
+    <DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" onClose={onClose} />,
   );
   fireEvent.click(
     await screen.findByRole("button", { name: "Salvar", exact: true }),
@@ -252,7 +252,7 @@ it("carrega dias em ordem Seg–Dom sem selects e mantém múltiplos turnos", as
     { diaSemana: 1, horaInicio: "08:00:00", horaFim: "12:00:00" },
     { diaSemana: 1, horaInicio: "14:00", horaFim: "18:00" },
   ]);
-  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" />);
   await screen.findByRole("switch", { name: "Segunda-feira ativo" });
   expect(
     screen
@@ -278,7 +278,7 @@ it("desativa um dia, ativa domingo e salva payload plano sem ID antigo", async (
   mocks.buscar.mockResolvedValueOnce([
     { id: "old", diaSemana: 1, horaInicio: "08:00", horaFim: "18:00" },
   ]);
-  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" />);
   fireEvent.click(
     await screen.findByRole("switch", { name: "Segunda-feira ativo" }),
   );
@@ -304,7 +304,7 @@ it("adiciona almoço e terceiro turno sem sobreposição e salva os horários su
   mocks.buscar.mockResolvedValueOnce([
     { diaSemana: 1, horaInicio: "08:00", horaFim: "18:00" },
   ]);
-  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" />);
   fireEvent.click(await screen.findByRole("button", { name: /Adicionar turno/ }));
   expect(screen.getByLabelText("Segunda-feira, fim do turno 1")).toHaveValue("12:00");
   expect(screen.getByLabelText("Segunda-feira, início do turno 2")).toHaveValue("13:00");
@@ -329,7 +329,7 @@ it("copia turnos para todos os dias após confirmação", async () => {
   mocks.buscar.mockResolvedValueOnce([
     { diaSemana: 1, horaInicio: "09:00", horaFim: "17:00" },
   ]);
-  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" />);
   fireEvent.click(
     await screen.findByRole("button", { name: "Copiar para todos" }),
   );
@@ -359,7 +359,7 @@ it("sobreposição bloqueia gravação, mas turnos contíguos são aceitos", asy
     { diaSemana: 1, horaInicio: "08:00", horaFim: "12:00" },
     { diaSemana: 1, horaInicio: "11:00", horaFim: "18:00" },
   ]);
-  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" />);
   fireEvent.click(
     await screen.findByRole("button", { name: "Salvar", exact: true }),
   );
@@ -382,7 +382,7 @@ it("mantém limite de três turnos e cancelar cópia com Escape não fecha o mod
     { diaSemana: 1, horaInicio: "16:00", horaFim: "18:00" },
   ]);
   render(
-    <DisponibilidadeProfissionalModal roleUserId="own" onClose={onClose} />,
+    <DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="own" onClose={onClose} />,
   );
   expect(
     await screen.findByRole("button", { name: "Limite de horários atingido" }),
@@ -410,7 +410,7 @@ it("exibe aviso visual e banner de exceção quando o Dono configura horário em
     ],
   });
 
-  render(<DisponibilidadeProfissionalModal roleUserId="colab-1" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="colab-1" />);
 
   // Banner âmbar no rodapé do modal
   const banner = await screen.findByTestId("aviso-excecao-clinica");
@@ -441,7 +441,7 @@ it("exibe banner de bloqueio para não-dono quando extrapola a grade da clínica
     ],
   });
 
-  render(<DisponibilidadeProfissionalModal roleUserId="colab-2" />);
+  render(<DisponibilidadeProfissionalModal tipoOrg="clinica" roleUserId="colab-2" />);
 
   // Banner vermelho de bloqueio
   const banner = await screen.findByTestId("bloqueio-clinica-fechada");
@@ -460,3 +460,66 @@ it("exibe banner de bloqueio para não-dono quando extrapola a grade da clínica
   expect(mocks.atualizar).not.toHaveBeenCalled();
 });
 
+
+it("impede salvar quando seguirHorarioClinica está desligado e todos os dias estão inativos", async () => {
+  mocks.buscar.mockResolvedValueOnce({
+    seguirHorarioClinica: false,
+    turnos: [],
+    gradeClinica: [
+      { diaSemana: 1, horaInicio: "08:00", horaFim: "18:00", ativo: true },
+    ],
+  });
+  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Salvar", exact: true }),
+  );
+  expect(mocks.error).toHaveBeenCalledWith(
+    "Ative ao menos um dia de atendimento ou marque 'Seguir o horário da clínica'",
+  );
+  expect(mocks.atualizar).not.toHaveBeenCalled();
+});
+
+it("aceita turno contínuo do profissional dentro de turnos contíguos da clínica para não-dono", async () => {
+  mocks.isDono.mockReturnValue(false);
+  mocks.buscar.mockResolvedValueOnce({
+    seguirHorarioClinica: false,
+    gradeClinica: [
+      { diaSemana: 1, horaInicio: "08:00", horaFim: "12:00", ativo: true },
+      { diaSemana: 1, horaInicio: "12:00", horaFim: "18:00", ativo: true },
+    ],
+    turnos: [
+      { diaSemana: 1, horaInicio: "10:00", horaFim: "15:00", ativo: true },
+    ],
+  });
+  render(<DisponibilidadeProfissionalModal roleUserId="colab-contiguo" />);
+  const btnSalvar = await screen.findByRole("button", { name: "Salvar", exact: true });
+  expect(screen.queryByTestId("bloqueio-clinica-fechada")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("alerta-turno-fora-1-0")).not.toBeInTheDocument();
+
+  fireEvent.click(btnSalvar);
+  await waitFor(() =>
+    expect(mocks.atualizar).toHaveBeenCalledWith("colab-contiguo", {
+      seguirHorarioClinica: false,
+      turnos: [
+        { id: null, diaSemana: 1, horaInicio: "10:00", horaFim: "15:00", ativo: true },
+      ],
+    }),
+  );
+});
+
+it("exibe alerta de erro, oculta Salvar e permite tentar novamente se a busca falhar", async () => {
+  mocks.buscar.mockRejectedValueOnce(new Error("Falha ao buscar disponibilidade"));
+  render(<DisponibilidadeProfissionalModal roleUserId="own" />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Não foi possível carregar a disponibilidade do profissional.",
+  );
+  expect(mocks.error).toHaveBeenCalledWith("Falha ao buscar disponibilidade");
+  expect(screen.queryByRole("button", { name: "Salvar", exact: true })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+  expect(
+    await screen.findByRole("switch", { name: "Seguir o horário da clínica" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Salvar", exact: true })).toBeEnabled();
+});
