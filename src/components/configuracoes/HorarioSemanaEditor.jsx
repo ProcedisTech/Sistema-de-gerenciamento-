@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Copy, AlertCircle, AlertTriangle, Clock } from 'lucide-react';
 import { Switch } from '../shared/Switch.jsx';
-import { adicionarTurnoInteligente, encontrarSobrepostos, hhmm } from './horarioSemanaUtils.js';
+import { adicionarTurnoInteligente, encontrarSobrepostos, hhmm, timeToMinutes, fundirJanelasMinutos } from './horarioSemanaUtils.js';
 
 const DIAS = [
   { value: 0, label: 'Domingo' },
@@ -59,14 +59,13 @@ export function HorarioSemanaEditor({
 
   const isTurnoForaExpediente = (infoClinica, turno) => {
     if (!infoClinica || infoClinica.fechado || !infoClinica.turnos?.length) return false;
-    const tIni = hhmm(turno.horaInicio);
-    const tFim = hhmm(turno.horaFim);
-    if (!tIni || !tFim || tFim <= tIni) return false;
-    return !infoClinica.turnos.some((tc) => {
-      const tcIni = hhmm(tc.horaInicio);
-      const tcFim = hhmm(tc.horaFim);
-      return tIni >= tcIni && tFim <= tcFim;
-    });
+    const tIniStr = hhmm(turno.horaInicio);
+    const tFimStr = hhmm(turno.horaFim);
+    if (!tIniStr || !tFimStr || tFimStr <= tIniStr) return false;
+    const tIni = timeToMinutes(tIniStr);
+    const tFim = timeToMinutes(tFimStr);
+    const janelas = fundirJanelasMinutos(infoClinica.turnos);
+    return !janelas.some((j) => tIni >= j.ini && tFim <= j.fim);
   };
 
   useEffect(() => {

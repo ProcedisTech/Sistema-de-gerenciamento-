@@ -141,7 +141,10 @@ it("carrega o perfil com cancelamento e apresenta skeleton até a resposta", asy
   ).not.toBeInTheDocument();
 });
 it("renderiza perfil próprio, Cadastro, seis abas e oculta breadcrumb interno", async () => {
-  const { container } = render(<MeuPerfilConfigPanel />);
+  let container;
+  await act(async () => {
+    ({ container } = render(<MeuPerfilConfigPanel />));
+  });
   await screen.findByRole("heading", { name: "Ana Souza" });
   expect(
     screen.getByRole("button", { name: "Abrir cadastro do usuário" }),

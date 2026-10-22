@@ -30,6 +30,8 @@ export function MeuPerfilConfigPanel({
     recarregarContextoOrg,
   } = useOrg();
   const {
+    isDono,
+    canManageUsers,
     canSeeAgenda,
     canSeeConfigPerfil,
     canSeeConfigAuditoria,
@@ -198,7 +200,7 @@ export function MeuPerfilConfigPanel({
           loadingPermissoes={!permissions}
           permissoesError={permissions?.error || ""}
           onRetryPermissoes={() => setReload((value) => value + 1)}
-          canManageDisponibilidade={canManageBloqueiosAgenda}
+          canManageDisponibilidade={Boolean(isDono || canManageUsers || canManageBloqueiosAgenda)}
           onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
           onEquipeInvalidate={() => {
             recarregarContextoOrg?.();

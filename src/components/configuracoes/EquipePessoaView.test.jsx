@@ -65,6 +65,7 @@ const pessoa = {
   apareceNaAgenda: true,
 };
 const props = {
+  tipoOrg: "clinica",
   pessoa,
   perfil: {
     id: "clinico",
@@ -337,7 +338,7 @@ it("horários reais incluem domingo, múltiplos turnos e ignoram intervalos inat
 it("salvar modal revalida horários sem reload e notifica disponibilidade", async () => {
   api.buscar
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce({ seguirHorarioClinica: true, turnos: [], gradeClinica: [] })
     .mockResolvedValue([
       { diaSemana: 3, horaInicio: "10:00", horaFim: "16:00" },
     ]);
@@ -651,4 +652,30 @@ it("exibe todos os dias de folga quando não há horários ativos", async () => 
   await screen.findByText("Todos os dias:");
   expect(screen.getByText("Folga")).toBeInTheDocument();
   expect(document.querySelectorAll(".week-group-row")).toHaveLength(0);
+});
+
+it("exibe botão editar quando canManageDisponibilidade=true sem depender de tipoOrg e abre modal", async () => {
+  const { tipoOrg: _omit, ...propsSemTipo } = props;
+  render(<EquipePessoaView {...propsSemTipo} canManageDisponibilidade />);
+  const btnEditar = await screen.findByRole("button", { name: /^editar$/i });
+  expect(btnEditar).toBeInTheDocument();
+  expect(screen.queryByText(/Modo Autônomo/)).not.toBeInTheDocument();
+  fireEvent.click(btnEditar);
+  expect(await screen.findByRole("dialog", { name: "Disponibilidade do profissional" })).toBeInTheDocument();
+});
+
+it("oculta botão editar quando canManageDisponibilidade=false", async () => {
+  render(<EquipePessoaView {...props} canManageDisponibilidade={false} />);
+  expect(await screen.findByText("Horário de atendimento")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument();
+});
+
+it("renderiza gradeClinica quando o envelope indica seguirHorarioClinica=true", async () => {
+  api.buscar.mockResolvedValueOnce({
+    seguirHorarioClinica: true,
+    turnos: [],
+    gradeClinica: [{ diaSemana: 1, horaInicio: "08:00", horaFim: "17:00", ativo: true }],
+  });
+  render(<EquipePessoaView {...props} />);
+  expect(await screen.findByText("08:00 - 17:00")).toBeInTheDocument();
 });

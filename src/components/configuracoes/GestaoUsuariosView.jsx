@@ -3,7 +3,6 @@ import { resolveApiUrl } from "../../config/apiEnv";
 import {
   authHeadersForFetch,
   agendasApi,
-  configuracoesClinicaApi,
   equipeApi,
   perfilApi,
   getApiErrorDetail,
@@ -42,6 +41,7 @@ export function GestaoUsuariosView({
   onPerfilAtualizado,
 }) {
   const {
+    isDono,
     canSeeConfigEquipe,
     canCreateUsers,
     canManageUsers,
@@ -81,7 +81,6 @@ export function GestaoUsuariosView({
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteDraft, setInviteDraft] = useState(null);
   const [activeTab, setActiveTab] = useState("membros"); // 'membros' | 'auditoria' | 'perfis'
-  const [tipoOrg, setTipoOrg] = useState("clinica");
   const [perfilParaAbrirNaAba, setPerfilParaAbrirNaAba] = useState(null);
 
   const onEditarPerfilNaAba = useCallback((perfilAcessoId) => {
@@ -241,21 +240,6 @@ export function GestaoUsuariosView({
     }
   }, [canSeeConfigEquipe, loadData, orgId]);
 
-  useEffect(() => {
-    if (!canSeeConfigEquipe) return;
-    let alive = true;
-    (async () => {
-      try {
-        const dto = await configuracoesClinicaApi.buscar();
-        if (alive) setTipoOrg(dto?.tipoOrg || "clinica");
-      } catch {
-        /* mantém default 'clinica'; falha aqui não deve quebrar a tela de equipe */
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [canSeeConfigEquipe]);
 
   useEffect(() => {
     if (!resolvedTarget || (!canSeeConfigEquipe && !selfTarget)) return;
@@ -723,7 +707,7 @@ export function GestaoUsuariosView({
           onEditarPerfil={onEditarPerfilNaAba}
           onDesativar={() => handleDeactivate(detail)}
           orgId={orgId}
-          canManageDisponibilidade={canManageBloqueiosAgenda}
+          canManageDisponibilidade={Boolean(isDono || canManageUsers || canManageBloqueiosAgenda)}
           onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
           onEquipeInvalidate={() => { recarregarContextoOrg(); onEquipeInvalidate?.(); }}
           onSelectPatient={onSelectPatient}
@@ -743,7 +727,6 @@ export function GestaoUsuariosView({
           usuarios={usuarios}
           onReload={loadData}
           fetchHeaders={fetchHeaders}
-          tipoOrg={tipoOrg}
           perfilParaAbrir={perfilParaAbrirNaAba}
           onPerfilParaAbrirConsumido={() => setPerfilParaAbrirNaAba(null)}
           criarNovoNonce={criarNovoNonce}

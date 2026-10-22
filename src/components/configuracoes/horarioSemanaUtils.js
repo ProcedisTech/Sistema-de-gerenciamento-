@@ -116,3 +116,32 @@ export function diasConfigToDisp(diasConfig = []) {
       : [],
   );
 }
+
+/**
+ * Funde intervalos contíguos ou sobrepostos (ex.: 08:00-12:00 + 12:00-18:00 -> 08:00-18:00).
+ */
+export function fundirJanelasMinutos(turnos = []) {
+  const validos = (turnos || [])
+    .map((t) => ({
+      ini: timeToMinutes(hhmm(t?.horaInicio)),
+      fim: timeToMinutes(hhmm(t?.horaFim)),
+    }))
+    .filter((j) => Number.isFinite(j.ini) && Number.isFinite(j.fim) && j.fim > j.ini)
+    .sort((a, b) => a.ini - b.ini || a.fim - b.fim);
+
+  const fundidas = [];
+  for (const j of validos) {
+    if (fundidas.length === 0) {
+      fundidas.push({ ...j });
+    } else {
+      const ultima = fundidas[fundidas.length - 1];
+      if (j.ini <= ultima.fim) {
+        ultima.fim = Math.max(ultima.fim, j.fim);
+      } else {
+        fundidas.push({ ...j });
+      }
+    }
+  }
+  return fundidas;
+}
+
