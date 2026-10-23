@@ -2295,11 +2295,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
       const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
       if (hasLote) {
         const loteValido = options.lote.filter((p) => {
-          if (p?.nomeSoDeTela === true) return false;
           const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
-          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
-          if (!cid && ehRotuloDeTela(nome)) return false;
           const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
           return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
         });
         const loteNormalizado = criarLoteProcedimentosSessao(loteValido);
@@ -2771,24 +2769,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
     let loteDaAgenda = [];
     if (Array.isArray(options?.lote) && options.lote.length > 0) {
       const loteValido = options.lote.filter((p) => {
-        if (p?.nomeSoDeTela === true) return false;
         const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
-        const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
-        if (!cid && ehRotuloDeTela(nome)) return false;
         const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
+        const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
         return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
       });
       loteDaAgenda = criarLoteProcedimentosSessao(loteValido);
     } else if (fromSlot && agendaId && dataRaw) {
       // B-42 F2: sem lote do card, só a agenda clicada (nunca o dia inteiro do paciente).
-      const linhas = loteDasLinhas([options]).filter((p) => {
-        if (p?.nomeSoDeTela === true) return false;
-        const nome = String(p.procedimentoNome || '').trim();
-        const cid = p.catalogoProcedimentoSaudeId;
-        if (!cid && ehRotuloDeTela(nome)) return false;
-        return true;
-      });
-      loteDaAgenda = criarLoteProcedimentosSessao(linhas);
+      loteDaAgenda = criarLoteProcedimentosSessao(loteDasLinhas([options]));
     }
     const opt = { ...(options || {}), loteDaAgenda };
 
