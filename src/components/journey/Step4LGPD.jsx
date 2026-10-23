@@ -30,6 +30,7 @@ import {
   organizacaoApi,
 } from '../../services/api';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
+import { ehRotuloDeTela } from '../consulta/consultaServidor.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
@@ -2182,8 +2183,10 @@ export function Step4Procedimento({
 
     if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
       const validos = procedimentosSessao.filter((p) => {
+        if (p?.nomeSoDeTela === true) return false;
         const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId;
         const nome = p.nomeProcedimento || p.procedimentoNome || p.nome;
+        if (!cid && ehRotuloDeTela(nome)) return false;
         if (isPlaceholder(nome) && !cid) return false;
         if (isPlaceholder(nome) && cid) {
           const matched = procedimentoSearchOptions.find((o) => String(o.id) === String(cid));
@@ -2192,14 +2195,16 @@ export function Step4Procedimento({
         return Boolean((cid && String(cid).trim()) || (nome && String(nome).trim() && !isPlaceholder(nome)));
       });
       if (validos.length > 0) {
+        const chavesVistas = new Set();
         return validos
           .map((p, idx) => {
-            const cid = String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id || `idx_${idx}`);
+            const cid = String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.itemId || p._uid || p.id || `idx_${idx}`);
             const matched = procedimentoSearchOptions.find((o) => String(o.id) === cid);
             const rawNome = p.nomeProcedimento || p.procedimentoNome || p.nome || matched?.nome;
             const finalNome = !isPlaceholder(rawNome) ? rawNome : (matched?.nome && !isPlaceholder(matched.nome) ? matched.nome : '');
             return {
               id: cid,
+              _uid: p._uid || cid,
               nome: finalNome,
               tipoCodigo: matched?.tipoCodigo,
               duracaoMin: matched?.duracaoMin,
@@ -2207,10 +2212,17 @@ export function Step4Procedimento({
               isAvulso: Boolean(p.isAvulso),
             };
           })
-          .filter((item) => item.nome && !isPlaceholder(item.nome));
+          .filter((item) => {
+            if (!item.nome || isPlaceholder(item.nome) || ehRotuloDeTela(item.nome)) return false;
+            const keyUnica = item.id.startsWith('idx_') ? item.nome.toLowerCase() : item.id;
+            if (chavesVistas.has(keyUnica)) return false;
+            chavesVistas.add(keyUnica);
+            return true;
+          });
       }
     }
     if (catalogoId && nomeProcedimento && String(nomeProcedimento).trim() && !isPlaceholder(nomeProcedimento)) {
+      if (ehRotuloDeTela(nomeProcedimento)) return [];
       return procedimentoSearchOptions.filter(
         (p) => String(p.id).trim() === String(catalogoId).trim(),
       );
@@ -2447,9 +2459,14 @@ export function Step4Procedimento({
 
   const handleRemoverProcedimento = React.useCallback(async (procId) => {
     const pid = String(procId);
-    const novaLista = (procedimentosSessao || []).filter(
-      (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) !== pid,
-    );
+    const novaLista = (procedimentosSessao || []).filter((p) => {
+      const matchCat = String(p.catalogoProcedimentoSaudeId || p.catalogoId || '') === pid;
+      const matchItem = String(p.itemId || '') === pid;
+      const matchUid = String(p._uid || '') === pid;
+      const matchId = String(p.id || '') === pid;
+      const matchNome = String(p.nomeProcedimento || p.nome || '').trim().toLowerCase() === pid.trim().toLowerCase();
+      return !(matchCat || matchItem || matchUid || matchId || matchNome);
+    });
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }

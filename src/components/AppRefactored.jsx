@@ -151,6 +151,7 @@ import { useEnvioFotosConsulta } from './hooks/useEnvioFotosConsulta.js';
 import { useMapaRascunhoAutosave } from './hooks/useMapaRascunhoAutosave.js';
 import {
   consultaFechada,
+  ehRotuloDeTela,
   inicioAoEntrarNaConsulta,
   itensOrientacoesDaSessao,
   itensSemOrientacaoMarcada as linhasSemOrientacaoMarcada,
@@ -1757,7 +1758,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
     if (Array.isArray(journeyState.procedimentosSessao) && journeyState.procedimentosSessao.length > 0) {
       const validos = journeyState.procedimentosSessao
         .filter((p) => {
+          if (p?.nomeSoDeTela === true) return false;
+          const cid = p?.catalogoProcedimentoSaudeId || p?.catalogoId || p?.nomeProcedimentoCatalogoId;
           const n = String(p?.procedimentoNome || p?.nomeProcedimento || p?.nome || p?.catalogoNome || '').trim();
+          if (!cid && ehRotuloDeTela(n)) return false;
           return n && n.toLowerCase() !== 'procedimento';
         })
         .map((p) => ({
