@@ -40,6 +40,7 @@ import { AssistiveTouchToolbar } from './mapeamento/AssistiveTouchToolbar.jsx';
 import { mapasApi, planejamentosApi, catalogosApi, pacientesGaleriaApi } from '../../services/api.js';
 import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { garantirProcedimentosNoPlano } from '../../utils/sincronizarProcedimentosPlanoAgenda.js';
+import { ehRotuloDeTela } from '../consulta/consultaServidor.js';
 
 const COR_PADRAO_AVALIACAO = '#0ea5e9'; // Ciano/Azul de alto contraste padrão
 const RAIO_BORRACHA_PERCENT = 2.8; // ~2.8% da largura da foto para o diâmetro da borracha
@@ -134,7 +135,10 @@ export function AnnotationCanvasAvaliacao({
   const [procedimentos, setProcedimentos] = useState(() => {
     if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) {
       const validos = procedimentosIniciais.filter((proc) => {
+        if (proc?.nomeSoDeTela === true) return false;
+        const cid = proc?.catalogoProcedimentoSaudeId || proc?.id;
         const nome = String(proc?.catalogoNome || proc?.nome || '').trim();
+        if (!cid && ehRotuloDeTela(nome)) return false;
         return nome && nome.toLowerCase() !== 'procedimento';
       });
 
@@ -172,7 +176,10 @@ export function AnnotationCanvasAvaliacao({
   const [activeProcedimentoId, setActiveProcedimentoId] = useState(() => {
     if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) {
       const primeiroValido = procedimentosIniciais.find((proc) => {
+        if (proc?.nomeSoDeTela === true) return false;
+        const cid = proc?.catalogoProcedimentoSaudeId || proc?.id;
         const nome = String(proc?.catalogoNome || proc?.nome || '').trim();
+        if (!cid && ehRotuloDeTela(nome)) return false;
         return nome && nome.toLowerCase() !== 'procedimento';
       });
       if (primeiroValido) {

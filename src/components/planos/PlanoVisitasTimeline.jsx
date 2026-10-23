@@ -16,7 +16,7 @@ import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 import { GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { GALERIA_CATEGORIA_BADGE_CLASS } from '../patients/galeria/galeriaUiConstants.js';
 import { formatValorBrl } from '../../utils/planejamentoDraftUtils.js';
-import { formatarDataCalendario, normalizarDataCalendario, somarDias } from '../../utils/datasClinica.js';
+import { formatarDataCalendario, normalizarDataCalendario, somarDias, diaDoInstante } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { PlanoFotoLightbox } from './PlanoFotoLightbox.jsx';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
@@ -74,11 +74,18 @@ function PlanoVisitaGaleria({
 
     (fotosDoPlano || []).forEach((f) => {
       const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
-      if (fData && fData === visita.data) {
+      const isFotoAvaliacao =
+        f.categoria === 'avaliacao' ||
+        String(f.tipoFotoCodigo || '').toUpperCase() === 'AVALIACAO' ||
+        Boolean(f.isAvaliacao);
+
+      const dataMatch = (fData && fData === visita.data) || (Boolean(visita.isAvaliacaoVisita) && isFotoAvaliacao);
+
+      if (dataMatch) {
         const fotoIsRetorno = Boolean(f.isRetorno);
         if (fotoIsRetorno === isVisitaRetorno) {
-          // Se a foto já tiver um matchedItemId específico, só inclui se pertencer aos itens desta visita
-          if (f.matchedItemId) {
+          // Se a foto já tiver um matchedItemId específico, só descarta se NÃO for foto de avaliação
+          if (f.matchedItemId && !isFotoAvaliacao && !visita.isAvaliacaoVisita) {
             const pertenceAEstaVisita = (visita.itens || []).some((it) => {
               const baseItemId = String(it.planejamentoItemId || it.id || '').replace(/_retorno$/, '');
               const expectedKey = isVisitaRetorno ? `${baseItemId}_retorno` : baseItemId;
@@ -93,7 +100,7 @@ function PlanoVisitaGaleria({
     });
 
     return Array.from(map.values());
-  }, [visita.itens, visita.data, visita.isRetornoVisita, fotosPorPlanejamentoItemId, fotosDoPlano]);
+  }, [visita.itens, visita.data, visita.isRetornoVisita, visita.isAvaliacaoVisita, fotosPorPlanejamentoItemId, fotosDoPlano]);
 
   // Agrupamento estrito por categoria clínica em prateleiras horizontais separadas
   const categoriasOrganizadas = useMemo(() => {
@@ -107,10 +114,12 @@ function PlanoVisitaGaleria({
 
     fotos.forEach((f) => {
       const cat = String(f.categoria || '').toLowerCase().trim();
+      const cod = String(f.tipoFotoCodigo || '').toUpperCase().trim();
+      const isAv = cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao);
       if (cat === 'antes') grupos.antes.push(f);
       else if (cat === 'mapa') grupos.mapa.push(f);
       else if (cat === 'depois') grupos.depois.push(f);
-      else if (cat === 'avaliacao') grupos.avaliacao.push(f);
+      else if (isAv) grupos.avaliacao.push(f);
       else grupos.outro.push(f);
     });
 
@@ -192,7 +201,7 @@ function PlanoVisitaGaleria({
               {/* Linha Horizontal de Miniaturas */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
                 {catFotos.map((f) => {
-                  const hasMarkup = Boolean(f.mapaOverlay?.marcacoes?.length);
+                  const hasMarkup = Boolean(f.mapaOverlay?.marcacoes?.length) || Boolean(f.mapaOverlay?.pontos?.length) || Boolean(f.pontos?.length);
                   return (
                     <div
                       key={f.id || f.fotoId || f.url}
@@ -206,7 +215,7 @@ function PlanoVisitaGaleria({
                       {hasMarkup ? (
                         <GaleriaMapaThumb
                           url={f.url}
-                          mapaOverlay={f.mapaOverlay}
+                          mapaOverlay={f.mapaOverlay || (f.pontos ? { pontos: f.pontos } : null)}
                           pacienteId={pacienteId}
                           fotoId={f.fotoId || f.id}
                           alt={f.descricaoLegenda || 'Mapa de aplicação'}
@@ -265,7 +274,7 @@ export function PlanoVisitasTimeline({
   termosFaltantes = [],
   procedimentosFeitos = [],
 }) {
-  const { hojeIso } = useAgoraDaClinica();
+  const { hojeIso, fuso } = useAgoraDaClinica();
   const [lightboxData, setLightboxData] = useState(null); // { foto, fotos }
 
   const itens = useMemo(() => Array.isArray(plano?.itens) ? plano.itens : [], [plano]);
@@ -393,9 +402,50 @@ export function PlanoVisitasTimeline({
       }
     });
 
+    // SÍNTESE DA VISITA DE AVALIAÇÃO CLÍNICA (quando há fotos/mapas de avaliação vinculados ao plano)
+    const fotosDeAvaliacao = (fotosDoPlano || []).filter((f) => {
+      const cat = String(f.categoria || '').toLowerCase();
+      const cod = String(f.tipoFotoCodigo || '').toUpperCase();
+      return cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao) || Boolean(f.mapaOverlay);
+    });
+
+    if (fotosDeAvaliacao.length > 0) {
+      let dataAvaliacao = null;
+      let horaAvaliacao = null;
+      for (const f of fotosDeAvaliacao) {
+        const rawData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
+        if (rawData && rawData !== 'sem-data') {
+          dataAvaliacao = rawData;
+          horaAvaliacao = f.registradoEm ? String(f.registradoEm).slice(11, 16) : null;
+          break;
+        }
+      }
+      if (!dataAvaliacao && plano?.criadoEm) {
+        dataAvaliacao = diaDoInstante(plano.criadoEm, fuso);
+        horaAvaliacao = String(plano.criadoEm).slice(11, 16);
+      }
+      if (!dataAvaliacao) {
+        dataAvaliacao = hojeIso;
+      }
+
+      if (dataAvaliacao) {
+        if (!gruposPorData.has(dataAvaliacao)) {
+          gruposPorData.set(dataAvaliacao, {
+            data: dataAvaliacao,
+            dataHoraInicio: horaAvaliacao || null,
+            isAvaliacaoVisita: true,
+            tituloVisita: 'Avaliação Clínica & Mapeamento',
+            itens: [],
+          });
+        } else {
+          gruposPorData.get(dataAvaliacao).temAvaliacao = true;
+        }
+      }
+    }
+
     const visitas = Array.from(gruposPorData.values()).sort((a, b) => a.data.localeCompare(b.data));
     return { poolSemData: semData, visitasAgrupadas: visitas };
-  }, [itens]);
+  }, [itens, fotosDoPlano, plano, fuso, hojeIso]);
 
   // Tempo total e valor do pool sem data
   const duracaoSemData = useMemo(() => {
@@ -435,7 +485,7 @@ export function PlanoVisitasTimeline({
 
   return (
     <div className="space-y-4">
-      {/* ── BLOCO 1: "ESCOLHIDOS, SEM DATA" (CONTAINER TRACEJADO) ── */}
+      {/* ── BLOCO 1: "ESCOLHIDOS, SEM DATA" (CONTAINER TRACEJADO - TOPO DO PLANO) ── */}
       {poolSemData.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 px-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
@@ -488,7 +538,7 @@ export function PlanoVisitasTimeline({
         </div>
       )}
 
-      {/* ── BLOCO 2: VISITAS AGENDADAS NA TB_AGENDA ── */}
+      {/* ── BLOCO 2: CRONOGRAMA DE VISITAS ── */}
       {visitasAgrupadas.length > 0 && (
         <div className="space-y-3">
           <div className="px-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
@@ -502,10 +552,13 @@ export function PlanoVisitasTimeline({
                 return acc + (Number(c?.duracaoMin) || 30);
               }, 0);
 
-              const todosFinalizados = visita.itens.every((it) => {
-                const s = String(it.statusItem || it.statusItemNome || '').toLowerCase();
-                return s === 'finalizado' || s === 'realizado';
-              });
+              const todosFinalizados =
+                Boolean(visita.isAvaliacaoVisita) ||
+                (visita.itens.length > 0 &&
+                  visita.itens.every((it) => {
+                    const s = String(it.statusItem || it.statusItemNome || '').toLowerCase();
+                    return s === 'finalizado' || s === 'realizado';
+                  }));
 
               return (
                 <div key={visita.data} className="relative">
@@ -519,16 +572,26 @@ export function PlanoVisitasTimeline({
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-900 text-[13px]">
-                          Visita {idx + 1} · {visita.isRetornoVisita ? 'Retorno Clínico · ' : ''}{formatDataHumana(visita.data, hojeIso)}
+                          Visita {idx + 1} ·{' '}
+                          {visita.isAvaliacaoVisita
+                            ? 'Avaliação Clínica & Mapeamento · '
+                            : visita.temAvaliacao
+                              ? 'Avaliação & Procedimentos · '
+                              : visita.isRetornoVisita
+                                ? 'Retorno Clínico · '
+                                : ''}
+                          {formatDataHumana(visita.data, hojeIso)}
                         </span>
                         {visita.dataHoraInicio && (
                           <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded">
                             {String(visita.dataHoraInicio).slice(0, 5)}
                           </span>
                         )}
-                        <span className="text-[11px] text-slate-400">
-                          ({formatarTempoCadeira(duracaoVisita)})
-                        </span>
+                        {duracaoVisita > 0 && !visita.isAvaliacaoVisita && (
+                          <span className="text-[11px] text-slate-400">
+                            ({formatarTempoCadeira(duracaoVisita)})
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -567,7 +630,7 @@ export function PlanoVisitasTimeline({
                               : `${visita.itens.length} procedimento${visita.itens.length !== 1 ? 's' : ''}`}
                         </span>
 
-                        {!todosFinalizados && canBaixa && !visita.isRetornoVisita && visita.itens.length > 1 && (
+                        {!todosFinalizados && canBaixa && !visita.isRetornoVisita && !visita.isAvaliacaoVisita && visita.itens.length > 1 && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -583,47 +646,49 @@ export function PlanoVisitasTimeline({
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      {visita.itens.map((item) => {
-                        const key = String(item.id || item.planejamentoItemId || item.tempId);
-                        const isSel = selecionados.has(key);
-                        const cat = catalogoMap.get(String(item.catalogoProcedimentoSaudeId || item.catalogoId));
-                        const vezes = getVezesFeitas(item);
-                        const temTermo = termosFaltantes.some(
-                          (tf) => String(tf.catalogoId) === String(item.catalogoProcedimentoSaudeId || item.catalogoId)
-                        );
+                    {visita.itens.length > 0 && (
+                      <div className="space-y-1.5">
+                        {visita.itens.map((item) => {
+                          const key = String(item.id || item.planejamentoItemId || item.tempId);
+                          const isSel = selecionados.has(key);
+                          const cat = catalogoMap.get(String(item.catalogoProcedimentoSaudeId || item.catalogoId));
+                          const vezes = getVezesFeitas(item);
+                          const temTermo = termosFaltantes.some(
+                            (tf) => String(tf.catalogoId) === String(item.catalogoProcedimentoSaudeId || item.catalogoId)
+                          );
 
-                        return (
-                          <PlanoItemCard
-                            key={key}
-                            item={item}
-                            plano={plano}
-                            planoTitulo={plano?.titulo || plano?.nome || 'Plano de Tratamento'}
-                            visitaLabel={`Visita ${idx + 1}${visita.isRetornoVisita ? ' (Retorno Clínico)' : ''}`}
-                            visitaData={visita.data}
-                            visitaHora={visita.dataHoraInicio}
-                            canCrud={canCrud}
-                            canBaixa={canBaixa}
-                            canReagendar={canReagendar}
-                            canAgendar={canAgendar}
-                            mutating={mutating}
-                            onAgendarItem={onAgendarItem}
-                            onAgendarRetornoItem={onAgendarRetornoItem}
-                            onReagendarItem={onReagendarItem}
-                            onIniciarAtendimento={onIniciarAtendimentoItem}
-                            onDarBaixa={onDarBaixa}
-                            onEdit={onEdit}
-                            onRemover={onRemover}
-                            selecionavel={true}
-                            selecionado={isSel}
-                            onToggleSelecao={() => onToggleSelecao?.(key)}
-                            vezesFeitas={vezes}
-                            temTermoPendente={temTermo}
-                            duracaoMin={cat?.duracaoMin}
-                          />
-                        );
-                      })}
-                    </div>
+                          return (
+                            <PlanoItemCard
+                              key={key}
+                              item={item}
+                              plano={plano}
+                              planoTitulo={plano?.titulo || plano?.nome || 'Plano de Tratamento'}
+                              visitaLabel={`Visita ${idx + 1}${visita.isRetornoVisita ? ' (Retorno Clínico)' : ''}`}
+                              visitaData={visita.data}
+                              visitaHora={visita.dataHoraInicio}
+                              canCrud={canCrud}
+                              canBaixa={canBaixa}
+                              canReagendar={canReagendar}
+                              canAgendar={canAgendar}
+                              mutating={mutating}
+                              onAgendarItem={onAgendarItem}
+                              onAgendarRetornoItem={onAgendarRetornoItem}
+                              onReagendarItem={onReagendarItem}
+                              onIniciarAtendimento={onIniciarAtendimentoItem}
+                              onDarBaixa={onDarBaixa}
+                              onEdit={onEdit}
+                              onRemover={onRemover}
+                              selecionavel={true}
+                              selecionado={isSel}
+                              onToggleSelecao={() => onToggleSelecao?.(key)}
+                              vezesFeitas={vezes}
+                              temTermoPendente={temTermo}
+                              duracaoMin={cat?.duracaoMin}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* GALERIA DE FOTOS DA VISITA */}
                     <PlanoVisitaGaleria
@@ -646,7 +711,7 @@ export function PlanoVisitasTimeline({
         Toque em dois ou mais procedimentos e use <strong className="text-slate-600 font-semibold">Agendar juntos</strong> — vira um agendamento só.
       </div>
 
-      {/* FOTOS DA AVALIAÇÃO / MARCAÇÃO VINCULADAS AO PLANO (VISUALIZAÇÃO DISCRETA SOB DEMANDA) */}
+      {/* GALERIA CONSOLIDADA DE TODAS AS FOTOS E REGISTROS DESTE PLANO (MASTER GALLERY) */}
       {fotosAvaliacao.length > 0 && (
         <div className="flex items-center justify-between rounded-xl border border-teal-100 bg-teal-50/40 p-2.5 shadow-2xs">
           <div className="flex items-center gap-2">
@@ -658,19 +723,19 @@ export function PlanoVisitasTimeline({
                 {fotosAvaliacao.length} {fotosAvaliacao.length === 1 ? 'Foto / Mapa deste Plano' : 'Fotos / Mapas deste Plano'}
               </span>
               <span className="block text-[10px] text-slate-500 font-medium">
-                Registros fotográficos e mapas vinculados a este plano
+                Galeria consolidada de todas as visitas e registros deste plano
               </span>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             {fotosAvaliacao.slice(0, 3).map((f) => (
               <div
-                key={f.id || f.fotoId}
+                key={f.id || f.fotoId || f.url}
                 onClick={() => setLightboxData({ foto: f, fotos: fotosAvaliacao })}
                 className="h-7 w-7 rounded-md overflow-hidden border border-teal-200 cursor-pointer hover:border-[#00a88e] hover:scale-105 transition-transform"
                 title={f.descricaoLegenda || 'Ver foto'}
               >
-                {Boolean(f.mapaOverlay?.marcacoes?.length) || Boolean(f.pontos?.length) ? (
+                {Boolean(f.mapaOverlay?.marcacoes?.length) || Boolean(f.mapaOverlay?.pontos?.length) || Boolean(f.pontos?.length) ? (
                   <GaleriaMapaThumb
                     url={f.url}
                     mapaOverlay={f.mapaOverlay || (f.pontos ? { pontos: f.pontos } : null)}
@@ -697,7 +762,7 @@ export function PlanoVisitasTimeline({
               className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-white px-2.5 py-1 text-xs font-semibold text-[#00a88e] hover:bg-teal-50 hover:border-[#00a88e] transition-colors cursor-pointer"
             >
               <Eye className="h-3.5 w-3.5" />
-              <span>Ver Fotos</span>
+              <span>Ver Todas as Fotos</span>
             </button>
           </div>
         </div>

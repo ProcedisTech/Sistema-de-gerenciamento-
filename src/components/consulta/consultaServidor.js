@@ -68,8 +68,21 @@ export function rotuloDaModalidade(tipoCodigo) {
 /** "Retorno: <nome>" da agenda de retorno sem catálogo, com o nome que a agenda mostra (agendaDashboardMapping.js). */
 const RETORNO_COM_NOME = /^Retorno: \S/;
 
-function ehRotuloDeTela(nome) {
-  return ROTULOS_DE_TELA.has(nome) || RETORNO_COM_NOME.test(nome);
+export function ehRotuloDeTela(nome) {
+  if (!nome || typeof nome !== 'string') return false;
+  const limpo = nome.trim();
+  const lower = limpo.toLowerCase();
+  if (
+    lower === 'consulta' ||
+    lower === 'avaliacao' ||
+    lower === 'avaliação' ||
+    lower === 'retorno' ||
+    lower === 'bloqueio'
+  ) {
+    return true;
+  }
+  if (/^retorno:\s*\S/i.test(limpo)) return true;
+  return ROTULOS_DE_TELA.has(limpo) || RETORNO_COM_NOME.test(limpo);
 }
 
 /**

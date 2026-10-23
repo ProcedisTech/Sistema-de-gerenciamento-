@@ -450,17 +450,20 @@ export function MapeamentoFullscreenToolbar({
           {/* BANDEJA DE CHIPS RÁPIDOS DO PLANO DE TRATAMENTO ATIVO (APENAS NÃO ADICIONADOS) */}
           {!collapsed && procedimentosPlanoNaoAdicionados.length > 0 && (
             <div className="rounded-xl border border-teal-200/80 bg-gradient-to-br from-teal-50/70 to-cyan-50/50 p-2.5 shadow-2xs animate-in fade-in duration-200">
-              <div className="mb-2 flex items-center justify-between gap-1.5">
+              <div className="mb-1 flex items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ClipboardList className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-800 truncate">
-                    Itens do Plano a Adicionar
+                  <span className="text-[11px] font-black tracking-tight text-teal-900">
+                    Do Plano Ativo
                   </span>
                 </div>
-                <span className="shrink-0 rounded-full border border-teal-200/90 bg-teal-100/90 px-2 py-0.5 text-[10px] font-bold text-teal-800 shadow-2xs whitespace-nowrap">
-                  +{procedimentosPlanoNaoAdicionados.length} pendente{procedimentosPlanoNaoAdicionados.length > 1 ? 's' : ''}
+                <span className="shrink-0 rounded-full border border-teal-200/90 bg-white px-2 py-0.5 text-[10px] font-bold text-teal-700 shadow-2xs">
+                  {procedimentosPlanoNaoAdicionados.length} {procedimentosPlanoNaoAdicionados.length > 1 ? 'disponíveis' : 'disponível'}
                 </span>
               </div>
+              <p className="text-[10px] text-teal-700/80 mb-2 leading-tight">
+                Toque para trazer ao mapa e marcar pontos:
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {procedimentosPlanoNaoAdicionados.map((procPlano) => {
                   const nomeExibicao =
@@ -490,14 +493,14 @@ export function MapeamentoFullscreenToolbar({
             </div>
           )}
 
-          {/* PROCEDIMENTOS DO PLANO */}
+          {/* PROCEDIMENTOS NO MAPA */}
           {!collapsed && (
             <div className="flex items-center justify-between px-0.5 mt-1 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                Procedimentos do Plano
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600">
+                Procedimentos no Mapa
               </span>
               <span className="text-[10px] font-bold text-slate-400">
-                {procedimentos.length} no mapa
+                {procedimentos.length} {procedimentos.length === 1 ? 'ativo' : 'ativos'}
               </span>
             </div>
           )}
